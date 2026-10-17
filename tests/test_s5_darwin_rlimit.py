@@ -9,7 +9,8 @@ Darwin 对该 rlimit 的限制整体不支持）——此前 S5 在 Darwin 上�
 本测试锁死口径：
 - Darwin 平台 _make_resource_preexec_fn 返回的闭包**跳过** RLIMIT_AS
   （保留 CPU/NPROC/FSIZE/NOFILE 四项），直接调用不抛；
-- 显式 EXECUTOR_RLIMIT_AS_FORCE=1 可在 Darwin 上强制启用 AS（自担风险）；
+- 显式 EXECUTOR_RLIMIT_AS_FORCE=1 可在 Darwin 上强制启用 AS（自担风险）——
+  该开关**刻意只认逐字节 "1"**，不并入 env_flag/env_flag_opt_out（放宽即危险侧）；
 - 非 POSIX / 无 resource 模块时 _make_resource_preexec_fn 返回 None。
 """
 
@@ -19,6 +20,8 @@ import os
 import platform
 import sys
 from unittest.mock import patch
+
+import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -89,6 +92,25 @@ class TestDarwinASSkip:
         with patch.object(resource, "setrlimit", side_effect=spy, autospec=False):
             fn()
         assert "AS" in called, "EXECUTOR_RLIMIT_AS_FORCE=1 应强制启用 AS"
+
+    @pytest.mark.parametrize("raw", ["true", "TRUE", "on", "yes", "1 ", " 1", "0", "false"])
+    def test_darwin_force_is_deliberately_single_valued(self, monkeypatch, raw):
+        """J-2 定调锁：AS 强制开关**刻意不并入** env_flag/env_flag_opt_out。
+
+        正集口径会把 ``EXECUTOR_RLIMIT_AS_FORCE=true`` 读成"强制启用 AS"，而
+        Darwin 上任何 ``setrlimit(RLIMIT_AS)`` 都会让**全部**子进程 pytest 失败
+        （S5 实跑 0/5 即此因）——即"顺手统一口径"的方向是危险侧。故此开关只认
+        逐字节 ``"1"``，其余一律不强制。
+        """
+        monkeypatch.setattr(er, "_IS_DARWIN", True)
+        monkeypatch.setenv("EXECUTOR_RLIMIT_AS_FORCE", raw)
+        monkeypatch.setenv("EXECUTOR_RLIMIT_AS_MB", "512")
+        fn = er._make_resource_preexec_fn()
+        assert fn is not None
+        called, spy, resource = _spy_setrlimit()
+        with patch.object(resource, "setrlimit", side_effect=spy, autospec=False):
+            fn()
+        assert "AS" not in called, f"{raw!r} 不应触发 AS 强制（只认逐字节 '1'）"
 
     def test_linux_keeps_as_by_default(self, monkeypatch):
         """非 Darwin（Linux 口径）默认 → AS 限制保留（全五项）。"""

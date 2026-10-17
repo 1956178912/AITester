@@ -207,6 +207,93 @@ def benchmark_base_agent():
     return results
 
 
+def benchmark_json_extraction():
+    """基准测试 JSON 提取家族（LLM 响应解析最高频路径）。
+
+    K 轮（2026-10-17）新增：`extract_json_object/array` 是**每条 LLM 响应**
+    都会走的解析入口（planner/generator/debugger/executor 全链路），历史上
+    没有微基准——围栏清洗、括号平衡、修复档的回退层次一旦变慢，整批任务耗时
+    会被静默放大。本组基准把三条真实路径钉进 weekly perf.yml 的回归比对：
+
+    - `fenced_typical`：典型 markdown 围栏 + 自然语言前后缀（最常见形态）；
+    - `fenced_large`：约 2KB 的围栏 JSON（Planner 大计划 / 多候选输出）；
+    - `truncated_repair`：截断 + 尾随逗号（走修复档，最慢路径）；
+    - `array_fenced`：数组契约调用点（adversarial intents / oracle enhancer）。
+
+    迭代数按单次耗时量级设定（小输入 2000 次、大输入 500 次），在 CI 上
+    总耗时 <1s；口径与其它类别一致（avg/min/max ms + iterations）。
+    """
+    import json as _json
+
+    from src.utils.helpers import extract_json_array, extract_json_object
+
+    payload_small = {
+        "patch": "--- a/x.py\n+++ b/x.py\n@@\n+if x is None: return 0",
+        "error_category": "assertion",
+        "root_cause": "空值未判空",
+        "oracle": "assert add(0, 0) == 0",
+    }
+    payload_large = {
+        "test_plan": {
+            "function_name": "compute",
+            "test_cases": [
+                {"case_name": f"case_{i}", "input": f"x={i}", "oracle": f"assert compute({i}) == {i * 2}"}
+                for i in range(10)
+            ],
+            "logic_analysis": {"preconditions": ["x >= 0"], "postconditions": ["result == 2 * x"]},
+        }
+    }
+    text_small = (
+        "以下是我的分析结果：\n```json\n" + _json.dumps(payload_small, ensure_ascii=False) + "\n```\n希望对你有帮助。"
+    )
+    text_large = "```json\n" + _json.dumps(payload_large, ensure_ascii=False) + "\n```"
+    text_truncated = '```json\n{"patch": "--- a/x.py", "error_category": "assertion",}\n```'
+    text_array = "```json\n" + _json.dumps(["assert f(1) == 1", "assert f(2) == 2"]) + "\n```"
+
+    cases = [
+        ("fenced_typical", text_small, 2000),
+        ("fenced_large", text_large, 500),
+        ("truncated_repair", text_truncated, 500),
+    ]
+    results = {}
+
+    print("\n【JSON 提取性能测试（K 轮新增：LLM 响应解析最高频路径）】")
+    print("-" * 40)
+    for name, text, iterations in cases:
+        times = []
+        for _ in range(iterations):
+            start = time.perf_counter()
+            extract_json_object(text)
+            end = time.perf_counter()
+            times.append(end - start)
+        avg_ms = sum(times) / len(times) * 1000
+        results[f"object_{name}"] = {
+            "avg_ms": avg_ms,
+            "min_ms": min(times) * 1000,
+            "max_ms": max(times) * 1000,
+            "iterations": iterations,
+        }
+        print(f"  object_{name:16s}: avg={avg_ms:.4f}ms, min={min(times) * 1000:.4f}ms, max={max(times) * 1000:.4f}ms")
+
+    iterations = 1000
+    times = []
+    for _ in range(iterations):
+        start = time.perf_counter()
+        extract_json_array(text_array)
+        end = time.perf_counter()
+        times.append(end - start)
+    avg_ms = sum(times) / len(times) * 1000
+    results["array_fenced"] = {
+        "avg_ms": avg_ms,
+        "min_ms": min(times) * 1000,
+        "max_ms": max(times) * 1000,
+        "iterations": iterations,
+    }
+    print(f"  array_fenced        : avg={avg_ms:.4f}ms, min={min(times) * 1000:.4f}ms, max={max(times) * 1000:.4f}ms")
+
+    return results
+
+
 def main():
     print("=" * 60)
     print("AITester 性能基准测试")
@@ -218,6 +305,7 @@ def main():
     all_results["executor"] = benchmark_executor()
     all_results["error_classifier"] = benchmark_error_classifier()
     all_results["base_agent"] = benchmark_base_agent()
+    all_results["json_extraction"] = benchmark_json_extraction()
 
     # 汇总结果
     print("\n" + "=" * 60)

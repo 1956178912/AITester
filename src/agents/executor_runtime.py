@@ -15,6 +15,8 @@ import platform
 import subprocess
 from typing import Any
 
+from src.utils.env_utils import env_int
+
 # 2026-10-10：模块级导入（而非函数内局部导入），使测试可用
 # `@patch("src.agents.executor_runtime.run_with_timeout")` 稳定替换该调用点。
 from src.utils.process_utils import run_with_timeout
@@ -58,13 +60,21 @@ def _make_resource_preexec_fn() -> Any | None:
     """返回 preexec_fn 闭包（在子进程 exec 前设 resource.setrlimit）。"""
     if not _RLIMIT_AVAILABLE or (platform.system() not in ("Linux", "Darwin")):
         return None
-    _cpu_limit = int(os.getenv("EXECUTOR_RLIMIT_CPU", "300"))
-    _as_limit_mb = int(os.getenv("EXECUTOR_RLIMIT_AS_MB", "512"))
-    _nproc_limit = int(os.getenv("EXECUTOR_RLIMIT_NPROC", "512"))
-    _FSIZE_limit_mb = int(os.getenv("EXECUTOR_RLIMIT_FSIZE_MB", "100"))
-    _nofile_limit = int(os.getenv("EXECUTOR_RLIMIT_NOFILE", "256"))
+    # J-1d（2026-10-17）：此前为裸 int(os.getenv(...))。坏值（如 EXECUTOR_RLIMIT_CPU=30s）
+    # 抛的 ValueError 会被调用点的 `except Exception` 吞成 ("UNAVAILABLE", …)——即**整批**
+    # 执行判分静默归零，日志里只有一行"第 N 次执行失败"；负值则让 setrlimit 在
+    # preexec_fn 内抛错、伪装成 SubprocessError。lo=0 保留"设 0 即禁用该项"的既有口径。
+    _cpu_limit = env_int("EXECUTOR_RLIMIT_CPU", 300, lo=0)
+    _as_limit_mb = env_int("EXECUTOR_RLIMIT_AS_MB", 512, lo=0)
+    _nproc_limit = env_int("EXECUTOR_RLIMIT_NPROC", 512, lo=0)
+    _FSIZE_limit_mb = env_int("EXECUTOR_RLIMIT_FSIZE_MB", 100, lo=0)
+    _nofile_limit = env_int("EXECUTOR_RLIMIT_NOFILE", 256, lo=0)
     # Darwin 平台兜底：默认跳过 AS（setrlimit(AS) 在 macOS 上整体不支持）；
     # 显式 EXECUTOR_RLIMIT_AS_FORCE=1 时强制启用（Linux 口径不变）。
+    # J-2 定调：此开关**刻意不并入** env_flag/env_flag_opt_out——正集口径会把
+    # EXECUTOR_RLIMIT_AS_FORCE=true 读成"强制启用 AS"，而 Darwin 上任何 setrlimit(AS)
+    # 都会让**全部**子进程 pytest 失败（S5 实跑 0/5 即此因）。窄口径（只认 "1"）
+    # 是正确的 fail-safe 方向：无法识别的值 = 不强制 = 按平台跳过 AS。
     _as_force = os.getenv("EXECUTOR_RLIMIT_AS_FORCE", "0") == "1"
     _enable_as = _as_force or not _IS_DARWIN
 

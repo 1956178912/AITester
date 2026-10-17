@@ -486,7 +486,9 @@ def _known_names_for_signature(signature_params: list[str] | None) -> frozenset[
     return frozenset({"r"} | set(signature_params) | _ALLOWED_CALL_NAMES | {"True", "False", "None"})
 
 
-def _clause_is_compilable(clause: Any, kind: str, known_names: frozenset[str] | None = None, extra_call_names: frozenset[str] | None = None) -> bool:
+def _clause_is_compilable(
+    clause: Any, kind: str, known_names: frozenset[str] | None = None, extra_call_names: frozenset[str] | None = None
+) -> bool:
     """单一子句"可编译为可执行断言"判定（度量通道与注入通道共用的唯一口径）。
 
     kind:
@@ -714,7 +716,9 @@ def _free_names(node: ast.AST, bound: frozenset[str] = frozenset()) -> set[str]:
     return free
 
 
-def _clause_reject_reason_for_known(clause: Any, kind: str, known_names: frozenset[str] | None, extra_call_names: frozenset[str] | None = None) -> str | None:
+def _clause_reject_reason_for_known(
+    clause: Any, kind: str, known_names: frozenset[str] | None, extra_call_names: frozenset[str] | None = None
+) -> str | None:
     """单子句拒绝原因（None = 可编译）；门顺序与 _clause_is_compilable 逐门一致。
 
     known_names 语义与原 _clause_is_compilable 相同（None = 历史默认绑定集合）。

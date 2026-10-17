@@ -41,6 +41,7 @@ from src.agents.llm_client import (
     json_output_mode_enabled,
 )
 from src.agents.rogue_monitor import rogue_monitor_enabled
+from src.utils.env_utils import env_flag_opt_out
 from src.utils.helpers import extract_code_block, extract_json_object
 
 
@@ -388,7 +389,7 @@ class BaseAgent:
         # 不同 model 命名空间下不再共享缓存条目（消除跨模型串味，保证
         # A/B 对照与可复现性）。设 AITESTER_CACHE_ISOLATE_MODEL=0 可显式
         # 退回"不隔离"历史口径（配额故障转移/模型切换复用旧结果的场景）。
-        if os.environ.get("AITESTER_CACHE_ISOLATE_MODEL", "1").strip() != "0":
+        if env_flag_opt_out("AITESTER_CACHE_ISOLATE_MODEL"):
             from src.agents.llm_client import get_first_valid_model_name
 
             _iso_model = get_first_valid_model_name()

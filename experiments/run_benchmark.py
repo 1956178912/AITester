@@ -68,6 +68,7 @@ from config import (  # noqa: E402
     LLM_CONFIGS,
     LLM_RETRY_WAIT,
     MAX_ITERATIONS,
+    MAX_REGENERATIONS,
     MUTATION_MAX_MUTANTS,
     REPO_LEVEL_EXECUTION,
     SWE_BENCH_P2P_GATE_ENABLE,
@@ -1222,9 +1223,9 @@ def _aggregate_failure_buckets(bl_results: list[dict[str, Any]]) -> dict[str, An
     把分母口径显式化——运行异常行（无工作流终局状态）单列计数而**不**折进
     uncategorized 桶，否则"归因未接线"与"状态信息不足"会同形。
 
-    位置说明：相邻三个聚合器（rag/token/failure_categories）都是 run_benchmark()
-    的**嵌套函数**，因此无法被单测直接钉住口径。本函数无闭包依赖，故提到模块
-    级——分母口径（total vs total_rows）是本项唯一容易读错的地方，必须可测。
+    位置说明：本函数与下列 rag/token/failure_categories 三个聚合同样为模块级
+    （J-1b，2026-10-17 由 `run_benchmark()` 嵌套函数外提，行为逐字节不变）——
+    分母口径（total vs total_rows）是本类指标唯一容易读错的地方，必须可测。
     """
     counts = dict.fromkeys((b.value for b in FailureBucket), 0)
     fault_side_counts = dict.fromkeys(FAULT_SIDES, 0)
@@ -1252,6 +1253,82 @@ def _aggregate_failure_buckets(bl_results: list[dict[str, Any]]) -> dict[str, An
         "fault_side_counts": fault_side_counts,
         "edge_counts": edge_counts,
     }
+
+
+def _aggregate_rag_metrics(bl_results: list[dict[str, Any]]) -> dict[str, Any]:
+    """聚合一个基线的 RAG 检索质量指标（P1：RAG 消融数据）。
+
+    - hit_rate: 检索命中（返回 ≥1 个参考案例）的检索占比；
+    - avg_max_similarity: 各次检索最高相似度的平均值（检索质量代理指标）。
+
+    Returns:
+        {"retrievals": int, "hits": int, "hit_rate": float, "avg_max_similarity": float}
+    """
+    all_stats = [s for r in bl_results for s in (r.get("rag_stats") or [])]
+    if not all_stats:
+        return {"retrievals": 0, "hits": 0, "hit_rate": 0.0, "avg_max_similarity": None}
+    hits = sum(1 for s in all_stats if s.get("results", 0) > 0)
+    sim_values = [s.get("max_similarity") for s in all_stats if s.get("max_similarity") is not None]
+    return {
+        "retrievals": len(all_stats),
+        "hits": hits,
+        "hit_rate": round(hits / len(all_stats), 4),
+        "avg_max_similarity": round(sum(sim_values) / len(sim_values), 4) if sim_values else None,
+    }
+
+
+def _aggregate_token_metrics(bl_results: list[dict[str, Any]]) -> dict[str, Any]:
+    """聚合一个基线的 token 消耗（P0-2：多智能体系统 vs Plain LLM 性价比对比）。
+
+    AD1（2026-10-06 输出成本控制）新增 output_share_pct / avg_output_per_task /
+    avg_output_per_call——输出 token 单价约为输入命中缓存的 10 倍以上
+    （DeepSeek 口径），输出占比是成本结构的首要指标（R-P0-2 实测
+    aitester 臂输出占 78%）。
+    """
+    total_input = sum((r.get("token_usage") or {}).get("input_tokens", 0) for r in bl_results)
+    total_output = sum((r.get("token_usage") or {}).get("output_tokens", 0) for r in bl_results)
+    total_calls = sum((r.get("token_usage") or {}).get("llm_calls", 0) for r in bl_results)
+    # P0 止血（缓存记账缺口）配套：缓存命中数 + 避免 token（cache_avoided_tokens
+    # 来自 token_usage.as_dict() 新增字段，结果行已自动携带）。
+    #   cache_hit_rate = 命中 / (命中 + 真实调用)——缓存命中率是成本首要指标
+    #   （前沿：缓存命中率 0%→94% 产生 9 倍成本差异，超过模型层级差异）。
+    #   uncached_theoretical_tokens = 真实 + 避免——还原"无缓存理论成本"，
+    #   消除"缓存命中率漂移导致 $/token 结论不可比"的系统性偏差。
+    total_cache_hits = sum((r.get("token_usage") or {}).get("cache_hits", 0) for r in bl_results)
+    total_cache_avoided = sum((r.get("token_usage") or {}).get("cache_avoided_tokens", 0) for r in bl_results)
+    total = len(bl_results)
+    return {
+        "total_input_tokens": total_input,
+        "total_output_tokens": total_output,
+        "total_tokens": total_input + total_output,
+        "total_llm_calls": total_calls,
+        "total_cache_hits": total_cache_hits,
+        "total_cache_avoided_tokens": total_cache_avoided,
+        "cache_hit_rate_pct": round(total_cache_hits / (total_cache_hits + total_calls) * 100, 2)
+        if (total_cache_hits + total_calls) > 0
+        else 0.0,
+        "uncached_theoretical_tokens": total_input + total_output + total_cache_avoided,
+        "avg_tokens_per_task": round((total_input + total_output) / total, 2) if total > 0 else 0,
+        # AD1：输出成本结构观测（键集合同构，纯新增）
+        "output_share_pct": round(total_output / (total_input + total_output) * 100, 2)
+        if (total_input + total_output) > 0
+        else 0.0,
+        "avg_output_per_task": round(total_output / total, 2) if total > 0 else 0,
+        "avg_output_per_call": round(total_output / total_calls, 2) if total_calls > 0 else 0,
+    }
+
+
+def _aggregate_failure_categories(bl_results: list[dict[str, Any]]) -> dict[str, int]:
+    """聚合一个基线的失败原因分布（2.2 公平性 + 1.2 细化类别可单独计数）。
+
+    仅统计失败任务的 error_category（"rate_limit"/"error" 占位值同样计入，
+    便于区分"API 故障"与"真实错误类别"）；成功任务无 error_category，不计入。
+    """
+    counter: dict[str, int] = {}
+    for r in bl_results:
+        if not r.get("passed") and r.get("error_category"):
+            counter[r["error_category"]] = counter.get(r["error_category"], 0) + 1
+    return dict(sorted(counter.items(), key=lambda kv: kv[1], reverse=True))
 
 
 def _build_task_result(
@@ -2576,6 +2653,36 @@ def _apply_rag_setting(enable_rag: bool | None) -> bool:
     return enabled
 
 
+def _apply_stagnation_arm(enable: bool = False, disable: bool = False) -> str | None:
+    """A-19（2026-10-17 独立评审）：把覆盖率停滞检测消融臂落到环境变量。
+
+    workflow 每次判定都现读 `COVERAGE_STALL_DETECT_ENABLE`
+    （`_coverage_stall_enabled` → `env_flag`），故 CLI 层写 env 即全链路生效，
+    无需把开关穿透 `run_benchmark` 形参；该键已在 provenance 清单内，
+    工件里可直接复核这一臂到底开没开（`check_env_snapshot_keys.py` 守）。
+
+    Args:
+        enable: `--enable-stagnation`（开臂）。
+        disable: `--no-stagnation`（对照臂）。
+
+    Returns:
+        落盘的取值（"true"/"false"）；两臂都未指定时返回 None=沿用配置默认。
+
+    Raises:
+        ValueError: 两臂同时指定——消融臂自相矛盾，静默取其一会让工件里的臂
+            与命令意图不一致且看不出来，故 fail fast。
+    """
+    if enable and disable:
+        raise ValueError("--enable-stagnation 与 --no-stagnation 互斥，请只指定其一")
+    if enable:
+        os.environ["COVERAGE_STALL_DETECT_ENABLE"] = "true"
+        return "true"
+    if disable:
+        os.environ["COVERAGE_STALL_DETECT_ENABLE"] = "false"
+        return "false"
+    return None
+
+
 # ─── 主基准测试函数 ────────────────────────────────────────────────────────────
 
 
@@ -3360,79 +3467,6 @@ def run_benchmark(
         "results": {},
     }
 
-    def _aggregate_rag_metrics(bl_results: list[dict[str, Any]]) -> dict[str, Any]:
-        """聚合一个基线的 RAG 检索质量指标（P1：RAG 消融数据）。
-
-        - hit_rate: 检索命中（返回 ≥1 个参考案例）的检索占比；
-        - avg_max_similarity: 各次检索最高相似度的平均值（检索质量代理指标）。
-
-        Returns:
-            {"retrievals": int, "hits": int, "hit_rate": float, "avg_max_similarity": float}
-        """
-        all_stats = [s for r in bl_results for s in (r.get("rag_stats") or [])]
-        if not all_stats:
-            return {"retrievals": 0, "hits": 0, "hit_rate": 0.0, "avg_max_similarity": None}
-        hits = sum(1 for s in all_stats if s.get("results", 0) > 0)
-        sim_values = [s.get("max_similarity") for s in all_stats if s.get("max_similarity") is not None]
-        return {
-            "retrievals": len(all_stats),
-            "hits": hits,
-            "hit_rate": round(hits / len(all_stats), 4),
-            "avg_max_similarity": round(sum(sim_values) / len(sim_values), 4) if sim_values else None,
-        }
-
-    def _aggregate_token_metrics(bl_results: list[dict[str, Any]]) -> dict[str, Any]:
-        """聚合一个基线的 token 消耗（P0-2：多智能体系统 vs Plain LLM 性价比对比）。
-
-        AD1（2026-10-06 输出成本控制）新增 output_share_pct / avg_output_per_task /
-        avg_output_per_call——输出 token 单价约为输入命中缓存的 10 倍以上
-        （DeepSeek 口径），输出占比是成本结构的首要指标（R-P0-2 实测
-        aitester 臂输出占 78%）。
-        """
-        total_input = sum((r.get("token_usage") or {}).get("input_tokens", 0) for r in bl_results)
-        total_output = sum((r.get("token_usage") or {}).get("output_tokens", 0) for r in bl_results)
-        total_calls = sum((r.get("token_usage") or {}).get("llm_calls", 0) for r in bl_results)
-        # P0 止血（缓存记账缺口）配套：缓存命中数 + 避免 token（cache_avoided_tokens
-        # 来自 token_usage.as_dict() 新增字段，结果行已自动携带）。
-        #   cache_hit_rate = 命中 / (命中 + 真实调用)——缓存命中率是成本首要指标
-        #   （前沿：缓存命中率 0%→94% 产生 9 倍成本差异，超过模型层级差异）。
-        #   uncached_theoretical_tokens = 真实 + 避免——还原"无缓存理论成本"，
-        #   消除"缓存命中率漂移导致 $/token 结论不可比"的系统性偏差。
-        total_cache_hits = sum((r.get("token_usage") or {}).get("cache_hits", 0) for r in bl_results)
-        total_cache_avoided = sum((r.get("token_usage") or {}).get("cache_avoided_tokens", 0) for r in bl_results)
-        total = len(bl_results)
-        return {
-            "total_input_tokens": total_input,
-            "total_output_tokens": total_output,
-            "total_tokens": total_input + total_output,
-            "total_llm_calls": total_calls,
-            "total_cache_hits": total_cache_hits,
-            "total_cache_avoided_tokens": total_cache_avoided,
-            "cache_hit_rate_pct": round(total_cache_hits / (total_cache_hits + total_calls) * 100, 2)
-            if (total_cache_hits + total_calls) > 0
-            else 0.0,
-            "uncached_theoretical_tokens": total_input + total_output + total_cache_avoided,
-            "avg_tokens_per_task": round((total_input + total_output) / total, 2) if total > 0 else 0,
-            # AD1：输出成本结构观测（键集合同构，纯新增）
-            "output_share_pct": round(total_output / (total_input + total_output) * 100, 2)
-            if (total_input + total_output) > 0
-            else 0.0,
-            "avg_output_per_task": round(total_output / total, 2) if total > 0 else 0,
-            "avg_output_per_call": round(total_output / total_calls, 2) if total_calls > 0 else 0,
-        }
-
-    def _aggregate_failure_categories(bl_results: list[dict[str, Any]]) -> dict[str, int]:
-        """聚合一个基线的失败原因分布（2.2 公平性 + 1.2 细化类别可单独计数）。
-
-        仅统计失败任务的 error_category（"rate_limit"/"error" 占位值同样计入，
-        便于区分"API 故障"与"真实错误类别"）；成功任务无 error_category，不计入。
-        """
-        counter: dict[str, int] = {}
-        for r in bl_results:
-            if not r.get("passed") and r.get("error_category"):
-                counter[r["error_category"]] = counter.get(r["error_category"], 0) + 1
-        return dict(sorted(counter.items(), key=lambda kv: kv[1], reverse=True))
-
     for baseline in baselines:
         bl_results = all_results[baseline]
         passed = sum(1 for r in bl_results if r["passed"])
@@ -3770,7 +3804,7 @@ def run_benchmark(
         "strict_skipped_task_ids": _strict_skipped[:200],
         "strict_skipped_truncated": len(_strict_skipped) > 200,
         "temperature": _temperature_val,
-        "max_iterations": int(os.environ.get("MAX_ITERATIONS", "3")),
+        "max_iterations": MAX_ITERATIONS,
         "seed": seed,
         # AB2（2026-10-06 生死实验观测缺口）：profile 显式入 provenance——
         # 生死实验复审发现 provenance 无 profile 字段（档位只能反推），
@@ -3816,9 +3850,13 @@ def run_benchmark(
                 # 重试与停止：失败重试一次 / 最大迭代 / 预算封顶 /
                 # 测试重生成上限 / 回归检测停止条件（StopReason 统一）
                 "executor_retry_on_fail": 1,
-                "max_iterations": int(os.environ.get("MAX_ITERATIONS", "3")),
+                "max_iterations": MAX_ITERATIONS,
                 "cost_budget_enabled": os.environ.get("COST_BUDGET_ENABLE", "false").lower() == "true",
-                "test_regeneration_cap": int(os.environ.get("TEST_REGENERATION_CAP", "2")),
+                # J-1d（2026-10-17）provenance 纠错：原写法读一个**无人消费**的
+                # `TEST_REGENERATION_CAP` 环境变量（全仓零读侧），默认写 2；实际生效的重生成
+                # 上限是 config.MAX_REGENERATIONS（Z2 已确立单一事实源，当前 1）。即历史批次
+                # 工件里的 `test_regeneration_cap: 2` 系统性地**高估了一倍**。现改读真实来源。
+                "test_regeneration_cap": MAX_REGENERATIONS,
                 "stop_reasons": [
                     "test_passed",
                     "max_iterations",
@@ -3829,7 +3867,7 @@ def run_benchmark(
                     "unknown",
                 ],
             },
-            "per_task_time_limit_seconds": int(os.environ.get("EXECUTION_TIMEOUT", "30")),
+            "per_task_time_limit_seconds": EXECUTION_TIMEOUT,
             "model_version": _model_version,
         },
     }
@@ -3912,6 +3950,18 @@ if __name__ == "__main__":
         help="显式关闭变异得分评估（覆盖 config.ENABLE_MUTATION_SCORING）",
     )
     @click.option(
+        "--enable-stagnation",
+        "enable_stagnation",
+        is_flag=True,
+        help="A-19 消融开臂：置 COVERAGE_STALL_DETECT_ENABLE=true，使覆盖率连续停滞（|delta|<eps 且本轮未通过）提前停（默认关）",
+    )
+    @click.option(
+        "--no-stagnation",
+        "no_stagnation",
+        is_flag=True,
+        help="A-19 消融对照臂：显式置 COVERAGE_STALL_DETECT_ENABLE=false（覆盖环境/档位预设，锁定不提前停口径）",
+    )
+    @click.option(
         "--difficulty",
         default="mixed",
         type=click.Choice(
@@ -3950,6 +4000,8 @@ if __name__ == "__main__":
         difficulty,
         max_pattern_repeat,
         per_task_token_caps,
+        enable_stagnation,
+        no_stagnation,
     ):
         """AITester 基准测试工具"""
         bl_list = [b.strip() for b in baselines.split(",") if b.strip()]
@@ -3968,6 +4020,12 @@ if __name__ == "__main__":
             mutation_override = False
         elif enable_mutation:
             mutation_override = True
+
+        # A-19：覆盖率停滞检测开/关消融臂（映射逻辑在模块级 helper，便于单测）
+        try:
+            _apply_stagnation_arm(enable_stagnation, no_stagnation)
+        except ValueError as exc:
+            raise click.UsageError(str(exc)) from exc
 
         summary = run_benchmark(
             dataset_name=dataset,

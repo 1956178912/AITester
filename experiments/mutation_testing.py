@@ -553,8 +553,24 @@ class MutationGenerator:
         return mutants
 
     def _generate_numeric_offset(self, tree: ast.Module, source_code: str) -> list[Mutant]:
-        """数字常量偏移变异：value → value+1（仅在数值出现在比较或赋值中时）。"""
+        """数字常量偏移变异：value → value+1（仅数值常量；K 轮修复 identity 变异体）。
+
+        K 轮（2026-10-17，self-mutation 批次实测发现）修复：此前对 Compare 中
+        **任意** Constant 都登记 "const X → +1"，但 `_offset_numeric` 只偏移
+        int/float——`x is None` / `s == "abc"` 这类比较会产出**与源码逐节点
+        相同的 identity 变异体**（unparse 只是重排版，AST 相同）。identity
+        变异体在任何测试套件下必然存活，等于把生成器缺陷记成"测试弱"，把
+        mutation_score 系统性压低（存量工件因此是旧口径下界）。
+
+        现三重防线：
+        1. 只对 int/float 常量登记（bool 是 int 子类但语义属布尔置换，已有
+           boolean 类算子覆盖，排除以免描述与语义混淆）；
+        2. 追加前做 AST 级变化校验（`_offset_numeric` 的定位逻辑未来若退化，
+           也不会再产出无效变异体）；
+        3. 保留原有 unparse 异常兜底。
+        """
         mutants: list[Mutant] = []
+        source_dump = ast.dump(tree)  # AST 级 identity 判据（只算一次）
         # 收集比较中的数字常量（左值或右值）
         for cmp_node in ast.walk(tree):
             if not isinstance(cmp_node, ast.Compare):
@@ -563,20 +579,24 @@ class MutationGenerator:
             for i, target in enumerate(targets):
                 if not isinstance(target, ast.Constant):
                     continue
+                if isinstance(target.value, bool) or not isinstance(target.value, (int, float)):
+                    continue
                 new_tree = copy.deepcopy(tree)
                 self._offset_numeric(new_tree, cmp_node, i, 1)
+                if ast.dump(new_tree) == source_dump:
+                    continue
                 try:
                     new_code = ast.unparse(new_tree)
-                    mutants.append(
-                        Mutant(
-                            code=new_code,
-                            mutant_type="numeric_offset",
-                            description=f"line {cmp_node.lineno}: const {target.value} → +1",
-                            line_no=cmp_node.lineno,
-                        )
-                    )
                 except (ValueError, TypeError):
                     continue
+                mutants.append(
+                    Mutant(
+                        code=new_code,
+                        mutant_type="numeric_offset",
+                        description=f"line {cmp_node.lineno}: const {target.value} → +1",
+                        line_no=cmp_node.lineno,
+                    )
+                )
         return mutants
 
     @staticmethod
@@ -837,6 +857,11 @@ class MutationGenerator:
         for const in _find_mutable_string_constants(tree):
             original = const.value
             replacement = "x" * max(1, len(original))
+            # K 轮（2026-10-17）：置换值必须真的不同于原值——原文 `'x'` 的
+            # "置换"恰好仍是 `'x'`（`"x" * 1`），产出 AST 完全相同的 identity
+            # 变异体（恒存活 → mutation_score 系统性偏低）。此处补一位。
+            if replacement == original:
+                replacement = replacement + "x"
             new_tree = copy.deepcopy(tree)
             node = self._locate_node(new_tree, const)
             if node is None or not isinstance(node, ast.Constant):
@@ -1331,6 +1356,22 @@ class ExtendedMutationGenerator(MutationGenerator):
             return
         if not new_code.strip() or new_code == source_code:
             return
+        # K 轮（2026-10-17）语法有效性守卫：unparse 成功 ≠ 产物可解析。
+        # 实测 `_gen_subscript_negate` 在 Slice 下标上产出
+        # `x[-(a:b) - 1]` 这类非法源码；不可执行变异体在执行期以 rc=2 返回，
+        # 而 `_run_mutant_tests` 的保守口径把 rc∈{2,5,超时} 记作"存活"——
+        # 即生成器缺陷被记成"测试未捕获"，mutation_score 系统性偏低。
+        # 此处直接丢弃，保证"变异体池 = 可执行单点改动"这一不变量。
+        try:
+            ast.parse(new_code)
+        except SyntaxError:
+            logger.debug(
+                "扩展算子 %s 产出语法非法变异体，已丢弃（line=%s）：%s",
+                mutant_type,
+                getattr(target, "lineno", None),
+                new_code[:80],
+            )
+            return
         out.append(
             Mutant(
                 code=new_code,
@@ -1464,6 +1505,11 @@ class ExtendedMutationGenerator(MutationGenerator):
         for node in ast.walk(tree):
             if not isinstance(node, ast.Subscript):
                 continue
+            # K 轮（2026-10-17）：Slice 下标（x[a:b] / x[::2]）没有定义良好的
+            # "取反"语义——unparse 会产出 `x[-(a:b) - 1]` 这类非法源码。
+            # 语义上不可执行 → 直接跳过（只对整数/表达式下标做取反变异）。
+            if isinstance(node.slice, ast.Slice):
+                continue
             self._emit(
                 tree,
                 node,
@@ -1586,6 +1632,7 @@ def _run_mutant_tests(
             # branch_coverage_inject.py:161）**同一机制**，只是触发点在变异层。
             # run_with_timeout 用 start_new_session + killpg 整树终止 + 有界
             # 收口，保证返回（timed_out=True 时按下方保守口径视为"存活"）。
+            from src.utils.process_utils import nested_pytest_env
             from src.utils.process_utils import run_with_timeout as _run_with_timeout
 
             proc = _run_with_timeout(
@@ -1599,7 +1646,7 @@ def _run_mutant_tests(
                 ],
                 timeout=timeout_seconds,
                 cwd=tmpdir,
-                env={**os.environ, "PYTHONPATH": tmpdir},
+                env=nested_pytest_env(PYTHONPATH=tmpdir),
                 logger_name="mutation_testing",
             )
             # 超时终止（被 SIGKILL）→ 保守视为存活（不夸大变异得分）

@@ -33,10 +33,9 @@ from __future__ import annotations
 
 import ast
 import logging
-import os
 import re
 
-from src.utils.env_utils import env_flag
+from src.utils.env_utils import env_flag, env_flag_opt_out
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +46,7 @@ logger = logging.getLogger(__name__)
 # _patch_applier_node）据此把 EMPTY_LLM_PATCH 标签写入 state，供
 # refine_failure_category 识别与实验分析消费。
 def _empty_patch_guard_enabled() -> bool:
-    return os.getenv("EMPTY_PATCH_GUARD", "true").lower() != "false"
+    return env_flag_opt_out("EMPTY_PATCH_GUARD")
 
 
 # P2 导入断裂修复（默认 false，保持历史行为）：补丁应用前自动把原代码的

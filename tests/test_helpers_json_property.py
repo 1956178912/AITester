@@ -204,12 +204,21 @@ class TestReplaceFunctionCode:
             assert out == _SOURCE
 
     def test_class_method_not_confused_with_top_level(self) -> None:
-        """类内同名方法不得被顶层替换误伤（AST 边界纪律）。"""
+        """类内同名方法不得被顶层替换误伤（AST 边界纪律）。
+
+        K 轮（2026-10-17）修复零断言违规（check_zero_assert_tests 门禁实证）：
+        原用例只在 `if ok:` 分支里 `ast.parse(out)` 且无断言——实测 `method`
+        不在顶层函数集合 → 替换被拒（ok=False）→ if 分支根本不执行，属
+        "零断言测试"（对行为零校验却计入覆盖率）。现锁两条硬边界：
+        拒绝路径必须**逐字节回滚**（零伤害），成功路径必须可解析；两条路径
+        都断言"类内方法定义仍在"，防未来实现改为命中类内方法时误删方法。
+        """
         out, ok = replace_function_code(_SOURCE, "method", _NEW_ALPHA.replace("alpha", "method"))
-        # method 不在顶层集合——历史口径按 ast.walk 匹配会命中类内方法；
-        # 该行为属既有契约（walk 含嵌套），此处只锁定"成功后源码仍可解析"。
         if ok:
-            ast.parse(out)
+            assert ast.parse(out) is not None
+        else:
+            assert out == _SOURCE, "拒绝路径必须逐字节回滚（零伤害契约）"
+        assert "def method(self):" in out, "类内方法定义不得被误删/改名"
 
 
 def extract_helper(source: str, name: str) -> str | None:

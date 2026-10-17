@@ -95,17 +95,23 @@ class TestArtifactsManifestE7:
     """AQ3：prereg 引用的 E7 复核工件纳入入库守卫（AK3 引用链口径）。"""
 
     def test_manifest_registers_e7_artifacts(self) -> None:
-        """MANIFEST 含两个 E7 工件且清单长度锁定为 21（漏登记属新缺口）。
+        """MANIFEST 含两个 E7 工件且清单长度锁定为 41（漏登记属新缺口）。
 
         R14（2026-10-08 R2）：登记 8 个 r4_batches 路径（6 批次 JSON +
         README + SHA256SUMS），清单 13→21——R4/QuixBugs 存量批次此前滞留
         /tmp（易失、违反预注册工件条款），入库后成为口径矩阵与勘误的
         证据链。长度锁随显式登记推进（同 AO 改 cap 同步 test_am 先例）。
+
+        J-4（2026-10-17）：独立评审 A-04 批次（commit 6cf3719）force-add 12 个
+        emse_* 证据目录并把 MANIFEST 扩至 41 项，但没同步这条长度锁——本用例
+        自那次提交起即红（E7 两个工件的 in-MANIFEST 断言一直是过的，红的只有
+        锁）。按既有"登记即改锁"口径把 21 更新为 41；清单卫生 / 旗舰链覆盖
+        改由 tests/test_artifacts_tracked_gate.py 承担，本锁只防"悄悄删项"。
         """
         module = _load_artifacts_guard()
         for rel in _E7_ARTIFACTS:
             assert rel in module.MANIFEST, f"MANIFEST 缺少 {rel}"
-        assert len(module.MANIFEST) == 21
+        assert len(module.MANIFEST) == 41
 
 
 class TestSurveyPackagingErrata:

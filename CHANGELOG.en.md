@@ -1,10 +1,256 @@
-> Last updated: 2026-10-17 (df_spec experiment [P1 main experiment] executed: verdict `not_confirmed` — significant negative-direction evidence [df_spec 54.3% vs df 77.8%, paired 1:10, δ=−25.7pp, two-sided exact p=0.0117]; pre-registration and decision caliber locked before results. Previously 2026-10-16 rounds F/G/H/I: switch-governance closure + security-guard actuation + coverage-measurement determinism closure + failure-attribution wiring; full suite 6759 passed / 5 skipped / 0 failed)
+> Last updated: 2026-10-17 (round K comprehensive optimization: P0 JSON-fence content-corruption fix + coverage **96.47% lines / 92.57% branches** + self-mutation **0.6419→0.7674** + G16 documentation link gate + mutation-generator invalid-mutant fix [measurement artifact #5] + orphan-process patrol + performance-regression surface extension; full suite **7530 passed / 5 skipped / 0 failed**. Round J closeout and the df_spec experiment [`not_confirmed`] are registered the same day)
 
 > **Language**: [简体中文](CHANGELOG.md) | English (this file)
 
 # Changelog
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+## [Unreleased] — 2026-10-17 Round K (comprehensive optimization: P0 JSON-fence content corruption fix + coverage 96.47%/92.57% + self-mutation 0.6419→0.7674 + documentation link gate + runtime hygiene; zero LLM)
+
+> Round K is the "comprehensive optimization to frontier level" batch: one real
+> defect fix (P0, silent data corruption), one meta-level capability build (the
+> strength of the project's own test suite becomes measurable for the first
+> time), one measurement-artifact treatment (#5: invalid mutants from the
+> mutation generator), a coverage closeout, and three engineering-hygiene
+> improvements (documentation link gate / orphan-process patrol /
+> performance-regression surface). All changes are zero-LLM with no default
+> behavior change; every number below is measured locally and carries a
+> verification entry.
+
+### Fixed
+
+- **K-1 (P0): JSON-fence content corruption**. The historical cleaning chain in
+  `extract_json_object/array` used `re.compile(r"```")` to **unconditionally
+  delete every triple-backtick run in the whole text** — legal JSON string
+  values containing backticks (extremely common when an LLM emits patches,
+  commands or code snippets) were silently rewritten: `{"cmd": "```bash"}` →
+  `{"cmd": "bash"}`, `{"```": null}` → `{"": null}`. Parsing "succeeds" but the
+  content is wrong — more dangerous than a parse failure (every caller only
+  checks for `JSONDecodeError` and never re-inspects string contents). Fix:
+  (1) a raw-text-first fast path (legal JSON parses without cleaning, zero
+  content rewriting); (2) fences are stripped only at **line starts**, so the
+  repair fallback no longer touches string contents. **Discovery path**: the
+  A-13 property fuzz test (hypothesis, 300 examples) hit the counterexample
+  randomly → this batch adds 29 deterministic regression locks. Verify:
+  `pytest tests/test_helpers_json_fence_content.py tests/test_helpers_json_property.py -q`;
+- **K-5: invalid-mutant fix in the mutation generator (measurement artifact #5)**.
+  Two classes of bogus mutants in `experiments/mutation_testing.py` recorded
+  generator defects as "weak tests" and **systematically depressed the mutation
+  score**: (1) identity — `_generate_numeric_offset` registers `const X → +1`
+  for *any* Constant in a Compare, but `_offset_numeric` only offsets
+  int/float (`x is None` / `s == "abc"` produce zero change); the string swap
+  keeps `'x'` for original `'x'` because `"x" * 1 == "x"`; (2) syntax-invalid —
+  `_gen_subscript_negate` unparses Slice subscripts into `x[-(a:b) - 1]`
+  (5 per file measured; pytest rc=2 at execution time was conservatively
+  recorded as "survived"). Fix: numeric type guard + AST-level change check +
+  string replacement forced ≠ original + Slice skip + a general `_emit` syntax
+  guard. Corpus validation: **30 files / 4603 mutants, 0 invalid / 0 identity**
+  (before the fix: 1 identity per module, up to 5 syntax-invalid per file;
+  `src/` reachable surface: 668 non-numeric comparison constants and 268 Slice
+  subscripts). New `tests/test_mutation_generator_validity.py` (16 cases:
+  invariants + counterexample locks). Stored artifacts using this metric are
+  treated as **old-caliber lower bounds** (not recomputed this round); the
+  cosmic-ray-based QuixBugs Mut@k **0.9396 is unaffected** (external tool).
+  Disclosure: `docs/MEASUREMENT_INTEGRITY.md` gains artifact #5;
+- **K-8: pre-existing zero-assert violation at HEAD ("local green ≠ CI green",
+  again)**. Measured that the U3 zero-assert gate had **long been CI-only and
+  absent from the local `make gates` chain** — HEAD (fde68ae) carried 1
+  violation (`tests/test_helpers_json_property.py::test_class_method_not_confused_with_top_level`
+  only `ast.parse(out)` inside `if ok:` with no assertion, and that branch
+  never executes). Fix: dual-path hard assertions (reject path rolls back
+  byte-for-byte + the class method definition remains), and `zero-assert` is
+  added to the local `make gates` chain.
+
+### Added
+
+- **K-3: mutation testing of the project's own test suite (meta layer)**. New
+  `scripts/tools/self_mutation.py` (zero-LLM/zero-network: reuses the 18 AST
+  operators + one tempfile copy per worker [working tree untouched] +
+  `nested_pytest_env` isolation + `run_with_timeout` killpg tree timeout + rc
+  classification [1=kill / 0=survive / others and timeout=invalid, excluded
+  from the denominator] + green-baseline precondition + JSON/MD reports +
+  `--test-map/--fail-under`). **First quantification of "how strong our own
+  tests are"**: 3-module baseline **0.6419** (138/215) → after the kill batch
+  **0.7674** (165/215, **+19.6% relative**; 27 survived→killed, 0 reverse
+  flips); per module env_utils 0.8933→**0.9467** / helpers 0.5294→**0.6471**
+  (120/468 = 25.6% sampled point estimate) / atomic_io 0.3810→**0.8095**. The
+  50 remaining survivors are attributed one by one (provably equivalent 5 /
+  strong-evidence practically equivalent 17 / outside public contract 5 /
+  **pending 23, not claimed equivalent**). New
+  `tests/test_self_mutation_tool.py` (47 cases) +
+  `tests/test_self_mutation_targets.py` (11 kill tests) +
+  `docs/design/self_mutation_harness.md`; artifacts
+  `experiments/results/self_mutation_20261017/` (before/after + attribution,
+  tracked in git). Verify: `make self-mutation`;
+- **K-2: G16 documentation link-integrity gate + documentation INDEX**. New
+  `scripts/gates/check_doc_links.py` (zero-network, purely static: relative
+  links / line-anchor targets / heading anchors; exact case checking at every
+  path level; github-slugger v2 approximation with CJK misses downgraded to
+  warning and currently 0; fenced/inline code ignored; external links counted
+  but never fetched; an exemption without a reason is itself an error).
+  Baseline 107 files/351 links/**1 error** → final **109 files/528 links/0
+  errors** (allowlist 0 entries; no exception-based green). New
+  `docs/INDEX.md` + `INDEX.en.md` (4 role paths: new contributor / reviewer in
+  15 minutes / replicator / maintainer) + bilingual README navigation blocks +
+  `tests/test_check_doc_links.py` (47 cases). Verify: `make docs-check`;
+- **K-6: orphan nested-test process patrol (runtime hygiene)**. Measured two
+  PPID=1 mutant-pytest processes spinning for **7h04m / 6h53m** at ~97% CPU
+  each (~14 CPU-hours wasted; the full suite ran at half speed meanwhile).
+  Cause: when the parent process is SIGKILLed externally, the killpg branch in
+  `run_with_timeout` never runs (macOS has no `PR_SET_PDEATHSIG` equivalent).
+  New `scripts/tools/detect_orphan_procs.py` (four-condition intersection:
+  sandbox marker + pytest invocation + PPID=1 + age ≥ 600s; read-only by
+  default, `--kill` sends SIGTERM then SIGKILL; an unavailable `ps` must **not**
+  look like "zero leaks"); wired into `make proc-hygiene` and
+  `run_preflight.py` (leaks count as a blocking item: CPU starvation produces
+  timeout tasks = undecidable = contaminated batch conclusions). New
+  `tests/test_detect_orphan_procs.py` (32 cases) + 6 preflight cases;
+- **K-7: performance-benchmark extension (JSON extraction family)**.
+  `scripts/tools/performance_benchmark.py` gains a `json_extraction` category
+  with 4 real paths (typical fence / 2KB large plan / truncated repair /
+  array contract) — every LLM response goes through this parser, which had no
+  regression surface. `docs/performance_baseline.json` gains the category
+  (values below the 0.05ms absolute floor, trend-only); new
+  `make perf-bench` / `make perf-check` +
+  `tests/test_perf_benchmark_k_round.py` (10 cases incl. a baseline-drift
+  guard);
+- **K-9: CI workflows**. `ci.yml` gains a blocking
+  `Documentation link integrity (G16)` step (blocking gates 24 → **25**); new
+  `mutation.yml` (weekly Monday 07:00 UTC + manual): self-mutation gate
+  (env_utils + atomic_io, threshold 0.85, measured **0.9067**) + 3-module full
+  patrol report archived for 90 days + Step Summary; all actions pinned by SHA
+  (same as ci.yml).
+
+### Changed
+
+- **K-4: coverage closeout (lines +1.82pp / branches +2.31pp)**. Ten new
+  `tests/test_closeout_k_*.py` (**155 cases**, all deterministic / zero-LLM /
+  zero real waiting) improve 18 files with **0 regressions**: debugger 76 /
+  base_agent 40 / api_manager 29 / llm_client 23 / multi_candidate 21 /
+  cli-app 18 / workflow 16 / error_classifier 16, etc. Lines
+  16061/16968=94.65% → **16369/16968=96.47%**; branches 5638/6246=90.27% →
+  **5782/6246=92.57%**. Ratchet watermarks **94.60→96.4 / 90.30→92.5**
+  (only-increase); remaining uncovered branches are attributed one by one
+  (import-time bad-env fallbacks deliberately not covered to avoid
+  `importlib.reload` polluting the shared process / statically unreachable
+  branches / `__main__` self-check blocks);
+- **K-8b: local `make gates` parity with CI** — `zero-assert` joins the local
+  gate chain; `BASELINE.yaml` gains a `self_mutation` section (different
+  caliber from `target_quality.mutation_score`, **must not be mixed**); the
+  bilingual README "latest optimization / core module coverage" rows now point
+  to BASELINE (removing stale hard-coded coverage numbers, eliminating the
+  "documentation below artifact" legacy drift).
+
+### Notes
+
+- Full suite **7535 collected / 7530 passed / 5 skipped / 0 failed** (162.60s
+  locally, xdist -n 4 loadfile + `--cov=src --cov-branch`; the 3 self-referential
+  documentation-reconciliation failures turn green once BASELINE/register are
+  refreshed); **358** net new cases this round;
+- This round consumed **zero LLM quota**: every optimization and verification
+  is local compute (mutation testing / coverage / link checking / performance
+  benchmarks);
+- Artifacts tracked: `experiments/results/self_mutation_20261017/` (5 files,
+  `git add -f`, constrained by the `experiments/results` gitignore rule);
+  documentation numbers are reconciled item by item with the artifacts;
+- Residual risks (registered in register §4): 23 of the 50 surviving mutants
+  are "pending" and **not claimed equivalent**; stored mutation_score/MDO
+  metrics are old-caliber lower bounds; the ±0.10pp coverage reconciliation
+  tolerance is still loose (this round matched digit-for-digit; tightening
+  awaits consecutive zero-drift ubuntu observations).
+
+## [Unreleased] — 2026-10-17 Round J (aggregator extraction + second recurrence of switch-budget blind spot + coverage closeout / dead-code removal + stagnation ablation arm; zero LLM)
+
+> Round J is an "engineering-debt closeout" batch: J-1b extracts the three
+> aggregators nested inside `run_benchmark()` to module level (their calibers
+> become unit-testable for the first time), J-2 fixes the **second recurrence
+> of the same-family blind spot** in the ADR-0003 env-switch budget gate
+> (new call forms silently escaped governance), J-4 brings the two largest
+> uncovered modules to 100% and removes four dead code paths with zero
+> production call sites, and A-19 lands the CLI arms for the coverage-stall
+> detection on/off ablation. All changes are zero-LLM with no default
+> behavior change.
+
+### Added
+
+- **J-1b: three aggregators extracted to module level**
+  (`_aggregate_rag_metrics` / `_aggregate_token_metrics` /
+  `_aggregate_failure_categories`; previously nested functions only reachable
+  through end-to-end batch runs). Behavior is byte-for-byte unchanged; 10
+  caliber-locking tests (denominators = retrievals / rows / calls must not be
+  mixed, zero-division guards, stable failure-category ordering). Verify:
+  `pytest tests/test_run_benchmark.py -q -k ModuleLevelAggregators`;
+- **J-2: `env_flag_opt_out` negative-set caliber + `env_float` numeric
+  caliber** (`src/utils/env_utils.py`): 10 hand-copied "explicitly off means
+  off" switches converge onto a single source of truth (closing the
+  case/whitespace/off-literal-set divergences — `AITESTER_LLM_CACHE=false`
+  previously still evaluated as "on"), and `env_float` completes the float
+  family (NaN/±inf fallback prevents silently passing bad thresholds).
+  Garbage values remain fail-closed; `EXECUTOR_RLIMIT_AS_FORCE` (opt-in
+  single-value form) is deliberately not merged (merging would flip the
+  `=""` semantics). Verify: `pytest tests/test_env_utils.py -q`;
+- **J-4: coverage closeout** — five `test_nodes_j4_*` files +
+  `test_executor_repo_j4_coverage.py`, **193 cases** total, raise
+  `graph/nodes.py` (155 uncovered lines) and `agents/executor_repo.py`
+  (118 uncovered lines) to **100.00% (line + branch)**; total line coverage
+  **92.96% → 94.68%**, branch **87.62% → 90.30%**, ratchet watermark raised
+  to 94.60 / 90.30. Verify: `make test-cov` +
+  `scripts/gates/coverage_ratchet.py --check`;
+- **A-19: coverage-stall detection ablation arms**
+  (`experiments/run_benchmark.py` `--enable-stagnation` / `--no-stagnation`):
+  writing `COVERAGE_STALL_DETECT_ENABLE` at the CLI layer takes effect along
+  the whole chain (workflow re-reads env on every decision), the key is in the
+  provenance list so artifacts can verify whether an arm was really on, and
+  specifying both arms fails fast. 5 mapping/mutual-exclusion/read-back tests.
+  **The ablation batch itself awaits LLM quota** (register §2 B8); this batch
+  delivers only the executable arms and switch semantics.
+
+### Changed
+
+- **J-2: second blind-spot fix in the env-switch budget gate**
+  (`scripts/gates/check_env_budget.py`): `env_flag_opt_out` (the character
+  after `env_flag` is `_`, so the old `env_(?:flag|int)\(` pattern cannot
+  match) and `config.py::_parse_int_env/_parse_float_env` were previously
+  invisible — **24 real product knobs** (`TEMPERATURE` / `MAX_ITERATIONS` /
+  `MYSQL_PORT` / `EXECUTION_TIMEOUT` …) had never entered the register, and
+  the 10 freshly converged guard switches would silently escape governance.
+  Register 219 → **248**; every added name was confirmed to have a real call
+  site, zero false positives. Verify: `make env-budget`;
+- **J-3: optional-plugin typing surface** — `pytest-timeout` (optional plugin
+  for M1 per-test timeouts) added to the mypy `ignore_missing_imports`
+  override (falls back conservatively to the historical caliber when absent);
+  otherwise the runtime import reached via `detection_gates` makes
+  `make typecheck` fail;
+- Five `experiments/` scripts and `scripts/reproduce_zero_llm.py` received
+  ruff-format normalization only (zero semantic change).
+
+### Removed
+
+- **J-4: four dead code paths with zero production call sites** —
+  `deterministic_guard.guard_generated_test`,
+  `patch_applier.safe_apply_patch_contract`,
+  `event_bus.publish_workflow_completed`, `process_utils._close_quietly`
+  (the first is a thin wrapper over `scan_test_file`; the contract check
+  actually goes through `check_naming_contract`; `grep` confirms no residual
+  callers, and `nodes.py:2041` keeps a historical comment).
+
+### Notes
+
+- Round J's standalone caliber: full suite **7172 passed / 5 skipped /
+  0 failed** (registered caliber = collected 7177 − skipped 5; **393** net new
+  cases this round); the zero-drift line/branch comparison across two
+  consecutive `coverage.xml` runs was locked in round I and this batch
+  introduces no new measurement nondeterminism;
+- A coverage number change is not a capability change: the +1.72pp line
+  coverage comes entirely from **existing code being really executed** (J-4
+  backfill), with no production logic change; the ratchet only ratchets up,
+  with margins of +0.08pp (line) / +0.00pp (branch) (the thin margin is
+  registered as a §1 consistency warning);
+- Not touched: 74 uncovered lines in `graph/orchestration_search.py` (the
+  16-arm bandit frozen by ADR-0034; not invested before Q6 is resolved);
+  76 lines in `agents/debugger.py` (LLM call chain, mock cost > test value,
+  registered as low priority).
 
 ## [Unreleased] — 2026-10-17 df_spec experiment (P1 main experiment executed: `not_confirmed`, significant negative-direction evidence)
 

@@ -228,3 +228,51 @@ class TestNestedPytestEnv:
         assert legacy != 0, "前提不成立：宿主 PYTEST_PLUGINS 未能让嵌套 pytest 失败"
         fixed = _run_nested_pytest(tmp_path, nested_pytest_env(PYTHONPATH=str(tmp_path)))
         assert fixed == 0, "剔除宿主 pytest 配置后嵌套运行应正常通过"
+
+
+@pytest.mark.unit
+class TestNoRawEnvAroundNestedPytest:
+    """J-1c 防回归守卫：任何"子进程里再跑 pytest"的调用点都必须走 nested_pytest_env。
+
+    H 轮只修了 2/7 处，剩余 5 处靠登记册的散文提醒维持——散文不会转红。
+    本守卫按 AST 复算：`env=` 实参**就地展开** `os.environ` 且命令字面量含 `pytest`
+    的调用点一律记名失败。纯 python 探针（命令里没有 pytest）不受约束；
+    把 dict 先赋给局部变量再传入的写法不在本守卫面内（J-1c 收敛后全仓无此类站点）。
+    """
+
+    _SCAN_ROOTS = ("src", "experiments", "scripts")
+
+    def _offenders(self) -> list[str]:
+        import ast
+        from pathlib import Path
+
+        repo = Path(__file__).resolve().parents[1]
+        out: list[str] = []
+        for root in self._SCAN_ROOTS:
+            for path in (repo / root).rglob("*.py"):
+                if "__pycache__" in str(path):
+                    continue
+                try:
+                    tree = ast.parse(path.read_text(encoding="utf-8"))
+                except SyntaxError:  # 非 Python 或被排除的临时脚本
+                    continue
+                for node in ast.walk(tree):
+                    if not isinstance(node, ast.Call):
+                        continue
+                    env_kw = next((k for k in node.keywords if k.arg == "env"), None)
+                    if env_kw is None:
+                        continue
+                    env_src = ast.unparse(env_kw.value)
+                    cmd_src = ast.unparse(node.args[0]) if node.args else ""
+                    if "pytest" not in cmd_src:
+                        continue
+                    if "os.environ" in env_src and "nested_pytest_env" not in env_src:
+                        out.append(f"{path.relative_to(repo)}:{node.lineno}")
+        return out
+
+    def test_no_nested_pytest_subprocess_inherits_host_pytest_config(self) -> None:
+        offenders = self._offenders()
+        assert not offenders, (
+            "以下嵌套 pytest 调用点仍用裸 os.environ（宿主 PYTEST_PLUGINS/PYTEST_ADDOPTS "
+            f"会静默改写测量结果），请改用 nested_pytest_env：{offenders}"
+        )

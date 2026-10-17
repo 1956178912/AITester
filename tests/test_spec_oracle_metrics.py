@@ -355,6 +355,31 @@ class TestVerdictAfterRun:
         got = _spec_oracle_verdict_after_run(self._state(True, "injected"), self._result(False, failed, output))  # type: ignore[arg-type]
         assert got == _SPEC_ORACLE_VERDICT_INJECTED_AND_PASSED
 
+    def test_oracle_match_is_line_wise_not_whole_output(self) -> None:
+        """nodes.py:300 循环假腿：非 oracle 的 PASSED 行不得短路判定。
+
+        误报风险真实存在：若实现写成"输出里出现 PASSED 就算 oracle 通过"，
+        LLM 用例先 PASSED、oracle 用例因收集错误根本没跑，会被记成
+        injected_and_passed（逻辑驱动通道的假绿）。这里输出首行是 test_llm 的
+        PASSED 行、oracle 标记只在第二行 → 必须扫过第一行的假腿才升判。
+        判别性：把条件改成 `"PASSED" in output` 时本用例失败。
+        """
+        failed = [{"name": "test_generated.py::test_llm_2", "error": "AssertionError"}]
+        output = (
+            "test_generated.py::test_llm PASSED [ 33%]\n"
+            "test_generated.py::test_specir_v2_oracle PASSED [ 66%]\n"
+            "test_generated.py::test_llm_2 FAILED [100%]"
+        )
+        got = _spec_oracle_verdict_after_run(self._state(True, "injected"), self._result(False, failed, output))  # type: ignore[arg-type]
+        assert got == _SPEC_ORACLE_VERDICT_INJECTED_AND_PASSED
+
+    def test_non_oracle_lines_only_exhausts_loop_and_stays_undecided(self) -> None:
+        """输出有行但全不含 oracle 标记 → 循环走空到底 → None（不升判）。"""
+        failed = [{"name": "test_generated.py::test_llm", "error": "AssertionError"}]
+        output = "test_generated.py::test_llm PASSED [ 33%]\ntest_generated.py::test_llm_2 PASSED [ 66%]"
+        got = _spec_oracle_verdict_after_run(self._state(True, "injected"), self._result(False, failed, output))  # type: ignore[arg-type]
+        assert got is None
+
     @pytest.mark.parametrize(
         ("injected", "verdict"),
         [(None, "not_attempted"), (False, "compiled_empty"), (None, None), (True, "injected_and_passed")],

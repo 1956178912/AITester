@@ -1123,43 +1123,6 @@ def check_naming_contract(
     return True, []
 
 
-def safe_apply_patch_contract(
-    code: str,
-    patch: str,
-    enforce_contract: bool | None = None,
-) -> tuple[str, bool, list[str]]:
-    """P0 1.3 契约验证补丁应用：safe_apply_patch + 命名契约检查。
-
-    在 safe_apply_patch 的语法验证之上，增加模块级符号删除检查。
-    契约检查失败时回滚原代码（与语法失败同口径），不引入半应用状态。
-
-    Args:
-        code: 原始代码。
-        patch: LLM 生成的补丁代码。
-        enforce_contract: 是否强制执行契约检查。None 时读环境变量
-            PATCH_CONTRACT_CHECK（默认 true，保持 P0 1.3 行为）；
-            显式传 False 跳过（历史对照 / 合成集无契约场景）。
-
-    Returns:
-        (应用后的代码, 是否成功, 缺失符号列表)。契约通过时缺失列表为空。
-    """
-    new_code, success = safe_apply_patch(code, patch)
-    if not success:
-        return code, False, []
-
-    if enforce_contract is None:
-        enforce_contract = env_flag("PATCH_CONTRACT_CHECK", True)
-    if not enforce_contract:
-        return new_code, True, []
-
-    ok, missing = check_naming_contract(code, new_code)
-    if not ok:
-        # 契约破坏 → 回滚（与语法失败同口径，保守不引入半应用状态）
-        logger.info("命名契约破坏，回滚补丁（P0 1.3）：缺失 %s", missing)
-        return code, False, missing
-    return new_code, True, []
-
-
 # ─── 1.3 改进：分层压缩降级链（符号守卫拒绝时逐级收紧上下文再生成）──────
 # 三级降级链（与路线图 1.3 口径）：
 #   L1 full_context      完整函数上下文（depth=CODE_FOCUS_DEPTH，AST 聚焦）

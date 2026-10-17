@@ -145,7 +145,7 @@ from src.tools.multi_candidate import (
 )
 from src.tools.patch_applier import apply_patch_to_code
 from src.tools.patch_rollback import snapshot_rollback_enabled
-from src.utils.env_utils import env_flag, env_int
+from src.utils.env_utils import env_flag, env_flag_opt_out, env_int
 
 # 模块级 logger，用于记录节点执行过程，便于实验追踪和问题排查
 logger = logging.getLogger(__name__)
@@ -698,7 +698,7 @@ def _detection_first_section_enabled() -> bool:
     置 "false"/"0" 时 `_detection_first_section` 返回 None（不注入强化段落），
     但 `_detection_first_regenerate_entry` 与再生成路由**不受影响**。
     """
-    return os.getenv("DETECTION_FIRST_SECTION_ENABLE", "true").lower() not in ("0", "false")
+    return env_flag_opt_out("DETECTION_FIRST_SECTION_ENABLE")
 
 
 def _derive_detection_first_status(passed: bool, red_seen: bool | None) -> str | None:
@@ -1280,7 +1280,14 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
         state.get("iteration", 0) >= state.get("max_iterations", MAX_ITERATIONS)
         or state.get("defect_type") == "test_defect"
         or (state.get("iteration", 0) > 0 and state.get("diagnosis") is not None)
-        or _o4_triggered
+        # J-4（2026-10-17）：`or _o4_triggered` 已移除——本块统计的是"本节点因
+        # 再生成路由而进入"，而 O4 是本轮**发出**再生成信号（发出方不是进入方）。
+        # config.MAX_REGENERATIONS 当前为 1，在发出的那一轮就 +1 会把唯一一次
+        # 再生成预算直接烧掉：_should_debug 的 defect_type 分支要求
+        # regeneration_count < 上限，于是恒 1 < 1 = False → done，O4 强制重生成
+        # 即使修好标记覆盖（见下方 defect_type 守卫）也仍然走不到。
+        # 防死循环不受影响：下一轮 state["defect_type"] == "test_defect" 命中
+        # 上方第二个条件时照常 +1 并清空标记，上限保护与 3.1 双向诊断同口径。
         # W3（2026-10-05 审查落地·检出优先协议）：第 4 类再生成进入方式——
         # _should_debug 的 detection_first_all_green 分支（首轮全绿未检出）。
         # 特征 iteration==0 + test_passed=True 与首生成（test_passed=None）可区分，
@@ -1298,7 +1305,18 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
         update["error_category"] = None
         # 3.1 双向诊断 + O4：重新生成测试后清空旧判定，避免"test_defect"信号
         # 在下一轮仍触发 regenerate（与 regeneration_count 上限共同防死循环）
-        update["defect_type"] = None
+        #
+        # J-4（2026-10-17）修复：清的是**历史**判定，本轮 O4 新写的标记必须保留。
+        # 此前无条件置 None 与上方 update["defect_type"] = "test_defect"（O4 分支）
+        # 写同一个键、同一次返回，后写覆盖前写；而本块的进入条件之一恰是
+        # _o4_triggered —— 于是 O4"恒真断言触发强制重生成"的路由信号永远到不了
+        # _should_debug（workflow.py 只读 state["defect_type"]，oracle_findings
+        # 全仓无路由消费者），该机制自落地起即为死路径（开关
+        # ORACLE_VALIDATE_ENABLE 默认关，故历史实验数据不受影响）。
+        # _o4_triggered 蕴含 state["defect_type"] != "test_defect"（触发条件之一），
+        # 故此处保留新标记与"清旧判定"的原意不冲突。
+        if not _o4_triggered:
+            update["defect_type"] = None
         update["review_reason"] = None
     return update
 
@@ -2016,13 +2034,13 @@ def _patch_applier_node(state: AITesterState) -> dict[str, Any]:
                 _try_code, _try_ok = safe_apply_patch(original_code, _extracted)
                 if not _try_ok:
                     return None
-                # P0-4 性能（2026-10-01）：safe_apply_patch 已对
-                # (original_code, _extracted) 做过命名契约 + 危险 API 差集
-                # （safe_apply_patch_contract 路径），此处重复调用是纯冗余
-                # AST 解析。契约结果已由 safe_apply_patch 把关（_try_ok
-                # 非 True 即代表契约/语法/危险 API 任一失败），此处仅保留
-                # 契约检查用于收集 missing 符号供日志观测（缺失时保守返回
-                # None 与原行为一致）。
+                # J-3 注释纠错（2026-10-17）：原注释称"safe_apply_patch 已做过命名契约、
+                # 此处 _ck 是纯冗余 AST"——**不成立**：safe_apply_patch 只做语法校验 +
+                # 危险 API 差集，命名契约由下面这次 check_naming_contract 把关（失败即
+                # 保守返回 None）。照原注释删除 _ck 会让重采样路径静默失去契约保护。
+                # （历史上确有一个包装器 safe_apply_patch_contract = safe_apply_patch +
+                # 本段两行，全仓零调用零测试，J-3 已删；契约开关 PATCH_CONTRACT_CHECK
+                # 在 check_naming_contract 内部生效。）
                 from src.tools.patch_applier import check_naming_contract as _ck
 
                 _contract_ok, _missing = _ck(original_code, _try_code)

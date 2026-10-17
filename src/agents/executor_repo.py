@@ -44,7 +44,7 @@ import threading
 from typing import Any
 
 from src.utils.credential_scrub import scrub_os_environ
-from src.utils.env_utils import env_flag
+from src.utils.env_utils import env_flag, env_flag_opt_out, env_float
 
 logger = logging.getLogger(__name__)
 
@@ -676,15 +676,17 @@ class RepoExecutor:
                 # （结果行带 error_info type=harness_invalid，调用方应剔除）。
                 # 默认 0.95 与 M3 审查建议"基线 P2P≥95%"一致；
                 # P2P_GATE_ENABLE=false（默认 true）可关闭门禁恢复历史口径。
-                _p2p_gate_enabled = os.getenv("P2P_GATE_ENABLE", "true").lower() not in ("false", "0", "off")
-                _p2p_gate_threshold = float(os.getenv("P2P_GATE_THRESHOLD", "0.95"))
+                _p2p_gate_enabled = env_flag_opt_out("P2P_GATE_ENABLE")
+                # J-1d（2026-10-17）：原裸 float(os.getenv(...)) 遇坏值抛 ValueError，会把
+                # 判分路径整体打断；阈值定义域即 [0,1]，越界属配置错误而非意图。口径与
+                # 姊妹门禁 config.SWE_BENCH_P2P_GATE_THRESHOLD（_parse_float_env 同范围）对齐。
+                _p2p_gate_threshold = env_float("P2P_GATE_THRESHOLD", 0.95, lo=0.0, hi=1.0)
                 _harness_invalid = False
                 if _p2p_gate_enabled and p2p["expected"] > 0:
                     _p2p_baseline_rate = p2p["passed"] / p2p["expected"]
                     base_result["p2p_baseline_rate"] = round(_p2p_baseline_rate, 4)
                     if _p2p_baseline_rate < _p2p_gate_threshold:
                         _harness_invalid = True
-                        base_result["harness_invalid"] = True
                         base_result["passed"] = False
                         base_result["error_info"] = {
                             "type": "harness_invalid",
@@ -702,8 +704,16 @@ class RepoExecutor:
                             _p2p_baseline_rate * 100,
                             _p2p_gate_threshold * 100,
                         )
-                else:
-                    base_result["harness_invalid"] = False
+                # J-4（2026-10-17）：此前 harness_invalid 由两条腿分别写
+                # （拦截分支写 True、`else` 分支写 False），而**门禁开启且基线
+                # 健康**这条腿无人写 → 结果字典缺键。该字典整体落进
+                # `final_state["repo_verification"]`（run_benchmark L2325），
+                # 官方 harness 分支又恒带 `harness_invalid: False`——同一字段
+                # 在不同健康路径里时有时无：按 `["harness_invalid"]` 取值即
+                # KeyError，按 `.get()` 取则 None 与 False 混用。现改由唯一
+                # 事实源 `_harness_invalid` 单点落键（此前它被赋值两次却从未
+                # 被读过，正是"本该单点落键"的残留证据），四条腿返回形状同构。
+                base_result["harness_invalid"] = _harness_invalid
                 if base_not_failing:
                     base_result["error_info"] = {
                         "type": "base_not_failing",

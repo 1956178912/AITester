@@ -67,6 +67,9 @@ FLAG_HELPERS = frozenset(
         "_flags",
         "_env_flag",
         "env_flag",
+        # 2026-10-17 J-2：opt-out 型守卫开关单一事实源。不收则该式调用点对本
+        # 门禁完全不可见——同 check_env_budget.py 的 C/F 轮"新引用方式绕过治理"盲区族。
+        "env_flag_opt_out",
         "_env_bool",
         "env_bool",
         "_bool_env",

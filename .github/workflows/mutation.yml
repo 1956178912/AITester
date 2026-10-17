@@ -1,0 +1,149 @@
+name: AITester Self-Mutation (own test-suite strength)
+
+# K 轮（2026-10-17）新增：**自身测试套件**的变异测试巡检。
+#
+# 为什么需要它（项目既往只度量覆盖率，从未度量"测试强度"）：
+#   本项目的研究对象就是"测试有效性"，而 mutation score 是文献中最难伪造的
+#   测试强度指标（覆盖率只证明代码被执行，不证明断言能抓到缺陷）。此前项目
+#   只对**被测代码**做变异（target_quality / Mut@k），对**自身测试套件**只有
+#   行/分支覆盖率——等于用自己批评过的弱口径评价自己。本工作流把
+#   `scripts/tools/self_mutation.py`（零 LLM、临时副本、killpg 超时）接入每周
+#   巡检：对 3 个核心工具模块（env_utils / helpers / atomic_io）抽样执行变异体，
+#   产出可复算的 mutation score 与存活变异体清单。
+#
+# 口径（与 docs/design/self_mutation_harness.md 一致）：
+#   - mutation score = killed / (killed + survived)；invalid/timeout 不进分母；
+#   - 抽样：每文件 --max-mutants 120，按源码位置等距抽样（报告披露抽样率）；
+#   - 生成器无效变异体（identity / 语法非法）在抽样前剔除并单列披露；
+#   - baseline（未变异副本）必须全绿，否则 measurement_valid=false、分数不作结论。
+#
+# 为什么暂不阻断：抽样变异分数存在抽样方差（不同抽样集分数不同），跨 runner
+# 也受并行度/超时影响；阻断阈值应在多周观测出稳定区间后再定。当前为
+# **非阻断巡检**（导出工件 + Step Summary）；`workflow_dispatch` 可显式传
+# `strict=true` 启用 --fail-under 闸（默认阈值 0.60，略低于当前实测基线）。
+#
+# 触发：每周一 07:00 UTC（错开 perf.yml 周日 07:30 UTC 与 ci.yml 周日 06:00 UTC）
+on:
+  schedule:
+    - cron: "0 7 * * 1"
+  workflow_dispatch:
+    inputs:
+      max_mutants:
+        description: "每个文件的变异体上限（0=全量；默认 120）"
+        required: false
+        default: "120"
+        type: string
+      strict:
+        description: "启用 --fail-under 阻断（默认 false 仅巡检）"
+        required: false
+        default: "false"
+        type: choice
+        options: ["false", "true"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  self-mutation:
+    name: Self-mutation score (3 core modules)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out code
+        # O10：SHA 固定——与 ci.yml 同源（actions/checkout@v4.1.1）
+        uses: actions/checkout@3f3f7fd89f09a93f8006f723897ab77c52b0d3e7
+
+      - name: Set up Python 3.14
+        # 与 ci.yml test 作业的开发环境档（3.14）对齐；目标测试 import
+        # src.agents.*（langchain/langgraph 依赖链）→ 需全量 requirements
+        # O10：SHA 固定——与 ci.yml test 作业同源（actions/setup-python@v6）
+        uses: actions/setup-python@8d5bc5b086458bc1c9e4c01b4f9f123f37c1c4c0
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Self-mutation gate (env_utils + atomic_io, threshold 0.85)
+        # 门禁口径（WP-A 实测建议）：选"稳定叶子模块"——env_utils 修正后 0.9467、
+        # atomic_io 0.8095，合并 88/96 = 0.9167；阈值 0.85 留约 6.7pp 余量，低于
+        # 抽样方差上界（每文件 60 变异体、2 worker）。invalid/timeout 不进分母，
+        # 因此慢 runner 不会制造假阴；只有"真正变弱"才会跌破阈值。
+        # --test-map 必须显式接入 tests/test_self_mutation_targets.py（击杀批次）：
+        # 自动发现只匹配 test_<stem>.py 命名族，漏接会让门禁回退到击杀前分数。
+        run: |
+          python scripts/tools/self_mutation.py \
+            --files src/utils/env_utils.py,src/utils/atomic_io.py \
+            --workers 2 --max-mutants 60 \
+            --fail-under 0.85 \
+            --test-map src/utils/env_utils.py=tests/test_env_utils.py,tests/test_self_mutation_targets.py \
+            --test-map src/utils/atomic_io.py=tests/test_atomic_io.py,tests/test_self_mutation_targets.py \
+            --json-out experiments/results/self_mutation_ci/gate.json \
+            --md-out experiments/results/self_mutation_ci/gate.md
+
+      - name: Self-mutation full patrol (3 modules, report-only)
+        # 全量巡检：3 个核心模块 × 每文件 120 抽样，产出可复算的完整报告
+        # （helpers 为 25.6% 抽样点估计，报告已披露抽样率，不写成全量分数）。
+        # 门禁步骤失败后仍执行（if: always()），保证工件可用于诊断。
+        if: always()
+        run: |
+          python scripts/tools/self_mutation.py \
+            --files src/utils/env_utils.py,src/utils/helpers.py,src/utils/atomic_io.py \
+            --workers 2 \
+            --max-mutants "${{ github.event.inputs.max_mutants || '120' }}" \
+            --json-out experiments/results/self_mutation_ci/self_mutation_report.json \
+            --md-out experiments/results/self_mutation_ci/self_mutation_report.md
+
+      - name: Write run summary
+        if: always()
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path("experiments/results/self_mutation_ci/self_mutation_report.json")
+          if not path.exists():
+              print("未生成报告（步骤失败或提前退出）")
+              raise SystemExit(0)
+          report = json.loads(path.read_text(encoding="utf-8"))
+          summary = report.get("summary", {})
+          lines = [
+              "## Self-mutation（自身测试套件变异得分）",
+              "",
+              f"- 变异体：生成 {summary.get('total_generated_mutants')} / 可执行池 {summary.get('executable_pool')} / 抽样执行 {summary.get('sampled_mutants')}",
+              f"- 结果：killed {summary.get('killed')} / survived {summary.get('survived')} / invalid {summary.get('invalid')} / timeout {summary.get('timeout')}",
+              f"- **mutation score = {summary.get('mutation_score')}**（有效分母 {summary.get('valid_denominator')}）",
+              f"- baseline_green={summary.get('baseline_green')} / measurement_valid={summary.get('measurement_valid')}",
+              "",
+              "| 模块 | score | killed | survived | invalid |",
+              "| --- | ---: | ---: | ---: | ---: |",
+          ]
+          for module in report.get("modules", []):
+              samples = module.get("samples", {})
+              lines.append(
+                  f"| `{module.get('module')}` | {module.get('mutation_score')} | "
+                  f"{samples.get('killed')} | {samples.get('survived')} | {samples.get('invalid')} |"
+              )
+          Path("self_mutation_summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+          print("\n".join(lines))
+          PY
+          cat self_mutation_summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload self-mutation report
+        if: always()
+        # O10：SHA 固定——与 ci.yml 静态快照上传同源（actions/upload-artifact@v4.2.0）
+        uses: actions/upload-artifact@84488ed32758509799cae3ed5e43ef903669d08b
+        with:
+          name: self-mutation-${{ github.run_number }}
+          path: |
+            experiments/results/self_mutation_ci/
+            self_mutation_summary.md
+          retention-days: 90

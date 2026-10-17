@@ -1,6 +1,6 @@
 # Troubleshooting — 故障排查手册
 
-> 语言 / Language：[English](troubleshooting.en.md)（待补） | 简体中文（本文）
+> 语言 / Language：English（待补，暂无对应文件） | 简体中文（本文）
 >
 > 组织口径（外部参照竞品 DevAssure "No brittle scripts to write or
 > maintain" 的价值主张 + KAT Dev 的 CI 集成定位）：**症状 → 根因 →

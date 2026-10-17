@@ -17,7 +17,8 @@
     - 扫描范围：src/**/*.py + config.py（产品开关面）。experiments/ 与
       scripts/ 的实验性 os.getenv 不计入（实验脚本不属于产品开关矩阵）；
     - 静态提取：os.getenv("X") / os.environ.get("X") / os.environ["X"] /
-      os.environ.setdefault("X", ...) / env_flag("X") / env_int("X") /
+      os.environ.setdefault("X", ...) / env_flag("X") / env_flag_opt_out("X") /
+      env_int("X") / env_float("X") / _parse_int_env("X") / _parse_float_env("X") /
       模块级名字含 ENV 的常量（_ENV_X、_X_ENV、_X_ENV_VAR 三式均收）；
       动态拼接（os.getenv(f"...") ）提取不到——已知漏网面，登记表是
       名字集合而非完备性证明；
@@ -63,6 +64,16 @@ SCAN_GLOBS = ["src/**/*.py", "config.py"]
 # 同族包装器（如 src/tools/feedback_compression.py::_clamp_env_int，其字面
 # 名此前同样不可见）；F 轮引入 env_utils.env_int 后该形态即为正向覆盖。
 # 合计新扫出 25 个真名（194 → 219），逐个人工核实均有实际取用点、零误报。
+#
+# 2026-10-17 J-2（同族盲区二次复现，务必按"每新增一个取用口径就回来加分支"
+# 理解为长期纪律而非一次性补票）：env_utils 布尔口径收敛新增 `env_flag_opt_out`、
+# 数值同族新增 `env_float`（含各模块自建 `_env_float` 包装器，靠"无左词界"顺带
+# 覆盖）后，旧模式 `env_(?:flag|int)\(` **匹配不到**这两式——括号必须紧跟 flag/int，
+# 而 `env_flag_opt_out(` 在 flag 后是 `_`。即 10 个刚收敛的守卫开关会静默脱离
+# ADR-0003 治理。同批补 config.py 自建的钳制解析式 `_parse_(?:int|float)_env(`：
+# 该族此前完全不可见，`EXECUTION_TIMEOUT`/`MAX_ITERATIONS`/`MYSQL_PORT`/
+# `TEMPERATURE` 等 24 个真实产品旋钮从未进过登记表（与 F 轮"194/194 假绿"同因）。
+# 两式合计 219 → 248，新增名字逐个核实均有实际取用点。
 _PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     (
         "os.getenv/environ.get/environ[]/setdefault",
@@ -74,8 +85,8 @@ _PATTERNS: list[tuple[str, re.Pattern[str]]] = [
         ),
     ),
     (
-        'env_flag/env_int("NAME") 单一事实源调用（2026-10-16 C/F 轮收敛后形态）',
-        re.compile(r"env_(?:flag|int)\(\s*[\x22\x27]([A-Z][A-Z0-9_]+)[\x22\x27]"),
+        'env_flag/env_flag_opt_out/env_int/env_float("NAME") 单一事实源调用（2026-10-16 C/F 轮、2026-10-17 J-2 收敛后形态）',
+        re.compile(r"env_(?:flag_opt_out|flag|int|float)\(\s*[\x22\x27]([A-Z][A-Z0-9_]+)[\x22\x27]"),
     ),
     (
         "模块级名字含 ENV 的字符串常量（os.getenv(_X_ENV) 间接引用）",
@@ -83,6 +94,10 @@ _PATTERNS: list[tuple[str, re.Pattern[str]]] = [
             r"^_?[A-Z0-9_]*ENV[A-Z0-9_]*\s*=\s*[\x22\x27]([A-Z][A-Z0-9_]+)[\x22\x27]",
             re.MULTILINE,
         ),
+    ),
+    (
+        'config.py::_parse_int_env/_parse_float_env("NAME") 钳制解析（2026-10-17 J-2 补）',
+        re.compile(r"_parse_(?:int|float)_env\(\s*[\x22\x27]([A-Z][A-Z0-9_]+)[\x22\x27]"),
     ),
 ]
 

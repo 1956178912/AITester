@@ -17,7 +17,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.agents.deterministic_guard import (
     GuardReport,
     deterministic_guard_enabled,
-    guard_generated_test,
     scan_test_file,
 )
 
@@ -33,7 +32,7 @@ def _rules(report: GuardReport) -> set[str]:
 class TestDefaultOff:
     def test_default_off_is_always_deterministic(self):
         assert deterministic_guard_enabled() is False
-        r = guard_generated_test("import random\ndef t():\n    random.random()\n")
+        r = scan_test_file("import random\ndef t():\n    random.random()\n")
         assert r.is_deterministic
         assert r.findings == []
 

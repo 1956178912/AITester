@@ -30,10 +30,11 @@
 from __future__ import annotations
 
 import logging
-import os
 import threading
 from collections.abc import Callable, Mapping
 from typing import Any
+
+from src.utils.env_utils import env_flag_opt_out
 
 logger = logging.getLogger(__name__)
 
@@ -175,7 +176,7 @@ Subscriber = Callable[[Event], None]
 def _event_bus_enabled() -> bool:
     """事件总线开关（EVENT_BUS_ENABLE，默认 true——纯观测零路由影响；
     设 false 时 publish/subscribe 为 no-op，消融"事件层本身"的成本）。"""
-    return os.getenv("EVENT_BUS_ENABLE", "true").lower() not in ("false", "0")
+    return env_flag_opt_out("EVENT_BUS_ENABLE")
 
 
 class EventBus:
@@ -283,17 +284,5 @@ def publish_debugger_diagnosed(state: Mapping[str, Any], error_category: str) ->
             fix_strategy_tag=str(state.get("fix_strategy_tag") or ""),
             fix_strategy_action=str(state.get("fix_strategy_action") or ""),
             iteration=int(state.get("iteration", 0)),
-        )
-    )
-
-
-def publish_workflow_completed(state: Mapping[str, Any], test_passed: bool, final_error_category: str = "") -> None:
-    """工作流收尾接线（WorkflowCompleted 事件）。"""
-    publish_event(
-        WorkflowCompleted(
-            task_uuid=str(state.get("task_uuid", "")),
-            test_passed=test_passed,
-            iteration=int(state.get("iteration", 0)),
-            final_error_category=final_error_category,
         )
     )

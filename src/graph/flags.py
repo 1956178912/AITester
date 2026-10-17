@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import os
 
-from src.utils.env_utils import env_flag
+from src.utils.env_utils import env_flag, env_flag_opt_out
 
 
 def _patch_resample_enabled() -> bool:
@@ -263,12 +263,12 @@ def _repo_core_protection_enabled() -> bool:
     等价（历史实现 not in ("0", "false", "False") 大小写敏感，"FALSE" 被
     误判为启用——保守方向错误的 bug，2026-09-29 审查 R3 修正）。
     """
-    return os.getenv("PATCH_PROTECT_REPO_CORE", "1").lower() not in ("0", "false")
+    return env_flag_opt_out("PATCH_PROTECT_REPO_CORE")
 
 
 def _agent_reuse_enabled() -> bool:
     """Agent 实例复用开关（AITESTER_AGENT_REUSE，默认启用，历史口径不变）。"""
-    return os.getenv("AITESTER_AGENT_REUSE", "1") != "0"
+    return env_flag_opt_out("AITESTER_AGENT_REUSE")
 
 
 def _plan_expected_output_strip_enabled() -> bool:

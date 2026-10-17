@@ -11,11 +11,11 @@ nodes.py 通过 `from .agents_cache import ...` re-export，保持
 
 from __future__ import annotations
 
-import os
 import threading
 from typing import TYPE_CHECKING, Any
 
 from src.graph.flags import _agent_reuse_enabled
+from src.utils.env_utils import env_flag_opt_out
 
 if TYPE_CHECKING:
     # 仅供 mypy 解析类型注解；运行时用函数内延迟 import（从 src.graph.nodes
@@ -43,7 +43,7 @@ def _get_or_create_executor_agent(
     # patch("src.graph.nodes.ExecutorAgent") 的 mock 能作用到本函数（历史 mock 口径）。
     from src.graph.nodes import ExecutorAgent
 
-    if os.getenv("AITESTER_EXECUTOR_AGENT_CACHE", "1") == "0":
+    if not env_flag_opt_out("AITESTER_EXECUTOR_AGENT_CACHE"):
         return ExecutorAgent(
             timeout=timeout,
             use_docker=use_docker,
