@@ -1,0 +1,171 @@
+{
+  "schema": "prompt_augment_evidence/2",
+  "generated_by": "experiments/run_augment_batch.sh",
+  "cache_dir": "/Users/wangchenyu/.cache/aitester/llm",
+  "window": {
+    "start_epoch": 1792242622.0,
+    "end_epoch": 1792246800.0
+  },
+  "generator_system_marker": "测试代码生成专家",
+  "augment_frame_marker": "【规格增广模式（Spec-Augment）：规格锚与目标代码并列】",
+  "spec_section_marker": "【独立于实现的规格锚（人类 docstring）】",
+  "anchor_table": "/Users/wangchenyu/Workspace/AITester-m-batch-fae8f45/experiments/results/emse_docstring_anchor_20261017/DOCSTRING_ANCHOR_TABLE.json",
+  "criterion_note": "QuixBugs 人类规格文本同时内嵌于缺陷源码尾部（模块 docstring），因此以 M-1 augment framing 段+顺序（代码标记 < framing < 规格锚末次出现）为决定性判据；无 framing 段的同 generator 条目 = df 对照臂（负向对照）。",
+  "n_generator_cache_entries_in_window": 108,
+  "n_augment_framing_entries": 43,
+  "n_code_only_entries": 42,
+  "n_unreadable_cache_files": 0,
+  "negative_control_ok": true,
+  "evidence_status": "ok",
+  "examples": [
+    {
+      "cache_file": "099e0d7fcfc6436d.json",
+      "cache_sha256": "09f41270ad0e8c27062a3b95d0bc19abb6971368d5989dff3147e3a7a9c1b0c3",
+      "cache_timestamp": 1792243011.900606,
+      "function_name": "minimum_spanning_tree",
+      "source_head": "def minimum_spanning_tree(weight_by_edge):",
+      "spec_marker_len": 105,
+      "prompt_len": 2223,
+      "code_offset": 29,
+      "augment_frame_offset": 1027,
+      "spec_marker_offsets": [
+        734,
+        1588
+      ],
+      "spec_marker_occurrences": 2,
+      "spec_last_after_frame": true,
+      "has_spec_section_header": true,
+      "augment_framing_present": true,
+      "augment_ok": true,
+      "excerpt_augment": "): 10,\n    ...     (1, 4): 10\n    ... })\n    {(1, 2), (3, 4), (1, 4)}\n\"\"\"\n\n```\n\n【规格增广模式（Spec-Augment）：规格锚与目标代码并列】\n上方已完整给出目标代码；以下并列追加同一函数的人类独立规格锚（独立于缺陷实现书写）。\n请结合两者：当实现与规格不一致时，按规格构造期望值（这是检出缺陷的关键）。\n不得仅凭当前实现的实际行为推断期望值——那会把缺陷固化成预期（oracle-from-implementation），系统性抹掉检出。\n\n函数签名：def minimum_spanning_tree(weight_by_edge)\n被测模块名：minimum_spanning_tree（import 必须 `from minimum_spanning_tree import ...`）\n\n【独立于实现的规格锚（人类 docstring）】\nMinimum Spanning Tree\n\n\nKruskal's algorithm implementation.\n\nInput:\n    weight_by_edge: A dict of the form {(u, v): weight} for every undirected graph edge {u, v}\n\nPrecondition:\n    The input graph is connected\n\nOutput:\n    A set of edges that connects all the vertices of the input graph and has the least possible total weight.\n\nExample:\n    >>> minimum_spanning_tree({\n    ...     (1, 2): 10,\n    ...     (2, 3): 15,\n    ...     (3, 4): 10,\n    ...     (1, 4): 10\n    ... })\n    {(1, 2), (3, 4), (1, 4)}\n\n【生成纪律（增广模式）】\n1. 人类规格 / docstring 明确覆盖的行为，必须按规格断言——不得以当前实现的实际行为作为期望值；\n2. 规格与实现不一致处即为嫌疑缺陷：按规格推导正确结果并断言（这是检出缺陷的关键）；\n3. 输入构造必须满足前置条件（不满足前件的输入应走 pytest.raises 路径或排除）；\n4. 可以阅读上方目标代码理解调用方式，但不得访问规约与签名之外的属性 / 符号。\n\n被测模块名：minimum_spanning_tree\n\n请根据以上计划生成完整的 pytest 测"
+    },
+    {
+      "cache_file": "2862c16a50ed6835.json",
+      "cache_sha256": "bdbae64c7ef009c6a5d78ec6efdb5bbef646c5c4966f1e0aa1592804e2af8457",
+      "cache_timestamp": 1792243322.898381,
+      "function_name": "subsequences",
+      "source_head": "def subsequences(a, b, k):",
+      "spec_marker_len": 65,
+      "prompt_len": 1385,
+      "code_offset": 28,
+      "augment_frame_offset": 511,
+      "spec_marker_offsets": [
+        338,
+        899
+      ],
+      "spec_marker_occurrences": 2,
+      "spec_last_after_frame": true,
+      "has_spec_section_header": true,
+      "augment_framing_present": true,
+      "augment_ok": true,
+      "excerpt_augment": "ces(a=1, b=5, k=3)\n    [[1, 2, 3], [1, 2, 4], [1, 3, 4], [2, 3, 4]]\n\"\"\"\n\n\n\n```\n\n【规格增广模式（Spec-Augment）：规格锚与目标代码并列】\n上方已完整给出目标代码；以下并列追加同一函数的人类独立规格锚（独立于缺陷实现书写）。\n请结合两者：当实现与规格不一致时，按规格构造期望值（这是检出缺陷的关键）。\n不得仅凭当前实现的实际行为推断期望值——那会把缺陷固化成预期（oracle-from-implementation），系统性抹掉检出。\n\n函数签名：def subsequences(a, b, k)\n被测模块名：subsequences（import 必须 `from subsequences import ...`）\n\n【独立于实现的规格锚（人类 docstring）】\nSubsequences\n\n\nInput:\n    a: An int\n    b: An int\n    k: A positive int\n\nOutput:\n    A list of all length-k ascending sequences of ints in range(a, b)\n\nExample:\n    >>> subsequences(a=1, b=5, k=3)\n    [[1, 2, 3], [1, 2, 4], [1, 3, 4], [2, 3, 4]]\n\n【生成纪律（增广模式）】\n1. 人类规格 / docstring 明确覆盖的行为，必须按规格断言——不得以当前实现的实际行为作为期望值；\n2. 规格与实现不一致处即为嫌疑缺陷：按规格推导正确结果并断言（这是检出缺陷的关键）；\n3. 输入构造必须满足前置条件（不满足前件的输入应走 pytest.raises 路径或排除）；\n4. 可以阅读上方目标代码理解调用方式，但不得访问规约与签名之外的属性 / 符号。\n\n被测模块名：subsequences\n\n请根据以上计划生成完整的 pytest 测试代码。\n\n【重要约束】import 语句必须使用以下模块名：`subsequences`，即 `from subsequences import ...`"
+    }
+  ],
+  "records_augment_arm": [
+    {
+      "cache_file": "099e0d7fcfc6436d.json",
+      "cache_sha256": "09f41270ad0e8c27062a3b95d0bc19abb6971368d5989dff3147e3a7a9c1b0c3",
+      "cache_timestamp": 1792243011.900606,
+      "function_name": "minimum_spanning_tree",
+      "source_head": "def minimum_spanning_tree(weight_by_edge):",
+      "spec_marker_len": 105,
+      "prompt_len": 2223,
+      "code_offset": 29,
+      "augment_frame_offset": 1027,
+      "spec_marker_offsets": [
+        734,
+        1588
+      ],
+      "spec_marker_occurrences": 2,
+      "spec_last_after_frame": true,
+      "has_spec_section_header": true,
+      "augment_framing_present": true,
+      "augment_ok": true,
+      "excerpt_augment": "): 10,\n    ...     (1, 4): 10\n    ... })\n    {(1, 2), (3, 4), (1, 4)}\n\"\"\"\n\n```\n\n【规格增广模式（Spec-Augment）：规格锚与目标代码并列】\n上方已完整给出目标代码；以下并列追加同一函数的人类独立规格锚（独立于缺陷实现书写）。\n请结合两者：当实现与规格不一致时，按规格构造期望值（这是检出缺陷的关键）。\n不得仅凭当前实现的实际行为推断期望值——那会把缺陷固化成预期（oracle-from-implementation），系统性抹掉检出。\n\n函数签名：def minimum_spanning_tree(weight_by_edge)\n被测模块名：minimum_spanning_tree（import 必须 `from minimum_spanning_tree import ...`）\n\n【独立于实现的规格锚（人类 docstring）】\nMinimum Spanning Tree\n\n\nKruskal's algorithm implementation.\n\nInput:\n    weight_by_edge: A dict of the form {(u, v): weight} for every undirected graph edge {u, v}\n\nPrecondition:\n    The input graph is connected\n\nOutput:\n    A set of edges that connects all the vertices of the input graph and has the least possible total weight.\n\nExample:\n    >>> minimum_spanning_tree({\n    ...     (1, 2): 10,\n    ...     (2, 3): 15,\n    ...     (3, 4): 10,\n    ...     (1, 4): 10\n    ... })\n    {(1, 2), (3, 4), (1, 4)}\n\n【生成纪律（增广模式）】\n1. 人类规格 / docstring 明确覆盖的行为，必须按规格断言——不得以当前实现的实际行为作为期望值；\n2. 规格与实现不一致处即为嫌疑缺陷：按规格推导正确结果并断言（这是检出缺陷的关键）；\n3. 输入构造必须满足前置条件（不满足前件的输入应走 pytest.raises 路径或排除）；\n4. 可以阅读上方目标代码理解调用方式，但不得访问规约与签名之外的属性 / 符号。\n\n被测模块名：minimum_spanning_tree\n\n请根据以上计划生成完整的 pytest 测"
+    },
+    {
+      "cache_file": "2862c16a50ed6835.json",
+      "cache_sha256": "bdbae64c7ef009c6a5d78ec6efdb5bbef646c5c4966f1e0aa1592804e2af8457",
+      "cache_timestamp": 1792243322.898381,
+      "function_name": "subsequences",
+      "source_head": "def subsequences(a, b, k):",
+      "spec_marker_len": 65,
+      "prompt_len": 1385,
+      "code_offset": 28,
+      "augment_frame_offset": 511,
+      "spec_marker_offsets": [
+        338,
+        899
+      ],
+      "spec_marker_occurrences": 2,
+      "spec_last_after_frame": true,
+      "has_spec_section_header": true,
+      "augment_framing_present": true,
+      "augment_ok": true,
+      "excerpt_augment": "ces(a=1, b=5, k=3)\n    [[1, 2, 3], [1, 2, 4], [1, 3, 4], [2, 3, 4]]\n\"\"\"\n\n\n\n```\n\n【规格增广模式（Spec-Augment）：规格锚与目标代码并列】\n上方已完整给出目标代码；以下并列追加同一函数的人类独立规格锚（独立于缺陷实现书写）。\n请结合两者：当实现与规格不一致时，按规格构造期望值（这是检出缺陷的关键）。\n不得仅凭当前实现的实际行为推断期望值——那会把缺陷固化成预期（oracle-from-implementation），系统性抹掉检出。\n\n函数签名：def subsequences(a, b, k)\n被测模块名：subsequences（import 必须 `from subsequences import ...`）\n\n【独立于实现的规格锚（人类 docstring）】\nSubsequences\n\n\nInput:\n    a: An int\n    b: An int\n    k: A positive int\n\nOutput:\n    A list of all length-k ascending sequences of ints in range(a, b)\n\nExample:\n    >>> subsequences(a=1, b=5, k=3)\n    [[1, 2, 3], [1, 2, 4], [1, 3, 4], [2, 3, 4]]\n\n【生成纪律（增广模式）】\n1. 人类规格 / docstring 明确覆盖的行为，必须按规格断言——不得以当前实现的实际行为作为期望值；\n2. 规格与实现不一致处即为嫌疑缺陷：按规格推导正确结果并断言（这是检出缺陷的关键）；\n3. 输入构造必须满足前置条件（不满足前件的输入应走 pytest.raises 路径或排除）；\n4. 可以阅读上方目标代码理解调用方式，但不得访问规约与签名之外的属性 / 符号。\n\n被测模块名：subsequences\n\n请根据以上计划生成完整的 pytest 测试代码。\n\n【重要约束】import 语句必须使用以下模块名：`subsequences`，即 `from subsequences import ...`"
+    },
+    {
+      "cache_file": "353d70a6f339edce.json",
+      "cache_sha256": "170bfcffb43024648aaaaa0248d061ee676a8cc5c23af6bf49970bfc4a9d1a9a",
+      "cache_timestamp": 1792242731.7808151,
+      "function_name": "gcd",
+      "source_head": "def gcd(a, b):",
+      "spec_marker_len": 49,
+      "prompt_len": 1188,
+      "code_offset": 28,
+      "augment_frame_offset": 374,
+      "spec_marker_offsets": [
+        277,
+        804
+      ],
+      "spec_marker_occurrences": 2,
+      "spec_last_after_frame": true,
+      "has_spec_section_header": true,
+      "augment_framing_present": true,
+      "augment_ok": true,
+      "excerpt_augment": "that divides evenly into a and b\n\nExample:\n    >>> gcd(35, 21)\n    7\n\n\"\"\"\n\n```\n\n【规格增广模式（Spec-Augment）：规格锚与目标代码并列】\n上方已完整给出目标代码；以下并列追加同一函数的人类独立规格锚（独立于缺陷实现书写）。\n请结合两者：当实现与规格不一致时，按规格构造期望值（这是检出缺陷的关键）。\n不得仅凭当前实现的实际行为推断期望值——那会把缺陷固化成预期（oracle-from-implementation），系统性抹掉检出。\n\n函数签名：def gcd(a, b)\n被测模块名：gcd（import 必须 `from gcd import ...`）\n\n【独立于实现的规格锚（人类 docstring）】\nInput:\n    a: A nonnegative int\n    b: A nonnegative int\n\n\nGreatest Common Divisor\n\nPrecondition:\n    isinstance(a, int) and isinstance(b, int)\n\nOutput:\n    The greatest int that divides evenly into a and b\n\nExample:\n    >>> gcd(35, 21)\n    7\n\n【生成纪律（增广模式）】\n1. 人类规格 / docstring 明确覆盖的行为，必须按规格断言——不得以当前实现的实际行为作为期望值；\n2. 规格与实现不一致处即为嫌疑缺陷：按规格推导正确结果并断言（这是检出缺陷的关键）；\n3. 输入构造必须满足前置条件（不满足前件的输入应走 pytest.raises 路径或排除）；\n4. 可以阅读上方目标代码理解调用方式，但不得访问规约与签名之外的属性 / 符号。\n\n被测模块名：gcd\n\n请根据以上计划生成完整的 pytest 测试代码。\n\n【重要约束】import 语句必须使用以下模块名：`gcd`，即 `from gcd import ...`"
+    },
+    {
+      "cache_file": "3f2e572910f1cce6.json",
+      "cache_sha256": "8b002f75650fd88bee65af5dd006f7e7b55d3f2a5c5b157c40b62e95b0ac9c50",
+      "cache_timestamp": 1792243296.9183922,
+      "function_name": "shunting_yard",
+      "source_head": "def shunting_yard(tokens):",
+      "spec_marker_len": 108,
+      "prompt_len": 2372,
+      "code_offset": 29,
+      "augment_frame_offset": 1126,
+      "spec_marker_offsets": [
+        543,
+        1471
+      ],
+      "spec_marker_occurrences": 2,
+      "spec_last_after_frame": true,
+      "has_spec_section_header": true,
+      "augment_framing_present": true,
+      "augment_ok": true,
+      "excerpt_augment": " '*', 9, '-', 10, '+', 13])\n    [4, 9, 9, '*', '+', 10, '-', 13, '+']\n\"\"\"\n\n```\n\n【规格增广模式（Spec-Augment）：规格锚与目标代码并列】\n上方已完整给出目标代码；以下并列追加同一函数的人类独立规格锚（独立于缺陷实现书写）。\n请结合两者：当实现与规格不一致时，按规格构造期望值（这是检出缺陷的关键）。\n不得仅凭当前实现的实际行为推断期望值——那会把缺陷固化成预期（oracle-from-implementation），系统性抹掉检出。\n\n函数签名：def shunting_yard(tokens)\n被测模块名：shunting_yard（import 必须 `from shunting_yard import ...`）\n\n【独立于实现的规格锚（人类 docstring）】\nInfix to RPN Conversion\nshunting-yard\n\n\nUses Dijkstra's shunting-yard algorithm to transform infix notation into equivalent Reverse Polish Notation.\n\nInput:\n    tokens: A list of tokens in infix notation\n\nPrecondition:\n    all(isinstance(token, int) or token in '+-*/' for token in tokens)\n\nOutput:\n    The input tokens reordered into Reverse Polish Notation\n\nExamples:\n    >>> shunting_yard([10, '-', 5, '-', 2])\n    [10, 5, '-', 2, '-']\n    >>> shunting_yard([34, '-', 12, '/', 5])\n    [34, 12, 5, '/' ,'-']\n    >>> shunting_yard([4, '+', 9, '*', 9, '-', 10, '+', 13])\n    [4, 9, 9, '*', '+', 10, '-', 13, '+']\n\n【生成纪律（增广模式）】\n1. 人类规格 / docstring 明确覆盖的行为，必须按规格断言——不得以当前实现的实际行为作为期望值；\n2. 规格与实现不一致处即为嫌疑缺陷：按规格推导正确结果并断言（这是检出缺陷的关键）；\n3. 输入构造必须满足前置条件（不满足前件的输入应走 pytest.raises 路径或排除）；\n4. 可以阅读上方目标代码理解调用方式"
+    },
+    {
+      "cache_file": "443b06507d317926.json",
+      "cache_sha256": "686cab5d6e2c5e9dfef3218a4ea77dabce12d8bfccbd932a40c71f1ece2d0915",
+      "cache_timestamp": 1792242685.965106,
+      "function_name": "find_first_in_sorted",
+      "source_head": "def find_first_in_sorted(arr, x):",
+      "spec_marker_len": 63,
+      "prompt_len": 1517,
+      "code_offset": 28,
+      "augment_frame_offset": 595,
+      "spec_marker_offsets": [
+        450,
+        1033
+      ],
+      "spec_marker_occurrences": 2,
+      "spec_last_after_frame": true,
+      "has_spec_section_header": true,
+      "augment_framing_present": true,
+      "augment_ok": true,
+      "excerpt_augment": "Example:\n    >>> find_first_in_sorted([3, 4, 5, 5, 5, 5, 6], 5)\n    2\n\"\"\"\n\n```\n\n【规格增广模式（Spec-Augment）：规格锚与目标代码并列】\n上方已完整给出目标代码；以下并列追加同一函数的人类独立规格锚（独立于缺陷实现书写）。\n请结合两者：当实现与规格不一致时，按规格构造期望值（这是检出缺陷的关键）。\n不得仅凭当前实现的实际行为推断期望值——那会把缺陷固化成预期（oracle-from-implementation），系统性抹掉检出。\n\n函数签名：def find_first_in_sorted(arr, x)\n被测模块名：find_first_in_sorted（import 必须 `from find_first_in_sorted import ...`）\n\n【独立于实现的规格锚（人类 docstring）】\nFancy Binary Search\nfancy-binsearch\n\n\nInput:\n    arr: A sorted list of ints\n    x: A value to find\n\nOutput:\n    The lowest index i such that arr[i] == x, or -1 if x not in arr\n\nExample:\n    >>> find_first_in_sorted([3, 4, 5, 5, 5, 5, 6], 5)\n    2\n\n【生成纪律（增广模式）】\n1. 人类规格 / docstring 明确覆盖的行为，必须按规格断言——不得以当前实现的实际行为作为期望值；\n2. 规格与实现不一致处即为嫌疑缺陷：按规格推导正确结果并断言（这是检出缺陷的关键）；\n3. 输入构造必须满足前置条件（不满足前件的输入应走 pytest.raises 路径或排除）；\n4. 可以阅读上方目标代码理解调用方式，但不得访问规约与签名之外的属性 / 符号。\n\n被测模块名：find_first_in_sorted\n\n请根据以上计划生成完整的 pytest 测试代码。\n\n【重要约束】import 语句必须使用以下模块名：`find_first_in_sorted`，即 `from find_first_in_sorted import ...`"
+    }
+  ]
+}

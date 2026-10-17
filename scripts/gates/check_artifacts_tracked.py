@@ -120,6 +120,28 @@ MANIFEST: tuple[str, ...] = (
     "experiments/results/l_round_pilot_20261017/README.md",
     "experiments/results/l_round_pilot_20261017/SHA256SUMS",
     "experiments/results/l_round_pilot_20261017/defect_repro/aborted_full50_run.log",
+    # M 轮（2026-10-17）：规格增广二臂正式批（BASELINE benchmark.docstring_augment /
+    # README 最新优化 / 登记册 M-2 的证据源；预注册判定 + prompt 一等证据）
+    "experiments/results/emse_docstring_augment_20261017/README.md",
+    "experiments/results/emse_docstring_augment_20261017/SHA256SUMS",
+    "experiments/results/emse_docstring_augment_20261017/DF_AUG_REPORT.json",
+    "experiments/results/emse_docstring_augment_20261017/PROMPT_EVIDENCE.json",
+    "experiments/results/emse_docstring_augment_20261017/benchmark_quixbugs_20261017_221735.json",
+    "experiments/results/emse_docstring_augment_20261017/benchmark_quixbugs_20261017_221948.json",
+    # M 轮：misguided/effective 机制重放（增广批）
+    "experiments/results/emse_misguided_augment_20261017/README.md",
+    "experiments/results/emse_misguided_augment_20261017/MISGUIDED_REPORT.json",
+    "experiments/results/emse_misguided_augment_20261017/SHA256SUMS",
+    # M 轮：A-05 oracle 质量（MEASUREMENT_INTEGRITY §6 / BASELINE target_quality.oracle_quality 证据源）
+    "experiments/results/emse_oracle_quality_20261017/README.md",
+    "experiments/results/emse_oracle_quality_20261017/ORACLE_QUALITY_REPORT.json",
+    "experiments/results/emse_oracle_quality_20261017/SHA256SUMS",
+    # M 轮：A-11 编译/执行率（BASELINE target_quality.compile_exec 证据源）
+    "experiments/results/emse_compile_exec_20261017/COMPILE_EXEC_REPORT.json",
+    "experiments/results/emse_compile_exec_20261017/SHA256SUMS",
+    # M 轮：m1_metrics 孤儿根因证据（M-3；before/after + 现场残留证据）
+    "experiments/results/orphan_repro_20261017/README.md",
+    "experiments/results/orphan_repro_20261017/SHA256SUMS",
 )
 
 # emse_* 目录覆盖扫描的显式豁免登记（相对 experiments/results/）。

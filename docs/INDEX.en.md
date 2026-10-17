@@ -85,6 +85,7 @@
 | [docs/design/multilanguage_extension.md](design/multilanguage_extension.md) (Chinese) | Multilanguage-extension architecture reservation (language adapter layer and admission criteria). |
 | [docs/design/docstring_anchor.md](design/docstring_anchor.md) (Chinese) | P1 independent docstring spec anchor: two-arm design, anchor-table caliber, pre-registration and three-arm verdict (`not_confirmed`). |
 | [docs/design/misguided_effective_metric.md](design/misguided_effective_metric.md) (Chinese) | Misguided/effective per-test three-way metric (ISSTA'26 operationalization): class tree, denominators, execution caliber and known limits. |
+| [docs/design/oracle_quality_metric.md](design/oracle_quality_metric.md) (Chinese) | Deterministic spec-oracle quality (A-05): four classes, injection fidelity, detection contribution and verdict-coupling limits. |
 | [docs/dependency_exemptions.en.md](dependency_exemptions.en.md) | Dependency-exemption registry: alternative for each exemption and its re-review deadline. |
 | [docs/threat_model.en.md](threat_model.en.md) | Threat model: T1-T8 threats, attack surfaces and existing mitigations. |
 

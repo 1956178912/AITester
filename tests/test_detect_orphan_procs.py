@@ -178,6 +178,24 @@ class TestMainCli:
         out = capsys.readouterr().out
         assert "[LEAK]" in out and "69946" in out and "--kill" in out
 
+    def test_min_age_default_is_600_and_skips_young_leak(self, monkeypatch, capsys) -> None:
+        """M-3：`--min-age` 默认 600s（兼容 K 轮）；龄期 500s 的疑似进程默认不报。
+
+        L 轮实测（582s < 600s）证明默认窗口会漏掉刚泄漏的进程——批次窗口
+        巡检应显式 `--min-age 60`（报告里 min_age_seconds 可审计）。
+        """
+        monkeypatch.setattr(detect, "list_processes", lambda timeout=10.0: [_proc(70000, 1, "00:08:20", _LEAKED_CMD)])
+        assert detect.main([]) == 0
+        assert "[OK]" in capsys.readouterr().out
+
+    def test_min_age_override_flags_young_leak(self, monkeypatch, capsys) -> None:
+        """显式 `--min-age 60`：500s 龄期命中并进入报告（批次窗口巡检口径）。"""
+        monkeypatch.setattr(detect, "list_processes", lambda timeout=10.0: [_proc(70000, 1, "00:08:20", _LEAKED_CMD)])
+        assert detect.main(["--min-age", "60", "--json"]) == 1
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["min_age_seconds"] == 60
+        assert payload["leaked_count"] == 1 and payload["leaked"][0]["pid"] == 70000
+
     def test_json_mode_schema(self, monkeypatch, capsys) -> None:
         monkeypatch.setattr(detect, "list_processes", lambda timeout=10.0: [_proc(69946, 1, "07:04:26", _LEAKED_CMD)])
         assert detect.main(["--json"]) == 1

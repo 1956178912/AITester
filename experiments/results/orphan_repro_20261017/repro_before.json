@@ -1,0 +1,60 @@
+{
+  "marker": "aitester_m1_orphanrepro_",
+  "run_with_timeout_has_orphan_guard": false,
+  "run_with_timeout_has_terminate_grace": false,
+  "leaked_scenarios": 2,
+  "results": [
+    {
+      "scenario": "S1",
+      "parent_pid": 97360,
+      "pytest_before_kill": [
+        {
+          "pid": 97377,
+          "ppid": 97360
+        }
+      ],
+      "leaked": true,
+      "survivors": [
+        {
+          "pid": 97377,
+          "ppid": 1,
+          "etime": "00:03"
+        }
+      ],
+      "leftover_tmpdirs": [
+        "/var/folders/pj/frxc6s715_x9x19hkk6pj2nh0000gn/T/aitester_m1_orphanrepro_mhhtt5dy",
+        "/var/folders/pj/frxc6s715_x9x19hkk6pj2nh0000gn/T/aitester_proc_1yupebwj",
+        "/var/folders/pj/frxc6s715_x9x19hkk6pj2nh0000gn/T/aitester_proc_559lekm7",
+        "/var/folders/pj/frxc6s715_x9x19hkk6pj2nh0000gn/T/aitester_proc_xxvx_eew"
+      ]
+    },
+    {
+      "scenario": "S2",
+      "outer_timed_out": true,
+      "outer_returncode": -9,
+      "leaked": true,
+      "survivors": [
+        {
+          "pid": 97439,
+          "ppid": 1
+        }
+      ]
+    },
+    {
+      "scenario": "S3",
+      "supported": false
+    },
+    {
+      "scenario": "S4",
+      "outer_timed_out": true,
+      "escaped_alive": 1,
+      "escaped": [
+        {
+          "pid": 97504,
+          "ppid": 1
+        }
+      ]
+    }
+  ],
+  "generated_at": "2026-10-17T21:19:46+0800"
+}

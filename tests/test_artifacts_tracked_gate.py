@@ -71,6 +71,25 @@ class TestManifestHygiene:
         for needle in required_substrings:
             assert any(needle in rel for rel in gate.MANIFEST), f"清单缺少 L 轮工件条目: {needle}"
 
+    def test_manifest_covers_m_round_chain(self):
+        """M 轮（2026-10-17）：增广批 / oracle 质量 / 编译执行率 / 孤儿根因四链证据必须在清单。
+
+        这些工件被 BASELINE 新增节（`benchmark.docstring_augment`、
+        `target_quality.oracle_quality` / `compile_exec`）、MEASUREMENT_INTEGRITY §6
+        与登记册 M-1~M-6 直接引用——漏登记即引用链断裂。
+        """
+        required_substrings = (
+            "emse_docstring_augment_20261017/DF_AUG_REPORT.json",
+            "emse_docstring_augment_20261017/SHA256SUMS",
+            "emse_docstring_augment_20261017/PROMPT_EVIDENCE.json",
+            "emse_misguided_augment_20261017/MISGUIDED_REPORT.json",
+            "emse_oracle_quality_20261017/ORACLE_QUALITY_REPORT.json",
+            "emse_compile_exec_20261017/COMPILE_EXEC_REPORT.json",
+            "orphan_repro_20261017/README.md",
+        )
+        for needle in required_substrings:
+            assert any(needle in rel for rel in gate.MANIFEST), f"清单缺少 M 轮工件条目: {needle}"
+
 
 class TestEmseDirScan:
     def test_exemptions_have_reasons(self):

@@ -25,6 +25,34 @@ O3 超时（60s）只覆盖**单个子进程执行**，不覆盖"超时后无法
 
 调用方按 `CompletedProcess.returncode` 与 `timed_out` 判定；返回值形状与
 `subprocess.run` 兼容（`returncode` / `stdout` / `stderr` / `args`）。
+
+M-3 加固（2026-10-17）：**父进程死亡缺口** —— 孤儿 pytest 根因修复
+----------------------------------------------------------------
+L 轮正式批实测 1 例 M1 判分孤儿（PID 57034，ppid=1，~98% CPU，age 9m42s）；
+现场残留证据（`experiments/results/orphan_repro_20261017/evidence_l_batch_leftovers.log`）
+显示 M1 判分 tmpdir 与 `run_with_timeout` 文件后端 tmpdir **同秒出生且都未被
+finally 清理** ⇒ 调用进程在超时分支**之前**被外部异常杀死。`start_new_session=True`
+让子进程自成会话（为整树 killpg 服务）的代价是：**调用方进程被外部杀死时
+（SIGKILL / harness 超时 / CI 取消），子进程不会被连带回收**——macOS 无
+`PR_SET_PDEATHSIG` 等价物，子进程被 init/launchd 收养后继续空转。
+
+两层修复：
+
+1. **超时路径两段式终止**（`_terminate_process_group`）：先 `killpg(SIGTERM)`
+   给组内进程自清理机会（`_TERMINATE_GRACE_SECONDS`，可经 `terminate_grace=`
+   覆盖），宽限后**总是**再 `killpg(SIGKILL)` 清扫（含"组长已退出、组内仍有
+   成员"的场景）——整树终止语义不变，只是多了优雅阶段。
+2. **父死亡看门狗**（`orphan_guard=True`，默认关、按调用点启用）：
+   `run_with_timeout` 先起一个监督进程（也在新会话），由它再起真正的命令
+   （同一进程组）；监督进程每 0.1s 检查 `os.getppid() != 原始父 PID`，
+   一旦父进程消亡立即 `killpg(SIGKILL)` 回收命令进程组并以 143 退出。
+   这样"调用方被外部 SIGKILL"时孙进程不会成为孤儿；超时路径仍由
+   `killpg` 整组回收（监督进程与命令同组，一并终止）。
+
+已知边界（残余风险，见复现 S4）：命令**自身**再 `start_new_session=True`
+的子进程仍会逃逸出看门狗可触达的进程组（任何进程组信号都到不了），
+需要调用点自行避免该形态；`orphan_guard` 与 `preexec_fn` 不能同用（看门狗
+无法转发任意 Python 钩子），同时给出会 fail-closed 抛 `ValueError`。
 """
 
 from __future__ import annotations
@@ -35,7 +63,9 @@ import os
 import shutil
 import signal
 import subprocess
+import sys
 import tempfile
+import time
 from collections.abc import Sequence
 from typing import Any
 
@@ -43,6 +73,61 @@ logger = logging.getLogger(__name__)
 
 # 超时后收口阶段等待 EOF 的宽限期（秒）：足够正常进程退出，又不至于久等
 _DRAIN_GRACE_SECONDS = 5.0
+
+# 超时后先 SIGTERM、再 SIGKILL 之间的宽限期（秒）：足够可响应进程自清理
+# （pytest 落盘 / 临时目录 / 子进程回收），又不至于显著拉长超时路径。
+# 调用点可经 run_with_timeout(terminate_grace=...) 覆盖（0–10s 归一）。
+_TERMINATE_GRACE_SECONDS = 0.5
+
+# 父死亡看门狗脚本（`orphan_guard=True` 时以 `python -c <脚本> <父PID> <cmd...>`
+# 启动）。只用标准库：它运行在 tmpdir / 干净 PYTHONPATH 下，不得 import 项目模块。
+# 协议：argv[1]=调用方 PID，argv[2:]=真实命令；命令与看门狗同进程组（新会话由
+# run_with_timeout 的 start_new_session 建立），因此超时 killpg 可一次回收两者；
+# 看门狗唯一职责是**父进程死亡时立即回收命令进程组**（与"超时"互补的两条路径）。
+_ORPHAN_GUARD_SCRIPT = r"""
+import os
+import signal
+import subprocess
+import sys
+import time
+
+_POLL_INTERVAL_S = 0.1
+
+if len(sys.argv) < 3:
+    sys.exit(2)
+_parent_pid = int(sys.argv[1])
+_cmd = sys.argv[2:]
+
+
+def _kill_child_group(child):
+    try:
+        os.killpg(os.getpgid(child.pid), signal.SIGKILL)
+    except OSError:
+        try:
+            child.kill()
+        except OSError:
+            pass
+
+
+# 竞态兜底：调用方可能在监督进程 exec 前就已死亡（此时 getppid 已不是原始父 PID）
+if os.getppid() != _parent_pid:
+    sys.exit(143)
+
+child = subprocess.Popen(_cmd)
+while True:
+    returncode = child.poll()
+    if returncode is not None:
+        sys.exit(returncode if returncode >= 0 else 128 - returncode)
+    if os.getppid() != _parent_pid:
+        # 调用方已死：命令进程组（含孙进程）立即回收，然后自己退出成"已回收"
+        _kill_child_group(child)
+        try:
+            child.wait(timeout=2.0)
+        except subprocess.TimeoutExpired:
+            pass
+        sys.exit(143)
+    time.sleep(_POLL_INTERVAL_S)
+"""
 
 # 宿主 pytest 配置键：嵌套 pytest 子进程**不得**继承。
 _HOST_PYTEST_ENV_KEYS: tuple[str, ...] = ("PYTEST_PLUGINS", "PYTEST_ADDOPTS")
@@ -102,6 +187,8 @@ def run_with_timeout(
     raise_on_timeout: bool = False,
     check: bool = False,
     capture_output: bool | None = None,  # 兼容裸 subprocess.run 调用位的透明参数（文件后端忽略）
+    terminate_grace: float | None = None,
+    orphan_guard: bool = False,
 ) -> CompletedProcess:
     """执行子进程并在超时后**可靠**返回（整树终止 + **文件后端**收口）。
 
@@ -117,6 +204,15 @@ def run_with_timeout(
     子进程写的是**普通文件**，父进程读取不依赖 EOF，因此"孙进程持有写端"
     这一阻塞条件在结构上不再存在——无论孙进程是否存活，本函数都必然返回。
     进程组终止（killpg）仍保留，用于回收资源。
+
+    2026-10-17 M-3 加固（父进程死亡缺口，孤儿 pytest 根因）
+    ------------------------------------------------------
+    见模块 docstring。两点：① 超时路径先 `SIGTERM` 宽限再 `SIGKILL` 清扫
+    （`terminate_grace` 可配）；② `orphan_guard=True` 时先起父死亡看门狗
+    （监督进程 + 真实命令同进程组），调用方被外部 SIGKILL 时由看门狗回收
+    命令进程组，不再产生 ppid=1 的孤儿。默认关（按调用点启用，避免给所有
+    调用面增加一层进程与启动开销）；与 `preexec_fn` 同用会 fail-closed 抛
+    `ValueError`。
 
     Args:
         cmd: 命令行参数序列（不经 shell）。
@@ -134,10 +230,22 @@ def run_with_timeout(
             的透明参数（本实现以文件后端承接输出，无需管道；参数被忽略）。
         check: 为 True 且进程以非零码退出时抛 `CalledProcessError`
             （与 `subprocess.run(check=True)` 同语义）。
+        terminate_grace: 超时后 SIGTERM 与 SIGKILL 之间的宽限秒数；
+            None = 模块默认 `_TERMINATE_GRACE_SECONDS`（0.5s），负值归 0，
+            上限 10s（防误配置挂死）。
+        orphan_guard: 是否启用父死亡看门狗（`python -c` 监督进程）。
+            启用后 `CompletedProcess.args` 仍为**原命令**；`returncode` 为
+            原命令退出码（原命令被信号杀死时归一为 128+n）。与
+            `preexec_fn` 不能同用。
 
     Returns:
         `CompletedProcess`（附加 `timed_out` 标记）。**本函数保证返回**。
+
+    Raises:
+        ValueError: `orphan_guard=True` 且同时给了 `preexec_fn`（fail-closed）。
     """
+    if orphan_guard and preexec_fn is not None:
+        raise ValueError("orphan_guard 与 preexec_fn 不能同时使用（看门狗无法转发 preexec_fn 钩子）")
     label = logger_name or (os.path.basename(cmd[0]) if cmd else "subprocess")
     popen_kwargs: dict[str, Any] = {}
     if preexec_fn is not None:
@@ -148,6 +256,12 @@ def run_with_timeout(
         # start_new_session 与 preexec_fn 均为 fork 后 exec 前的钩子，可共存。
         popen_kwargs["preexec_fn"] = preexec_fn
 
+    launch_cmd: list[str] = list(cmd)
+    if orphan_guard:
+        # 监督进程与真实命令同进程组（新会话由下方 start_new_session 建立）：
+        # 超时 killpg 一次回收两者；调用方死亡时由监督进程 killpg 回收。
+        launch_cmd = [sys.executable, "-c", _ORPHAN_GUARD_SCRIPT, str(os.getpid()), *launch_cmd]
+
     tmpdir = tempfile.mkdtemp(prefix="aitester_proc_")
     out_path = os.path.join(tmpdir, "stdout")
     err_path = os.path.join(tmpdir, "stderr")
@@ -156,7 +270,7 @@ def run_with_timeout(
         # 文件后端：不建管道 → 不存在"等 EOF"阻塞（见 docstring 根因说明）
         with open(out_path, "wb") as out_f, open(err_path, "wb") as err_f:
             proc = subprocess.Popen(
-                list(cmd),
+                launch_cmd,
                 cwd=cwd,
                 env=env,
                 stdin=subprocess.DEVNULL,
@@ -175,7 +289,7 @@ def run_with_timeout(
                 proc.wait(timeout=effective_timeout)
             except subprocess.TimeoutExpired:
                 timed_out = True
-                _terminate_process_group(proc, label=label)
+                _terminate_process_group(proc, label=label, grace_seconds=terminate_grace)
                 # killpg 后主进程应立即消亡；给一个很短的等待，拿不到就继续
                 with contextlib.suppress(subprocess.TimeoutExpired):
                     proc.wait(timeout=_DRAIN_GRACE_SECONDS)
@@ -192,9 +306,9 @@ def run_with_timeout(
         )
         if raise_on_timeout:
             raise subprocess.TimeoutExpired(list(cmd), timeout or 0, output=out, stderr=err)
-        return CompletedProcess(proc.args, -9, out, err, timed_out=True)
+        return CompletedProcess(list(cmd), -9, out, err, timed_out=True)
 
-    result = CompletedProcess(proc.args, proc.returncode, out, err, timed_out=False)
+    result = CompletedProcess(list(cmd), proc.returncode, out, err, timed_out=False)
     if check and proc.returncode != 0:
         raise subprocess.CalledProcessError(proc.returncode, cmd, output=out, stderr=err)
     return result
@@ -212,14 +326,79 @@ def _read_output(path: str, *, text: bool) -> Any:
     return raw
 
 
-def _terminate_process_group(proc: subprocess.Popen[str], *, label: str) -> None:
-    """终止子进程**及其整个进程组**（含孙进程），失败时回退到 kill()。"""
-    killed_group = False
+def _resolve_terminate_grace(grace_seconds: float | None) -> float:
+    """归一 SIGTERM→SIGKILL 宽限秒数（None→默认；负值→0；上限 10 防误配置）。
+
+    Args:
+        grace_seconds: 调用点显式宽限（None = 用模块默认 `_TERMINATE_GRACE_SECONDS`）。
+
+    Returns:
+        落在 ``[0.0, 10.0]`` 的宽限秒数；无法解析时回落默认值。
+    """
+    raw: Any = _TERMINATE_GRACE_SECONDS if grace_seconds is None else grace_seconds
     try:
-        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-        killed_group = True
-    except (ProcessLookupError, PermissionError, OSError) as e:
-        logger.debug("%s：killpg 失败（%s），回退 kill()", label, e)
-    if not killed_group:
-        with contextlib.suppress(OSError):  # pragma: no cover - 进程已消亡
+        value = float(raw)
+    except (TypeError, ValueError):  # pragma: no cover - 防御非数值注入
+        return _TERMINATE_GRACE_SECONDS
+    return min(max(value, 0.0), 10.0)
+
+
+def _terminate_process_group(
+    proc: subprocess.Popen[str],
+    *,
+    label: str,
+    grace_seconds: float | None = None,
+) -> None:
+    """终止子进程**及其整个进程组**（含孙进程）：SIGTERM 宽限 → SIGKILL 清扫。
+
+    M-3（2026-10-17）：历史上直接 `killpg(SIGKILL)`——子进程（如 pytest）
+    没有机会清理自己的临时文件/子进程；但超时是"父进程仍存活"的路径，
+    宽限只影响清理质量、不改变整树终止语义：
+
+    1. 先 `killpg(SIGTERM)`（可响应进程自清理，如 pytest 落盘/临时目录）；
+    2. 最多等待 `grace` 秒（组长退出即提前结束等待）；
+    3. **总是**再 `killpg(SIGKILL)` 清扫——包括"组长已退出但组内仍有成员"
+       的形态（组号在组内仍有成员时仍有效）。
+    4. 任何 `getpgid`/`killpg` 失败（进程已消亡/无权限）都回退 `proc.kill()`。
+
+    注意：本函数只覆盖"**调用方存活**时的超时回收"；调用方被外部 SIGKILL
+    的路径由 `run_with_timeout(orphan_guard=True)` 的看门狗负责（见模块 docstring）。
+
+    Args:
+        proc: 已超时的直接子进程（进程组组长）。
+        label: 日志标签。
+        grace_seconds: SIGTERM 后宽限秒数（None = 模块默认 0.5s）。
+    """
+    grace = _resolve_terminate_grace(grace_seconds)
+    try:
+        pgid: int | None = os.getpgid(proc.pid)
+    except (ProcessLookupError, PermissionError, OSError) as e:  # pragma: no cover - 进程已消亡竞态
+        logger.debug("%s：getpgid 失败（%s），回退 kill()", label, e)
+        pgid = None
+    if pgid is None:  # pragma: no cover - 进程已消亡竞态
+        with contextlib.suppress(OSError):
             proc.kill()
+        return
+
+    # 阶段 1：SIGTERM 给组内进程自清理机会
+    sent_term = False
+    try:
+        os.killpg(pgid, signal.SIGTERM)
+        sent_term = True
+    except (ProcessLookupError, PermissionError, OSError) as e:  # pragma: no cover - 组已消亡竞态
+        logger.debug("%s：killpg(SIGTERM) 失败（%s），转入 SIGKILL 兜底", label, e)
+    if sent_term and grace > 0:
+        deadline = time.monotonic() + grace
+        while time.monotonic() < deadline:
+            if proc.poll() is not None:
+                break
+            time.sleep(0.02)
+
+    # 阶段 2：SIGKILL 兜底清扫（整树终止语义不变；组长已退出也补刀组内残留成员）
+    try:
+        os.killpg(pgid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError, OSError) as e:
+        logger.debug("%s：killpg(SIGKILL) 失败（%s），回退 kill()", label, e)
+        if proc.poll() is None:
+            with contextlib.suppress(OSError):
+                proc.kill()

@@ -1,6 +1,8 @@
 # 测量完整性：口径分叉的五种形态与修复方法论
 
-最后更新：2026-10-17（L 轮：新增 §5——**代理指标的构念效度失效**（over_red proxy ≠
+最后更新：2026-10-17（M 轮：新增 §6——**确定性 oracle 的未校验注入 + 判分耦合**
+（A-05 零 LLM 重放：oracle 76% 假阳、0 正确检出、混入同文件判分抹掉 14/22 个既有
+LLM 检出）。L 轮：新增 §5——**代理指标的构念效度失效**（over_red proxy ≠
 misguided 构念；df_spec 机制假设被逐测试操作化检验撤回）。K 轮：新增第 ⑤ 起——
 **变异生成器**的无效变异体（identity / 语法非法）；此前的 2026-10-15 EMSE 批次把前四起
 合并为"测量口径分叉"方法论章，逐起给出分叉的两种口径、检测方式、影响量级、修复、
@@ -182,3 +184,50 @@ misguidance 证据。新度量工具与完整报告（输入 sha256、逐任务�
 四分类；超时测试单列（与 A-06 "超时记红"的判分口径有意不同）；`node` 无缺陷信号已剔除
 并披露。**该结论不得外推为"所有规格锚路线无 misguidance 风险"**——它只说明本批次
 df_spec 臂的伤害形态不是 misguidance。
+
+---
+
+## 6. 附：确定性 oracle 的"未校验注入 + 判分耦合"（2026-10-17 M 轮）
+
+> **与 §1 五起伪影、§5 代理失效的区别**：五起是"同一材料被两条路径按不同口径理解"的
+> 口径分叉；§5 是 proxy 与构念不重叠；本节是**测量仪器自身未校验收** + **判分对象
+> 耦合**——确定性 oracle（机器生成的断言）在注入前未验证其正确性，且与 LLM 测试
+> **混在同一 pytest 文件**里共同决定任务级判定。二者叠加，使一个"零 LLM 的确定性
+> 检出通道"在证据上表现为**净损伤**。
+
+**背景（设计意图 vs 实现）**：`src/specs/spec_ir_v2.compile_spec_oracle` 把 SpecExpr
+可编译子句编译成确定性断言，`src/graph/nodes._append_spec_oracle_to_test_with_verdict`
+把它**追加到 LLM 生成测试的同一文件尾部**；设计注释称"与 LLM 测试**并列**执行"
+（`SPEC_ORACLE_EXEC_ENABLE`，默认关，历史批次恒未启用）。"并列"在语义上指两通道
+独立判读，但实现是同一文件、同一次 pytest 会话、同一个任务级二值判定。
+
+**M 轮测量（零 LLM 重放，`experiments/oracle_quality_replay.py`）**：取 df_spec 双臂
+归档批次，用**生产注入函数原样调用**（state 由锚表重建：`test_plan={function_name,
+logic_analysis}`、`target_function`、`module_name`、`target_code`；锚表 sha256
+`3e90b2ad…` 校验，QuixBugs 内容寻址命中 50/50），再按逐测试 buggy/fixed 分类：
+
+| 项 | 数值 |
+|---|---|
+| 注入率（50 行） | attempted 49 / **injected 38（76.0%）** / compiled_empty 11 / not_attempted 1 |
+| oracle 四分类（分母 38 条可分类 oracle 测试） | **correct 0 / fp 29（76.32%）/ silent 9（23.68%）/ misguided 0** |
+| 假阳主因 | fixed 侧异常 27 条：**TypeError 24**、AttributeError 2、ZeroDivisionError 1（+断言失败 2）——编译器对缺失输入的 0 字面量绑定使 oracle 在**正确实现**上崩溃 |
+| 任务级检出贡献（40 缺陷程序口径，配对） | df_spec 归档 54.29% → LLM-only 重放 50.00% → oracle 混入后 **10.53%**（Δ−36.84pp；lost 14 / none 20 / preserved 4 / **added 0**）；df 对照 77.78% → 77.50% → **18.42%**（Δ−57.89pp；lost 22 / none 9 / preserved 7） |
+| 交叉校验 | 归档 detection/`spec_oracle_verdict` 复现 **0 mismatch**（50/50）；四分类两臂完全相同（oracle 与 LLM 测试内容无关） |
+
+**结论（两条独立缺陷，均需处置）**：
+
+1. **仪器未自校验**：确定性 oracle 在"正确实现"上的失败率 76%，且 0 条正确检出——
+   确定性通道当前**不是**"LLM 之外的机器锚点"，而是把编译层绑定错误转成了断言的
+   假阳性。生产上 `SPEC_ORACLE_EXEC_ENABLE` 默认关，因此**历史批次数字不受影响**；
+   但任何"打开该开关能提升检出"的预期在现有实现下不成立（先修仪器）。
+2. **判分对象耦合**：oracle 测试与 LLM 测试同文件，oracle 在 fixed 侧失败会让**整文件
+   fixed 判定失败** → 任务级 detection 被抹掉（实测 lost 14/22 个 LLM 已有检出）。
+   修复方向（下一轮，需预注册）：oracle 测试**独立文件独立判读**——LLM-suite verdict
+   与 oracle verdict 分开产出、分别报告；oracle 失败不得改写 LLM 检出结论。在修复
+   并验证前，`SPEC_ORACLE_EXEC_ENABLE` 保持默认关且不得用于能力主张。
+
+**口径纪律（不得省略）**：本节数字是**仅锚表材料重建 state** 的受控反事实
+（无 Planner 现场 `spec_ir` / `boundary_triplets`），是该材料条件下的**质量下界**，
+不是 LLM 生成能力指标，也不与 TestAgent / Tratto / TOGLL 的 oracle 数字横向对比；
+描述性、无显著性推断。工件：`experiments/results/emse_oracle_quality_20261017/`
+（输入 sha256、命令、分母、失败类型逐类披露、0 mismatch 交叉校验）。
