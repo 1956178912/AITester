@@ -1,6 +1,6 @@
 {
   "schema": "e2e_probe_report/1",
-  "generated_at": "2026-10-17T23:06:37+0800",
+  "generated_at": "2026-10-18T02:43:14+0800",
   "include_llm": true,
   "probes": [
     {
@@ -17,7 +17,7 @@
           "clean-venv-cache"
         ]
       },
-      "duration_s": 1.79,
+      "duration_s": 0.95,
       "description": "python main.py --help：退出码 0 且 4 个子命令在帮助面"
     },
     {
@@ -35,7 +35,7 @@
           "string_utils.py"
         ]
       },
-      "duration_s": 1.68,
+      "duration_s": 0.76,
       "description": "list-examples：列出 examples 文件并给出使用示例"
     },
     {
@@ -49,7 +49,7 @@
         "redacted_path_segments": 0,
         "redaction_note": ""
       },
-      "duration_s": 2.43,
+      "duration_s": 1.21,
       "description": "check-dataset quixbugs：加载 50 任务 + 质量报告"
     },
     {
@@ -74,14 +74,15 @@
           "total_consumed": 0,
           "budget_exceeded_events": 0,
           "tasks_capped": 0,
-          "budget_misconfigured_events": 0
+          "budget_misconfigured_events": 0,
+          "usd_pricing_unavailable_events": 0
         },
         "llm_calls": 0,
         "total_tokens": 0,
         "input_tokens": 0,
         "output_tokens": 0
       },
-      "duration_s": 7.94,
+      "duration_s": 6.74,
       "description": "run examples/calculator.py --json --verbose：真 LLM 下 stdout 为单一合法 JSON（1 次调用）"
     },
     {
@@ -99,7 +100,7 @@
         "input_tokens": 0,
         "output_tokens": 0
       },
-      "duration_s": 5.24,
+      "duration_s": 3.6,
       "description": "run 两文件 --parallel 2 --json：真 LLM 下每任务一份合法 JSON（2 次调用）"
     },
     {
@@ -128,7 +129,7 @@
           "planner->generator"
         ]
       },
-      "duration_s": 1.84,
+      "duration_s": 0.79,
       "description": "fast 档 build_workflow：节点/边装配正确（无逻辑档节点）"
     },
     {
@@ -166,7 +167,7 @@
           "KERNEL_SANDBOX_ENABLE": null
         }
       },
-      "duration_s": 1.8,
+      "duration_s": 0.78,
       "description": "logic 档 build_workflow：预设开关注入 + mutation_advisor 环在场"
     },
     {
@@ -176,12 +177,12 @@
       "status": "pass",
       "detail": "logic 档 invoke 正常（stop_reason=test_passed，trace=1 条）",
       "evidence": {
-        "elapsed_s": 8.23,
+        "elapsed_s": 6.35,
         "stop_reason": "test_passed",
         "test_passed": true,
         "iteration": 0,
         "test_cases": 8,
-        "generated_test_len": 1857,
+        "generated_test_len": 1531,
         "execution_trace_len": 1,
         "checks": {
           "test_plan_is_dict": true,
@@ -193,11 +194,11 @@
           "stop_reason_present": true
         },
         "llm_calls": 2,
-        "total_tokens": 5166,
-        "input_tokens": 3794,
-        "output_tokens": 1372
+        "total_tokens": 4950,
+        "input_tokens": 3807,
+        "output_tokens": 1143
       },
-      "duration_s": 9.88,
+      "duration_s": 7.14,
       "description": "logic 档最小任务真实 invoke：test_plan/generated_test/trace/终态字段齐全（2 次调用）"
     },
     {
@@ -205,9 +206,9 @@
       "group": "agents",
       "requires_llm": true,
       "status": "pass",
-      "detail": "planner 结构化计划正常（8 用例，logic_degraded=False）",
+      "detail": "planner 结构化计划正常（6 用例，logic_degraded=False）",
       "evidence": {
-        "test_cases": 8,
+        "test_cases": 6,
         "logic_keys": [
           "edge_cases",
           "input_domain",
@@ -217,11 +218,11 @@
         ],
         "logic_degraded": false,
         "llm_calls": 1,
-        "total_tokens": 1072,
+        "total_tokens": 980,
         "input_tokens": 461,
-        "output_tokens": 611
+        "output_tokens": 519
       },
-      "duration_s": 4.57,
+      "duration_s": 3.52,
       "description": "planner 真实 LLM 输出结构化 test_plan（1 次调用）"
     },
     {
@@ -229,16 +230,16 @@
       "group": "agents",
       "requires_llm": true,
       "status": "pass",
-      "detail": "generator 生成可解析 pytest（792 字符，5 个测试函数）",
+      "detail": "generator 生成可解析 pytest（784 字符，5 个测试函数）",
       "evidence": {
-        "generated_len": 792,
+        "generated_len": 784,
         "test_functions": 5,
         "llm_calls": 1,
-        "total_tokens": 916,
+        "total_tokens": 910,
         "input_tokens": 587,
-        "output_tokens": 329
+        "output_tokens": 323
       },
-      "duration_s": 3.03,
+      "duration_s": 2.44,
       "description": "generator 真实 LLM 生成可解析 pytest（import/断言齐全，1 次调用）"
     },
     {
@@ -257,7 +258,7 @@
           "failed_cases": 1
         }
       },
-      "duration_s": 2.74,
+      "duration_s": 1.39,
       "description": "executor 本地沙箱运行生成测试并回报 passed/coverage/failed_cases"
     },
     {
@@ -271,14 +272,14 @@
         "patch_applied": true,
         "dangerous_api_added": [],
         "error_category": "assertion",
-        "root_cause": "被测函数 add 的实现与文档字符串及函数名语义不符：第3行 `return a - b` 使用了减法，而函数名 add 和 docstring 'Return the sum of a and b' 均要求返回两数之和。测试调用 add(2, 3) 期望 5，实际返回 -1，导致断言失败。这是被测代码逻辑错误，而非测试预期值错误。",
+        "root_cause": "calc_add.py 中 add 函数第 3 行实现为 `return a - b`，与函数名 add 及文档字符串 'Return the sum of a and b.' 描述的加法语义不符。测试调用 add(2, 3) 期望 5，实际返回 -1，导致断言失败。属于被测代码逻辑错误，而非测试预期值错误。",
         "llm_calls": 1,
-        "total_tokens": 1410,
+        "total_tokens": 1399,
         "input_tokens": 1224,
-        "output_tokens": 186,
+        "output_tokens": 175,
         "after_passed": true
       },
-      "duration_s": 6.13,
+      "duration_s": 3.83,
       "description": "真实修复链：Debugger(1 次 LLM)→安全应用补丁→修复后测试通过；区分模型未产出"
     },
     {
@@ -288,7 +289,7 @@
       "status": "pass",
       "detail": "修复环正常：debugger 进入 1 轮 → patch_applier 应用 → 复跑通过（stop_reason=test_passed）",
       "evidence": {
-        "elapsed_s": 9.5,
+        "elapsed_s": 7.48,
         "iteration": 1,
         "test_passed": true,
         "stop_reason": "test_passed",
@@ -299,11 +300,11 @@
         "target_code_changed": true,
         "dangerous_api_added": [],
         "llm_calls": 3,
-        "total_tokens": 4284,
-        "input_tokens": 3570,
-        "output_tokens": 714
+        "total_tokens": 4406,
+        "input_tokens": 3659,
+        "output_tokens": 747
       },
-      "duration_s": 11.55,
+      "duration_s": 8.28,
       "description": "真实 graph 修复环：executor 失败→debugger→patch_applier→复跑通过（≈2 次调用）"
     },
     {
@@ -328,7 +329,7 @@
           }
         }
       },
-      "duration_s": 0.08,
+      "duration_s": 0.04,
       "description": "补丁危险 API 守卫：os.system / from-import 别名 / eval 均拒绝"
     },
     {
@@ -344,7 +345,7 @@
         ],
         "apply_applied": false
       },
-      "duration_s": 0.08,
+      "duration_s": 0.04,
       "description": "命名契约守卫：删除模块级符号被 apply 层 + 契约层双重拦截"
     },
     {
@@ -375,7 +376,7 @@
           }
         }
       },
-      "duration_s": 0.07,
+      "duration_s": 0.04,
       "description": "补丁测试黑客检测：删断言/硬编码分支/吞异常命中且正常补丁无 FP"
     },
     {
@@ -397,7 +398,7 @@
         },
         "patch_has_import": true
       },
-      "duration_s": 0.08,
+      "duration_s": 0.04,
       "description": "确定性修复：NameError→import 零 LLM 产出补丁；无匹配显式 abstain"
     },
     {
@@ -419,7 +420,7 @@
           "success": true
         }
       },
-      "duration_s": 1.91,
+      "duration_s": 0.83,
       "description": "快照回滚协议：P2P 回归失败自动回滚、通过保留、开关可观测"
     },
     {
@@ -437,7 +438,7 @@
         "records": 3,
         "redacted": true
       },
-      "duration_s": 0.09,
+      "duration_s": 0.04,
       "description": "trace JSONL 落盘三事件且敏感串已脱敏"
     },
     {
@@ -463,7 +464,7 @@
           "subscribed": []
         }
       },
-      "duration_s": 0.08,
+      "duration_s": 0.04,
       "description": "事件总线发布/订阅/统计可用，关闭开关后 no-op"
     },
     {
@@ -490,7 +491,7 @@
         ],
         "candidate_lines": 5
       },
-      "duration_s": 0.08,
+      "duration_s": 0.04,
       "description": "FL_spectral（Ochiai）：Top-1 命中注入缺陷分支行"
     },
     {
@@ -511,7 +512,7 @@
           "localization_mrr": 1.0
         }
       },
-      "duration_s": 1.28,
+      "duration_s": 0.48,
       "description": "fault localizer 反事实定位：gold 变更函数命中 + Hit@1/@3/MRR"
     },
     {
@@ -525,7 +526,7 @@
         "invalid_reason": "语法错误（line 2）: invalid syntax",
         "best_index": 1
       },
-      "duration_s": 0.08,
+      "duration_s": 0.04,
       "description": "multi-candidate：静态筛选通过/拒绝 + 最小改动择优"
     },
     {
@@ -549,10 +550,11 @@
           "total_consumed": 120,
           "budget_exceeded_events": 1,
           "tasks_capped": 1,
-          "budget_misconfigured_events": 0
+          "budget_misconfigured_events": 0,
+          "usd_pricing_unavailable_events": 0
         }
       },
-      "duration_s": 0.08,
+      "duration_s": 0.04,
       "description": "任务级 token/费用硬上限触发停止通道 + 超限事件计数（零 LLM）"
     },
     {
@@ -566,10 +568,11 @@
           "total_consumed": 2,
           "budget_exceeded_events": 0,
           "tasks_capped": 2,
-          "budget_misconfigured_events": 2
+          "budget_misconfigured_events": 2,
+          "usd_pricing_unavailable_events": 0
         }
       },
-      "duration_s": 0.08,
+      "duration_s": 0.04,
       "description": "预算坏值（不可解析/负数）fail-closed 且与真实超限分列计数（零 LLM）"
     },
     {
@@ -589,7 +592,7 @@
           "批次级上限 100 低于估算上界 968（= 任务数 150 × 最坏臂 4.3 × 重试系数 1.5）——批次会被闸掉或跑不完"
         ]
       },
-      "duration_s": 0.08,
+      "duration_s": 0.04,
       "description": "批次级配额评估：50×3 任务估算 968 调用 + 闸门判定（零 LLM）"
     },
     {
@@ -602,7 +605,7 @@
         "first_response": "7",
         "stats_after": {
           "consumed_tokens": 29,
-          "consumed_usd": 0.0,
+          "consumed_usd": 1e-05,
           "token_limit": 1,
           "usd_limit": 0.0,
           "exceeded": true,
@@ -612,7 +615,7 @@
         },
         "error": "LLM 预算耗尽：已消耗 29 tokens >= 上限 1 tokens"
       },
-      "duration_s": 2.21,
+      "duration_s": 1.64,
       "description": "真 LLM 1 次：预算耗尽后下一次调用抛 BudgetExceededError（停止通道）"
     },
     {
@@ -636,7 +639,7 @@
           "fp_rate": 0.0
         }
       },
-      "duration_s": 1.18,
+      "duration_s": 0.47,
       "description": "AITESTER_LLM_CACHE=0 关闭文件缓存；语义缓存默认关（零 LLM）"
     },
     {
@@ -644,7 +647,7 @@
       "group": "cache",
       "requires_llm": true,
       "status": "pass",
-      "detail": "两次同 prompt：第二次缓存命中（0.000s vs 首次 0.79s）；llm_calls=1, cache_hits=1, avoided_tokens=29",
+      "detail": "两次同 prompt：第二次缓存命中（0.000s vs 首次 0.97s）；llm_calls=1, cache_hits=1, avoided_tokens=29",
       "evidence": {
         "usage": {
           "input_tokens": 28,
@@ -658,12 +661,12 @@
           }
         },
         "cache_files": [
-          "5ce1d574db84bf97.json"
+          "1f5fa55b196b944d.json"
         ],
-        "first_elapsed_s": 0.786,
+        "first_elapsed_s": 0.971,
         "second_elapsed_s": 0.0
       },
-      "duration_s": 2.28,
+      "duration_s": 1.63,
       "description": "真 LLM 1 次：同 prompt 两次调用 → 命中 + avoided tokens 记账"
     },
     {
@@ -680,7 +683,7 @@
           "embed_failures": 0
         }
       },
-      "duration_s": 1.01,
+      "duration_s": 0.53,
       "description": "语义缓存索引真实嵌入：同义命中 / 无关未命中（零 LLM）"
     },
     {
@@ -694,7 +697,7 @@
         "retrieved": 1,
         "similarity": 0.7143
       },
-      "duration_s": 0.98,
+      "duration_s": 0.5,
       "description": "RAG 检索器初始化（chromadb）+ 写入/检索案例；依赖缺失显式 skip（零 LLM）"
     },
     {
@@ -702,9 +705,9 @@
       "group": "rag",
       "requires_llm": true,
       "status": "pass",
-      "detail": "ENABLE_RAG 下最小任务 4.1s 完成；rag_stats 1 条（kinds=['test_cases']）；generated_test 1361 字符",
+      "detail": "ENABLE_RAG 下最小任务 3.8s 完成；rag_stats 1 条（kinds=['test_cases']）；generated_test 1269 字符",
       "evidence": {
-        "elapsed_s": 4.08,
+        "elapsed_s": 3.83,
         "rag_stats": [
           {
             "kind": "test_cases",
@@ -713,9 +716,9 @@
             "avg_similarity": null
           }
         ],
-        "generated_test_len": 1361
+        "generated_test_len": 1269
       },
-      "duration_s": 6.03,
+      "duration_s": 4.64,
       "description": "真 LLM：ENABLE_RAG=true 最小任务终态断言 rag_stats（检索观测接线）"
     },
     {
@@ -734,7 +737,7 @@
           "eval_or_exec"
         ]
       },
-      "duration_s": 0.08,
+      "duration_s": 0.04,
       "description": "注入检测（4 类）+ 系统警示 + 危险补丁扫描（零 LLM）"
     },
     {
@@ -761,7 +764,7 @@
         ],
         "provider_count": 10
       },
-      "duration_s": 0.13,
+      "duration_s": 0.05,
       "description": "子进程环境白名单：不含 LLM_*/*_API_KEY 凭证（零 LLM）"
     },
     {
@@ -779,7 +782,7 @@
           "/var/folders/pj/xxxx/T/aitester_m1_bitcount_07q05sj_"
         ]
       },
-      "duration_s": 0.09,
+      "duration_s": 0.04,
       "description": "日志 handler 脱敏：假 sk- key 经 filter/formatter 后无明文（零 LLM）"
     },
     {
@@ -813,7 +816,7 @@
           "profile_summary": "3 路径写放行 + 0 只读 + 0 仅执行 + 全文件系统只读 + 断网"
         }
       },
-      "duration_s": 0.1,
+      "duration_s": 0.05,
       "description": "内核沙箱能力探测 + 沙箱命令真实执行；平台不支持显式 skip（零 LLM）"
     },
     {
@@ -821,12 +824,12 @@
       "group": "executor",
       "requires_llm": false,
       "status": "pass",
-      "detail": "本地执行器 1.61s 通过最小测试（coverage=100.0，failed_cases=0）",
+      "detail": "本地执行器 0.91s 通过最小测试（coverage=100.0，failed_cases=0）",
       "evidence": {
-        "elapsed_s": 1.61,
+        "elapsed_s": 0.91,
         "coverage": 100.0
       },
-      "duration_s": 1.69,
+      "duration_s": 0.95,
       "description": "本地执行器真实跑生成测试 → passed/coverage（零 LLM）"
     },
     {
@@ -834,12 +837,12 @@
       "group": "executor",
       "requires_llm": false,
       "status": "pass",
-      "detail": "venv 执行器 1.07s 通过最小测试（coverage=100.0）",
+      "detail": "venv 执行器 0.45s 通过最小测试（coverage=100.0）",
       "evidence": {
-        "elapsed_s": 1.07,
+        "elapsed_s": 0.45,
         "coverage": 100.0
       },
-      "duration_s": 1.15,
+      "duration_s": 0.49,
       "description": "venv 沙箱执行器真实跑最小测试（首次建 venv 可慢，300s 超时保护；零 LLM）"
     },
     {
@@ -854,7 +857,7 @@
           "message": "请安装 docker 并构建镜像：docker build -t aitester:latest ."
         }
       },
-      "duration_s": 0.1,
+      "duration_s": 0.05,
       "description": "无 docker CLI 时明确降级 docker_unavailable（零 LLM/零网络）"
     },
     {
@@ -862,16 +865,16 @@
       "group": "executor",
       "requires_llm": false,
       "status": "pass",
-      "detail": "临时仓库 verify 全链路 2.4s：test_patch 基线红 → llm_patch 后 F2P 1/1 转绿 → passed=True",
+      "detail": "临时仓库 verify 全链路 0.9s：test_patch 基线红 → llm_patch 后 F2P 1/1 转绿 → passed=True",
       "evidence": {
-        "elapsed_s": 2.35,
+        "elapsed_s": 0.93,
         "fail_to_pass": {
           "expected": 1,
           "passed": 1,
           "baseline_passed": 0
         }
       },
-      "duration_s": 2.58,
+      "duration_s": 1.03,
       "description": "最小临时仓库 test_patch/llm_patch 走 RepoExecutor.verify 全链路（零 LLM/零网络）"
     },
     {
@@ -879,9 +882,9 @@
       "group": "executor",
       "requires_llm": false,
       "status": "pass",
-      "detail": "KERNEL_SANDBOX_ENABLE=true：local + venv 执行器真实跑通（passed/coverage/obs 齐备），总耗时 2.79s",
+      "detail": "KERNEL_SANDBOX_ENABLE=true：local + venv 执行器真实跑通（passed/coverage/obs 齐备），总耗时 1.13s",
       "evidence": {
-        "elapsed_s": 2.79,
+        "elapsed_s": 1.13,
         "local": {
           "passed": true,
           "coverage": 100.0,
@@ -897,7 +900,7 @@
           "backend": "seatbelt"
         }
       },
-      "duration_s": 2.91,
+      "duration_s": 1.17,
       "description": "KERNEL_SANDBOX_ENABLE=true：执行器 local+venv 真实沙箱执行必须 passed（零 LLM）"
     },
     {
@@ -905,7 +908,7 @@
       "group": "dataset",
       "requires_llm": false,
       "status": "pass",
-      "detail": "三加载器真实加载 0.02s：quixbugs=50 / examples=3 / synthetic=3",
+      "detail": "三加载器真实加载 0.01s：quixbugs=50 / examples=3 / synthetic=3",
       "evidence": {
         "sizes": {
           "quixbugs": 50,
@@ -914,7 +917,7 @@
         },
         "sample_task_id": "quixbugs__bitcount"
       },
-      "duration_s": 1.15,
+      "duration_s": 0.46,
       "description": "quixbugs(≥41)/examples/synthetic 真实加载 + gold 材料键（零 LLM）"
     },
     {
@@ -931,7 +934,7 @@
           "ult__fix_labels"
         ]
       },
-      "duration_s": 1.15,
+      "duration_s": 0.46,
       "description": "ULT 数据集加载；数据缺失显式 skip（零 LLM）"
     },
     {
@@ -950,7 +953,7 @@
           "decontamination_rate": 0.5
         }
       },
-      "duration_s": 1.15,
+      "duration_s": 0.45,
       "description": "去污染时间戳解析/切片报告/unverifiable 披露（零 LLM）"
     },
     {
@@ -958,12 +961,12 @@
       "group": "dataset",
       "requires_llm": false,
       "status": "pass",
-      "detail": "check-dataset CLI 2.7s rc=0，质量检查 50 个任务无加载问题",
+      "detail": "check-dataset CLI 1.1s rc=0，质量检查 50 个任务无加载问题",
       "evidence": {
-        "elapsed_s": 2.69,
+        "elapsed_s": 1.07,
         "checked_tasks": 50
       },
-      "duration_s": 2.78,
+      "duration_s": 1.11,
       "description": "`main.py check-dataset quixbugs` CLI 冒烟（零 LLM）"
     },
     {
@@ -971,22 +974,22 @@
       "group": "observability",
       "requires_llm": true,
       "status": "pass",
-      "detail": "模型指纹 1.06s：alias=deepseek-flash returned=deepseek-flash pinned=True probe=fc3d915941b8…",
+      "detail": "模型指纹 1.63s：alias=deepseek-flash returned=deepseek-flash pinned=True probe=fc3d915941b8…",
       "evidence": {
-        "elapsed_s": 1.06,
+        "elapsed_s": 1.63,
         "fingerprint": {
           "requested_alias": "deepseek-flash",
           "returned_model": "deepseek-flash",
           "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
           "probe_sha256": "fc3d915941b87e39064ba2075b6e2b29fc0de33bd9fd2b046f6857036edefda3",
-          "probe_at": "2026-10-17T15:06:13.340118+00:00",
+          "probe_at": "2026-10-17T18:43:01.082569+00:00",
           "missing": [],
           "pinned": true,
           "error": null,
           "alias_mismatch": false
         }
       },
-      "duration_s": 3.72,
+      "duration_s": 2.78,
       "description": "真 LLM 1 次：S29 模型指纹 pinned=True（快照可锁定）"
     },
     {
@@ -1016,7 +1019,7 @@
           "source"
         ]
       },
-      "duration_s": 0.08,
+      "duration_s": 0.04,
       "description": "SpecIR 双通道解析 + 边界三元组 + 空材料保守降级"
     },
     {
@@ -1033,7 +1036,7 @@
           "eval('1+1')": "unsupported_syntax"
         }
       },
-      "duration_s": 0.08,
+      "duration_s": 0.04,
       "description": "SpecExpr 白名单：危险子句拒绝 / 可编译子句接受 / readiness 计率"
     },
     {
@@ -1041,15 +1044,15 @@
       "group": "logic",
       "requires_llm": false,
       "status": "pass",
-      "detail": "确定性 oracle 编译正常（248 字符，2 条断言，ast 合法）",
+      "detail": "确定性 oracle 编译正常（489 字符，2 条断言，ast 合法）",
       "evidence": {
-        "code_len": 248,
+        "code_len": 489,
         "assertions": 2,
         "funcs": [
           "test_specir_v2_oracle"
         ]
       },
-      "duration_s": 0.08,
+      "duration_s": 0.04,
       "description": "确定性 oracle 编译：ast 合法 + 标准测试名 + 无材料空串"
     },
     {
@@ -1082,7 +1085,7 @@
           }
         ]
       },
-      "duration_s": 0.11,
+      "duration_s": 0.08,
       "description": "SMT 见证：sat/边界见证 + 不可翻译保守降级（可选依赖 z3）"
     },
     {
@@ -1094,7 +1097,7 @@
       "evidence": {
         "verdict": "compiled_empty"
       },
-      "duration_s": 1.64,
+      "duration_s": 0.68,
       "description": "N-3 接线：仅 spec_anchor 材料也能注入确定性 oracle"
     },
     {
@@ -1107,7 +1110,7 @@
         "verdict": "unavailable",
         "documented": true
       },
-      "duration_s": 0.16,
+      "duration_s": 0.08,
       "description": "N-3 独立判读：结果行字段 + fail-closed 函数 + replay 入口"
     },
     {
@@ -1117,7 +1120,7 @@
       "status": "pass",
       "detail": "停滞开关正常（default=False，env true→True/false→False，消融臂互斥）",
       "evidence": {},
-      "duration_s": 2.62,
+      "duration_s": 1.04,
       "description": "覆盖率停滞检测开关 + 消融臂互斥"
     },
     {
@@ -1127,7 +1130,7 @@
       "status": "pass",
       "detail": "mutation advisor 环装配正确（开=7 节点 / 关=6 节点）",
       "evidence": {},
-      "duration_s": 1.87,
+      "duration_s": 0.78,
       "description": "mutation advisor 环装配随开关变化"
     },
     {
@@ -1140,25 +1143,76 @@
         "branch_coverage": 25.0,
         "missing": 3
       },
-      "duration_s": 1.1,
+      "duration_s": 0.57,
       "description": "branch 覆盖注入真实测量（含空测试保守降级）"
+    },
+    {
+      "name": "logic-oracle-instrument-safety",
+      "group": "logic",
+      "requires_llm": false,
+      "status": "pass",
+      "detail": "oracle 仪器加固生效：崩溃→skip（rc=0），静态 harness 齐备",
+      "evidence": {
+        "checks": {
+          "has_try": true,
+          "has_except": true,
+          "has_skip": true,
+          "has_oracle_name": true
+        }
+      },
+      "duration_s": 0.39,
+      "description": "O-1：oracle 崩溃安全 harness（崩溃→skip 非 fail，真实 pytest 验证）"
+    },
+    {
+      "name": "logic-oracle-replay-instrument-breakdown",
+      "group": "logic",
+      "requires_llm": false,
+      "status": "pass",
+      "detail": "replay 分类细化正常：fp=2（断言型）、instrument_error=0、skipped=27，旧四分类键保留",
+      "evidence": {
+        "checks": {
+          "old_four_keys_kept": true,
+          "fp_breakdown_present": true,
+          "skip_reasons_present": true,
+          "fp_reduced": true,
+          "instrument_quarantined": true,
+          "skip_attributed": true
+        },
+        "skip_reasons": {
+          "oracle-unavailable: AttributeError": 2,
+          "oracle-unavailable: TypeError": 24,
+          "oracle-unavailable: ZeroDivisionError": 1
+        }
+      },
+      "duration_s": 0.04,
+      "description": "O-1：replay 分类细化（fp 拆分 instrument_error + skip 原因单列）"
+    },
+    {
+      "name": "logic-oracle-precondition-input-filter",
+      "group": "logic",
+      "requires_llm": false,
+      "status": "pass",
+      "detail": "前件校验输入选择生效：跳过违反 side>0 的候选，绑定合法候选 side=3",
+      "evidence": {},
+      "duration_s": 0.04,
+      "description": "O-1：前件校验输入选择（跳过违反前件的边界候选）"
     },
     {
       "name": "logic-profile-spec-fields",
       "group": "logic",
       "requires_llm": true,
       "status": "pass",
-      "detail": "logic 档 spec 链路正常（12.9s，compile_rate=1.0，generated_test=有）",
+      "detail": "logic 档 spec 链路正常（7.2s，compile_rate=1.0，generated_test=有）",
       "evidence": {
         "compile_rate": 1.0,
-        "elapsed_s": 12.95
+        "elapsed_s": 7.25
       },
-      "duration_s": 14.87,
+      "duration_s": 8.04,
       "description": "logic 档最小真实任务：spec 链路状态字段落态（真 LLM ≤1 调用）"
     }
   ],
   "summary": {
-    "pass": 56
+    "pass": 59
   },
   "load_errors": [
     "scripts.tools.e2e_probes_platform: 探针名重复 observability-trace-redaction",

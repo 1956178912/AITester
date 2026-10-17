@@ -302,6 +302,9 @@ lost 1/2 才是断言型 fp 的语义质量信号；"判分耦合"缺陷本身�
 占比必须同时给分母与 skipped 数，禁止与加固前数字混池；历史批次（开关默认
 关）数字不受影响。残余风险：harness 只捕获 `Exception` 子类（段错误等由外层
 subprocess 兜底）；skip 暴露而非修复编译器绑定缺陷；NL 前件仍不可机检；
-`nodes._spec_oracle_verdict_after_run` 对"oracle 全 skip"轮次仍可能记
-injected_and_passed（nodes 写域归 O-3，本任务未改，风险登记）。
+`nodes._spec_oracle_verdict_after_run` 对"oracle 全 skip"轮次可能记
+injected_and_passed 的风险**已在 O 轮配套修复**：输出显式出现 oracle `SKIPPED`
+行时保留未决态 `injected`（不臆测 passed），与独立判读
+`oracle_suite_verdict=unavailable` 对齐（`tests/test_oracle_instrument_safety.py`
+3 例锁定正常 passed/全 skip/失败三态）。
 

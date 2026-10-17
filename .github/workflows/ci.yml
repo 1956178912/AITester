@@ -698,7 +698,7 @@ jobs:
   #
   # 设计纪律（沿用既有 CI 口径，不引入新第三方 action——本作业全部 action 均
   # 复用文件内已 SHA 钉版版本）：
-  # - 零 LLM：env 显式 AITESTER_E2E_LLM=false，只跑 44 个零 LLM 探针；12 个
+  # - 零 LLM：env 显式 AITESTER_E2E_LLM=false，只跑 47 个零 LLM 探针；12 个
   #   requires_llm 探针由运行器置 skip（报告可见原因），不消耗任何 API 配额；
   # - job 绿判据：0 fail / 0 error（skip 允许，且摘要逐条打印）；probe 运行器
   #   有 fail/error 时 exit 1，直接阻断；
@@ -816,7 +816,7 @@ jobs:
             echo "PYTHONDONTWRITEBYTECODE=1"
           } >> "$GITHUB_ENV"
 
-      - name: Run zero-LLM e2e probes (44 zero-LLM; LLM probes skip by design)
+      - name: Run zero-LLM e2e probes (47 zero-LLM; LLM probes skip by design)
         # 等价本地命令：make e2e-probe（产物路径不同；CI 产物走 artifact）。
         run: |
           python scripts/tools/e2e_probe.py --all --json-out e2e_probe.json --md-out e2e_probe.md
@@ -868,7 +868,7 @@ jobs:
   # - 镜像内不得含 .env*（.dockerignore 防线回归；密钥从来不进构建上下文）；
   # - Dockerfile.repro 只做存在性 + 可选 `docker build --check` 静态检查
   #   （不真构建，避免复制实验镜像安装全量依赖的 5-10min 成本）。
-  # 依赖：PyPI 网络（pip install -r requirements.txt）；无 CI secrets。
+  # 依赖：PyPI 网络（镜像内按 requirements.txt 安装依赖）；无 CI secrets。
   # ─────────────────────────────────────────────────────────────────────────────
   docker-build:
     name: Docker build (runtime image)

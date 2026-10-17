@@ -1,10 +1,202 @@
-> Last updated: 2026-10-17 (round N: **full-feature end-to-end probe matrix** 56/56 pass [14 groups, 12 real-LLM probes] + probes found **8 real defects** [safe-profile kernel sandbox P0, `COST_BUDGET_USD` production accounting P0, CLI JSON contract, over-redaction, ...] + **oracle wiring and independent judging** [LLM detection no longer erased by oracle failures] + real-LLM heavy paths [logic/RAG/cross-file/venv/safe] + 8300+ tests; actual LLM spend < $0.1. Rounds M/L/K registered the same day)
+> Last updated: 2026-10-18 (round O: **oracle instrument treatment** [crash-safe + precondition-validated input; fp 29→2, instrument_error 27→0, correct still 0 with honest correction] + **cross-file repair path really entered** [real-LLM 8-node chain + atomic multi-file rollback] + **CI zero-LLM e2e-probe/Docker jobs** + **runtime-hygiene root fixes** [branch-measurement orphan / stale-pyc false red / oracle all-skip mis-grade] + oracle-enabled two-arm validation batch. Rounds N/M/L/K registered the same day)
 
 > **Language**: [简体中文](CHANGELOG.md) | English (this file)
 
 # Changelog
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+## [Unreleased] — 2026-10-18 Round O (oracle instrument treatment + cross-file path evidence + CI release engineering + runtime hygiene)
+
+> Round O continues the two lines exposed by round N's full-feature verification:
+> (1) treating the "deterministic oracle channel is net-negative" finding from the
+> **instrument-validity** direction (crashes / precondition violations no longer pose
+> as false positives) and **honestly correcting** the magnitude of M-2's "net damage";
+> (2) forcing the cross-file repair path registered in N-4 to actually run (constructed
+> first-round-failure scenario) and validating multi-file patch safety semantics;
+> (3) release engineering (CI zero-LLM e2e-probe job + Docker build check); (4) root-fixing
+> three real runtime defects surfaced by the probe/CI work (82-minute branch-measurement
+> orphan, RepoExecutor stale-pyc random false red, oracle all-skip mis-graded as passed).
+> Real LLM spend **< $0.05** (O-3: 2 runs / 5 calls ≈$0.0035 + O-2: two arms × 20 tasks
+> ≈$0.03 + probe smoke).
+
+### Fixed
+
+- **O-1: unvalidated oracle instrument → crash-safe harness + precondition-validated
+  input (A-05 follow-up "instrument treatment").** `compile_spec_oracle` output reworked:
+  (1) the execution body (binding / precondition asserts / call / postcondition asserts) is
+  wrapped in `try`; `AssertionError` is re-raised unchanged (semantic judgement still
+  records fail), all other `Exception`s become
+  `pytest.skip("oracle-unavailable: <ExcType>: …")` (no silent pass, no fake fail;
+  BaseException/timeouts are not swallowed); (2) with boundary material, candidates are
+  filtered in order via `spec_smt.safe_eval_clause` (whitelisted AST, zero eval/exec) so
+  that the first candidate satisfying **all machine-checkable preconditions** is bound;
+  if all are rejected → SMT witness fallback → if still none → a conservative
+  `no-valid-input` skeleton (never fabricates inputs / fake assertions); (3) `_m1_metrics`
+  records skip-only suites as `oracle_suite_verdict=unavailable` (no longer mis-graded
+  pass/silent); replay keeps the legacy four-class keys and adds
+  `fp_breakdown{fp_assertion_fail, instrument_error}` / `skipped_count` /
+  `skip_reason_counts` / `--compare-report`.
+  **Zero-LLM before/after** (df_spec two arms, 279.9s): fp **29 → 2** (assertion-only),
+  `instrument_error` **27 → 0**, `skipped` **0 → 27** (TypeError 24 / AttributeError 2 /
+  ZeroDivisionError 1, matching the before exception types class by class), correct
+  **0 → 0**, classifiable denominator **38 → 11**; production independent-judging path
+  `oracle_suite_verdict` = unavailable 29 / fp 2 / silent 9 / correct 0 and LLM-suite
+  detection bit-identical to M-2 (0 mismatches). **Honest correction**: M-2's
+  "spec-oracle mixed judging erased 14/22 LLM detections" is **mostly an instrument
+  artifact** (crash-type oracle tests are permanently red on fixed) — after hardening the
+  mixed-judging lost drops **14/22 → 1/2**, oracle-augmented 40-caliber detection
+  **10.53%/18.42% → 44.74%/71.05%**, LLM-suite detection unchanged (50.00%/77.50%) —
+  **this is not a detection-capability gain**; the remaining lost 1/2 is the real
+  assertion-type fp semantic-quality signal. Companion fix in
+  `nodes._spec_oracle_verdict_after_run`: an explicit oracle `SKIPPED` line keeps the
+  unresolved `injected` state (no longer mis-upgraded to `injected_and_passed`, aligned
+  with independent judging). **53 tests**; targeted+regression 378 passed.
+- **O-5a: branch-measurement orphan pytest (ppid=1, 99% CPU, 82 minutes on the spot).**
+  QuixBugs' non-terminating family hung the nested pytest inside the branch-coverage
+  measurement subprocess; when the parent was killed externally the child was adopted by
+  init (the M-3 parent-death family). Fix: pytest-timeout **10s** per test inside the
+  measurement subprocess (graceful degradation when the plugin is absent) + call-site
+  `orphan_guard=True` (outer 60s timeout unchanged). 7 regression tests (bounded 11.5s
+  infinite loop, argument contract, timeout degradation).
+- **O-5b: RepoExecutor stale-pyc random false red (6/15 reproduction).** The
+  baseline and llm_patch phases wrote **same-size** source within one second → CPython's
+  pyc header `(mtime second, size)` unchanged → the second round reused baseline bytecode
+  → "patch applied yet still failing". Root fix: the single pytest throat in
+  `executor_repo` now uses `-B` + `PYTHONDONTWRITEBYTECODE=1` (env propagates to child
+  processes); the CI/Makefile sitecustomize workaround stays as belt-and-braces. 3
+  regression tests (argument/env contract, no `__pycache__` inside repo, same-second
+  same-size rewrite sees the new source).
+- **O-3: cross-file repair path forced real-LLM end-to-end + D3c audit mislabel fix.**
+  With a constructed deterministic first-round-failure two-module scenario, the real LLM
+  full graph chain was **truly entered**:
+  `generator → executor(FAIL) → _should_debug(debug) → cross_file_analyzer → debugger →
+  patch_applier(written) → executor(PASS) → done` (8-node trace); `cross_file_enabled=true`,
+  preset `cross_file_deps` state present, `repair_history.patch_applied=true`,
+  `patch_evidence_level=sbfl`, `passed=true`. **D3c fix**: analyzer trace now separates
+  `ast / preset / effective dep_edges`; preset dep_chain edges are no longer mislabeled
+  `single_file_fallback` (observability-only, routing/state unchanged). Component-level
+  Run2 real LLM showed an illegal whole-file rewrite patch is rejected by the apply layer
+  → **atomic rollback** (correct safety semantics). N-4 D3 root cause clarified as
+  scenario frequency / first-round all-green, **not an assembly defect**. 2 runs / 5 calls
+  / ≈$0.0035; 11 regression tests.
+- **O-4: release engineering.** `.github/workflows/ci.yml` **pure append** (existing jobs
+  untouched): `e2e-probe` job (ubuntu-latest, zero LLM, 44 zero-LLM probes, gate = 0 fail /
+  0 error; pinned QuixBugs data + chromadb warm-up + bwrap guard + nested-pytest
+  determinism hook + skip-reason summary + artifact upload; no new actions) and
+  `docker-build` job (plain shell: `docker build` + in-image import/CLI/`.env*` assertions
+  + Dockerfile.repro check); Makefile `e2e-probe` embeds the same determinism hook
+  (6/15 random false red before → 3/3 green after). CI-equivalent environment measured
+  **44 pass / 0 fail / 0 error / 12 skip (27.8s)**; YAML `safe_load` + 11/11 `bash -n` +
+  structural assertions pass.
+
+### Added
+
+- **O-2: oracle-enabled two-arm real-LLM validation batch** (clean cut worktree
+  HEAD=`70b5436`, dirty=0): both arms use `plain_llm_df_spec` (protocol correction: only
+  that arm carries `spec_anchor` material able to inject the oracle; the task-book default
+  `plain_llm_df` has no planner/anchor table → degenerates to not_attempted), A/B differ
+  only in `SPEC_ORACLE_EXEC_ENABLE`, 20 tasks seed=42, concurrent, distinct namespaces,
+  real calls, `AITESTER_LLM_CACHE=0`. Checks: injection rate and `oracle_suite_verdict`
+  distribution (after O-1 crashes should land unavailable, not fp), LLM-suite detection
+  consistency across arms, row-field completeness, cost. **Valid A/B (20 tasks; sequential
+  pairing disclosed)**: **A control (oracle off)** LLM-suite detection **10/14 = 71.43%**,
+  cost $0.050887; **B oracle (oracle on) 11/14 = 78.57%**, cost $0.051041; **20/20 paired
+  tasks, 1 mismatch** (`kheapsort` control 0.0 / oracle 1.0 — within temp=0 rerun noise;
+  attempt#1 same-config repeat had 2/20) → **no evidence that oracle injection changes
+  LLM-suite detection** (since N-3 `detection_rate` semantics = LLM-suite; oracle tests are
+  excluded from judging). Injection/independent judging: control `spec_oracle_injected` all
+  None / `spec_oracle_verdict` all not_attempted / `oracle_suite_verdict` all unavailable;
+  oracle arm injected **16** / compiled_empty **4** (3 `*_test` driver tasks + flatten,
+  material not compilable — not an injection fault) / `oracle_suite_verdict` unavailable
+  **15** + silent **5**, **fp=0** (O-1 crash-safe directional validation; no
+  correct/misguided in this subset → no quality conclusion); row fields 5 keys × 20 rows in
+  both arms. **Process disclosures**: (1) attempt#1 invalid because
+  `AITESTER_PROFILE=logic` preset setdefaults `SPEC_ORACLE_EXEC_ENABLE=true` so unsetting
+  alone cannot disable it → both arms oracle-on ($0.0947, archived
+  `_invalid_control_attempt_20261018/`); (2) attempt#2 with the fix: control hit the 2400s
+  watchdog during **MDO post-processing** (no batch JSON; oracle valid); (3) attempt#3
+  control-only rerun (watchdog 3600s) produced the valid A/B. **Post-processing wall-time
+  run-to-run variance** (same cut/protocol 2102.4s→>2400s→2297.4s, ≥14% tail) registered as
+  defensive evidence: next round should size the watchdog as "task phase + post-processing
+  budget + margin" (≥3600s for 20 tasks) and log per-stage wall time. O-2 measured total
+  **$0.19665 + unaccounted ≈$0.04 ≈ $0.23** (exemption $0.25 ✓), wall ≈117min. Artifacts
+  Artifacts `experiments/results/emse_oracle_enabled_validation_20261017/`; entry
+  `experiments/run_oracle_validation_batch.sh --arm-baseline plain_llm_df_spec`.
+- **O-1/O-5 probe coverage**: `scripts/tools/e2e_probes_logic.py` gains 3 probes
+  (`logic-oracle-instrument-safety` crash→skip real-pytest verification /
+  `logic-oracle-replay-instrument-breakdown` class refinement /
+  `logic-oracle-precondition-input-filter` precondition-validated input selection) —
+  full-feature probe matrix 56 → **59**.
+
+### Changed
+
+- **Profile-preset precedence trap (O-2 evidence)**: `AITESTER_PROFILE=logic`
+  **setdefaults `SPEC_ORACLE_EXEC_ENABLE` to true**; disabling requires an **explicit
+  `=false`** (unset is not an explicit disable). Batch runs must verify the two arms'
+  switch values differ in `provenance.env_snapshot` during preflight (the O-2 invalid
+  attempt came from this; archived and disclosed; registered in register §5).
+- **Oracle citation caliber (since O-1)**: must report "classifiable denominator +
+  skipped count + fp breakdown"; O-1-before (38 denominator / 29 fp) and after (11 / 2)
+  **must not be pooled**; instrument treatment ≠ detection gain (correct still 0; semantic
+  quality governance is a separate item).
+- **Cross-file capability disclosure**: the graph path applies only the entry-module patch
+  and `cross_file_plan_present=false` is a known registered state; multi-module
+  coordination (D3b `build_cross_file_repair_plan` has zero graph call sites) requires
+  design + pre-registration + same-batch contrast and is registered for the next round;
+  `patch_rollback_verdict/rolled_back` row-schema extension registered alongside.
+- **Documentation / BASELINE / register sync**: BASELINE gains
+  `target_quality.oracle_instrument_hardening` and `engineering_runtime_hygiene`;
+  `feature_matrix` 56→59; register gains §3.2 O-1..O-5, §4 round-O closures / A-05 honest
+  correction / next-round registrations, §5 three citation disciplines;
+  MEASUREMENT_INTEGRITY §6 gains the "correction of M-2/N-3 conclusions" section; bilingual
+  README "latest optimization" synchronized to round O; the local EMSE checklist gains
+  round-O increments.
+
+### Verification
+
+### Verification
+
+- **Full suite (CI caliber)**: `pytest tests/ -q -n 4 --dist loadfile --cov=src --cov-branch`
+  → **8396 passed / 5 skipped / 0 failed** (**8401** collected; **160.54s** locally;
+  `COVERAGE_FILE` isolated to avoid merges with nested-pytest coverage data);
+- **Coverage**: lines **96.51%** (16803/17411) / branches **92.65%** (5952/6424);
+  `coverage_ratchet.py --check` passes (water 96.40/92.50, headroom +0.11pp/+0.15pp);
+- **Static checks**: `ruff check .` / `ruff format --check .` green (787 files);
+  `mypy src/ config.py` 0 errors (134 source files);
+- **Gates**: `make gates` green (25 CI-blocking gates); `check_artifacts_tracked`
+  MANIFEST **99/99** plus the `emse_*` directory coverage scan (9 new O-round evidence
+  entries);
+- **Full-feature probe matrix (extended to 59 in round O)**: `AITESTER_E2E_LLM=true
+  python scripts/tools/e2e_probe.py --all --include-llm` → **59/59 pass** (14 groups,
+  12 real-LLM probes, 73.6s wall; the 47-probe zero-LLM subset is CI-safe);
+  `make e2e-probe` / `make e2e-probe-llm` available; CI now has a zero-LLM `e2e-probe` job;
+- **O-1 instrument-treatment recompute (zero LLM)**: `python -m
+  experiments.oracle_quality_replay --compare-report
+  experiments/results/emse_oracle_quality_20261017/ORACLE_QUALITY_REPORT.json` →
+  fp **29→2** (instrument_error 27→0, skipped 27 listed, correct 0→0, denominator
+  38→11); production independent judging `oracle_suite_verdict` = unavailable 29 / fp 2 /
+  silent 9 / correct 0, LLM-suite 0 mismatches vs M-2; artifact SHA256SUMS `44a1f3ab…`
+  verified (9 entries);
+- **O-2 two-arm validation (real LLM, clean cut 70b5436)**: LLM-suite detection control
+  **10/14=71.43%** ($0.050887) / oracle **11/14=78.57%** ($0.051041); 20/20 paired,
+  1 mismatch (within rerun noise); control zero injection, oracle arm fp=0; artifact
+  SHA256SUMS `00e3c6dc…` verified (134 entries; invalid attempt and attempt2 partial
+  archives included);
+- **O-3 cross-file evidence**: real-LLM 8-node chain truly entered the analyzer (trace on
+  record), preset dep edges present, atomic rollback of an illegal multi-file patch;
+  2 runs / 5 calls ≈$0.0035; artifact `o_round_cross_file_20261017/` (22 files verified);
+- **O-4 CI/release engineering**: YAML `safe_load` OK (jobs include
+  smoke-llm/test/security/supply-chain/e2e-probe/docker-build); 11/11 new run blocks pass
+  `bash -n`; CI-equivalent zero-LLM probes 47 pass / 0 fail / 0 error / 12 skip;
+  actionlint not installed locally (disclosed), docker build verified on first CI push
+  (no Docker CLI locally);
+- **Runtime-hygiene re-verification**: hanging-test branch measurement bounded (~11.5s,
+  far below the outer 60s); RepoExecutor same-second same-size rewrite sees the new source
+  and writes no `__pycache__`; oracle all-skip keeps the unresolved row-level verdict
+  (three-state tests locked);
+- **Cost**: round O real LLM ≈ **$0.24** (O-2 ≈$0.23 + O-3 $0.0035 + probes ≈$0.02,
+  including already-spent O-2 invalid/partial attempt costs; round-O exemption $0.30).
 
 ## [Unreleased] — 2026-10-17 Round N (full-feature end-to-end verification + 8 functional-defect fixes + oracle independent judging + real-LLM heavy paths)
 

@@ -1,0 +1,251 @@
+{
+  "run_tag": "dryrun",
+  "wall_seconds": 8.36,
+  "batch": {
+    "batch_path": "/Users/wangchenyu/Workspace/AITester/experiments/results/o_round_cross_file_20261017/run_artifacts/dryrun/benchmark_o3_cross_file_20261018_001534.json",
+    "batch_sha256": "e16c3f195e94d63b980be1c89ed91b7a2a194bfa70701abd59297b74db60107f",
+    "provenance": {
+      "git_sha": "1425ee74490ba6e2be15fd0feb87fc6f07ea856e",
+      "git_dirty": true,
+      "model_name": "deepseek-flash",
+      "seed": 42,
+      "temperature": 0.0,
+      "profile": "logic"
+    },
+    "arm_summary": {
+      "total_functions": 1,
+      "passed_count": 1,
+      "success_rate": 100.0,
+      "avg_iterations": 1.0,
+      "total_time": 3.69
+    },
+    "row_count": 1,
+    "row_audit": {
+      "cross_file_enabled": true,
+      "cross_file_deps": [
+        {
+          "source_module": "o3_caller",
+          "target_module": "o3_target",
+          "symbol": "",
+          "call_line": 0,
+          "source": "benchmark_preset",
+          "context": "dep_chain[0]: o3_caller -> o3_target"
+        }
+      ],
+      "cross_file_plan_present": false,
+      "repair_history": [
+        {
+          "iteration": 1,
+          "diagnosis": "add 的 docstring 声明求和，实现为减法",
+          "error_category": "assertion",
+          "patch_applied": true
+        }
+      ],
+      "patch_plausible": 1,
+      "passed": true,
+      "iterations": 1,
+      "stop_reason": "test_passed",
+      "error_category": "assertion",
+      "detection_rate": null,
+      "repair_rate": 1.0
+    },
+    "row_keys": [
+      "attribution_edge",
+      "attribution_fault_side",
+      "contamination_risk_level",
+      "contract_missing_symbols",
+      "coverage",
+      "cross_file_deps",
+      "cross_file_enabled",
+      "cross_file_plan_present",
+      "detection_first_red_seen",
+      "detection_first_status",
+      "detection_rate",
+      "deterministic_repair_status",
+      "diagnosis",
+      "edit_intent_status",
+      "edit_localization",
+      "elapsed_seconds",
+      "error_category",
+      "execution_trace",
+      "failure_bucket",
+      "failure_bucket_detail",
+      "false_fix_rate",
+      "fl_at_k",
+      "fl_constraint_changed_functions",
+      "fl_constraint_hit_rank",
+      "fl_constraint_verdict",
+      "generated_test",
+      "harness_invalid",
+      "iterations",
+      "llm_localization",
+      "llm_suite_detection_rate",
+      "localization_hit_function",
+      "localization_hit_function_at_3",
+      "localization_mrr",
+      "m10_leaf_fallback",
+      "mdo_available",
+      "mdo_crash_rate",
+      "mdo_not_available_reason",
+      "mdo_pool_floor_ok",
+      "mdo_pool_size",
+      "mdo_provisional",
+      "mdo_raw",
+      "mdr",
+      "mtr",
+      "oracle_quality_history",
+      "oracle_suite_verdict",
+      "oracle_type",
+      "passed",
+      "patch",
+      "patch_abstain_signals",
+      "patch_abstained",
+      "patch_correct",
+      "patch_evidence_level",
+      "patch_plausible",
+      "patch_plausible_evidence",
+      "patch_plausible_invariant_violation",
+      "patch_precision",
+      "patch_resample_stats",
+      "patch_validate_verdict",
+      "patch_validated",
+      "rag_stats",
+      "red_regression_violation",
+      "regeneration_count",
+      "regression_rate",
+      "repair_history",
+      "repair_rate",
+      "repo",
+      "repo_verification",
+      "risk_summary",
+      "self_repair_trap_signals",
+      "self_repair_trap_suspected",
+      "source_patched_unverified",
+      "spec_augment_applied",
+      "spec_compile_rate",
+      "spec_expr_coverage",
+      "spec_oracle_injected",
+      "spec_oracle_verdict",
+      "spec_reject_reasons",
+      "spec_replace_applied",
+      "specificity_gate_verdict",
+      "stop_reason",
+      "task_id",
+      "task_metadata",
+      "test_error_rate",
+      "test_hacking_signals",
+      "test_hacking_suspected",
+      "test_regenerated_pass_unverified",
+      "test_visible_to_system",
+      "token_budget_capped",
+      "token_usage"
+    ],
+    "tokens": {
+      "total_input_tokens": 1157,
+      "total_output_tokens": 96,
+      "total_tokens": 1253,
+      "total_llm_calls": 1,
+      "total_cache_hits": 0,
+      "total_cache_avoided_tokens": 0,
+      "cache_hit_rate_pct": 0.0,
+      "uncached_theoretical_tokens": 1253,
+      "avg_tokens_per_task": 1253.0,
+      "output_share_pct": 7.66,
+      "avg_output_per_task": 96.0,
+      "avg_output_per_call": 96.0
+    }
+  },
+  "trace": {
+    "trace_files": [
+      "/Users/wangchenyu/Workspace/AITester/experiments/results/o_round_cross_file_20261017/traces/dryrun/synthetic__o3_target_aitester_1792253726.trace.jsonl"
+    ],
+    "trace_file_count": 1,
+    "event_count": 10,
+    "node_event_counts": {
+      "_should_debug": 2,
+      "cross_file_analyzer": 1,
+      "debugger": 1,
+      "executor": 2,
+      "generator": 1,
+      "patch_applier": 1
+    },
+    "analyzer_entered": true,
+    "analyzer_records": [
+      {
+        "event": "node",
+        "task": "<REDACTED_KEY>",
+        "node": "cross_file_analyzer",
+        "ts": 1792253727.2392478,
+        "run_id": "a85db39c4c1b4c71",
+        "span_id": "de6a17427e9b",
+        "output": {
+          "entry_module": "o3_target",
+          "dep_edges": 0
+        },
+        "decision": "single_file_fallback",
+        "duration_ms": 0.06,
+        "iteration": 0
+      }
+    ],
+    "patch_applier_records": [
+      {
+        "event": "node",
+        "task": "<REDACTED_KEY>",
+        "node": "patch_applier",
+        "ts": 1792253729.081347,
+        "run_id": "a85db39c4c1b4c71",
+        "span_id": "9b18ba254c9e",
+        "output": {
+          "patch_applied": true,
+          "new_code_len": 105
+        },
+        "decision": "written",
+        "iteration": 0
+      }
+    ],
+    "route_records": [
+      {
+        "event": "node",
+        "task": "<REDACTED_KEY>",
+        "node": "_should_debug",
+        "ts": 1792253727.238664,
+        "run_id": "a85db39c4c1b4c71",
+        "span_id": "fa55879452c2",
+        "output": {
+          "iteration": 0
+        },
+        "decision": "debug"
+      },
+      {
+        "event": "node",
+        "task": "<REDACTED_KEY>",
+        "node": "_should_debug",
+        "ts": 1792253729.964606,
+        "run_id": "a85db39c4c1b4c71",
+        "span_id": "c968ca581921",
+        "output": {
+          "reason": "test_passed"
+        },
+        "decision": "done"
+      }
+    ]
+  },
+  "run_benchmark_return_top_keys": [
+    "baselines",
+    "dataset",
+    "enable_debugger",
+    "enable_planner",
+    "enable_rag",
+    "environment",
+    "p2p_gate_enabled",
+    "p2p_gate_threshold",
+    "parallelism",
+    "provenance",
+    "results",
+    "seed",
+    "subset",
+    "timestamp",
+    "total_tasks",
+    "valid_apis"
+  ]
+}

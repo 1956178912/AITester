@@ -61,11 +61,11 @@ class TestCILockInstall:
         assert isinstance(cfg, dict) and "jobs" in cfg
 
     def test_install_and_cache_use_lock(self) -> None:
-        """test/smoke 两作业安装走 lock 且无 requirements.txt 安装残留；
-        缓存键随 lock（2 处：test + smoke）。"""
-        assert CI_YML.count("pip install -r requirements.lock") == 2
+        """所有 Python 作业安装走 lock 且无 requirements.txt 安装残留；
+        缓存键随 lock（O 轮起 3 处：test + smoke-llm + e2e-probe）。"""
+        assert CI_YML.count("pip install -r requirements.lock") == 3
         assert "pip install -r requirements.txt" not in CI_YML
-        assert CI_YML.count("cache-dependency-path: requirements.lock") == 2
+        assert CI_YML.count("cache-dependency-path: requirements.lock") == 3
 
     def test_lock_contains_test_toolchain(self) -> None:
         """lock 全量钉版覆盖测试工具链（pytest 系/ruff/hypothesis/coverage）。"""

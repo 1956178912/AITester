@@ -16,6 +16,9 @@
 #   BENCHMARK_PARALLELISM=4 AITESTER_BATCH_MAX_CALLS=100
 #   COST_BUDGET_ENABLE=true COST_BUDGET_USD=1 AITESTER_LLM_CACHE=0
 #   两臂独立 AITESTER_CACHE_NAMESPACE；均不设 DETECTION_SPEC_MODE。
+#   ⚠️ control 臂必须**显式** SPEC_ORACLE_EXEC_ENABLE=false：AITESTER_PROFILE=logic
+#      的档位预设会 setdefault 注入 true（O-2 首跑实测：仅 unset 导致两臂都 oracle-on，
+#      对照无效）——本脚本已修复为先 unset 再显式赋值。
 #   预算 ≤$0.2 / 墙钟 ≤60min（两臂并发，各臂墙钟看门狗 2400s）。
 #
 # ⚠️ 协议前置（本脚本进行**零 LLM 可行性门禁**，dry-run 可查）：
@@ -65,6 +68,9 @@ REQUIRE_CLEAN_ROOT=0
 ALLOW_DEGENERATE_ORACLE=0
 DRY_RUN=0
 EMIT_SKELETON=0
+WATCHDOG_SECONDS=2400
+ONLY_CONTROL=0
+REUSE_ORACLE_BATCH=""
 
 usage() {
     awk 'NR == 1 { next } /^#/ { sub(/^# ?/, ""); print; next } { exit }' "${BASH_SOURCE[0]}"
@@ -88,6 +94,14 @@ while [ $# -gt 0 ]; do
         --parallelism)
             [ $# -ge 2 ] || { echo "--parallelism 需要正整数" >&2; exit 2; }
             PARALLELISM="$2"; shift 2 ;;
+        --watchdog-seconds)
+            [ $# -ge 2 ] || { echo "--watchdog-seconds 需要正整数" >&2; exit 2; }
+            WATCHDOG_SECONDS="$2"; shift 2 ;;
+        --only-control)
+            ONLY_CONTROL=1; shift ;;
+        --reuse-oracle-batch)
+            [ $# -ge 2 ] || { echo "--reuse-oracle-batch 需要批次 JSON 路径" >&2; exit 2; }
+            REUSE_ORACLE_BATCH="$2"; shift 2 ;;
         --require-clean-root)
             REQUIRE_CLEAN_ROOT=1; shift ;;
         --allow-degenerate-oracle)
@@ -105,6 +119,12 @@ done
 
 case "${TASK_LIMIT}" in '' | *[!0-9]*) echo "--task-limit 必须正整数" >&2; exit 2 ;; esac
 case "${PARALLELISM}" in '' | *[!0-9]*) echo "--parallelism 必须正整数" >&2; exit 2 ;; esac
+case "${WATCHDOG_SECONDS}" in '' | *[!0-9]*) echo "--watchdog-seconds 必须正整数" >&2; exit 2 ;; esac
+[ "${WATCHDOG_SECONDS}" -ge 60 ] || { echo "--watchdog-seconds 必须 >= 60" >&2; exit 2; }
+if [ "${ONLY_CONTROL}" -eq 1 ]; then
+    [ -n "${REUSE_ORACLE_BATCH}" ] || { echo "✗ --only-control 必须同时给 --reuse-oracle-batch <已完成的 oracle 批次 JSON>" >&2; exit 2; }
+    [ -f "${REUSE_ORACLE_BATCH}" ] || { echo "✗ --reuse-oracle-batch 文件不存在：${REUSE_ORACLE_BATCH}" >&2; exit 2; }
+fi
 [ -x "${PY}" ] || { echo "✗ 未找到解释器 ${PY}" >&2; exit 2; }
 [ -d "${ROOT}" ] || { echo "✗ --root 不是目录：${ROOT}" >&2; exit 2; }
 ROOT="$(cd "${ROOT}" && pwd)"
@@ -131,14 +151,21 @@ echo "  协议：arm_baseline=${ARM_BASELINE} | task_limit=${TASK_LIMIT} seed=42
 echo "        AITESTER_PROFILE=logic TEMPERATURE=0.0 LLM_THINKING_MODE=disabled P=${PARALLELISM}"
 echo "        AITESTER_BATCH_MAX_CALLS=100 COST_BUDGET_ENABLE=true COST_BUDGET_USD=1 AITESTER_LLM_CACHE=0"
 echo "  两臂：A=control（oracle off） / B=oracle（SPEC_ORACLE_EXEC_ENABLE=true），同 baseline、独立 namespace"
-echo "  预算：≤\$0.2；墙钟：≤60min（各臂看门狗 2400s）"
+echo "  预算：≤\$0.2；墙钟：≤60min（各臂看门狗 ${WATCHDOG_SECONDS}s）"
+if [ "${ONLY_CONTROL}" -eq 1 ]; then
+    echo "  运行模式：control-only 补跑（reuse oracle 批次：${REUSE_ORACLE_BATCH}）——sequential pairing，非同一并发时刻"
+fi
 echo "================================================================================"
 
 # ─── 零 LLM 结构性预检（import 代码根；不调 LLM） ───────────────────────────
 echo ""
 echo "[1/7] 零 LLM 结构性预检（baseline 注册 / 行字段 / env_snapshot / 材料可行性）"
 mkdir -p "${OUT}"
-PREFLIGHT_JSON="${OUT}/PREFLIGHT.json"
+if [ "${DRY_RUN}" -eq 1 ] || [ "${EMIT_SKELETON}" -eq 1 ]; then
+    PREFLIGHT_JSON="${OUT}/PREFLIGHT_dryrun.json"
+else
+    PREFLIGHT_JSON="${OUT}/PREFLIGHT.json"
+fi
 set +e
 "${PY}" - "${ROOT}" "${PREFLIGHT_JSON}" "${ARM_BASELINE}" "${TASK_LIMIT}" "${PARALLELISM}" "${ROOT_GIT_HEAD}" <<'PY'
 """O-2 零 LLM 预检：baseline 注册 / oracle 行字段 / env_snapshot / 材料可行性 / 锚表 sha256。
@@ -199,6 +226,15 @@ for k, ok in row_fields.items():
         payload["blocking"].append(f"结果行字段缺失：{k}")
 env_snapshot_has_oracle_switch = '"SPEC_ORACLE_EXEC_ENABLE"' in src_rb
 payload["checks"]["env_snapshot_has_SPEC_ORACLE_EXEC_ENABLE"] = env_snapshot_has_oracle_switch
+_cfg_text = (root / "config.py").read_text(encoding="utf-8")
+_logic_block = re.search(r'"logic": \{(.*?)\n    \}', _cfg_text, re.S)
+payload["checks"]["profile_logic_presets_SPEC_ORACLE_EXEC_ENABLE"] = bool(
+    _logic_block and "SPEC_ORACLE_EXEC_ENABLE" in _logic_block.group(1)
+)
+if payload["checks"]["profile_logic_presets_SPEC_ORACLE_EXEC_ENABLE"]:
+    payload["warnings"].append(
+        "AITESTER_PROFILE=logic 的档位预设默认注入 SPEC_ORACLE_EXEC_ENABLE=true；control 臂必须显式 false（脚本已处理）。"
+    )
 if not env_snapshot_has_oracle_switch:
     payload["blocking"].append("env_snapshot 未登记 SPEC_ORACLE_EXEC_ENABLE（无法审计开关值）")
 
@@ -356,6 +392,113 @@ else
     fi
 fi
 
+# ─── [0b/7] 复用 oracle 批次校验（--only-control；不重跑） ───────────────────
+if [ "${ONLY_CONTROL}" -eq 1 ]; then
+    echo ""
+    echo "[0b/7] 复用 oracle 批次校验（同 cut / 20 行 / env_snapshot=true；不重跑）"
+    set +e
+    "${PY}" - "${REUSE_ORACLE_BATCH}" "${ROOT_GIT_HEAD}" "${ARM_BASELINE}" "${TASK_LIMIT}" <<'PY'
+import hashlib
+import json
+import sys
+from pathlib import Path
+
+path, head, arm_baseline, task_limit = sys.argv[1:5]
+p = Path(path)
+data = json.loads(p.read_text(encoding="utf-8"))
+issues = []
+results = data.get("results") or {}
+arm = results.get(arm_baseline)
+if arm is None:
+    issues.append(f"缺少臂结果键 {arm_baseline!r}（baselines={list(results)}）")
+    rows = []
+else:
+    rows = arm.get("details") or []
+prov = data.get("provenance") or {}
+snap = prov.get("env_snapshot") or {}
+if int(task_limit) > 0 and len(rows) != int(task_limit):
+    issues.append(f"行数 {len(rows)} ≠ task_limit {task_limit}")
+if str(prov.get("git_sha")) != head:
+    issues.append(f"git_sha {prov.get('git_sha')} ≠ 切点 {head}")
+if prov.get("git_dirty") is True:
+    issues.append("provenance.git_dirty=true（复用批次必须干净）")
+if str(snap.get("SPEC_ORACLE_EXEC_ENABLE")).lower() != "true":
+    issues.append(f"env_snapshot.SPEC_ORACLE_EXEC_ENABLE={snap.get('SPEC_ORACLE_EXEC_ENABLE')!r} ≠ 'true'（复用的必须是 oracle 臂）")
+summary = {
+    "reuse_batch": str(p.resolve()),
+    "reuse_batch_sha256": hashlib.sha256(p.read_bytes()).hexdigest(),
+    "rows": len(rows),
+    "git_sha": prov.get("git_sha"),
+    "git_dirty": prov.get("git_dirty"),
+    "env_snapshot_SPEC_ORACLE_EXEC_ENABLE": snap.get("SPEC_ORACLE_EXEC_ENABLE"),
+    "issues": issues,
+}
+# 注：不向复用批次所在目录写任何文件（归档保持原样/可校验）；校验结果仅打印并随运行日志归档。
+print(json.dumps(summary, ensure_ascii=False, indent=2))
+raise SystemExit(0 if not issues else 1)
+PY
+    REUSE_RC=$?
+    set -e
+    if [ "${REUSE_RC}" -ne 0 ]; then
+        echo "✗ 复用 oracle 批次校验失败——立即中止（不跑 control）。" >&2
+        exit 3
+    fi
+fi
+
+# ─── 显式 env 有效性门禁（profile preset footgun 防呆；零 LLM）──────────────
+echo ""
+echo "[1b/7] 显式 env 有效性门禁（control 必须 false / oracle 必须 true，且两者不同）"
+( cd "${ROOT}" && env -u SPEC_ORACLE_EXEC_ENABLE AITESTER_PROFILE=logic SPEC_ORACLE_EXEC_ENABLE=false \
+    "${PY}" -c 'import os, config; print((os.getenv("SPEC_ORACLE_EXEC_ENABLE") or "").strip().lower())' ) > /tmp/o2_eff_ctl.$$ 2>/dev/null || true
+( cd "${ROOT}" && env -u SPEC_ORACLE_EXEC_ENABLE AITESTER_PROFILE=logic SPEC_ORACLE_EXEC_ENABLE=true \
+    "${PY}" -c 'import os, config; print((os.getenv("SPEC_ORACLE_EXEC_ENABLE") or "").strip().lower())' ) > /tmp/o2_eff_orc.$$ 2>/dev/null || true
+EFF_CTL="$(cat /tmp/o2_eff_ctl.$$ 2>/dev/null || true)"; EFF_ORC="$(cat /tmp/o2_eff_orc.$$ 2>/dev/null || true)"
+rm -f /tmp/o2_eff_ctl.$$ /tmp/o2_eff_orc.$$
+echo "  control effective SPEC_ORACLE_EXEC_ENABLE=${EFF_CTL:-<probe-failed>} | oracle effective=${EFF_ORC:-<probe-failed>}"
+if [ "${EFF_CTL}" != "false" ] || [ "${EFF_ORC}" != "true" ]; then
+    echo "✗ 预检失败：显式 env 未按预期生效（control=${EFF_CTL:-?} oracle=${EFF_ORC:-?}）——立即中止，不跑批（profile preset 陷阱？）。" >&2
+    exit 3
+fi
+"${PY}" - "${PREFLIGHT_JSON}" "${EFF_CTL}" "${EFF_ORC}" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path, ctl, orc = sys.argv[1:4]
+try:
+    d = json.loads(Path(path).read_text(encoding="utf-8"))
+except (OSError, ValueError):
+    d = {}
+d.setdefault("checks", {})["effective_env_probe"] = {
+    "control_SPEC_ORACLE_EXEC_ENABLE": ctl,
+    "oracle_SPEC_ORACLE_EXEC_ENABLE": orc,
+    "distinct": (ctl != orc),
+}
+Path(path).write_text(json.dumps(d, ensure_ascii=False, indent=2), encoding="utf-8")
+print("  ✓ PREFLIGHT.effective_env_probe:", d["checks"]["effective_env_probe"])
+PY
+
+# ─── 运行模式写入 PREFLIGHT（only-control/watchdog/reuse；审计） ─────────────
+if [ -f "${PREFLIGHT_JSON}" ]; then
+    "${PY}" - "${PREFLIGHT_JSON}" "${ONLY_CONTROL}" "${WATCHDOG_SECONDS}" "${REUSE_ORACLE_BATCH}" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path, only_control, watchdog, reuse = sys.argv[1:5]
+try:
+    d = json.loads(Path(path).read_text(encoding="utf-8"))
+except (OSError, ValueError):
+    d = {}
+d["run_mode"] = {
+    "only_control": str(only_control) == "1",
+    "watchdog_seconds": int(watchdog),
+    "reuse_oracle_batch": reuse or None,
+}
+Path(path).write_text(json.dumps(d, ensure_ascii=False, indent=2), encoding="utf-8")
+PY
+fi
+
 # ─── README 骨架（--emit-readme-skeleton，零 LLM） ──────────────────────────
 if [ "${EMIT_SKELETON}" -eq 1 ]; then
     "${PY}" - "${OUT}/README_SKELETON.md" "${ARM_BASELINE}" "${TASK_LIMIT}" "${ROOT_GIT_HEAD}" "${PREFLIGHT_JSON}" <<'PY'
@@ -433,8 +576,13 @@ fi
 if [ "${DRY_RUN}" -eq 1 ]; then
     echo ""
     echo "[DRY-RUN] 计划执行（两臂并发；每臂独立 namespace/log；零 LLM 调用）："
-    echo "  A control：--baselines ${ARM_BASELINE}（SPEC_ORACLE_EXEC_ENABLE 未设）"
-    echo "  B oracle ：--baselines ${ARM_BASELINE} + SPEC_ORACLE_EXEC_ENABLE=true"
+    echo "  A control：--baselines ${ARM_BASELINE}（SPEC_ORACLE_EXEC_ENABLE=false，显式关闭）"
+    if [ "${ONLY_CONTROL}" -eq 1 ]; then
+        echo "  B oracle ：**复用** attempt#2 批次（不启动、不消耗 LLM）：${REUSE_ORACLE_BATCH}"
+        echo "  模式：control-only 补跑（sequential pairing；看门狗 ${WATCHDOG_SECONDS}s）"
+    else
+        echo "  B oracle ：--baselines ${ARM_BASELINE} + SPEC_ORACLE_EXEC_ENABLE=true"
+    fi
     echo "  输出：${OUT}"
     echo "  真实跑批前：等 Lead 给出 O-1 切点 sha + 干净 worktree，再执行"
     echo "  bash experiments/run_oracle_validation_batch.sh --root <worktree> --require-clean-root [--arm-baseline <approved>]"
@@ -593,7 +741,14 @@ _launch_arm() { # label oracle_enabled namespace staging logfile
         "BENCHMARK_PARALLELISM=${PARALLELISM}" "AITESTER_BATCH_MAX_CALLS=100"
         "COST_BUDGET_ENABLE=true" "COST_BUDGET_USD=1" "AITESTER_LLM_CACHE=0"
         "AITESTER_CACHE_NAMESPACE=${ns}" "AITESTER_TRACE_DIR=${OUT}/traces_${label}")
-    if [ "${oracle}" = "1" ]; then _env_args+=("SPEC_ORACLE_EXEC_ENABLE=true"); fi
+    if [ "${oracle}" = "1" ]; then
+        _env_args+=("SPEC_ORACLE_EXEC_ENABLE=true")
+    else
+        # 关键修复（O-2 实测）：AITESTER_PROFILE=logic 的档位预设默认注入
+        # SPEC_ORACLE_EXEC_ENABLE=true（config.py setdefault），"unset"无法关闭——
+        # control 必须**显式 false** 才能与 oracle 臂构成有效 A/B 对照。
+        _env_args+=("SPEC_ORACLE_EXEC_ENABLE=false")
+    fi
     local cmd=(env "${_env_args[@]}" "${PY}" "${ROOT}/experiments/run_main_batch.py"
         --dataset quixbugs --task-limit "${TASK_LIMIT}" --seed 42 --baselines "${ARM_BASELINE}"
         --output-dir "${staging}" --skip-stats ${_DIRTY_ARGS[@]+"${_DIRTY_ARGS[@]}"})
@@ -608,7 +763,7 @@ _launch_arm() { # label oracle_enabled namespace staging logfile
     rm -f "${OUT}/.arm_${label}.rc"
     (
         set +e
-        ( cd "${ROOT}" && "${PY}" "${OUT}/_helpers/limited_run.py" 2400 "${cmd[@]}" ) >> "${log}" 2>&1
+        ( cd "${ROOT}" && "${PY}" "${OUT}/_helpers/limited_run.py" "${WATCHDOG_SECONDS}" "${cmd[@]}" ) >> "${log}" 2>&1
         echo $? > "${OUT}/.arm_${label}.rc"
     ) &
     echo "$!" > "${OUT}/.arm_${label}.pid"
@@ -618,32 +773,43 @@ _launch_arm() { # label oracle_enabled namespace staging logfile
 if [ -n "${ROOT_DIRTY}" ]; then _DIRTY_ARGS=(--allow-dirty --dirty-reason "O-2 validation batch: code root not clean (${#ROOT_DIRTY} lines) — user-approved"); else _DIRTY_ARGS=(); fi
 
 _launch_arm control 0 "${NS_A}" "${STAGE_A}" "${LOG_A}"
-_launch_arm oracle 1 "${NS_B}" "${STAGE_B}" "${LOG_B}"
 PID_A="$(cat "${OUT}/.arm_control.pid")"
-PID_B="$(cat "${OUT}/.arm_oracle.pid")"
-echo "  ✓ A control 已启动 pid=${PID_A}（ns=${NS_A}）"
-echo "  ✓ B oracle  已启动 pid=${PID_B}（ns=${NS_B}，SPEC_ORACLE_EXEC_ENABLE=true）"
+echo "  ✓ A control 已启动 pid=${PID_A}（ns=${NS_A}，SPEC_ORACLE_EXEC_ENABLE=false 显式）"
+if [ "${ONLY_CONTROL}" -eq 1 ]; then
+    PID_B=""
+    rm -f "${OUT}/.arm_oracle.rc"
+    echo "  ✓ B oracle  ：复用既存批次（不启动，不消耗 LLM）：${REUSE_ORACLE_BATCH}"
+else
+    _launch_arm oracle 1 "${NS_B}" "${STAGE_B}" "${LOG_B}"
+    PID_B="$(cat "${OUT}/.arm_oracle.pid")"
+    echo "  ✓ B oracle  已启动 pid=${PID_B}（ns=${NS_B}，SPEC_ORACLE_EXEC_ENABLE=true）"
+fi
 
 echo ""
-echo "[3/7] 监控与等待（每 15s 检查完成；每臂看门狗 2400s）"
+echo "[3/7] 监控与等待（每 15s 检查完成；每臂看门狗 ${WATCHDOG_SECONDS}s）"
 LAST_SCAN=0
 while :; do
     _done=1
     [ -f "${OUT}/.arm_control.rc" ] || _done=0
-    [ -f "${OUT}/.arm_oracle.rc" ] || _done=0
+    if [ "${ONLY_CONTROL}" -eq 0 ]; then [ -f "${OUT}/.arm_oracle.rc" ] || _done=0; fi
     if [ "${_done}" -eq 1 ]; then break; fi
     sleep 15
     NOW="$(date +%s)"
     if [ $((NOW - LAST_SCAN)) -ge 300 ]; then
         LAST_SCAN="${NOW}"
-        echo "  … 已运行 $(( (NOW - START_ALL_EPOCH) / 60 ))min（control=$([ -f "${OUT}/.arm_control.rc" ] && echo done || echo running)，oracle=$([ -f "${OUT}/.arm_oracle.rc" ] && echo done || echo running)）"
+        if [ "${ONLY_CONTROL}" -eq 1 ]; then
+            echo "  … 已运行 $(( (NOW - START_ALL_EPOCH) / 60 ))min（control=$([ -f "${OUT}/.arm_control.rc" ] && echo done || echo running)；oracle 复用不运行）"
+        else
+            echo "  … 已运行 $(( (NOW - START_ALL_EPOCH) / 60 ))min（control=$([ -f "${OUT}/.arm_control.rc" ] && echo done || echo running)，oracle=$([ -f "${OUT}/.arm_oracle.rc" ] && echo done || echo running)）"
+        fi
     fi
 done
 set +e
-wait "${PID_A}" 2>/dev/null; wait "${PID_B}" 2>/dev/null
+wait "${PID_A}" 2>/dev/null
+if [ -n "${PID_B}" ]; then wait "${PID_B}" 2>/dev/null; fi
 set -e
 RC_A="$(cat "${OUT}/.arm_control.rc" 2>/dev/null || echo 127)"
-RC_B="$(cat "${OUT}/.arm_oracle.rc" 2>/dev/null || echo 127)"
+if [ "${ONLY_CONTROL}" -eq 1 ]; then RC_B=0; else RC_B="$(cat "${OUT}/.arm_oracle.rc" 2>/dev/null || echo 127)"; fi
 case "${RC_A}" in '' | *[!0-9]*) RC_A=127 ;; esac
 case "${RC_B}" in '' | *[!0-9]*) RC_B=127 ;; esac
 END_ALL_EPOCH="$(date +%s)"
@@ -700,13 +866,28 @@ PY
     fi
     "${PY}" "${OUT}/_helpers/extract_arm.py" "${_batch}" "${label}" "${baseline}" "${ns}" "${oracle}" \
         "${ROOT}/experiments/price_table.json" "${OUT}/arm_${label}.meta.json"
-    local var="BATCH_${label^^}"
-    printf -v "${var}" '%s' "${_batch}" 2>/dev/null || true
     if [ "${label}" = "control" ]; then BATCH_A="${_batch}"; else BATCH_B="${_batch}"; fi
 }
 
 _collect_arm control "${ARM_BASELINE}" "${NS_A}" 0 "${STAGE_A}" "${RC_A}"
-_collect_arm oracle "${ARM_BASELINE}" "${NS_B}" 1 "${STAGE_B}" "${RC_B}"
+if [ "${ONLY_CONTROL}" -eq 1 ]; then
+    _reuse_target="${OUT}/$(basename "${REUSE_ORACLE_BATCH}")"
+    if [ -e "${_reuse_target}" ]; then
+        _reuse_target="${OUT}/$(basename "${REUSE_ORACLE_BATCH}" .json)_reused_oracle.json"
+    fi
+    if [ -e "${_reuse_target}" ]; then
+        echo "✗ 复用目标已存在，拒绝覆盖：${_reuse_target}" >&2
+        ARM_FAIL=1
+    else
+        cp -p "${REUSE_ORACLE_BATCH}" "${_reuse_target}"
+        BATCH_B="${_reuse_target}"
+        echo "  oracle（复用批次已复制入工件目录）：${BATCH_B}"
+        "${PY}" "${OUT}/_helpers/extract_arm.py" "${BATCH_B}" oracle "${ARM_BASELINE}" "${NS_B}" 1 \
+            "${ROOT}/experiments/price_table.json" "${OUT}/arm_oracle.meta.json"
+    fi
+else
+    _collect_arm oracle "${ARM_BASELINE}" "${NS_B}" 1 "${STAGE_B}" "${RC_B}"
+fi
 echo "  control 批次：${BATCH_A:-<缺失>}"
 echo "  oracle  批次：${BATCH_B:-<缺失>}"
 
@@ -735,7 +916,7 @@ issues: list[str] = []
 warnings: list[str] = []
 
 # provenance
-for meta, expected_oracle in ((meta_a, None), (meta_b, "true")):
+for meta, expected_oracle in ((meta_a, "false"), (meta_b, "true")):
     prov = meta.get("provenance") or {}
     fp = prov.get("model_fingerprint") or {}
     label = meta["arm_label"]
@@ -748,8 +929,11 @@ for meta, expected_oracle in ((meta_a, None), (meta_b, "true")):
     snap = prov.get("env_snapshot_spec_oracle_exec_enable")
     if expected_oracle is not None and str(snap).lower() != expected_oracle:
         issues.append(f"{label}: env_snapshot.SPEC_ORACLE_EXEC_ENABLE={snap!r}，期望 {expected_oracle!r}")
-    if expected_oracle is None and snap not in (None, "", "false", "False"):
-        issues.append(f"{label}: control 臂 env_snapshot.SPEC_ORACLE_EXEC_ENABLE={snap!r}，期望未设")
+    if expected_oracle == "false" and str(snap).lower() != "false":
+        issues.append(
+            f"{label}: control 臂 env_snapshot.SPEC_ORACLE_EXEC_ENABLE={snap!r}，期望显式 'false'"
+            "（注意：AITESTER_PROFILE=logic 预设会默认开启 oracle，unset 不等于关闭）"
+        )
     if prov.get("env_snapshot_detection_spec_mode") not in (None, ""):
         issues.append(f"{label}: 不应设置 DETECTION_SPEC_MODE，实际 {prov.get('env_snapshot_detection_spec_mode')!r}")
 
@@ -834,13 +1018,13 @@ fi
 # ─── README（数字全部来自工件） ─────────────────────────────────────────────
 echo ""
 echo "[6/7] 生成 README.md（协议/两臂表/注入与 verdict/一致性/成本/局限）"
-"${PY}" - "${OUT}" "${RUN_STAMP}" "${ARM_BASELINE}" "${TASK_LIMIT}" "${PARALLELISM}" <<'PY'
+"${PY}" - "${OUT}" "${RUN_STAMP}" "${ARM_BASELINE}" "${TASK_LIMIT}" "${PARALLELISM}" "${ONLY_CONTROL}" "${REUSE_ORACLE_BATCH}" <<'PY'
 import json
 import sys
 from pathlib import Path
 
 out = Path(sys.argv[1])
-stamp, arm_baseline, task_limit, parallelism = sys.argv[2:6]
+stamp, arm_baseline, task_limit, parallelism, only_control, reuse_oracle = sys.argv[2:8]
 pre = json.loads((out / "PREFLIGHT.json").read_text(encoding="utf-8"))
 cmp = json.loads((out / "ARM_COMPARISON.json").read_text(encoding="utf-8"))
 mac = json.loads((out / "arm_control.meta.json").read_text(encoding="utf-8"))
@@ -874,6 +1058,11 @@ add(f"- 零 LLM 材料可行性探测：arm_can_inject_oracle=`{pre.get('materia
 if pre.get("material_probe", {}).get("spec_anchor_state", {}).get("table_sha256"):
     add(f"- SPEC_ANCHOR_TABLE sha256=`{pre['material_probe']['spec_anchor_state']['table_sha256']}`（仅 arm_baseline=plain_llm_df_spec 时涉及）。")
 add("- 调度：两臂**并发**执行（各 P" + str(parallelism) + "、独立 namespace/log/trace；主指标在任务阶段采集，次指标含并发 CPU 噪声）。")
+if str(only_control) == "1":
+    add("")
+    add("> **sequential pairing 披露**：本轮为 **control-only 补跑**（attempt#2 的 control 臂在 MDO 后处理阶段撞 2400s 看门狗失败），")
+    add(f"> oracle 臂批次**复用** attempt#2 已完成工件（`{reuse_oracle}`），未重跑。两臂同切点/同协议/独立 namespace，")
+    add("> 但 control 补跑与 oracle 运行**不是同一并发时刻**（sequential pairing，非 same-batch concurrent），解释时须注意。")
 if arm_baseline != "plain_llm_df":
     add("")
     add(f"**验证性协议修正（Lead 批准 2026-10-17，方案 a）**：任务书默认 baseline `plain_llm_df` 修正为 `{arm_baseline}`。")
@@ -881,6 +1070,10 @@ if arm_baseline != "plain_llm_df":
     add("`plain_llm_df` 无 planner（无 `test_plan`）且不加载锚表（无 `spec_anchor`）→ 材料为空 → `SPEC_ORACLE_EXEC_ENABLE=true`")
     add("只会记 `not_attempted`，无法验证 oracle 注入；`plain_llm_df_spec` 携带 `spec_anchor.logic_analysis`（随库 `SPEC_ANCHOR_TABLE`）")
     add("为可编译锚材料 → 才能真实验证 oracle-enabled 通道。**该修正属验证性协议修正，不改变任何判定规则/判分口径。**")
+add("")
+add("> **profile preset 陷阱（O-2 实测，AITESTER_PROFILE=logic）**：档位预设会用 `setdefault` 注入")
+add("> `SPEC_ORACLE_EXEC_ENABLE=true`（`config.py` logic 预设）——关闭 oracle 的 control 臂必须**显式**")
+add("> `SPEC_ORACLE_EXEC_ENABLE=false`，仅 unset 会被预设重新打开（O-2 首跑即因此 invalid，见附录 / `_invalid_control_attempt_20261018/`）。")
 add("")
 add("## 2. 两臂结果")
 add("")

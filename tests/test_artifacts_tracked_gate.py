@@ -90,6 +90,29 @@ class TestManifestHygiene:
         for needle in required_substrings:
             assert any(needle in rel for rel in gate.MANIFEST), f"清单缺少 M 轮工件条目: {needle}"
 
+    def test_manifest_covers_n_round_chain(self):
+        """N 轮（2026-10-17）：功能矩阵 / oracle 独立判读 / 真实 LLM 重型探针链必须在清单。"""
+        required_substrings = (
+            "e2e_probe_20261017/report.json",
+            "e2e_probe_workflow_20261017/report.json",
+            "e2e_probe_platform_20261017/llm_report.json",
+            "emse_oracle_independent_judging_20261017/ORACLE_INDEPENDENT_JUDGING_REPORT.json",
+            "e2e_llm_probes_20261017/ITEM_RESULTS.json",
+        )
+        for needle in required_substrings:
+            assert any(needle in rel for rel in gate.MANIFEST), f"清单缺少 N 轮工件条目: {needle}"
+
+    def test_manifest_covers_o_round_chain(self):
+        """O 轮（2026-10-18）：oracle 仪器治疗 / 跨文件路径 / oracle 二臂验证链必须在清单。"""
+        required_substrings = (
+            "emse_oracle_instrument_hardening_20261017/ORACLE_QUALITY_REPORT.json",
+            "emse_oracle_instrument_hardening_20261017/SHA256SUMS",
+            "o_round_cross_file_20261017/O3_EVIDENCE.json",
+            "emse_oracle_enabled_validation_20261017/ARM_COMPARISON.json",
+        )
+        for needle in required_substrings:
+            assert any(needle in rel for rel in gate.MANIFEST), f"清单缺少 O 轮工件条目: {needle}"
+
 
 class TestEmseDirScan:
     def test_exemptions_have_reasons(self):

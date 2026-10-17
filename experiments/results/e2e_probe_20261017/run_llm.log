@@ -1,62 +1,65 @@
 [e2e] ⚠️ 探针模块加载问题：scripts.tools.e2e_probes_platform: 探针名重复 observability-trace-redaction
 [e2e] ⚠️ 探针模块加载问题：scripts.tools.e2e_probes_platform: 探针名重复 observability-event-bus
-[e2e] 运行 56 个探针（LLM=on）…
-[PASS ] cli            cli-help                                1.8s  CLI --help 正常，4 个子命令均在帮助面
-[PASS ] cli            cli-list-examples                       1.7s  list-examples 正常，列出 5 个示例文件且建议 calculator.py
-[PASS ] cli            cli-check-dataset-quixbugs              2.4s  check-dataset quixbugs 正常（50 任务 / 质量通过）
-[PASS ] cli            cli-run-json-single                     7.9s  CLI --json 输出合法 JSON（passed=True, rc=0）
-[PASS ] cli            cli-run-multi-parallel                  5.2s  多文件 --parallel --json 正常（2 份结果，passed=2/2，rc=0）
-[PASS ] workflow       workflow-fast-assembly                  1.8s  fast 档装配正确（5 节点 / 8 边）
-[PASS ] workflow       workflow-logic-assembly                 1.8s  logic 档装配正确（6 节点，mutation_advisor 环在场，预设开关已注入）
-[PASS ] workflow       workflow-logic-invoke                   9.9s  logic 档 invoke 正常（stop_reason=test_passed，trace=1 条）
-[PASS ] agents         agents-planner-structured-plan          4.6s  planner 结构化计划正常（8 用例，logic_degraded=False）
-[PASS ] agents         agents-generator-parseable-tests        3.0s  generator 生成可解析 pytest（792 字符，5 个测试函数）
-[PASS ] agents         agents-executor-run                     2.7s  executor 沙箱正常（通过用例 passed=True/coverage=100.0，失败用例失败可归因）
-[PASS ] repair         repair-debugger-patch-chain             6.1s  修复链正常：Debugger 产出补丁 → 安全应用 → 修复后测试通过
-[PASS ] repair         repair-graph-loop                      11.5s  修复环正常：debugger 进入 1 轮 → patch_applier 应用 → 复跑通过（stop_reason=test_passed）
-[PASS ] safety         safety-dangerous-api-guard              0.1s  危险 API 守卫正常：os.system / from-import 别名 / eval 均拒绝，正常补丁放行
-[PASS ] safety         safety-naming-contract-guard            0.1s  命名契约守卫正常：删除模块级符号被拒（契约检查 missing=['g'] + apply 保守拒绝）
-[PASS ] safety         safety-test-hacking-detection           0.1s  测试黑客检测正常：三类信号全部命中且正常补丁无误报
-[PASS ] safety         safety-deterministic-repair             0.1s  确定性修复正常：NameError→import 零 LLM 产出补丁，无匹配场景显式 abstain
-[PASS ] safety         safety-patch-rollback                   1.9s  快照回滚协议正常：P2P 失败自动回滚、通过则保留，开关默认关/开启生效
-[PASS ] observability  observability-trace-redaction           0.1s  trace 正常：JSONL 三事件落盘且敏感串已脱敏
-[PASS ] observability  observability-event-bus                 0.1s  事件总线正常：发布→订阅回调/计数一致，关闭开关后 no-op
-[PASS ] localization   analysis-fl-spectral-topk               0.1s  FL_spectral 正常：Top-1 命中缺陷分支行 5（Top-k=[5, 2, 3]）
-[PASS ] localization   analysis-fault-localizer-gold           1.3s  fault localizer 正常：gold 变更函数 find_max 命中（MRR=1.0）
-[PASS ] localization   analysis-multi-candidate                0.1s  multi-candidate 正常：静态筛选通过/拒绝正确，最小改动候选 index=1
-[PASS ] budget         budget-cost-cap                         0.1s  累计 120 tokens 超过 100 上限 → check_budget=False；events=1
-[PASS ] budget         budget-invalid-fail-closed              0.1s  坏值/负值均 fail-closed；misconfigured_events=2
-[PASS ] budget         budget-batch-quota                      0.1s  estimate(150)=968；未配置→blocking 2 条；上限 2000→ok；上限 100→拦截
-[PASS ] budget         budget-llm-stop                         2.2s  首次调用成功（'7'）；耗尽后第二次抛 BudgetExceededError（consumed=29）
-[PASS ] cache          cache-disabled                          1.2s  文件缓存 enabled=False；语义缓存默认 enabled=False（精确缓存口径）
-[PASS ] cache          cache-two-call-hit                      2.3s  两次同 prompt：第二次缓存命中（0.000s vs 首次 0.79s）；llm_calls=1, cache_hits=1, avoided_tokens=29
-[PASS ] cache          cache-semantic-index                    1.0s  语义索引 entries=1，同义命中 / 无关未命中（hits=1, misses=1）
-[PASS ] rag            rag-retriever                           1.0s  检索器初始化 0.07s；写入 1 案例后检索到 1 条（top similarity=0.7143）
-[PASS ] rag            rag-workflow-stats                      6.0s  ENABLE_RAG 下最小任务 4.1s 完成；rag_stats 1 条（kinds=['test_cases']）；generated_test 1361 字符
-[PASS ] security       security-injection-guard                0.1s  3 类注入全检出、干净文本零误报、警示文本含【安全警示】；危险补丁 os.system/eval 检出、安全补丁零误报
+[e2e] 运行 59 个探针（LLM=on）…
+[PASS ] cli            cli-help                                1.0s  CLI --help 正常，4 个子命令均在帮助面
+[PASS ] cli            cli-list-examples                       0.8s  list-examples 正常，列出 5 个示例文件且建议 calculator.py
+[PASS ] cli            cli-check-dataset-quixbugs              1.2s  check-dataset quixbugs 正常（50 任务 / 质量通过）
+[PASS ] cli            cli-run-json-single                     6.7s  CLI --json 输出合法 JSON（passed=True, rc=0）
+[PASS ] cli            cli-run-multi-parallel                  3.6s  多文件 --parallel --json 正常（2 份结果，passed=2/2，rc=0）
+[PASS ] workflow       workflow-fast-assembly                  0.8s  fast 档装配正确（5 节点 / 8 边）
+[PASS ] workflow       workflow-logic-assembly                 0.8s  logic 档装配正确（6 节点，mutation_advisor 环在场，预设开关已注入）
+[PASS ] workflow       workflow-logic-invoke                   7.1s  logic 档 invoke 正常（stop_reason=test_passed，trace=1 条）
+[PASS ] agents         agents-planner-structured-plan          3.5s  planner 结构化计划正常（6 用例，logic_degraded=False）
+[PASS ] agents         agents-generator-parseable-tests        2.4s  generator 生成可解析 pytest（784 字符，5 个测试函数）
+[PASS ] agents         agents-executor-run                     1.4s  executor 沙箱正常（通过用例 passed=True/coverage=100.0，失败用例失败可归因）
+[PASS ] repair         repair-debugger-patch-chain             3.8s  修复链正常：Debugger 产出补丁 → 安全应用 → 修复后测试通过
+[PASS ] repair         repair-graph-loop                       8.3s  修复环正常：debugger 进入 1 轮 → patch_applier 应用 → 复跑通过（stop_reason=test_passed）
+[PASS ] safety         safety-dangerous-api-guard              0.0s  危险 API 守卫正常：os.system / from-import 别名 / eval 均拒绝，正常补丁放行
+[PASS ] safety         safety-naming-contract-guard            0.0s  命名契约守卫正常：删除模块级符号被拒（契约检查 missing=['g'] + apply 保守拒绝）
+[PASS ] safety         safety-test-hacking-detection           0.0s  测试黑客检测正常：三类信号全部命中且正常补丁无误报
+[PASS ] safety         safety-deterministic-repair             0.0s  确定性修复正常：NameError→import 零 LLM 产出补丁，无匹配场景显式 abstain
+[PASS ] safety         safety-patch-rollback                   0.8s  快照回滚协议正常：P2P 失败自动回滚、通过则保留，开关默认关/开启生效
+[PASS ] observability  observability-trace-redaction           0.0s  trace 正常：JSONL 三事件落盘且敏感串已脱敏
+[PASS ] observability  observability-event-bus                 0.0s  事件总线正常：发布→订阅回调/计数一致，关闭开关后 no-op
+[PASS ] localization   analysis-fl-spectral-topk               0.0s  FL_spectral 正常：Top-1 命中缺陷分支行 5（Top-k=[5, 2, 3]）
+[PASS ] localization   analysis-fault-localizer-gold           0.5s  fault localizer 正常：gold 变更函数 find_max 命中（MRR=1.0）
+[PASS ] localization   analysis-multi-candidate                0.0s  multi-candidate 正常：静态筛选通过/拒绝正确，最小改动候选 index=1
+[PASS ] budget         budget-cost-cap                         0.0s  累计 120 tokens 超过 100 上限 → check_budget=False；events=1
+[PASS ] budget         budget-invalid-fail-closed              0.0s  坏值/负值均 fail-closed；misconfigured_events=2
+[PASS ] budget         budget-batch-quota                      0.0s  estimate(150)=968；未配置→blocking 2 条；上限 2000→ok；上限 100→拦截
+[PASS ] budget         budget-llm-stop                         1.6s  首次调用成功（'7'）；耗尽后第二次抛 BudgetExceededError（consumed=29）
+[PASS ] cache          cache-disabled                          0.5s  文件缓存 enabled=False；语义缓存默认 enabled=False（精确缓存口径）
+[PASS ] cache          cache-two-call-hit                      1.6s  两次同 prompt：第二次缓存命中（0.000s vs 首次 0.97s）；llm_calls=1, cache_hits=1, avoided_tokens=29
+[PASS ] cache          cache-semantic-index                    0.5s  语义索引 entries=1，同义命中 / 无关未命中（hits=1, misses=1）
+[PASS ] rag            rag-retriever                           0.5s  检索器初始化 0.07s；写入 1 案例后检索到 1 条（top similarity=0.7143）
+[PASS ] rag            rag-workflow-stats                      4.6s  ENABLE_RAG 下最小任务 3.8s 完成；rag_stats 1 条（kinds=['test_cases']）；generated_test 1269 字符
+[PASS ] security       security-injection-guard                0.0s  3 类注入全检出、干净文本零误报、警示文本含【安全警示】；危险补丁 os.system/eval 检出、安全补丁零误报
 [PASS ] security       security-credential-scrub               0.1s  白名单最小环境剔除全部 6 个假凭证键；子进程 env 无 LLM_*/*_API_KEY；provider 名单 10 项
-[PASS ] security       security-log-redaction                  0.1s  3 条含假凭证日志经 handler 后均脱敏（输出 81 字符，占位符在场）；3 条长路径样本零误伤（D3 修复回归）
-[PASS ] security       security-kernel-sandbox                 0.1s  内核沙箱可用（seatbelt，platform=darwin）：/bin/echo 在沙箱内真实执行 0.01s rc=0；profile 无双引号缺陷
-[PASS ] executor       executor-local                          1.7s  本地执行器 1.61s 通过最小测试（coverage=100.0，failed_cases=0）
-[PASS ] executor       executor-venv                           1.2s  venv 执行器 1.07s 通过最小测试（coverage=100.0）
+[PASS ] security       security-log-redaction                  0.0s  3 条含假凭证日志经 handler 后均脱敏（输出 81 字符，占位符在场）；3 条长路径样本零误伤（D3 修复回归）
+[PASS ] security       security-kernel-sandbox                 0.0s  内核沙箱可用（seatbelt，platform=darwin）：/bin/echo 在沙箱内真实执行 0.01s rc=0；profile 无双引号缺陷
+[PASS ] executor       executor-local                          1.0s  本地执行器 0.91s 通过最小测试（coverage=100.0，failed_cases=0）
+[PASS ] executor       executor-venv                           0.5s  venv 执行器 0.45s 通过最小测试（coverage=100.0）
 [PASS ] executor       executor-docker-degrade                 0.1s  无 docker CLI → passed=False + error_info.type=docker_unavailable（明确降级，未静默回退本地）
-[PASS ] executor       executor-repo-verify                    2.6s  临时仓库 verify 全链路 2.4s：test_patch 基线红 → llm_patch 后 F2P 1/1 转绿 → passed=True
-[PASS ] executor       executor-kernel-sandbox                 2.9s  KERNEL_SANDBOX_ENABLE=true：local + venv 执行器真实跑通（passed/coverage/obs 齐备），总耗时 2.79s
-[PASS ] dataset        dataset-loaders                         1.1s  三加载器真实加载 0.02s：quixbugs=50 / examples=3 / synthetic=3
-[PASS ] dataset        dataset-ult                             1.2s  ULT 加载 200 任务；样例 task_id=['ult__is_degree_in_degree_range', 'ult__BinaryFromFraction', 'ult__fix_labels']
-[PASS ] dataset        dataset-decontamination                 1.2s  去污染口径正确：total=3 kept=1 dropped=1 unverifiable=1；decontamination_rate=0.5
-[PASS ] dataset        dataset-check-cli                       2.8s  check-dataset CLI 2.7s rc=0，质量检查 50 个任务无加载问题
-[PASS ] observability  observability-model-fingerprint         3.7s  模型指纹 1.06s：alias=deepseek-flash returned=deepseek-flash pinned=True probe=fc3d915941b8…
-[PASS ] logic          logic-spec-ir-parse                     0.1s  SpecIR 双通道解析正常，空材料保守降级
-[PASS ] logic          logic-spec-expr-whitelist               0.1s  白名单正常：危险子句拒绝 3/3，可编译子句接受，readiness=1.00
-[PASS ] logic          logic-spec-oracle-compile               0.1s  确定性 oracle 编译正常（248 字符，2 条断言，ast 合法）
+[PASS ] executor       executor-repo-verify                    1.0s  临时仓库 verify 全链路 0.9s：test_patch 基线红 → llm_patch 后 F2P 1/1 转绿 → passed=True
+[PASS ] executor       executor-kernel-sandbox                 1.2s  KERNEL_SANDBOX_ENABLE=true：local + venv 执行器真实跑通（passed/coverage/obs 齐备），总耗时 1.13s
+[PASS ] dataset        dataset-loaders                         0.5s  三加载器真实加载 0.01s：quixbugs=50 / examples=3 / synthetic=3
+[PASS ] dataset        dataset-ult                             0.5s  ULT 加载 200 任务；样例 task_id=['ult__is_degree_in_degree_range', 'ult__BinaryFromFraction', 'ult__fix_labels']
+[PASS ] dataset        dataset-decontamination                 0.5s  去污染口径正确：total=3 kept=1 dropped=1 unverifiable=1；decontamination_rate=0.5
+[PASS ] dataset        dataset-check-cli                       1.1s  check-dataset CLI 1.1s rc=0，质量检查 50 个任务无加载问题
+[PASS ] observability  observability-model-fingerprint         2.8s  模型指纹 1.63s：alias=deepseek-flash returned=deepseek-flash pinned=True probe=fc3d915941b8…
+[PASS ] logic          logic-spec-ir-parse                     0.0s  SpecIR 双通道解析正常，空材料保守降级
+[PASS ] logic          logic-spec-expr-whitelist               0.0s  白名单正常：危险子句拒绝 3/3，可编译子句接受，readiness=1.00
+[PASS ] logic          logic-spec-oracle-compile               0.0s  确定性 oracle 编译正常（489 字符，2 条断言，ast 合法）
 [PASS ] logic          logic-smt-witness                       0.1s  SMT 见证层正常：2 个见证（kinds=['boundary_max', 'sat']），不可翻译保守降级
-[PASS ] logic          logic-spec-anchor-oracle-wiring         1.6s  spec_anchor 接线正常：verdict=compiled_empty，injected=False；无材料负控 not_attempted
-[PASS ] logic          logic-oracle-independent-judging        0.2s  oracle 独立判读字段/函数/replay 入口齐备，None 输入 fail-closed，设计文档已登记
-[PASS ] logic          logic-stagnation-switch                 2.6s  停滞开关正常（default=False，env true→True/false→False，消融臂互斥）
-[PASS ] logic          logic-mutation-advisor-assembly         1.9s  mutation advisor 环装配正确（开=7 节点 / 关=6 节点）
-[PASS ] logic          logic-branch-coverage-inject            1.1s  branch 覆盖测量真实可用（coverage=25.0%，missing=3，开关默认=False）
-[PASS ] logic          logic-profile-spec-fields              14.9s  logic 档 spec 链路正常（12.9s，compile_rate=1.0，generated_test=有）
-[e2e] 汇总：pass=56 fail=0 error=0 skip=0（共 56）
+[PASS ] logic          logic-spec-anchor-oracle-wiring         0.7s  spec_anchor 接线正常：verdict=compiled_empty，injected=False；无材料负控 not_attempted
+[PASS ] logic          logic-oracle-independent-judging        0.1s  oracle 独立判读字段/函数/replay 入口齐备，None 输入 fail-closed，设计文档已登记
+[PASS ] logic          logic-stagnation-switch                 1.0s  停滞开关正常（default=False，env true→True/false→False，消融臂互斥）
+[PASS ] logic          logic-mutation-advisor-assembly         0.8s  mutation advisor 环装配正确（开=7 节点 / 关=6 节点）
+[PASS ] logic          logic-branch-coverage-inject            0.6s  branch 覆盖测量真实可用（coverage=25.0%，missing=3，开关默认=False）
+[PASS ] logic          logic-oracle-instrument-safety          0.4s  oracle 仪器加固生效：崩溃→skip（rc=0），静态 harness 齐备
+[PASS ] logic          logic-oracle-replay-instrument-breakdown    0.0s  replay 分类细化正常：fp=2（断言型）、instrument_error=0、skipped=27，旧四分类键保留
+[PASS ] logic          logic-oracle-precondition-input-filter    0.0s  前件校验输入选择生效：跳过违反 side>0 的候选，绑定合法候选 side=3
+[PASS ] logic          logic-profile-spec-fields               8.0s  logic 档 spec 链路正常（7.2s，compile_rate=1.0，generated_test=有）
+[e2e] 汇总：pass=59 fail=0 error=0 skip=0（共 59）
 [e2e] JSON 报告：experiments/results/e2e_probe_20261017/report.json
 [e2e] Markdown 报告：experiments/results/e2e_probe_20261017/report.md
