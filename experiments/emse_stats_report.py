@@ -139,6 +139,28 @@ def sigma_d2_paired(p_a: float, p_b: float, p11: float) -> float:
     return p_a + p_b - delta * delta - 2.0 * p11
 
 
+# ─── Wilson score 区间（比例型端点单臂 CI；A-07 2026-10-17）────────────────
+# 审稿人常规要求：小样本比例（如 17/37、19/35）必须给 CI。配对差已有 bootstrap
+# （§3），单臂点估计此前无区间——此处补 Wilson score 区间（小样本覆盖率优于
+# Wald 正态近似；n=0 或比例在边界时行为良定义）。z=1.959963984540054 为
+# NormalDist().inv_cdf(0.975)，与模块 _NORM 同源避免双实现。
+_Z95 = _NORM.inv_cdf(0.975)
+
+
+def wilson_ci(k: int, n: int, z: float = _Z95) -> tuple[float, float] | None:
+    """比例的 Wilson score 95% 区间（返回 (lo, hi) 百分比；n=0 → None）。
+
+    不臆造区间：n=0 时 None（与全模块"不可计算记 None 不记 0"纪律一致）。
+    """
+    if n <= 0:
+        return None
+    p = k / n
+    denom = 1.0 + z * z / n
+    center = (p + z * z / (2.0 * n)) / denom
+    half = z * ((p * (1.0 - p) / n + z * z / (4.0 * n * n)) ** 0.5) / denom
+    return (100.0 * max(0.0, center - half), 100.0 * min(1.0, center + half))
+
+
 # ─── 工件加载（只读；种子前缀池化） ───────────────────────────────────────
 def _sha256(path: Path) -> str:
     """批次工件 sha256（审计用，报告头部登记）。"""
@@ -212,12 +234,14 @@ def endpoint_point(rows: list[dict[str, Any]], field: str, restrict_passed: bool
     denom = [r for r in rows if r.get(field) is not None and (not restrict_passed or r.get("passed") is True)]
     numer = [r for r in denom if r.get(field) == 1.0]
     n = len(denom)
+    ci = wilson_ci(len(numer), n)
     return {
         "field": field,
         "restrict_passed": restrict_passed,
         "numerator": len(numer),
         "denominator": n,
         "rate_pct": round(100.0 * len(numer) / n, 4) if n else None,
+        "wilson95_pct": [round(ci[0], 4), round(ci[1], 4)] if ci else None,
     }
 
 
@@ -418,6 +442,83 @@ def cost_block(rows: list[dict[str, Any]]) -> dict[str, Any]:
     return out
 
 
+# ─── 成本-效果（$/detection；A-07 2026-10-17）─────────────────────────────
+_PRICE_TABLE_PATH = Path(__file__).resolve().parents[1] / "experiments" / "price_table.json"
+
+
+def _load_price_table(path: Path = _PRICE_TABLE_PATH) -> dict[str, dict[str, Any]]:
+    """读取价目表（缺失/损坏 → 空表；调用方按"价目未登记"口径输出，不编造价格）。"""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        models = data.get("models", {})
+        return models if isinstance(models, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def cost_effectiveness_block(
+    rows: list[dict[str, Any]],
+    price_table: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """单臂成本-效果：总 token / 检出数 / $/detection / tokens/detection。
+
+    诚实条款（与价目表 _comment 同口径）：
+    - 行的计费模型 = `token_usage.by_model` 的**单一**键（多模型混合行不猜，
+      记 unpriceable）；该模型价目未登记（input/output 任一为 null）→ 不编造；
+    - 单模型行的行级 input/output 拆分归因于该模型（主批次即此情形，精确）；
+    - 检出数 = `detection_rate == 1.0` 且 detection_rate 非 None 的行数；
+    - $/detection = 可计价成本合计 / 检出数；检出数为 0 → None（不除零）；
+    - tokens/detection 为无价目伴侣指标（不依赖价目表，永可计算——检出>0 时）。
+    """
+    if price_table is None:
+        price_table = _load_price_table()
+    total_tokens = 0.0
+    total_usd = 0.0
+    n_unpriceable = 0
+    n_priced = 0
+    n_detections = 0
+    n_detect_measurable = 0
+    for r in rows:
+        usage = r.get("token_usage")
+        if not isinstance(usage, dict):
+            continue
+        tt = usage.get("total_tokens")
+        if isinstance(tt, (int, float)) and not isinstance(tt, bool) and tt > 0:
+            total_tokens += float(tt)
+        det = r.get("detection_rate")
+        if det is not None:
+            n_detect_measurable += 1
+            if det == 1.0:
+                n_detections += 1
+        by_model = usage.get("by_model")
+        if not isinstance(by_model, dict) or len(by_model) != 1:
+            if isinstance(by_model, dict) and by_model:
+                n_unpriceable += 1
+            continue
+        model = next(iter(by_model))
+        price = price_table.get(model)
+        if not price or price.get("input_per_mtok") is None or price.get("output_per_mtok") is None:
+            n_unpriceable += 1
+            continue
+        it = usage.get("input_tokens") or 0
+        ot = usage.get("output_tokens") or 0
+        total_usd += (
+            float(it) * float(price["input_per_mtok"]) + float(ot) * float(price["output_per_mtok"])
+        ) / 1_000_000.0
+        n_priced += 1
+    return {
+        "total_tokens": round(total_tokens, 2),
+        "n_rows_with_tokens_positive": n_priced + n_unpriceable,
+        "n_priced_rows": n_priced,
+        "n_unpriceable_rows": n_unpriceable,
+        "total_usd": round(total_usd, 6),
+        "n_detections": n_detections,
+        "n_detection_measurable": n_detect_measurable,
+        "usd_per_detection": (round(total_usd / n_detections, 6) if n_detections else None),
+        "tokens_per_detection": (round(total_tokens / n_detections, 2) if n_detections else None),
+    }
+
+
 # ─── 修正口径（可选，opt-in） ────────────────────────────────────────────
 def corrected_endpoints(
     rows: dict[str, list[dict[str, Any]]],
@@ -567,13 +668,15 @@ def _render_endpoint_section(
     lines = [
         "## 2. 比例型端点：各臂点估计（None 剔除，不计 0）",
         "",
-        "| 臂 | 端点 | 可测分子/分母 | 点估计(%) |",
-        "|---|---|---|---|",
+        "| 臂 | 端点 | 可测分子/分母 | 点估计(%) | Wilson 95% CI(%) |",
+        "|---|---|---|---|---|",
     ]
     for arm, data in arms_data.items():
         for label, point in data["endpoints"].items():
+            ci = point.get("wilson95_pct")
+            ci_s = "—" if ci is None else f"[{_f(ci[0], 4)}, {_f(ci[1], 4)}]"
             lines.append(
-                f"| `{arm}` | {label} | {point['numerator']}/{point['denominator']} | {_f(point['rate_pct'], 4)} |"
+                f"| `{arm}` | {label} | {point['numerator']}/{point['denominator']} | {_f(point['rate_pct'], 4)} | {ci_s} |"
             )
     lines += [
         "",
@@ -635,6 +738,33 @@ def _render_cost_section(arms_data: dict[str, dict[str, Any]]) -> list[str]:
         "分位口径：`statistics.quantiles(..., n=4, method='inclusive')`（线性插值）；"
         "只统计 `token_usage.total_tokens > 0` 的行（与 S11 记账健全性判定同口径）；"
         "记账断裂的臂一律输出 NOT_COMPUTABLE，不给成本数字。",
+        "",
+        "### 4.1 成本-效果：$/detection（A-07，2026-10-17 增补）",
+        "",
+        "| 臂 | 检出数/可测 | 总 tokens | 总 $（可计价行） | $/detection | tokens/detection | 计价健全性 |",
+        "|---|---|---|---|---|---|---|",
+    ]
+    for arm, data in arms_data.items():
+        eff = data.get("cost_eff")
+        if not eff:
+            continue
+        usd = "—" if eff["total_usd"] is None else _f(eff["total_usd"], 6)
+        usd_per_det = "—" if eff["usd_per_detection"] is None else _f(eff["usd_per_detection"], 6)
+        tok_per_det = "—" if eff["tokens_per_detection"] is None else _f(eff["tokens_per_detection"], 1)
+        lines.append(
+            f"| `{arm}` | {eff['n_detections']}/{eff['n_detection_measurable']} "
+            f"| {_f(eff['total_tokens'], 0)} | {usd} | {usd_per_det} | {tok_per_det} "
+            f"| {eff['n_priced_rows']} 行计价 / {eff['n_unpriceable_rows']} 行不可计价 |"
+        )
+    lines += [
+        "",
+        "计价口径（与 `experiments/price_table.json` 的诚实条款一致）：行的计费模型取 "
+        "`token_usage.by_model` 的**单一**键（多模型混合行不猜，计不可计价）；"
+        "该模型价目未登记（input/output 任一为 null）→ 不编造价格；"
+        "单模型行的行级 input/output 拆分归因于该模型（主批次即此情形，精确）。",
+        "检出数 = `detection_rate == 1.0` 且非 None 的行（None 不进分母）；"
+        "检出数为 0 时 $/detection 与 tokens/detection 均记 `—`（不除零、不臆造）。",
+        "tokens/detection 为无价目伴侣指标（不依赖价目表），可与 $/detection 互证。",
         "",
     ]
     return lines
@@ -742,9 +872,9 @@ def build_report(
 ) -> str:
     """Markdown 报告（口径头块 + §1 MDE/功效 + §2/§3 端点与 CI + §4 成本 + §5 修正 + §6 局限）。"""
     lines = [
-        "# EMSE 统计补口报告：主对比 MDE/功效 + 比例型端点 bootstrap 95% CI",
+        "# EMSE 统计补口报告：主对比 MDE/功效 + 比例型端点 bootstrap/Wilson 95% CI + 成本-效果",
         "",
-        "（2026-10-15 批次；零 LLM / 零网络 / 只读归档工件；全部数字由 `experiments/emse_stats_report.py` 现算）",
+        "（2026-10-15 批次；A-07 增补 Wilson CI 与 $/detection，2026-10-17；零 LLM / 零网络 / 只读归档工件；全部数字由 `experiments/emse_stats_report.py` 现算）",
         "",
     ]
     lines += _render_caliber_block(results_dir, batch_meta, _ARMS, command)
@@ -782,6 +912,7 @@ def analyze(
             "n_rows": len(rows[arm]),
             "endpoints": endpoints,
             "cost": cost_block(rows[arm]),
+            "cost_eff": cost_effectiveness_block(rows[arm]),
         }
 
     mde_rows: list[dict[str, Any]] = []

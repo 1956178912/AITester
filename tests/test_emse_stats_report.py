@@ -393,3 +393,139 @@ class TestRealArtifactRegression:
         assert (marginal["numerator"], marginal["denominator"]) == (143, 240)
         assert marginal["rate_pct"] == pytest.approx(59.58, abs=0.01)
         assert (conditional["numerator"], conditional["denominator"]) == (143, 143)
+
+
+class TestWilsonCiA07:
+    """A-07（2026-10-17）：比例型端点单臂 Wilson score 95% CI。"""
+
+    def test_known_values(self) -> None:
+        """已知值锁定：38/240 与 4/261 与独立评审复算一致（防公式漂移）。"""
+        from experiments.emse_stats_report import wilson_ci
+
+        lo, hi = wilson_ci(38, 240)
+        assert (round(lo, 2), round(hi, 2)) == (11.76, 20.99)
+        lo2, hi2 = wilson_ci(4, 261)
+        assert (round(lo2, 2), round(hi2, 2)) == (0.60, 3.87)
+
+    def test_zero_denominator_returns_none(self) -> None:
+        """n=0 → None（不可计算不记 0，与全模块纪律一致）。"""
+        from experiments.emse_stats_report import wilson_ci
+
+        assert wilson_ci(0, 0) is None
+
+    def test_extremes_are_bounded(self) -> None:
+        """0/n 与 n/n 的区间不越界 [0,100] 且包含点估计。"""
+        from experiments.emse_stats_report import wilson_ci
+
+        lo, hi = wilson_ci(0, 37)
+        assert 0.0 <= lo <= hi <= 100.0 and lo == 0.0
+        lo2, hi2 = wilson_ci(37, 37)
+        assert 0.0 <= lo2 <= hi2 <= 100.0 and hi2 == 100.0
+
+    def test_endpoint_point_carries_wilson(self) -> None:
+        """endpoint_point 输出含 wilson95_pct 且与 wilson_ci 同源。"""
+        from experiments.emse_stats_report import wilson_ci
+
+        rows = [{"detection_rate": 1.0}, {"detection_rate": 0.0}, {"detection_rate": None}]
+        point = endpoint_point(rows, "detection_rate")
+        assert point["denominator"] == 2 and point["numerator"] == 1
+        assert point["wilson95_pct"] == [round(x, 4) for x in wilson_ci(1, 2)]
+
+    def test_real_data_matches_review_recompute(self) -> None:
+        """真实工件：aitester detection 38/240 的 Wilson CI 与复算工件逐位一致。"""
+        files = resolve_batch_files(_REAL_RESULTS_DIR, None)
+        rows, _meta = load_pooled_rows(_REAL_RESULTS_DIR, files)
+        point = endpoint_point(rows["aitester"], "detection_rate")
+        assert point["wilson95_pct"] == [11.7581, 20.9851]
+
+
+class TestCostEffectivenessA07:
+    """A-07（2026-10-17）：$/detection 成本-效果块。"""
+
+    def test_unregistered_price_not_fabricated(self) -> None:
+        """价目未登记的模型不计价（不编造价格），tokens 仍累计。"""
+        from experiments.emse_stats_report import cost_effectiveness_block
+
+        rows = [
+            {
+                "detection_rate": 1.0,
+                "token_usage": {
+                    "input_tokens": 100,
+                    "output_tokens": 50,
+                    "total_tokens": 150,
+                    "llm_calls": 1,
+                    "by_model": {"mystery-model": 150},
+                },
+            }
+        ]
+        out = cost_effectiveness_block(rows, price_table={})
+        assert out["n_priced_rows"] == 0 and out["n_unpriceable_rows"] == 1
+        assert out["total_usd"] == 0.0
+        assert out["tokens_per_detection"] == 150.0
+        assert out["usd_per_detection"] is None or out["usd_per_detection"] == 0.0
+
+    def test_single_model_priced_exactly(self) -> None:
+        """单模型行按 input/output 分别计价（算术精确锁定）。"""
+        from experiments.emse_stats_report import cost_effectiveness_block
+
+        price = {"m1": {"input_per_mtok": 0.3, "output_per_mtok": 1.2}}
+        rows = [
+            {
+                "detection_rate": 1.0,
+                "token_usage": {
+                    "input_tokens": 1_000_000,
+                    "output_tokens": 1_000_000,
+                    "total_tokens": 2_000_000,
+                    "llm_calls": 1,
+                    "by_model": {"m1": 2_000_000},
+                },
+            },
+            {
+                "detection_rate": 0.0,
+                "token_usage": {
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                    "total_tokens": 0,
+                    "llm_calls": 0,
+                    "by_model": {},
+                },
+            },
+        ]
+        out = cost_effectiveness_block(rows, price_table=price)
+        assert out["total_usd"] == pytest.approx(0.3 + 1.2, abs=1e-9)
+        assert out["n_detections"] == 1
+        assert out["usd_per_detection"] == pytest.approx(1.5, abs=1e-9)
+        assert out["tokens_per_detection"] == pytest.approx(2_000_000.0)
+
+    def test_zero_detection_no_division(self) -> None:
+        """检出为 0 → $/detection 与 tokens/detection 均 None（不除零）。"""
+        from experiments.emse_stats_report import cost_effectiveness_block
+
+        rows = [
+            {
+                "detection_rate": 0.0,
+                "token_usage": {
+                    "input_tokens": 10,
+                    "output_tokens": 5,
+                    "total_tokens": 15,
+                    "llm_calls": 1,
+                    "by_model": {"m1": 15},
+                },
+            }
+        ]
+        out = cost_effectiveness_block(rows, price_table={"m1": {"input_per_mtok": 0.3, "output_per_mtok": 1.2}})
+        assert out["n_detections"] == 0
+        assert out["usd_per_detection"] is None and out["tokens_per_detection"] is None
+
+    def test_real_data_usd_per_task_matches_baseline(self) -> None:
+        """真实工件：总 $ / 行数 反算的 $/task 与 BASELINE 声称逐位一致
+        （aitester $0.0259 / plain_llm_df $0.0045——价格记账的端到端锁定）。"""
+        from experiments.emse_stats_report import cost_effectiveness_block
+
+        files = resolve_batch_files(_REAL_RESULTS_DIR, None)
+        rows, _meta = load_pooled_rows(_REAL_RESULTS_DIR, files)
+        for arm, expected in (("aitester", 0.0259), ("plain_llm_df", 0.0045)):
+            out = cost_effectiveness_block(rows[arm])
+            assert out["total_usd"] is not None
+            per_task = out["total_usd"] / len(rows[arm])
+            assert per_task == pytest.approx(expected, abs=5e-5), f"{arm}: {per_task}"
