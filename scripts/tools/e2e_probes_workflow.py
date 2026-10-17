@@ -1104,6 +1104,38 @@ def probe_analysis_multi_candidate() -> ProbeOutcome:
 
 # ─── PROBES 清单 ─────────────────────────────────────────────────────────────
 # name 全局唯一；group 与框架 render_markdown 的功能矩阵分桶对齐。
+def probe_cli_doctor():
+    """P-3：`python main.py doctor --json` 零 LLM 自检入口可用且不泄漏凭证。"""
+    env = {"AITESTER_E2E_LLM": "false", "AITESTER_LLM_CACHE": "0"}
+    rc, out, err = run_cmd(
+        [sys.executable, "main.py", "doctor", "--groups", "budget", "--json"],
+        timeout=180.0,
+        env=env,
+    )
+    if rc != 0:
+        return fail(f"doctor --json rc={rc}：{(err or out)[-300:]}")
+    try:
+        payload = json.loads(out)
+    except json.JSONDecodeError as exc:
+        return fail(f"doctor --json stdout 不是纯 JSON：{exc}；head={out[:200]!r}")
+    checks = {
+        "schema": payload.get("schema") == "aitester_doctor/1",
+        "zero_llm": (payload.get("command") or {}).get("zero_llm") is True,
+        "checks_present": isinstance(payload.get("checks"), list) and len(payload["checks"]) >= 5,
+        "matrix_present": isinstance(payload.get("matrix"), dict),
+        "conclusion_present": "conclusion" in payload,
+        "no_secret_leak": "sk-" not in out and "API_KEY=" not in out and "LLM_1_API_KEY" not in out,
+    }
+    if not all(checks.values()):
+        return fail(f"doctor --json 契约不完整：{checks}", payload_head=out[:400])
+    matrix_summary = (payload.get("matrix") or {}).get("summary") or {}
+    return ok(
+        f"doctor 零 LLM 自检正常（checks={len(payload['checks'])}，matrix pass={matrix_summary.get('pass')}，stdout 纯 JSON）",
+        checks=checks,
+        matrix_summary=matrix_summary,
+    )
+
+
 PROBES: list[Probe] = [
     # CLI
     Probe(
@@ -1276,6 +1308,14 @@ PROBES: list[Probe] = [
         func=probe_analysis_multi_candidate,
         timeout_s=120.0,
         description="multi-candidate：静态筛选通过/拒绝 + 最小改动择优",
+    ),
+    # cli（P-3 新增：doctor 零 LLM 自检入口）
+    Probe(
+        name="cli-doctor-json",
+        group="cli",
+        func=probe_cli_doctor,
+        timeout_s=180.0,
+        description="main.py doctor --json 零 LLM 自检入口（schema/聚合/不泄漏凭证）",
     ),
 ]
 

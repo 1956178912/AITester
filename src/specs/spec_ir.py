@@ -15,6 +15,10 @@ SpecIR 结构（JSON Schema 描述）：
       "boundaries": [                   # 确定性边界锚点
           {"input": Any, "expected": Any, "rationale": str}, ...
       ],
+      # P-1（2026-10-18）：规格**可执行示例**通道（LLM spec-only 生成或
+      # 人类规格给出）：每条示例编译为一条确定性断言 f(*input) == expected；
+      # 最多 5 条；非法形状丢弃（不抛异常）。无该字段 = 历史口径。
+      "examples": [{"input": Any, "expected": Any}, ...],
       "oracle_kind": "boundary" | "invariant" | "postcondition"
     }
 
@@ -45,6 +49,9 @@ _SCHEMA_VERSION = "1"
 # 边界三元组上限（与 logic_spec.derive_boundary_triplets 同口径，防 prompt 过长）
 _DEFAULT_BOUNDARIES_MAX = 20
 _ENV_BOUNDARIES_MAX = "SPEC_IR_BOUNDARIES_MAX"
+# P-1（2026-10-18）：规格可执行示例通道——单任务最多透传 5 条（防 prompt/
+# 断言膨胀；与生成器 strict 上限同源）。非法形状一律丢弃、不抛异常。
+_DEFAULT_EXAMPLES_MAX = 5
 
 
 def spec_ir_enabled() -> bool:
@@ -61,6 +68,70 @@ def _boundaries_max() -> int:
         return int(os.getenv(_ENV_BOUNDARIES_MAX, str(_DEFAULT_BOUNDARIES_MAX)))
     except ValueError:
         return _DEFAULT_BOUNDARIES_MAX
+
+
+def is_literal_value(value: Any) -> bool:
+    """判断值是否为**可安全 repr 的 JSON 字面量**（示例通道安全门）。
+
+    允许：None / bool / 有限 int/float / str / 由上述组成的 list /
+    键为 str 的 dict。拒绝：NaN/Infinity、任意对象、tuple/set 等非 JSON
+    形态（``repr`` 产物可能是构造表达式，不保证可执行/可复现）。
+
+    用途：① ``parse_logic_analysis`` 丢弃非法示例；②
+    ``spec_ir_v2.compile_spec_oracle`` 在生成 `assert f(input) == expected`
+    前二次校验（防调用方绕过解析层直接构造 SpecIR）。
+    """
+    if value is None or isinstance(value, bool):
+        return True
+    if isinstance(value, int):
+        return True
+    if isinstance(value, float):
+        return value == value and value not in (float("inf"), float("-inf"))  # 拒绝 NaN/inf
+    if isinstance(value, str):
+        return True
+    if isinstance(value, list):
+        return all(is_literal_value(item) for item in value)
+    if isinstance(value, dict):
+        return all(isinstance(key, str) and is_literal_value(item) for key, item in value.items())
+    return False
+
+
+def parse_examples(raw: Any, max_examples: int = _DEFAULT_EXAMPLES_MAX) -> list[dict[str, Any]]:
+    """把 ``logic_analysis["examples"]`` 解析为规范化示例列表（保守丢弃）。
+
+    契约：``[{"input": <JSON literal>, "expected": <JSON literal>}, ...]``；
+    - 非 list / 非 dict 条目 / 缺 input 或 expected / 非安全字面量 → 丢弃；
+    - 最多保留 ``max_examples``（默认 5）条；完全相同的 (input, expected)
+      对去重（确定性，保持首次出现顺序）；
+    - **任何非法输入都不抛异常**（返回可用的子集；空列表表示无示例通道）。
+
+    Returns:
+        [{"input": Any, "expected": Any}, ...]（可能为空）。
+    """
+    if not isinstance(raw, list):
+        return []
+    limit = max(0, int(max_examples))
+    if limit == 0:
+        return []
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    # 注意：遍历**全部**原始条目，只对"接受数"限 5——若只检查前 5 条，
+    # 前面出现非法条目会挤掉后面的合法示例（契约：最多保留 5 条**有效**示例）。
+    for item in raw:
+        if len(out) >= limit:
+            break
+        if not isinstance(item, dict) or "input" not in item or "expected" not in item:
+            continue
+        inp = item.get("input")
+        expected = item.get("expected")
+        if not is_literal_value(inp) or not is_literal_value(expected):
+            continue
+        key = repr((inp, expected))
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append({"input": inp, "expected": expected})
+    return out
 
 
 def parse_logic_analysis(
@@ -103,6 +174,8 @@ def parse_logic_analysis(
     pre_expr = _as_str_list(logic_analysis.get("preconditions_expr"))
     post_expr = _as_str_list(logic_analysis.get("postconditions_expr"))
     inv_expr = _as_str_list(logic_analysis.get("invariants_expr"))
+    # P-1：规格可执行示例通道透传（非法形状丢弃，不抛；空 = 无该通道）
+    examples = parse_examples(logic_analysis.get("examples"))
     # 规约来源：docstring 驱动（LLM 从 docstring 抽取）vs 手写
     source = logic_analysis.get("spec_source") or ("docstring" if func_name else "logic_analysis")
 
@@ -141,8 +214,8 @@ def parse_logic_analysis(
         if isinstance(e, dict) and ("input" in e or "expected" in e)
     )
 
-    # 保守：无任何规约材料（无前置/后置/不变量/边界/函数名）时返回 None
-    if not (pre or post or inv or boundaries or func_name):
+    # 保守：无任何规约材料（无前置/后置/不变量/边界/示例/函数名）时返回 None
+    if not (pre or post or inv or boundaries or examples or func_name):
         return None
 
     spec: dict[str, Any] = {
@@ -155,6 +228,10 @@ def parse_logic_analysis(
         "boundaries": boundaries,
         "oracle_kind": _infer_oracle_kind(pre, post, inv, boundaries),
     }
+    # P-1：示例通道（非空才写键——历史 spec 无该键，消费方按缺省空列表处理，
+    # schema 向后兼容；无示例时后续编译器产物逐字节不变）。
+    if examples:
+        spec["examples"] = examples
     # AC1：表达式通道字段（非空才写键——历史 spec 无该键，消费方按缺省
     # 空列表处理，schema 向后兼容）
     if pre_expr:
@@ -164,7 +241,7 @@ def parse_logic_analysis(
     if inv_expr:
         spec["invariants_expr"] = inv_expr
     logger.info(
-        "SpecIR 解析：fn=%s pre=%d post=%d inv=%d expr(pre/post/inv)=%d/%d/%d boundaries=%d oracle=%s",
+        "SpecIR 解析：fn=%s pre=%d post=%d inv=%d expr(pre/post/inv)=%d/%d/%d boundaries=%d examples=%d oracle=%s",
         func_name or "(unknown)",
         len(pre),
         len(post),
@@ -173,6 +250,7 @@ def parse_logic_analysis(
         len(post_expr),
         len(inv_expr),
         len(boundaries),
+        len(examples),
         spec["oracle_kind"],
     )
     return spec
@@ -198,6 +276,19 @@ def validate_spec_ir(spec: dict[str, Any] | None) -> list[str]:
     for i, b in enumerate(spec.get("boundaries") or []):
         if "input" not in b or "expected" not in b:
             findings.append(f"boundary_{i}_missing_input_or_expected")
+    # P-1：示例通道 shape 校验（解析层已净化；此处防调用方绕过解析直接构造）
+    examples = spec.get("examples")
+    if examples is not None:
+        if not isinstance(examples, list):
+            findings.append("examples_not_list")
+        else:
+            if len(examples) > _DEFAULT_EXAMPLES_MAX:
+                findings.append(f"examples_too_many:{len(examples)}")
+            for i, example in enumerate(examples):
+                if not isinstance(example, dict) or "input" not in example or "expected" not in example:
+                    findings.append(f"example_{i}_missing_input_or_expected")
+                elif not is_literal_value(example.get("input")) or not is_literal_value(example.get("expected")):
+                    findings.append(f"example_{i}_not_safe_literal")
     valid_kinds = ("boundary", "invariant", "postcondition")
     if spec.get("oracle_kind") not in valid_kinds:
         findings.append(f"oracle_kind_invalid:{spec.get('oracle_kind')}")

@@ -1,10 +1,135 @@
 > **语言 / Language**：[English](CHANGELOG.en.md) | 简体中文（本文）
 >
-> Last updated: 2026-10-18（O 轮：**oracle 仪器治疗**（崩溃安全 + 前件校验输入；fp 29→2、instrument_error 27→0、correct 仍 0 的诚实修正）+ **跨文件修复路径真实进入**（真 LLM 8 节点链 + 多文件补丁整体回滚）+ **CI 零 LLM e2e 探针/Docker 构建 job** + **运行期卫生根修**（branch 测量孤儿/stale pyc 假红/oracle 全 skip 误升）+ oracle-enabled 二臂真实验证批。N/M/L/K 轮同日登记）
+> Last updated: 2026-10-18（P 轮：**规格可执行示例通道**探索性验证（oracle correct 0→6→8、表示归一后 fp 3→0、精确率 42.9%→61.5%；仍 2 例 LLM 幻觉错误）+ **A-19 覆盖率停滞检测纸面功能修复**（接线→真提前停止，26 测试+零 LLM 证据；B8 缩小消融因任务集首轮全绿结构性无触发，如实披露）+ **`main.py doctor` 零 LLM 自检命令**（21.45s/47 pass，环境+功能矩阵）；O/N/M/L/K 轮同日登记）
 
 # Changelog
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
+
+## [Unreleased] — 2026-10-18 P 轮（oracle 示例通道探索 + A-19 纸面功能修复 + doctor 自检命令）
+
+> P 轮从 O 轮"仪器可判定但 correct 仍 0"继续向**语义质量**推进，同时把配额解锁的
+> A-19 消融做"先查机制、再谈效果"，并交付用户侧零 LLM 自检入口。核心诚实结论：
+> 示例通道**确有检出能力**（correct 0→8），但 v1 仍有 2 例 LLM 幻觉错误、**不构成
+> 净质量提升**；A-19 消融因任务集 10/10 首轮全绿而**结构性无触发**（机制修复已
+> 独立验证）。真实 LLM 花费 **≈$0.054**（示例生成 $0.0062 + B8 两臂 $0.0473）。
+
+### Fixed
+
+- **P-2：A-19 覆盖率停滞检测是"纸面功能" → 修复为真提前停止（含消融如实披露）**。
+  零 LLM 实证：`COVERAGE_STALL` 仅被 `determine_stop_reason` 使用，且 6.5 分支位于
+  `MAX_ITERATIONS` 之后（标签被遮蔽），全仓无任何路由消费点——开关存在但无行为
+  （与 O 轮 N-4 D1 同类）。修复：`_should_debug` / `_route_after_diagnosis` 在进入
+  debugger 前**短路消费**停滞判定（trace `decision=done`/`reason=coverage_stall`、
+  `state["stop_reason"]="coverage_stall"`、`return "done"`），只拦截"本将进入 debug"
+  路径、不抢占 test_passed/detection-first/specificity-gate/repair-invalid/
+  test_defect-cap/keyword-regenerate；`determine_stop_reason` 停滞分支前移至
+  MAX_ITERATIONS 之前（OFF 历史标签逐位不变）。新测试 26 例（含删短路负控/优先级
+  不被抢占/诊断路由对称/graph smoke）+ 既有 workflow 回归 205 passed；零 LLM 前后
+  证据：修前 stalled 时 `_should_debug=debug`、at-max=`max_iterations`，修后
+  `done`+`coverage_stall`、at-max=`coverage_stall`，OFF 全部一致。
+  **缩小消融（synthetic 10 任务/臂、fast 档、两臂并发、$0.0473）**：两臂
+  **coverage_stall 触发=0**、detection 0/10、iterations=0——10/10 任务首轮全绿
+  （`false_fix_rate=1.0`）→ 从未进入 debugger，停滞判据**结构上不可达**；配对
+  Δ iterations=0、coverage=−0.1（95% CI 跨 0）。**归类：场景/功效限制，不是 wiring
+  缺陷**；下一轮用"保证 ≥2 轮失败且 |Δcoverage|<eps"的任务集重做（高难 QuixBugs /
+  DETECTION_FIRST 强制先红 / 显式失败注入）。
+- **P-1 附：O-1 遗留仪器 bug**：multi-param boundary 的 pre 断言在
+  `args = X; f(*args)` 下 NameError（合法输入被误判不可用）→ 修复并披露"无示例
+  产物在该子集上仅多一行参数名绑定，调用不变"。
+
+### Added
+
+- **P-1/P-1.1：规格可执行示例通道（oracle 语义质量治理 v1，探索性）**。
+  `parse_logic_analysis` 透传 `examples`（≤5、非法丢弃不抛、无示例不写键）；
+  `compile_spec_oracle` 对示例逐条生成 `assert f(实参…) == 期望值`（repr 字面量、
+  零 eval/exec、与 O-1 同一崩溃安全 harness；示例优先并丢弃"0 字面量臆造输入"退化体；
+  无示例产物与 O-1 逐字节不变）；新增 **spec-only 示例生成器**（仅规格/人类 docstring/
+  参数名，**不发送缺陷代码**；每任务 1 次、512 tokens、strict JSON、失败透传）与
+  `oracle_examples_replay` 质量重放工具。**探索性 A/B（df_spec 归档 20 任务）**：
+  注入任务 18→20；可分类分母 5→14；**correct 0→6**（真实检出，逐例用 buggy/fixed
+  真实实现核验）；同时 fp 0→3（全表示型：generator/tuple vs list）、misguided 0→2
+  （LLM 示例期望值幻觉）、silent 5→3、unavailable 13→6。**P-1.1 表示归一**
+  （`normalize_return_value`：tuple/list 递归→list、Iterator/generator 一次性→list、
+  str/bytes/dict 语义保持；`--reuse-examples` 零 LLM 重放）：**fp 3→0、correct 6→8**、
+  分母 13、**精确率 42.9%→61.5%、错误率 35.7%→15.4%**；2 例幻觉 misguided 保留、
+  `flatten` fp→unavailable（buggy 混合类型 TypeError，O-1 正确记账）；A 臂 20/20
+  oracle 代码 sha256 与 P-1 一致。成本 20 次调用/$0.006195（P-1.1 零成本），测试 62 例。
+  **结论**：示例通道**有检出能力**但 v1 **不提升净质量**；下一步=示例自校验/
+  二次过滤 + 生产接线（需同批 A/B+预注册）。
+- **P-3：`main.py doctor` 零 LLM 自检命令**。环境/配置 6 项（Python 版本 / 可选依赖 /
+  LLM 端点**只报数量不输出值** / 数据集缓存可加载性 / 内核沙箱能力 / git HEAD+dirty）
+  + 零 LLM 功能矩阵子集（内部隔离子进程调 `e2e_probe.py`，**强制剥除
+  `AITESTER_E2E_LLM`**、`--groups` 透传、超时 fail-closed）；人类可读与 `--json`
+  （schema `aitester_doctor/1`，内嵌 probe_report）；退出码 fail/error→1、warn/skip→0
+  （`--strict` 时→1）。实测全量 **21.45s**：47 pass/0 fail/0 error/12 skip，6 项检查
+  5 pass+1 warn；`--groups budget` 1.39s；凭证泄漏 0 次（程序化比对）。新增测试 46 例；
+  README 双语快速开始 + 矩阵文档 §5 同步。
+- **全功能探针矩阵 59→62**：新增 `cli-doctor-json`（doctor JSON 契约/聚合/不泄漏凭证）、
+  `logic-oracle-examples-compile`（示例→逐示例断言编译）、
+  `logic-oracle-examples-detection`（buggy 必败/fixed 必过/无示例对照不检出）。
+
+### Changed
+
+- **oracle 语义质量口径（P-1 起）**：示例通道是**探索性机制证据**，correct 0→8 与
+  2 例幻觉错误并存——引用必须同时给"分母/精确率/错误率/生成方式（spec-only）"，
+  **禁止**作为"oracle 可用于生产"或"检出能力提升"的能力主张；生产接线需下一轮
+  同批 A/B+预注册。
+- **A-19 出口判据更新**：停滞检测从"纸面功能"修为真提前停止（`aeadb7b`），但
+  **B8 消融仍待重做**（需保证 ≥2 轮失败的任务集）；在此之前不得引用"停滞检测
+  提升收敛"或"无效果"的结论。
+- **BASELINE/登记册/CHANGELOG/README/EMSE 同步**：BASELINE 新增
+  `target_quality.oracle_examples_validation`、`ablation_batches.b8_stagnation_detection`、
+  `engineering_runtime_hygiene.stagnation_wiring / product_doctor`；`feature_matrix` 62；
+  登记册 §3.2 P-1~P-3、§4 P 轮收口与新登记；§5 两条引用纪律；README 双语"最新优化"
+  同步 P 轮；`MEASUREMENT_INTEGRITY` 增 P-1 口径段；EMSE 本地清单增 P 增量。
+
+### Verification
+
+### Verification
+
+- **全量测试（CI 同口径）**：`pytest tests/ -q -n 4 --dist loadfile --cov=src --cov-branch`
+  → **8561 passed / 5 skipped / 0 failed**（collected **8566**；本机 **162.1s**；
+  COVERAGE_FILE 隔离）；
+- **覆盖率**：行 **96.52%**（17235/17857）/ 分支 **92.70%**（6137/6620）；
+  `coverage_ratchet.py --check` 通过（水位 96.40/92.50，余量 +0.12pp/+0.20pp；
+  为守住水位新增 `tests/test_p_round_coverage_fill.py`（30 例）补齐 doctor/示例/
+  归一分支）；
+- **静态检查**：`ruff check .` / `ruff format --check .` 全绿（793 文件）；
+  `mypy src/ config.py` 0 错（134 源文件）；
+- **门禁**：`make gates` 全绿（25 道 CI 阻断门禁）；`check_artifacts_tracked`
+  MANIFEST **106/106** + `emse_*` 目录覆盖扫描通过（P 轮新增 7 项证据工件）；
+- **全功能探针矩阵（62）**：`AITESTER_E2E_LLM=true python scripts/tools/e2e_probe.py
+  --all --include-llm` → **62/62 pass**（14 功能组、12 真实 LLM 探针、墙钟 75.6s；
+  零 LLM 子集 50 探针可 CI 化）；新增 doctor/示例编译/示例检出 3 探针；
+- **P-1/P-1.1 示例通道（探索性）**：`python -m experiments.oracle_examples_replay
+  --out ... --reuse-examples ...` → A 臂 correct 0/fp 0/分母 5；B 臂 raw correct 6/
+  fp 3/misguided 2/分母 14；**norm correct 8/fp 0/misguided 2/分母 13**（精确率
+  61.5%、错误率 15.4%）；工件 SHA256SUMS `546a6035…` verify 7 项；
+- **P-2 A-19 wiring**：`aeadb7b` 26 新测试 + 205 既有 workflow 回归；零 LLM 前后
+  证据（修前 `_should_debug=debug`/at-max=`max_iterations` → 修后 `done`+
+  `coverage_stall`/at-max=`coverage_stall`，OFF 全一致）；B8 缩小消融两臂
+  $0.047272、stall 触发=0（10/10 首轮全绿，结构性无触发，如实披露），
+  工件 `p_round_b8_ablation_20261018/` SHA256SUMS `01370be9…` 40 项 verify；
+- **P-3 doctor**：`python main.py doctor` 实测 **21.45s**、47 pass/0 fail/0 error/
+  12 skip；`--json` 纯 JSON（schema `aitester_doctor/1`）、凭证泄漏 0 次；
+  `--groups budget` 1.39s；`--strict`/`--timeout` 语义验证；46 测试；
+- **真实 LLM 花费**：P 轮 ≈ **$0.054**（示例生成 20 次调用 $0.006195 + B8 两臂
+  $0.047272 + 探针矩阵 12 次 ≈$0.02，含在 $0.8 预算内）。
+
+- **oracle 质量 / 编译执行率复算（零 LLM）**：
+  `python -m experiments.oracle_quality_replay` → 交叉校验 0 mismatch、body_digest
+  `ce10e33b…`；`python -m experiments.compile_exec_metrics --repeat 2` → body_digest
+  `2f614275…` 逐位一致；两工件目录 `checksum_results.py --verify` 通过（6/10 项）；
+- **孤儿根因复现**：`nice -n 15 .venv/bin/python
+  experiments/results/orphan_repro_20261017/run_minimal_repro.py` → before 2 个孤儿
+  场景 / after 0；`pytest tests/test_orphan_repro_20261017.py tests/test_process_utils.py
+  tests/test_detect_orphan_procs.py -q` → 75 passed；
+- **Q11 论文审计**：`make paper-audit`（strict）→ exit 0：**77 条数字声明、SRC 覆盖 71
+  + 引文覆盖 6 = 综合可追溯 100.0%**、SRC 注释 20 条、0 无效引用、TODO 10 项；
+- **真实 LLM 链路**：M-4 两臂 exit 0（墙钟 4175s/臂；合计 **$0.1588**；provenance
+  `git_sha=fae8f45`/`git_dirty=false`/指纹 pinned；prompt 一等证据 43 vs 42；
+  15 次孤儿巡检 0 泄漏）；L 轮链路/批次工件保持入库可复算。
 
 ## [Unreleased] — 2026-10-18 O 轮（oracle 仪器治疗 + 跨文件路径实证 + CI 发布工程 + 运行期卫生）
 
@@ -437,20 +562,6 @@
   --df <df.json> --augment <aug.json>` → `verdict=not_confirmed`、`fail_line=false`、
   `non_inferiority=true`；两臂工件 `shasum -a 256 -c SHA256SUMS` **127/127 OK**；
   机制重放 `misguided_metrics` 两臂（零 LLM）body_digest `0df41d24…`；
-- **oracle 质量 / 编译执行率复算（零 LLM）**：
-  `python -m experiments.oracle_quality_replay` → 交叉校验 0 mismatch、body_digest
-  `ce10e33b…`；`python -m experiments.compile_exec_metrics --repeat 2` → body_digest
-  `2f614275…` 逐位一致；两工件目录 `checksum_results.py --verify` 通过（6/10 项）；
-- **孤儿根因复现**：`nice -n 15 .venv/bin/python
-  experiments/results/orphan_repro_20261017/run_minimal_repro.py` → before 2 个孤儿
-  场景 / after 0；`pytest tests/test_orphan_repro_20261017.py tests/test_process_utils.py
-  tests/test_detect_orphan_procs.py -q` → 75 passed；
-- **Q11 论文审计**：`make paper-audit`（strict）→ exit 0：**77 条数字声明、SRC 覆盖 71
-  + 引文覆盖 6 = 综合可追溯 100.0%**、SRC 注释 20 条、0 无效引用、TODO 10 项；
-- **真实 LLM 链路**：M-4 两臂 exit 0（墙钟 4175s/臂；合计 **$0.1588**；provenance
-  `git_sha=fae8f45`/`git_dirty=false`/指纹 pinned；prompt 一等证据 43 vs 42；
-  15 次孤儿巡检 0 泄漏）；L 轮链路/批次工件保持入库可复算。
-
 ## [Unreleased] — 2026-10-17 L 轮（真 LLM：P1 独立锚三臂阴性判定 + 代理指标失效修正 + runner 语义缺陷修复 + 测试强度提升）
 
 > L 轮与 K 轮同日，是"全面优化至前沿水准"的**真 LLM 配额批次**：完成三件此前只能

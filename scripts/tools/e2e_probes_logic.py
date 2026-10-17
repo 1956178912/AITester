@@ -498,6 +498,124 @@ def probe_oracle_precondition_input_filter():
     return ok("前件校验输入选择生效：跳过违反 side>0 的候选，绑定合法候选 side=3")
 
 
+def probe_oracle_examples_compile():
+    """P-1：规格可执行示例通道——examples 解析后编译为逐示例断言（零 eval/exec）。"""
+    from src.specs.spec_ir import parse_logic_analysis
+    from src.specs.spec_ir_v2 import compile_spec_oracle
+
+    la = {
+        "function_name": "add",
+        "preconditions": ["a, b 为整数"],
+        "postconditions": ["返回 a + b"],
+        "postconditions_expr": ["r == a + b"],
+        "spec_source": "logic_analysis",
+        "examples": [{"input": [2, 3], "expected": 5}],
+    }
+    spec = parse_logic_analysis(la)
+    if not spec or not spec.get("examples"):
+        return fail("parse_logic_analysis 未透传有效 examples", spec=spec)
+    code = compile_spec_oracle(spec, target_module="target_mod", target_function="add", signature_params=["a", "b"])
+    if not code:
+        return fail("含 examples 的 spec 未生成 oracle")
+    try:
+        import ast as _ast
+
+        _ast.parse(code)
+    except SyntaxError as exc:
+        return fail(f"含示例 oracle 不是合法 Python：{exc}")
+    checks = {
+        "expected_literal": "_specir_norm_return(5)" in code or "== 5" in code,
+        "assert_present": any(line.strip().startswith("assert") for line in code.splitlines()),
+        "crash_safe": "pytest.skip(" in code and "except Exception" in code,
+        "audit_marker": "examples=1" in code,
+        "no_eval_exec": "eval(" not in code and "exec(" not in code,
+    }
+    if not all(checks.values()):
+        return fail(f"示例断言编译契约不完整：{checks}", code_head=code[:400])
+    # 无示例负控：仍按 O-1 路径生成（无示例审计标记/无该期望字面量）
+    la_nonex = {k: v for k, v in la.items() if k != "examples"}
+    spec2 = parse_logic_analysis(la_nonex)
+    code2 = compile_spec_oracle(spec2, target_module="target_mod", target_function="add", signature_params=["a", "b"])
+    if code2 and ("_specir_norm_return(5)" in code2 or "examples=" in code2):
+        return fail("无示例路径出现示例标记（零差异契约破坏）", code_head=code2[:300])
+    return ok(f"示例通道编译正常（{len(code)} 字符、examples=1、崩溃安全、无 eval/exec）", checks=checks)
+
+
+def probe_oracle_examples_detection():
+    """P-1：示例 oracle 的检出能力——buggy 必败、fixed 必过（自含 fixture，真实 pytest）。"""
+    import ast as _ast
+    import subprocess
+
+    from src.specs.spec_ir import parse_logic_analysis
+    from src.specs.spec_ir_v2 import compile_spec_oracle
+
+    tmpdir = make_temp_dir("e2e_oracle_examples_")
+    la = {
+        "function_name": "add",
+        "postconditions_expr": ["r == a + b"],
+        "preconditions": [],
+        "spec_source": "logic_analysis",
+        "examples": [{"input": [2, 3], "expected": 5}],
+    }
+    spec = parse_logic_analysis(la)
+    code = compile_spec_oracle(spec, target_module="target_mod", target_function="add", signature_params=["a", "b"])
+    if not code:
+        return fail("示例 oracle 未生成")
+    if not code.strip():
+        return fail("示例 oracle 为空")
+    try:
+        _ast.parse(code)
+    except SyntaxError as exc:
+        return fail(f"示例 oracle 非法 Python：{exc}")
+
+    outcomes: dict[str, int] = {}
+    for variant, impl in (
+        ("buggy", "def add(a, b):\n    return a - b\n"),
+        ("fixed", "def add(a, b):\n    return a + b\n"),
+    ):
+        work = tmpdir / variant
+        work.mkdir()
+        (work / "target_mod.py").write_text(impl, encoding="utf-8")
+        (work / "test_oracle.py").write_text(code, encoding="utf-8")
+        proc = subprocess.run(
+            [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "test_oracle.py"],
+            capture_output=True,
+            text=True,
+            cwd=str(work),
+            timeout=120,
+        )
+        outcomes[variant] = proc.returncode
+    if outcomes["fixed"] != 0:
+        return fail("fixed 实现上示例 oracle 未通过（误报/仪器缺陷）", outcomes=outcomes)
+    if outcomes["buggy"] == 0:
+        return fail("buggy 实现上示例 oracle 未检出（应至少一例断言失败）", outcomes=outcomes)
+    # 对照：无示例 oracle 对同一 buggy 不检出（静默通过）——证明检出由示例通道带来
+    la_nonex = {k: v for k, v in la.items() if k != "examples"}
+    code_nonex = compile_spec_oracle(
+        parse_logic_analysis(la_nonex), target_module="target_mod", target_function="add", signature_params=["a", "b"]
+    )
+    control_rc = 0
+    if code_nonex:
+        work = tmpdir / "buggy_control"
+        work.mkdir()
+        (work / "target_mod.py").write_text("def add(a, b):\n    return a - b\n", encoding="utf-8")
+        (work / "test_oracle.py").write_text(code_nonex, encoding="utf-8")
+        proc = subprocess.run(
+            [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "test_oracle.py"],
+            capture_output=True,
+            text=True,
+            cwd=str(work),
+            timeout=120,
+        )
+        control_rc = proc.returncode
+    if control_rc != 0:
+        return fail("无示例对照 oracle 竟然在 buggy 上失败（对照不成立）", control_rc=control_rc, outcomes=outcomes)
+    return ok(
+        f"示例 oracle 检出能力正确：buggy rc={outcomes['buggy']}（检出）/ fixed rc=0 / 无示例对照 rc=0（不检出）",
+        outcomes=outcomes,
+    )
+
+
 PROBES = [
     Probe(
         name="logic-spec-ir-parse",
@@ -582,6 +700,20 @@ PROBES = [
         func=probe_oracle_precondition_input_filter,
         timeout_s=90,
         description="O-1：前件校验输入选择（跳过违反前件的边界候选）",
+    ),
+    Probe(
+        name="logic-oracle-examples-compile",
+        group="logic",
+        func=probe_oracle_examples_compile,
+        timeout_s=90,
+        description="P-1：规格可执行示例 → 逐示例断言编译（零 eval/exec、崩溃安全、审计标记）",
+    ),
+    Probe(
+        name="logic-oracle-examples-detection",
+        group="logic",
+        func=probe_oracle_examples_detection,
+        timeout_s=180,
+        description="P-1：示例 oracle 检出能力（buggy 必败/fixed 必过/无示例对照不检出）",
     ),
     Probe(
         name="logic-profile-spec-fields",

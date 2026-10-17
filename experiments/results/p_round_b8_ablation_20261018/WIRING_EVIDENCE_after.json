@@ -1,0 +1,46 @@
+{
+  "schema": "p2_b8_wiring_evidence/1",
+  "phase": "after_fix",
+  "source": "src/graph/workflow.py (A-19 wiring fixed: short-circuit + priority move)",
+  "workflow_py_sha256": "495aab42b2040a5a9de6729c2ad3bdb80dfd4793421a020e31301eac89d1bf28",
+  "state_used": {
+    "iteration": 2,
+    "max_iterations": 3,
+    "execution_trace": [
+      {
+        "passed": false,
+        "coverage_delta": 0.0
+      },
+      {
+        "passed": false,
+        "coverage_delta": 0.0
+      }
+    ],
+    "test_passed": false
+  },
+  "observed": {
+    "on": {
+      "stall_detected_iter2": true,
+      "determine_stop_reason_iter2": "coverage_stall",
+      "should_debug_iter2": "done",
+      "should_debug_iter2_stop_reason_field": "coverage_stall",
+      "determine_stop_reason_iter3_at_max": "coverage_stall",
+      "should_debug_iter3_at_max": "done",
+      "should_debug_iter3_stop_reason_field": "coverage_stall",
+      "route_after_diagnosis_iter2": "done",
+      "route_after_diagnosis_iter2_stop_reason_field": "coverage_stall"
+    },
+    "off": {
+      "stall_detected_iter2": false,
+      "determine_stop_reason_iter2": "unknown",
+      "should_debug_iter2": "debug",
+      "should_debug_iter2_stop_reason_field": null,
+      "determine_stop_reason_iter3_at_max": "max_iterations",
+      "should_debug_iter3_at_max": "done",
+      "should_debug_iter3_stop_reason_field": "max_iterations",
+      "route_after_diagnosis_iter2": "debug",
+      "route_after_diagnosis_iter2_stop_reason_field": null
+    }
+  },
+  "conclusion": "AFTER FIX: ON arm short-circuits to \"done\" with stop_reason=coverage_stall in both routers; at iteration>=max label is coverage_stall (no longer shadowed); OFF arm identical to history (debug / unknown / max_iterations)."
+}

@@ -102,6 +102,18 @@ class TestManifestHygiene:
         for needle in required_substrings:
             assert any(needle in rel for rel in gate.MANIFEST), f"清单缺少 N 轮工件条目: {needle}"
 
+    def test_manifest_covers_p_round_chain(self):
+        """P 轮（2026-10-18）：示例通道双报告与 B8 消融工件必须在清单。"""
+        required_substrings = (
+            "p_round_oracle_examples_20261018/ORACLE_EXAMPLES_REPORT.json",
+            "p_round_oracle_examples_20261018/ORACLE_EXAMPLES_REPORT_norm.json",
+            "p_round_oracle_examples_20261018/SHA256SUMS",
+            "p_round_b8_ablation_20261018/ABLATION_REPORT.json",
+            "p_round_b8_ablation_20261018/SHA256SUMS",
+        )
+        for needle in required_substrings:
+            assert any(needle in rel for rel in gate.MANIFEST), f"清单缺少 P 轮工件条目: {needle}"
+
     def test_manifest_covers_o_round_chain(self):
         """O 轮（2026-10-18）：oracle 仪器治疗 / 跨文件路径 / oracle 二臂验证链必须在清单。"""
         required_substrings = (

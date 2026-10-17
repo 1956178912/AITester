@@ -141,15 +141,11 @@ class TestStopReasonPriority:
         assert state["stop_reason"] == StopReason.MAX_ITERATIONS.value
 
     def test_budget_exceeded_not_preempted(self, stall_on):
-        state = _state(
-            iteration=2, execution_trace=_stalled_trace(2), test_passed=False, budget_exceeded=True
-        )
+        state = _state(iteration=2, execution_trace=_stalled_trace(2), test_passed=False, budget_exceeded=True)
         assert determine_stop_reason(state) is StopReason.BUDGET_EXCEEDED
 
     def test_regression_detected_not_preempted(self, stall_on):
-        state = _state(
-            iteration=2, execution_trace=_stalled_trace(2), test_passed=False, regression_detected=True
-        )
+        state = _state(iteration=2, execution_trace=_stalled_trace(2), test_passed=False, regression_detected=True)
         assert determine_stop_reason(state) is StopReason.REGRESSION_DETECTED
 
     def test_test_defect_regen_cap_not_preempted(self, stall_on):
