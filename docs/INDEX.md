@@ -1,6 +1,6 @@
 # AITester 文档索引（Documentation Index）
 
-> 最后更新：2026-10-18（T 轮）
+> 最后更新：2026-10-18（U 轮：第三轮独立评审收口 + A-03/A-17 漂移论文化 + P3 评测诚信 checklist + D3b Step A 接线；T 轮同日）
 >
 > 本页是全部 Markdown 文档的**导航入口**：先按角色给最短阅读路径，再给核心文档清单
 >（每份一句话说明）。本页的全部链接由 `scripts/gates/check_doc_links.py --strict`
@@ -34,11 +34,12 @@
 ### 2.2 审稿人 15 分钟路径
 
 1. [docs/VALIDITY.md](VALIDITY.md)：构念 / 内部 / 外部 / 统计结论四类效度威胁与缓解。
-2. [docs/preregistration.md](preregistration.md)：E1–E4 预注册（判定口径先声明后取数）。
+2. [docs/preregistration.md](preregistration.md)：E1–E8 预注册（E5 探索性；E6–E8 增补，判定口径先声明后取数）。
 3. [docs/EVALUATION_SCOPE.md](EVALUATION_SCOPE.md)：声明 → 证据 → 范围对账表（含被反驳声明）。
 4. [docs/MEASUREMENT_INTEGRITY.md](MEASUREMENT_INTEGRITY.md)：测量伪影的形态、检测与修复方法论。
 5. [BASELINE.yaml](../BASELINE.yaml)：全部当前数字的机器可读单一来源。
-6. [docs/reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-17.md](reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-17.md)：独立系统性评审（含遗留项与处置）。
+6. [docs/reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-17.md](reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-17.md)：第二轮独立系统性评审（含遗留项与处置）。
+7. [docs/reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-18.md](reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-18.md)：第三轮独立系统性评审（14 项核心声明逐位复验；A-01..A-20 建议与同日收口状态）。
 
 ### 2.3 复现者
 
@@ -67,7 +68,7 @@
 | [docs/VALIDITY.md](VALIDITY.md) | 效度威胁模型：构念 / 内部 / 外部 / 统计结论四类威胁与逐项缓解。 |
 | [docs/EVALUATION_SCOPE.md](EVALUATION_SCOPE.md) | 声明 → 证据 → 范围对账表；含 contradicted 声明清单（编辑初筛用）。 |
 | [docs/MEASUREMENT_INTEGRITY.md](MEASUREMENT_INTEGRITY.md) | 四起测量伪影的"口径分叉"方法论：逐起给分叉口径 / 检测 / 量级 / 修复 / 结论是否翻转。 |
-| [docs/preregistration.md](preregistration.md) | E1–E4 验证实验预注册：判定口径、样本量与停止条件先声明后取数。 |
+| [docs/preregistration.md](preregistration.md) | E1–E8 验证实验预注册（E5 探索性，E6–E8 增补）：判定口径、样本量与停止条件先声明后取数。 |
 | [docs/DATA_CARD.md](DATA_CARD.md) | 数据集卡：来源、规模、许可、污染视角与适用边界。 |
 | [MODEL_CARD.md](../MODEL_CARD.md) | 模型卡：模型版本、指纹口径、成本与已知局限。 |
 
@@ -87,7 +88,8 @@
 | [docs/design/oracle_quality_metric.md](design/oracle_quality_metric.md) | 确定性规约 oracle 质量度量（A-05）：四分类、注入 fidelity、检出贡献与判分耦合限制。 |
 | [docs/design/e2e_probe_matrix.md](design/e2e_probe_matrix.md) | 全功能端到端探针矩阵：功能清单化验证、零 LLM 默认与真 LLM 按需、报告与边界。 |
 | [docs/design/smt_witness_batch_plan.md](design/smt_witness_batch_plan.md) | z3 SMT 见证层最小启用批次：设计、判定规则与 T 轮执行记录（机制层 pass；pre/post-fix 口径）。 |
-| [docs/design/cross_file_plan_wiring_prereg.md](design/cross_file_plan_wiring_prereg.md) | D3b 跨文件图通路接线：下游消费点定位、两阶段双开关方案与预注册草案（未接线）。 |
+| [docs/design/evaluation_integrity_checklist.md](design/evaluation_integrity_checklist.md) | 评测诚信 checklist v1（P3）：IC-1..IC-8 工件级静态诚信检查 + 可执行校验器（`experiments/eval_integrity_check.py`），跑批后/引用前/跨批对比前必跑。 |
+| [docs/design/cross_file_plan_wiring_prereg.md](design/cross_file_plan_wiring_prereg.md) | D3b 跨文件图通路接线：下游消费点定位、两阶段双开关方案与预注册；**Step A 已实装（双开关默认关，OFF/OFF 与历史逐位一致）**，Step B / AB1 待做。 |
 | [docs/COST_MODEL.md](COST_MODEL.md) | 成本模型：批后处理墙钟可观测（StageTimer/分位/阈值）、预算口径与批跑建议。 |
 | [docs/dependency_exemptions.md](dependency_exemptions.md) | 依赖豁免登记表：每个豁免的替代方案与到期复核条件。 |
 | [docs/threat_model.md](threat_model.md) | 威胁模型：T1–T8 威胁、攻击面与现有缓解措施。 |
@@ -129,7 +131,8 @@
 |---|---|
 | [docs/PROJECT_STATUS_REGISTER.md](PROJECT_STATUS_REGISTER.md) | 项目状态与决策登记册：已完成 / 遗留 / 阻断三类状态与验证入口。 |
 | [CHANGELOG.md](../CHANGELOG.md) | 逐批变更日志（历史快照；当前口径以 BASELINE 与本索引指向的文档为准）。 |
-| [docs/reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-17.md](reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-17.md) | 独立系统性评审报告：发现、证据与处置建议。 |
+| [docs/reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-18.md](reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-18.md) | 第三轮独立系统性评审报告（2026-10-18）：60+ 前沿数据点一手重建、14 项核心声明逐位复验、A-01..A-20 建议与同日收口状态。 |
+| [docs/reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-17.md](reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-17.md) | 第二轮独立系统性评审报告：发现、证据与处置建议。 |
 | [INDEPENDENT_REVIEW_2026-10-16.md](../INDEPENDENT_REVIEW_2026-10-16.md) | 独立评审报告（根目录批次交付物）。 |
 | [CODE_OPTIMIZATION_2026-10-16.md](../CODE_OPTIMIZATION_2026-10-16.md) | 代码全面审查与优化报告（C 轮）。 |
 | [PHASE1_PRECHECK_2026-10-12.md](../PHASE1_PRECHECK_2026-10-12.md) | 改进方案阶段 1 前置核查报告。 |

@@ -1,10 +1,103 @@
 > **语言 / Language**：[English](CHANGELOG.en.md) | 简体中文（本文）
 >
-> Last updated: 2026-10-18（T 轮：**B2 主批次锁指纹复现** + **B1 协议文本指纹级复现判定 confirmed（文本净效应 +16.1/+19.5pp，采样效应可忽略）** + **oracle K=3 示例治理判定 high_risk_default_off（"自洽≠正确"）** + **z3 SMT 见证层首个专项批 pass 及 result/r 别名修复** + **A-19 抢占优先级修复/回滚 schema/preflight 探针修复** + **文档↔工件审计 P0=4/P1=17/P2=14 收口**；S/R/Q/P/O/N/M/L/K 轮同日登记）
+> Last updated: 2026-10-18（U 轮：**第三轮独立评审收口（零 LLM）**——**A-05 门禁数量口径统一**（`BASELINE.yaml` `gates` 节为权威口径：26 脚本 / ci.yml 24 唯一引用·27 调用点） + **A-06 "0 failed" 环境标签**（正常环境口径 + 沙箱宿主能力缺失归因披露） + **A-08/A-09 测试环境加固**（broker mkdir 垫片防御 + ps/生产 profile 沙箱能力探测 `skipif`） + **A-03/A-17 T 轮漂移论文化**（论文 `sec:tround` + E8 2×2 消融预注册冻结） + **P3 评测诚信 checklist v1（IC-1..IC-8）** + **D3b Step A 跨文件计划接线**（双开关默认关）；第三轮独立评审报告入库 + 全量双语文档同步；T/S/R/Q/P/O/N/M/L/K 轮同日登记）
 
 # Changelog
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
+
+## [Unreleased] — 2026-10-18 U 轮（第三轮独立评审收口：A-05/A-06/A-08/A-09 + A-03/A-17 漂移论文化 + P3 评测诚信 checklist + D3b Step A 接线，零 LLM）
+
+> U 轮执行第三轮独立系统性评审（`docs/reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-18.md`）中不依赖 LLM 配额/人力授权的收口项，并把该轮评审报告入库：
+> ① **A-05 门禁数量口径统一**——五处分裂（README 文件树 23/18、论文 24、登记册 headline 25、git 记录 25、实测 26 脚本/27 调用）收敛为 `BASELINE.yaml` `gates` 节三个可复算数字；
+> ② **A-06 "0 failed" 环境标签**——登记口径改为"正常环境 0 failed"，受限宿主 14-15 例能力缺失失败逐项归因披露；
+> ③ **A-08/A-09 测试环境假设加固**——broker `mkdir` 垫片防御 + `ps`/生产 profile `sandbox_apply` 能力探测 `skipif`，加固后受限环境亦 0 failed；
+> ④ **A-03/A-17 T 轮漂移论文化**——论文新增 `sec:tround`（B2 `not_reproduced` 但 R2 −25.29pp 仍显著 + 漂移三因），E8 `{thinking on/off}×{legacy/current profile}` 2×2 消融预注册冻结；
+> ⑤ **P3 评测诚信 checklist v1（IC-1..IC-8）**——零 LLM 工件级校验器 + B2/df_spec 两决策级工件实测；
+> ⑥ **D3b Step A 跨文件修复计划接线**——`CROSS_FILE_PLAN_BUILD_ENABLE`/`_CONSUME_ENABLE` 双开关默认关、OFF/OFF 与历史逐位一致；
+> ⑦ 第三轮独立评审报告入库 + 全量双语文档同步。
+> 真实 LLM 花费：**$0**（本轮全部零 LLM；A-01/A-02/A-04 需预算/人力的项不在本轮范围）。
+
+### Fixed — 第三轮独立评审驱动的测试环境加固与口径统一（A-05/A-06/A-08/A-09，零 LLM）
+
+- **A-08 测试环境假设加固**（`tests/test_executor_repo_j4_coverage.py`）：`_run_verify` 的
+  `repo_dir.mkdir(exist_ok=True)` 改防御式存在性守卫——第三方评审在沙箱宿主实测发现 broker 的
+  `mkdir` 垫片不尊重 `exist_ok`（目录已存在仍抛 EEXIST/PermissionError），致 `TestVerifyP2PGate`
+  在受限环境假红；修复后该测试类 6/6 在两种环境下均通过。
+- **A-09 进程/沙箱观测用例能力探测降级**（`tests/test_orphan_repro_20261017.py`、
+  `tests/test_p0_hardening_2026_10_11.py`、`tests/test_n_round_platform_executor_sandbox.py`、
+  `tests/test_n_round_platform_kernel_sandbox.py`）：孤儿/僵尸观测类用例（依赖 `ps` 读进程表）
+  与内核沙箱真实执行类用例（依赖 Seatbelt `sandbox_apply`）新增**能力探测 + skipif 降级**——
+  实测发现受限宿主 `ps` 返回 `Operation not permitted`、且**极简 profile 可 apply 而生产 profile
+  （含 subpath/deny 规则）apply 被拒**（rc=71）；探针一律使用生产口径（`build_sandbox_command`
+  产物 / 真实 `ps` 调用），  不可判定时显式 skip 并标注"环境能力缺失，非代码缺陷"，与项目既有
+  `skipif`/`importorskip` 降级惯例一致。受影响 5 个文件（A-09 的 4 个 + A-08 的
+  `test_executor_repo_j4_coverage.py`）实跑 **142 passed / 14 skipped / 0 failed**；
+  加固后全量（沙箱宿主，broker 激活）复跑 **8942 passed / 19 skipped / 0 failed**
+  （774.71s，D3b 批次后最终值；P3 批次中间态曾为 8915/19/0）——即"零失败"在受限环境亦成立
+  （19 skipped = 原 5 + 能力探测新增 14）。
+- **A-06 "0 failed" 环境标签**（`BASELINE.yaml` `tests.total_failed` 注释 + README 中英"已知失败"行）：
+  登记口径改为"正常环境 0 failed"；沙箱宿主（broker/ps/嵌套 sandbox 受限）实测 14-15 例失败
+  全部归因环境能力缺失并披露，禁止无条件引用。
+- **A-05 门禁数量口径统一**（新增 `BASELINE.yaml` `gates` 节为权威口径）：此前 README 文件树
+  23/18、论文 24、登记册 headline 25、git 记录 25、实测 26 脚本/27 调用五处分裂；统一为三个可复算
+  数字（`scripts/gates/` **26 脚本**、`ci.yml` **24 唯一引用/27 调用点**、2 个在 perf.yml 等专用工作流），
+  README 中英文件树、论文 §贡献段、登记册 headline 同步指向该口径；历史 CHANGELOG 快照按惯例不回溯。
+
+### Added — 第三轮独立评审后续：T 轮漂移论文化（A-03/A-17）+ 评测诚信 checklist v1（P3，零 LLM）
+
+- **A-03/A-17 论文 T 轮复现与漂移段**（`paper/draft.typ` 新增 `sec:tround`）：B2 锁指纹复现批
+  （干净树 `a93c1f6` + 指纹 pinned + 3 seed×3 臂×87 任务）结果入论文——pooled
+  detection 3.07%/11.88%/28.35%，预注册判定 `not_reproduced`（次级排序 R1/R3 失败），
+  **核心负面 R2 仍显著**（−25.29pp，b=4/c=70，CI [−31.0,−19.5]pp）；并定位漂移三因
+  （推理模式：out token 78.6%→36.4%；logic 档新增 5 开关；plain_llm 臂全局漂移
+  1.53%→11.88%）⇒ 新旧批不混池、归因交 2×2 消融（E8）。
+- **E8 预注册**（`docs/preregistration.md`）：`{thinking on/off} × {legacy/current profile}`
+  2×2 消融，判定规则（H1 推理模式不变式 / H2 模式依赖 / H3 漂移归因）跑前冻结；
+  预估 $6–9，授权前不得开跑（ADR-0034 同类纪律）。
+- **P3 评测诚信 checklist v1**（`docs/design/evaluation_integrity_checklist.md` +
+  `experiments/eval_integrity_check.py` + `tests/test_eval_integrity_check.py` 12 例）：
+  把四起测量伪影、false_fix 口径矩阵、Mut@k 三偏差、fail-closed None 纪律固化为
+  **IC-1..IC-8 工件级静态诚信检查**（provenance/指纹/None 重算/补丁验证/缓存隔离/
+  SHA256/变异报告/不可测披露），零 LLM 可对任意批次目录执行。对 B2 与 df_spec 两个
+  决策级工件实测：硬检查全过；IC-7 正确识别 608/51 行"协议内未测变异得分"占位值
+  （禁用于跨系统对比）；IC-4 正确区分弃权门故意不应用（34 行）与 ADR-0021 伪影签名。
+- 文档索引（`docs/INDEX.md`）登记 checklist。
+- **收口修复（同批回归发现）**：① E8 预注册补英文对应节（`docs/preregistration.en.md`，
+  `test_ar_batch.py::TestPreregBilingualStructureParity` 中英结构计数对等锁）；② BASELINE
+  测试计数刷新（P3 批次中间态 collected 8946 = 8941 + 5；**U 批最终 8961 = 8956 + 5**，
+  沙箱最终 **8942/19/0，774.71s**），`test_2026_10_10_optimization_batch.py::TestBaselineNumbersConsistency` 的
+  "BASELINE 数字时效"锁通过。
+
+### Added — D3b Step A 跨文件修复计划接线（第三轮独立评审 P4 续作；双开关默认关，零 LLM 可测）
+
+- **构建开关** `CROSS_FILE_PLAN_BUILD_ENABLE`（默认 false）+ **消费开关**
+  `CROSS_FILE_PLAN_CONSUME_ENABLE`（默认 false）（`src/tools/cross_file.py` 新增
+  两个 env 读取器；env_budget 251→253 登记；`.env.example` 建档）。
+- **生产接线**（`src/graph/debugger.py`）：`_debugger_node` LLM 分支在 BUILD 开且
+  跨文件任务（deps 非空）时调 `build_cross_file_repair_plan_cached`
+  （协调器-提议者）构建计划并经 update 写 `state["cross_file_plan"]`；构建失败
+  静默降级不阻断修复。`_resolve_target_module` 增 `plan` 参数，消费受 CONSUME
+  门控；OFF/OFF 与历史逐位一致（依赖边末元素回退在任何开关下保留）。
+- **设计修正**（`docs/design/cross_file_plan_wiring_prereg.md` §1.5）：生产节点
+  由 analyzer 改为 debugger LLM 分支（builder 需要 debugger 实例与 test_output，
+  analyzer 运行时点不可得）；消费门控仅门控 plan 读取（首版曾误将回退也纳入
+  门控，被契约测试抓住）。
+- **回归锁**：`tests/test_cross_file_plan_wiring.py` 13 例（双开关默认/读取、
+  消费门控 6 情形、节点构建 4 情形含失败降级）；
+  `tests/test_debugger_node_branches.py::TestResolveTargetModule` 增补消费关
+  对偶用例（原 `test_cross_file_plan_target_modules_first` 显式开 CONSUME）。
+- 后续（需 LLM 预算，未执行）：D3b-AB1 三臂对照（A0 对照 / A1 构建不消费测
+  成本上界 / A2 全链路测能力）与 Step B 多模块协同修复。
+
+### Verification
+
+- **全量测试（CI 同口径，正常环境）**：`pytest tests/ -n 4 --dist loadfile --cov=src --cov-branch`（`COVERAGE_FILE` 隔离）→ **8956 passed / 5 skipped / 0 failed**（collected **8961**；**176.43s**）。
+- **覆盖率（meta_coverage）**：行 **96.55%**（17506/18131）、分支 **92.79%**（6282/6770）；`coverage_ratchet.py --check` 通过（水位 96.40/92.50，余量 +0.15pp/+0.29pp）；`check_branch_coverage.py coverage.xml` 通过。
+- **静态检查**：`ruff check .` 全绿 / `ruff format --check .` **814 文件已格式化** / `mypy src/ config.py` 0 错（**134** 源文件）。
+- **门禁链**：`check_bilingual_docs --strict` 0 错、`check_doc_links --strict` 0 错、`check_baseline`+`check_baseline_numbers`、`check_env_budget` **253/253**、`check_env_snapshot_keys`、`check_model_fingerprint`、`check_tool_versions`、`check_json_contract_sites`、`check_zero_assert_tests`、`check_artifact_doc_consistency`（含登记册 coverage 对账）、`check_artifacts_tracked`（179/179 + 证据目录覆盖扫描）、`check_citations` 全部通过。
+- **定向测试**：受影响 5 文件 **142 passed / 14 skipped / 0 failed**（沙箱宿主口径）；P3 校验器 12 例、D3b 接线 13 例 + 消费关对偶 2 例全过。
+- **文档同步**：README 中英「最新优化 / 已知失败 / 文件树」、`BASELINE.yaml`（tests/coverage/gates）、登记册 headline + §1 + §3.2 + §4、`docs/INDEX.md` + `INDEX.en.md`（第三轮评审报告与 P3 checklist 登记）、`scripts/README.md` 脚本清单、`docs/design/cross_file_plan_wiring_prereg.md`（Step A 状态）、CHANGELOG 中英本轮节同步刷新；第三轮独立评审报告入库（16 节 + 2 附录，含同日收口状态附录）。
 
 ## [Unreleased] — 2026-10-18 T 轮（真实 LLM 配额解锁：B2 锁指纹复现 + B1 协议文本指纹级复现 + 语义修复 + 仪器自检）
 

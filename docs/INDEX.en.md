@@ -1,6 +1,6 @@
 # AITester Documentation Index
 
-> Last updated: 2026-10-18 (T round)
+> Last updated: 2026-10-18 (round U: third-round independent-review close-out + A-03/A-17 drift write-up + P3 evaluation-integrity checklist + D3b Step A wiring; round T same day)
 >
 > This page is the **navigation entry** for all Markdown documents: shortest reading
 > paths by role first, then the core-document list (one line per document). Every link
@@ -35,11 +35,12 @@
 ### 2.2 Reviewer 15-minute path
 
 1. [docs/VALIDITY.en.md](VALIDITY.en.md): construct / internal / external / statistical-conclusion validity threats and mitigations.
-2. [docs/preregistration.en.md](preregistration.en.md): E1-E4 pre-registration (decision criteria declared before data collection).
+2. [docs/preregistration.en.md](preregistration.en.md): E1-E8 pre-registration (E5 exploratory; E6-E8 added later; decision criteria declared before data collection).
 3. [docs/EVALUATION_SCOPE.md](EVALUATION_SCOPE.md) (Chinese): claim -> evidence -> scope reconciliation table, including contradicted claims.
 4. [docs/MEASUREMENT_INTEGRITY.md](MEASUREMENT_INTEGRITY.md) (Chinese): forms, detection and repair methodology for measurement artifacts.
 5. [BASELINE.yaml](../BASELINE.yaml): machine-readable single source of truth for all current numbers.
-6. [docs/reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-17.md](reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-17.md) (Chinese): independent systematic review with open items and dispositions.
+6. [docs/reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-17.md](reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-17.md) (Chinese): second independent systematic review with open items and dispositions.
+7. [docs/reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-18.md](reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-18.md) (Chinese): third independent systematic review (14 core claims recomputed bit-for-bit; A-01..A-20 recommendations and same-day close-out status).
 
 ### 2.3 Reproducer
 
@@ -68,7 +69,7 @@
 | [docs/VALIDITY.en.md](VALIDITY.en.md) | Validity-threat model: construct / internal / external / statistical-conclusion threats with itemised mitigations. |
 | [docs/EVALUATION_SCOPE.md](EVALUATION_SCOPE.md) (Chinese) | Claim -> evidence -> scope reconciliation table, including the contradicted-claims list (for editorial triage). |
 | [docs/MEASUREMENT_INTEGRITY.md](MEASUREMENT_INTEGRITY.md) (Chinese) | Methodology for four measurement artifacts with a "caliber fork": forked caliber / detection / magnitude / fix / whether the conclusion flips. |
-| [docs/preregistration.en.md](preregistration.en.md) | E1-E4 pre-registration: decision criteria, sample sizes and stopping conditions declared before data collection. |
+| [docs/preregistration.en.md](preregistration.en.md) | E1-E8 pre-registration (E5 exploratory, E6-E8 added later): decision criteria, sample sizes and stopping conditions declared before data collection. |
 | [docs/DATA_CARD.en.md](DATA_CARD.en.md) | Dataset card: provenance, scale, licence, contamination view and applicability boundaries. |
 | [MODEL_CARD.en.md](../MODEL_CARD.en.md) | Model card: model versions, fingerprint calibers, cost and known limitations. |
 
@@ -88,7 +89,8 @@
 | [docs/design/oracle_quality_metric.md](design/oracle_quality_metric.md) (Chinese) | Deterministic spec-oracle quality (A-05): four classes, injection fidelity, detection contribution and verdict-coupling limits. |
 | [docs/design/e2e_probe_matrix.md](design/e2e_probe_matrix.md) (Chinese) | Full-feature end-to-end probe matrix: feature-checklist verification, zero-LLM default with opt-in real LLM, reporting and boundaries. |
 | [docs/design/smt_witness_batch_plan.md](design/smt_witness_batch_plan.md) (Chinese) | Minimal enablement batch for the z3 SMT witness layer: design, decision rules and T-round execution record (mechanism layer pass; pre/post-fix calibers). |
-| [docs/design/cross_file_plan_wiring_prereg.md](design/cross_file_plan_wiring_prereg.md) (Chinese) | D3b cross-file graph-path wiring: downstream consumer localization, two-stage dual-switch plan and preregistration draft (not wired). |
+| [docs/design/evaluation_integrity_checklist.md](design/evaluation_integrity_checklist.md) (Chinese) | Evaluation-integrity checklist v1 (P3): IC-1..IC-8 artifact-level static integrity checks plus an executable validator (`experiments/eval_integrity_check.py`); run after each batch / before citation / before cross-batch comparison. |
+| [docs/design/cross_file_plan_wiring_prereg.md](design/cross_file_plan_wiring_prereg.md) (Chinese) | D3b cross-file graph-path wiring: downstream consumer localization, two-stage dual-switch plan and preregistration; **Step A implemented (dual switches default-off, OFF/OFF bit-for-bit identical to history)**, Step B / AB1 pending. |
 | [docs/COST_MODEL.md](COST_MODEL.md) (bilingual pair) | Cost model: batch post-processing wall observability (StageTimer/percentiles/thresholds), budget caliber and batch guidance. |
 | [docs/dependency_exemptions.en.md](dependency_exemptions.en.md) | Dependency-exemption registry: alternative for each exemption and its re-review deadline. |
 | [docs/threat_model.en.md](threat_model.en.md) | Threat model: T1-T8 threats, attack surfaces and existing mitigations. |
@@ -130,7 +132,8 @@
 |---|---|
 | [docs/PROJECT_STATUS_REGISTER.md](PROJECT_STATUS_REGISTER.md) (Chinese) | Project status and decision register: done / open / blocked states with verification entry points. |
 | [CHANGELOG.en.md](../CHANGELOG.en.md) | Per-batch change log (historical snapshot; current calibers live in BASELINE and the documents linked here). |
-| [docs/reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-17.md](reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-17.md) (Chinese) | Independent systematic review: findings, evidence and disposition suggestions. |
+| [docs/reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-18.md](reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-18.md) (Chinese) | Third independent systematic review (2026-10-18): 60+ frontier data points rebuilt from primary sources, 14 core claims recomputed bit-for-bit, A-01..A-20 recommendations and same-day close-out status. |
+| [docs/reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-17.md](reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-17.md) (Chinese) | Second independent systematic review: findings, evidence and disposition suggestions. |
 | [INDEPENDENT_REVIEW_2026-10-16.md](../INDEPENDENT_REVIEW_2026-10-16.md) (Chinese) | Independent review report (root-level batch deliverable). |
 | [CODE_OPTIMIZATION_2026-10-16.md](../CODE_OPTIMIZATION_2026-10-16.md) (Chinese) | Full code review and optimization report (round C). |
 | [PHASE1_PRECHECK_2026-10-12.md](../PHASE1_PRECHECK_2026-10-12.md) (Chinese) | Phase-1 pre-check report for the improvement plan. |
