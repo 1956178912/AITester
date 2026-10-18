@@ -85,8 +85,9 @@ Makefile：`make e2e-probe`（零 LLM）、`make e2e-probe-llm`（真 LLM）。
 ## 5. 与门禁/CI 的关系
 
 - **CI 已有零 LLM `e2e-probe` job**（`.github/workflows/ci.yml`，O 轮 2026-10-18
-  接入，ubuntu-latest）：跑 `python scripts/tools/e2e_probe.py --all`（47 个零 LLM
-  探针；12 个真实 LLM 探针默认 skip，不设 secrets、零 API 配额）。job 判据是
+  接入，ubuntu-latest）：跑 `python scripts/tools/e2e_probe.py --all`（**56 个零 LLM
+  探针**；12 个真实 LLM 探针默认 skip，不设 secrets、零 API 配额；注册数=可执行数=68，
+  T 轮去重前曾因 2 个重名探针被静默丢弃而显示 66 个——见 `docs/MEASUREMENT_INTEGRITY.md` §7）。job 判据是
   **0 fail / 0 error**；预期 skip 由探针内既有逻辑显式产生并在摘要逐条打印：
   `executor-docker-degrade`（CI 有 docker CLI）、`security-kernel-sandbox` /
   `executor-kernel-sandbox`（CI 明确不装 bwrap → 无 Linux 沙箱后端）、

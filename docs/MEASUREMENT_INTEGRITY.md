@@ -376,3 +376,77 @@ correct **8→3（−5）** → 判定「高风险，默认关」；不得把"�
 （enable_candidate = Δ≥5 in ≥2/3 seeds ∧ loss ≤5pp in ≥2/3 seeds）→ **`enable_candidate`**；
 该结论仅为**决策支持**，生产开关默认关、enabling 需另行变更+回归，不得当作能力主张。
 seed42 的 −20pp 维持"单次运行噪声"归因（R-1 not_reproduced + S-1 复核 0pp）。
+
+## 7. 附：T 轮（2026-10-18）仪器自检与"一致地错"
+
+> T 轮在真实 LLM 配额开放后做三件事：① 把 S 轮多采样家族的 K=3 变体做完（预注册判定）；
+> ② 给 z3 SMT 见证层补首个专项评估批（A-18/Q7），并由其错误归因驱动一次真实语义修复；
+> ③ 给跑批仪器本身做审计——本轮的三个缺陷都不是"模型能力"问题，而是**测量/仪器**问题，
+> 按本文件体例登记（引用时必须与工件同引）。
+
+**T-3 示例通道 K=3 多数一致 + canonical input（2026-10-18）**：自由采样多采样家族前两轮
+（P-1.1 norm 单采样 correct 8；S-3 K=2 精确求交 correct 3）之后，T-3 用 K=3+≥2/3 多数一致
++ canonical input 约束（60 次 spec-only 调用，$0.020577，20 任务）把跨采样重叠从
+S-3 的 union 67→交集 43（保留率 64%）提升到 **union 57→交集 55（保留率 96.5%）**——
+"一致性过滤器召回代价过高"的机制在 canonical 约束下**不再成立**；但零 LLM 重放
+correct 仍 **8→5（损失 3）**，且 **`knapsack` 出现 3/3 一致的新幻觉**（`(1,[[1,1]])→0`，
+正确应为 1）→ 判定 **`high_risk_default_off`**。方法学结论：**"自洽 ≠ 正确"**；
+多数一致只能过滤"不稳定错误"，对"稳定的错误"无效；结合 R-2（后置子句过滤器 0 命中）
+与 S-3（精确求交杀真检出），四轮证据共同指向**规约表达力**是示例质量瓶颈，
+而非某个过滤器实现——下一步应按收益做"示例级独立核验（LLM 二次核验 expected 与规格）"
+与"canonical 模板保留非平凡判别样例"，不得再以"清掉 N 个幻觉"单独作质量提升主张。
+工件 `experiments/results/t_round_oracle_k3_20261018/`（22 项 SHA verify）。
+
+**T-3b SMT 见证层首个专项评估批（2026-10-18，零 LLM）**：A-18/Q7 此前是"实现在场、
+评估缺席"。本批 QuixBugs 41 缺陷程序、锚表内容寻址 50/50 命中、z3-solver 5.1.0、
+per-clause 5s，产出 184 条非空评估子句的逐子句审计：**sat 19 / unsat 0 / unknown 0 /
+timeout 0 / error 165**；`smt_witness_rate` 均值 0.088531、`smt_timeout_rate` 0.0
+→ 机制层 **pass**（层在工作、超时有界、桶可逐子句复算）。**但 reach_rate 仅 0.103261**
+——瓶颈不在求解器（到达求解器的 19 条 19/19 全 sat），而在"材料未达求解器"；
+错误归因给出最大单项 **`result_alias_not_reached`=110 条（66%）**：SpecIR 表达式通道
+后件写 `result`，而 `spec_smt` 后件自由变量域只有 `r`（见 §T-3c）。该批不做
+detection 关联（中位数二分退化，低桶为空）——**只报告"无对照"**，MDE≈16.57pp 已披露。
+工件 `experiments/results/t_round_smt_witness_20261018/`（7 项 SHA verify）。
+
+**T-3c `result`/`r` 别名缺口修复（2026-10-18）**：T-3b 的错误归因直接定位到
+`src/specs/spec_smt.py::_collect_post_constraints` 的自由变量域缺口——表达式通道后件
+普遍引用 `result`，而该层只认 `r`，导致 110 条子句**保守未达求解器**（不是求解失败）。
+修复（token 感知 AST 归一：仅当 `result` 不在签名参数中时把后件/不变式 `Name(id="result")`
+改写为 `r`，解析失败保守回退；参数名确为 `result` 时不归一）后零 LLM 复跑，见
+`experiments/results/t_round_smt_witness_aliasfix_20261018/`。**口径纪律**：T-3b 旧批保留为
+**pre-fix 基线**（不得删除/改写）；T-3c 是新配置批次，两者并列引用；logic 档启用 SMT 的
+批次在 T 轮之后 reach 提升属**行为变更**（仅对之前被保守跳过的子句新增判定，
+不改变已判定子句的结果），跨 T 轮批次不得混池。
+
+**T-4a `run_preflight.py --check-quota` 的"闸自身坏了"（2026-10-18）**：批次前置闸的
+配额探测 `quota_probe()` 引用**不存在的符号** `src.agents.llm_client.LLMClient` →
+`--check-quota` 恒 `ImportError`、结果为 `skipped=True`；strict 语义下这会让**任何**
+批次前置闸失败（B2 主批次实证：第一次启动被自身闸阻断）。修复改用真实调用入口
+（`import config` → `_get_llm_config()` → `_get_or_create_chat_client()` → `.invoke()`），
+三态语义不变（无凭证 skipped / 异常 ok=False / 成功 ok=True），修复后真实探测
+`ok=True`（1 次调用）+ 7 例 monkeypatch 回归。教训与 H2/G6 同型：**"闸判绿"不等于
+"闸在工作"——安全/前置检查自身必须有正负控**；本次修复把"导入面回归锁"写进测试
+（不得再 import 该符号）。
+
+**T-4b 跑前成本估算的 input/output 份额误设（2026-10-18）**：B2 跑前估算用"input 占 76%"
+的统一假设（沿用 S-1/R-1 的短批口径）得 ≈$4.5；而 R-P0-2 三批实测 `token_metrics`
+的 input/output 是 **22%/78%**（output 单价 4× input）→ 正确上界应为 ≈$8.8。修正件在
+seed42 完成前落盘（`t_round_b2_main_batch_20261018/PREREG_AMENDMENT_cost_estimate.md`），
+判据未改、批次未中止；最终实测成本按本批 `token_metrics` 分别计价。教训：跑前成本估算
+必须从历史批次的 `token_metrics` 实算份额推导，**不得用统一 input share 假设**——
+份额误设可直接造成 2× 低估。
+
+**T-5a 探针矩阵"去重丢弃"假绿（2026-10-18）**：`feature_matrix.probes_total=66` 与三个
+探针模块实际注册 **68** 不符——`observability-trace-redaction` / `observability-event-bus`
+同时注册于 platform 与 workflow 两个模块，运行器按 name 去重时把第二份记入
+`load_errors` 后**静默丢弃**，报告仍显示 66/66 pass（与 G6 "缺席与通过同形"同型）。
+修复：workflow 模块不再重复注册（保留同名函数供单测直调）；探针矩阵 66→68（含 T 轮
+新增 2 个 e2e 探针）、重跑后按实测刷新 BASELINE/文档。教训：**"注册数 > 可执行数"必须
+是失败信号**，不能只记 load_errors 而继续判绿。
+
+**T-5b SHA256SUMS 路径写法与工具不兼容（2026-10-18）**：`emse_docstring_anchor_20261017/`
+的清单由 `shasum` 以 `./` 前缀生成，仓内 `checksum_results.py --verify` 把 165 条全部
+误判"缺失 + 清单外新增"，而 `shasum -a 256 -c` 165/165 OK——**同一事实两种工具两种结论**，
+且被登记册当作"165 条校验通过"引用。修复：verify 端归一 `./` 前缀、`*` 二进制标记与
+Windows 反斜杠（新增 4 例回归含"真缺失仍报错"负控）。教训：清单格式不是"谁生成都行"，
+跨工具互操作必须在工具里归一，而不是在文档里注记。

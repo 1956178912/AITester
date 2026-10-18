@@ -779,3 +779,54 @@ hallucination 排除 2/2（满足第一子句），但 correct 损失 5（≥2�
 要求固定边界值/标准输入模板，提高跨采样重叠）；③ 交集只作高置信子集，与
 R-2 过滤器通过的另一部分示例合并；④ 示例级 LLM 二次核验（与一致性正交）。
 生产不建议启用（默认关）；本评估为探索性（n=20、K=2、单次），不外推。
+
+## 16. T-3 K=3 多数一致 + canonical input 约束（2026-10-18，探索性）
+
+### 16.1 动机与协议
+
+R-2（后置子句过滤器）在 90 条示例上 `dropped=0`；S-3（K=2 精确求交）排除 2/2 幻觉
+但 correct 8→3（−5）→「高风险，默认关」；S-3 登记的下一步是 **K=3 + ≥2/3 多数一致
++ canonical input 约束**（提高跨采样重叠、保留有判别力示例）。T-3 按该方向执行，预注册
+`experiments/results/t_round_oracle_k3_20261018/PREREG.md`（跑前冻结，sha256 见 PREFLIGHT）：
+
+- 采样 20 任务 × K=3（60 次 spec-only 调用，cache off，$0.020577，45.3s，回退 0）；
+- 归一化键与 S-3 相同；`majority=2`（≥2/3 一致保留）；每样本 ≤3 条；
+- canonical input 约束为冻结 prompt 追加段（`CANONICAL_INPUT_SECTION`，sha256 记录），
+  仅 3/3 样本非 ok 时回退（fail-open）；
+- 零 LLM 重放（`--reuse-examples`）两源臂（R-2 开/关）各一次，llm_calls=0。
+
+### 16.2 结果
+
+| 指标（oracle 测试级） | P-1.1 norm 基线 | T-3（R-2 开=主判定） | T-3（R-2 关，敏感性） |
+|---|---|---|---|
+| 可分类分母 | 13 | 12 | 12 |
+| correct | 8 | **5** | 5 |
+| fp | 0 | 0 | 0 |
+| silent | 3 | 6 | 6 |
+| misguided | 2 | 1 | 1 |
+| unavailable | 7 | 8 | 8 |
+
+- 跨采样重叠：union 57 → 交集 55（**保留率 96.5%**），对比 S-3 的 67→43（64%）
+  —— canonical 约束确实解除了"精确求交召回代价过高"的机制，但**没能保住 correct**。
+- 逐任务：`levenshtein`/`lis`/`max_sublist_sum` correct→silent（边界示例失去判别力）；
+  `is_valid_parenthesization` misguided→silent；`knapsack` 仍 misguided。
+- **关键新证据（一致地错）**：`knapsack` 出现 **3/3 一致的新幻觉**
+  （`(1,[[1,1]])→0`，正确应为 1）——多数一致对"稳定的错误"无效；自一致性 ≠ 正确性。
+- P-1 的 2 条旧幻觉均未在本轮任何样本中出现（2/2 排除），但**不是被多数一致过滤掉的**，
+  而是重采样未再现——不能据此把"幻觉排除"归因于过滤器。
+
+### 16.3 判定与结论
+
+按预注册规则（幻觉排除 ≥1 ∧ correct 损失 ≤1 → 有效；correct 损失 ≥2 → 高风险默认关）：
+correct 8→5、损失 **3 ≥ 2** → **`high_risk_default_off`**。生产开关
+`SPEC_ORACLE_EXAMPLES_ENABLE` **保持默认关**；本判定为探索性（n=20、单轮 K=3），不外推。
+
+**方法学结论（与 R-2/S-3 合并）**：示例质量瓶颈是**规约表达力**（锚后置子句未编码语义），
+不是某个过滤器的实现——四轮证据（P-1 幻觉 → R-2 过滤器 0 命中 → S-3 精确求交杀真检出
+→ T-3 多数一致"一致地错"）一致指向该根因。下一步按收益排序：① **示例级独立核验**
+（LLM 二次核验 expected 与规格，与一致性正交）；② canonical 模板改为"只约束输入集合、
+保留非平凡判别样例"；③ 多数一致只作高置信子集与 P-1 原示例取并集；④ 规约强化
+（关键语义 → `*_expr`）。**不得**再以"清掉 N 个幻觉"单独作质量提升主张。
+
+工件：`experiments/results/t_round_oracle_k3_20261018/`（PREREG/PREFLIGHT/SAMPLING_REPORT/
+K3_STATS/K3_REUSE_REPORT/两份重放报告/ANALYSIS_REPORT/README/SHA256SUMS，22 项 verify）。

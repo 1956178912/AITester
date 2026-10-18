@@ -1,0 +1,27 @@
+[2026-10-18T09:07:58+0800 → 2026-10-18T09:07:58+0800] experiments.smt_witness_batch v1.0.0（零 LLM）
+git_head=a93c1f60ee31b9582e0146f73e3038e6ce0f01a1 python=3.14.6 z3=5.1.0 platform=macOS-27.0.1-arm64-arm-64bit-Mach-O
+anchor_table sha256=3e90b2ad5ed365ad5ee989c73c92b84956a83c0fa8cb51368d288ae3ea53bf22
+dfspec_benchmark sha256=813c437fc53a84c1517cce234b12184e5047bf483fb982cb9382d1c61307245a
+params timeout_ms=5000 unknown_as_timeout_ratio=0.9
+tasks: total=50 primary=41 with_material=50 clauses_primary=184 clauses_all=204
+material_gap_tasks=[]
+status primary: {'sat': 19, 'unsat': 0, 'unknown': 0, 'timeout': 0, 'error': 165}
+status all50:   {'sat': 19, 'unsat': 0, 'unknown': 0, 'timeout': 0, 'error': 185}
+witness_rate mean=0.088531 median=0.0 reach_rate_pooled=0.103261 timeout_rate_pooled=0.0
+mechanism verdict=pass reason=见证率 > 0 且超时率有界且逐子句可复算（层在工作）
+association: 两桶任一为空（分桶退化），无对照，不做 detection 比较 (delta_pp=None, MDE=16.57pp)
+determinism in_process_double_solve_status_equal=True mismatches=[]
+llm_calls=0 usd=0.0 solver_ms_total=57.354 wall_clock_seconds=0.18
+artifacts:
+  ANALYSIS_REPORT.json  9820 bytes
+  PER_CLAUSE.jsonl  99226 bytes
+  PREFLIGHT.json  3679 bytes
+  PREREG.md  10464 bytes
+  README.md  8009 bytes
+  RUN_SUMMARY.log  1401 bytes
+  SHA256SUMS  567 bytes
+  TASK_LEVEL.json  212376 bytes
+cross_run_idempotency_check:
+  method: 连续两次独立运行同一命令（第二次覆盖同目录），对 PER_CLAUSE.jsonl / TASK_LEVEL.json / ANALYSIS_REPORT.json 剔除计时键（smt_solve_ms, smt_solve_ms_total, solve_ms_total, solver_cpu_ms_total, wall_clock_seconds）后逐字段比较
+  result: all_equal=True（三文件全部一致；计时键差异属求解器墙钟波动，已在 README §7 披露）
+  commands: .venv/bin/python -m experiments.smt_witness_batch（两次，第二次覆盖写）

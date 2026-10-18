@@ -78,6 +78,24 @@ class TestManifestHygiene:
         for needle in required_substrings:
             assert any(needle in rel for rel in gate.MANIFEST), f"清单缺少 S 轮工件条目: {needle}"
 
+    def test_manifest_covers_t_round_chain(self):
+        """T 轮（2026-10-18）：K=3 治理 / SMT pre-post-fix / 语义修复 / A-19 默认门 / 审计工件必须在清单。"""
+        required_substrings = (
+            "t_round_oracle_k3_20261018/PREREG.md",
+            "t_round_oracle_k3_20261018/ANALYSIS_REPORT.json",
+            "t_round_oracle_k3_20261018/SHA256SUMS",
+            "t_round_smt_witness_20261018/ANALYSIS_REPORT.json",
+            "t_round_smt_witness_aliasfix_20261018/COMPARISON.json",
+            "t_round_semantic_fixes_20261018/A19_REVALIDATION_PREREG.md",
+            "t_round_a19_default_gate_20261018/ANALYSIS.json",
+            "t_round_artifact_audit_20261018/AUDIT_REPORT.md",
+            "t_round_b1_protocol_text_20261018/PREREG_CONTINUATION.md",
+            "t_round_b1_protocol_text_20261018/DOC_RECONCILIATION.md",
+            "t_round_b1_protocol_text_20261018/SHA256SUMS",
+        )
+        for needle in required_substrings:
+            assert any(needle in rel for rel in gate.MANIFEST), f"清单缺少 T 轮工件条目: {needle}"
+
     def test_manifest_covers_df_spec_chain(self):
         """A-04：df_spec / M4 / D1 / ULT-df200 四批旗舰工件的关键件必须在清单。"""
         required_substrings = (

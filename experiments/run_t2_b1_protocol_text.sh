@@ -340,7 +340,7 @@ PYEOF
 echo "[runner] gates ..."
 "$PY" "$HELPERS/gates.py" --out "$OUT" --expect-sha "$EXPECT_SHA"
 GATES_RC=$?
-echo "[runner] gates rc=$GATES_RC（GATES.json=$( [ -f "$OUT/GATES.json" ] && echo '已生成' || echo '缺失')）" | tee -a "$RUN_SUMMARY"
+echo "[runner] gates rc=${GATES_RC}（GATES.json=$( [ -f "$OUT/GATES.json" ] && echo '已生成' || echo '缺失')）" | tee -a "$RUN_SUMMARY"
 
 if [ "$ALL_RUNS_OK" = "1" ] && [ "$GATES_RC" -eq 0 ]; then
   echo "RUNNER_EXIT=0" >> "$RUN_SUMMARY"
@@ -348,6 +348,6 @@ if [ "$ALL_RUNS_OK" = "1" ] && [ "$GATES_RC" -eq 0 ]; then
   exit 0
 else
   echo "RUNNER_EXIT=4" >> "$RUN_SUMMARY"
-  echo "[runner] 完成但有异常：ALL_RUNS_OK=$ALL_RUNS_OK GATES_RC=$GATES_RC（详见 $RUN_SUMMARY 与 $OUT/GATES.json）" >&2
+  echo "[runner] 完成但有异常：ALL_RUNS_OK=$ALL_RUNS_OK GATES_RC=${GATES_RC}（详见 $RUN_SUMMARY 与 $OUT/GATES.json）" >&2
   exit 4
 fi

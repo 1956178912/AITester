@@ -1,0 +1,354 @@
+{
+  "schema": "t2_b1_protocol_text_gates/1",
+  "generated_at_utc": "2026-10-18T01:47:39.106868+00:00",
+  "status": "pass",
+  "blocking": [],
+  "warnings": [],
+  "checks": [
+    {
+      "id": "six_meta_present",
+      "ok": true,
+      "detail": {
+        "C1_seed42": true,
+        "C2_seed42": true,
+        "C3_seed42": true,
+        "C1_seed44": true,
+        "C2_seed44": true,
+        "C3_seed44": true
+      },
+      "blocking": false
+    },
+    {
+      "id": "all_runs_ok",
+      "ok": true,
+      "detail": {
+        "C1_seed42": "ok",
+        "C2_seed42": "ok",
+        "C3_seed42": "ok",
+        "C1_seed44": "ok",
+        "C2_seed44": "ok",
+        "C3_seed44": "ok"
+      },
+      "blocking": false
+    },
+    {
+      "id": "rows_87_and_unique",
+      "ok": true,
+      "detail": {
+        "C1_seed42": {
+          "rows": 87,
+          "unique": 87
+        },
+        "C2_seed42": {
+          "rows": 87,
+          "unique": 87
+        },
+        "C3_seed42": {
+          "rows": 87,
+          "unique": 87
+        },
+        "C1_seed44": {
+          "rows": 87,
+          "unique": 87
+        },
+        "C2_seed44": {
+          "rows": 87,
+          "unique": 87
+        },
+        "C3_seed44": {
+          "rows": 87,
+          "unique": 87
+        }
+      },
+      "blocking": false
+    },
+    {
+      "id": "task_sets_identical_within_seed",
+      "ok": true,
+      "detail": {
+        "42": {
+          "equal": true,
+          "sizes": [
+            87,
+            87,
+            87
+          ]
+        },
+        "44": {
+          "equal": true,
+          "sizes": [
+            87,
+            87,
+            87
+          ]
+        }
+      },
+      "blocking": false
+    },
+    {
+      "id": "provenance_sha_matches_cut",
+      "ok": true,
+      "detail": {
+        "C1_seed42": {
+          "git_sha": "a93c1f60ee31b9582e0146f73e3038e6ce0f01a1",
+          "git_dirty": false
+        },
+        "C2_seed42": {
+          "git_sha": "a93c1f60ee31b9582e0146f73e3038e6ce0f01a1",
+          "git_dirty": false
+        },
+        "C3_seed42": {
+          "git_sha": "a93c1f60ee31b9582e0146f73e3038e6ce0f01a1",
+          "git_dirty": false
+        },
+        "C1_seed44": {
+          "git_sha": "a93c1f60ee31b9582e0146f73e3038e6ce0f01a1",
+          "git_dirty": false
+        },
+        "C2_seed44": {
+          "git_sha": "a93c1f60ee31b9582e0146f73e3038e6ce0f01a1",
+          "git_dirty": false
+        },
+        "C3_seed44": {
+          "git_sha": "a93c1f60ee31b9582e0146f73e3038e6ce0f01a1",
+          "git_dirty": false
+        }
+      },
+      "blocking": false
+    },
+    {
+      "id": "provenance_clean_tree",
+      "ok": true,
+      "detail": {
+        "C1_seed42": {
+          "git_sha": "a93c1f60ee31b9582e0146f73e3038e6ce0f01a1",
+          "git_dirty": false
+        },
+        "C2_seed42": {
+          "git_sha": "a93c1f60ee31b9582e0146f73e3038e6ce0f01a1",
+          "git_dirty": false
+        },
+        "C3_seed42": {
+          "git_sha": "a93c1f60ee31b9582e0146f73e3038e6ce0f01a1",
+          "git_dirty": false
+        },
+        "C1_seed44": {
+          "git_sha": "a93c1f60ee31b9582e0146f73e3038e6ce0f01a1",
+          "git_dirty": false
+        },
+        "C2_seed44": {
+          "git_sha": "a93c1f60ee31b9582e0146f73e3038e6ce0f01a1",
+          "git_dirty": false
+        },
+        "C3_seed44": {
+          "git_sha": "a93c1f60ee31b9582e0146f73e3038e6ce0f01a1",
+          "git_dirty": false
+        }
+      },
+      "blocking": false
+    },
+    {
+      "id": "model_fingerprint_present",
+      "ok": true,
+      "detail": {
+        "C1_seed42": true,
+        "C2_seed42": true,
+        "C3_seed42": true,
+        "C1_seed44": true,
+        "C2_seed44": true,
+        "C3_seed44": true
+      },
+      "blocking": false
+    },
+    {
+      "id": "model_fingerprint_pinned",
+      "ok": true,
+      "detail": {
+        "C1_seed42": true,
+        "C2_seed42": true,
+        "C3_seed42": true,
+        "C1_seed44": true,
+        "C2_seed44": true,
+        "C3_seed44": true
+      },
+      "blocking": false
+    },
+    {
+      "id": "intervention_section_switch_in_artifact",
+      "ok": true,
+      "detail": {
+        "C1_seed42": {
+          "DETECTION_FIRST_SECTION_ENABLE": null,
+          "cache_namespace": "t_b1_C1_42",
+          "expected_namespace": "t_b1_C1_42",
+          "cache_enabled": false,
+          "temperature": 0.0
+        },
+        "C2_seed42": {
+          "DETECTION_FIRST_SECTION_ENABLE": "false",
+          "cache_namespace": "t_b1_C2_42",
+          "expected_namespace": "t_b1_C2_42",
+          "cache_enabled": false,
+          "temperature": 0.0
+        },
+        "C3_seed42": {
+          "DETECTION_FIRST_SECTION_ENABLE": null,
+          "cache_namespace": "t_b1_C3_42",
+          "expected_namespace": "t_b1_C3_42",
+          "cache_enabled": false,
+          "temperature": 0.0
+        },
+        "C1_seed44": {
+          "DETECTION_FIRST_SECTION_ENABLE": null,
+          "cache_namespace": "t_b1_C1_44",
+          "expected_namespace": "t_b1_C1_44",
+          "cache_enabled": false,
+          "temperature": 0.0
+        },
+        "C2_seed44": {
+          "DETECTION_FIRST_SECTION_ENABLE": "false",
+          "cache_namespace": "t_b1_C2_44",
+          "expected_namespace": "t_b1_C2_44",
+          "cache_enabled": false,
+          "temperature": 0.0
+        },
+        "C3_seed44": {
+          "DETECTION_FIRST_SECTION_ENABLE": null,
+          "cache_namespace": "t_b1_C3_44",
+          "expected_namespace": "t_b1_C3_44",
+          "cache_enabled": false,
+          "temperature": 0.0
+        }
+      },
+      "blocking": false
+    },
+    {
+      "id": "cache_namespaces_isolated",
+      "ok": true,
+      "detail": {
+        "C1_seed42": {
+          "actual": "t_b1_C1_42",
+          "expected": "t_b1_C1_42"
+        },
+        "C2_seed42": {
+          "actual": "t_b1_C2_42",
+          "expected": "t_b1_C2_42"
+        },
+        "C3_seed42": {
+          "actual": "t_b1_C3_42",
+          "expected": "t_b1_C3_42"
+        },
+        "C1_seed44": {
+          "actual": "t_b1_C1_44",
+          "expected": "t_b1_C1_44"
+        },
+        "C2_seed44": {
+          "actual": "t_b1_C2_44",
+          "expected": "t_b1_C2_44"
+        },
+        "C3_seed44": {
+          "actual": "t_b1_C3_44",
+          "expected": "t_b1_C3_44"
+        }
+      },
+      "blocking": false
+    },
+    {
+      "id": "cache_disabled",
+      "ok": true,
+      "detail": {
+        "C1_seed42": false,
+        "C2_seed42": false,
+        "C3_seed42": false,
+        "C1_seed44": false,
+        "C2_seed44": false,
+        "C3_seed44": false
+      },
+      "blocking": false
+    },
+    {
+      "id": "temperature_zero",
+      "ok": true,
+      "detail": {
+        "C1_seed42": 0.0,
+        "C2_seed42": 0.0,
+        "C3_seed42": 0.0,
+        "C1_seed44": 0.0,
+        "C2_seed44": 0.0,
+        "C3_seed44": 0.0
+      },
+      "blocking": false
+    },
+    {
+      "id": "mutation_scoring_disabled_all_runs",
+      "ok": true,
+      "detail": {
+        "C1_seed42": "false",
+        "C2_seed42": "false",
+        "C3_seed42": "false",
+        "C1_seed44": "false",
+        "C2_seed44": "false",
+        "C3_seed44": "false"
+      },
+      "blocking": false
+    },
+    {
+      "id": "cost_total_under_budget_2usd",
+      "ok": true,
+      "detail": {
+        "cost_total_usd": 0.876339,
+        "per_run": {
+          "C1_seed42": 0.089914,
+          "C2_seed42": 0.168927,
+          "C3_seed42": 0.184313,
+          "C1_seed44": 0.085611,
+          "C2_seed44": 0.167431,
+          "C3_seed44": 0.180143
+        }
+      },
+      "blocking": false
+    },
+    {
+      "id": "wall_total_under_90min",
+      "ok": true,
+      "detail": {
+        "wall_total_seconds": 1281,
+        "per_run": {
+          "C1_seed42": 156,
+          "C2_seed42": 227,
+          "C3_seed42": 249,
+          "C1_seed44": 149,
+          "C2_seed44": 227,
+          "C3_seed44": 273
+        }
+      },
+      "blocking": false
+    },
+    {
+      "id": "prereg_hash_unchanged",
+      "ok": true,
+      "detail": {
+        "preflight": "5761901e868672ba15f8884a9b62108ec3c5c25306c41158d85600236acaab7f",
+        "now": "5761901e868672ba15f8884a9b62108ec3c5c25306c41158d85600236acaab7f"
+      },
+      "blocking": false
+    },
+    {
+      "id": "old_baseline_recomputable",
+      "ok": true,
+      "detail": {
+        "plain_llm": 9,
+        "rt1": 10,
+        "df_full": 27
+      },
+      "blocking": false
+    }
+  ],
+  "evidence_quality": {
+    "clean_tree_and_cut_sha": true,
+    "model_fingerprint_present": true,
+    "model_fingerprint_pinned_all": true,
+    "note": "pinned=false 表示 provider 未返回 system_fingerprint：指纹块在场但未锁定模型快照，不得称『指纹级（pinned）』",
+    "execution_amendment": "PREREG_CONTINUATION.md：判据未改；首跑因批后 mutation/MDO 辅助测量墙钟超预期被中止（日志见 _superseded_first_attempt/，无主终点数据损失），六格以 ENABLE_MUTATION_SCORING=false 统一重跑"
+  }
+}

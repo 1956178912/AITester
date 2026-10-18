@@ -1,0 +1,1539 @@
+{
+  "experiment": "S-2 / B8 / A-19 coverage-stall ablation with deterministic failure injection",
+  "created_epoch": 1792286559.440238,
+  "out_dir": "/Users/wangchenyu/Workspace/AITester/experiments/results/t_round_a19_default_gate_20261018",
+  "prereg": {
+    "path": "/Users/wangchenyu/Workspace/AITester/experiments/results/t_round_a19_default_gate_20261018/PREREG.md",
+    "sha256": "83a8a645732efe6fddb168227e8efbb0833dfc0fd136057030350126bc31368c"
+  },
+  "isolation": {
+    "mechanism": "experiment-layer in-process monkeypatch only (no production file changes)",
+    "root": "/Users/wangchenyu/Workspace/AITester-t-a19-962c77e",
+    "git_before_on": {
+      "root": "/Users/wangchenyu/Workspace/AITester-t-a19-962c77e",
+      "head": "962c77e16b14308295e20e58d563544c214b8faf",
+      "status_porcelain": "",
+      "diff_stat": "",
+      "diff_name_only": "",
+      "dirty_lines": 0
+    },
+    "git_after_on": {
+      "root": "/Users/wangchenyu/Workspace/AITester-t-a19-962c77e",
+      "head": "962c77e16b14308295e20e58d563544c214b8faf",
+      "status_porcelain": "",
+      "diff_stat": "",
+      "diff_name_only": "",
+      "dirty_lines": 0
+    },
+    "git_before_off": {
+      "root": "/Users/wangchenyu/Workspace/AITester-t-a19-962c77e",
+      "head": "962c77e16b14308295e20e58d563544c214b8faf",
+      "status_porcelain": "",
+      "diff_stat": "",
+      "diff_name_only": "",
+      "dirty_lines": 0
+    },
+    "git_after_off": {
+      "root": "/Users/wangchenyu/Workspace/AITester-t-a19-962c77e",
+      "head": "962c77e16b14308295e20e58d563544c214b8faf",
+      "status_porcelain": "",
+      "diff_stat": "",
+      "diff_name_only": "",
+      "dirty_lines": 0
+    },
+    "patched_targets": [
+      "src.agents.executor.ExecutorAgent.execute @ /Users/wangchenyu/Workspace/AITester-t-a19-962c77e/src/agents/executor.py",
+      "src.graph.nodes._executor_node @ /Users/wangchenyu/Workspace/AITester-t-a19-962c77e/src/graph/nodes.py",
+      "src.graph.workflow._executor_node @ /Users/wangchenyu/Workspace/AITester-t-a19-962c77e/src/graph/workflow.py"
+    ],
+    "production_diff": "git status/diff 前后均为空（见 git_* 字段与 ISOLATION.json）"
+  },
+  "price": {
+    "source": "https://api-docs.deepseek.com/quick_start/pricing",
+    "currency": "USD",
+    "as_of": "2026-10-06",
+    "model": "deepseek-flash",
+    "input_per_mtok": 0.3,
+    "output_per_mtok": 1.2
+  },
+  "protocol": {
+    "root_head": "962c77e16b14308295e20e58d563544c214b8faf",
+    "dataset": "synthetic",
+    "tasks": 10,
+    "seed": 42,
+    "profile": "fast",
+    "parallel": 4,
+    "inject_rounds": 3,
+    "watchdog_seconds": 1500.0,
+    "arms": {
+      "on": "COVERAGE_STALL_DETECT_ENABLE=true",
+      "off": "COVERAGE_STALL_DETECT_ENABLE=false"
+    },
+    "extra_env": {}
+  },
+  "arms": {
+    "on": {
+      "n_tasks": 10,
+      "batch_path": "/Users/wangchenyu/Workspace/AITester/experiments/results/t_round_a19_default_gate_20261018/arm_on/benchmark_synthetic_20261018_092238.json",
+      "batch_sha256": "397d669bcd22d7b0f0152708cb8ec1c47cfc28379dd54285677107536624cfed",
+      "wall_seconds": 55.21,
+      "token_metrics": {
+        "total_input_tokens": 62327,
+        "total_output_tokens": 25508,
+        "total_tokens": 87835,
+        "total_llm_calls": 60,
+        "total_cache_hits": 0,
+        "total_cache_avoided_tokens": 0,
+        "cache_hit_rate_pct": 0.0,
+        "uncached_theoretical_tokens": 87835,
+        "avg_tokens_per_task": 8783.5,
+        "output_share_pct": 29.04,
+        "avg_output_per_task": 2550.8,
+        "avg_output_per_call": 425.13
+      },
+      "cost_usd_standard_price": 0.049308,
+      "stop_reason_counts": {
+        "coverage_stall": 10
+      },
+      "coverage_stall_count": 10,
+      "coverage_stall_rate": 1.0,
+      "iterations_mean": 1.9,
+      "iterations_median": 2,
+      "iterations_max": 2,
+      "coverage_mean": 0.0,
+      "passed_count": 0,
+      "detection": {
+        "measurable": 10,
+        "positive": 0,
+        "rate": 0.0
+      },
+      "crash_rows": [],
+      "crash_count": 0,
+      "injection": {
+        "records": 30,
+        "injected_rounds": 30,
+        "real_rounds": 0,
+        "tasks_with_injection": 10,
+        "tasks_total": 10
+      },
+      "provenance": {
+        "git_sha": "962c77e16b14308295e20e58d563544c214b8faf",
+        "git_dirty": false,
+        "model_name": "deepseek-flash",
+        "coverage_stall_env": "true",
+        "cache_namespace": "s2_b8_injection_on"
+      },
+      "per_task": [
+        {
+          "task_id": "synthetic__task_0001",
+          "stop_reason": "coverage_stall",
+          "iterations": 1,
+          "coverage": 0.0,
+          "passed": false,
+          "detection_rate": 0.0,
+          "error_category": "patch_validation_failed",
+          "elapsed_seconds": 12.01,
+          "token_usage": {
+            "input_tokens": 4878,
+            "output_tokens": 2188,
+            "total_tokens": 7066,
+            "llm_calls": 5,
+            "cache_hits": 0,
+            "cache_avoided_tokens": 0,
+            "by_model": {
+              "deepseek-flash": 7066
+            }
+          },
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            }
+          ]
+        },
+        {
+          "task_id": "synthetic__task_0002",
+          "stop_reason": "coverage_stall",
+          "iterations": 2,
+          "coverage": 0.0,
+          "passed": false,
+          "detection_rate": 0.0,
+          "error_category": "patch_validation_failed",
+          "elapsed_seconds": 12.81,
+          "token_usage": {
+            "input_tokens": 5782,
+            "output_tokens": 1846,
+            "total_tokens": 7628,
+            "llm_calls": 6,
+            "cache_hits": 0,
+            "cache_avoided_tokens": 0,
+            "by_model": {
+              "deepseek-flash": 7628
+            }
+          },
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            }
+          ]
+        },
+        {
+          "task_id": "synthetic__task_0003",
+          "stop_reason": "coverage_stall",
+          "iterations": 2,
+          "coverage": 0.0,
+          "passed": false,
+          "detection_rate": 0.0,
+          "error_category": "patch_validation_failed",
+          "elapsed_seconds": 18.05,
+          "token_usage": {
+            "input_tokens": 7375,
+            "output_tokens": 3120,
+            "total_tokens": 10495,
+            "llm_calls": 6,
+            "cache_hits": 0,
+            "cache_avoided_tokens": 0,
+            "by_model": {
+              "deepseek-flash": 10495
+            }
+          },
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            }
+          ]
+        },
+        {
+          "task_id": "synthetic__task_0000",
+          "stop_reason": "coverage_stall",
+          "iterations": 2,
+          "coverage": 0.0,
+          "passed": false,
+          "detection_rate": 0.0,
+          "error_category": "assertion",
+          "elapsed_seconds": 14.01,
+          "token_usage": {
+            "input_tokens": 6155,
+            "output_tokens": 2120,
+            "total_tokens": 8275,
+            "llm_calls": 6,
+            "cache_hits": 0,
+            "cache_avoided_tokens": 0,
+            "by_model": {
+              "deepseek-flash": 8275
+            }
+          },
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.933
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.933
+              }
+            }
+          ]
+        },
+        {
+          "task_id": "synthetic__task_0005",
+          "stop_reason": "coverage_stall",
+          "iterations": 2,
+          "coverage": 0.0,
+          "passed": false,
+          "detection_rate": 0.0,
+          "error_category": "patch_validation_failed",
+          "elapsed_seconds": 15.06,
+          "token_usage": {
+            "input_tokens": 6533,
+            "output_tokens": 2608,
+            "total_tokens": 9141,
+            "llm_calls": 6,
+            "cache_hits": 0,
+            "cache_avoided_tokens": 0,
+            "by_model": {
+              "deepseek-flash": 9141
+            }
+          },
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            }
+          ]
+        },
+        {
+          "task_id": "synthetic__task_0004",
+          "stop_reason": "coverage_stall",
+          "iterations": 2,
+          "coverage": 0.0,
+          "passed": false,
+          "detection_rate": 0.0,
+          "error_category": "patch_validation_failed",
+          "elapsed_seconds": 18.59,
+          "token_usage": {
+            "input_tokens": 6721,
+            "output_tokens": 3811,
+            "total_tokens": 10532,
+            "llm_calls": 6,
+            "cache_hits": 0,
+            "cache_avoided_tokens": 0,
+            "by_model": {
+              "deepseek-flash": 10532
+            }
+          },
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            }
+          ]
+        },
+        {
+          "task_id": "synthetic__task_0006",
+          "stop_reason": "coverage_stall",
+          "iterations": 2,
+          "coverage": 0.0,
+          "passed": false,
+          "detection_rate": 0.0,
+          "error_category": "patch_validation_failed",
+          "elapsed_seconds": 14.89,
+          "token_usage": {
+            "input_tokens": 7534,
+            "output_tokens": 2720,
+            "total_tokens": 10254,
+            "llm_calls": 7,
+            "cache_hits": 0,
+            "cache_avoided_tokens": 0,
+            "by_model": {
+              "deepseek-flash": 10254
+            }
+          },
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            }
+          ]
+        },
+        {
+          "task_id": "synthetic__task_0007",
+          "stop_reason": "coverage_stall",
+          "iterations": 2,
+          "coverage": 0.0,
+          "passed": false,
+          "detection_rate": 0.0,
+          "error_category": "patch_validation_failed",
+          "elapsed_seconds": 14.42,
+          "token_usage": {
+            "input_tokens": 4900,
+            "output_tokens": 2237,
+            "total_tokens": 7137,
+            "llm_calls": 6,
+            "cache_hits": 0,
+            "cache_avoided_tokens": 0,
+            "by_model": {
+              "deepseek-flash": 7137
+            }
+          },
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            }
+          ]
+        },
+        {
+          "task_id": "synthetic__task_0008",
+          "stop_reason": "coverage_stall",
+          "iterations": 2,
+          "coverage": 0.0,
+          "passed": false,
+          "detection_rate": 0.0,
+          "error_category": "patch_validation_failed",
+          "elapsed_seconds": 12.43,
+          "token_usage": {
+            "input_tokens": 5977,
+            "output_tokens": 1931,
+            "total_tokens": 7908,
+            "llm_calls": 6,
+            "cache_hits": 0,
+            "cache_avoided_tokens": 0,
+            "by_model": {
+              "deepseek-flash": 7908
+            }
+          },
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            }
+          ]
+        },
+        {
+          "task_id": "synthetic__task_0009",
+          "stop_reason": "coverage_stall",
+          "iterations": 2,
+          "coverage": 0.0,
+          "passed": false,
+          "detection_rate": 0.0,
+          "error_category": "patch_validation_failed",
+          "elapsed_seconds": 16.16,
+          "token_usage": {
+            "input_tokens": 6472,
+            "output_tokens": 2927,
+            "total_tokens": 9399,
+            "llm_calls": 6,
+            "cache_hits": 0,
+            "cache_avoided_tokens": 0,
+            "by_model": {
+              "deepseek-flash": 9399
+            }
+          },
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "off": {
+      "n_tasks": 10,
+      "batch_path": "/Users/wangchenyu/Workspace/AITester/experiments/results/t_round_a19_default_gate_20261018/arm_off/benchmark_synthetic_20261018_092236.json",
+      "batch_sha256": "b03e48f64673c625945533acf8824160f29cdc2b64a5e3b0aa2cbc4641e9f6f9",
+      "wall_seconds": 52.53,
+      "token_metrics": {
+        "total_input_tokens": 62186,
+        "total_output_tokens": 25030,
+        "total_tokens": 87216,
+        "total_llm_calls": 62,
+        "total_cache_hits": 0,
+        "total_cache_avoided_tokens": 0,
+        "cache_hit_rate_pct": 0.0,
+        "uncached_theoretical_tokens": 87216,
+        "avg_tokens_per_task": 8721.6,
+        "output_share_pct": 28.7,
+        "avg_output_per_task": 2503.0,
+        "avg_output_per_call": 403.71
+      },
+      "cost_usd_standard_price": 0.048692,
+      "stop_reason_counts": {
+        "max_iterations": 1,
+        "skip_debugger_repair_invalid": 9
+      },
+      "coverage_stall_count": 0,
+      "coverage_stall_rate": 0.0,
+      "iterations_mean": 2.1,
+      "iterations_median": 2,
+      "iterations_max": 3,
+      "coverage_mean": 10.0,
+      "passed_count": 0,
+      "detection": {
+        "measurable": 10,
+        "positive": 0,
+        "rate": 0.0
+      },
+      "crash_rows": [],
+      "crash_count": 0,
+      "injection": {
+        "records": 31,
+        "injected_rounds": 30,
+        "real_rounds": 1,
+        "tasks_with_injection": 10,
+        "tasks_total": 10
+      },
+      "provenance": {
+        "git_sha": "962c77e16b14308295e20e58d563544c214b8faf",
+        "git_dirty": false,
+        "model_name": "deepseek-flash",
+        "coverage_stall_env": "false",
+        "cache_namespace": "s2_b8_injection_off"
+      },
+      "per_task": [
+        {
+          "task_id": "synthetic__task_0001",
+          "stop_reason": "skip_debugger_repair_invalid",
+          "iterations": 2,
+          "coverage": 0.0,
+          "passed": false,
+          "detection_rate": 0.0,
+          "error_category": "patch_validation_failed",
+          "elapsed_seconds": 12.74,
+          "token_usage": {
+            "input_tokens": 5394,
+            "output_tokens": 1866,
+            "total_tokens": 7260,
+            "llm_calls": 6,
+            "cache_hits": 0,
+            "cache_avoided_tokens": 0,
+            "by_model": {
+              "deepseek-flash": 7260
+            }
+          },
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            }
+          ]
+        },
+        {
+          "task_id": "synthetic__task_0000",
+          "stop_reason": "skip_debugger_repair_invalid",
+          "iterations": 2,
+          "coverage": 0.0,
+          "passed": false,
+          "detection_rate": 0.0,
+          "error_category": "patch_validation_failed",
+          "elapsed_seconds": 13.3,
+          "token_usage": {
+            "input_tokens": 5831,
+            "output_tokens": 2048,
+            "total_tokens": 7879,
+            "llm_calls": 6,
+            "cache_hits": 0,
+            "cache_avoided_tokens": 0,
+            "by_model": {
+              "deepseek-flash": 7879
+            }
+          },
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            }
+          ]
+        },
+        {
+          "task_id": "synthetic__task_0002",
+          "stop_reason": "skip_debugger_repair_invalid",
+          "iterations": 2,
+          "coverage": 0.0,
+          "passed": false,
+          "detection_rate": 0.0,
+          "error_category": "patch_validation_failed",
+          "elapsed_seconds": 13.18,
+          "token_usage": {
+            "input_tokens": 5651,
+            "output_tokens": 1811,
+            "total_tokens": 7462,
+            "llm_calls": 6,
+            "cache_hits": 0,
+            "cache_avoided_tokens": 0,
+            "by_model": {
+              "deepseek-flash": 7462
+            }
+          },
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            }
+          ]
+        },
+        {
+          "task_id": "synthetic__task_0006",
+          "stop_reason": "skip_debugger_repair_invalid",
+          "iterations": 2,
+          "coverage": 0.0,
+          "passed": false,
+          "detection_rate": 0.0,
+          "error_category": "patch_validation_failed",
+          "elapsed_seconds": 11.51,
+          "token_usage": {
+            "input_tokens": 6147,
+            "output_tokens": 1993,
+            "total_tokens": 8140,
+            "llm_calls": 6,
+            "cache_hits": 0,
+            "cache_avoided_tokens": 0,
+            "by_model": {
+              "deepseek-flash": 8140
+            }
+          },
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            }
+          ]
+        },
+        {
+          "task_id": "synthetic__task_0003",
+          "stop_reason": "max_iterations",
+          "iterations": 3,
+          "coverage": 100.0,
+          "passed": false,
+          "detection_rate": 0.0,
+          "error_category": "assertion",
+          "elapsed_seconds": 24.18,
+          "token_usage": {
+            "input_tokens": 9602,
+            "output_tokens": 3976,
+            "total_tokens": 13578,
+            "llm_calls": 8,
+            "cache_hits": 0,
+            "cache_avoided_tokens": 0,
+            "by_model": {
+              "deepseek-flash": 13578
+            }
+          },
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.8
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.8
+              }
+            },
+            {
+              "iteration": 3,
+              "passed": false,
+              "coverage": 100.0,
+              "coverage_delta": 100.0,
+              "elapsed_seconds": 1.46,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.951,
+                "simplicity": 0.833
+              }
+            }
+          ]
+        },
+        {
+          "task_id": "synthetic__task_0005",
+          "stop_reason": "skip_debugger_repair_invalid",
+          "iterations": 2,
+          "coverage": 0.0,
+          "passed": false,
+          "detection_rate": 0.0,
+          "error_category": "patch_validation_failed",
+          "elapsed_seconds": 15.19,
+          "token_usage": {
+            "input_tokens": 6280,
+            "output_tokens": 2460,
+            "total_tokens": 8740,
+            "llm_calls": 6,
+            "cache_hits": 0,
+            "cache_avoided_tokens": 0,
+            "by_model": {
+              "deepseek-flash": 8740
+            }
+          },
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            }
+          ]
+        },
+        {
+          "task_id": "synthetic__task_0004",
+          "stop_reason": "skip_debugger_repair_invalid",
+          "iterations": 2,
+          "coverage": 0.0,
+          "passed": false,
+          "detection_rate": 0.0,
+          "error_category": "patch_validation_failed",
+          "elapsed_seconds": 18.83,
+          "token_usage": {
+            "input_tokens": 6759,
+            "output_tokens": 3751,
+            "total_tokens": 10510,
+            "llm_calls": 6,
+            "cache_hits": 0,
+            "cache_avoided_tokens": 0,
+            "by_model": {
+              "deepseek-flash": 10510
+            }
+          },
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            }
+          ]
+        },
+        {
+          "task_id": "synthetic__task_0008",
+          "stop_reason": "skip_debugger_repair_invalid",
+          "iterations": 2,
+          "coverage": 0.0,
+          "passed": false,
+          "detection_rate": 0.0,
+          "error_category": "patch_validation_failed",
+          "elapsed_seconds": 13.26,
+          "token_usage": {
+            "input_tokens": 5975,
+            "output_tokens": 2100,
+            "total_tokens": 8075,
+            "llm_calls": 6,
+            "cache_hits": 0,
+            "cache_avoided_tokens": 0,
+            "by_model": {
+              "deepseek-flash": 8075
+            }
+          },
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            }
+          ]
+        },
+        {
+          "task_id": "synthetic__task_0007",
+          "stop_reason": "skip_debugger_repair_invalid",
+          "iterations": 2,
+          "coverage": 0.0,
+          "passed": false,
+          "detection_rate": 0.0,
+          "error_category": "patch_validation_failed",
+          "elapsed_seconds": 14.57,
+          "token_usage": {
+            "input_tokens": 4862,
+            "output_tokens": 2310,
+            "total_tokens": 7172,
+            "llm_calls": 6,
+            "cache_hits": 0,
+            "cache_avoided_tokens": 0,
+            "by_model": {
+              "deepseek-flash": 7172
+            }
+          },
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            }
+          ]
+        },
+        {
+          "task_id": "synthetic__task_0009",
+          "stop_reason": "skip_debugger_repair_invalid",
+          "iterations": 2,
+          "coverage": 0.0,
+          "passed": false,
+          "detection_rate": 0.0,
+          "error_category": "patch_validation_failed",
+          "elapsed_seconds": 14.78,
+          "token_usage": {
+            "input_tokens": 5685,
+            "output_tokens": 2715,
+            "total_tokens": 8400,
+            "llm_calls": 6,
+            "cache_hits": 0,
+            "cache_avoided_tokens": 0,
+            "by_model": {
+              "deepseek-flash": 8400
+            }
+          },
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "harness_smoke": [],
+  "paired": {
+    "n_pairs": 10,
+    "delta_iterations_mean_off_minus_on": 0.2,
+    "iterations_saved_off_minus_on": 0.2,
+    "direction": {
+      "off_gt_on": 2,
+      "equal": 8,
+      "off_lt_on": 0
+    },
+    "rows": [
+      {
+        "task_id": "synthetic__task_0000",
+        "iterations_on": 2,
+        "iterations_off": 2,
+        "delta_iterations_off_minus_on": 0,
+        "stop_reason_on": "coverage_stall",
+        "stop_reason_off": "skip_debugger_repair_invalid",
+        "coverage_on": 0.0,
+        "coverage_off": 0.0,
+        "injected_rounds_on": 3,
+        "injected_rounds_off": 3
+      },
+      {
+        "task_id": "synthetic__task_0001",
+        "iterations_on": 1,
+        "iterations_off": 2,
+        "delta_iterations_off_minus_on": 1,
+        "stop_reason_on": "coverage_stall",
+        "stop_reason_off": "skip_debugger_repair_invalid",
+        "coverage_on": 0.0,
+        "coverage_off": 0.0,
+        "injected_rounds_on": 3,
+        "injected_rounds_off": 3
+      },
+      {
+        "task_id": "synthetic__task_0002",
+        "iterations_on": 2,
+        "iterations_off": 2,
+        "delta_iterations_off_minus_on": 0,
+        "stop_reason_on": "coverage_stall",
+        "stop_reason_off": "skip_debugger_repair_invalid",
+        "coverage_on": 0.0,
+        "coverage_off": 0.0,
+        "injected_rounds_on": 3,
+        "injected_rounds_off": 3
+      },
+      {
+        "task_id": "synthetic__task_0003",
+        "iterations_on": 2,
+        "iterations_off": 3,
+        "delta_iterations_off_minus_on": 1,
+        "stop_reason_on": "coverage_stall",
+        "stop_reason_off": "max_iterations",
+        "coverage_on": 0.0,
+        "coverage_off": 100.0,
+        "injected_rounds_on": 3,
+        "injected_rounds_off": 3
+      },
+      {
+        "task_id": "synthetic__task_0004",
+        "iterations_on": 2,
+        "iterations_off": 2,
+        "delta_iterations_off_minus_on": 0,
+        "stop_reason_on": "coverage_stall",
+        "stop_reason_off": "skip_debugger_repair_invalid",
+        "coverage_on": 0.0,
+        "coverage_off": 0.0,
+        "injected_rounds_on": 3,
+        "injected_rounds_off": 3
+      },
+      {
+        "task_id": "synthetic__task_0005",
+        "iterations_on": 2,
+        "iterations_off": 2,
+        "delta_iterations_off_minus_on": 0,
+        "stop_reason_on": "coverage_stall",
+        "stop_reason_off": "skip_debugger_repair_invalid",
+        "coverage_on": 0.0,
+        "coverage_off": 0.0,
+        "injected_rounds_on": 3,
+        "injected_rounds_off": 3
+      },
+      {
+        "task_id": "synthetic__task_0006",
+        "iterations_on": 2,
+        "iterations_off": 2,
+        "delta_iterations_off_minus_on": 0,
+        "stop_reason_on": "coverage_stall",
+        "stop_reason_off": "skip_debugger_repair_invalid",
+        "coverage_on": 0.0,
+        "coverage_off": 0.0,
+        "injected_rounds_on": 3,
+        "injected_rounds_off": 3
+      },
+      {
+        "task_id": "synthetic__task_0007",
+        "iterations_on": 2,
+        "iterations_off": 2,
+        "delta_iterations_off_minus_on": 0,
+        "stop_reason_on": "coverage_stall",
+        "stop_reason_off": "skip_debugger_repair_invalid",
+        "coverage_on": 0.0,
+        "coverage_off": 0.0,
+        "injected_rounds_on": 3,
+        "injected_rounds_off": 3
+      },
+      {
+        "task_id": "synthetic__task_0008",
+        "iterations_on": 2,
+        "iterations_off": 2,
+        "delta_iterations_off_minus_on": 0,
+        "stop_reason_on": "coverage_stall",
+        "stop_reason_off": "skip_debugger_repair_invalid",
+        "coverage_on": 0.0,
+        "coverage_off": 0.0,
+        "injected_rounds_on": 3,
+        "injected_rounds_off": 3
+      },
+      {
+        "task_id": "synthetic__task_0009",
+        "iterations_on": 2,
+        "iterations_off": 2,
+        "delta_iterations_off_minus_on": 0,
+        "stop_reason_on": "coverage_stall",
+        "stop_reason_off": "skip_debugger_repair_invalid",
+        "coverage_on": 0.0,
+        "coverage_off": 0.0,
+        "injected_rounds_on": 3,
+        "injected_rounds_off": 3
+      }
+    ]
+  },
+  "verdict": {
+    "classification": "not_confirmed",
+    "criteria": {
+      "primary": {
+        "rule": "on.coverage_stall_rate >= 0.8 AND off.coverage_stall_count == 0",
+        "on_stall_rate": 1.0,
+        "on_stall_count": 10,
+        "off_stall_rate": 0.0,
+        "off_stall_count": 0,
+        "met": true
+      },
+      "secondary": {
+        "rule": "iterations_saved(off_mean-on_mean) >= 1.0 AND on/off crash_count == 0",
+        "iterations_saved": 0.2,
+        "on_crash": 0,
+        "off_crash": 0,
+        "met": false
+      },
+      "harness": {
+        "rule": "on arm injection coverage: tasks_with_injection >= 80% 且 injected_rounds > 0",
+        "on_tasks_with_injection": 10,
+        "on_tasks_total": 10,
+        "on_injected_rounds": 30,
+        "met": true
+      }
+    },
+    "cost_total_usd": 0.098,
+    "wall_total_seconds": 107.74
+  }
+}

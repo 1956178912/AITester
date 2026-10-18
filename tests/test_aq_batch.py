@@ -117,7 +117,9 @@ class TestArtifactsManifestE7:
         # 报告 / oracle 独立判读 / 真实 LLM 重型探针证据）；O 轮（2026-10-18）：90 → 99
         # （oracle 仪器治疗 / 跨文件真实路径 / oracle-enabled 二臂验证）；P 轮（2026-10-18）：
         # 99 → 106（示例通道 raw/norm 双报告 / B8 消融）。漏登记属新缺口，故仍锁精确长度。
-        assert len(module.MANIFEST) == 133
+        # T 轮（2026-10-18）：133 → 163（K=3 示例治理 / SMT pre-post-fix / 语义修复汇总 /
+        # A-19 默认门复验 / 文档审计 / B1 三格复现链 / 工件入库门禁扩面登记）。
+        assert len(module.MANIFEST) == 163
 
 
 class TestSurveyPackagingErrata:

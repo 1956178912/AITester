@@ -1,0 +1,35 @@
+T3（2026-10-18）oracle 示例通道 K=3 多数一致 + canonical input 约束 —— 运行摘要
+====================================================================================
+生成时间（UTC）：2026-10-18T01:13:56+00:00
+预注册：PREREG.md sha256=c4619018f6dd2119597f870c1e069ddcfdc0d6fa0378fd21f47b84842a38b5b4（PREFLIGHT 冻结）
+
+[命令]
+  ① 预检（零 LLM）：.venv/bin/python experiments/results/t_round_oracle_k3_20261018/_helpers/run_k3_sampling.py --dry-run
+  ② 真实采样（60 次；cache off）：AITESTER_LLM_CACHE=0 .venv/bin/python experiments/results/t_round_oracle_k3_20261018/_helpers/run_k3_sampling.py
+  ③ 重放臂 1（R-2 默认开，零 LLM）：SPEC_ORACLE_EXEC_ENABLE=true SPEC_ORACLE_EXAMPLES_ENABLE=true nice -n 15 .venv/bin/python -m experiments.oracle_examples_replay --out <OUT> --reuse-examples <OUT>/K3_REUSE_REPORT.json --report-name ORACLE_EXAMPLES_REPORT_k3_default --skip-markdown --limit 20 --jobs 4 --per-test-timeout 1 --file-timeout 180
+  ④ 重放臂 2（R-2 关，零 LLM）：同 ③ + SPEC_EXAMPLES_SELF_VALIDATE=false --report-name ORACLE_EXAMPLES_REPORT_k3_r2off
+  ⑤ 分析/README：.venv/bin/python experiments/results/t_round_oracle_k3_20261018/_helpers/analyze_k3.py
+  ⑥ 校验和：.venv/bin/python scripts/gates/checksum_results.py --write/--verify --results-dir experiments/results/t_round_oracle_k3_20261018
+
+[采样]
+  任务 20；K=3、majority=2（≥2/3）、每样本≤3 条、canonical_inputs=True
+  LLM 调用 60；input/output tokens=56385/3051；估算成本 $0.020577（预算 ≤$0.05）；墙钟 45.301s
+  union 57 → intersection 55（丢弃 2）；失败回退任务 0
+  P-1 两个 hallucination 在 3 个样本中的出现：{'quixbugs__is_valid_parenthesization': {'present_in_samples': [False, False, False], 'n_samples_present': 0}, 'quixbugs__knapsack': {'present_in_samples': [False, False, False], 'n_samples_present': 0}}
+  默认 prompt（canonical=False）与 S-3 工件 prompt_sha256 逐任务相同：20/20
+
+[零 LLM 重放]
+  臂 1（R-2 默认开，主判定）：correct=5 fp=0 silent=6 misguided=1 unavailable=8 可分类=12 墙钟≈263.046s
+  臂 2（R-2 关，敏感性）：correct=5 fp=0 silent=6 misguided=1 unavailable=8 可分类=12 墙钟≈261.844s
+  两臂逐任务是否一致：True
+
+[判定：PREREG 冻结规则]
+  hallucination 排除 2/2；correct 8→5（损失 3）；misguided 2→1
+  verdict = high_risk_default_off（高风险，默认关）—— correct 8→5（损失 3 ≥2）→ 触发预注册规则 2
+
+[限制]
+  n=20、单次 K=3、单次零 LLM 重放 ×2 臂；探索性/非 confirmatory；与 B2 主批次并发运行（重放 nice -n 15）
+
+[helper 版本说明]
+  采样实际执行版本 _helpers/run_k3_sampling.py sha256=da2eb72fe49f37f118549325f374e86a35ec241f015797b110f659a9c2e106c9（PREFLIGHT 记录）
+  当前文件 sha256=b996a19c36be49e3606589c8a7001fb79761a67b4fe7e541924137ac6ccd093b（采样执行后对该 helper 做过一次 ruff format：纯格式，无行为变化）

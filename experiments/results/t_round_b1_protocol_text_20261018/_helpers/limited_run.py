@@ -1,0 +1,37 @@
+#!/usr/bin/env python3
+"""看门狗：限制单跑墙钟；超时对进程组 SIGTERM → 30 s 后 SIGKILL（不静默挂死）。
+
+用法：limited_run.py <limit_seconds> <cmd> [args...]
+退出码：子进程退出码；超时 124。
+"""
+import os
+import signal
+import subprocess
+import sys
+import time
+
+limit = float(sys.argv[1])
+cmd = sys.argv[2:]
+t0 = time.time()
+proc = subprocess.Popen(cmd, start_new_session=True)
+try:
+    rc = proc.wait(timeout=limit)
+except subprocess.TimeoutExpired:
+    print(f"\n[watchdog] 超过单跑墙钟上限 {limit:.0f}s：SIGTERM 进程组…", file=sys.stderr, flush=True)
+    try:
+        os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+    except ProcessLookupError:
+        pass
+    try:
+        rc = proc.wait(timeout=30)
+    except subprocess.TimeoutExpired:
+        print("[watchdog] SIGTERM 未退，SIGKILL 进程组…", file=sys.stderr, flush=True)
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        rc = proc.wait(timeout=30)
+    print(f"[watchdog] 超时终止 rc={rc} wall={time.time() - t0:.1f}s", file=sys.stderr, flush=True)
+    sys.exit(124)
+print(f"[watchdog] rc={rc} wall={time.time() - t0:.1f}s", file=sys.stderr, flush=True)
+sys.exit(rc)

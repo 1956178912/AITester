@@ -1,16 +1,131 @@
 > **语言 / Language**：[English](CHANGELOG.en.md) | 简体中文（本文）
 >
-> Last updated: 2026-10-18（S 轮：**A-19 停滞检测失败注入重做判定 confirmed**（stall 10/10、省 1.2 轮；并披露默认协议下 repair-invalid 抢占使 A-19 只改标签）+ **多采样示例自一致性判定 高风险默认关**（2/2 幻觉被清但 correct −5） + **seed-44 复现批与 3-seed 生产化决策**（结果见 CHANGELOG）；R/Q/P/O/N/M/L/K 轮同日登记）
+> Last updated: 2026-10-18（T 轮：**B2 主批次锁指纹复现** + **B1 协议文本指纹级复现判定 confirmed（文本净效应 +16.1/+19.5pp，采样效应可忽略）** + **oracle K=3 示例治理判定 high_risk_default_off（"自洽≠正确"）** + **z3 SMT 见证层首个专项批 pass 及 result/r 别名修复** + **A-19 抢占优先级修复/回滚 schema/preflight 探针修复** + **文档↔工件审计 P0=4/P1=17/P2=14 收口**；S/R/Q/P/O/N/M/L/K 轮同日登记）
 
 # Changelog
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [Unreleased] — 2026-10-18 T 轮（真实 LLM 配额解锁：B2 锁指纹复现 + B1 协议文本指纹级复现 + 语义修复 + 仪器自检）
+
+> T 轮在用户授权充足 LLM 配额后，回答此前**因配额被阻断**的问题，并修掉一轮"探针驱动"发现的真实语义/仪器缺陷：
+> ① **B2 主批次锁指纹复现**（3 seed × 3 臂 × 87 任务，干净树 + `model_fingerprint.pinned=true`）；
+> ② **B1/RT1 协议文本消融指纹级复现**（3 格 × 2 seed；并核对出 VALIDITY/EMSE 文档"未执行"为陈旧声明——
+> RT1 已于 2026-10-09 执行过，只是缺指纹/证据强度）；
+> ③ **oracle 示例通道 K=3 多数一致 + canonical input 治理**（判定「高风险，默认关」，并给出"自洽≠正确"的
+> 关键负面证据）；④ **z3 SMT 见证层首个专项评估批**（A-18/Q7；机制层 pass，并由其错误归因驱动
+> `result`/`r` 别名修复，reach 10.3%→14.7%）；⑤ **A-19 抢占优先级修复 + 回滚 verdict schema + preflight
+> 配额探针缺陷修复**；⑥ **文档↔工件一致性审计**（P0=4 / P1=17 / P2=14）与对应收口。
+> 真实 LLM 花费：<!-- T-COST-PENDING -->（B2 ≈$…；B1 ≈$…；A-19 复验 ≈$0.08；K=3 $0.020577；e2e LLM 探针 ≈$…）。
+
+### Added
+
+- **T1/B2：主批次锁指纹复现批**（`experiments/run_t1_b2_main_batch.sh` + `experiments/analyze_t1_b2_main_batch.py`）。
+  干净 worktree（切点 `a93c1f6`）上以 documented protocol（`AITESTER_PROFILE=logic`、`TEMPERATURE=0.0`、冷缓存、
+  `--task-count 87 --max-pattern-repeat 2`、3 臂 `aitester/plain_llm/plain_llm_df`、seeds 42/43/44）重跑；
+  预注册 `PREREG.md` 跑前冻结（§1.1 硬门槛 / §1.2 R1–R3 方向性判据 / §1.3 并列报告），成本估算口径错误以
+  `PREREG_AMENDMENT_cost_estimate.md` 中途披露（判据未改）。逐 seed 门槛（干净树/指纹 pinned/87 行/exit=0/task 集一致）
+  与三 seed 合并判定见 `GATES.json`/`ANALYSIS_REPORT.json`。<!-- T1-RESULT-PENDING -->
+- **T2/B1：RT1 协议文本消融指纹级复现**（`experiments/run_t2_b1_protocol_text.sh`）：三格 = `plain_llm`（无再生成无强化段）
+  / `plain_llm_df` + `DETECTION_FIRST_SECTION_ENABLE=false`（有再生成无强化段）/ `plain_llm_df` 全协议；seeds 42/44；
+  预注册冻结（文本效应 = C3−C2 方向一致且显著；采样效应 = C2−C1 ≤5pp）。因 logic 档 `ENABLE_MUTATION_SCORING`
+  批后阶段实际墙钟超预期，按 `PREREG_CONTINUATION.md`（判据逐字未改）显式关闭该**批后辅助测量**并从 C1_seed44 起
+  生效（C1_seed42 保留 mutation 口径并披露差异）；`DOC_RECONCILIATION.md` 列出 4 处"未执行"陈旧声明与纠正文案。
+  **结果（六格全过 GATES 16 checks；均 git_dirty=false / 指纹 pinned=true）**：C1 plain_llm 9/87（seed42）、12/87（seed44）；
+  C2 RT1 10/87、10/87；C3 df 全协议 24/87、27/87。**文本效应 C3−C2 = +16.1pp（McNemar b/c=15/1，p=0.000519）** /
+  **+19.5pp（b/c=17/0，p=1.5e-05）**；采样效应 C2−C1 = +1.1pp（p=1.0）/ −2.3pp（p=0.5）→ **文本效应 2/2 seed 复现、采样效应可忽略**。
+  六格合计 $0.876339 / 1299s；首跑（中止、无主终点数据）如实披露。工件 `t_round_b1_protocol_text_20261018/`。
+- **T3：oracle 示例通道 K=3 多数一致 + canonical input 约束**（`experiments/spec_examples_generator.py` 增量：
+  `majority` 参数（默认 None=历史行为）、冻结 canonical prompt 段、fail-open 回退判定；`tests/test_examples_multisample.py`
+  23→39 例）。真实采样 60 次（$0.020577，45.3s，回退 0）→ union 57/交集 55（保留率 96.5%，对比 S-3 的 64%）；
+  零 LLM 重放 correct **8→5（损失 3）**、misguided 2→1 → 预注册判定 **`high_risk_default_off`**（生产开关保持默认关）；
+  关键证据：`knapsack` 出现 **3/3 一致的新幻觉**（自洽≠正确）。工件 `t_round_oracle_k3_20261018/`（22 项 SHA verify）。
+- **T3b：z3 SMT 见证层最小启用批次（A-18/Q7）**（`experiments/smt_witness_batch.py`，零 LLM）：QuixBugs 41 缺陷程序、
+  锚表内容寻址 50/50、D1=184 子句；**机制层 pass**（witness_rate 0.088531>0、timeout 0.0<20%、桶可逐子句复算）；
+  reach_rate 0.103261、sat 19/19 到达即 sat；错误归因最大项 `result_alias_not_reached`=110（66%）。
+  关联层因中位数二分退化按预注册"无对照"报告（MDE≈16.57pp 披露）。
+- **T3c：`result`/`r` 别名缺口修复**（`src/specs/spec_smt.py`）：token 感知 AST 归一（仅当 `result` 不在签名参数中；
+  解析失败保守回退；前件路径零变化），零 LLM 复跑 **reached 19→27 / sat 19→27 / error 165→157；witness_rate
+  0.088531→0.125116、reach_rate 0.103261→0.146739**；语义安全审计（solver_exception=0、新增 unsat 任务 0、
+  NL 生产通道 41/41 不变）通过。`tests/test_spec_smt_result_alias.py` 12 例。
+- **T4：A-19 抢占优先级修复**（`src/graph/workflow.py`）：`COVERAGE_STALL_DETECT_ENABLE=true` 时停滞判定在同迭代
+  repair-invalid 平局中优先（默认关路径由"改前生成黄金表 18/18 逐位一致"锁定；**不承诺迭代节省**——平局止于同一迭代）。
+  `tests/test_t_round_semantic_fixes.py` 34 例 + **真实 LLM 默认协议复验**（10 任务×2 臂并发、$0.098、0 crash）：
+  预注册 P1/P2/P3 按字面未全满足 → classification **`unexpected_delta`**（ON 10/10 停滞终止、repair-invalid 日志 0；
+  但 preempt 日志 8/10——另 2 任务无平局走既有尾部短路；OFF 1/10 任务 LLM 轨迹分叉到 max_iterations；
+  Δ iterations=0.2 不可归因）。**不得当作收益主张**；判据修正项（固定响应重放/拆子判据）已登记下轮。详见
+  `experiments/results/t_round_a19_default_gate_20261018/README.md`。
+- **T4：回滚 verdict 结果行 schema**（`experiments/run_benchmark.py` 纯投影 +2 键 × 双分支）：
+  `patch_rollback_verdict` / `patch_rolled_back`（成功分支 state 投影；失败分支 `(None, False)`；键集合同构 93=93）。
+- **T4：`run_preflight.py::quota_probe` 缺陷修复**：旧实现 import 不存在的 `LLMClient` → `--check-quota` 恒
+  ImportError（strict 下阻断任何批次前置闸，B2 首次启动被自身闸拦下实证）；改真实调用入口（`import config` →
+  `_get_llm_config` → `_get_or_create_chat_client` → `.invoke`），修复后真实探测 `ok=True`，7 例 monkeypatch 回归
+  + AST 回归锁（不得再 import 该符号）。
+- **T4：D3b 跨文件接线**：定位到 `cross_file_plan` 的下游真实消费者（`debugger._resolve_target_module` ⇒ 接线必变
+  prompt/修复路由），按纪律只出设计与预注册草案（`docs/design/cross_file_plan_wiring_prereg.md`），不硬改。
+- **T5：e2e 探针矩阵扩面与去重**：新增 `logic-stagnation-precedence` / `logic-rollback-schema-fields` 两探针；
+  去掉 `observability-trace-redaction` / `observability-event-bus` 的**重复注册**（此前被运行器按名去重后
+  静默丢弃于 `load_errors`，报告仍 66/66 pass）→ 注册数=可执行数（66→**68**，零 LLM **56** + LLM **12**）。
+- **T5：文档↔工件一致性系统审计**（只读，`t_round_artifact_audit_20261018/AUDIT_REPORT.md`）：P0=4（文档称已执行
+  实验"未执行"×3 + BASELINE 逐模块覆盖率 100% 被同节 coverage.xml 推翻）/ P1=17 / P2=14，含 BASELINE 20 项逐项核对
+  与 10 项"无法核验"清单；本批按报告逐项收口（见 Changed）。
+- **T5：`checksum_results.py --verify` 路径归一**（`./` 前缀 / `*` 二进制标记 / Windows 反斜杠）：
+  修复 `emse_docstring_anchor_20261017` 的 165 条清单被误判全缺失（`shasum -c` 165/165 OK）的跨工具不兼容；4 例回归含
+  "真缺失仍报错"负控。
+- **T5：工件入库门禁扩面**（`scripts/gates/check_artifacts_tracked.py`）：扫描面从 `emse_*` 扩到
+  `emse_*` + `*_round_*`（历史教训：每轮新命名一种前缀，硬编码清单就再漏一次），T 轮证据目录与 MANIFEST 同步登记。
+
+### Changed
+
+- **示例通道口径（T 轮起）**：多采样自一致性家族（S-3 K=2 精确求交 / T-3 K=3 多数一致+canonical）**均不用于生产**
+  （K=3 correct 损失 3 → 高风险默认关）；根因结论收敛为**规约表达力**而非过滤器实现；下一步=示例级独立核验/
+  规约强化，不得再以"清掉 N 个幻觉"单独作质量提升主张。
+- **SMT 口径（T 轮起）**：T3b（pre-fix）与 T3c（post-fix）**并列引用、不得混池**；logic 档启用 SMT 的批次在 T 轮后
+  reach 提升属行为变更（仅对之前被保守跳过的 `result` 别名子句新增判定；已判定子句结果不变）。
+- **B1/RT1 文档状态勘误**：`docs/VALIDITY.md`（+.en）/`docs/emse/EMSE_OPTIMIZATION_2026-10-15.md`/`docs/EVALUATION_SCOPE.md`
+  的"RT1/2×2 未执行、需 LLM 配额"改为"2026-10-09 已执行（跨批拼合、无指纹）→ T 轮指纹级 3 格复现在途/完成"；
+  剩余缺口从"未执行"改为"证据强度/指纹"。
+- **B8/A-19 文档状态勘误**：S-2 已 confirmed，T4 已修复默认协议抢占优先级；登记册 §2/§4 的"待 LLM 配额"过时条目收口。
+- **postprocess_wall 状态勘误**：R-3 已接入 run_benchmark（代码/COST_MODEL/BASELINE 一致），登记册 §4 的"hook 尚未接入"收口。
+- **BASELINE 逐模块覆盖率刷新**（P0-04）：`graph_nodes`/`planner`/`graph_workflow`(branch)/`error_classifier`(branch)
+  由文档声称的 100%/1.0000 改为 `coverage.xml` 实测值（并注明"核心路由函数子集 100%"如需保留必须给可复算命令）。
+- **静态检查口径刷新**：mypy 源文件 133→**134**（+`config.py`；N-5 新增 pricing.py 后未回填）；ruff 文件数按 T 轮
+  收尾实测刷新（P1-04）。
+- **feature_matrix 刷新**：`probes_total` 66→**68**、`probes_by_group` 按实测、`llm_probes`=12、零 LLM=56；
+  `docs/design/e2e_probe_matrix.md` 的"47 个零 LLM 探针"改为当前实测（54→56）。
+- **metrics_schema 补登**：结果行已产出的 `llm_suite_detection_rate` / `oracle_suite_verdict` /
+  `spec_oracle_examples_source` / `spec_oracle_examples_count` 等键补入 BASELINE `metrics_schema`（P2-05）；
+  回滚两键同步。
+- **其它审计收口**：M-5 论文审计数字按工件刷新（77/20/71/92.2%）；Q11 标已收口；VALIDITY 配额闸"未实现"改为
+  "已实现、重跑未执行"；"四起伪影"统一为"五起"（K-5）；EMSE §3 三项未执行加后续收口脚注；
+  BASELINE `body_digest` 7248b145→678463c8（工件实测）；CHANGELOG S 轮花费统一 $0.43 口径；
+  README "最近改动 2026-10-07/4669" 改为历史里程碑；删除/更正 3 处被引用但不存在的工件路径与 `false_fix` 死引用；
+  nodes.py 行号引用改为"函数名"引用（防再次漂移）；§1 门禁数给出可复算清单。
+
+### Fixed
+
+- `src/specs/spec_smt.py`：后件/不变式 `result` 别名缺口（110/166 expr error 子句未达求解器）→ token 感知归一。
+- `scripts/tools/run_preflight.py`：`--check-quota` 引用不存在符号的 ImportError（前置闸自身失效）。
+- `scripts/tools/e2e_probes_workflow.py`：两个 observability 探针重复注册（被静默丢弃的"假 66/66"）。
+- `scripts/gates/checksum_results.py`：`./`/`*`/反斜杠路径写法被误判缺失（跨工具清单互操作）。
+- `src/graph/workflow.py`：A-19 停滞判定在默认证据门协议下只改标签不生效（抢占优先级修复）。
+- `experiments/run_benchmark.py`：结果行缺回滚 verdict 两键（O 轮登记项落地）。
+- `experiments/spec_examples_generator.py`：K=3/多数一致/canonical 支持（默认行为逐字节不变，39 例锁定）。
+
+### Verification
+
+- 定向测试：T4 `pytest` 7 文件 **217 passed**；T3 既有 62+33 passed；T3c 8 文件 **187 passed**；T5 断言/校验补测全绿。
+- 全量测试与覆盖率（T 轮收尾，CI 同口径）：<!-- T-TESTS-PENDING -->
+- 门禁链：`make gates`（含 G16 文档链接 / 工件入库 / 基线一致性 / env 预算 / 零断言）<!-- T-GATES-PENDING -->；
+  `make e2e-probe` 与 `AITESTER_E2E_LLM=true make e2e-probe-llm`（功能矩阵 68 探针）；`python main.py doctor`。
+- 工件：T 轮证据目录全部 `SHA256SUMS --write/--verify` 通过（T1/T2/T3/T3b/T3c/T4/T5a）；`check_artifacts_tracked`
+  的 `*_round_*` 覆盖扫描与 MANIFEST 同步登记。
+
 ## [Unreleased] — 2026-10-18 S 轮（A-19 失败注入重做 + 多采样示例治理 + 3-seed 生产化决策）
 
 > S 轮回答两个悬而未决的问题：① A-19 覆盖率停滞检测在**确实多轮失败**时是否真提前
 > 停止（P-2/B8 的"无触发"限制）；② 示例幻觉能否用多采样自一致性治理。同时跑
-> seed-44 第三次复现，做 3-seed 生产化决策。真实 LLM 花费 ≈$0.42（S-1 复现批
+> seed-44 第三次复现，做 3-seed 生产化决策。真实 LLM 花费 ≈$0.43（S-1 复现批 $0.27884 + S-2 $0.140324（含冒烟）+ S-3 $0.010912，合计 $0.430076；P2-07 口径统一）
 > ≈$0.28 + S-2 $0.14 + S-3 $0.011；预算 $0.8）。
 
 ### Added

@@ -1,0 +1,33 @@
+=== probe registry count (T 轮前 66 → 本轮 68) ===
+full --list lines: 68
+logic group --list lines: 20
+grep -c probe（探针名不含字面 probe，故为 0；计数以 --list 行数为准）: 0
+
+=== 新增两个探针（--name 定向，零 LLM）===
+[e2e] 运行 2 个探针（LLM=off）…
+[PASS ] logic          logic-stagnation-precedence             1.5s  A-19 抢占优先级正常：默认关 repair-invalid 平局历史口径不变；ON 时停滞优先（done/coverage_stall）
+[PASS ] logic          logic-rollback-schema-fields            1.9s  回滚 verdict schema 正常：两分支键集合同构、含 patch_rollback_verdict/patch_rolled_back、投影与占位语义正确、可落盘
+[e2e] 汇总：pass=2 fail=0 error=0 skip=0（共 2）
+
+=== group logic（20 探针，零 LLM 子集）===
+[e2e] 运行 20 个探针（LLM=off）…
+[PASS ] logic          logic-spec-ir-parse                     0.1s  SpecIR 双通道解析正常，空材料保守降级
+[PASS ] logic          logic-spec-expr-whitelist               0.1s  白名单正常：危险子句拒绝 3/3，可编译子句接受，readiness=1.00
+[PASS ] logic          logic-spec-oracle-compile               0.1s  确定性 oracle 编译正常（489 字符，2 条断言，ast 合法）
+[PASS ] logic          logic-smt-witness                       0.1s  SMT 见证层正常：2 个见证（kinds=['boundary_max', 'sat']），不可翻译保守降级
+[PASS ] logic          logic-spec-anchor-oracle-wiring         1.4s  spec_anchor 接线正常：verdict=compiled_empty，injected=False；无材料负控 not_attempted
+[PASS ] logic          logic-oracle-independent-judging        0.1s  oracle 独立判读字段/函数/replay 入口齐备，None 输入 fail-closed，设计文档已登记
+[PASS ] logic          logic-stagnation-switch                 2.1s  停滞开关正常（default=False，env true→True/false→False，消融臂互斥）
+[PASS ] logic          logic-mutation-advisor-assembly         1.4s  mutation advisor 环装配正确（开=7 节点 / 关=6 节点）
+[PASS ] logic          logic-branch-coverage-inject            0.9s  branch 覆盖测量真实可用（coverage=25.0%，missing=3，开关默认=False）
+[PASS ] logic          logic-oracle-instrument-safety          0.7s  oracle 仪器加固生效：崩溃→skip（rc=0），静态 harness 齐备
+[PASS ] logic          logic-oracle-replay-instrument-breakdown    0.1s  replay 分类细化正常：fp=2（断言型）、instrument_error=0、skipped=27，旧四分类键保留
+[PASS ] logic          logic-oracle-precondition-input-filter    0.1s  前件校验输入选择生效：跳过违反 side>0 的候选，绑定合法候选 side=3
+[PASS ] logic          logic-oracle-examples-compile           0.1s  示例通道编译正常（1078 字符、examples=1、崩溃安全、无 eval/exec）
+[PASS ] logic          logic-oracle-examples-detection         2.4s  示例 oracle 检出能力正确：buggy rc=1（检出）/ fixed rc=0 / 无示例对照 rc=0（不检出）
+[PASS ] logic          logic-oracle-examples-production        2.3s  Q-1 生产接线契约齐备（双门默认关/prompt 段/行字段/env 登记）
+[PASS ] logic          logic-examples-self-validation          0.1s  示例自校验正常（矛盾示例丢弃/safe-AST 危险子句保留/env 开关）
+[PASS ] logic          logic-examples-multisample              0.1s  多采样自一致性正常（归一化键/求交/审计/单采样 API 保持）
+[PASS ] logic          logic-stagnation-precedence             1.5s  A-19 抢占优先级正常：默认关 repair-invalid 平局历史口径不变；ON 时停滞优先（done/coverage_stall）
+[PASS ] logic          logic-rollback-schema-fields            2.0s  回滚 verdict schema 正常：两分支键集合同构、含 patch_rollback_verdict/patch_rolled_back、投影与占位语义正确、可落盘
+[e2e] 汇总：pass=19 fail=0 error=0 skip=1（共 20）

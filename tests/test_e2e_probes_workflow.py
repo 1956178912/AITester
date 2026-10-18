@@ -78,8 +78,16 @@ class TestProbeInventory:
             assert probe.description.strip(), f"{probe.name} 缺 description"
 
     def test_required_coverage_areas_present(self) -> None:
-        """任务书 7 组覆盖面必须都有探针。"""
-        names = {probe.name for probe in probes_mod.PROBES}
+        """任务书 7 组覆盖面必须都有探针。
+
+        T 轮（2026-10-18）去重：`observability-trace-redaction` / `observability-event-bus`
+        曾在本模块与 `e2e_probes_platform` 双重注册（运行器按名去重后静默丢弃第二份，
+        报告仍 66/66 pass）。现统一由 platform 模块注册，故覆盖面按**矩阵并集**核验
+        （单模块清单契约仍由上面的名称唯一性/分组用例锁定）。
+        """
+        import scripts.tools.e2e_probes_platform as platform_mod
+
+        names = {probe.name for probe in probes_mod.PROBES} | {probe.name for probe in platform_mod.PROBES}
         required_fragments = [
             "cli-help",
             "cli-list-examples",

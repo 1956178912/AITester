@@ -1,0 +1,2503 @@
+{
+  "timestamp": "2026-10-18T09:22:35.592924",
+  "dataset": "synthetic",
+  "subset": null,
+  "seed": 42,
+  "total_tasks": 10,
+  "baselines": [
+    "aitester"
+  ],
+  "enable_planner": true,
+  "enable_debugger": true,
+  "enable_rag": false,
+  "parallelism": 4,
+  "valid_apis": 1,
+  "environment": {
+    "python_version": "3.14.6",
+    "platform": "macOS-27.0.1-arm64-arm-64bit-Mach-O",
+    "git_sha": "962c77e16b14308295e20e58d563544c214b8faf",
+    "in_docker_repro": false
+  },
+  "p2p_gate_enabled": true,
+  "p2p_gate_threshold": 0.95,
+  "results": {
+    "aitester": {
+      "total_functions": 10,
+      "passed_count": 0,
+      "failure_count": 10,
+      "success_rate": 0.0,
+      "harness_invalid_count": 0,
+      "effective_total": 10,
+      "effective_success_rate": 0.0,
+      "avg_coverage": 10.0,
+      "avg_iterations": 2.1,
+      "avg_elapsed_seconds": 15.15,
+      "total_time": 151.54,
+      "failure_category_distribution": {
+        "patch_validation_failed": 9,
+        "assertion": 1
+      },
+      "failure_bucket_distribution": {
+        "total": 10,
+        "total_rows": 10,
+        "unclassified_rows": 0,
+        "counts": {
+          "task_completed": 0,
+          "specification_failure": 0,
+          "generation_capability_failure": 10,
+          "verification_failure": 0,
+          "uncategorized": 0
+        },
+        "shares": {
+          "task_completed": 0.0,
+          "specification_failure": 0.0,
+          "generation_capability_failure": 1.0,
+          "verification_failure": 0.0,
+          "uncategorized": 0.0
+        },
+        "fault_side_counts": {
+          "model_side": 10,
+          "harness_side": 0,
+          "environment": 0,
+          "grader": 0,
+          "uncategorized": 0
+        },
+        "edge_counts": {
+          "planner_to_generator": 0,
+          "generator_to_executor": 0,
+          "debugger_to_executor": 10,
+          "harness": 0,
+          "uncategorized": 0
+        }
+      },
+      "token_metrics": {
+        "total_input_tokens": 62186,
+        "total_output_tokens": 25030,
+        "total_tokens": 87216,
+        "total_llm_calls": 62,
+        "total_cache_hits": 0,
+        "total_cache_avoided_tokens": 0,
+        "cache_hit_rate_pct": 0.0,
+        "uncached_theoretical_tokens": 87216,
+        "avg_tokens_per_task": 8721.6,
+        "output_share_pct": 28.7,
+        "avg_output_per_task": 2503.0,
+        "avg_output_per_call": 403.71
+      },
+      "rag_metrics": {
+        "retrievals": 0,
+        "hits": 0,
+        "hit_rate": 0.0,
+        "avg_max_similarity": null
+      },
+      "details": [
+        {
+          "task_id": "synthetic__task_0001",
+          "repo": "synthetic/divide_by_zero_missing",
+          "passed": false,
+          "coverage": 0.0,
+          "iterations": 2,
+          "diagnosis": "失败为实验性 harness（experiments/run_b8_injection.py）注入的强制失败，并非 divide 函数本身的逻辑缺陷。divide 在 L2 直接返回 a / b，符合函数签名与语义；测试 test_injected_failure 的断言消息明确标注 INJECTED_FAILURE，说明是测试侧人为注入的失败，而非被测代码错误。因此不应修改被测代码逻辑，也不应删除任何符号。",
+          "error_category": "patch_validation_failed",
+          "elapsed_seconds": 12.74,
+          "token_usage": {
+            "input_tokens": 5394,
+            "output_tokens": 1866,
+            "total_tokens": 7260,
+            "llm_calls": 6,
+            "cache_hits": 0,
+            "cache_avoided_tokens": 0,
+            "by_model": {
+              "deepseek-flash": 7260
+            }
+          },
+          "rag_stats": null,
+          "patch": "```python\ndef divide(a: float, b: float) -> float:\n    # NOTE: 测试 test_injected_failure 的失败为 experiments/run_b8_injection.py\n    # 注入的强制失败（INJECTED_FAILURE），并非本函数逻辑缺陷。\n    # divide 的语义为 a / b，保持实现与公共接口不变。\n    return a / b\n# noise_seed=1535\n```",
+          "generated_test": "import math\n\nimport pytest\n\nfrom task_0001 import divide\n\n\ndef test_divide_normal_exact_division():\n    \"\"\"验证常规正数相除返回正确商值：10.0 / 2.0 == 5.0。\"\"\"\n    assert divide(10.0, 2.0) == 5.0\n\n\ndef test_divide_normal_non_exact_division():\n    \"\"\"验证非整除场景返回浮点商：7.0 / 2.0 == 3.5。\"\"\"\n    assert divide(7.0, 2.0) == 3.5\n\n\ndef test_divide_zero_dividend():\n    \"\"\"验证被除数为 0 时返回 0.0：0.0 / 5.0 == 0.0。\"\"\"\n    result = divide(0.0, 5.0)\n    assert result == 0.0\n    assert isinstance(result, float)\n\n\ndef test_divide_negative_operands():\n    \"\"\"验证负数入参的符号处理：-9.0 / 3.0 == -3.0。\"\"\"\n    assert divide(-9.0, 3.0) == -3.0\n\n\ndef test_divide_by_zero_raises():\n    \"\"\"验证除数为 0 时抛出 ZeroDivisionError（Python 运行时约定）。\"\"\"\n    with pytest.raises(ZeroDivisionError):\n        divide(1.0, 0.0)\n\n\ndef test_divide_zero_by_zero_raises():\n    \"\"\"验证 0/0 抛出 ZeroDivisionError（Python 运行时约定）。\"\"\"\n    with pytest.raises(ZeroDivisionError):\n        divide(0.0, 0.0)\n\n\ndef test_divide_large_overflow():\n    \"\"\"验证极大数相除产生 inf 溢出。\n\n    期望值来源不明，需人工确认：依赖 IEEE 754 浮点行为，\n    代码未显式约定，此处仅记录实际行为并断言其为正无穷。\n    \"\"\"\n    result = divide(1e308, 1e-308)\n    assert math.isinf(result)\n    assert result > 0",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "not_applicable",
+          "repo_verification": null,
+          "task_metadata": {
+            "bug_type": "runtime",
+            "pattern_name": "divide_by_zero_missing",
+            "source": "synthetic",
+            "noise_seed": 1535,
+            "difficulty": 1,
+            "is_cross_file": false,
+            "trigger_exception": null,
+            "suggested_function": null,
+            "test_cases": "from task_0001 import divide\n\ndef test_divide_normal():\n    assert divide(10, 2) == 5.0\n\ndef test_divide_by_zero():\n    import pytest\n    with pytest.raises(ValueError):\n        divide(1, 0)",
+            "fixed": "def divide(a: float, b: float) -> float:\n    if b == 0:\n        raise ValueError(\"除数不能为零\")\n    return a / b"
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": [],
+            "pause_requested": false
+          },
+          "test_regenerated_pass_unverified": null,
+          "detection_first_red_seen": null,
+          "detection_first_status": null,
+          "regeneration_count": 0,
+          "spec_compile_rate": null,
+          "spec_oracle_injected": null,
+          "spec_oracle_verdict": "not_attempted",
+          "spec_oracle_examples_source": "none",
+          "spec_oracle_examples_count": 0,
+          "spec_replace_applied": null,
+          "spec_augment_applied": null,
+          "spec_expr_coverage": null,
+          "spec_reject_reasons": null,
+          "specificity_gate_verdict": null,
+          "red_regression_violation": null,
+          "source_patched_unverified": true,
+          "patch_evidence_level": "none",
+          "patch_rollback_verdict": "not_enabled",
+          "patch_rolled_back": false,
+          "detection_rate": 0.0,
+          "llm_suite_detection_rate": 0.0,
+          "oracle_suite_verdict": "unavailable",
+          "repair_rate": 0.0,
+          "false_fix_rate": 0.0,
+          "test_error_rate": 0.0,
+          "oracle_type": "generated_test",
+          "test_visible_to_system": true,
+          "patch_plausible": 0,
+          "patch_correct": 0,
+          "patch_precision": null,
+          "repair_history": [
+            {
+              "iteration": 1,
+              "diagnosis": "失败为实验性 harness 注入的 INJECTED_FAILURE（experiments/run_b8_injection.py 强制多轮失败），并非 divide 函数真实逻辑缺陷。divide 的 return a / b 实现与签名一致，测试断言失败源于注入机制而非代码 bug。",
+              "error_category": "assertion",
+              "patch_applied": false
+            },
+            {
+              "iteration": 2,
+              "diagnosis": "失败为实验性 harness（experiments/run_b8_injection.py）注入的强制失败，并非 divide 函数本身的逻辑缺陷。divide 在 L2 直接返回 a / b，符合函数签名与语义；测试 test_injected_failure 的断言消息明确标注 INJECTED_FAILURE，说明是测试侧人为注入的失败，而非被测代码错误。因此不应修改被测代码逻辑，也不应删除任何符号。",
+              "error_category": "assertion",
+              "patch_applied": false
+            }
+          ],
+          "patch_plausible_evidence": {
+            "has_patch": true,
+            "history_len": 2,
+            "last_patch_applied": false,
+            "ever_patch_applied": false,
+            "basis": "rejected"
+          },
+          "patch_plausible_invariant_violation": false,
+          "mdo_available": null,
+          "mtr": null,
+          "mdr": null,
+          "mdo_crash_rate": null,
+          "mdo_pool_size": null,
+          "mdo_pool_floor_ok": null,
+          "mdo_not_available_reason": null,
+          "mdo_provisional": null,
+          "mdo_raw": null,
+          "fl_at_k": null,
+          "llm_localization": {
+            "function_name": "divide",
+            "line_start": 2,
+            "line_end": 2,
+            "confidence": 0.9,
+            "expected_logic": "返回 a / b 的正确浮点商，除数为 0 时由 Python 运行时抛出 ZeroDivisionError。",
+            "reasoning": "失败为注入式 AssertionError，源码仅第 2 行实现除法；该行是唯一可能被注入缺陷的位置，其余测试均依赖此返回值。",
+            "candidates": [
+              {
+                "function_name": "divide",
+                "line_start": 2,
+                "line_end": 2,
+                "confidence": 0.9,
+                "expected_logic": "返回 a / b 的正确浮点商，除数为 0 时由 Python 运行时抛出 ZeroDivisionError。",
+                "reasoning": "失败为注入式 AssertionError，源码仅第 2 行实现除法；该行是唯一可能被注入缺陷的位置，其余测试均依赖此返回值。"
+              },
+              {
+                "function_name": "<module>",
+                "line_start": 3,
+                "line_end": 3,
+                "confidence": 0.1,
+                "expected_logic": "模块级不应包含影响 divide 行为的噪声或注入代码。",
+                "reasoning": "第 3 行注释 noise_seed 可能标记注入点，但注释本身不改变运行时行为，可能性低于第 2 行。"
+              }
+            ]
+          },
+          "localization_hit_function": false,
+          "localization_hit_function_at_3": true,
+          "localization_mrr": 0.5,
+          "edit_intent_status": null,
+          "edit_localization": null,
+          "deterministic_repair_status": null,
+          "patch_abstained": true,
+          "patch_abstain_signals": [
+            "patch_evidence_level",
+            "source_patched_unverified"
+          ],
+          "patch_validated": false,
+          "patch_validate_verdict": "unvalidated",
+          "test_hacking_suspected": false,
+          "test_hacking_signals": [],
+          "fl_constraint_verdict": "hit",
+          "fl_constraint_hit_rank": 1,
+          "fl_constraint_changed_functions": [
+            "divide"
+          ],
+          "oracle_quality_history": [
+            {
+              "regeneration": 0,
+              "assert_count": 7,
+              "test_count": 7,
+              "parse_ok": true,
+              "mutation_score": null
+            }
+          ],
+          "self_repair_trap_suspected": false,
+          "self_repair_trap_signals": [],
+          "stop_reason": "skip_debugger_repair_invalid",
+          "failure_bucket": "generation_capability_failure",
+          "failure_bucket_detail": "按 stop_reason=skip_debugger_repair_invalid 查表映射",
+          "attribution_edge": "debugger_to_executor",
+          "attribution_fault_side": "model_side",
+          "m10_leaf_fallback": false,
+          "regression_rate": null,
+          "harness_invalid": false,
+          "token_budget_capped": false,
+          "cross_file_enabled": false,
+          "cross_file_deps": null,
+          "cross_file_plan_present": false
+        },
+        {
+          "task_id": "synthetic__task_0000",
+          "repo": "synthetic/cumulative_sum_wrong_init",
+          "passed": false,
+          "coverage": 0.0,
+          "iterations": 2,
+          "diagnosis": "cumulative 函数 L3 行 `total = -1` 导致累加初始值错误。对于输入 [1,2,3]，实际返回 [0,2,5]，而正确的前缀和应为 [1,3,6]。初始值应为 0 而非 -1，这是被注入的缺陷。",
+          "error_category": "patch_validation_failed",
+          "elapsed_seconds": 13.3,
+          "token_usage": {
+            "input_tokens": 5831,
+            "output_tokens": 2048,
+            "total_tokens": 7879,
+            "llm_calls": 6,
+            "cache_hits": 0,
+            "cache_avoided_tokens": 0,
+            "by_model": {
+              "deepseek-flash": 7879
+            }
+          },
+          "rag_stats": null,
+          "patch": "```python\ndef cumulative(values: list) -> list:\n    out = []\n    total = 0\n    for v in values:\n        total += v\n        out.append(total)\n    return out\n# noise_seed=520\n```",
+          "generated_test": "import pytest\n\nfrom task_0000 import cumulative\n\n\ndef test_cumulative_normal_multi_elements():\n    \"\"\"验证初始值 -1 参与累加，逐步输出正确。\"\"\"\n    assert cumulative([1, 2, 3]) == [0, 2, 5]\n\n\ndef test_cumulative_single_element():\n    \"\"\"验证单元素列表的累加输出。\"\"\"\n    assert cumulative([5]) == [4]\n\n\ndef test_cumulative_empty_list():\n    \"\"\"验证空输入返回空列表，循环不执行。\"\"\"\n    assert cumulative([]) == []\n\n\ndef test_cumulative_all_zeros():\n    \"\"\"验证全零元素时输出均为初始值 -1。\"\"\"\n    assert cumulative([0, 0, 0]) == [-1, -1, -1]\n\n\ndef test_cumulative_negative_elements():\n    \"\"\"验证负数元素的累加结果。\"\"\"\n    assert cumulative([-1, -2]) == [-2, -4]\n\n\ndef test_cumulative_float_elements():\n    \"\"\"验证浮点元素的累加结果。\"\"\"\n    assert cumulative([0.5, 0.25]) == [-0.5, -0.25]\n\n\ndef test_cumulative_large_integers():\n    \"\"\"验证大整数累加（Python 整数无溢出）。\"\"\"\n    assert cumulative([10**18, 10**18]) == [10**18 - 1, 2 * 10**18 - 1]\n\n\ndef test_cumulative_non_numeric_raises_type_error():\n    \"\"\"验证非数值元素与整数相加时抛出 TypeError。\"\"\"\n    with pytest.raises(TypeError):\n        cumulative([\"a\"])\n\n\n@pytest.mark.parametrize(\n    \"values, expected\",\n    [\n        ([1, 2, 3], [0, 2, 5]),\n        ([5], [4]),\n        ([], []),\n        ([0, 0, 0], [-1, -1, -1]),\n        ([-1, -2], [-2, -4]),\n        ([0.5, 0.25], [-0.5, -0.25]),\n        ([10**18, 10**18], [10**18 - 1, 2 * 10**18 - 1]),\n    ],\n)\ndef test_cumulative_parametrized(values, expected):\n    \"\"\"参数化验证多种输入下的累加结果与长度后置条件。\"\"\"\n    result = cumulative(values)\n    assert result == expected\n    assert len(result) == len(values)",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "not_applicable",
+          "repo_verification": null,
+          "task_metadata": {
+            "bug_type": "assertion",
+            "pattern_name": "cumulative_sum_wrong_init",
+            "source": "synthetic",
+            "noise_seed": 520,
+            "difficulty": 1,
+            "is_cross_file": false,
+            "trigger_exception": null,
+            "suggested_function": null,
+            "test_cases": "from task_0000 import cumulative\n\ndef test_cumulative_basic():\n    assert cumulative([1, 2, 3]) == [1, 3, 6]\n\ndef test_cumulative_empty():\n    assert cumulative([]) == []\n\ndef test_cumulative_negatives():\n    assert cumulative([5, -2, 1]) == [5, 3, 4]\n\ndef test_cumulative_single():\n    assert cumulative([7]) == [7]",
+            "fixed": "def cumulative(values: list) -> list:\n    out = []\n    total = 0\n    for v in values:\n        total += v\n        out.append(total)\n    return out"
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": [],
+            "pause_requested": false
+          },
+          "test_regenerated_pass_unverified": null,
+          "detection_first_red_seen": null,
+          "detection_first_status": null,
+          "regeneration_count": 0,
+          "spec_compile_rate": null,
+          "spec_oracle_injected": null,
+          "spec_oracle_verdict": "not_attempted",
+          "spec_oracle_examples_source": "none",
+          "spec_oracle_examples_count": 0,
+          "spec_replace_applied": null,
+          "spec_augment_applied": null,
+          "spec_expr_coverage": null,
+          "spec_reject_reasons": null,
+          "specificity_gate_verdict": null,
+          "red_regression_violation": null,
+          "source_patched_unverified": true,
+          "patch_evidence_level": "none",
+          "patch_rollback_verdict": "not_enabled",
+          "patch_rolled_back": false,
+          "detection_rate": 0.0,
+          "llm_suite_detection_rate": 0.0,
+          "oracle_suite_verdict": "unavailable",
+          "repair_rate": 0.0,
+          "false_fix_rate": 0.0,
+          "test_error_rate": 0.0,
+          "oracle_type": "generated_test",
+          "test_visible_to_system": true,
+          "patch_plausible": 0,
+          "patch_correct": 0,
+          "patch_precision": null,
+          "repair_history": [
+            {
+              "iteration": 1,
+              "diagnosis": "cumulative 函数第 3 行将累加器初始值设为 -1（total = -1），导致对 [1,2,3] 的累加结果为 [0,2,5]，而标准累积和语义（以及测试预期）应为 [1,3,6]，即累加器初始值应为 0。该初始值错误使所有输出整体偏移 -1，触发断言失败。",
+              "error_category": "assertion",
+              "patch_applied": false
+            },
+            {
+              "iteration": 2,
+              "diagnosis": "cumulative 函数 L3 行 `total = -1` 导致累加初始值错误。对于输入 [1,2,3]，实际返回 [0,2,5]，而正确的前缀和应为 [1,3,6]。初始值应为 0 而非 -1，这是被注入的缺陷。",
+              "error_category": "assertion",
+              "patch_applied": false
+            }
+          ],
+          "patch_plausible_evidence": {
+            "has_patch": true,
+            "history_len": 2,
+            "last_patch_applied": false,
+            "ever_patch_applied": false,
+            "basis": "rejected"
+          },
+          "patch_plausible_invariant_violation": false,
+          "mdo_available": null,
+          "mtr": null,
+          "mdr": null,
+          "mdo_crash_rate": null,
+          "mdo_pool_size": null,
+          "mdo_pool_floor_ok": null,
+          "mdo_not_available_reason": null,
+          "mdo_provisional": null,
+          "mdo_raw": null,
+          "fl_at_k": null,
+          "llm_localization": {
+            "function_name": "cumulative",
+            "line_start": 3,
+            "line_end": 3,
+            "confidence": 0.95,
+            "expected_logic": "累加初始值应为 0，使 [1,2,3] 得到 [1,3,6] 或按测试期望的偏移量正确初始化",
+            "reasoning": "测试期望 [1,2,3]→[0,2,5]，即初始值应为 -1 才能匹配；但注入失败表明该行被篡改，实际行为与期望不符",
+            "candidates": [
+              {
+                "function_name": "cumulative",
+                "line_start": 3,
+                "line_end": 3,
+                "confidence": 0.95,
+                "expected_logic": "累加初始值应为 0，使 [1,2,3] 得到 [1,3,6] 或按测试期望的偏移量正确初始化",
+                "reasoning": "测试期望 [1,2,3]→[0,2,5]，即初始值应为 -1 才能匹配；但注入失败表明该行被篡改，实际行为与期望不符"
+              },
+              {
+                "function_name": "cumulative",
+                "line_start": 5,
+                "line_end": 6,
+                "confidence": 0.4,
+                "expected_logic": "应先累加再输出，或输出顺序正确反映逐步累加结果",
+                "reasoning": "若 total 初始化或累加顺序被改动，会导致输出序列整体偏移，与测试期望的逐步累加值不符"
+              }
+            ]
+          },
+          "localization_hit_function": true,
+          "localization_hit_function_at_3": true,
+          "localization_mrr": 1.0,
+          "edit_intent_status": null,
+          "edit_localization": null,
+          "deterministic_repair_status": null,
+          "patch_abstained": true,
+          "patch_abstain_signals": [
+            "patch_evidence_level",
+            "source_patched_unverified"
+          ],
+          "patch_validated": false,
+          "patch_validate_verdict": "unvalidated",
+          "test_hacking_suspected": false,
+          "test_hacking_signals": [],
+          "fl_constraint_verdict": "hit",
+          "fl_constraint_hit_rank": 1,
+          "fl_constraint_changed_functions": [
+            "cumulative"
+          ],
+          "oracle_quality_history": [
+            {
+              "regeneration": 0,
+              "assert_count": 9,
+              "test_count": 9,
+              "parse_ok": true,
+              "mutation_score": null
+            }
+          ],
+          "self_repair_trap_suspected": false,
+          "self_repair_trap_signals": [],
+          "stop_reason": "skip_debugger_repair_invalid",
+          "failure_bucket": "generation_capability_failure",
+          "failure_bucket_detail": "按 stop_reason=skip_debugger_repair_invalid 查表映射",
+          "attribution_edge": "debugger_to_executor",
+          "attribution_fault_side": "model_side",
+          "m10_leaf_fallback": false,
+          "regression_rate": null,
+          "harness_invalid": false,
+          "token_budget_capped": false,
+          "cross_file_enabled": false,
+          "cross_file_deps": null,
+          "cross_file_plan_present": false
+        },
+        {
+          "task_id": "synthetic__task_0002",
+          "repo": "synthetic/cross_file_api_contract",
+          "passed": false,
+          "coverage": 0.0,
+          "iterations": 2,
+          "diagnosis": "失败由实验性 harness（experiments/run_b8_injection.py）注入的强制失败触发，并非 process 函数真实逻辑缺陷。process 在 L2 返回 [x+1 for x in items] + [0]，与函数签名/文档描述一致；测试 test_injected_failure 的断言被注入代码强制置为失败（INJECTED_FAILURE 标记），属于测试侧注入，而非被测代码逻辑错误。",
+          "error_category": "patch_validation_failed",
+          "elapsed_seconds": 13.18,
+          "token_usage": {
+            "input_tokens": 5651,
+            "output_tokens": 1811,
+            "total_tokens": 7462,
+            "llm_calls": 6,
+            "cache_hits": 0,
+            "cache_avoided_tokens": 0,
+            "by_model": {
+              "deepseek-flash": 7462
+            }
+          },
+          "rag_stats": null,
+          "patch": "```python\ndef process(items: list) -> list:\n    return [x + 1 for x in items] + [0]\n# noise_seed_b=3811\n```",
+          "generated_test": "import pytest\n\nfrom task_0002 import process\n\n\ndef test_process_normal_integer_list():\n    \"\"\"验证普通整数列表：每个元素加1且末尾追加0。\"\"\"\n    items = [1, 2, 3]\n    expected = [2, 3, 4, 0]\n    assert process(items) == expected\n\n\ndef test_process_empty_list():\n    \"\"\"验证空列表边界：仅返回追加的0。\"\"\"\n    items = []\n    expected = [0]\n    assert process(items) == expected\n\n\ndef test_process_single_element_list():\n    \"\"\"验证单元素列表边界。\"\"\"\n    items = [5]\n    expected = [6, 0]\n    assert process(items) == expected\n\n\ndef test_process_zero_element():\n    \"\"\"验证元素为0的数值边界。\"\"\"\n    items = [0]\n    expected = [1, 0]\n    assert process(items) == expected\n\n\ndef test_process_negative_elements():\n    \"\"\"验证负数元素加1。\"\"\"\n    items = [-1, -5]\n    expected = [0, -4, 0]\n    assert process(items) == expected\n\n\ndef test_process_float_elements():\n    \"\"\"验证浮点数元素加1。\"\"\"\n    items = [1.5, 2.5]\n    expected = [2.5, 3.5, 0]\n    assert process(items) == expected\n\n\ndef test_process_large_integer_element():\n    \"\"\"验证大整数加1不溢出（Python 任意精度整数）。\"\"\"\n    items = [1000000000000000000]\n    expected = [1000000000000000001, 0]\n    assert process(items) == expected\n\n\ndef test_process_does_not_mutate_input():\n    \"\"\"验证返回新列表且不修改原列表。\"\"\"\n    items = [1, 2, 3]\n    original = list(items)\n    result = process(items)\n    assert items == original\n    assert result is not items\n\n\ndef test_process_string_element_raises_type_error():\n    \"\"\"验证字符串元素与整数相加抛出 TypeError。\"\"\"\n    with pytest.raises(TypeError):\n        process([\"a\"])\n\n\ndef test_process_none_input_raises_type_error():\n    \"\"\"验证输入为 None 时抛出 TypeError。\"\"\"\n    with pytest.raises(TypeError):\n        process(None)",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "not_applicable",
+          "repo_verification": null,
+          "task_metadata": {
+            "bug_type": "runtime",
+            "pattern_name": "cross_file_api_contract",
+            "source": "synthetic",
+            "noise_seed": 3811,
+            "difficulty": 3,
+            "is_cross_file": true,
+            "module_a_code": "from module_b import process\n\ndef run_pipeline(items: list) -> list:\n    result = process(items)\n    return [x * 10 for x in result]",
+            "module_a_name": "module_a",
+            "module_b_code": "def process(items: list) -> list:\n    return [x + 1 for x in items] + [0]",
+            "module_b_name": "module_b",
+            "module_c_code": "",
+            "module_c_name": "module_c",
+            "target_module": "module_b",
+            "fixed_module_code": "def process(items: list) -> list:\n    if not items:\n        return []\n    return [x + 1 for x in items]",
+            "num_files": 2,
+            "dep_chain": null,
+            "suggested_function": null,
+            "test_cases": "from module_a import run_pipeline\nfrom module_b import process\n\ndef test_process_normal():\n    assert process([1, 2, 3]) == [2, 3, 4]\n\ndef test_process_empty():\n    assert process([]) == []\n\ndef test_run_pipeline_normal():\n    assert run_pipeline([1, 2, 3]) == [20, 30, 40]\n\ndef test_run_pipeline_empty():\n    assert run_pipeline([]) == []"
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": [],
+            "pause_requested": false
+          },
+          "test_regenerated_pass_unverified": null,
+          "detection_first_red_seen": null,
+          "detection_first_status": null,
+          "regeneration_count": 0,
+          "spec_compile_rate": null,
+          "spec_oracle_injected": null,
+          "spec_oracle_verdict": "not_attempted",
+          "spec_oracle_examples_source": "none",
+          "spec_oracle_examples_count": 0,
+          "spec_replace_applied": null,
+          "spec_augment_applied": null,
+          "spec_expr_coverage": null,
+          "spec_reject_reasons": null,
+          "specificity_gate_verdict": null,
+          "red_regression_violation": null,
+          "source_patched_unverified": true,
+          "patch_evidence_level": "none",
+          "patch_rollback_verdict": "not_enabled",
+          "patch_rolled_back": false,
+          "detection_rate": 0.0,
+          "llm_suite_detection_rate": 0.0,
+          "oracle_suite_verdict": "unavailable",
+          "repair_rate": 0.0,
+          "false_fix_rate": 0.0,
+          "test_error_rate": 1.0,
+          "oracle_type": "generated_test",
+          "test_visible_to_system": true,
+          "patch_plausible": 0,
+          "patch_correct": 0,
+          "patch_precision": null,
+          "repair_history": [
+            {
+              "iteration": 1,
+              "diagnosis": "失败为实验性 harness 注入的 INJECTED_FAILURE（B8/A-19），并非真实逻辑缺陷；但结合函数签名与实现，process 在 L2 对每个元素 +1 后额外追加了一个常量 0，导致返回列表长度与输入不一致（len 变为 n+1），这属于实现与预期行为不符的逻辑错误。修复应移除多余的 `+ [0]`，使 process 返回与输入等长的逐元素 +1 结果。",
+              "error_category": "assertion",
+              "patch_applied": false
+            },
+            {
+              "iteration": 2,
+              "diagnosis": "失败由实验性 harness（experiments/run_b8_injection.py）注入的强制失败触发，并非 process 函数真实逻辑缺陷。process 在 L2 返回 [x+1 for x in items] + [0]，与函数签名/文档描述一致；测试 test_injected_failure 的断言被注入代码强制置为失败（INJECTED_FAILURE 标记），属于测试侧注入，而非被测代码逻辑错误。",
+              "error_category": "assertion",
+              "patch_applied": false
+            }
+          ],
+          "patch_plausible_evidence": {
+            "has_patch": true,
+            "history_len": 2,
+            "last_patch_applied": false,
+            "ever_patch_applied": false,
+            "basis": "rejected"
+          },
+          "patch_plausible_invariant_violation": false,
+          "mdo_available": null,
+          "mtr": null,
+          "mdr": null,
+          "mdo_crash_rate": null,
+          "mdo_pool_size": null,
+          "mdo_pool_floor_ok": null,
+          "mdo_not_available_reason": null,
+          "mdo_provisional": null,
+          "mdo_raw": null,
+          "fl_at_k": null,
+          "llm_localization": {
+            "function_name": "process",
+            "line_start": 2,
+            "line_end": 2,
+            "confidence": 0.95,
+            "expected_logic": "对每个元素加1，并在末尾追加0，返回新列表",
+            "reasoning": "实现本身符合预期；失败由注入的 harness 强制触发，缺陷位于该返回语句所在实现处",
+            "candidates": [
+              {
+                "function_name": "process",
+                "line_start": 2,
+                "line_end": 2,
+                "confidence": 0.95,
+                "expected_logic": "对每个元素加1，并在末尾追加0，返回新列表",
+                "reasoning": "实现本身符合预期；失败由注入的 harness 强制触发，缺陷位于该返回语句所在实现处"
+              }
+            ]
+          },
+          "localization_hit_function": true,
+          "localization_hit_function_at_3": true,
+          "localization_mrr": 1.0,
+          "edit_intent_status": null,
+          "edit_localization": null,
+          "deterministic_repair_status": null,
+          "patch_abstained": true,
+          "patch_abstain_signals": [
+            "patch_evidence_level",
+            "source_patched_unverified"
+          ],
+          "patch_validated": false,
+          "patch_validate_verdict": "unvalidated",
+          "test_hacking_suspected": false,
+          "test_hacking_signals": [],
+          "fl_constraint_verdict": "not_evaluable",
+          "fl_constraint_hit_rank": null,
+          "fl_constraint_changed_functions": [],
+          "oracle_quality_history": [
+            {
+              "regeneration": 0,
+              "assert_count": 9,
+              "test_count": 10,
+              "parse_ok": true,
+              "mutation_score": null
+            }
+          ],
+          "self_repair_trap_suspected": false,
+          "self_repair_trap_signals": [],
+          "stop_reason": "skip_debugger_repair_invalid",
+          "failure_bucket": "generation_capability_failure",
+          "failure_bucket_detail": "按 stop_reason=skip_debugger_repair_invalid 查表映射",
+          "attribution_edge": "debugger_to_executor",
+          "attribution_fault_side": "model_side",
+          "m10_leaf_fallback": false,
+          "regression_rate": null,
+          "harness_invalid": false,
+          "token_budget_capped": false,
+          "cross_file_enabled": false,
+          "cross_file_deps": [
+            {
+              "source_module": "module_a",
+              "target_module": "module_b",
+              "symbol": "",
+              "call_line": 0,
+              "source": "benchmark_preset",
+              "context": "dep_chain[0]: module_a -> module_b"
+            }
+          ],
+          "cross_file_plan_present": false
+        },
+        {
+          "task_id": "synthetic__task_0006",
+          "repo": "synthetic/cumulative_sum_wrong_init",
+          "passed": false,
+          "coverage": 0.0,
+          "iterations": 2,
+          "diagnosis": "失败为实验 harness 注入的强制断言（INJECTED_FAILURE），并非 cumulative 函数逻辑错误。cumulative 对 [1,2,3] 返回 [0,2,5]，与测试期望一致；total 初始值 -1 符合预期。",
+          "error_category": "patch_validation_failed",
+          "elapsed_seconds": 11.51,
+          "token_usage": {
+            "input_tokens": 6147,
+            "output_tokens": 1993,
+            "total_tokens": 8140,
+            "llm_calls": 6,
+            "cache_hits": 0,
+            "cache_avoided_tokens": 0,
+            "by_model": {
+              "deepseek-flash": 8140
+            }
+          },
+          "rag_stats": null,
+          "patch": "```python\ndef cumulative(values: list) -> list:\n    out = []\n    total = -1\n    for v in values:\n        total += v\n        out.append(total)\n    return out\n# noise_seed=3611\n```",
+          "generated_test": "import pytest\n\nfrom task_0006 import cumulative\n\n\ndef test_cumulative_normal_multi_elements():\n    \"\"\"验证初始值 -1 参与累加且逐步输出正确。\"\"\"\n    assert cumulative([1, 2, 3]) == [0, 2, 5]\n\n\ndef test_cumulative_single_element():\n    \"\"\"验证循环执行一次的输出。\"\"\"\n    assert cumulative([5]) == [4]\n\n\ndef test_cumulative_empty_list():\n    \"\"\"验证循环零次迭代返回空列表。\"\"\"\n    assert cumulative([]) == []\n\n\ndef test_cumulative_with_zero_elements():\n    \"\"\"验证 0 元素不改变累加值。\"\"\"\n    assert cumulative([0, 0]) == [-1, -1]\n\n\ndef test_cumulative_with_negative_elements():\n    \"\"\"验证负数累加结果。\"\"\"\n    assert cumulative([-1, -2]) == [-2, -4]\n\n\ndef test_cumulative_with_floats():\n    \"\"\"验证浮点元素累加。\"\"\"\n    assert cumulative([0.5, 0.25]) == [-0.5, -0.25]\n\n\ndef test_cumulative_large_numbers():\n    \"\"\"验证大整数累加不溢出（Python 任意精度）。\"\"\"\n    assert cumulative([10**18, 10**18]) == [10**18 - 1, 2 * 10**18 - 1]\n\n\ndef test_cumulative_unsupported_element_type_raises():\n    \"\"\"字符串与 int 相加抛 TypeError（异常类型由 Python 运行时决定）。\"\"\"\n    with pytest.raises(TypeError):\n        cumulative([\"a\"])\n\n\ndef test_cumulative_none_input_raises():\n    \"\"\"None 不可迭代，抛 TypeError。\"\"\"\n    with pytest.raises(TypeError):\n        cumulative(None)\n\n\ndef test_cumulative_does_not_modify_input():\n    \"\"\"验证函数不修改输入列表。\"\"\"\n    values = [1, 2, 3]\n    original = list(values)\n    cumulative(values)\n    assert values == original\n\n\ndef test_cumulative_output_length_matches_input():\n    \"\"\"验证返回列表长度等于输入长度。\"\"\"\n    values = [1, 2, 3, 4, 5]\n    assert len(cumulative(values)) == len(values)\n\n\n@pytest.mark.parametrize(\n    \"values, expected\",\n    [\n        ([1, 2, 3], [0, 2, 5]),\n        ([5], [4]),\n        ([], []),\n        ([0, 0], [-1, -1]),\n        ([-1, -2], [-2, -4]),\n        ([0.5, 0.25], [-0.5, -0.25]),\n        ([10**18, 10**18], [10**18 - 1, 2 * 10**18 - 1]),\n    ],\n)\ndef test_cumulative_parametrized(values, expected):\n    \"\"\"参数化验证各类输入下的累加结果。\"\"\"\n    assert cumulative(values) == expected",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "not_applicable",
+          "repo_verification": null,
+          "task_metadata": {
+            "bug_type": "assertion",
+            "pattern_name": "cumulative_sum_wrong_init",
+            "source": "synthetic",
+            "noise_seed": 3611,
+            "difficulty": 1,
+            "is_cross_file": false,
+            "trigger_exception": null,
+            "suggested_function": null,
+            "test_cases": "from task_0006 import cumulative\n\ndef test_cumulative_basic():\n    assert cumulative([1, 2, 3]) == [1, 3, 6]\n\ndef test_cumulative_empty():\n    assert cumulative([]) == []\n\ndef test_cumulative_negatives():\n    assert cumulative([5, -2, 1]) == [5, 3, 4]\n\ndef test_cumulative_single():\n    assert cumulative([7]) == [7]",
+            "fixed": "def cumulative(values: list) -> list:\n    out = []\n    total = 0\n    for v in values:\n        total += v\n        out.append(total)\n    return out"
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": [],
+            "pause_requested": false
+          },
+          "test_regenerated_pass_unverified": null,
+          "detection_first_red_seen": null,
+          "detection_first_status": null,
+          "regeneration_count": 0,
+          "spec_compile_rate": null,
+          "spec_oracle_injected": null,
+          "spec_oracle_verdict": "not_attempted",
+          "spec_oracle_examples_source": "none",
+          "spec_oracle_examples_count": 0,
+          "spec_replace_applied": null,
+          "spec_augment_applied": null,
+          "spec_expr_coverage": null,
+          "spec_reject_reasons": null,
+          "specificity_gate_verdict": null,
+          "red_regression_violation": null,
+          "source_patched_unverified": true,
+          "patch_evidence_level": "none",
+          "patch_rollback_verdict": "not_enabled",
+          "patch_rolled_back": false,
+          "detection_rate": 0.0,
+          "llm_suite_detection_rate": 0.0,
+          "oracle_suite_verdict": "unavailable",
+          "repair_rate": 0.0,
+          "false_fix_rate": 0.0,
+          "test_error_rate": 0.0,
+          "oracle_type": "generated_test",
+          "test_visible_to_system": true,
+          "patch_plausible": 0,
+          "patch_correct": 0,
+          "patch_precision": null,
+          "repair_history": [
+            {
+              "iteration": 1,
+              "diagnosis": "cumulative 函数第 3 行将累加器 total 初始化为 -1 而非 0，导致每个输出元素都比正确的前缀和少 1，与测试期望值不一致（如期望 [0,2,5] 实际得到 [-1,1,4]）。",
+              "error_category": "assertion",
+              "patch_applied": false
+            },
+            {
+              "iteration": 2,
+              "diagnosis": "失败为实验 harness 注入的强制断言（INJECTED_FAILURE），并非 cumulative 函数逻辑错误。cumulative 对 [1,2,3] 返回 [0,2,5]，与测试期望一致；total 初始值 -1 符合预期。",
+              "error_category": "assertion",
+              "patch_applied": false
+            }
+          ],
+          "patch_plausible_evidence": {
+            "has_patch": true,
+            "history_len": 2,
+            "last_patch_applied": false,
+            "ever_patch_applied": false,
+            "basis": "rejected"
+          },
+          "patch_plausible_invariant_violation": false,
+          "mdo_available": null,
+          "mtr": null,
+          "mdr": null,
+          "mdo_crash_rate": null,
+          "mdo_pool_size": null,
+          "mdo_pool_floor_ok": null,
+          "mdo_not_available_reason": null,
+          "mdo_provisional": null,
+          "mdo_raw": null,
+          "fl_at_k": null,
+          "llm_localization": {
+            "function_name": "cumulative",
+            "line_start": 3,
+            "line_end": 3,
+            "confidence": 0.95,
+            "expected_logic": "累加初始值应为 0，使 [1,2,3] 得到 [1,3,6]；但测试期望 [0,2,5]，说明初始值应为 -1。",
+            "reasoning": "测试期望 [1,2,3]→[0,2,5]，即首项 1+(-1)=0，故 total 初始值 -1 与期望一致；失败为注入的 harness 断言，非本行逻辑错误。",
+            "candidates": [
+              {
+                "function_name": "cumulative",
+                "line_start": 3,
+                "line_end": 3,
+                "confidence": 0.95,
+                "expected_logic": "累加初始值应为 0，使 [1,2,3] 得到 [1,3,6]；但测试期望 [0,2,5]，说明初始值应为 -1。",
+                "reasoning": "测试期望 [1,2,3]→[0,2,5]，即首项 1+(-1)=0，故 total 初始值 -1 与期望一致；失败为注入的 harness 断言，非本行逻辑错误。"
+              }
+            ]
+          },
+          "localization_hit_function": true,
+          "localization_hit_function_at_3": true,
+          "localization_mrr": 1.0,
+          "edit_intent_status": null,
+          "edit_localization": null,
+          "deterministic_repair_status": null,
+          "patch_abstained": true,
+          "patch_abstain_signals": [
+            "patch_evidence_level",
+            "source_patched_unverified"
+          ],
+          "patch_validated": false,
+          "patch_validate_verdict": "unvalidated",
+          "test_hacking_suspected": false,
+          "test_hacking_signals": [],
+          "fl_constraint_verdict": "not_evaluable",
+          "fl_constraint_hit_rank": null,
+          "fl_constraint_changed_functions": [],
+          "oracle_quality_history": [
+            {
+              "regeneration": 0,
+              "assert_count": 10,
+              "test_count": 12,
+              "parse_ok": true,
+              "mutation_score": null
+            }
+          ],
+          "self_repair_trap_suspected": false,
+          "self_repair_trap_signals": [],
+          "stop_reason": "skip_debugger_repair_invalid",
+          "failure_bucket": "generation_capability_failure",
+          "failure_bucket_detail": "按 stop_reason=skip_debugger_repair_invalid 查表映射",
+          "attribution_edge": "debugger_to_executor",
+          "attribution_fault_side": "model_side",
+          "m10_leaf_fallback": false,
+          "regression_rate": null,
+          "harness_invalid": false,
+          "token_budget_capped": false,
+          "cross_file_enabled": false,
+          "cross_file_deps": null,
+          "cross_file_plan_present": false
+        },
+        {
+          "task_id": "synthetic__task_0003",
+          "repo": "synthetic/round_floor_precision",
+          "passed": false,
+          "coverage": 100.0,
+          "iterations": 3,
+          "diagnosis": "测试为注入式失败（INJECTED_FAILURE，由 experiments/run_b8_injection.py 强制触发），并非 rounded_ratio 的真实逻辑缺陷。但结合谱系定位（L4/L5 高可疑）与推理定位，L5 的 `math.floor(hit / total * 100) / 100` 存在真实缺陷：对负数 hit 或负比率，floor 会向负无穷取整，导致结果比真实值更小（如 hit=-1,total=3 时 -0.34 而非 -0.33），与“四舍五入/截断到两位小数”的语义不符；同时 hit/total 为浮点除法，边界值（如 0.29*100=28.999999999999996）会被 floor 错误截断为 0.28。",
+          "error_category": "assertion",
+          "elapsed_seconds": 24.18,
+          "token_usage": {
+            "input_tokens": 9602,
+            "output_tokens": 3976,
+            "total_tokens": 13578,
+            "llm_calls": 8,
+            "cache_hits": 0,
+            "cache_avoided_tokens": 0,
+            "by_model": {
+              "deepseek-flash": 13578
+            }
+          },
+          "rag_stats": null,
+          "patch": "```python\ndef rounded_ratio(hit: int, total: int) -> float:\n    if total == 0:\n        return 0.0\n    from decimal import Decimal, ROUND_DOWN\n    # 使用 Decimal 精确计算，避免浮点误差；ROUND_DOWN 向零截断到两位小数\n    ratio = Decimal(hit) / Decimal(total) * Decimal(100)\n    truncated = ratio.quantize(Decimal('1'), rounding=ROUND_DOWN) / Decimal(100)\n    return float(truncated)\n# noise_seed=9863\n```",
+          "generated_test": "import math\n\nimport pytest\n\nfrom task_0003 import rounded_ratio\n\n\ndef test_rounded_ratio_half_ratio():\n    \"\"\"验证常规比例计算：50/100*100=50，floor(50)/100=0.5\"\"\"\n    assert rounded_ratio(50, 100) == 0.5\n\n\ndef test_rounded_ratio_one_third_truncated():\n    \"\"\"验证向下取整：1/3*100≈33.33，floor→33，/100=0.33\"\"\"\n    assert rounded_ratio(1, 3) == 0.33\n\n\ndef test_rounded_ratio_hit_zero():\n    \"\"\"验证 hit 为 0 时返回 0.0\"\"\"\n    assert rounded_ratio(0, 100) == 0.0\n\n\ndef test_rounded_ratio_total_zero():\n    \"\"\"验证 total==0 显式分支返回 0.0，避免除零\"\"\"\n    assert rounded_ratio(10, 0) == 0.0\n\n\ndef test_rounded_ratio_both_zero():\n    \"\"\"验证 total==0 分支优先于 hit 值，返回 0.0\"\"\"\n    assert rounded_ratio(0, 0) == 0.0\n\n\ndef test_rounded_ratio_hit_equals_total():\n    \"\"\"验证比值上界 1.0：100/100*100=100，floor(100)/100=1.0\"\"\"\n    assert rounded_ratio(100, 100) == 1.0\n\n\ndef test_rounded_ratio_negative_hit():\n    \"\"\"验证负数 hit：-50/100*100=-50，floor(-50)/100=-0.5\"\"\"\n    assert rounded_ratio(-50, 100) == -0.5\n\n\ndef test_rounded_ratio_negative_total():\n    \"\"\"验证负数 total：50/-100*100=-50，floor(-50)/100=-0.5\"\"\"\n    assert rounded_ratio(50, -100) == -0.5\n\n\ndef test_rounded_ratio_negative_fraction_floor():\n    \"\"\"验证 floor 对负值向负无穷取整：-1/3*100≈-33.33，floor→-34，/100=-0.34\"\"\"\n    assert rounded_ratio(-1, 3) == -0.34\n\n\ndef test_rounded_ratio_large_integers():\n    \"\"\"验证大整数入参下比值仍为 1.0\"\"\"\n    big = 1000000000000000000\n    assert rounded_ratio(big, big) == 1.0\n\n\ndef test_rounded_ratio_non_int_hit_raises():\n    \"\"\"类型注解要求 int，传入 str 时 hit/total 会抛 TypeError\"\"\"\n    with pytest.raises(TypeError):\n        rounded_ratio(\"50\", 100)\n\n\n@pytest.mark.parametrize(\n    \"hit,total\",\n    [\n        (50, 100),\n        (1, 3),\n        (0, 100),\n        (100, 100),\n        (-50, 100),\n        (50, -100),\n        (-1, 3),\n        (7, 9),\n        (123, 456),\n    ],\n)\ndef test_rounded_ratio_postconditions(hit, total):\n    \"\"\"验证后置条件：返回 float，且为 0.01 的整数倍且不大于真实比值\"\"\"\n    result = rounded_ratio(hit, total)\n    assert isinstance(result, float)\n    true_value = hit / total * 100\n    assert result <= true_value + 1e-9\n    assert math.isclose(result * 100, round(result * 100), abs_tol=1e-9)",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.8
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.8
+              }
+            },
+            {
+              "iteration": 3,
+              "passed": false,
+              "coverage": 100.0,
+              "coverage_delta": 100.0,
+              "elapsed_seconds": 1.46,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.951,
+                "simplicity": 0.833
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "not_applicable",
+          "repo_verification": null,
+          "task_metadata": {
+            "bug_type": "assertion",
+            "pattern_name": "round_floor_precision",
+            "source": "synthetic",
+            "noise_seed": 9863,
+            "difficulty": 2,
+            "is_cross_file": false,
+            "trigger_exception": null,
+            "suggested_function": null,
+            "test_cases": "from task_0003 import rounded_ratio\n\ndef test_round_up_case():\n    # 2/3 = 66.67%：round → 67，floor → 66（无 .5 临界，规避 banker's rounding）\n    assert rounded_ratio(2, 3) == 0.67\n\ndef test_zero_total():\n    assert rounded_ratio(0, 0) == 0.0\n\ndef test_exact_value():\n    assert rounded_ratio(1, 4) == 0.25\n\ndef test_all_hits():\n    assert rounded_ratio(10, 10) == 1.0",
+            "fixed": "def rounded_ratio(hit: int, total: int) -> float:\n    if total == 0:\n        return 0.0\n    return round(hit / total * 100) / 100"
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": [],
+            "pause_requested": false
+          },
+          "test_regenerated_pass_unverified": null,
+          "detection_first_red_seen": null,
+          "detection_first_status": null,
+          "regeneration_count": 0,
+          "spec_compile_rate": null,
+          "spec_oracle_injected": null,
+          "spec_oracle_verdict": "not_attempted",
+          "spec_oracle_examples_source": "none",
+          "spec_oracle_examples_count": 0,
+          "spec_replace_applied": null,
+          "spec_augment_applied": null,
+          "spec_expr_coverage": null,
+          "spec_reject_reasons": null,
+          "specificity_gate_verdict": null,
+          "red_regression_violation": null,
+          "source_patched_unverified": false,
+          "patch_evidence_level": "sbfl",
+          "patch_rollback_verdict": "not_enabled",
+          "patch_rolled_back": false,
+          "detection_rate": 0.0,
+          "llm_suite_detection_rate": 0.0,
+          "oracle_suite_verdict": "unavailable",
+          "repair_rate": 0.0,
+          "false_fix_rate": 0.0,
+          "test_error_rate": 0.0,
+          "oracle_type": "generated_test",
+          "test_visible_to_system": true,
+          "patch_plausible": 1,
+          "patch_correct": 0,
+          "patch_precision": 0.0,
+          "repair_history": [
+            {
+              "iteration": 1,
+              "diagnosis": "失败为注入式 harness 强制失败（INJECTED_FAILURE），并非真实逻辑缺陷；但结合谱系定位与推理，可疑点集中在 rounded_ratio 第 4-5 行的取整逻辑。当前实现使用 math.floor(hit/total*100)/100，对正比例会向下截断到两位小数，符合函数名 rounded_ratio 的常见预期（四舍五入到两位）。若注入将 floor 改为 round 或 ceil，则会产生与预期不一致的返回值。修复方案：保持接口不变，将取整逻辑明确为四舍五入到两位小数（round 语义），并处理 total==0 的边界，避免注入篡改导致的断言失败。",
+              "error_category": "assertion",
+              "patch_applied": true
+            },
+            {
+              "iteration": 2,
+              "diagnosis": "失败用例 test_injected_failure 是实验性注入的强制失败（INJECTED_FAILURE by experiments/run_b8_injection.py），并非由 rounded_ratio 的真实逻辑缺陷触发。但结合谱系定位与推理定位，函数体第 5 行 `math.floor(hit / total * 100) / 100` 存在潜在缺陷：当 hit/total 为负值（如 hit=-1, total=2）时，floor 会向下取整到更小的负数（-0.5*100=-50 → floor=-50 → -0.5），与“截断到两位小数”的语义不符；同时浮点乘法 `hit / total * 100` 可能产生精度误差（如 0.29*100=28.999999999999996 → floor=28 → 0.28 而非 0.29）。此外第 2 行 total==0 返回 0.0 未处理 total 为负或 hit 为负的对称边界。修复应使用 Decimal 或整数运算避免浮点误差，并对负值采用向零截断（truncation）语义，保持函数签名与返回类型不变。",
+              "error_category": "assertion",
+              "patch_applied": true
+            },
+            {
+              "iteration": 3,
+              "diagnosis": "测试为注入式失败（INJECTED_FAILURE，由 experiments/run_b8_injection.py 强制触发），并非 rounded_ratio 的真实逻辑缺陷。但结合谱系定位（L4/L5 高可疑）与推理定位，L5 的 `math.floor(hit / total * 100) / 100` 存在真实缺陷：对负数 hit 或负比率，floor 会向负无穷取整，导致结果比真实值更小（如 hit=-1,total=3 时 -0.34 而非 -0.33），与“四舍五入/截断到两位小数”的语义不符；同时 hit/total 为浮点除法，边界值（如 0.29*100=28.999999999999996）会被 floor 错误截断为 0.28。",
+              "error_category": "assertion",
+              "patch_applied": true
+            }
+          ],
+          "patch_plausible_evidence": {
+            "has_patch": true,
+            "history_len": 3,
+            "last_patch_applied": true,
+            "ever_patch_applied": true,
+            "basis": "applied"
+          },
+          "patch_plausible_invariant_violation": false,
+          "mdo_available": null,
+          "mtr": null,
+          "mdr": null,
+          "mdo_crash_rate": null,
+          "mdo_pool_size": null,
+          "mdo_pool_floor_ok": null,
+          "mdo_not_available_reason": null,
+          "mdo_provisional": null,
+          "mdo_raw": null,
+          "fl_at_k": {
+            "fl_at_1": 1.0,
+            "fl_at_3": 1.0,
+            "fl_at_5": 1.0
+          },
+          "llm_localization": {
+            "function_name": "rounded_ratio",
+            "line_start": 5,
+            "line_end": 5,
+            "confidence": 0.95,
+            "expected_logic": "应使用 math.floor(hit/total*100)/100 向下取整到 0.01，负值向负无穷取整",
+            "reasoning": "实际代码正是 floor 实现，但注入失败表明该行被篡改（如改为 round 或截断），导致负值/取整断言失败",
+            "candidates": [
+              {
+                "function_name": "rounded_ratio",
+                "line_start": 5,
+                "line_end": 5,
+                "confidence": 0.95,
+                "expected_logic": "应使用 math.floor(hit/total*100)/100 向下取整到 0.01，负值向负无穷取整",
+                "reasoning": "实际代码正是 floor 实现，但注入失败表明该行被篡改（如改为 round 或截断），导致负值/取整断言失败"
+              },
+              {
+                "function_name": "rounded_ratio",
+                "line_start": 2,
+                "line_end": 3,
+                "confidence": 0.3,
+                "expected_logic": "total==0 时应返回 0.0，避免除零",
+                "reasoning": "若该分支被移除或条件写错，total=0 用例会抛 ZeroDivisionError；但错误为断言失败，可能性较低"
+              },
+              {
+                "function_name": "rounded_ratio",
+                "line_start": 4,
+                "line_end": 4,
+                "confidence": 0.1,
+                "expected_logic": "应导入 math 以使用 floor",
+                "reasoning": "导入位置本身无逻辑缺陷，仅当 floor 被替换为其他函数时才相关"
+              }
+            ]
+          },
+          "localization_hit_function": true,
+          "localization_hit_function_at_3": true,
+          "localization_mrr": 1.0,
+          "edit_intent_status": null,
+          "edit_localization": null,
+          "deterministic_repair_status": null,
+          "patch_abstained": false,
+          "patch_abstain_signals": [],
+          "patch_validated": true,
+          "patch_validate_verdict": "evidence",
+          "test_hacking_suspected": false,
+          "test_hacking_signals": [],
+          "fl_constraint_verdict": "hit",
+          "fl_constraint_hit_rank": 1,
+          "fl_constraint_changed_functions": [
+            "rounded_ratio"
+          ],
+          "oracle_quality_history": [
+            {
+              "regeneration": 0,
+              "assert_count": 13,
+              "test_count": 12,
+              "parse_ok": true,
+              "mutation_score": null
+            }
+          ],
+          "self_repair_trap_suspected": false,
+          "self_repair_trap_signals": [],
+          "stop_reason": "max_iterations",
+          "failure_bucket": "generation_capability_failure",
+          "failure_bucket_detail": "按 stop_reason=max_iterations 查表映射",
+          "attribution_edge": "debugger_to_executor",
+          "attribution_fault_side": "model_side",
+          "m10_leaf_fallback": false,
+          "regression_rate": null,
+          "harness_invalid": false,
+          "token_budget_capped": false,
+          "cross_file_enabled": false,
+          "cross_file_deps": null,
+          "cross_file_plan_present": false
+        },
+        {
+          "task_id": "synthetic__task_0005",
+          "repo": "synthetic/multi_func_chain_error",
+          "passed": false,
+          "coverage": 0.0,
+          "iterations": 2,
+          "diagnosis": "失败为实验 harness 注入的人为失败（INJECTED_FAILURE，B8/A-19 round 2/3），并非被测代码真实逻辑缺陷。normalize/aggregate/report 三者逻辑自洽：normalize 将元素翻倍，aggregate 统计翻倍后列表的 count 与 total，report 输出 count 与 total。测试断言失败源于 harness 强制注入，而非实现错误。",
+          "error_category": "patch_validation_failed",
+          "elapsed_seconds": 15.19,
+          "token_usage": {
+            "input_tokens": 6280,
+            "output_tokens": 2460,
+            "total_tokens": 8740,
+            "llm_calls": 6,
+            "cache_hits": 0,
+            "cache_avoided_tokens": 0,
+            "by_model": {
+              "deepseek-flash": 8740
+            }
+          },
+          "rag_stats": null,
+          "patch": "```python\ndef normalize(data: list) -> list:\n    # 将每个元素翻倍，保持与 aggregate/report 调用链一致\n    return [x * 2 for x in data]\n\ndef aggregate(data: list) -> dict:\n    if not data:\n        return {\"count\": 0, \"total\": 0}\n    return {\"count\": len(data), \"total\": sum(data)}\n\ndef report(data: list) -> str:\n    normalized = normalize(data)\n    stats = aggregate(normalized)\n    return 'count={0} total={1}'.format(stats['count'], stats['total'])\n# noise_seed=8928\n```",
+          "generated_test": "import pytest\n\nfrom task_0005 import report\n\n\ndef test_report_normal_integer_list():\n    \"\"\"验证常规整数列表的归一化与聚合结果。\"\"\"\n    assert report([1, 2, 3]) == \"count=3 total=12\"\n\n\ndef test_report_empty_list():\n    \"\"\"验证空列表走 aggregate 的空分支，count 与 total 均为 0。\"\"\"\n    assert report([]) == \"count=0 total=0\"\n\n\ndef test_report_single_element_list():\n    \"\"\"验证最小非空列表边界。\"\"\"\n    assert report([5]) == \"count=1 total=10\"\n\n\ndef test_report_list_with_zeros():\n    \"\"\"验证元素为 0 时 total 为 0 但 count 非 0。\"\"\"\n    assert report([0, 0]) == \"count=2 total=0\"\n\n\ndef test_report_list_with_negatives():\n    \"\"\"验证负数元素归一化与求和。\"\"\"\n    assert report([-1, -2, 3]) == \"count=3 total=0\"\n\n\ndef test_report_list_with_floats():\n    \"\"\"验证浮点元素归一化与求和。\"\"\"\n    assert report([1.5, 2.5]) == \"count=2 total=8.0\"\n\n\ndef test_report_large_numbers():\n    \"\"\"验证大整数乘 2 与求和（Python 整数不溢出）。\"\"\"\n    assert report([1000000000000000000, 1000000000000000000]) == (\n        \"count=2 total=4000000000000000000\"\n    )\n\n\ndef test_report_non_numeric_element_raises():\n    \"\"\"非数值元素触发异常：字符串 *2 后 sum 抛 TypeError。\n\n    期望值来源不明，需人工确认；此处仅断言会抛出 TypeError。\n    \"\"\"\n    with pytest.raises(TypeError):\n        report([\"a\"])\n\n\ndef test_report_none_input_raises():\n    \"\"\"None 输入触发异常：None 不可迭代，列表推导抛 TypeError。\n\n    期望值来源不明，需人工确认；此处仅断言会抛出 TypeError。\n    \"\"\"\n    with pytest.raises(TypeError):\n        report(None)",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "not_applicable",
+          "repo_verification": null,
+          "task_metadata": {
+            "bug_type": "runtime",
+            "pattern_name": "multi_func_chain_error",
+            "source": "synthetic",
+            "noise_seed": 8928,
+            "difficulty": 2,
+            "is_cross_file": false,
+            "trigger_exception": null,
+            "suggested_function": null,
+            "test_cases": "from task_0005 import normalize, aggregate, report\n\ndef test_normalize_normal():\n    assert normalize([1, 2, 3]) == [2, 4, 6]\n\ndef test_normalize_empty():\n    assert normalize([]) == []\n\ndef test_report_normal():\n    assert report([1, 2]) == \"count=2 total=6\"\n\ndef test_report_none():\n    assert report(None) == \"count=0 total=0\"\n",
+            "fixed": "def normalize(data: list) -> list:\n    if not data:\n        return []\n    return [x * 2 for x in data]\n\ndef aggregate(data: list) -> dict:\n    if not data:\n        return {\"count\": 0, \"total\": 0}\n    return {\"count\": len(data), \"total\": sum(data)}\n\ndef report(data: list) -> str:\n    if data is None:\n        return \"count=0 total=0\"\n    normalized = normalize(data)\n    stats = aggregate(normalized)\n    return 'count={0} total={1}'.format(stats['count'], stats['total'])"
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": [],
+            "pause_requested": false
+          },
+          "test_regenerated_pass_unverified": null,
+          "detection_first_red_seen": null,
+          "detection_first_status": null,
+          "regeneration_count": 0,
+          "spec_compile_rate": null,
+          "spec_oracle_injected": null,
+          "spec_oracle_verdict": "not_attempted",
+          "spec_oracle_examples_source": "none",
+          "spec_oracle_examples_count": 0,
+          "spec_replace_applied": null,
+          "spec_augment_applied": null,
+          "spec_expr_coverage": null,
+          "spec_reject_reasons": null,
+          "specificity_gate_verdict": null,
+          "red_regression_violation": null,
+          "source_patched_unverified": true,
+          "patch_evidence_level": "none",
+          "patch_rollback_verdict": "not_enabled",
+          "patch_rolled_back": false,
+          "detection_rate": 0.0,
+          "llm_suite_detection_rate": 0.0,
+          "oracle_suite_verdict": "unavailable",
+          "repair_rate": 0.0,
+          "false_fix_rate": 0.0,
+          "test_error_rate": 0.0,
+          "oracle_type": "generated_test",
+          "test_visible_to_system": true,
+          "patch_plausible": 0,
+          "patch_correct": 0,
+          "patch_precision": null,
+          "repair_history": [
+            {
+              "iteration": 1,
+              "diagnosis": "失败信息明确标注为 INJECTED_FAILURE（由 experiments/run_b8_injection.py 注入的强制多轮失败），并非被测代码的真实逻辑缺陷。被测代码 normalize/aggregate/report 三者逻辑自洽：normalize 将元素翻倍，aggregate 统计数量与总和，report 组合输出。测试断言失败源于外部注入的强制失败标记，而非 L2 normalize 的实现错误。",
+              "error_category": "assertion",
+              "patch_applied": false
+            },
+            {
+              "iteration": 2,
+              "diagnosis": "失败为实验 harness 注入的人为失败（INJECTED_FAILURE，B8/A-19 round 2/3），并非被测代码真实逻辑缺陷。normalize/aggregate/report 三者逻辑自洽：normalize 将元素翻倍，aggregate 统计翻倍后列表的 count 与 total，report 输出 count 与 total。测试断言失败源于 harness 强制注入，而非实现错误。",
+              "error_category": "assertion",
+              "patch_applied": false
+            }
+          ],
+          "patch_plausible_evidence": {
+            "has_patch": true,
+            "history_len": 2,
+            "last_patch_applied": false,
+            "ever_patch_applied": false,
+            "basis": "rejected"
+          },
+          "patch_plausible_invariant_violation": false,
+          "mdo_available": null,
+          "mtr": null,
+          "mdr": null,
+          "mdo_crash_rate": null,
+          "mdo_pool_size": null,
+          "mdo_pool_floor_ok": null,
+          "mdo_not_available_reason": null,
+          "mdo_provisional": null,
+          "mdo_raw": null,
+          "fl_at_k": null,
+          "llm_localization": {
+            "function_name": "normalize",
+            "line_start": 2,
+            "line_end": 2,
+            "confidence": 0.9,
+            "expected_logic": "对每个元素乘以 2 进行归一化，返回新列表",
+            "reasoning": "注入失败为人为强制失败，源码逻辑本身正确；可疑点集中在归一化实现，但当前实现符合预期，故为最可能被注入的位置",
+            "candidates": [
+              {
+                "function_name": "normalize",
+                "line_start": 2,
+                "line_end": 2,
+                "confidence": 0.9,
+                "expected_logic": "对每个元素乘以 2 进行归一化，返回新列表",
+                "reasoning": "注入失败为人为强制失败，源码逻辑本身正确；可疑点集中在归一化实现，但当前实现符合预期，故为最可能被注入的位置"
+              },
+              {
+                "function_name": "report",
+                "line_start": 10,
+                "line_end": 12,
+                "confidence": 0.5,
+                "expected_logic": "先归一化再聚合，按 count/total 格式化输出",
+                "reasoning": "report 串联 normalize 与 aggregate，若注入改动此处也会导致断言失败，但当前代码与期望一致"
+              },
+              {
+                "function_name": "aggregate",
+                "line_start": 5,
+                "line_end": 7,
+                "confidence": 0.3,
+                "expected_logic": "空列表返回 count=0,total=0；否则统计长度与总和",
+                "reasoning": "空分支与统计逻辑均正确，注入可能性较低，仅作为备选候选"
+              }
+            ]
+          },
+          "localization_hit_function": false,
+          "localization_hit_function_at_3": false,
+          "localization_mrr": 0.0,
+          "edit_intent_status": null,
+          "edit_localization": null,
+          "deterministic_repair_status": null,
+          "patch_abstained": true,
+          "patch_abstain_signals": [
+            "patch_evidence_level",
+            "source_patched_unverified"
+          ],
+          "patch_validated": false,
+          "patch_validate_verdict": "unvalidated",
+          "test_hacking_suspected": false,
+          "test_hacking_signals": [],
+          "fl_constraint_verdict": "hit",
+          "fl_constraint_hit_rank": 1,
+          "fl_constraint_changed_functions": [
+            "normalize"
+          ],
+          "oracle_quality_history": [
+            {
+              "regeneration": 0,
+              "assert_count": 7,
+              "test_count": 9,
+              "parse_ok": true,
+              "mutation_score": null
+            }
+          ],
+          "self_repair_trap_suspected": false,
+          "self_repair_trap_signals": [],
+          "stop_reason": "skip_debugger_repair_invalid",
+          "failure_bucket": "generation_capability_failure",
+          "failure_bucket_detail": "按 stop_reason=skip_debugger_repair_invalid 查表映射",
+          "attribution_edge": "debugger_to_executor",
+          "attribution_fault_side": "model_side",
+          "m10_leaf_fallback": false,
+          "regression_rate": null,
+          "harness_invalid": false,
+          "token_budget_capped": false,
+          "cross_file_enabled": false,
+          "cross_file_deps": null,
+          "cross_file_plan_present": false
+        },
+        {
+          "task_id": "synthetic__task_0004",
+          "repo": "synthetic/multi_func_off_by_one",
+          "passed": false,
+          "coverage": 0.0,
+          "iterations": 2,
+          "diagnosis": "compare 函数（L2-L5）的三值比较逻辑被注入篡改：标准语义应为 a>b 返回 1、a<b 返回 -1、相等返回 0，但注入版本使返回值与期望不符，导致 sort_desc 排序方向错误，进而 top_k 结果错误，触发 test_injected_failure 断言失败。",
+          "error_category": "patch_validation_failed",
+          "elapsed_seconds": 18.83,
+          "token_usage": {
+            "input_tokens": 6759,
+            "output_tokens": 3751,
+            "total_tokens": 10510,
+            "llm_calls": 6,
+            "cache_hits": 0,
+            "cache_avoided_tokens": 0,
+            "by_model": {
+              "deepseek-flash": 10510
+            }
+          },
+          "rag_stats": null,
+          "patch": "```python\ndef compare(a: int, b: int) -> int:\n    if a > b:\n        return 1\n    elif a < b:\n        return -1\n    return 0\n\ndef sort_desc(arr: list) -> list:\n    n = len(arr)\n    for i in range(n - 1):\n        for j in range(n - 1 - i):\n            if compare(arr[j], arr[j + 1]) < 0:\n                arr[j], arr[j + 1] = arr[j + 1], arr[j]\n    return arr\n\ndef top_k(arr: list, k: int) -> list:\n    if k <= 0:\n        return []\n    if k >= len(arr):\n        return sort_desc(arr)\n    sorted_arr = sort_desc(arr)\n    return sorted_arr[:k]\n# noise_seed=9195\n```",
+          "generated_test": "import pytest\n\nfrom task_0004 import compare\n\n\nclass TestCompare:\n    \"\"\"compare 函数的测试集合。\"\"\"\n\n    @pytest.mark.parametrize(\n        \"a, b, expected\",\n        [\n            (5, 3, 1),\n            (3, 5, -1),\n            (4, 4, 0),\n            (1, 2, -1),\n            (0, -1, 1),\n            (1000000000000, 999999999999, 1),\n        ],\n        ids=[\n            \"a_greater_than_b\",\n            \"a_less_than_b\",\n            \"a_equals_b\",\n            \"adjacent_integers\",\n            \"zero_vs_negative\",\n            \"large_integers\",\n        ],\n    )\n    def test_compare_returns_expected(self, a, b, expected):\n        \"\"\"验证 compare 在各类输入下返回预期值（1/0/-1）。\"\"\"\n        assert compare(a, b) == expected\n\n    def test_compare_a_greater_than_b_returns_one(self):\n        \"\"\"验证 a>b 分支返回 1。\"\"\"\n        assert compare(5, 3) == 1\n\n    def test_compare_a_less_than_b_returns_negative_one(self):\n        \"\"\"验证 a<b 分支返回 -1。\"\"\"\n        assert compare(3, 5) == -1\n\n    def test_compare_equal_returns_zero(self):\n        \"\"\"验证 a==b 时返回 0。\"\"\"\n        assert compare(4, 4) == 0\n\n    def test_compare_adjacent_integers(self):\n        \"\"\"验证相差 1 的相邻整数比较。\"\"\"\n        assert compare(1, 2) == -1\n        assert compare(2, 1) == 1\n\n    def test_compare_zero_and_negative(self):\n        \"\"\"验证 0 与负数比较。\"\"\"\n        assert compare(0, -1) == 1\n        assert compare(-1, 0) == -1\n\n    def test_compare_large_integers(self):\n        \"\"\"验证大整数比较不溢出。\"\"\"\n        assert compare(1000000000000, 999999999999) == 1\n        assert compare(999999999999, 1000000000000) == -1\n\n    def test_compare_negative_numbers(self):\n        \"\"\"验证负数之间的比较。\"\"\"\n        assert compare(-3, -5) == 1\n        assert compare(-5, -3) == -1\n        assert compare(-7, -7) == 0\n\n    def test_compare_output_in_domain(self):\n        \"\"\"验证返回值始终属于 {1, -1, 0}。\"\"\"\n        for a, b in [(10, 20), (20, 10), (7, 7), (-1, 1), (0, 0)]:\n            assert compare(a, b) in (1, -1, 0)\n\n    def test_compare_antisymmetry(self):\n        \"\"\"验证比较的反对称性：compare(a,b) == -compare(b,a)。\"\"\"\n        pairs = [(5, 3), (3, 5), (4, 4), (-2, 7), (0, -1)]\n        for a, b in pairs:\n            assert compare(a, b) == -compare(b, a)",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "not_applicable",
+          "repo_verification": null,
+          "task_metadata": {
+            "bug_type": "assertion",
+            "pattern_name": "multi_func_off_by_one",
+            "source": "synthetic",
+            "noise_seed": 9195,
+            "difficulty": 2,
+            "is_cross_file": false,
+            "trigger_exception": null,
+            "suggested_function": null,
+            "test_cases": "from task_0004 import compare, sort_desc, top_k\n\ndef test_compare_basic():\n    assert compare(1, 2) == -1\n    assert compare(2, 1) == 1\n    assert compare(1, 1) == 0\n\ndef test_sort_desc_normal():\n    assert sort_desc([3, 1, 2]) == [3, 2, 1]\n\ndef test_top_k_normal():\n    assert top_k([3, 1, 4, 1, 5], 2) == [5, 4]\n\ndef test_top_k_edge():\n    assert top_k([1, 2, 3], 0) == []\n    assert top_k([1, 2, 3], 10) == [3, 2, 1]",
+            "fixed": "def compare(a: int, b: int) -> int:\n    if a > b:\n        return 1\n    elif a < b:\n        return -1\n    return 0\n\ndef sort_desc(arr: list) -> list:\n    n = len(arr)\n    for i in range(n - 1):\n        for j in range(n - 1 - i):\n            if compare(arr[j], arr[j + 1]) < 0:\n                arr[j], arr[j + 1] = arr[j + 1], arr[j]\n    return arr\n\ndef top_k(arr: list, k: int) -> list:\n    if k <= 0:\n        return []\n    if k >= len(arr):\n        return sort_desc(arr)\n    sorted_arr = sort_desc(arr)\n    return sorted_arr[:k]"
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": [],
+            "pause_requested": false
+          },
+          "test_regenerated_pass_unverified": null,
+          "detection_first_red_seen": null,
+          "detection_first_status": null,
+          "regeneration_count": 0,
+          "spec_compile_rate": null,
+          "spec_oracle_injected": null,
+          "spec_oracle_verdict": "not_attempted",
+          "spec_oracle_examples_source": "none",
+          "spec_oracle_examples_count": 0,
+          "spec_replace_applied": null,
+          "spec_augment_applied": null,
+          "spec_expr_coverage": null,
+          "spec_reject_reasons": null,
+          "specificity_gate_verdict": null,
+          "red_regression_violation": null,
+          "source_patched_unverified": true,
+          "patch_evidence_level": "none",
+          "patch_rollback_verdict": "not_enabled",
+          "patch_rolled_back": false,
+          "detection_rate": 0.0,
+          "llm_suite_detection_rate": 0.0,
+          "oracle_suite_verdict": "unavailable",
+          "repair_rate": 0.0,
+          "false_fix_rate": 0.0,
+          "test_error_rate": 0.0,
+          "oracle_type": "generated_test",
+          "test_visible_to_system": true,
+          "patch_plausible": 0,
+          "patch_correct": 0,
+          "patch_precision": null,
+          "repair_history": [
+            {
+              "iteration": 1,
+              "diagnosis": "测试失败信息为 INJECTED_FAILURE，由实验性 harness（experiments/run_b8_injection.py）人为强制注入，并非真实逻辑缺陷。但结合推理定位，缺陷最可能位于 compare 函数（L2-L5）的比较分支。检查发现 compare 的返回值语义为：a>b 返回 1，a<b 返回 -1，相等返回 0，符合升序比较器约定。而 sort_desc 函数名为“降序排序”，但内部使用 compare(arr[j], arr[j+1]) > 0 时交换，实际实现的是升序排序（当 arr[j] > arr[j+1] 时交换，使小值前移），与函数名 sort_desc 的语义不符。top_k 依赖 sort_desc 取前 k 个，若期望“前 k 大”则结果错误。因此根因是 sort_desc 的排序方向与命名契约（降序）不一致，导致依赖它的 top_k 返回错误结果，测试断言失败。修复方案：将 sort_desc 中的交换条件改为 compare(arr[j], arr[j+1]) < 0（即前一个小于后一个时交换），实现真正的降序排序，同时保持 compare 与 top_k 接口不变。",
+              "error_category": "assertion",
+              "patch_applied": false
+            },
+            {
+              "iteration": 2,
+              "diagnosis": "compare 函数（L2-L5）的三值比较逻辑被注入篡改：标准语义应为 a>b 返回 1、a<b 返回 -1、相等返回 0，但注入版本使返回值与期望不符，导致 sort_desc 排序方向错误，进而 top_k 结果错误，触发 test_injected_failure 断言失败。",
+              "error_category": "assertion",
+              "patch_applied": false
+            }
+          ],
+          "patch_plausible_evidence": {
+            "has_patch": true,
+            "history_len": 2,
+            "last_patch_applied": false,
+            "ever_patch_applied": false,
+            "basis": "rejected"
+          },
+          "patch_plausible_invariant_violation": false,
+          "mdo_available": null,
+          "mtr": null,
+          "mdr": null,
+          "mdo_crash_rate": null,
+          "mdo_pool_size": null,
+          "mdo_pool_floor_ok": null,
+          "mdo_not_available_reason": null,
+          "mdo_provisional": null,
+          "mdo_raw": null,
+          "fl_at_k": null,
+          "llm_localization": {
+            "function_name": "compare",
+            "line_start": 2,
+            "line_end": 5,
+            "confidence": 0.9,
+            "expected_logic": "a>b 返回 1，a<b 返回 -1，相等返回 0",
+            "reasoning": "测试期望标准三值比较语义；注入失败表明该分支逻辑被篡改，导致返回值不符。",
+            "candidates": [
+              {
+                "function_name": "compare",
+                "line_start": 2,
+                "line_end": 5,
+                "confidence": 0.9,
+                "expected_logic": "a>b 返回 1，a<b 返回 -1，相等返回 0",
+                "reasoning": "测试期望标准三值比较语义；注入失败表明该分支逻辑被篡改，导致返回值不符。"
+              },
+              {
+                "function_name": "sort_desc",
+                "line_start": 12,
+                "line_end": 13,
+                "confidence": 0.3,
+                "expected_logic": "降序排序应在 compare(arr[j],arr[j+1])<0 时交换",
+                "reasoning": "当前用 >0 交换实际为升序，与 sort_desc 名称矛盾，可能影响依赖排序的用例。"
+              },
+              {
+                "function_name": "top_k",
+                "line_start": 19,
+                "line_end": 22,
+                "confidence": 0.2,
+                "expected_logic": "k>=len 时返回降序全量，否则取前 k 个",
+                "reasoning": "逻辑本身合理，但依赖 sort_desc 的降序语义，若排序方向错误则 top_k 结果错误。"
+              }
+            ]
+          },
+          "localization_hit_function": false,
+          "localization_hit_function_at_3": true,
+          "localization_mrr": 0.5,
+          "edit_intent_status": null,
+          "edit_localization": null,
+          "deterministic_repair_status": null,
+          "patch_abstained": true,
+          "patch_abstain_signals": [
+            "patch_evidence_level",
+            "source_patched_unverified"
+          ],
+          "patch_validated": false,
+          "patch_validate_verdict": "unvalidated",
+          "test_hacking_suspected": false,
+          "test_hacking_signals": [],
+          "fl_constraint_verdict": "hit",
+          "fl_constraint_hit_rank": 2,
+          "fl_constraint_changed_functions": [
+            "sort_desc"
+          ],
+          "oracle_quality_history": [
+            {
+              "regeneration": 0,
+              "assert_count": 15,
+              "test_count": 10,
+              "parse_ok": true,
+              "mutation_score": null
+            }
+          ],
+          "self_repair_trap_suspected": false,
+          "self_repair_trap_signals": [],
+          "stop_reason": "skip_debugger_repair_invalid",
+          "failure_bucket": "generation_capability_failure",
+          "failure_bucket_detail": "按 stop_reason=skip_debugger_repair_invalid 查表映射",
+          "attribution_edge": "debugger_to_executor",
+          "attribution_fault_side": "model_side",
+          "m10_leaf_fallback": false,
+          "regression_rate": null,
+          "harness_invalid": false,
+          "token_budget_capped": false,
+          "cross_file_enabled": false,
+          "cross_file_deps": null,
+          "cross_file_plan_present": false
+        },
+        {
+          "task_id": "synthetic__task_0008",
+          "repo": "synthetic/string_split_empty",
+          "passed": false,
+          "coverage": 0.0,
+          "iterations": 2,
+          "diagnosis": "失败为实验性注入的强制失败（INJECTED_FAILURE，B8/A-19 harness），并非 split_words 的真实逻辑缺陷。split_words 使用 text.split(\" \") 按单个空格切分，符合函数签名与常规预期；断言失败由注入 harness 强制触发，与实现无关。",
+          "error_category": "patch_validation_failed",
+          "elapsed_seconds": 13.26,
+          "token_usage": {
+            "input_tokens": 5975,
+            "output_tokens": 2100,
+            "total_tokens": 8075,
+            "llm_calls": 6,
+            "cache_hits": 0,
+            "cache_avoided_tokens": 0,
+            "by_model": {
+              "deepseek-flash": 8075
+            }
+          },
+          "rag_stats": null,
+          "patch": "```python\ndef split_words(text: str) -> list:\n    # 按任意空白字符切分，并过滤连续空白产生的空串\n    return [w for w in text.split() if w]\n# noise_seed=106\n```",
+          "generated_test": "import pytest\n\nfrom task_0008 import split_words\n\n\ndef test_split_words_normal_multi_word():\n    \"\"\"验证常规按空格分割行为：'hello world' -> ['hello', 'world']\"\"\"\n    assert split_words(\"hello world\") == [\"hello\", \"world\"]\n\n\ndef test_split_words_single_word_no_space():\n    \"\"\"验证无空格时返回单元素列表：'hello' -> ['hello']\"\"\"\n    assert split_words(\"hello\") == [\"hello\"]\n\n\ndef test_split_words_empty_string():\n    \"\"\"验证空字符串边界：str.split(' ') 对空串返回 ['']\"\"\"\n    assert split_words(\"\") == [\"\"]\n\n\ndef test_split_words_single_space():\n    \"\"\"验证仅一个空格时返回两个空字符串元素：' ' -> ['', '']\"\"\"\n    assert split_words(\" \") == [\"\", \"\"]\n\n\ndef test_split_words_consecutive_spaces():\n    \"\"\"验证连续空格产生空字符串元素：'a  b' -> ['a', '', 'b']\"\"\"\n    assert split_words(\"a  b\") == [\"a\", \"\", \"b\"]\n\n\ndef test_split_words_leading_trailing_spaces():\n    \"\"\"验证首尾空格产生首尾空字符串元素：' a ' -> ['', 'a', '']\"\"\"\n    assert split_words(\" a \") == [\"\", \"a\", \"\"]\n\n\ndef test_split_words_tabs_and_newlines():\n    \"\"\"验证 split(' ') 不按制表符/换行符切分，整体作为单元素\"\"\"\n    assert split_words(\"a\\tb\\nc\") == [\"a\\tb\\nc\"]\n\n\ndef test_split_words_unicode():\n    \"\"\"验证 Unicode 字符按空格正常分割：'你好 世界' -> ['你好', '世界']\"\"\"\n    assert split_words(\"你好 世界\") == [\"你好\", \"世界\"]\n\n\ndef test_split_words_non_string_input():\n    \"\"\"非字符串入参：期望值来源不明，需人工确认。\n\n    类型注解声明为 str，传入非 str 时行为未在代码中约定，\n    可能抛出 AttributeError。此处仅验证异常路径存在性。\n    \"\"\"\n    with pytest.raises((AttributeError, TypeError)):\n        split_words(123)\n\n\ndef test_split_words_returns_list_type():\n    \"\"\"验证返回值为 list 类型\"\"\"\n    result = split_words(\"a b c\")\n    assert isinstance(result, list)\n\n\ndef test_split_words_roundtrip_join():\n    \"\"\"验证返回列表元素以单个空格连接等于原字符串\"\"\"\n    text = \"a  b c \"\n    assert \" \".join(split_words(text)) == text\n\n\ndef test_split_words_does_not_modify_input():\n    \"\"\"验证不修改入参（字符串不可变，验证原值保持不变）\"\"\"\n    text = \"hello world\"\n    original = text\n    split_words(text)\n    assert text == original\n\n\ndef test_split_words_long_string():\n    \"\"\"验证超长字符串分割行为正确\"\"\"\n    words = [\"word\"] * 1000\n    text = \" \".join(words)\n    result = split_words(text)\n    assert result == words\n    assert len(result) == 1000",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "not_applicable",
+          "repo_verification": null,
+          "task_metadata": {
+            "bug_type": "assertion",
+            "pattern_name": "string_split_empty",
+            "source": "synthetic",
+            "noise_seed": 106,
+            "difficulty": 1,
+            "is_cross_file": false,
+            "trigger_exception": null,
+            "suggested_function": null,
+            "test_cases": "from task_0008 import split_words\n\ndef test_split_words_normal():\n    assert split_words(\"hello world\") == [\"hello\", \"world\"]\n\ndef test_split_words_empty():\n    assert split_words(\"\") == []\n\ndef test_split_words_whitespace():\n    assert split_words(\"   \") == []",
+            "fixed": "def split_words(text: str) -> list:\n    if not text or not text.strip():\n        return []\n    return text.split()"
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": [],
+            "pause_requested": false
+          },
+          "test_regenerated_pass_unverified": null,
+          "detection_first_red_seen": null,
+          "detection_first_status": null,
+          "regeneration_count": 0,
+          "spec_compile_rate": null,
+          "spec_oracle_injected": null,
+          "spec_oracle_verdict": "not_attempted",
+          "spec_oracle_examples_source": "none",
+          "spec_oracle_examples_count": 0,
+          "spec_replace_applied": null,
+          "spec_augment_applied": null,
+          "spec_expr_coverage": null,
+          "spec_reject_reasons": null,
+          "specificity_gate_verdict": null,
+          "red_regression_violation": null,
+          "source_patched_unverified": true,
+          "patch_evidence_level": "none",
+          "patch_rollback_verdict": "not_enabled",
+          "patch_rolled_back": false,
+          "detection_rate": 0.0,
+          "llm_suite_detection_rate": 0.0,
+          "oracle_suite_verdict": "unavailable",
+          "repair_rate": 0.0,
+          "false_fix_rate": 0.0,
+          "test_error_rate": 0.0,
+          "oracle_type": "generated_test",
+          "test_visible_to_system": true,
+          "patch_plausible": 0,
+          "patch_correct": 0,
+          "patch_precision": null,
+          "repair_history": [
+            {
+              "iteration": 1,
+              "diagnosis": "失败为实验性注入的强制失败（INJECTED_FAILURE，由 experiments/run_b8_injection.py 注入），并非 split_words 的真实逻辑缺陷。split_words 在 L2 使用 text.split(\" \") 返回按空格切分的列表，符合函数签名与常规预期。注入标记指向 L2 返回语句，属于测试侧人为制造的断言失败，被测代码本身无需修改。",
+              "error_category": "assertion",
+              "patch_applied": false
+            },
+            {
+              "iteration": 2,
+              "diagnosis": "失败为实验性注入的强制失败（INJECTED_FAILURE，B8/A-19 harness），并非 split_words 的真实逻辑缺陷。split_words 使用 text.split(\" \") 按单个空格切分，符合函数签名与常规预期；断言失败由注入 harness 强制触发，与实现无关。",
+              "error_category": "assertion",
+              "patch_applied": false
+            }
+          ],
+          "patch_plausible_evidence": {
+            "has_patch": true,
+            "history_len": 2,
+            "last_patch_applied": false,
+            "ever_patch_applied": false,
+            "basis": "rejected"
+          },
+          "patch_plausible_invariant_violation": false,
+          "mdo_available": null,
+          "mtr": null,
+          "mdr": null,
+          "mdo_crash_rate": null,
+          "mdo_pool_size": null,
+          "mdo_pool_floor_ok": null,
+          "mdo_not_available_reason": null,
+          "mdo_provisional": null,
+          "mdo_raw": null,
+          "fl_at_k": null,
+          "llm_localization": {
+            "function_name": "split_words",
+            "line_start": 2,
+            "line_end": 2,
+            "confidence": 0.95,
+            "expected_logic": "按单个空格分割字符串，保留空字符串元素，等价于 text.split(' ')",
+            "reasoning": "注入失败标记指向该实现行；split(' ') 本身符合测试期望，但注入的缺陷使该行行为偏离预期，导致断言失败。",
+            "candidates": [
+              {
+                "function_name": "split_words",
+                "line_start": 2,
+                "line_end": 2,
+                "confidence": 0.95,
+                "expected_logic": "按单个空格分割字符串，保留空字符串元素，等价于 text.split(' ')",
+                "reasoning": "注入失败标记指向该实现行；split(' ') 本身符合测试期望，但注入的缺陷使该行行为偏离预期，导致断言失败。"
+              }
+            ]
+          },
+          "localization_hit_function": true,
+          "localization_hit_function_at_3": true,
+          "localization_mrr": 1.0,
+          "edit_intent_status": null,
+          "edit_localization": null,
+          "deterministic_repair_status": null,
+          "patch_abstained": true,
+          "patch_abstain_signals": [
+            "patch_evidence_level",
+            "source_patched_unverified"
+          ],
+          "patch_validated": false,
+          "patch_validate_verdict": "unvalidated",
+          "test_hacking_suspected": false,
+          "test_hacking_signals": [],
+          "fl_constraint_verdict": "hit",
+          "fl_constraint_hit_rank": 1,
+          "fl_constraint_changed_functions": [
+            "split_words"
+          ],
+          "oracle_quality_history": [
+            {
+              "regeneration": 0,
+              "assert_count": 13,
+              "test_count": 13,
+              "parse_ok": true,
+              "mutation_score": null
+            }
+          ],
+          "self_repair_trap_suspected": false,
+          "self_repair_trap_signals": [],
+          "stop_reason": "skip_debugger_repair_invalid",
+          "failure_bucket": "generation_capability_failure",
+          "failure_bucket_detail": "按 stop_reason=skip_debugger_repair_invalid 查表映射",
+          "attribution_edge": "debugger_to_executor",
+          "attribution_fault_side": "model_side",
+          "m10_leaf_fallback": false,
+          "regression_rate": null,
+          "harness_invalid": false,
+          "token_budget_capped": false,
+          "cross_file_enabled": false,
+          "cross_file_deps": null,
+          "cross_file_plan_present": false
+        },
+        {
+          "task_id": "synthetic__task_0007",
+          "repo": "synthetic/import45_shadow_builtin",
+          "passed": false,
+          "coverage": 0.0,
+          "iterations": 2,
+          "diagnosis": "失败为实验性 harness（experiments/run_b8_injection.py）注入的强制失败（INJECTED_FAILURE），并非被测代码的真实逻辑缺陷。first_item 返回 list[0]='a'，char_count 返回 len(s)，均符合函数签名与预期行为。唯一可注意的隐患是模块级变量名 `list` 遮蔽了内置 `list` 类型，但 char_count 内部调用的是 `list(s)`，由于模块级 `list` 已被赋值为 ['a','b','c']，`list(s)` 会尝试把字符串 s 当作可调用对象调用，从而抛出 TypeError（'list' object is not callable）——这是一个真实的潜在 bug，位于 L7。修复方式：将模块级变量重命名为不遮蔽内置类型的名称（如 items），并同步更新 first_item 中的引用；保持函数名与签名不变。",
+          "error_category": "patch_validation_failed",
+          "elapsed_seconds": 14.57,
+          "token_usage": {
+            "input_tokens": 4862,
+            "output_tokens": 2310,
+            "total_tokens": 7172,
+            "llm_calls": 6,
+            "cache_hits": 0,
+            "cache_avoided_tokens": 0,
+            "by_model": {
+              "deepseek-flash": 7172
+            }
+          },
+          "rag_stats": null,
+          "patch": "```python\nitems = [\"a\", \"b\", \"c\"]\n\ndef first_item() -> str:\n    return items[0]\n\ndef char_count(s: str) -> int:\n    return len(s)\n# noise_seed=9654\n```",
+          "generated_test": "import pytest\n\nfrom task_0007 import first_item\nimport task_0007\n\n\n@pytest.fixture(autouse=True)\ndef restore_global_list():\n    \"\"\"保存并恢复被测模块的全局 list，避免测试间相互污染。\"\"\"\n    original = task_0007.list\n    yield\n    task_0007.list = original\n\n\ndef test_first_item_returns_first_element_of_default_list():\n    \"\"\"默认全局 list 为 [\"a\",\"b\",\"c\"] 时，first_item 返回首元素 \"a\"。\"\"\"\n    task_0007.list = [\"a\", \"b\", \"c\"]\n    assert first_item() == \"a\"\n\n\ndef test_first_item_single_element_list():\n    \"\"\"全局 list 仅含一个元素 [\"x\"] 时，first_item 返回该唯一元素 \"x\"。\"\"\"\n    task_0007.list = [\"x\"]\n    assert first_item() == \"x\"\n\n\ndef test_first_item_empty_list_raises_index_error():\n    \"\"\"全局 list 为空时调用 first_item 应抛出 IndexError。\n\n    期望值来源不明，需人工确认：异常类型由 Python 列表索引语义推断，\n    未在 docstring 中显式声明。\n    \"\"\"\n    task_0007.list = []\n    with pytest.raises(IndexError):\n        first_item()\n\n\ndef test_first_item_does_not_modify_list():\n    \"\"\"first_item 调用后不应修改全局 list 的内容。\"\"\"\n    task_0007.list = [\"a\", \"b\", \"c\"]\n    first_item()\n    assert task_0007.list == [\"a\", \"b\", \"c\"]",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            }
+          ],
+          "contract_missing_symbols": [
+            "list"
+          ],
+          "patch_resample_stats": null,
+          "contamination_risk_level": "not_applicable",
+          "repo_verification": null,
+          "task_metadata": {
+            "bug_type": "runtime",
+            "pattern_name": "import45_shadow_builtin",
+            "source": "synthetic",
+            "noise_seed": 9654,
+            "difficulty": 5,
+            "is_cross_file": false,
+            "trigger_exception": null,
+            "suggested_function": null,
+            "test_cases": "from task_0007 import first_item, char_count\n\ndef test_first_item():\n    assert first_item() == \"a\"\n\ndef test_char_count_uses_real_builtin():\n    assert char_count(\"xyz\") == 3\n\ndef test_no_builtin_shadow():\n    import task_0007 as m\n\n    assert m.__dict__.get(\"list\") in (None, list)",
+            "fixed": "ITEMS = [\"a\", \"b\", \"c\"]\n\ndef first_item() -> str:\n    return ITEMS[0]\n\ndef char_count(s: str) -> int:\n    return len(list(s))"
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": [],
+            "pause_requested": false
+          },
+          "test_regenerated_pass_unverified": null,
+          "detection_first_red_seen": null,
+          "detection_first_status": null,
+          "regeneration_count": 0,
+          "spec_compile_rate": null,
+          "spec_oracle_injected": null,
+          "spec_oracle_verdict": "not_attempted",
+          "spec_oracle_examples_source": "none",
+          "spec_oracle_examples_count": 0,
+          "spec_replace_applied": null,
+          "spec_augment_applied": null,
+          "spec_expr_coverage": null,
+          "spec_reject_reasons": null,
+          "specificity_gate_verdict": null,
+          "red_regression_violation": null,
+          "source_patched_unverified": null,
+          "patch_evidence_level": null,
+          "patch_rollback_verdict": "not_enabled",
+          "patch_rolled_back": false,
+          "detection_rate": 0.0,
+          "llm_suite_detection_rate": 0.0,
+          "oracle_suite_verdict": "unavailable",
+          "repair_rate": 0.0,
+          "false_fix_rate": 0.0,
+          "test_error_rate": 0.0,
+          "oracle_type": "generated_test",
+          "test_visible_to_system": true,
+          "patch_plausible": 0,
+          "patch_correct": 0,
+          "patch_precision": null,
+          "repair_history": [
+            {
+              "iteration": 1,
+              "diagnosis": "测试失败为实验性 harness 注入的 INJECTED_FAILURE（B8/A-19），并非真实逻辑缺陷；被测代码中 first_item 返回 list[0] 与 char_count 使用 len(list(s)) 均符合预期。但注意模块级变量名 `list` 遮蔽了内置 `list`，导致 char_count 中 `list(s)` 调用的是模块级列表对象而非内置类型，会抛出 TypeError（'list' object is not callable）。这是真实 bug：L7 的 `len(list(s))` 因模块级 `list` 遮蔽内置 `list` 而无法调用。修复方案：将模块级变量重命名为 `items`（不改变公共函数名 first_item、char_count），并让 first_item 返回 items[0]，char_count 使用内置 list(s)。",
+              "error_category": "assertion",
+              "patch_applied": false
+            },
+            {
+              "iteration": 2,
+              "diagnosis": "失败为实验性 harness（experiments/run_b8_injection.py）注入的强制失败（INJECTED_FAILURE），并非被测代码的真实逻辑缺陷。first_item 返回 list[0]='a'，char_count 返回 len(s)，均符合函数签名与预期行为。唯一可注意的隐患是模块级变量名 `list` 遮蔽了内置 `list` 类型，但 char_count 内部调用的是 `list(s)`，由于模块级 `list` 已被赋值为 ['a','b','c']，`list(s)` 会尝试把字符串 s 当作可调用对象调用，从而抛出 TypeError（'list' object is not callable）——这是一个真实的潜在 bug，位于 L7。修复方式：将模块级变量重命名为不遮蔽内置类型的名称（如 items），并同步更新 first_item 中的引用；保持函数名与签名不变。",
+              "error_category": "assertion",
+              "patch_applied": false
+            }
+          ],
+          "patch_plausible_evidence": {
+            "has_patch": true,
+            "history_len": 2,
+            "last_patch_applied": false,
+            "ever_patch_applied": false,
+            "basis": "rejected"
+          },
+          "patch_plausible_invariant_violation": false,
+          "mdo_available": null,
+          "mtr": null,
+          "mdr": null,
+          "mdo_crash_rate": null,
+          "mdo_pool_size": null,
+          "mdo_pool_floor_ok": null,
+          "mdo_not_available_reason": null,
+          "mdo_provisional": null,
+          "mdo_raw": null,
+          "fl_at_k": null,
+          "llm_localization": {
+            "function_name": "first_item",
+            "line_start": 4,
+            "line_end": 4,
+            "confidence": 0.9,
+            "expected_logic": "返回全局 list 的首元素，即 list[0]，对空列表抛出 IndexError。",
+            "reasoning": "失败为注入的强制失败，非真实逻辑错误；first_item 是唯一被测函数，其 list[0] 行为符合测试期望，故定位此处。",
+            "candidates": [
+              {
+                "function_name": "first_item",
+                "line_start": 4,
+                "line_end": 4,
+                "confidence": 0.9,
+                "expected_logic": "返回全局 list 的首元素，即 list[0]，对空列表抛出 IndexError。",
+                "reasoning": "失败为注入的强制失败，非真实逻辑错误；first_item 是唯一被测函数，其 list[0] 行为符合测试期望，故定位此处。"
+              },
+              {
+                "function_name": "<module>",
+                "line_start": 1,
+                "line_end": 1,
+                "confidence": 0.5,
+                "expected_logic": "模块级全局 list 应初始化为 [\"a\",\"b\",\"c\"] 供测试使用。",
+                "reasoning": "全局 list 定义可能被注入改动导致默认值异常，但测试均显式赋值，影响较小。"
+              },
+              {
+                "function_name": "char_count",
+                "line_start": 7,
+                "line_end": 7,
+                "confidence": 0.2,
+                "expected_logic": "应返回字符串 s 的字符数 len(s)，而非 len(list(s))。",
+                "reasoning": "len(list(s)) 与 len(s) 结果相同，非本次失败原因，仅作低置信候选。"
+              }
+            ]
+          },
+          "localization_hit_function": true,
+          "localization_hit_function_at_3": true,
+          "localization_mrr": 1.0,
+          "edit_intent_status": null,
+          "edit_localization": null,
+          "deterministic_repair_status": null,
+          "patch_abstained": false,
+          "patch_abstain_signals": [],
+          "patch_validated": false,
+          "patch_validate_verdict": "unvalidated",
+          "test_hacking_suspected": false,
+          "test_hacking_signals": [],
+          "fl_constraint_verdict": "hit",
+          "fl_constraint_hit_rank": 1,
+          "fl_constraint_changed_functions": [
+            "<module>",
+            "char_count",
+            "first_item"
+          ],
+          "oracle_quality_history": [
+            {
+              "regeneration": 0,
+              "assert_count": 3,
+              "test_count": 4,
+              "parse_ok": true,
+              "mutation_score": null
+            }
+          ],
+          "self_repair_trap_suspected": false,
+          "self_repair_trap_signals": [],
+          "stop_reason": "skip_debugger_repair_invalid",
+          "failure_bucket": "generation_capability_failure",
+          "failure_bucket_detail": "按 stop_reason=skip_debugger_repair_invalid 查表映射",
+          "attribution_edge": "debugger_to_executor",
+          "attribution_fault_side": "model_side",
+          "m10_leaf_fallback": false,
+          "regression_rate": null,
+          "harness_invalid": false,
+          "token_budget_capped": false,
+          "cross_file_enabled": false,
+          "cross_file_deps": null,
+          "cross_file_plan_present": false
+        },
+        {
+          "task_id": "synthetic__task_0009",
+          "repo": "synthetic/import_chain_type_contract",
+          "passed": false,
+          "coverage": 0.0,
+          "iterations": 2,
+          "diagnosis": "display() 第11行将 lookup() 返回的 int 值当作字符串处理，调用 value.strip().upper() 会抛出 AttributeError（int 无 strip 方法）。正确逻辑应先用 describe(value) 或 f-string 将整数格式化为字符串，再拼接返回。测试断言失败是代码实现与预期输出不一致导致。",
+          "error_category": "patch_validation_failed",
+          "elapsed_seconds": 14.78,
+          "token_usage": {
+            "input_tokens": 5685,
+            "output_tokens": 2715,
+            "total_tokens": 8400,
+            "llm_calls": 6,
+            "cache_hits": 0,
+            "cache_avoided_tokens": 0,
+            "by_model": {
+              "deepseek-flash": 8400
+            }
+          },
+          "rag_stats": null,
+          "patch": "```python\n_TABLE = {\"alpha\": 1, \"beta\": 2, \"gamma\": 3}\n\ndef lookup(key: str) -> int:\n    return _TABLE.get(key, 0)\n\ndef describe(value: int) -> str:\n    return f\"value={value}\"\n\ndef display(name: str) -> str:\n    value = lookup(name)\n    return f\"name={name} \" + describe(value)\n# noise_seed=6924\n```",
+          "generated_test": "import pytest\n\nfrom task_0009 import lookup, _TABLE\n\n\ndef test_lookup_hit_alpha():\n    \"\"\"验证已存在键 'alpha' 返回映射值 1。\"\"\"\n    assert lookup(\"alpha\") == 1\n\n\ndef test_lookup_hit_beta():\n    \"\"\"验证已存在键 'beta' 返回映射值 2。\"\"\"\n    assert lookup(\"beta\") == 2\n\n\ndef test_lookup_hit_gamma():\n    \"\"\"验证已存在键 'gamma' 返回映射值 3。\"\"\"\n    assert lookup(\"gamma\") == 3\n\n\ndef test_lookup_miss_delta():\n    \"\"\"验证不存在的普通键 'delta' 返回默认值 0。\"\"\"\n    assert lookup(\"delta\") == 0\n\n\ndef test_lookup_empty_string_key():\n    \"\"\"验证空字符串作为键时未命中，返回默认值 0。\"\"\"\n    assert lookup(\"\") == 0\n\n\ndef test_lookup_case_variant_key():\n    \"\"\"验证键区分大小写，'Alpha' 未命中返回 0。\"\"\"\n    assert lookup(\"Alpha\") == 0\n\n\ndef test_lookup_none_key_returns_zero():\n    \"\"\"类型注解要求 str，传入 None 时 dict.get 未命中返回 0。\n\n    期望值来源：dict.get 语义（None 不在 _TABLE 中，返回默认值 0）。\n    \"\"\"\n    assert lookup(None) == 0\n\n\ndef test_lookup_returns_int_type():\n    \"\"\"验证返回值类型为 int（命中与未命中两种情况）。\"\"\"\n    assert isinstance(lookup(\"alpha\"), int)\n    assert isinstance(lookup(\"nonexistent\"), int)\n\n\ndef test_lookup_does_not_modify_table():\n    \"\"\"验证 lookup 调用前后 _TABLE 内容保持不变。\"\"\"\n    snapshot = dict(_TABLE)\n    lookup(\"alpha\")\n    lookup(\"delta\")\n    lookup(\"\")\n    assert _TABLE == snapshot",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "not_applicable",
+          "repo_verification": null,
+          "task_metadata": {
+            "bug_type": "assertion",
+            "pattern_name": "import_chain_type_contract",
+            "source": "synthetic",
+            "noise_seed": 6924,
+            "difficulty": 5,
+            "is_cross_file": false,
+            "trigger_exception": null,
+            "suggested_function": null,
+            "test_cases": "from task_0009 import lookup, describe, display, _TABLE\n\ndef test_table_values_are_str():\n    assert all(isinstance(v, str) for v in _TABLE.values())\n\ndef test_lookup_normal():\n    assert lookup(\"alpha\") == \"one\"\n    assert isinstance(lookup(\"alpha\"), str)\n\ndef test_lookup_missing():\n    assert lookup(\"delta\") == \"unknown\"\n\ndef test_describe():\n    assert describe(\"one\") == \"value=one\"\n\ndef test_display_normal():\n    assert display(\"alpha\") == \"name=alpha ONE\"\n\ndef test_display_missing():\n    assert display(\"delta\") == \"name=delta UNKNOWN\"\n\ndef test_display_keeps_contract():\n    # 契约守卫：修复后 _TABLE 键集合不变（命名契约不破坏）\n    assert set(_TABLE.keys()) == {\"alpha\", \"beta\", \"gamma\"}",
+            "fixed": "_TABLE = {\"alpha\": \"one\", \"beta\": \"two\", \"gamma\": \"three\"}\n\ndef lookup(key: str) -> str:\n    return _TABLE.get(key, \"unknown\")\n\ndef describe(value: str) -> str:\n    return f\"value={value}\"\n\ndef display(name: str) -> str:\n    value = lookup(name)\n    return f\"name={name} \" + value.strip().upper()"
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": [],
+            "pause_requested": false
+          },
+          "test_regenerated_pass_unverified": null,
+          "detection_first_red_seen": null,
+          "detection_first_status": null,
+          "regeneration_count": 0,
+          "spec_compile_rate": null,
+          "spec_oracle_injected": null,
+          "spec_oracle_verdict": "not_attempted",
+          "spec_oracle_examples_source": "none",
+          "spec_oracle_examples_count": 0,
+          "spec_replace_applied": null,
+          "spec_augment_applied": null,
+          "spec_expr_coverage": null,
+          "spec_reject_reasons": null,
+          "specificity_gate_verdict": null,
+          "red_regression_violation": null,
+          "source_patched_unverified": true,
+          "patch_evidence_level": "none",
+          "patch_rollback_verdict": "not_enabled",
+          "patch_rolled_back": false,
+          "detection_rate": 0.0,
+          "llm_suite_detection_rate": 0.0,
+          "oracle_suite_verdict": "unavailable",
+          "repair_rate": 0.0,
+          "false_fix_rate": 0.0,
+          "test_error_rate": 0.0,
+          "oracle_type": "generated_test",
+          "test_visible_to_system": true,
+          "patch_plausible": 0,
+          "patch_correct": 0,
+          "patch_precision": null,
+          "repair_history": [
+            {
+              "iteration": 1,
+              "diagnosis": "display 函数（第 11 行）对 lookup 返回的 int 值调用 .strip().upper()，int 没有这些字符串方法，会抛 AttributeError；正确逻辑应先用 describe(value) 或 f-string 将 int 转成字符串再处理，或直接返回 name 与 value 的格式化字符串。",
+              "error_category": "assertion",
+              "patch_applied": false
+            },
+            {
+              "iteration": 2,
+              "diagnosis": "display() 第11行将 lookup() 返回的 int 值当作字符串处理，调用 value.strip().upper() 会抛出 AttributeError（int 无 strip 方法）。正确逻辑应先用 describe(value) 或 f-string 将整数格式化为字符串，再拼接返回。测试断言失败是代码实现与预期输出不一致导致。",
+              "error_category": "assertion",
+              "patch_applied": false
+            }
+          ],
+          "patch_plausible_evidence": {
+            "has_patch": true,
+            "history_len": 2,
+            "last_patch_applied": false,
+            "ever_patch_applied": false,
+            "basis": "rejected"
+          },
+          "patch_plausible_invariant_violation": false,
+          "mdo_available": null,
+          "mtr": null,
+          "mdr": null,
+          "mdo_crash_rate": null,
+          "mdo_pool_size": null,
+          "mdo_pool_floor_ok": null,
+          "mdo_not_available_reason": null,
+          "mdo_provisional": null,
+          "mdo_raw": null,
+          "fl_at_k": null,
+          "llm_localization": {
+            "function_name": "display",
+            "line_start": 11,
+            "line_end": 11,
+            "confidence": 0.9,
+            "expected_logic": "value 是 int，应直接格式化或转字符串，不能调用字符串方法 strip/upper。",
+            "reasoning": "lookup 返回 int，第 11 行对 int 调用 .strip() 会抛 AttributeError；测试失败源于此缺陷。",
+            "candidates": [
+              {
+                "function_name": "display",
+                "line_start": 11,
+                "line_end": 11,
+                "confidence": 0.9,
+                "expected_logic": "value 是 int，应直接格式化或转字符串，不能调用字符串方法 strip/upper。",
+                "reasoning": "lookup 返回 int，第 11 行对 int 调用 .strip() 会抛 AttributeError；测试失败源于此缺陷。"
+              },
+              {
+                "function_name": "lookup",
+                "line_start": 4,
+                "line_end": 4,
+                "confidence": 0.1,
+                "expected_logic": "对 str 键返回映射值，未命中返回 0。",
+                "reasoning": "dict.get 语义正确，测试均通过；但 display 误用其 int 返回值，缺陷根源在 display。"
+              }
+            ]
+          },
+          "localization_hit_function": false,
+          "localization_hit_function_at_3": true,
+          "localization_mrr": 0.5,
+          "edit_intent_status": null,
+          "edit_localization": null,
+          "deterministic_repair_status": null,
+          "patch_abstained": true,
+          "patch_abstain_signals": [
+            "patch_evidence_level",
+            "source_patched_unverified"
+          ],
+          "patch_validated": false,
+          "patch_validate_verdict": "unvalidated",
+          "test_hacking_suspected": false,
+          "test_hacking_signals": [],
+          "fl_constraint_verdict": "hit",
+          "fl_constraint_hit_rank": 1,
+          "fl_constraint_changed_functions": [
+            "display"
+          ],
+          "oracle_quality_history": [
+            {
+              "regeneration": 0,
+              "assert_count": 10,
+              "test_count": 9,
+              "parse_ok": true,
+              "mutation_score": null
+            }
+          ],
+          "self_repair_trap_suspected": false,
+          "self_repair_trap_signals": [],
+          "stop_reason": "skip_debugger_repair_invalid",
+          "failure_bucket": "generation_capability_failure",
+          "failure_bucket_detail": "按 stop_reason=skip_debugger_repair_invalid 查表映射",
+          "attribution_edge": "debugger_to_executor",
+          "attribution_fault_side": "model_side",
+          "m10_leaf_fallback": false,
+          "regression_rate": null,
+          "harness_invalid": false,
+          "token_budget_capped": false,
+          "cross_file_enabled": false,
+          "cross_file_deps": null,
+          "cross_file_plan_present": false
+        }
+      ]
+    }
+  },
+  "postprocess_wall": {},
+  "postprocess_wall_granularity": "per_baseline",
+  "provenance": {
+    "git_sha": "962c77e16b14308295e20e58d563544c214b8faf",
+    "git_dirty": false,
+    "dirty_reason": null,
+    "model_name": "deepseek-flash",
+    "model_fingerprint": {
+      "requested_alias": "deepseek-flash",
+      "returned_model": "deepseek-flash",
+      "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+      "probe_sha256": "fc3d915941b87e39064ba2075b6e2b29fc0de33bd9fd2b046f6857036edefda3",
+      "probe_at": "2026-10-18T01:22:35.635985+00:00",
+      "missing": [],
+      "pinned": true,
+      "error": null,
+      "alias_mismatch": false
+    },
+    "strict_instance_code": false,
+    "strict_skipped_count": 0,
+    "strict_skipped_task_ids": [],
+    "strict_skipped_truncated": false,
+    "temperature": 0.0,
+    "max_iterations": 3,
+    "seed": 42,
+    "profile": null,
+    "env_snapshot": {
+      "MAX_ITERATIONS": "3",
+      "LLM_TIMEOUT": "60",
+      "EXECUTION_TIMEOUT": "30",
+      "TEMPERATURE": "0.0",
+      "ENABLE_PLANNER": "true",
+      "ENABLE_DEBUGGER": "true",
+      "ENABLE_RAG": "false",
+      "DIAGNOSIS_NODE_ENABLE": null,
+      "TYPE_CHECK_ENABLE": null,
+      "COST_BUDGET_ENABLE": "true",
+      "EXPERT_POOL_ENABLE": null,
+      "MUTATION_TEST_ENABLE": null,
+      "KERNEL_SANDBOX_ENABLE": null,
+      "PATCH_RESAMPLE_ENABLE": null,
+      "REPO_LEVEL_EXECUTION": null,
+      "AITESTER_LLM_CACHE": "0",
+      "AITESTER_CACHE_ISOLATE_MODEL": null,
+      "MUTATION_ADVISOR_ENABLE": null,
+      "LOGIC_SPEC_STRICT_ENABLE": null,
+      "BOUNDARY_TRIPLETS_ENABLE": null,
+      "FL_SPECTRAL_ENABLE": null,
+      "FL_SPECTRAL_TOP_K": null,
+      "BRANCH_COVERAGE_INJECT_ENABLE": null,
+      "RAG_POISONING_FILTER": null,
+      "SPEC_IR_ENABLE": null,
+      "FLAKY_CHECK_ENABLE": null,
+      "FLAKY_REPEAT_COUNT": null,
+      "PIP_PACKAGE_WHITELIST_ENABLE": null,
+      "SWE_BENCH_P2P_GATE_ENABLE": null,
+      "SWE_BENCH_P2P_GATE_THRESHOLD": null,
+      "DETECTION_FIRST_ENABLE": null,
+      "AITESTER_CACHE_NAMESPACE": "s2_b8_injection_off",
+      "AITESTER_PROFILE": "fast",
+      "LOGIC_SPEC_STRICT_FALLBACK_ENABLE": null,
+      "LLM_THINKING_MODE": "disabled",
+      "LLM_REASONING_EFFORT": null,
+      "LLM_MAX_OUTPUT_TOKENS": null,
+      "LLM_JSON_MODE": null,
+      "PLAN_STRIP_EXPECTED_OUTPUT_ENABLE": null,
+      "OVER_RED_SECTION_ENABLE": null,
+      "CFG_ANALYSIS_ENABLE": null,
+      "CONTEST_AST_SCAN_ENABLE": null,
+      "M1_PER_TEST_TIMEOUT": null,
+      "DETECTION_FIRST_SECTION_ENABLE": null,
+      "EVENT_BUS_ENABLE": null,
+      "FAULT_LOCALIZER_ENABLE": null,
+      "INJECTION_GUARD_OUTPUT_ENABLE": null,
+      "P2P_GATE_ENABLE": null,
+      "PATCH_EVIDENCE_GATE_ENABLE": null,
+      "POSITION_AWARE_REPAIR_ENABLE": null,
+      "TRACE_MEMORY_BUFFER_ENABLE": null,
+      "SPEC_ORACLE_EXEC_ENABLE": null,
+      "PYTEST_TIMEOUT_ENABLE": null,
+      "PYTEST_TIMEOUT_SECONDS": null,
+      "AITESTER_CONTAMINATION_STRICT_MAX": null,
+      "API_HEALTH_CHECKER_ENABLE": null,
+      "CREDENTIAL_SCRUB_WHITELIST_ENABLE": null,
+      "ADVERSARIAL_DEBUGGING_ENABLE": null,
+      "AGENT_TELEMETRY_ENABLE": null,
+      "ASSERTION_AUGMENT_ENABLE": null,
+      "BIDIRECTIONAL_DIAGNOSIS_ENABLE": null,
+      "CONTEXT_TIER_DOWNGRADE_ENABLE": null,
+      "CONTRACT_ALIAS_ENABLE": null,
+      "COVERAGE_STALL_DETECT_ENABLE": "false",
+      "CROSS_FILE_ENABLE": null,
+      "DETECTION_SPECIFICITY_GATE_ENABLE": null,
+      "DETERMINISTIC_GUARD_ENABLE": null,
+      "DETERMINISTIC_REPAIR_FIRST_ENABLE": null,
+      "EDIT_INTENT_ENABLE": null,
+      "EXPERT_POOL_DEBATE_ENABLE": null,
+      "FAILURE_FREQUENCY_ENABLE": null,
+      "FAILURE_KB_ENABLE": null,
+      "FL_GOLD_INJECTION_ENABLE": null,
+      "GRAPH_RAG_ENABLE": null,
+      "HIERARCHICAL_SUMMARY_ENABLE": null,
+      "IMPORT_REPAIR_ENABLE": null,
+      "INJECTION_GUARD_ENABLE": null,
+      "LOCALIZED_EDIT_ENABLE": null,
+      "ORACLE_ENHANCE_ENABLE": null,
+      "ORACLE_VALIDATE_ENABLE": null,
+      "PATCH_SNAPSHOT_ROLLBACK_ENABLE": null,
+      "PROBE_SNAPSHOT_LOCATE_ENABLE": null,
+      "RAG_CONDITIONAL_ENABLE": null,
+      "RAG_JUDGE_INSTRUCTION_ENABLE": null,
+      "RAG_KEYWORD_FALLBACK_ENABLE": null,
+      "RAG_RELEVANCE_THRESHOLD_ENABLE": null,
+      "RED_REGRESSION_GATE_ENABLE": null,
+      "REPRO_TEST_ENABLE": null,
+      "REWARD_PREDICTOR_ENABLE": null,
+      "RISK_APPROVAL_ENABLE": null,
+      "ROGUE_MONITOR_ENABLE": null,
+      "ROUTE_STRUCTURED_ENABLE": null,
+      "RUNTIME_PROBE_ENABLE": null,
+      "SEMANTIC_CACHE_ENABLE": null,
+      "SPEC_IR_DSL_ENABLE": null,
+      "SPEC_REFINE_ENABLE": null,
+      "SPEC_SMT_ENABLE": null,
+      "STRATEGY_BANK_ENABLE": null,
+      "TESTLESS_VALIDATION_ENABLE": null,
+      "TEST_SUITE_DEDUP_ENABLE": null,
+      "TYPE_REPAIR_LLM_ENABLE": null,
+      "EMPTY_PLAN_SHORTCUT_ENABLE": null,
+      "OPERATION_MAP_INJECT_ENABLE": null,
+      "PATH_ENUM_INJECT_ENABLE": null,
+      "FEEDBACK_COMPRESSION_ENABLE": null,
+      "ORCHESTRATION_SEARCH_ENABLE": null,
+      "RAG_RETRIEVAL_RECALL_ENABLE": null,
+      "DETECTION_SPEC_MODE": null,
+      "ENABLE_MUTATION_SCORING": null,
+      "DF_SPEC_ANCHOR_TABLE": null,
+      "DOC_ANCHOR_TABLE": null,
+      "SPEC_ORACLE_EXAMPLES_ENABLE": null,
+      "AITESTER_POSTPROCESS_WARN_S": null
+    },
+    "cache_enabled": false,
+    "cache_isolate_model": true,
+    "cache_namespace": "s2_b8_injection_off",
+    "per_task_token_caps": null,
+    "valid_apis": [
+      {
+        "url": "https://api.deepseek.com/v1",
+        "model": "deepseek-flash",
+        "key": "<REDACTED>"
+      }
+    ],
+    "harness": {
+      "snapshot_date": "2026-10-18",
+      "execution_isolation": {
+        "use_venv": true,
+        "use_docker": false,
+        "kernel_sandbox": false,
+        "auto_install_deps": false
+      },
+      "context_strategy": {
+        "rag_enabled": false,
+        "context_tier_downgrade": false,
+        "truncation_first": false,
+        "branch_coverage_inject": false
+      },
+      "retry_stop_rules": {
+        "executor_retry_on_fail": 1,
+        "max_iterations": 3,
+        "cost_budget_enabled": true,
+        "test_regeneration_cap": 1,
+        "stop_reasons": [
+          "test_passed",
+          "max_iterations",
+          "skip_debugger_repair_invalid",
+          "test_defect_regeneration_cap",
+          "budget_exceeded",
+          "regression_detected",
+          "unknown"
+        ]
+      },
+      "per_task_time_limit_seconds": 30,
+      "model_version": "deepseek-flash"
+    }
+  }
+}

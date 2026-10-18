@@ -1,0 +1,5 @@
+  ✓ case_confirmed：classification=confirmed_priority（期望 confirmed_priority）
+  ✓ case_prefix_repair_invalid：classification=not_confirmed（期望 not_confirmed）
+  ✓ case_delta：classification=unexpected_delta（期望 unexpected_delta）
+  ✓ case_no_injection：classification=not_confirmed（期望 not_confirmed）
+✓ 复验脚本判定逻辑自测全部通过（4/4 构造夹具，零 LLM）

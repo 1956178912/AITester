@@ -1,0 +1,90 @@
+{
+  "schema": "t3_oracle_k3_preflight/1",
+  "generated_at": "2026-10-18T01:02:13+00:00",
+  "run_stamp": "t_round_oracle_k3_20261018",
+  "prereg_sha256": "c4619018f6dd2119597f870c1e069ddcfdc0d6fa0378fd21f47b84842a38b5b4",
+  "implementation": {
+    "experiments/spec_examples_generator.py": "01c0742b2133e16ee7b68dd2784b31cbb35855ffdbf4e700a51c150b9bffdc05",
+    "tests/test_examples_multisample.py": "8729017589a4d319e5f66cef3e83eb7c2e6862d05b0962c19805aab7c0f6317a",
+    "_helpers/run_k3_sampling.py": "da2eb72fe49f37f118549325f374e86a35ec241f015797b110f659a9c2e106c9",
+    "experiments/oracle_examples_replay.py": "348147dcddb400d0d5b926d3f089214927bf3ca59568c5c2e3bf51cc449deb40"
+  },
+  "git": {
+    "root": "/Users/wangchenyu/Workspace/AITester",
+    "head": "a93c1f60ee31b9582e0146f73e3038e6ce0f01a1",
+    "branch": "main",
+    "dirty_files_count": 7,
+    "note": "多 teammate 并发工作区；本任务不 git commit，只读基线工件"
+  },
+  "inputs_sha256": {
+    "experiments/results/emse_spec_anchor_20261016/SPEC_ANCHOR_TABLE.json": "3e90b2ad5ed365ad5ee989c73c92b84956a83c0fa8cb51368d288ae3ea53bf22",
+    "experiments/results/emse_df_spec_20261016/benchmark_quixbugs_20261016_232138.json": "813c437fc53a84c1517cce234b12184e5047bf483fb982cb9382d1c61307245a",
+    "experiments/results/emse_df_spec_20261016/benchmark_quixbugs_20261017_003023.json": "536da803dbb290dab9dff26ae14302a8ce8d452e058b1d2c4c1705852900d0ec",
+    "experiments/results/p_round_oracle_examples_20261018/ORACLE_EXAMPLES_REPORT.json": "87ee536b6b6b49dc4425d4d4303f50c9e8eb7def8fb62a7d04097186c1618477",
+    "experiments/results/p_round_oracle_examples_20261018/ORACLE_EXAMPLES_REPORT_norm.json": "0870f1f213c1b7cf84f39453e38ee64203c7dca6dc903340bc08269686e08ab1",
+    "experiments/results/s_round_examples_multisample_20261018/MULTISAMPLE_STATS.json": "bfdc226c3aee11d8cbfa85c945c0c46f342e61373039868d6c71228500f5143d",
+    "docs/design/oracle_quality_metric.md": "514527e987fe379d21b16fd502e9fddb70da8f1bcdd5f856a7eb716af2c623ff",
+    "experiments/price_table.json": "30c40b81dcdd39e2ed996d7792b36d2b193bbfde0a7d6eb25601a96dba048979"
+  },
+  "baseline_p11_norm": {
+    "report": "experiments/results/p_round_oracle_examples_20261018/ORACLE_EXAMPLES_REPORT_norm.json",
+    "counts": {
+      "correct": 8,
+      "fp": 0,
+      "silent": 3,
+      "misguided": 2,
+      "unavailable": 7
+    },
+    "n_classifiable": 13
+  },
+  "prompt_audit": {
+    "path": "experiments/results/t_round_oracle_k3_20261018/PREFLIGHT_PROMPTS.json",
+    "sha256": "eceb98aa356628bdee1f11090559801d9fe0d855fc7e62677c739e8495cd3c73",
+    "n_tasks": 20,
+    "all_default_prompts_match_s3": true,
+    "canonical_section_sha256": "88f4e057a509e3ee221c7fef4be5174d9ddd324c5a7e7d9fa1ecaa3fe978f355",
+    "note": "默认 prompt（canonical=False）与 S-3 工件 samples[0].prompt_sha256 20/20 相同 → 生成器默认零变化；canonical=True 为追加冻结段落后的变体"
+  },
+  "env": {
+    "model": "deepseek-flash",
+    "model_source": "config.LLM_CONFIGS[0]（API key 存在，不落盘/不打印）",
+    "llm_cache_planned": "AITESTER_LLM_CACHE=0（真实调用、成本可测）",
+    "max_output_tokens": "512",
+    "temperature": 0.0,
+    "sampling_namespace": "t_round_k3_20261018"
+  },
+  "tests": {
+    "ran": true,
+    "command": ".venv/bin/python -m pytest tests/test_examples_multisample.py -q",
+    "result": "39 passed, 1 warning in 0.14s（含既有 S-3 用例 + 新增 T3 majority/canonical/fallback 用例）",
+    "related_command": ".venv/bin/python -m pytest tests/test_oracle_examples.py -q",
+    "related_result": "62 passed, 1 warning in 1.34s",
+    "ruff_mypy": "ruff check/format 干净；mypy 无问题（spec_examples_generator.py）"
+  },
+  "estimate": {
+    "planned_calls": 60,
+    "per_call_expected_input_tokens": 950,
+    "per_call_expected_output_tokens": 60,
+    "estimated_cost_usd": 0.02142,
+    "fallback_worst_case_calls": 60,
+    "fallback_worst_case_cost_usd": 0.04284,
+    "budget_usd": 0.05,
+    "wall_limit_s": 900,
+    "abort_rules": "成本 >$0.05 / 采样墙钟 >900s / 连续 3 任务全 error（脚本内成本与墙钟检查 + 人工监视）"
+  },
+  "checks": {
+    "prereg_exists_and_no_edit_after_freeze": true,
+    "generator_default_prompt_matches_s3_20_of_20": true,
+    "canonical_section_appended_all_tasks": true,
+    "majority_param_k3_strictly_ge_2": true,
+    "single_sample_record_keys_unchanged": true,
+    "audit_keys_unchanged": true,
+    "targeted_tests_green": true,
+    "baseline_artifact_readable": true,
+    "budget_le_0_05": true
+  },
+  "blocking": [],
+  "warnings": [
+    "B2 主批次在后台运行：本预检/采样只用小调用与定向单测，不跑全量 pytest；重放阶段与 B2 并行（nice -n 15），墙钟可能略高于 S-3 记录"
+  ]
+}
