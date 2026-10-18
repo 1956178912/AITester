@@ -890,7 +890,7 @@ python experiments/run_benchmark.py --dataset swe_bench --subset lite --task-lim
 With `RepoExecutor` (`REPO_LEVEL_EXECUTION=true`), the lite-20 run was
 verified on the official SWE-bench criterion (gold `test_patch` before/after
 FAIL_TO_PASS/PASS_TO_PASS measurement); results in
-[experiments/results/experiment_report_20260925.md](experiments/results/experiment_report_20260925.md) §7:
+`experiments/results/experiment_report_20260925.md` §7:
 
 - After the data pipeline fix (`SWE_BENCH_ENRICHMENT` injecting real source) +
   execution environment fix (RepoExecutor repo-level clone + pip install -e +
@@ -1363,7 +1363,7 @@ For more details, see the [Performance Tuning Guide](docs/performance_guide.md),
 - The Single Agent baseline performs significantly worse (22.0%), validating the necessity of the multi-agent architecture
 - Statistical tests show the AITester vs Single Agent difference is significant (p < 0.001, Cohen's d = 0.848)
 
-See [experiments/results/synthetic_50_final/charts/](experiments/results/synthetic_50_final/charts/) for detailed results (kept locally, not committed; the repo's `experiments/results/` only tracks a placeholder note, historical artifacts are excluded via .gitignore).
+See `experiments/results/synthetic_50_final/charts/` for detailed results (kept locally, not committed; the repo's `experiments/results/` only tracks a placeholder note, historical artifacts are excluded via .gitignore).
 
 ### SWE-bench Lite Experiment (20 tasks)
 
@@ -1372,7 +1372,7 @@ This batch of experiments was affected by API rate limits, and results were not 
 **Repo-level verification (P0/P1, 2026-09-25)**: With `RepoExecutor`
 (`REPO_LEVEL_EXECUTION=true`) on the official SWE-bench criterion (gold
 `test_patch` before/after FAIL_TO_PASS/PASS_TO_PASS measurement), lite-20
-results are in [experiments/results/experiment_report_20260925.md](experiments/results/experiment_report_20260925.md) §7:
+results are in `experiments/results/experiment_report_20260925.md` §7:
 
 - After data pipeline fix (`SWE_BENCH_ENRICHMENT` injecting real source) +
   execution environment fix (RepoExecutor repo-level clone + pip install -e +

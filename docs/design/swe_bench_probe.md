@@ -34,7 +34,7 @@
 修正为"**数据管道✅修复 + 执行环境✅修复 + 补丁管道✅修复 + LLM 引擎
 修复质量边界（未突破）**"。跨文件任务（13/20 多源）在引擎能力突破前
 无正向信息量（ON/OFF 都会 0/N），跨文件收益验证需更强模型 + 仓库全量
-源码上下文重做。详见 [experiments/results/experiment_report_20260925.md](../../experiments/results/experiment_report_20260925.md) §7。
+源码上下文重做。详见 `experiments/results/experiment_report_20260925.md` §7（本地历史报告，不入库）。
 
 原探路方案（§1–§5.1）作为历史记录保留，下方原文不变。
 
