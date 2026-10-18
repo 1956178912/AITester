@@ -11,7 +11,9 @@
 ## 2. 全量测试
 
 - `full_suite_cov.log`：**8929 passed / 5 skipped / 0 failed**（`pytest tests/ -n 4 --dist loadfile --cov=src --cov-branch`，
-  COVERAGE_FILE 隔离；总行覆盖 17481/18106=96.55%、分支 6274/6762=92.78%）。
+  177.9s；COVERAGE_FILE 隔离；总行覆盖 **17482/18106=96.55%**、分支 **6275/6762=92.80%**）。
+- 说明：曾有一轮在同类命令下测得分支 92.78%（该轮含 2 例"工件目录未入库"门禁失败，失败改变分支执行）；
+  以本（干净树全绿）轮为准，两轮均在 ratchet 水位 92.5 之上。
 - 注：本日志在**最终提交后**的干净树状态生成（`check_artifacts_tracked` 的 `*_round_*` 扫描面要求本目录已入库）。
 
 ## 3. 口径

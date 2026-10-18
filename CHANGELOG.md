@@ -126,7 +126,7 @@
 ### Verification
 
 - 定向测试：T4 `pytest` 7 文件 **217 passed**；T3 既有 62+33 passed；T3c 8 文件 **187 passed**；T5 断言/校验补测全绿。
-- 全量测试与覆盖率（T 轮收尾，CI 同口径）：<!-- T-TESTS-PENDING -->
+- 全量测试与覆盖率（T 轮收尾，CI 同口径，干净树全绿轮）：**8929 passed / 5 skipped / 0 failed**（`pytest tests/ -n 4 --dist loadfile --cov=src --cov-branch`，177.9s；总行覆盖 **96.55%**（17482/18106）、分支 **92.80%**（6275/6762），均高于 ratchet 水位 96.4/92.5）。日志 `experiments/results/t_round_final_checks_20261018/full_suite_cov.log`。
 - 门禁链实测：`ruff check .` 全绿 / `ruff format --check .` **809 文件已格式化** / `mypy src/ config.py` 0 错（**134** 源文件）；
   `check_bilingual_docs --strict` 0 错、`check_doc_links --strict` 0 错（120 文件 / 550 链接）；
   `check_env_budget` 251/251 登记、`check_baseline(+numbers)`、`check_state_contract`（133 文件）、
