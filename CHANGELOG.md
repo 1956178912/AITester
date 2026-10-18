@@ -137,6 +137,14 @@
   本地 `make test-cov` 早已用 `COVERAGE_FILE=.coverage.ci` 隔离（Makefile 注释记录同类
   INTERNALERROR），CI 此前从未真正执行故未暴露；现已与 Makefile 同口径（`env.COVERAGE_FILE`
   + 跑前清理），并保留 `coverage.xml` 落仓库根供覆盖率集群消费。
+- **覆盖率跨平台口径校准（第 7 类，首次真实 CI 实测驱动）**：同一 Python 3.14、同一份源码，
+  ubuntu CI 实测行 96.53%（17501/18131）/ 分支 92.66%（6273/6770），macOS 本地 96.55%
+  （17506/18131）/ 92.79%（6282/6770）——**分支跨平台差 0.13pp**（9 条平台专属分支：
+  Seatbelt/bwrap 等），超出原 ±0.10pp 容差，导致"声明 ubuntu 则本地红 / 声明 macOS 则 CI 红"
+  的双向假红。处置：登记册 §1 声明口径定为 **CI ubuntu 3.14**（权威执行环境），
+  `_REGISTER_TOLERANCE_PP` 校准为 **±0.20pp**（≈1.5× 实测跨平台差，仍远小于实质性错报），
+  BASELINE `coverage` 双口径并列披露；防回退仍由 `coverage_ratchet.py` 只升水位独立把守
+  （CI 口径余量行 +0.13pp / 分支 +0.16pp）。门禁单测 32 例随新边界更新并通过。
 - **预推送 fresh-clone 门禁复验**：`check_doc_links --strict` / `check_bilingual_docs --strict` /
   `check_baseline(+numbers)` / `env_budget` / `env_snapshot` / `tool_versions` / `json_contract` /
   `zero_assert` / `state_contract` / `citations` / `credential_scrub` / `llm_configs_schema` /
@@ -147,7 +155,7 @@
 ### Verification
 
 - **全量测试（CI 同口径，正常环境）**：`pytest tests/ -n 4 --dist loadfile --cov=src --cov-branch`（`COVERAGE_FILE` 隔离）→ **8956 passed / 5 skipped / 0 failed**（collected **8961**；**176.43s**）。
-- **覆盖率（meta_coverage）**：行 **96.55%**（17506/18131）、分支 **92.79%**（6282/6770）；`coverage_ratchet.py --check` 通过（水位 96.40/92.50，余量 +0.15pp/+0.29pp）；`check_branch_coverage.py coverage.xml` 通过。
+- **覆盖率（meta_coverage）**：本地 macOS 3.14 实测行 **96.55%**（17506/18131）、分支 **92.79%**（6282/6770）；**首次真实 CI（ubuntu 3.14）实测行 96.53%（17501/18131）、分支 92.66%（6273/6770）**——跨平台差 0.02pp/0.13pp（9 条平台专属分支）；登记册声明口径定为 **CI ubuntu 3.14**、对账容差校准为 ±0.20pp；`coverage_ratchet.py --check` 通过（水位 96.40/92.50，CI 口径余量 +0.13pp/+0.16pp）；`check_branch_coverage.py coverage.xml` 通过。
 - **静态检查**：`ruff check .` 全绿 / `ruff format --check .` **814 文件已格式化** / `mypy src/ config.py` 0 错（**134** 源文件）。
 - **门禁链**：`check_bilingual_docs --strict` 0 错、`check_doc_links --strict` 0 错、`check_baseline`+`check_baseline_numbers`、`check_env_budget` **253/253**、`check_env_snapshot_keys`、`check_model_fingerprint`、`check_tool_versions`、`check_json_contract_sites`、`check_zero_assert_tests`、`check_artifact_doc_consistency`（含登记册 coverage 对账）、`check_artifacts_tracked`（179/179 + 证据目录覆盖扫描）、`check_citations` 全部通过。
 - **定向测试**：受影响 5 文件 **142 passed / 14 skipped / 0 failed**（沙箱宿主口径）；P3 校验器 12 例、D3b 接线 13 例 + 消费关对偶 2 例全过。
