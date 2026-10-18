@@ -297,7 +297,7 @@ class TestMutationScoreFloatGuard:
 class TestVisualizeNoneDiagonal:
     """2026-09-26 round9 P2：visualize p 值热力图 None 对角线渲染为 "—"。"""
 
-    def test_none_cell_renders_dash(self, capsys):
+    def test_none_cell_renders_dash(self, capsys, tmp_path, monkeypatch):
         import pytest
 
         matplotlib = pytest.importorskip("matplotlib")
@@ -305,6 +305,11 @@ class TestVisualizeNoneDiagonal:
         import matplotlib.pyplot as plt
 
         from experiments import visualize_results
+
+        # 2026-10-18 CI 首跑实测：默认输出目录是本地实验工件目录
+        # （experiments/results/** 不入库，fresh clone/CI 中不存在）→ savefig
+        # 抛 FileNotFoundError。测试不依赖本地遗留工件，输出重定向到 tmp_path。
+        monkeypatch.setattr(visualize_results, "_charts_dir", str(tmp_path))
 
         sig_result = {
             "pairwise": [

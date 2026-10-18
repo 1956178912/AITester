@@ -52,17 +52,20 @@ class TestIsWithinAllowedRootsBranches:
         """显式 roots：路径不在指定根内 → False。"""
         from src.graph.nodes import _is_within_allowed_roots
 
-        custom_root = os.path.realpath(tempfile.gettempdir())
-        # 构造一个兄弟前缀路径（custom_root_backup/）碰撞探测
+        # 2026-10-18 CI 首跑实测：直接在系统临时目录旁建兄弟目录
+        # （/tmp_backup）在 Linux/CI 上因根目录不可写而 PermissionError。
+        # 改为在用户可写的私有父目录内构造 root/root_backup 兄弟前缀。
+        base = tempfile.mkdtemp(prefix="aitester_roots_")
+        custom_root = os.path.realpath(os.path.join(base, "root"))
+        os.makedirs(custom_root)
         sibling = custom_root.rstrip(os.sep) + "_backup"
-        os.makedirs(sibling, exist_ok=True)
         try:
             path = os.path.join(sibling, "f.py")
             assert _is_within_allowed_roots(path, roots=(custom_root,)) is False
         finally:
             import shutil
 
-            shutil.rmtree(sibling, ignore_errors=True)
+            shutil.rmtree(base, ignore_errors=True)
 
     def test_root_itself_within(self):
         """路径即根目录本身 → True（含根目录自身口径）。"""

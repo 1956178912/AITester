@@ -59,6 +59,28 @@ All notable changes to this project will be documented in this file. Format foll
   with **real, API-verified SHAs** matching the versions declared in the comments (checkout v4.1.1
   `b4ffde65…` / setup-python v6.0.0 `e797f83b…` / upload-artifact v4.2.0 `694cdabd…` / codecov-action
   v3.1.6 `ab904c41…`); all four workflow YAMLs parse.
+- **Two more blockers fixed from the first real CI run (#123)**: ① **gitleaks working-tree scan, 406 findings** —
+  400 are `key_sha256` fields (SHA-256 digests, not credentials) in four oracle-quality report JSONs,
+  false-flagged by the generic-api-key rule; 6 are placeholder fake values in the H3/N-round redaction-probe
+  corpus and test fixtures (`AKIAPLACEHOLDERXXXXX` / placeholder JWT / fake `sk-`). Added precise,
+  individually-documented allowlist entries to `.gitleaks.toml` (including a `regexTarget=line` exemption for
+  `key_sha256`); re-verified locally with the same 8.28.0 binary on a clean export: **0 findings / exit 0**.
+  ② **SBOM generation step** (info-only): `cyclonedx-py requirements.txt` does not match the cyclonedx-bom
+  4.5.0 CLI (unknown subcommand) → changed to `cyclonedx-py requirements requirements.txt` in both
+  `ci.yml` and `release.yml`; verified locally with 4.5.0.
+- **Four cross-platform test defects exposed by the first CI run (ubuntu 3.13; all pre-existing tests, not
+  introduced by round U)**: ① `test_none_cell_renders_dash` — the default chart output directory
+  `experiments/results/synthetic_50_final/charts` is a local artifact (not committed), so `savefig` raises
+  `FileNotFoundError` in CI; the test now monkeypatches the output dir to `tmp_path`. ②
+  `test_diff_codes_full_file_replace_is_git_applicable` — the temporary repo's `git commit` depended on a
+  global git identity (absent on CI runners); now configures repo-level `user.name/email`. ③
+  `test_explicit_roots_outside` — creating a sibling directory next to the system temp dir (`/tmp_backup`)
+  raises `PermissionError` on Linux because `/` is not writable; it now builds `root/root_backup` inside a
+  user-writable private parent. ④ `test_orphan_repro_20261017.py` orphan/zombie observation (7 cases) —
+  Linux/procps `ps` truncates the `command` column to screen width by default, cutting off the marker token
+  that follows a long `python -c` argument, so child processes were unobservable; `ps` now always uses `-ww`
+  (unlimited width). Local rerun of the 4 files: **109 passed**.
+
 - **Pre-push fresh-clone gate re-check**: `check_doc_links --strict` / `check_bilingual_docs --strict` /
   `check_baseline(+numbers)` / `env_budget` / `env_snapshot` / `tool_versions` / `json_contract` /
   `zero_assert` / `state_contract` / `citations` / `credential_scrub` / `llm_configs_schema` /

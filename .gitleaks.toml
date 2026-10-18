@@ -37,4 +37,20 @@ regexes = [
     # 段（signature 段由 secrets.token_urlsafe 随机生成；真实泄漏的 JWT
     # payload 不同 → 不命中本豁免，仍会被 jwt 规则检出）
     '''eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.eyJzdWIiOiIxMjM0NTY3ODkwIn0\.''',
+    # H3/N 轮（2026-10-16/17）：运行期脱敏一致性探针语料
+    # （src/utils/logging_utils.py::_REDACTION_CONSISTENCY_PROBES）及其回放副本
+    # （tests/test_n_round_platform_over_redaction.py、experiments/results/
+    # e2e_probe_platform_20261017/repro_over_redaction.py）里的固定占位假值——
+    # 它们是"守卫必须脱敏"的输入样本，非真实凭证。
+    '''AKIAPLACEHOLDERXXXXX''',
+    '''eyJhbGciOiJIUzI1NiJ9\.eyJzdWIiOiJwbGFjZWhvbGRlciJ9\.cGxhY2Vob2xkZXJzaWduYXR1cmU''',
+    # tests/test_model_fingerprint.py:230 — 探针异常文本必须脱敏的假 sk- 夹具
+    '''sk-abcdef0123456789abcdef0123456789''',
+]
+
+[[allowlists]]
+description = "工件中的 SHA-256 摘要字段（key_sha256）：哈希值不是凭证，属 generic-api-key 对 'key'+hex 的误报"
+regexTarget = "line"
+regexes = [
+    '''"key_sha256":\s*"[0-9a-f]{64}"''',
 ]

@@ -682,8 +682,7 @@ jobs:
         # 生成 CycloneDX 格式 SBOM（Software Bill of Materials），
         # 上传为工件供合规审查
         run: |
-          cyclonedx-py requirements.txt -o sbom.cyclonedx.json || \
-            pip install cyclonedx-python && cyclonedx-python requirements.txt -o sbom.cyclonedx.json
+          cyclonedx-py requirements requirements.txt -o sbom.cyclonedx.json
 
       - name: Upload SBOM artifact
         if: always()
