@@ -217,7 +217,7 @@ class TestStatusRegisterCoverageCheck:
     G6（2026-10-16）：返回值扩成 ``(问题清单, 是否真正对过账)``——此前
     "coverage.xml 缺席"与"对账通过"都返回空清单，调用方一律打 `[OK]`，而 CI 里
     该步骤排在 coverage.xml 生成之前，于是这道对账常年假绿（从未真正运行）。
-    同日修正对账口径：锚定 §1 声明行 + ±0.10pp 容差（逐位相等不可满足：
+    同日修正对账口径：锚定 §1 声明行 + 容差（逐位相等不可满足：
     分支覆盖同源码连跑两次即抖 ±1 分支 = 0.016pp，`graph/nodes.py` 行覆盖
     同源码两次相差约 6 行 = 总行覆盖 0.035pp），声明行缺失按不通过处置。
     """
@@ -299,7 +299,9 @@ class TestStatusRegisterCoverageCheck:
         """容差边界：吸收实测量级的抖动，但不放过任何超过噪声的错报。
 
         实测抖动量级（2026-10-16，同源码连跑）：分支 0.016pp、`graph/nodes.py`
-        行覆盖约 6 行 → 总行覆盖 0.035pp。容差取其约 2 倍（0.10pp）。
+        行覆盖约 6 行 → 总行覆盖 0.035pp；2026-10-18 首次真实 CI 实测**跨平台**
+        分支差 0.13pp（ubuntu 92.66 vs macOS 92.79，同 Python 3.14）→ 容差校准为
+        0.20pp（≈1.5× 跨平台差），仍不放过超过观测噪声的错报。
         """
         cov = tmp_path / "coverage.xml"
         cov.write_text(
@@ -307,14 +309,14 @@ class TestStatusRegisterCoverageCheck:
             encoding="utf-8",
         )
         reg = tmp_path / "PROJECT_STATUS_REGISTER.md"
-        # 行 +0.09pp（抖动量级内 → 通过）；分支 +0.12pp（超出 → 转红）
-        reg.write_text("| 总行覆盖 | **92.99%** |\n| 总分支覆盖 | **87.62%** |", encoding="utf-8")
+        # 行 +0.09pp（抖动量级内 → 通过）；分支 +0.22pp（超出跨平台校准后的容差 → 转红）
+        reg.write_text("| 总行覆盖 | **92.99%** |\n| 总分支覆盖 | **87.72%** |", encoding="utf-8")
         monkeypatch.setattr(gate, "_STATUS_REGISTER", reg)
         monkeypatch.setattr(gate, "_COVERAGE_XML", cov)
         problems, checked = gate.check_status_register()
         assert checked is True
         assert len(problems) == 1, problems
-        assert "总分支覆盖" in problems[0] and "+0.12pp" in problems[0], problems
+        assert "总分支覆盖" in problems[0] and "+0.22pp" in problems[0], problems
 
     def test_declaration_beyond_tolerance_reports_both_sides(self, tmp_path, monkeypatch):
         """容差是双向的：文档**高报**（美化）与低报同样计为问题。"""
@@ -324,14 +326,14 @@ class TestStatusRegisterCoverageCheck:
             encoding="utf-8",
         )
         reg = tmp_path / "PROJECT_STATUS_REGISTER.md"
-        reg.write_text("| 总行覆盖 | **93.00%** |\n| 总分支覆盖 | **87.00%** |", encoding="utf-8")
+        reg.write_text("| 总行覆盖 | **93.05%** |\n| 总分支覆盖 | **86.95%** |", encoding="utf-8")
         monkeypatch.setattr(gate, "_STATUS_REGISTER", reg)
         monkeypatch.setattr(gate, "_COVERAGE_XML", cov)
         problems, checked = gate.check_status_register()
         assert checked is True
         assert len(problems) == 2, problems
-        assert any("+0.20pp" in p for p in problems), problems
-        assert any("-0.27pp" in p for p in problems), problems
+        assert any("+0.25pp" in p for p in problems), problems
+        assert any("-0.32pp" in p for p in problems), problems
 
     def test_number_elsewhere_in_doc_does_not_satisfy_reconciliation(self, tmp_path, monkeypatch):
         """旧口径漏判面：实测值出现在正文别处（如历史勘误）不算 §1 已声明。"""

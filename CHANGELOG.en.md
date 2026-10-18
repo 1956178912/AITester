@@ -95,6 +95,15 @@ All notable changes to this project will be documented in this file. Format foll
   INTERNALERROR); CI had never really executed before, so it was never exposed. CI now matches the Makefile
   caliber (`env.COVERAGE_FILE` plus pre-run cleanup) while `coverage.xml` still lands at the repo root for the
   coverage cluster.
+- **Cross-platform coverage-caliber calibration (7th item, driven by the first real CI measurement)**: same Python 3.14,
+  same source — ubuntu CI measured line 96.53% (17501/18131) / branch 92.66% (6273/6770), while local macOS measured
+  96.55% (17506/18131) / 92.79% (6282/6770) — a **0.13 pp cross-platform branch delta** (9 platform-specific branches:
+  Seatbelt/bwrap etc.) that exceeds the old ±0.10 pp tolerance, producing a two-way false red ("declare ubuntu → local red /
+  declare macOS → CI red"). Fix: the register §1 declaration caliber is now **CI ubuntu 3.14** (the authoritative execution
+  environment), `_REGISTER_TOLERANCE_PP` is calibrated to **±0.20 pp** (≈1.5× the measured cross-platform delta, still far
+  below any material misreport), and BASELINE `coverage` discloses both calibers side by side; regression protection remains
+  with `coverage_ratchet.py`'s ratchet-only watermarks (CI-caliber headroom line +0.13 pp / branch +0.16 pp). All 32 gate unit
+  tests were updated for the new boundary and pass.
 - **Pre-push fresh-clone gate re-check**: `check_doc_links --strict` / `check_bilingual_docs --strict` /
   `check_baseline(+numbers)` / `env_budget` / `env_snapshot` / `tool_versions` / `json_contract` /
   `zero_assert` / `state_contract` / `citations` / `credential_scrub` / `llm_configs_schema` /
@@ -106,7 +115,7 @@ All notable changes to this project will be documented in this file. Format foll
 ### Verification
 
 - **Full suite (CI caliber, normal environment)**: `pytest tests/ -n 4 --dist loadfile --cov=src --cov-branch` (isolated `COVERAGE_FILE`) → **8956 passed / 5 skipped / 0 failed** (collected **8961**; **176.43 s**).
-- **Coverage (meta_coverage)**: line **96.55%** (17506/18131), branch **92.79%** (6282/6770); `coverage_ratchet.py --check` passes (watermarks 96.40/92.50, headroom +0.15 pp/+0.29 pp); `check_branch_coverage.py coverage.xml` passes.
+- **Coverage (meta_coverage)**: local macOS 3.14 measured line **96.55%** (17506/18131), branch **92.79%** (6282/6770); **first real CI (ubuntu 3.14) measured line 96.53% (17501/18131), branch 92.66% (6273/6770)** — cross-platform delta 0.02 pp/0.13 pp (9 platform-specific branches); the register declaration caliber is now **CI ubuntu 3.14** and the reconciliation tolerance is calibrated to ±0.20 pp; `coverage_ratchet.py --check` passes (watermarks 96.40/92.50, CI headroom +0.13 pp/+0.16 pp); `check_branch_coverage.py coverage.xml` passes.
 - **Static checks**: `ruff check .` clean / `ruff format --check .` **814 files already formatted** / `mypy src/ config.py` 0 errors (**134** source files).
 - **Gate chain**: `check_bilingual_docs --strict` 0 errors, `check_doc_links --strict` 0 errors, `check_baseline`+`check_baseline_numbers`, `check_env_budget` **253/253**, `check_env_snapshot_keys`, `check_model_fingerprint`, `check_tool_versions`, `check_json_contract_sites`, `check_zero_assert_tests`, `check_artifact_doc_consistency` (incl. status-register coverage reconciliation), `check_artifacts_tracked` (179/179 + evidence-directory coverage scan), `check_citations` — all pass.
 - **Targeted tests**: the 5 affected files **142 passed / 14 skipped / 0 failed** (sandbox-host caliber); P3 validator 12 cases and D3b wiring 13 cases + 2 consume-off dual cases all pass.

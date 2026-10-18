@@ -278,7 +278,10 @@ class TestTokenUsageRecordLock:
     def test_process_lock_exists(self) -> None:
         from src.graph import token_usage as tu
 
-        assert isinstance(tu._usage_lock, threading.Lock)
+        # U 轮（2026-10-18）：Python ≤3.12 的 threading.Lock 是**工厂函数**
+        # 而非类型（3.13 起才改为类），isinstance(x, threading.Lock) 在 3.12
+        # 抛 TypeError（CI 3.12 档实测）。改用工厂产物的类型判定，跨版本一致。
+        assert isinstance(tu._usage_lock, type(threading.Lock()))
 
     def test_record_usage_holds_process_lock(self) -> None:
         """record_usage 的各字段读改写在 _usage_lock 内原子化（口径锁定）。"""
@@ -300,9 +303,16 @@ class TestTokenUsageRecordLock:
             tu._registry.clear()
         tu.reset()  # 主线程累计器清零（写入 registry[main] = fresh）
 
+        # U 轮（2026-10-18）：8 个线程必须**同时在世**——CPython 3.12 的
+        # threading.get_ident() 在线程退出后可被复用，短生命周期线程快速轮转
+        # 会让后线程覆盖前线程的 registry 条目（CI 3.12 实测只聚合到 2 个线程
+        # =200/800）。用 Barrier 保证 8 个 ident 同时唯一，再并发累计。
+        barrier = threading.Barrier(8)
+
         def _rec() -> None:
             # 每个 worker 线程独立累计（threading.local 口径）
             tu.reset()  # 隔离：每个 worker 清零自己的累计器
+            barrier.wait(timeout=10)  # 8 线程全部就绪后才开始累计（ident 唯一性）
             for _ in range(100):
                 tu.record_usage(1, 1, model="m")
 

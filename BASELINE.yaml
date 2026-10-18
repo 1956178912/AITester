@@ -32,8 +32,8 @@ tests:
 #   ULT/TOSEM'26）中的 "coverage" 一律指**被测代码**。对外引用必须显式区分；
 #   被测代码覆盖率见下方 target_quality 节。
 coverage:                    # = meta_coverage（项目自身源码），勿与 target_quality 混用
-  line_total_pct: 96.55      # --cov=src 总行覆盖（U 轮 2026-10-18 收口全量实测 **96.55%**〔17506/18131 = 96.5531%〕；分母较 T 轮 +25（D3b Step A / P3 等新增可达行）；ratchet 水位 96.4 不变，余量 +0.15pp。口径 = 全绿收口全量 + coverage.xml 实测）
-  line_core_modules:         # 逐模块行覆盖（%，coverage.xml 实测四舍五入）。2026-10-16 I 轮逐项复核：**10 项中 1 项变动**（planner 98 → **100**，I 轮新增的 3 个写侧测试收复了 `planner.py:352/379`——即 ADR-0032 决策 2「Planner M10 归因改写」的写侧，此前**从未被任何测试执行过**）；graph_nodes 仍记 78，但其分数由 0.7776 升至 0.7789（分母 +4，见该行注）。其余 8 项 0 变动。G 轮复核记录：10 项中 1 项变动（dependency 95 → 96）；F 轮回填时的存量漂移记录：
+  line_total_pct: 96.53      # --cov=src 总行覆盖（**CI ubuntu 3.14 实测** 2026-10-18 首次真实 CI〔17501/18131 = 96.5308%〕；ratchet 水位 96.4 不变，余量 +0.13pp。本地 macOS 3.14 同轮实测 96.55%（17506/18131）——跨平台差 0.02pp；登记册对账容差 U 轮起 ±0.20pp（原 ±0.10pp 被实测跨平台分支差 0.13pp 超出，见 `scripts/gates/check_artifact_doc_consistency.py` 注释））
+  line_core_modules:         # 逐模块行覆盖（%，coverage.xml 实测四舍五入；**本地 macOS 3.14 快照**——CI ubuntu 逐模块值未采集，跨平台总差见上）。2026-10-16 I 轮逐项复核：**10 项中 1 项变动**（planner 98 → **100**，I 轮新增的 3 个写侧测试收复了 `planner.py:352/379`——即 ADR-0032 决策 2「Planner M10 归因改写」的写侧，此前**从未被任何测试执行过**）；graph_nodes 仍记 78，但其分数由 0.7776 升至 0.7789（分母 +4，见该行注）。其余 8 项 0 变动。G 轮复核记录：10 项中 1 项变动（dependency 95 → 96）；F 轮回填时的存量漂移记录：
                              # 本节此前为早期批次快照，10 项中 9 项已低于实测 3–14pp（如
                              # code_analyzer 记 89 / 实测 99、rag_retriever 记 86 / 实测 98），
                              # 属"文档低于工件"的存量漂移（U7 只挡文档硬编码、不挡本节过期）。
@@ -50,7 +50,7 @@ coverage:                    # = meta_coverage（项目自身源码），勿与 
     multi_candidate: 98.67   # tools/multi_candidate.py（296/300；branch 94.26%）
     cross_file: 92.98        # tools/cross_file.py（278/299；branch 84.78%——U 轮 D3b Step A 新增 21 行后按 coverage.xml 实测刷新）
     rag_retriever: 98.10     # rag/retriever.py（207/211；branch 98.57%）
-  branch_total_pct: 92.79  # --cov=src --cov-branch（U 轮 2026-10-18 收口全量实测 **92.79%**〔6282/6770 = 92.7902%〕；ratchet 水位 92.5 不变，余量 +0.29pp。T 轮同口径为 92.80%（6275/6762）；以干净树全绿轮为准）
+  branch_total_pct: 92.66  # --cov=src --cov-branch（**CI ubuntu 3.14 实测** 2026-10-18 首次真实 CI〔6273/6770 = 92.6588%〕；ratchet 水位 92.5 不变，余量 +0.16pp。本地 macOS 3.14 同轮 92.79%（6282/6770）——**跨平台差 0.13pp**（9 条平台专属分支），故登记册对账容差校准为 ±0.20pp；T 轮同口径为 92.80%（6275/6762））
   branch_core_routing:       # 核心条件路由模块分支覆盖（scripts/gates/check_branch_coverage.py 门槛 85%）
     # T 轮（2026-10-18，审计 P0-04）：按 coverage.xml 实测刷新（此前两项声明 1.0000 被产物推翻）。
     graph_workflow: 99.17   # _should_debug / _route_after_diagnosis / determine_stop_reason 条件路由（branch 实测；行覆盖 361/362=99.72%）
