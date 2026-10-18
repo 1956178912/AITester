@@ -1,0 +1,36 @@
+{
+  "schema": "aitester_t1_b2_gates/1",
+  "criteria": "§1.1 硬门槛（三 seed 全过才可作复现性证据）",
+  "seeds_expected": [
+    42,
+    43,
+    44
+  ],
+  "seeds_present": [
+    42,
+    43,
+    44
+  ],
+  "all_pass": true,
+  "issues": [],
+  "per_seed": {
+    "42": {
+      "pass": true,
+      "exit_code": 0,
+      "wall_seconds": 4135,
+      "issues": []
+    },
+    "43": {
+      "pass": true,
+      "exit_code": 0,
+      "wall_seconds": 3578,
+      "issues": []
+    },
+    "44": {
+      "pass": true,
+      "exit_code": 0,
+      "wall_seconds": 3795,
+      "issues": []
+    }
+  }
+}

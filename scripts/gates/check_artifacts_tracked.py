@@ -243,6 +243,11 @@ MANIFEST: tuple[str, ...] = (
     "experiments/results/t_round_a19_default_gate_20261018/README.md",
     "experiments/results/t_round_a19_default_gate_20261018/SHA256SUMS",
     "experiments/results/t_round_artifact_audit_20261018/AUDIT_REPORT.md",
+    "experiments/results/t_round_artifact_audit_20261018/SHA256SUMS",
+    "experiments/results/t_round_verify_20261018/VERIFY_REPORT.md",
+    "experiments/results/t_round_verify_20261018/SHA256SUMS",
+    "experiments/results/e2e_probe_t_round_20261018/README.md",
+    "experiments/results/e2e_probe_t_round_20261018/SHA256SUMS",
     "experiments/results/t_round_b1_protocol_text_20261018/PREREG.md",
     "experiments/results/t_round_b1_protocol_text_20261018/PREREG_CONTINUATION.md",
     "experiments/results/t_round_b1_protocol_text_20261018/GATES.json",
@@ -250,6 +255,13 @@ MANIFEST: tuple[str, ...] = (
     "experiments/results/t_round_b1_protocol_text_20261018/README.md",
     "experiments/results/t_round_b1_protocol_text_20261018/DOC_RECONCILIATION.md",
     "experiments/results/t_round_b1_protocol_text_20261018/SHA256SUMS",
+    "experiments/results/t_round_b2_main_batch_20261018/PREREG.md",
+    "experiments/results/t_round_b2_main_batch_20261018/PREFLIGHT.json",
+    "experiments/results/t_round_b2_main_batch_20261018/PREREG_AMENDMENT_cost_estimate.md",
+    "experiments/results/t_round_b2_main_batch_20261018/GATES.json",
+    "experiments/results/t_round_b2_main_batch_20261018/ANALYSIS_REPORT.json",
+    "experiments/results/t_round_b2_main_batch_20261018/README.md",
+    "experiments/results/t_round_b2_main_batch_20261018/SHA256SUMS",
 )
 
 # 证据目录覆盖扫描的显式豁免登记（相对 experiments/results/）。

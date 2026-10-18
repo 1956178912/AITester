@@ -119,7 +119,9 @@ class TestArtifactsManifestE7:
         # 99 → 106（示例通道 raw/norm 双报告 / B8 消融）。漏登记属新缺口，故仍锁精确长度。
         # T 轮（2026-10-18）：133 → 163（K=3 示例治理 / SMT pre-post-fix / 语义修复汇总 /
         # A-19 默认门复验 / 文档审计 / B1 三格复现链 / 工件入库门禁扩面登记）。
-        assert len(module.MANIFEST) == 163
+        # T 轮收尾追加：审计/复核报告 SHA + e2e 探针矩阵 README/SHA（163 → 168），
+        # 再追加 B2 复现批 7 件（168 → 175）。
+        assert len(module.MANIFEST) == 175
 
 
 class TestSurveyPackagingErrata:
