@@ -1,0 +1,4 @@
+[env-snapshot] 扫描 133 个文件；开关全集 82 个（select=_ENABLE$）
+[env-snapshot] 快照 113 个键（提取模式 literal_eval，experiments/run_benchmark.py:4088）
+[env-snapshot] 已覆盖 82；缺失 0；白名单豁免 0
+[env-snapshot] 提示：快照内 31 个键未在扫描面出现（信息项，不阻断）

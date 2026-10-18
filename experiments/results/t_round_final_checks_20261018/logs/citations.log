@@ -1,0 +1,113 @@
+[INFO] README.md: arXiv×2 DOI×2
+[INFO] README.en.md: arXiv×2 DOI×2
+[INFO] MODEL_CARD.md: arXiv×0 DOI×0
+[INFO] MODEL_CARD.en.md: arXiv×0 DOI×0
+[INFO] docs/DATA_CARD.md: arXiv×1 DOI×0
+[INFO] docs/DATA_CARD.en.md: arXiv×1 DOI×0
+[INFO] docs/preregistration.md: arXiv×0 DOI×0
+[INFO] docs/preregistration.en.md: arXiv×0 DOI×0
+[INFO] docs/design/abstain_validate_design.md: arXiv×2 DOI×2
+[INFO] docs/design/cross_file_plan_wiring_prereg.md: arXiv×0 DOI×0
+[INFO] docs/design/cross_file_repair.en.md: arXiv×0 DOI×0
+[INFO] docs/design/cross_file_repair.md: arXiv×0 DOI×0
+[INFO] docs/design/docstring_anchor.md: arXiv×0 DOI×0
+[INFO] docs/design/e2e_probe_matrix.md: arXiv×0 DOI×0
+[INFO] docs/design/layered_narrative.md: arXiv×3 DOI×3
+[INFO] docs/design/failure_knowledge_feedback.md: arXiv×0 DOI×0
+[INFO] docs/design/frame_lifetime_trace.md: arXiv×0 DOI×0
+[INFO] docs/design/hierarchical_summary.md: arXiv×0 DOI×0
+[INFO] docs/design/mas_compilation.md: arXiv×0 DOI×0
+[INFO] docs/design/misguided_effective_metric.md: arXiv×0 DOI×1
+[INFO] docs/design/multilanguage_extension.md: arXiv×0 DOI×0
+[INFO] docs/design/oracle_quality_metric.md: arXiv×0 DOI×1
+[INFO] docs/design/payload_equivalence_prereg.md: arXiv×0 DOI×0
+[INFO] docs/design/property_template_route_skeleton.md: arXiv×0 DOI×0
+[INFO] docs/design/r4_localized_edit_ab.md: arXiv×0 DOI×0
+[INFO] docs/design/real_benchmark_upgrade.md: arXiv×2 DOI×0
+[INFO] docs/design/repair_caliber_matrix.md: arXiv×0 DOI×0
+[INFO] docs/design/self_mutation_harness.md: arXiv×0 DOI×0
+[INFO] docs/design/smt_witness_batch_plan.md: arXiv×0 DOI×0
+[INFO] docs/design/spec_replace_ab_scale87_prereg.md: arXiv×0 DOI×0
+[INFO] docs/design/spec_to_repair_wiring.md: arXiv×0 DOI×0
+[INFO] docs/design/swe_bench_probe.md: arXiv×0 DOI×0
+[INFO] docs/design/ult_bridge_plan.md: arXiv×1 DOI×2
+[INFO] docs/adr/0001-langgraph-state-graph.md: arXiv×0 DOI×0
+[INFO] docs/adr/0002-error-classifier-rules.md: arXiv×0 DOI×0
+[INFO] docs/adr/0003-default-off-experiment-hygiene.md: arXiv×0 DOI×0
+[INFO] docs/adr/0004-zero-default-deps.md: arXiv×0 DOI×0
+[INFO] docs/adr/0005-node-degradation.md: arXiv×0 DOI×0
+[INFO] docs/adr/0011-llm-cache-user-isolation.md: arXiv×0 DOI×0
+[INFO] docs/adr/0012-prompt-injection-defense.md: arXiv×0 DOI×0
+[INFO] docs/adr/0013-classifier-explanability.md: arXiv×0 DOI×0
+[INFO] docs/adr/0014-branch-coverage-gates.md: arXiv×0 DOI×0
+[INFO] docs/adr/0015-detection-first-protocol.md: arXiv×0 DOI×0
+[INFO] docs/adr/0016-orchestration-container-repositioning.md: arXiv×0 DOI×0
+[INFO] docs/adr/0017-repair-engine-pivot.md: arXiv×2 DOI×0
+[INFO] docs/adr/0018-edit-intent-deterministic-landing.md: arXiv×2 DOI×0
+[INFO] docs/adr/0019-deterministic-repair-first.md: arXiv×2 DOI×0
+[INFO] docs/adr/0020-patch-abstain-gate.md: arXiv×2 DOI×0
+[INFO] docs/adr/0021-repair-zero-measurement-artifact.md: arXiv×0 DOI×0
+[INFO] docs/adr/0022-test-hacking-guard.md: arXiv×0 DOI×0
+[INFO] docs/adr/0023-eval-report-pass-at-k-cost-solved-contamination.md: arXiv×0 DOI×0
+[INFO] docs/adr/0024-counterfactual-fl-upper-bound.md: arXiv×0 DOI×0
+[INFO] docs/adr/0025-oracle-context-ablation-tier.md: arXiv×0 DOI×1
+[INFO] docs/adr/0026-interaction-centric-failure-attribution.md: arXiv×0 DOI×0
+[INFO] docs/adr/0027-corrected-caliber-re-estimation.md: arXiv×0 DOI×0
+[INFO] docs/adr/0028-fl-constraint-gate-self-repair-trap.md: arXiv×1 DOI×1
+[INFO] docs/adr/0029-measurement-artifact-cross-file-and-packaged-import.md: arXiv×0 DOI×0
+[INFO] docs/adr/0030-spec-first-and-observation-compression-default-off.md: arXiv×2 DOI×1
+[INFO] docs/adr/0031-llm-structured-output-hardening.md: arXiv×0 DOI×0
+[INFO] docs/adr/0032-m10-leaf-fallback-observability.md: arXiv×0 DOI×0
+[INFO] docs/adr/0033-packaged-test-tree-flat-import-artifact.md: arXiv×0 DOI×0
+[INFO] docs/adr/0034-orchestration-search-freeze-and-unblock.md: arXiv×0 DOI×0
+[INFO] docs/adr/0035-self-recursive-clause-binding.md: arXiv×0 DOI×0
+[INFO] docs/adr/README.md: arXiv×0 DOI×0
+[INFO] docs/COST_MODEL.en.md: arXiv×0 DOI×0
+[INFO] docs/COST_MODEL.md: arXiv×0 DOI×0
+[INFO] docs/COVERAGE_RATCHET_DEVIATION.md: arXiv×0 DOI×0
+[INFO] docs/EVALUATION_SCOPE.md: arXiv×0 DOI×0
+[INFO] docs/HUMAN_ADJUDICATION_PROTOCOL.md: arXiv×0 DOI×0
+[INFO] docs/INDEX.en.md: arXiv×0 DOI×0
+[INFO] docs/INDEX.md: arXiv×0 DOI×0
+[INFO] docs/MEASUREMENT_INTEGRITY.md: arXiv×0 DOI×1
+[INFO] docs/PROJECT_STATUS_REGISTER.md: arXiv×0 DOI×0
+[INFO] docs/VALIDITY.en.md: arXiv×0 DOI×0
+[INFO] docs/VALIDITY.md: arXiv×0 DOI×0
+[INFO] docs/algorithm_design.en.md: arXiv×0 DOI×0
+[INFO] docs/algorithm_design.md: arXiv×0 DOI×0
+[INFO] docs/dependency_exemptions.en.md: arXiv×0 DOI×0
+[INFO] docs/dependency_exemptions.md: arXiv×0 DOI×0
+
+[INFO] 去重后引用：arXiv×16 DOI×16
+  arXiv:1708.00154
+  arXiv:2410.00752
+  arXiv:2501.07531
+  arXiv:2507.11873
+  arXiv:2508.00408
+  arXiv:2510.03217
+  arXiv:2510.12487
+  arXiv:2511.11012
+  arXiv:2512.23631
+  arXiv:2601.09695
+  arXiv:2601.18044
+  arXiv:2604.16560
+  arXiv:2604.24212
+  arXiv:2606.26978
+  arXiv:2607.22883
+  arXiv:2609.00227
+  DOI:10.1109/ASE63991.2025.00031
+  DOI:10.1109/ICST69053.2026.00040
+  DOI:10.1145/3786583.3786858`
+  DOI:10.1145/3786583.3786858`）是否与
+  DOI:10.1145/3797126
+  DOI:10.1145/3803418
+  DOI:10.1145/3803418）报告多智能体在
+  DOI:10.1145/3803437.3806428
+  DOI:10.1145/3803437.3806428）line
+  DOI:10.1145/3805043`
+  DOI:10.1145/3805043`（2026-02-25
+  DOI:10.1145/3832093
+  DOI:10.1145/3832204
+  DOI:10.1145/3832204**
+  DOI:10.1145/3832204）的
+  DOI:10.1145/3832204）的操作化

@@ -1,0 +1,21 @@
+口径 A（json_mode=True 实参调用点）：7 处（期望 7）
+  - src/agents/debugger.py:1078
+  - src/agents/debugger.py:1157
+  - src/agents/debugger.py:622
+  - src/agents/debugger.py:643
+  - src/agents/debugger.py:735
+  - src/agents/fault_localizer.py:186
+  - src/agents/planner.py:399
+
+文档数量表述：9 处
+  [OK] README.md:270 -> 7
+  [OK] README.md:1391 -> 7
+  [OK] README.en.md:269 -> 7
+  [OK] README.en.md:1167 -> 7
+  [OK] MODEL_CARD.md:3 -> 7
+  [OK] MODEL_CARD.md:37 -> 7
+  [OK] MODEL_CARD.en.md:3 -> 7
+  [OK] MODEL_CARD.en.md:46 -> 7
+  [OK] docs/adr/0031-llm-structured-output-hardening.md:34 -> 7
+
+JSON 契约调用点计数一致性检查通过（口径 A）
