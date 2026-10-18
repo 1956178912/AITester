@@ -1,0 +1,3 @@
+扫描 1023 个 .py 文件，631 个 logger 调用点
+✓ 未发现未脱敏可疑点（exc_info 堆栈路径由 SensitiveFormatter 全局覆盖）
+✓ 运行期自检：mask_sensitive_info 与 redact_text 两口径逐字一致，键派生同源
