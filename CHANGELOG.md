@@ -124,7 +124,12 @@
   观测（7 例）——Linux/procps 的 `ps` 默认按屏幕宽度截断 `command` 列，标记 token 位于长
   `python -c` 参数之后被截掉→观测不到子进程；`ps` 统一加 `-ww`（unlimited width）。
   本地 4 个文件复跑 **109 passed**。
-
+- **CI mypy 硬门禁在锁定环境失败（第 5 类，环境口径差异）**：`src/db/mysql_client.py` 的
+  `import pymysql` 在 CI（`requirements.lock` 环境，无 `types-PyMySQL`）报 `import-untyped`——
+  本机 venv 曾手工安装 `types-PyMySQL`（不在 lock），导致"本地 mypy 134 文件 0 错"与 CI 不一致；
+  三个 Python 档均因此失败。按既有 untyped 可选依赖口径在 `pyproject.toml`
+  `[[tool.mypy.overrides]]` 增加 `pymysql` 模块级 `ignore_missing_imports`，
+  本地 venv 与按 lock 全量安装的干净 venv 双环境复验 **0 errors**。
 - **预推送 fresh-clone 门禁复验**：`check_doc_links --strict` / `check_bilingual_docs --strict` /
   `check_baseline(+numbers)` / `env_budget` / `env_snapshot` / `tool_versions` / `json_contract` /
   `zero_assert` / `state_contract` / `citations` / `credential_scrub` / `llm_configs_schema` /

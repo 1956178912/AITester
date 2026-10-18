@@ -257,6 +257,11 @@ module = [
     # 保守回退历史口径），无 py.typed 声明。经 src/tools/detection_gates.py
     # 的运行时 import 被 mypy 跟进 → 不列此处则 `make typecheck` 直接报红。
     "pytest_timeout",
+    # U 轮（2026-10-18）：pymysql 无 py.typed（本机 venv 曾装 types-PyMySQL，
+    # 但该 stub 包不在 requirements.lock → CI 锁定环境里 mypy 报
+    # `import-untyped`，三个 Python 档全红；按既有 untyped 可选依赖口径
+    # 做模块级 ignore_missing_imports，本地与 CI 同绿）。
+    "pymysql",
     # S8b（2026-10-08 R3）：embedding 后端（transformers / sentence_transformers
     # / torch）与 pyright-python 为可选依赖，未安装时 mypy 报 import-not-found；
     # 收窄 blanket `# type: ignore` 后改为模块级 ignore_missing_imports（与

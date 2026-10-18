@@ -80,7 +80,13 @@ All notable changes to this project will be documented in this file. Format foll
   Linux/procps `ps` truncates the `command` column to screen width by default, cutting off the marker token
   that follows a long `python -c` argument, so child processes were unobservable; `ps` now always uses `-ww`
   (unlimited width). Local rerun of the 4 files: **109 passed**.
-
+- **CI mypy hard gate failure in the locked environment (5th item, environment-caliber mismatch)**:
+  `import pymysql` in `src/db/mysql_client.py` raises `import-untyped` on CI (a `requirements.lock`
+  environment without `types-PyMySQL`) — the local venv had `types-PyMySQL` installed by hand (not in the
+  lock), so "local mypy: 134 files, 0 errors" disagreed with CI; all three Python matrix jobs failed on it.
+  Following the existing untyped-optional-dependency caliber, added a module-level `ignore_missing_imports`
+  override for `pymysql` in `pyproject.toml`; re-verified **0 errors** in both the local venv and a clean
+  venv installed from `requirements.lock`.
 - **Pre-push fresh-clone gate re-check**: `check_doc_links --strict` / `check_bilingual_docs --strict` /
   `check_baseline(+numbers)` / `env_budget` / `env_snapshot` / `tool_versions` / `json_contract` /
   `zero_assert` / `state_contract` / `citations` / `credential_scrub` / `llm_configs_schema` /
