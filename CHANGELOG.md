@@ -106,6 +106,25 @@
   起 CI 从未真正执行过。按注释声明的目标版本替换为**经 GitHub API 校验可解析的真实 SHA**
   （checkout v4.1.1 `b4ffde65…` / setup-python v6.0.0 `e797f83b…` / upload-artifact v4.2.0
   `694cdabd…` / codecov-action v3.1.6 `ab904c41…`），4 个 workflow YAML 解析通过。
+- **CI 首跑（run #123）另修两类阻断**：① **gitleaks 工作树扫描 406 findings**——其中 400 为
+  4 份 oracle 质量报告 JSON 中 `key_sha256` 字段（SHA-256 摘要，非凭证）被 generic-api-key 规则
+  误报，6 为 H3/N 轮脱敏探针语料与测试夹具中的占位假值（`AKIAPLACEHOLDERXXXXX` / 占位 JWT /
+  假 `sk-`）；`.gitleaks.toml` 增补逐条理由的精确豁免（含 `regexTarget=line` 的 key_sha256 豁免），
+  本地同版本 8.28.0 对干净导出复验 **0 findings / exit 0**。② **SBOM 生成步骤**（info-only）：
+  `cyclonedx-py requirements.txt` 与 cyclonedx-bom 4.5.0 的 CLI 语法不符（未知子命令）→
+  改为 `cyclonedx-py requirements requirements.txt`（`ci.yml` + `release.yml` 同修），
+  本地 4.5.0 实测生成成功。
+- **CI 首跑暴露的四类跨平台测试缺陷（ubuntu 3.13，均为既有用例、非 U 轮代码引入）**：
+  ① `test_none_cell_renders_dash`——默认图表输出目录 `experiments/results/synthetic_50_final/charts`
+  为本地工件（不入库），CI 中 `savefig` 抛 `FileNotFoundError`；测试改为 monkeypatch 输出到 `tmp_path`。
+  ② `test_diff_codes_full_file_replace_is_git_applicable`——临时仓库 `git commit` 依赖全局 git
+  identity（CI runner 无），显式配置仓库级 `user.name/email`。③ `test_explicit_roots_outside`——
+  在系统临时目录旁创建兄弟目录（`/tmp_backup`）在 Linux 上因根目录不可写而 `PermissionError`，
+  改为在用户可写私有父目录内构造 `root/root_backup`。④ `test_orphan_repro_20261017.py` 孤儿/僵尸
+  观测（7 例）——Linux/procps 的 `ps` 默认按屏幕宽度截断 `command` 列，标记 token 位于长
+  `python -c` 参数之后被截掉→观测不到子进程；`ps` 统一加 `-ww`（unlimited width）。
+  本地 4 个文件复跑 **109 passed**。
+
 - **预推送 fresh-clone 门禁复验**：`check_doc_links --strict` / `check_bilingual_docs --strict` /
   `check_baseline(+numbers)` / `env_budget` / `env_snapshot` / `tool_versions` / `json_contract` /
   `zero_assert` / `state_contract` / `citations` / `credential_scrub` / `llm_configs_schema` /

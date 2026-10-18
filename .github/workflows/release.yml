@@ -101,11 +101,11 @@ jobs:
         run: twine check dist/*
 
       - name: Generate CycloneDX SBOM (R13，复用 ci.yml 写法)
-        # 与 ci.yml supply-chain 作业同口径：cyclonedx-bom 旧包名优先，
-        # 失败回退新包名 cyclonedx-python（同一工具更名前后关系）
+        # 与 ci.yml supply-chain 作业同口径：cyclonedx-bom 4.5.0 的 CLI 为
+        # `cyclonedx-py requirements <file>`（旧写法 `cyclonedx-py <file>` 会被判
+        # 未知子命令 → 2026-10-18 首次真实 CI 实测该步骤失败，已修正）。
         run: |
-          cyclonedx-py requirements.txt -o sbom.cyclonedx.json || \
-            pip install cyclonedx-python && cyclonedx-python requirements.txt -o sbom.cyclonedx.json
+          cyclonedx-py requirements requirements.txt -o sbom.cyclonedx.json
 
       - name: Upload build artifacts
         # 无论后续发布步骤成败都保留构建产物（90 天，供失败排查/人工发布）

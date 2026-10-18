@@ -66,7 +66,7 @@ def _ps_works() -> bool:
     """
     try:
         proc = subprocess.run(
-            ["ps", "-axo", "pid=,ppid=,stat=,command="],
+            ["ps", "-ww", "-axo", "pid=,ppid=,stat=,command="],
             capture_output=True,
             text=True,
             timeout=10,
@@ -87,9 +87,14 @@ def _token(name: str) -> str:
 
 
 def _ps_rows() -> list[dict[str, Any]]:
-    """读取进程表（pid/ppid/stat/command；stat 用于僵尸判定）。"""
+    """读取进程表（pid/ppid/stat/command；stat 用于僵尸判定）。
+
+    `-ww`（unlimited width）不可省：Linux/procps 下 `command` 列默认按屏幕宽度
+    截断，标记 token 位于长 `python -c` 脚本参数之后会被截掉 → 观测不到子进程
+    （2026-10-18 CI 首跑实测孤儿观测类用例在 ubuntu 失败；macOS ps 不截断故本地全绿）。
+    """
     proc = subprocess.run(
-        ["ps", "-axo", "pid=,ppid=,stat=,command="],
+        ["ps", "-ww", "-axo", "pid=,ppid=,stat=,command="],
         capture_output=True,
         text=True,
         timeout=10,

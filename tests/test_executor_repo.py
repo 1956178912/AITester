@@ -363,6 +363,10 @@ class TestLlmPatchHelpers:
         mod = repo / "src" / "pkg" / "mod.py"
         mod.write_text(original)
         subprocess.run(["git", "-C", str(repo), "init", "-q"], check=True)
+        # 2026-10-18 CI 首跑实测：GitHub runner 无全局 git identity，临时仓库
+        # commit 会以 "Please tell me who you are" 失败 → 显式设置仓库级身份。
+        subprocess.run(["git", "-C", str(repo), "config", "user.email", "t@example.invalid"], check=True)
+        subprocess.run(["git", "-C", str(repo), "config", "user.name", "t"], check=True)
         subprocess.run(["git", "-C", str(repo), "add", "."], check=True)
         subprocess.run(["git", "-C", str(repo), "commit", "-q", "-m", "base"], check=True)
         patch_file = tmp_path / "llm.patch"
