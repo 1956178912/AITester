@@ -16,7 +16,7 @@
 > 关键负面证据）；④ **z3 SMT 见证层首个专项评估批**（A-18/Q7；机制层 pass，并由其错误归因驱动
 > `result`/`r` 别名修复，reach 10.3%→14.7%）；⑤ **A-19 抢占优先级修复 + 回滚 verdict schema + preflight
 > 配额探针缺陷修复**；⑥ **文档↔工件一致性审计**（P0=4 / P1=17 / P2=14）与对应收口。
-> 真实 LLM 花费：<!-- T-COST-PENDING -->（B2 ≈$…；B1 ≈$…；A-19 复验 ≈$0.08；K=3 $0.020577；e2e LLM 探针 ≈$…）。
+> 真实 LLM 花费：B1 **$0.876339**（六格；含首跑中止累计 ≈$0.97）+ B2 **$2.249652**（3 seed×3 臂，783 task-runs）+ A-19 复验 **$0.098** + K=3 采样 **$0.020577** ≈ **$3.245**（另 e2e LLM 探针框架上限 <$0.05、SMT/审计/复核零 LLM）。
 
 ### Added
 
@@ -25,13 +25,24 @@
   `--task-count 87 --max-pattern-repeat 2`、3 臂 `aitester/plain_llm/plain_llm_df`、seeds 42/43/44）重跑；
   预注册 `PREREG.md` 跑前冻结（§1.1 硬门槛 / §1.2 R1–R3 方向性判据 / §1.3 并列报告），成本估算口径错误以
   `PREREG_AMENDMENT_cost_estimate.md` 中途披露（判据未改）。逐 seed 门槛（干净树/指纹 pinned/87 行/exit=0/task 集一致）
-  与三 seed 合并判定见 `GATES.json`/`ANALYSIS_REPORT.json`。<!-- T1-RESULT-PENDING -->
+  与三 seed 合并判定见 `GATES.json`/`ANALYSIS_REPORT.json`。
+  **结果（三 seed 全过 §1.1 硬门槛：干净树 / 指纹 pinned / 87 行 / exit=0 / task 集一致）**：
+  pooled（261/臂）detection = aitester **8/261（3.07%）** / plain_llm **31/261（11.88%）** / df **74/261（28.35%）**；
+  预注册判定 **`not_reproduced`**（R1 排序 `df>aitester>plain` 失败、R3 0/3 seed），但 **R2 成立且显著**：
+  aitester vs df δ=**−25.29pp**（b/c=4/70，McNemar p≈0，bootstrap CI [−31.0,−19.5]pp）→ 核心负面
+  （编排 vs df 提示协议）在新协议下仍显著为负；**次级排序（aitester > 裸提示）不稳健/反向**。
+  **漂移定位（如实披露，非因果证明）**：① logic 档自 R-P0-2 新增 5 个行为开关；
+  ② **R-P0-2 切点尚无 `LLM_THINKING_MODE`**（该开关更晚加入，实测非祖先）→ 旧批按模型默认推理模式运行；
+  token 证据：旧批 output 占比 **78.6%**（总 8.76M）vs 新批 **36.4%**（总 3.58M）→ 新旧**不是同一推理模式**的重跑；
+  ③ `plain_llm` 单次提示臂（logic 新开关不改变其生成路径）旧 1.53%→新 11.88%，⇒ 存在全局性因素，不能全归因协议开关。
+  成本实测 **$2.249652**（3.58M tokens；显著低于修正上界 $8.8，主因 reasoning token 减少）。
+  工件 `t_round_b2_main_batch_20261018/`（README §0.6 T 轮发现；SHA 804 项）。
 - **T2/B1：RT1 协议文本消融指纹级复现**（`experiments/run_t2_b1_protocol_text.sh`）：三格 = `plain_llm`（无再生成无强化段）
   / `plain_llm_df` + `DETECTION_FIRST_SECTION_ENABLE=false`（有再生成无强化段）/ `plain_llm_df` 全协议；seeds 42/44；
   预注册冻结（文本效应 = C3−C2 方向一致且显著；采样效应 = C2−C1 ≤5pp）。因 logic 档 `ENABLE_MUTATION_SCORING`
   批后阶段实际墙钟超预期，按 `PREREG_CONTINUATION.md`（判据逐字未改）显式关闭该**批后辅助测量**并从 C1_seed44 起
-  生效（C1_seed42 保留 mutation 口径并披露差异）；`DOC_RECONCILIATION.md` 列出 4 处"未执行"陈旧声明与纠正文案。
-  **结果（六格全过 GATES 16 checks；均 git_dirty=false / 指纹 pinned=true）**：C1 plain_llm 9/87（seed42）、12/87（seed44）；
+  生效（**首跑已中止且无主终点数据，六格统一重跑**，执行修订见 `PREREG_CONTINUATION.md`）；`DOC_RECONCILIATION.md` 列出 **9 处（5 文件）**"未执行"陈旧声明与纠正文案。
+  **结果（六格全过 GATES 17 checks；均 git_dirty=false / 指纹 pinned=true）**：C1 plain_llm 9/87（seed42）、12/87（seed44）；
   C2 RT1 10/87、10/87；C3 df 全协议 24/87、27/87。**文本效应 C3−C2 = +16.1pp（McNemar b/c=15/1，p=0.000519）** /
   **+19.5pp（b/c=17/0，p=1.5e-05）**；采样效应 C2−C1 = +1.1pp（p=1.0）/ −2.3pp（p=0.5）→ **文本效应 2/2 seed 复现、采样效应可忽略**。
   六格合计 $0.876339 / 1299s；首跑（中止、无主终点数据）如实披露。工件 `t_round_b1_protocol_text_20261018/`。
@@ -116,10 +127,19 @@
 
 - 定向测试：T4 `pytest` 7 文件 **217 passed**；T3 既有 62+33 passed；T3c 8 文件 **187 passed**；T5 断言/校验补测全绿。
 - 全量测试与覆盖率（T 轮收尾，CI 同口径）：<!-- T-TESTS-PENDING -->
-- 门禁链：`make gates`（含 G16 文档链接 / 工件入库 / 基线一致性 / env 预算 / 零断言）<!-- T-GATES-PENDING -->；
-  `make e2e-probe` 与 `AITESTER_E2E_LLM=true make e2e-probe-llm`（功能矩阵 68 探针）；`python main.py doctor`。
-- 工件：T 轮证据目录全部 `SHA256SUMS --write/--verify` 通过（T1/T2/T3/T3b/T3c/T4/T5a）；`check_artifacts_tracked`
-  的 `*_round_*` 覆盖扫描与 MANIFEST 同步登记。
+- 门禁链实测：`ruff check .` 全绿 / `ruff format --check .` **809 文件已格式化** / `mypy src/ config.py` 0 错（**134** 源文件）；
+  `check_bilingual_docs --strict` 0 错、`check_doc_links --strict` 0 错（120 文件 / 550 链接）；
+  `check_env_budget` 251/251 登记、`check_baseline(+numbers)`、`check_state_contract`（133 文件）、
+  `check_env_snapshot_keys`（覆盖 82 / 缺失 0）、`check_model_fingerprint`、`check_tool_versions`、
+  `check_json_contract_sites`、`check_zero_assert_tests`（383 测试文件 / 0 违规）、`check_prompt_artifacts --strict`、
+  `check_artifact_doc_consistency`（含登记册 coverage 对账）、`coverage_ratchet --check`（96.55≥96.4 / 92.78≥92.5）、
+  `check_branch_coverage coverage.xml` 全部通过。
+- e2e 功能矩阵：`make e2e-probe` **56 pass / 0 fail / 0 error / 12 skip（共 68）**；
+  `AITESTER_E2E_LLM=true make e2e-probe-llm` **68/68 pass**（含 12 真实 LLM 探针，耗时合计 97.5s）；
+  `python main.py doctor` exit=0（12 个 LLM 探针按强制零 LLM 跳过）。
+- 工件：T 轮 **10 个**证据目录全部 `SHA256SUMS --write/--verify` 通过（T1/B2 804 项、T2/B1 557 项、T3 22 项、
+  T3b 7 项、T3c 9 项、T4 语义修复 11 项、A-19 默认门 34 项、文档审计 1 项、独立复核 1 项、e2e 矩阵 5 项）；
+  `check_artifacts_tracked` 的 `*_round_*` 覆盖扫描与 MANIFEST 同步登记（175 项）。
 
 ## [Unreleased] — 2026-10-18 S 轮（A-19 失败注入重做 + 多采样示例治理 + 3-seed 生产化决策）
 

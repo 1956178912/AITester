@@ -15,7 +15,7 @@ All notable changes to this project will be documented in this file. Format foll
 > (4) **z3 SMT witness layer first dedicated batch** (A-18/Q7; mechanism layer `pass`) and the `result`/`r` alias fix driven by its error attribution (reach 10.3%→14.7%);
 > (5) **A-19 preemption-priority fix + rollback verdict schema + preflight quota-probe fix**;
 > (6) **documentation↔artifact consistency audit** (P0=4 / P1=17 / P2=14) and its close-out.
-> Real LLM spend: <!-- T-COST-PENDING-EN -->.
+> Real LLM spend: B1 **$0.876339** (six cells; ≈$0.97 including the aborted first attempt) + B2 **$2.249652** (3 seeds × 3 arms, 783 task-runs) + A-19 revalidation **$0.098** + K=3 sampling **$0.020577** ≈ **$3.245** (plus e2e LLM probes under the framework's <$0.05 cap; SMT/audit/verification are zero-LLM).
 
 ### Added
 
@@ -60,8 +60,9 @@ All notable changes to this project will be documented in this file. Format foll
 
 - Targeted tests: T4 `pytest` 7 files **217 passed**; T3 existing 62+33 passed; T3c 8 files **187 passed**; T5 assertion/checksum regressions all green.
 - Full suite and coverage (T-round closing, CI caliber): <!-- T-TESTS-PENDING-EN -->
-- Gates: `make gates` (incl. G16 doc links / artifact tracking / baseline consistency / env budget / zero-assert) <!-- T-GATES-PENDING-EN -->; `make e2e-probe` and `AITESTER_E2E_LLM=true make e2e-probe-llm` (68-probe feature matrix); `python main.py doctor`.
-- Artifacts: all T-round evidence directories pass `SHA256SUMS --write/--verify` (T1/T2/T3/T3b/T3c/T4/T5a); the `*_round_*` coverage scan and MANIFEST are registered.
+- Gates measured: `ruff check .` clean / `ruff format --check .` **809 files already formatted** / `mypy src/ config.py` 0 errors (**134** source files); `check_bilingual_docs --strict` 0 errors, `check_doc_links --strict` 0 errors (120 files / 550 links); `check_env_budget` 251/251 registered, `check_baseline(+numbers)`, `check_state_contract` (133 files), `check_env_snapshot_keys` (82 covered / 0 missing), `check_model_fingerprint`, `check_tool_versions`, `check_json_contract_sites`, `check_zero_assert_tests` (383 test files / 0 violations), `check_prompt_artifacts --strict`, `check_artifact_doc_consistency` (incl. status-register coverage reconciliation), `coverage_ratchet --check` (96.55≥96.4 / 92.78≥92.5), `check_branch_coverage coverage.xml` all pass.
+- e2e feature matrix: `make e2e-probe` **56 pass / 0 fail / 0 error / 12 skip (68 total)**; `AITESTER_E2E_LLM=true make e2e-probe-llm` **68/68 pass** (12 real-LLM probes, 97.5 s aggregate); `python main.py doctor` exit=0 (12 LLM probes skipped by the forced zero-LLM rule).
+- Artifacts: all **10** T-round evidence directories pass `SHA256SUMS --write/--verify` (B2 804 entries, B1 557, K3 22, SMT 7, SMT-alias 9, semantic-fixes 11, A-19 default-gate 34, doc audit 1, independent verification 1, e2e matrix 5); the `*_round_*` coverage scan and MANIFEST are registered (175 entries).
 
 ## [Unreleased] — 2026-10-18 Round S (A-19 failure-injection redo + multi-sample example governance + 3-seed production decision)
 

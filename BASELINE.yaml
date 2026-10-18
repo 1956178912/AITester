@@ -11,10 +11,10 @@
 #   - 过期内容不得就地标注在本文件，历史快照归 docs/history/。
 
 version: "1"
-last_verified: "2026-10-17"   # 全量回归实测日期（2026-10-17 N 轮全功能优化批次后：`--collect-only` 实测 **8320**，登记值 passed = collected − skipped = 8320 − 5 = **8315**。本轮净增 **326** 例（7989 → 8315）= 探针框架/三组探针测试 26+56+54+22 + N 轮缺陷回归 146 + oracle 独立判读 48 + 其他，零代码回归。此前 M 轮：7994/5/0）
+last_verified: "2026-10-18"   # 全量回归实测日期（T 轮 2026-10-18：collected **8934**，登记值 passed = collected − skipped = **8929** / skipped 5 / failed 0；净增 88 例 = T4 零 LLM 34 + SMT alias 12 + SMT 批 8 + K3 多采样 16 + preflight 7 + checksum 4 + e2e 探针/负控 4 + 其他 3；另有 2 例既有用例按行为变更更新。此前 S 轮 8846/8841）
 
 tests:
-  total_passed: 8929          # 全量 pytest tests/（T 轮 2026-10-18：collected **8934**；登记口径 = collected − skipped。本轮净增 **88** 例（8846 → 8934）+ 2 例既有用例按行为变更更新（探针清单并集/ MANIFEST 长度锁），零代码回归。此前 S 轮 8846/8841）
+  total_passed: 8929          # 全量 pytest tests/（T 轮 2026-10-18：collected **8934**；登记口径 = collected − skipped。本轮净增 **88** 例（8846 → 8934）+ 2 例既有用例按行为变更更新（`test_e2e_probes_workflow` 探针清单改矩阵并集；`tests/test_aq_batch.py::TestArtifactsManifestE7` 的 MANIFEST 长度锁 133→163），零代码回归。此前 S 轮 8846/8841）
   # T 轮新增/更新用例来源：test_t_round_semantic_fixes.py 34 / test_spec_smt_result_alias.py 12 /
   # test_smt_witness_batch.py 8 / test_examples_multisample.py 23→39（+16）/ test_batch_quota_preflight.py
   # QuotaProbe 7 / test_checksum_results_gate.py 路径归一 4 / test_e2e_probes_logic.py 2 探针 2 负控 / 既有两例更新。
@@ -369,6 +369,13 @@ target_quality:
     checksum_path_normalization: "./ 前缀 / * 二进制标记 / Windows 反斜杠在 --verify 端归一（emse_docstring_anchor_20261017 的 165 条清单由误判全缺失 → 165/165 通过；4 例回归含真缺失负控）"
     evidence_dir_scan: "check_artifacts_tracked 扫描面 emse_* → emse_* + *_round_*（T 轮证据目录与 MANIFEST 同步登记）"
     artifacts: "experiments/results/t_round_semantic_fixes_20261018/_evidence/（preflight before/after 日志、探针日志）+ tests/ 回归"
+  t_round_llm_spend:  # T 轮真实 LLM 花费总账（价目表标准价上界口径，非账单）
+    b1_protocol_text: {cost_usd: 0.876339, note: "六格；首跑中止（无主终点数据）另计 ≈$0.09，累计 ≈$0.97；批次墙钟 1299s"}
+    b2_main_batch: {cost_usd: 2.249652, note: "3 seed×3 臂×87 任务（783 task-runs）；reasoning disabled 使 output 大减，显著低于修正上界 $8.8"}
+    a19_default_gate: {cost_usd: 0.098, note: "10 任务×2 臂并发复验"}
+    oracle_examples_k3: {cost_usd: 0.020577, note: "60 次 spec-only 采样"}
+    subtotal_usd: 3.244568
+    other: "e2e LLM 探针（框架上限 <$0.05，未单独结算）；SMT 见证/SMT 别名复跑/文档审计/独立复核 = 0（零 LLM）"
   b1_protocol_text_t_round:
     measured_at: "2026-10-18"
     nature: "预注册同协议三格复现（decision-grade；判据跑前冻结，执行修订见 PREREG_CONTINUATION.md）"
@@ -383,6 +390,36 @@ target_quality:
     reconciliation: "勘误 VALIDITY/OPTIMIZATION/EVALUATION_SCOPE 的'RT1/2×2 未执行'陈旧声明：2026-10-09 RT1 单 seed 批早已执行（plain_llm 9/87、RT1 10/87、df 27/87，df−RT1=+19.5pp），本批为指纹级三格×2 seed 复现（C1/C2/C3 与旧批数字同向）"
     artifacts: "experiments/results/t_round_b1_protocol_text_20261018/（GATES/PREREG/PREREG_CONTINUATION/六格批次+meta/logs/traces/README/ANALYSIS_REPORT/DOC_RECONCILIATION/SHA256SUMS）"
     caliber_note: "pre-run 预算 $2.0；实际 $0.876（含首跑中止）；不得与 R-P0-2 的 3 臂主批次混池（协议不同：本批为单臂逐格、C2 为 RT1 干预格）"
+  b2_main_batch_t_round:
+    measured_at: "2026-10-18"
+    nature: "锁指纹复现批（decision-grade；预注册冻结；成本估算口径修正见 PREREG_AMENDMENT，判据未改）"
+    cut_commit: "a93c1f60ee31b9582e0146f73e3038e6ce0f01a1"
+    protocol: {dataset: synthetic, task_count: 87, max_pattern_repeat: 2, seeds: [42, 43, 44], arms: [aitester, plain_llm, plain_llm_df], profile: logic, temperature: 0.0, thinking_mode: disabled, cache: "off", parallelism: 4}
+    gates: {all_pass: true, per_seed: {"42": {pass: true, exit_code: 0, wall_seconds: 4135}, "43": {pass: true, exit_code: 0, wall_seconds: 3578}, "44": {pass: true, exit_code: 0, wall_seconds: 3795}}}
+    pooled_261_per_arm:
+      aitester: {detected: 8, measurable: 261, detection_rate: 0.0307, repaired: 22, false_fixed: 200, original_detected: 38, original_measurable: 240, original_rate: 0.1583}
+      plain_llm: {detected: 31, measurable: 261, detection_rate: 0.1188, repaired: 0, false_fixed: 213, original_detected: 4, original_measurable: 261, original_rate: 0.0153}
+      plain_llm_df: {detected: 74, measurable: 261, detection_rate: 0.2835, repaired: 0, false_fixed: 129, original_detected: 117, original_measurable: 261, original_rate: 0.4483}
+    per_seed_detection:
+      "42": {aitester: "4/87", plain_llm: "9/87", plain_llm_df: "24/87"}
+      "43": {aitester: "0/87", plain_llm: "12/87", plain_llm_df: "27/87"}
+      "44": {aitester: "4/87", plain_llm: "10/87", plain_llm_df: "23/87"}
+    verdict:
+      classification: "not_reproduced"
+      rationale: "预注册冻结规则：R1 排序 plain_llm_df>aitester>plain_llm 未成立（R3 亦 0/3 seed），尽管 R2（aitester vs df 负向差）成立且显著"
+      R1_pooled_ordering: false
+      R2_aitester_vs_df: {delta_pp: -25.29, b_new_only: 4, c_old_only: 70, mcnemar_p: "≈0（精确二项下溢）", bootstrap_ci95: [-0.3103, -0.1954]}
+      R3_seeds_with_ordering: []
+    provenance: "三 seed 均 git_dirty=false / git_sha=a93c1f6 / model_fingerprint.pinned=true（system_fingerprint 齐全）/ 每臂 87 行×3 / task_id 与原批逐 seed 一致"
+    drift_findings:
+      profile_switches_added_since_rp02: [DETECTION_SPECIFICITY_GATE_ENABLE, FL_SPECTRAL_ENABLE, LOGIC_SPEC_STRICT_FALLBACK_ENABLE, MUTATION_ADVISOR_ENABLE, RED_REGRESSION_GATE_ENABLE]
+      thinking_mode: "R-P0-2 切点 b533cff 的 llm_client 尚无 LLM_THINKING_MODE（该开关在更晚 6e46463 加入，实测非祖先）→ 旧批=模型默认推理模式；本批显式 disabled"
+      token_share: {old: "in 2,276k / out 6,880k（out 78.6%，总 8.76M）", new: "in 2,278k / out 1,305k（out 36.4%，总 3.58M）"}
+      stop_reason_shift_aitester: {old: "test_passed 143 / skip_debugger_repair_invalid 77 / None 21 / max_iterations 20", new: "test_passed 207 / test_defect_regeneration_cap 33 / max_iterations 21"}
+      global_drift_evidence: "plain_llm 为单次提示臂、logic 档新开关不改变其生成路径，但旧批 1.53%→新批 11.88% ⇒ 存在全局性因素（推理模式/服务端/测量路径），不能全归因协议开关"
+    interpretation: "核心负面（编排 vs df 提示协议）在新协议下仍显著为负（−25.29pp，CI 全负）；次级排序（aitester > 裸提示）不稳健/反向。因果归属需下一轮 {thinking on/off} × {legacy/current profile} 2×2 消融（已登记）。旧批数字（无 thinking 记录、无指纹、dirty）不得与新批混池；对外引用必须带批名与协议版本。"
+    cost: {actual_est_usd: 2.249652, total_tokens: 3583029, preflight_estimate_usd: 4.518, amended_estimate_usd: 8.8, budget_usd: 6.0, note: "实测显著低于修正上界：推理 disabled 使 output token 大减；上界估算方法学教训见 PREREG_AMENDMENT"}
+    artifacts: "experiments/results/t_round_b2_main_batch_20261018/（PREREG/PREFLIGHT/PREREG_AMENDMENT/GATES/ANALYSIS_REPORT/README 0.6 T 轮发现节/SHA256SUMS 804 项）"
   doc_consistency_audit_t_round:
     measured_at: "2026-10-18"
     nature: "只读系统审计（文档↔工件一致性）"

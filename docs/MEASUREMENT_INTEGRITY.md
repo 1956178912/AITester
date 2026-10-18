@@ -450,3 +450,22 @@ seed42 完成前落盘（`t_round_b2_main_batch_20261018/PREREG_AMENDMENT_cost_e
 且被登记册当作"165 条校验通过"引用。修复：verify 端归一 `./` 前缀、`*` 二进制标记与
 Windows 反斜杠（新增 4 例回归含"真缺失仍报错"负控）。教训：清单格式不是"谁生成都行"，
 跨工具互操作必须在工具里归一，而不是在文档里注记。
+
+**T-1 B2 锁指纹复现批：头条批次在当前协议下不可复现（2026-10-18）**：R-P0-2 头条批（`b533cff`，旧批 10/10
+`git_dirty=true`、0/10 有 `model_fingerprint`）在干净切点 + 指纹 pinned + 预注册下重跑（3 seed×3 臂×87 任务，
+783 task-runs，$2.249652）：**§1.1 硬门槛三 seed 全过**，但预注册判定 **`not_reproduced`**——pooled detection
+aitester **3.07%** / plain_llm **11.88%** / df **28.35%**（R1 排序 `df>aitester>plain` 失败；R3 0/3 seed），
+而 **R2（aitester vs df δ=−25.29pp，b/c=4/70，bootstrap CI [−31.0,−19.5]pp）仍成立且显著**。
+**漂移定位（非因果证明，两条已核实的确定性差异 + 一条全局证据）**：
+① logic 档自 R-P0-2 切点新增 5 个行为开关（specificity/red-regression gates、FL-spectral、mutation-advisor、
+strict-fallback）；
+② **R-P0-2 切点的 `llm_client` 尚无 `LLM_THINKING_MODE` 开关**（`git merge-base --is-ancestor` 实测该开关更晚加入、
+非祖先）⇒ 旧批按模型**默认推理模式**运行、新批显式 disabled；token 证据：旧批 output 占比 **78.6%**
+（2,276k in / 6,880k out，总 8.76M）vs 新批 **36.4%**（2,278k in / 1,305k out，总 3.58M）——**新旧不是同一推理模式的重跑**；
+③ `plain_llm` 是单次提示臂、logic 档新开关不改变其生成路径，却从旧批 **1.53%** 变为新批 **11.88%**
+⇒ 存在**全局性因素**（推理模式/服务端行为/测量路径），交叉批差异**不能全部归因于协议开关**。
+**方法学结论**：① 旧批头条数字**对协议版本/推理模式敏感**，对外引用必须带批名 + 协议/推理模式标签，严禁与新批混池；
+② "同批对照"是唯一可辩护的配对方式（与 Q5 一致）；③ 本批可作为**当前协议下的新基线**供后续批内比较；
+④ 下一轮立项 **{thinking on/off} × {R-P0-2 legacy profile / current profile} 2×2 消融**（干净切点、固定 task 集、
+指纹 pinned）以分离推理预算与协议开关两个因素。工件 `experiments/results/t_round_b2_main_batch_20261018/`
+（README §0.6 / ANALYSIS_REPORT 的 `profile_preset_drift` / SHA 804 项）。

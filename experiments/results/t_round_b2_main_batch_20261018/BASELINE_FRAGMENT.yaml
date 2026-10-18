@@ -1,0 +1,20 @@
+  b2_main_batch_t_round:
+    measured_at: "2026-10-18"
+    nature: "锁指纹复现批（decision-grade；预注册冻结；成本估算口径修正见 PREREG_AMENDMENT）"
+    cut_commit: "a93c1f60ee31b9582e0146f73e3038e6ce0f01a1"
+    protocol: {dataset: synthetic, task_count: 87, max_pattern_repeat: 2, seeds: [42, 43, 44], arms: [aitester, plain_llm, plain_llm_df], profile: logic, temperature: 0.0, cache: "off", parallelism: 4}
+    gates: {all_pass: true, per_seed: {'42': {'pass': True, 'exit_code': 0, 'wall_seconds': 4135}, '43': {'pass': True, 'exit_code': 0, 'wall_seconds': 3578}, '44': {'pass': True, 'exit_code': 0, 'wall_seconds': 3795}}}
+    pooled_261_per_arm:
+      aitester: {detected: 8, measurable: 261, detection_rate: 0.0307, repaired: 22, repair_measurable: 261, false_fixed: 200, false_fix_measurable: 261, tokens: 2629059, cost_usd: 1.447277, original_detected: 38, original_measurable: 240, original_rate: 0.1583}
+      plain_llm: {detected: 31, measurable: 261, detection_rate: 0.1188, repaired: 0, repair_measurable: 261, false_fixed: 213, false_fix_measurable: 261, tokens: 310018, cost_usd: 0.260967, original_detected: 4, original_measurable: 261, original_rate: 0.0153}
+      plain_llm_df: {detected: 74, measurable: 261, detection_rate: 0.2835, repaired: 0, repair_measurable: 261, false_fixed: 129, false_fix_measurable: 261, tokens: 643952, cost_usd: 0.541408, original_detected: 117, original_measurable: 261, original_rate: 0.4483}
+    verdict:
+      classification: "not_reproduced"
+      rationale: "R1 或 R2 反向/不成立"
+      R1_pooled_ordering_df_gt_aitester_gt_plain: false
+      R3_ordering_in_at_least_2_of_3_seeds: false  # seeds_with_ordering=[]
+      R2_aitester_vs_df: {delta_pp: -25.29, b_new_only: 4, c_old_only: 70, mcnemar_p: 0.0, bootstrap_ci95: [-0.3103, -0.1954]}
+    provenance: "三 seed 均 git_dirty=false / git_sha=a93c1f6 / model_fingerprint.pinned=true / 87 行×3 臂 / task 集与原批一致"
+    cost: {actual_est_usd: 2.249652, total_tokens: 3583029, preflight_estimate_usd: 4.518, amended_estimate_usd: 8.8, budget_usd: 6.0}
+    caliber_note: "harness 漂移（logic 档自 R-P0-2 新增 5 开关、输出 token 份额差异）逐项披露；repair/false_fix 与旧批修正口径不混用"
+    artifacts: "experiments/results/t_round_b2_main_batch_20261018/（PREREG/PREFLIGHT/PREREG_AMENDMENT/GATES/ANALYSIS_REPORT/README/SHA256SUMS）"

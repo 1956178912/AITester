@@ -458,6 +458,72 @@ def build_report(out_dir: Path, orig_dir: Path, price: dict[str, Any]) -> dict[s
     return report
 
 
+def render_baseline_fragment(report: dict[str, Any]) -> str:
+    """渲染 BASELINE.yaml `target_quality.b2_main_batch_t_round` 片段（2 空格缩进 YAML）。"""
+    v = report["verdict"]
+    lines: list[str] = []
+    lines.append("  b2_main_batch_t_round:")
+    lines.append('    measured_at: "2026-10-18"')
+    lines.append('    nature: "锁指纹复现批（decision-grade；预注册冻结；成本估算口径修正见 PREREG_AMENDMENT）"')
+    lines.append('    cut_commit: "a93c1f60ee31b9582e0146f73e3038e6ce0f01a1"')
+    lines.append(
+        "    protocol: {dataset: synthetic, task_count: 87, max_pattern_repeat: 2, seeds: [42, 43, 44], "
+        'arms: [aitester, plain_llm, plain_llm_df], profile: logic, temperature: 0.0, cache: "off", parallelism: 4}'
+    )
+    per_seed = {
+        k: {"pass": x.get("pass"), "exit_code": x.get("exit_code"), "wall_seconds": x.get("wall_seconds")}
+        for k, x in (report.get("gates") or {}).get("per_seed", {}).items()
+    }
+    lines.append(f"    gates: {{all_pass: {str(v.get('gates_all_pass')).lower()}, per_seed: {per_seed}}}")
+    pooled = report["pooled"]
+    lines.append("    pooled_261_per_arm:")
+    for arm in report["arms"]:
+        p = pooled.get(arm) or {}
+        o = (report.get("original_pooled") or {}).get(arm) or {}
+        lines.append(
+            f"      {arm}: {{detected: {p.get('detected')}, measurable: {p.get('measurable')}, "
+            f"detection_rate: {p.get('detection_rate')}, repaired: {p.get('repaired')}, "
+            f"repair_measurable: {p.get('repair_measurable')}, false_fixed: {p.get('false_fixed')}, "
+            f"false_fix_measurable: {p.get('false_fix_measurable')}, tokens: {(p.get('tokens') or {}).get('total')}, "
+            f"cost_usd: {p.get('cost_usd')}, original_detected: {o.get('detected')}, "
+            f"original_measurable: {o.get('measurable')}, original_rate: {o.get('detection_rate')}}}"
+        )
+    lines.append("    verdict:")
+    lines.append(f'      classification: "{v.get("verdict")}"')
+    lines.append(f'      rationale: "{v.get("rationale")}"')
+    r1 = str(v.get("R1_pooled_ordering_df_gt_aitester_gt_plain")).lower()
+    r3 = str(v.get("R3_ordering_in_at_least_2_of_3_seeds")).lower()
+    lines.append(f"      R1_pooled_ordering_df_gt_aitester_gt_plain: {r1}")
+    lines.append(
+        f"      R3_ordering_in_at_least_2_of_3_seeds: {r3}  # seeds_with_ordering={v.get('R3_seeds_with_ordering')}"
+    )
+    r2 = v.get("R2_stats") or {}
+    lines.append(
+        f"      R2_aitester_vs_df: {{delta_pp: {r2.get('delta_pp')}, b_new_only: {r2.get('b_new_only')}, "
+        f"c_old_only: {r2.get('c_old_only')}, mcnemar_p: {r2.get('mcnemar_exact_p_two_sided')}, "
+        f"bootstrap_ci95: {r2['bootstrap_ci95']}}}"
+    )
+    lines.append(
+        '    provenance: "三 seed 均 git_dirty=false / git_sha=a93c1f6 / model_fingerprint.pinned=true / '
+        '87 行×3 臂 / task 集与原批一致"'
+    )
+    c = report.get("cost") or {}
+    lines.append(
+        f"    cost: {{actual_est_usd: {c.get('actual_est_usd')}, total_tokens: {c.get('total_tokens')}, "
+        f"preflight_estimate_usd: {c.get('preflight_estimate_usd')}, "
+        f"amended_estimate_usd: {c.get('amended_estimate_usd')}, budget_usd: {c.get('budget_usd')}}}"
+    )
+    lines.append(
+        '    caliber_note: "harness 漂移（logic 档自 R-P0-2 新增 5 开关、输出 token 份额差异）逐项披露；'
+        'repair/false_fix 与旧批修正口径不混用"'
+    )
+    lines.append(
+        '    artifacts: "experiments/results/t_round_b2_main_batch_20261018/'
+        '（PREREG/PREFLIGHT/PREREG_AMENDMENT/GATES/ANALYSIS_REPORT/README/SHA256SUMS）"'
+    )
+    return "\n".join(lines) + "\n"
+
+
 def render_readme(report: dict[str, Any]) -> str:
     """渲染中文 README 报告（表格为主，数字全部来自 report）。"""
     v = report["verdict"]
@@ -482,6 +548,62 @@ def render_readme(report: dict[str, Any]) -> str:
     )
     lines.append(
         f"| R3 逐 seed 排序 | `{v['R3_ordering_in_at_least_2_of_3_seeds']}`（seed {v['R3_seeds_with_ordering']}） |"
+    )
+    lines.append("")
+    # ── 0.5 机制对照（描述性，不做事后改判）──────────────────────────────
+    lines.append("## 0.5 与原批的机制对照（描述性；不用于改判）")
+    lines.append("")
+    lines.append("### 0.5.1 stop_reason 分布（三 seed 合并，逐臂）")
+    lines.append("")
+    lines.append("| 臂 | 新批 stop_reason | 原批 stop_reason |")
+    lines.append("|---|---|---|")
+    for arm in report["arms"]:
+        new_sr: dict[str, int] = {}
+        old_sr: dict[str, int] = {}
+        for seed in report["seeds"]:
+            st = (report["per_seed"].get(str(seed)) or {}).get("new", {}).get(arm)
+            if st:
+                for key, n in (st.get("stop_reasons") or {}).items():
+                    new_sr[str(key)] = new_sr.get(str(key), 0) + int(n)
+            ost = (report["per_seed"].get(str(seed)) or {}).get("original", {}).get(arm)
+            if ost:
+                for key, n in (ost.get("stop_reasons") or {}).items():
+                    old_sr[str(key)] = old_sr.get(str(key), 0) + int(n)
+        lines.append(f"| `{arm}` | {new_sr} | {old_sr} |")
+    lines.append("")
+    pd = report.get("profile_preset_drift") or {}
+    lines.append("### 0.5.2 logic 档预设漂移（候选机制来源，非因果证明）")
+    lines.append("")
+    if pd.get("available"):
+        added = pd.get("added") or {}
+        lines.append(
+            f"logic 档自 R-P0-2 切点新增 **{len(added)}** 个行为开关（R-P0-2 切点未启用）："
+            + "、".join(f"`{k}`" for k in added)
+            + "。本批按当前 documented protocol（logic 档）运行，因此**新批不是 R-P0-2 的逐字节等价重跑**；"
+            "R1 未复现与这些漂移的相关性只能作为**候选机制**，因果归属需下一轮的逐开关消融（另预注册）。"
+        )
+    else:
+        lines.append("profile 预设漂移无法核验（git show 失败）——不得当作无漂移。")
+    lines.append("")
+    r2 = v.get("R2_stats") or {}
+    lines.append("### 0.5.3 解释边界（写死口径，防事后改写）")
+    lines.append("")
+    lines.append(
+        "- **正面（R2）**：新批 `aitester` vs `plain_llm_df` 的配对差为 "
+        f"δ={r2.get('delta')}（{r2.get('delta_pp')}pp；b/c={r2.get('b_new_only')}/{r2.get('c_old_only')}；"
+        f"McNemar p={r2.get('mcnemar_exact_p_two_sided')}；bootstrap CI={r2.get('bootstrap_ci95')}）——"
+        "头条结论的核心负面证据（编排 vs df 提示协议的检出差距，方向为负）在新协议下**仍然成立且显著**。"
+    )
+    lines.append(
+        f"- **未复现（R1/R3）**：预设的完整排序 `plain_llm_df > aitester > plain_llm` 未成立"
+        f"（R1={v.get('R1_pooled_ordering_df_gt_aitester_gt_plain')}；R3={v.get('R3_ordering_in_at_least_2_of_3_seeds')}）。"
+        "注意：R-P0-2 中 `aitester > plain_llm` 这一**次级排序**本身不是核心结论；其未复现意味着"
+        '"aitester 检出高于裸提示"在当前协议下不成立（新批部分 seed 甚至更低）。'
+    )
+    lines.append(
+        '- **不得**把本批差异归因于模型能力变化（同切点同模型指纹）；也**不得**声称"编排更差"是因果结论——'
+        '协议漂移是混杂因素。可辩护表述："R-P0-2 头条批次的检出数字对 logic 档协议版本敏感；核心负面（vs df）稳健，'
+        '次级排序（vs 裸提示）不稳健"。'
     )
     lines.append("")
     lines.append("## 1. 合并口径（3 seed 池化，n=261/臂）")
@@ -600,6 +722,7 @@ def main(argv: list[str] | None = None) -> int:
             json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
         )
         (out_dir / "README.md").write_text(render_readme(report), encoding="utf-8")
+        (out_dir / "BASELINE_FRAGMENT.yaml").write_text(render_baseline_fragment(report), encoding="utf-8")
         print(f"已写出：{out_dir / 'ANALYSIS_REPORT.json'}")
         print(f"已写出：{out_dir / 'README.md'}")
     print(json.dumps(report["verdict"], ensure_ascii=False, indent=2))
