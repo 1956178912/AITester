@@ -461,12 +461,26 @@ class TestRiskApprovalBranch:
 
 
 class TestResolveTargetModule:
-    def test_cross_file_plan_target_modules_first(self):
+    def test_cross_file_plan_target_modules_first(self, monkeypatch):
+        # D3b Step A（2026-10-18）：plan 消费受 CROSS_FILE_PLAN_CONSUME_ENABLE
+        # 门控（默认关 = 历史"plan 不在场"口径；生产中 analyzer 恒写 None，
+        # 该门控此前不可见）。本用例显式开消费开关验证 plan 首元素口径。
+        monkeypatch.setenv("CROSS_FILE_PLAN_CONSUME_ENABLE", "true")
         state = _base_state(
             cross_file_deps=[{"target_module": "module_b"}],
             cross_file_plan={"target_modules": ["module_c"]},
         )
         assert _resolve_target_module(state) == "module_c"
+
+    def test_consume_off_ignores_plan_in_state(self, monkeypatch):
+        # D3b Step A 对偶用例：消费关（默认）时 plan 在场也不消费，
+        # 回退依赖边末元素（历史口径逐位保持）。
+        monkeypatch.delenv("CROSS_FILE_PLAN_CONSUME_ENABLE", raising=False)
+        state = _base_state(
+            cross_file_deps=[{"target_module": "module_b"}],
+            cross_file_plan={"target_modules": ["module_c"]},
+        )
+        assert _resolve_target_module(state) == "module_b"
 
     def test_cross_file_deps_fallback_last_module(self):
         state = _base_state(

@@ -58,9 +58,35 @@ def _orphans(pattern: str) -> list[str]:
     return hits
 
 
+def _ps_works() -> bool:
+    """ps 不仅存在，而且当前进程真的能读进程表（A-09，2026-10-18 独立评审）。
+
+    某些沙箱/容器宿主 `ps` 二进制存在但执行即 `PermissionError: Operation not
+    permitted`；此时"无孤儿残留"断言无法判定——环境能力缺失而非代码缺陷，
+    按项目既有 skipif 降级惯例显式 skip。
+    """
+    try:
+        proc = subprocess.run(
+            ["ps", "-eo", "pid,ppid,command"],
+            capture_output=True,
+            text=True,
+            timeout=20,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return proc.returncode == 0 and bool(proc.stdout.strip())
+
+
+_PS_OK = _ps_works()
+
+
 class TestProcessGroupTimeout:
     """P0-4：超时路径必须整树终止且不残留孤儿。"""
 
+    @pytest.mark.skipif(
+        not _PS_OK, reason="宿主环境禁止 ps 读取进程表（沙箱/容器限制），孤儿断言无法判定——非代码缺陷（A-09）"
+    )
     def test_timeout_returns_none_and_leaves_no_orphan(self) -> None:
         """挂起测试（子进程 sleep 300）在 timeout 后返回 None，且无孤儿残留。"""
         from experiments._m1_metrics import _run_pytest_in_tmp

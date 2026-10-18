@@ -1950,9 +1950,11 @@ def _cross_file_analyzer_node(state: AITesterState) -> dict[str, Any]:
                 state.get("module_name") or os.path.basename(state.get("target_file") or ""),
             )
 
-    # 跨文件计划落态：当前实现只写 None 占位（完整计划构建器
-    # cross_file.build_cross_file_repair_plan 尚未接入图——O-3 实测确认
-    # src/graph/ 内零调用点，属已登记的二期缺口；见 O-3 报告缺陷 D3b）。
+    # 跨文件计划落态：默认写 None 占位。D3b Step A（2026-10-18）起，
+    # CROSS_FILE_PLAN_BUILD_ENABLE=true 时由 _debugger_node（LLM 分支，具备
+    # debugger 实例与 test_output）经 build_cross_file_repair_plan_cached 构建
+    # 真实计划并覆盖本占位；消费由 CROSS_FILE_PLAN_CONSUME_ENABLE 门控
+    # （_resolve_target_module）。设计依据 docs/design/cross_file_plan_wiring_prereg.md。
     if not deps and not _preset_deps:
         logger.info("3.5 跨文件修复：依赖图为空（单文件项目），降级为单文件模式")
     elif deps:

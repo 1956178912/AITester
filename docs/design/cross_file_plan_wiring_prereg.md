@@ -1,15 +1,35 @@
 # D3b 跨文件图通路接线（`build_cross_file_repair_plan`）：设计与预注册草案
 
-> 状态：**未接线**（本轮只出设计与预注册草案，不实跑、不改生产默认）。
+> 状态：**Step A 已实装（2026-10-18 第三轮独立评审落地，双开关默认关、OFF/OFF 与历史逐位一致）；Step B（多模块协同修复）与 D3b-AB1 跑批未执行。**
 > 归属：T4 / T 轮 2026-10-18；承接 O 轮登记（`docs/PROJECT_STATUS_REGISTER.md`
 > §4 "D3b：`build_cross_file_repair_plan` 图内零调用点"）。
-> 结论先行：**接线会改变跨文件任务的 LLM 调用数与 debugger 的修复路由**
-> （下游已有消费点），不满足"默认关接线且不改路由行为"的判据 → 按纪律只做
-> 设计 + 预注册草案，留待下一轮同批对照。
+> 结论先行（**T 轮切点、实装前**）：**接线会改变跨文件任务的 LLM 调用数与 debugger 的修复路由**
+> （下游已有消费点），当时不满足"默认关接线且不改路由行为"的判据 → 只做
+> 设计 + 预注册草案。**U 轮已按本文件 §3 Step A 实装**（双开关默认关，OFF/OFF
+> 与历史逐位一致，实装口径修正见 §1.5）；Step B / D3b-AB1 仍待下一轮。
 
-## 1. 现状（本批切点实测，行号以切点为准）
+## 1.5 实现备注（2026-10-18 Step A 落地，对 §3 的两处修正）
 
-### 1.1 图内零调用点（事实）
+1. **生产节点位置修正**：§3 原写"`_cross_file_analyzer_node` 调
+   `build_cross_file_repair_plan_cached`"——实测不可行：builder 需要
+   `debugger` 实例与 `test_output`/`failed_cases`，而 analyzer 运行于执行
+   前、三者均不在场。实装改为 **`_debugger_node` 的 LLM 分支**（确定性接管
+   分支不构建——避免白烧调用），构建结果经节点 `update` 写
+   `state["cross_file_plan"]`（覆盖 analyzer 的 None 占位）；BUILD 关时
+   不写键，返回键集合与历史逐位一致。
+2. **消费门控层级修正**：`CROSS_FILE_PLAN_CONSUME_ENABLE` 仅门控 **plan
+   读取**；"依赖边末元素"回退是 plan 入图前的历史口径，任何开关下保留
+   （首版实现曾把整个 `if cross_file_deps` 块纳入门控，被契约测试
+   `test_consume_off_ignores_plan_in_state` 抓住——默认配置会丢失回退、
+   构成行为变化；已修复并为该对偶用例建档）。
+3. 回归锁：`tests/test_cross_file_plan_wiring.py`（13 例：双开关默认 /
+   读取、消费门控 6 情形、节点构建 4 情形含失败降级）；
+   `tests/test_debugger_node_branches.py::TestResolveTargetModule` 增补
+   消费关对偶用例。
+
+## 1. 实装前切点现状（2026-10-18 T 轮切点；Step A 后已变化，见 §1.5）
+
+### 1.1 实装前：图内零调用点（历史证据）
 
 ```
 $ grep -rn "build_cross_file_repair_plan(" src/graph/
@@ -24,6 +44,8 @@ experiments/results/o_round_cross_file_20261017/_helpers/*.py   # O 轮组件级
   **硬编码占位**：`update["cross_file_plan"] = None  # 占位，待二期实现完整计划构建`。
 - `src/tools/cross_file.py::build_cross_file_repair_plan`（协调器-提议者）**零生产调用点**；
   其缓存包装 `build_cross_file_repair_plan_cached` 同样零图内调用点。
+  （以上为**实装前口径**；U 轮 Step A 后：`src/graph/debugger.py::_debugger_node` 在
+  `CROSS_FILE_PLAN_BUILD_ENABLE=true` 且 deps 非空时为生产调用点，见 §1.5 与 CHANGELOG U 轮。）
 
 ### 1.2 关键发现：`cross_file_plan` 已有**下游消费者**（接线即改行为）
 
@@ -62,12 +84,18 @@ O 轮登记只说"接线会改变 LLM 调用/修复路由"，本批进一步定�
 | 默认关（env 未设）时行为零变化 | ✅ 可实现 | 开关默认 false，OFF 时 analyzer 仍写 `cross_file_plan=None` |
 | 关闭时 LLM 调用/修复路由零变化 | ✅ | 与现行为逐位一致（只需一次守卫） |
 | **开启（ON）时不改变 LLM 调用/修复路由** | ❌ | plan 的 `target_modules` 被 debugger 现有消费点读取（§1.2-1）⇒ prompt/路由必变；builder 本身必增 LLM 调用（§1.3） |
-| 因此本轮是否硬接线 | ❌ 不接线 | 符合任务"会改变 LLM 调用/修复路由 → 设计+预注册"分支 |
+| 因此本轮是否硬接线 | ❌ 不接线（T 轮切点判定，已被 U 轮 §1.5 取代） | 符合任务"会改变 LLM 调用/修复路由 → 设计+预注册"分支 |
 
-**本轮不做**：不改 `src/graph/nodes.py` / `src/graph/debugger.py` / 默认开关；
-`cross_file_plan` 保持 `None` 占位（与 O 轮登记状态一致，非静默失败）。
+**T 轮切点决定（已被 U 轮 Step A 取代）**：当时不改 `src/graph/nodes.py` /
+`src/graph/debugger.py` / 默认开关，`cross_file_plan` 保持 `None` 占位。
+**U 轮 Step A 已实装**（BUILD/CONSUME 双开关默认关；OFF/OFF 与历史逐位一致；
+Step B 多模块协同与 D3b-AB1 跑批仍未执行），实现修正见 §1.5。
 
 ## 3. 建议实施方案（下一轮，分两步）
+
+> 注：本节为 **T 轮设计稿**；Step A 实装与本节的两处差异见 §1.5
+> （生产节点改为 `_debugger_node` LLM 分支；`_patch_applier_node` 消费未在
+> Step A 接线，属 Step B）。
 
 ### Step A（观测/接线期，默认关）——"plan 构建 + 显式消费门控"
 

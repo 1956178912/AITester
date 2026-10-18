@@ -607,9 +607,14 @@ class TestVerifyP2PGate:
     def _run_verify(self, envs_root, tmp_path: Path, monkeypatch, recorder, p2p_passed: int, p2p_expected: int):
         ex = RepoExecutor(timeout=5, setup_timeout=5)
         repo_dir = tmp_path / "repo"
-        repo_dir.mkdir(exist_ok=True)
+        # 防御式 mkdir（A-08，2026-10-18 独立评审）：同一测试内四轮复用 tmp_path，
+        # 目录已存在时不得再调 mkdir——沙箱 broker 的 mkdir 垫片不尊重 exist_ok
+        # （已存在也抛 EEXIST/PermissionError），显式存在性守卫在两种环境下都安全。
+        if not repo_dir.exists():
+            repo_dir.mkdir(parents=True)
         scratch = tmp_path / "tmp"
-        scratch.mkdir(exist_ok=True)  # 允许同一测试内多轮复用（四条腿形状同构测试）
+        if not scratch.exists():
+            scratch.mkdir(parents=True)  # 允许同一测试内多轮复用（四条腿形状同构测试）
         monkeypatch.setattr("tempfile.gettempdir", lambda: str(scratch))
         monkeypatch.setattr(ex, "setup", lambda _u, _c: {"workdir": str(repo_dir), "cached": True, "error": None})
         monkeypatch.setattr(ex, "_official_harness_enabled", lambda: False)
