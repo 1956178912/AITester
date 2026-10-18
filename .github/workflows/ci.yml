@@ -376,13 +376,21 @@ jobs:
         # 分片，保持"同文件用例顺序不变"的隔离口径）。默认行为不变——
         # 不传 -n 时退化为历史串行。并行 4 worker 下全量 ~21s（串行 ~49s）。
         # 覆盖率口径不变（pytest-cov 与 xdist 组合仍产出 coverage.xml）。
-        run: |
-          pytest tests/ -v --cov=src --cov-branch --cov-report=xml --cov-report=term-missing -n 4 --dist loadfile
+        # 2026-10-18（U 轮，首次真实 CI 实测）：必须隔离 COVERAGE_FILE——探针/
+        # 执行器测试会启动真实 pytest 子进程，宿主 pytest-cov 默认 `.coverage`
+        # 数据文件会被子进程写入的非分支数据污染 → pytest 退出码 3
+        # （coverage INTERNALERROR: Can't combine branch coverage data with
+        # statement data）。本地 Makefile `test-cov` 早已用 COVERAGE_FILE 隔离，
+        # CI 此前从未真正执行故未暴露；此处与 Makefile 同口径。
         env:
           # 使用测试用的 mock API key，避免真实调用
           LLM_1_API_KEY: test-key
           LLM_1_BASE_URL: https://test.example.com
           LLM_1_MODEL_NAME: test-model
+          COVERAGE_FILE: ${{ github.workspace }}/.coverage.ci
+        run: |
+          rm -f .coverage.ci .coverage.ci.*
+          pytest tests/ -v --cov=src --cov-branch --cov-report=xml --cov-report=term-missing -n 4 --dist loadfile
 
       - name: Audit log redaction (4.2)
         # 4.2 日志脱敏门禁：扫描全仓 .py 日志调用点，参数含敏感字段名

@@ -130,6 +130,13 @@
   三个 Python 档均因此失败。按既有 untyped 可选依赖口径在 `pyproject.toml`
   `[[tool.mypy.overrides]]` 增加 `pymysql` 模块级 `ignore_missing_imports`，
   本地 venv 与按 lock 全量安装的干净 venv 双环境复验 **0 errors**。
+- **CI 测试步骤缺 COVERAGE_FILE 隔离（第 6 类，run #125 暴露）**：三档 test job 的
+  "Run tests with coverage" 均以 **pytest exit code 3**（coverage INTERNALERROR：
+  `Can't combine branch coverage data with statement data`）失败，且无 FAILED 用例行——
+  探针/执行器测试启动的真实 pytest 子进程污染宿主默认 `.coverage` 数据文件。
+  本地 `make test-cov` 早已用 `COVERAGE_FILE=.coverage.ci` 隔离（Makefile 注释记录同类
+  INTERNALERROR），CI 此前从未真正执行故未暴露；现已与 Makefile 同口径（`env.COVERAGE_FILE`
+  + 跑前清理），并保留 `coverage.xml` 落仓库根供覆盖率集群消费。
 - **预推送 fresh-clone 门禁复验**：`check_doc_links --strict` / `check_bilingual_docs --strict` /
   `check_baseline(+numbers)` / `env_budget` / `env_snapshot` / `tool_versions` / `json_contract` /
   `zero_assert` / `state_contract` / `citations` / `credential_scrub` / `llm_configs_schema` /

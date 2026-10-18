@@ -87,6 +87,14 @@ All notable changes to this project will be documented in this file. Format foll
   Following the existing untyped-optional-dependency caliber, added a module-level `ignore_missing_imports`
   override for `pymysql` in `pyproject.toml`; re-verified **0 errors** in both the local venv and a clean
   venv installed from `requirements.lock`.
+- **CI test step lacked COVERAGE_FILE isolation (6th item, exposed by run #125)**: all three test-matrix
+  jobs' "Run tests with coverage" failed with **pytest exit code 3** (coverage INTERNALERROR:
+  `Can't combine branch coverage data with statement data`) and no FAILED-case lines — real pytest
+  subprocesses spawned by probe/executor tests pollute the host's default `.coverage` data file. The local
+  `make test-cov` already isolates with `COVERAGE_FILE=.coverage.ci` (the Makefile comment records the same
+  INTERNALERROR); CI had never really executed before, so it was never exposed. CI now matches the Makefile
+  caliber (`env.COVERAGE_FILE` plus pre-run cleanup) while `coverage.xml` still lands at the repo root for the
+  coverage cluster.
 - **Pre-push fresh-clone gate re-check**: `check_doc_links --strict` / `check_bilingual_docs --strict` /
   `check_baseline(+numbers)` / `env_budget` / `env_snapshot` / `tool_versions` / `json_contract` /
   `zero_assert` / `state_contract` / `citations` / `credential_scrub` / `llm_configs_schema` /
