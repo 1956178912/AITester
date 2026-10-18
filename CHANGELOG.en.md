@@ -41,6 +41,32 @@ All notable changes to this project will be documented in this file. Format foll
 - **Regression locks**: `tests/test_cross_file_plan_wiring.py` (13 cases: switch defaults/reads, 6 consumption-gating scenarios, 4 node-build scenarios including failure degradation); `tests/test_debugger_node_branches.py::TestResolveTargetModule` adds the consume-off dual case (the original `test_cross_file_plan_target_modules_first` now explicitly enables CONSUME).
 - Follow-ups (LLM budget required, not executed): the D3b-AB1 three-arm comparison (A0 control / A1 build-without-consume cost ceiling / A2 full-chain capability) and Step B multi-module collaborative repair.
 
+### Fixed — repository-level defects found by pre-push fresh-clone verification (docs links / CI workflows, zero LLM)
+
+- **Documentation links (18 failures)**: simulating a fresh clone / CI checkout with the `git archive HEAD`
+  tree, `check_doc_links.py --strict` reported **18 failures** — all pointing at artifacts excluded by
+  `.gitignore` and present only on the local machine (`experiments/results/experiment_report_20260925.md`,
+  `synthetic_50_final/charts/`, `docs/study/SUBMISSION_{CHECKLIST,SKELETON}_*.md`, root
+  `INDEPENDENT_REVIEW_2026-10-16.md`); the local working tree had been green only because those files exist.
+  Fix: evidence references became plain code paths (README zh/en, design docs, failure_analysis); the
+  submission checklist/skeleton and the 10-16 review became plain text pointing at the committed
+  `docs/study/OPTIMIZATION_2026-10-15.md` / `docs/reviews/` reports. Fresh-clone re-check: **0 errors**
+  (111 files / 544 links).
+- **CI workflows (all jobs failed at startup)**: the four "pinned SHA" actions (`actions/checkout` /
+  `actions/setup-python` / `actions/upload-artifact` / `codecov/codecov-action`) **do not exist upstream**
+  (REST verification returns 422); the latest CI run shows every job failing within 2-3 s with
+  *"Unable to resolve action …"* — i.e. CI has never really executed since the O10 SHA pinning. Replaced
+  with **real, API-verified SHAs** matching the versions declared in the comments (checkout v4.1.1
+  `b4ffde65…` / setup-python v6.0.0 `e797f83b…` / upload-artifact v4.2.0 `694cdabd…` / codecov-action
+  v3.1.6 `ab904c41…`); all four workflow YAMLs parse.
+- **Pre-push fresh-clone gate re-check**: `check_doc_links --strict` / `check_bilingual_docs --strict` /
+  `check_baseline(+numbers)` / `env_budget` / `env_snapshot` / `tool_versions` / `json_contract` /
+  `zero_assert` / `state_contract` / `citations` / `credential_scrub` / `llm_configs_schema` /
+  `audit_log_redaction` / `artifacts_tracked` / `artifact_doc_consistency` (the register-coverage branch
+  correctly SKIPs when coverage.xml is absent) / `checksum_results` (main_batch 2029 entries) /
+  `dependency_exemptions` all pass; `check_prompt_artifacts` correctly SKIPs under CI's non-strict caliber
+  (the manifest is a local derivative).
+
 ### Verification
 
 - **Full suite (CI caliber, normal environment)**: `pytest tests/ -n 4 --dist loadfile --cov=src --cov-branch` (isolated `COVERAGE_FILE`) → **8956 passed / 5 skipped / 0 failed** (collected **8961**; **176.43 s**).

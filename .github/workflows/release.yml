@@ -72,12 +72,12 @@ jobs:
     steps:
       - name: Check out code
         # O10：SHA 固定——与 ci.yml 同源（actions/checkout@v4 → v4.1.1）
-        uses: actions/checkout@3f3f7fd89f09a93f8006f723897ab77c52b0d3e7
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
 
       - name: Set up Python 3.12
         # O10：SHA 固定——与 ci.yml test/security 作业同源
         #（actions/setup-python@v6 → v6.0.0）
-        uses: actions/setup-python@8d5bc5b086458bc1c9e4c01b4f9f123f37c1c4c0
+        uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c
         with:
           python-version: '3.12'
 
@@ -111,7 +111,7 @@ jobs:
         # 无论后续发布步骤成败都保留构建产物（90 天，供失败排查/人工发布）
         if: always()
         # O10：SHA 固定——与 ci.yml 同源（actions/upload-artifact@v4 → v4.2.0）
-        uses: actions/upload-artifact@84488ed32758509799cae3ed5e43ef903669d08b
+        uses: actions/upload-artifact@694cdabd8bdb0f10b2cea11669e1bf5453eed0a6
         with:
           name: release-dist-${{ github.run_number }}
           path: |

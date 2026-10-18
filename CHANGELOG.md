@@ -90,6 +90,29 @@
 - 后续（需 LLM 预算，未执行）：D3b-AB1 三臂对照（A0 对照 / A1 构建不消费测
   成本上界 / A2 全链路测能力）与 Step B 多模块协同修复。
 
+### Fixed — 预推送 fresh-clone 验证发现的仓库级缺陷（文档链接 / CI 工作流，零 LLM）
+
+- **文档链接（18 处）**：用 `git archive HEAD` 解包树模拟 fresh clone / CI checkout 实测
+  `check_doc_links.py --strict` 报 **18 处失败**——全部指向被 `.gitignore` 排除、只存在于本机的工件
+  （`experiments/results/experiment_report_20260925.md`、`synthetic_50_final/charts/`、
+  `docs/study/SUBMISSION_{CHECKLIST,SKELETON}_*.md`、根目录 `INDEPENDENT_REVIEW_2026-10-16.md`）；
+  本机工作树因文件在场而一直"假绿"。处置：证据类引用改为代码路径文本（README 中英、design、
+  failure_analysis）；投稿清单/骨架与 10-16 评审改为纯文本并指向已入库的
+  `docs/study/OPTIMIZATION_2026-10-15.md` / `docs/reviews/` 评审报告。fresh-clone 复验
+  **0 错误**（111 文件 / 544 链接）。
+- **CI 工作流（全 job 启动即失败）**：4 个"固定 SHA"（`actions/checkout` / `actions/setup-python` /
+  `actions/upload-artifact` / `codecov/codecov-action`）在 GitHub 上游**均不存在**（REST 校验 422），
+  最近一次 CI run 实测全部 job 在 2-3s 内因 *"Unable to resolve action …"* 失败——即自 O10 钉 SHA
+  起 CI 从未真正执行过。按注释声明的目标版本替换为**经 GitHub API 校验可解析的真实 SHA**
+  （checkout v4.1.1 `b4ffde65…` / setup-python v6.0.0 `e797f83b…` / upload-artifact v4.2.0
+  `694cdabd…` / codecov-action v3.1.6 `ab904c41…`），4 个 workflow YAML 解析通过。
+- **预推送 fresh-clone 门禁复验**：`check_doc_links --strict` / `check_bilingual_docs --strict` /
+  `check_baseline(+numbers)` / `env_budget` / `env_snapshot` / `tool_versions` / `json_contract` /
+  `zero_assert` / `state_contract` / `citations` / `credential_scrub` / `llm_configs_schema` /
+  `audit_log_redaction` / `artifacts_tracked` / `artifact_doc_consistency`（登记册覆盖率支路在
+  coverage.xml 缺席时正确 SKIP）/ `checksum_results`（main_batch 2029 项）/ `dependency_exemptions`
+  全部通过；`check_prompt_artifacts` 在 CI 的非 strict 口径下按设计 SKIP（清单为本地派生物）。
+
 ### Verification
 
 - **全量测试（CI 同口径，正常环境）**：`pytest tests/ -n 4 --dist loadfile --cov=src --cov-branch`（`COVERAGE_FILE` 隔离）→ **8956 passed / 5 skipped / 0 failed**（collected **8961**；**176.43s**）。
