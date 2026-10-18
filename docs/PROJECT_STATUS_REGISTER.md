@@ -37,8 +37,8 @@
 | 维度 | 数值 | 验证入口 |
 |---|---|---|
 | 全量测试 | **8929 passed / 5 skipped / 0 failed**（登记口径 = collected 8934 − skipped 5；2026-10-18 T 轮本机实测（xdist -n 4 loadfile + `--cov`，COVERAGE_FILE 隔离）。本轮净增 **88** 例（8846 → 8934）+ 2 例按行为变更更新；零代码回归）
-| 总行覆盖 | **96.55%**（17481/18106；ratchet 水位 **96.4** 不变，余量 +0.15pp）
-| 总分支覆盖 | **92.78%**（6274/6762；水位 **92.5** 不变，余量 +0.28pp）
+| 总行覆盖 | **96.55%**（17482/18106；ratchet 水位 **96.4** 不变，余量 +0.15pp）
+| 总分支覆盖 | **92.80%**（6275/6762；水位 **92.5** 不变，余量 +0.30pp）
 | 静态硬下限覆盖 | 达标（行 ≥85% / 分支总 ≥77% / 核心路由 ≥85–90%） | `scripts/gates/check_branch_coverage.py coverage.xml` |
 | 门禁总数 | **25 道全绿**（口径 = `ci.yml` 主工作流**逐提交阻断的门禁检查步骤**，不含测试执行本身；可枚举复算）【K 轮 2026-10-17：① 新增 G16 文档链接完整性门禁（24→25，109 文件/528 链接/0 错误）；② 实测发现 U3 零断言门禁**长期只在 CI、不在本地 `make gates` 链**——HEAD（fde68ae）实际带 1 例零断言违规（`test_class_method_not_confused_with_top_level`，`if ok:` 分支从不执行），即"本地全绿≠CI 绿"再次复现，已把该门补入本地 gates 并修复违规（现 0 违规）；`scripts/gates/` 目录现为 26 脚本、`ci.yml` 引用 **24** 个（可枚举：`grep -oE 'scripts/gates/[a-z_]+[.]py' .github/workflows/ci.yml | sort -u`），主工作流阻断检查步骤 25（coverage 集群拆分为两步）】 | `make gates`；逐项见 §3 |
 | 静态检查 | ruff 全绿 / **809** 文件已格式化 / mypy 0 错（**134** 源文件，含 config.py） | `ruff check .`、`ruff format --check .`、`mypy src/ config.py` |

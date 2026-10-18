@@ -265,6 +265,7 @@ MANIFEST: tuple[str, ...] = (
     "experiments/results/t_round_final_checks_20261018/README.md",
     "experiments/results/t_round_final_checks_20261018/GATES.md",
     "experiments/results/t_round_final_checks_20261018/SHA256SUMS",
+    "experiments/results/t_round_final_checks_20261018/full_suite_cov.log",
 )
 
 # 证据目录覆盖扫描的显式豁免登记（相对 experiments/results/）。
