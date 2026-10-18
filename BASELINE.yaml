@@ -11,18 +11,20 @@
 #   - 过期内容不得就地标注在本文件，历史快照归 docs/history/。
 
 version: "1"
-last_verified: "2026-10-18"   # 全量回归实测日期（T 轮 2026-10-18：collected **8934**，登记值 passed = collected − skipped = **8929** / skipped 5 / failed 0；净增 88 例 = T4 零 LLM 34 + SMT alias 12 + SMT 批 8 + K3 多采样 16 + preflight 7 + checksum 4 + e2e 探针/负控 4 + 其他 3；另有 2 例既有用例按行为变更更新。此前 S 轮 8846/8841）
+last_verified: "2026-10-18"   # 全量回归实测日期（U 轮收口批次，CI 同口径）：collected **8961** = passed **8956** + skipped 5 + failed 0（正常环境实测 176.43s，coverage 同轮采集）；沙箱宿主实测 8942 passed / 19 skipped / 0 failed（774.71s）。此前 P3 批次 8946；T 轮 8934；S 轮 8846/8841）
 
 tests:
-  total_passed: 8929          # 全量 pytest tests/（T 轮 2026-10-18：collected **8934**；登记口径 = collected − skipped。本轮净增 **88** 例（8846 → 8934）+ 2 例既有用例按行为变更更新（`test_e2e_probes_workflow` 探针清单改矩阵并集；`tests/test_aq_batch.py::TestArtifactsManifestE7` 的 MANIFEST 长度锁 133→163），零代码回归。此前 S 轮 8846/8841）
+  total_passed: 8956          # 全量 pytest tests/（2026-10-18 U 轮收口实测：collected **8961**，**8956 passed / 5 skipped / 0 failed**，176.43s；登记口径 = collected − skipped（正常环境 5）。净增构成：T 轮 +88 例 + 第三轮独立评审收口批次 +14 例（P3 校验器回归锁 12 + 消费关对偶用例 2）+ D3b Step A +13 例（`tests/test_cross_file_plan_wiring.py`）。此前 P3 批次登记 8941）
   # T 轮新增/更新用例来源：test_t_round_semantic_fixes.py 34 / test_spec_smt_result_alias.py 12 /
   # test_smt_witness_batch.py 8 / test_examples_multisample.py 23→39（+16）/ test_batch_quota_preflight.py
   # QuotaProbe 7 / test_checksum_results_gate.py 路径归一 4 / test_e2e_probes_logic.py 2 探针 2 负控 / 既有两例更新。
-  total_failed: 0
+  # 第三轮独立评审收口批次（2026-10-18，零 LLM）：A-08 防御式 mkdir / A-09 能力探测 skipif（4 文件，沙箱内 14 例显式 skip）
+  # + P3 `tests/test_eval_integrity_check.py` 12 例（IC-1..IC-8 校验器回归锁）。
+  total_failed: 0            # 口径 = **正常环境**（CI 3.12/3.13/3.14 矩阵口径）。2026-10-18 第三轮独立评审实测补充：加固前沙箱宿主（broker/ps/嵌套 sandbox 受限）全量实跑 15 failed/8914 passed，失败全部归因环境能力缺失而非代码缺陷——① broker mkdir 垫片不尊重 exist_ok（TestVerifyP2PGate）；② 沙箱禁 ps（孤儿检测 10 例）与禁生产 profile sandbox_apply（内核沙箱真实执行 5 例）。A-08/A-09 加固后（防御式 mkdir + 能力探测 skipif）**沙箱内复跑 0 failed**（D3b 批次后为 8942 passed / 19 skipped / 0 failed，774.71s；U 轮收口正常环境全量 8956 passed / 5 skipped / 0 failed，176.43s）。引用"0 failed"时正常环境口径外，可带"加固后受限环境亦 0 failed"标签。
   total_skipped: 5           # 2026-10-16 实测 5〔含 3 可选依赖缺失优雅跳过 + 1〔test_ult_adapter cosmic-ray 在场时"不可用口径不可演练"反跳〕+ 1 新增来源待定位〕
   total_xfailed: 0           # 2026-10-15：上一批次登记的 strict xfail（`parse_coverage` 小写 total 回退失效）已随缺陷修复解除；套件重新回到零 xfail。历史：2026-10-12 推导式变量误杀修复后转正 → 本批为第二轮零 xfail
   slim_environment: 1863     # 上一次精简环境实测（2026-10-05 N 批次；此后续批次未重测精简环境——新增用例均为纯 stdlib 或仅依赖既有可选依赖口径）
-  suite_seconds: 192           # 全量耗时：T 轮收尾全量本机实测 192.06s（xdist -n 4 loadfile + `--cov=src --cov-branch`，COVERAGE_FILE 隔离；含覆盖率采集开销）。
+  suite_seconds: 176           # 全量耗时：U 轮收口全量本机实测 176.43s（xdist -n 4 loadfile + `--cov=src --cov-branch`，COVERAGE_FILE 隔离；含覆盖率采集开销）。
 
 # ⚠️ 口径澄清（R5 审查 2026-10-09，MET-01）：本节是 **meta_coverage**——
 #   即 AITester **自身源码**（--cov=src）的测试覆盖率，不是被测代码的覆盖率。
@@ -30,7 +32,7 @@ tests:
 #   ULT/TOSEM'26）中的 "coverage" 一律指**被测代码**。对外引用必须显式区分；
 #   被测代码覆盖率见下方 target_quality 节。
 coverage:                    # = meta_coverage（项目自身源码），勿与 target_quality 混用
-  line_total_pct: 96.55      # --cov=src 总行覆盖（T 轮 2026-10-18 收尾全量实测 **96.55%**〔17482/18106 = 96.5536%〕；分母 +35（T 轮新增可达分支）与 +? 相对 S 轮；ratchet 水位 96.4 不变，余量 +0.15pp。口径 = 全绿收口全量 + coverage.xml 实测）
+  line_total_pct: 96.55      # --cov=src 总行覆盖（U 轮 2026-10-18 收口全量实测 **96.55%**〔17506/18131 = 96.5531%〕；分母较 T 轮 +25（D3b Step A / P3 等新增可达行）；ratchet 水位 96.4 不变，余量 +0.15pp。口径 = 全绿收口全量 + coverage.xml 实测）
   line_core_modules:         # 逐模块行覆盖（%，coverage.xml 实测四舍五入）。2026-10-16 I 轮逐项复核：**10 项中 1 项变动**（planner 98 → **100**，I 轮新增的 3 个写侧测试收复了 `planner.py:352/379`——即 ADR-0032 决策 2「Planner M10 归因改写」的写侧，此前**从未被任何测试执行过**）；graph_nodes 仍记 78，但其分数由 0.7776 升至 0.7789（分母 +4，见该行注）。其余 8 项 0 变动。G 轮复核记录：10 项中 1 项变动（dependency 95 → 96）；F 轮回填时的存量漂移记录：
                              # 本节此前为早期批次快照，10 项中 9 项已低于实测 3–14pp（如
                              # code_analyzer 记 89 / 实测 99、rag_retriever 记 86 / 实测 98），
@@ -46,9 +48,9 @@ coverage:                    # = meta_coverage（项目自身源码），勿与 
     planner: 99.09           # agents/planner.py（109/110；branch 91.67%——原"1.0000/91 行"系过期分母，实测分母 110）
     dependency: 96.26        # tools/dependency.py（309/321；branch 90.74%）
     multi_candidate: 98.67   # tools/multi_candidate.py（296/300；branch 94.26%）
-    cross_file: 92.83        # tools/cross_file.py（272/293；branch 84.78%）
+    cross_file: 92.98        # tools/cross_file.py（278/299；branch 84.78%——U 轮 D3b Step A 新增 21 行后按 coverage.xml 实测刷新）
     rag_retriever: 98.10     # rag/retriever.py（207/211；branch 98.57%）
-  branch_total_pct: 92.80  # --cov=src --cov-branch（T 轮 2026-10-18 收尾全量实测 **92.80%**〔6275/6762 = 92.8033%〕；ratchet 水位 92.5 不变，余量 +0.30pp。注：另一轮含 2 例工件门禁失败的运行测得 92.78（失败改变分支执行），以干净树全绿轮为准）
+  branch_total_pct: 92.79  # --cov=src --cov-branch（U 轮 2026-10-18 收口全量实测 **92.79%**〔6282/6770 = 92.7902%〕；ratchet 水位 92.5 不变，余量 +0.29pp。T 轮同口径为 92.80%（6275/6762）；以干净树全绿轮为准）
   branch_core_routing:       # 核心条件路由模块分支覆盖（scripts/gates/check_branch_coverage.py 门槛 85%）
     # T 轮（2026-10-18，审计 P0-04）：按 coverage.xml 实测刷新（此前两项声明 1.0000 被产物推翻）。
     graph_workflow: 99.17   # _should_debug / _route_after_diagnosis / determine_stop_reason 条件路由（branch 实测；行覆盖 361/362=99.72%）
@@ -1198,3 +1200,14 @@ benchmark:
       replace_doc_arm_L_round: "60.00%（L 轮同批对照 86.11%）"
       replace_union_arm_L_round: "61.76%"
     interpretation: "**增广不损伤检出（non-inferior 成立，δ=+2.86pp、p=0.5、BF10=0.31，MDE 16.57pp 下不显著）**；与 L 轮 replace 的 −26pp 对照，支持'检出损失来自移除实现代码，而非加入规格'。机制侧（逐测试）：effective +9.07pp / misguided −1.01pp / both_pass −8.07pp，但任务级 detection 仅 +2.86pp（n.s.）→ 逐测试质量与任务级二值判定解耦/饱和；代价 = 测试膨胀（collected 1317 vs 933）+ 挂死测试 timeout 单列 363 vs 97。**不构成'增广提升检出'的确认性证据**（未达预注册 88% 成功线）。"
+
+# A-05（2026-10-18 第三轮独立评审收口）：门禁数量口径统一（此前 README 23/18、
+# 论文 24、登记册 25、git 记录 25、实测 26 脚本/27 调用五处分裂）。
+# 权威口径 = 本文件三个可复算数字；README/论文/登记册引用必须与本节一致。
+gates:
+  scripts_total: 26           # `ls scripts/gates/*.py | wc -l`（门禁脚本总数）
+  ci_unique_scripts: 24       # `grep -oE 'scripts/gates/[a-z_]+[.]py' .github/workflows/ci.yml | sort -u | wc -l`
+  ci_call_sites: 27           # 同上去重前的调用点数（coverage_ratchet / check_citations / check_artifact_doc_consistency 各被调用 2 次）
+  not_in_ci: [check_perf_regression, check_swe_bench_pro_ready]  # 前者在 perf.yml，后者为 SWE-bench 数据前置门（本地/专用作业）
+  local_gates_target: "make gates"   # 本地全量门禁链（Makefile `gates` 目标）
+  note: "历史快照（CHANGELOG 各轮 '25 道' 等）按项目惯例不回溯刷新；当前口径一律以本三数字为准。"

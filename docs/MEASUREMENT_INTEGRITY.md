@@ -12,6 +12,8 @@ misguided 构念；df_spec 机制假设被逐测试操作化检验撤回）。K 
 > 按 `scripts/gates/check_bilingual_docs.py` 的维护约定登记豁免（见该文件
 > `_EXEMPT_NO_EN`，2026-10-15 条目）。
 >
+> **可执行版本**：`docs/design/evaluation_integrity_checklist.md`（IC-1..IC-8 工件级静态诚信检查，零 LLM；配套校验器 `experiments/eval_integrity_check.py`；跑批后 / 对外引用前 / 跨批对比前必跑）。
+>
 > **证据纪律**：表内每个数字均取自下列决策记录 / 实测记录原文，未做二次换算；凡原文未给出
 > 的数字一律留空或标注"原文未给"，不以估算填充：
 > `docs/adr/0021-repair-zero-measurement-artifact.md`、

@@ -1,6 +1,6 @@
 # 项目状态与决策登记册（Status & Decision Register）
 
-- 最后更新：2026-10-18（**T 轮**：真实 LLM 配额解锁——**B2 主批次锁指纹复现批**（3 seed×3 臂，干净树+`model_fingerprint.pinned=true`；判定与数字见 §3.2 T-1 与 BASELINE `target_quality.b2_*`）+ **B1/RT1 协议文本指纹级复现**（3 格×2 seed；并勘误 VALIDITY/EMSE 的"未执行"陈旧声明）→ 见 T-2；**oracle 示例 K=3 多数一致+canonical 治理**判定 `high_risk_default_off`（"自洽≠正确"，T-3）；**z3 SMT 见证层首个专项批**（A-18/Q7 机制层 pass）+ 由错误归因驱动的 `result`/`r` 别名修复（reach 10.3%→14.7%，T-3b/T-3c）；**A-19 抢占优先级修复 + 回滚 verdict schema + preflight 配额探针缺陷修复**（T-4）；**文档↔工件系统审计**（P0=4/P1=17/P2=14）并与本册 §1/§2/§4/§4.1 同批收口（T-5）。此前 **S 轮**：A-19 失败注入判 confirmed + 多采样示例治理（默认关）+ 3-seed 生产化决策 `enable_candidate`；此前 R/Q/P/O/N/M/L/K 轮同日登记；§1 快照随 BASELINE 同步至当日终态）
+- 最后更新：2026-10-18（**U 轮**：第三轮独立评审收口（**零 LLM**）——**A-05 门禁数量口径统一**（`BASELINE.yaml` `gates` 节为权威口径：26 脚本 / ci.yml 24 唯一引用·27 调用点 / 2 个专用工作流；README 中英文件树、论文贡献段、本册 headline 同步）+ **A-06 "0 failed" 环境标签**（正常环境口径 + 沙箱宿主能力缺失归因披露）+ **A-08/A-09 测试环境加固**（broker mkdir 垫片防御 + ps/生产 profile 沙箱能力探测 skipif；受限环境亦 0 failed）+ **A-03/A-17 T 轮漂移论文化**（论文 `sec:tround` + E8 2×2 消融预注册冻结）+ **P3 评测诚信 checklist v1**（IC-1..IC-8 零 LLM 校验器 + B2/df_spec 实测）+ **D3b Step A 跨文件计划接线**（双开关默认关、OFF/OFF 与历史逐位一致）+ 第三轮独立评审报告入库；§1 快照按 U 轮收口全量实测刷新（collected 8961 / 176.43s）。此前 **T 轮**：真实 LLM 配额解锁——**B2 主批次锁指纹复现批**（3 seed×3 臂，干净树+`model_fingerprint.pinned=true`；判定与数字见 §3.2 T-1 与 BASELINE `target_quality.b2_*`）+ **B1/RT1 协议文本指纹级复现**（3 格×2 seed；并勘误 VALIDITY/EMSE 的"未执行"陈旧声明）→ 见 T-2；**oracle 示例 K=3 多数一致+canonical 治理**判定 `high_risk_default_off`（"自洽≠正确"，T-3）；**z3 SMT 见证层首个专项批**（A-18/Q7 机制层 pass）+ 由错误归因驱动的 `result`/`r` 别名修复（reach 10.3%→14.7%，T-3b/T-3c）；**A-19 抢占优先级修复 + 回滚 verdict schema + preflight 配额探针缺陷修复**（T-4）；**文档↔工件系统审计**（P0=4/P1=17/P2=14）并与本册 §1/§2/§4/§4.1 同批收口（T-5）。此前 **S 轮**：A-19 失败注入判 confirmed + 多采样示例治理（默认关）+ 3-seed 生产化决策 `enable_candidate`；此前 R/Q/P/O/N/M/L/K 轮同日登记；§1 快照随 BASELINE 同步至当日终态）
 - **自我对账**：本册的覆盖率声明由 `scripts/gates/check_artifact_doc_consistency.py`
   的 `check_status_register()` 与 `coverage.xml` 实测对账——数字实质性错报即 CI 红，
   因此本册不允许手工美化。对账口径 = **锚定 §1 声明行 + ±0.10pp 容差**（见下）。
@@ -32,16 +32,16 @@
 - 阅读顺序建议：§1 现状快照 → §2 阻断项与解锁路径 → §3 已完成事项（含验证入口）
   → §4 遗留缺口 → §5 口径与术语纪律。
 
-## 1. 现状快照（2026-10-18 T 轮优化批次实测，CI 同口径）
+## 1. 现状快照（2026-10-18 U 轮收口批次实测，CI 同口径）
 
 | 维度 | 数值 | 验证入口 |
 |---|---|---|
-| 全量测试 | **8929 passed / 5 skipped / 0 failed**（登记口径 = collected 8934 − skipped 5；2026-10-18 T 轮本机实测（xdist -n 4 loadfile + `--cov`，COVERAGE_FILE 隔离）。本轮净增 **88** 例（8846 → 8934）+ 2 例按行为变更更新；零代码回归）
-| 总行覆盖 | **96.55%**（17482/18106；ratchet 水位 **96.4** 不变，余量 +0.15pp）
-| 总分支覆盖 | **92.80%**（6275/6762；水位 **92.5** 不变，余量 +0.30pp）
+| 全量测试 | **8956 passed / 5 skipped / 0 failed**（登记口径 = collected **8961** − skipped 5；2026-10-18 U 轮收口全量实测（xdist -n 4 loadfile + `--cov`，COVERAGE_FILE 隔离，**176.43s**）。净增构成：T 轮 +88 例 + 第三轮独立评审收口批次 +14 例（P3 校验器 12 + 消费关对偶 2）+ D3b Step A +13 例；零代码回归。沙箱宿主口径 8942 passed / 19 skipped / 0 failed，见 BASELINE `tests.total_failed` 注释） | `pytest tests/ -n 4 --dist loadfile`；`BASELINE.yaml` `tests` 节 |
+| 总行覆盖 | **96.55%**（17506/18131；ratchet 水位 **96.4** 不变，余量 +0.15pp） | `coverage.xml`；`scripts/gates/coverage_ratchet.py --check` |
+| 总分支覆盖 | **92.79%**（6282/6770；水位 **92.5** 不变，余量 +0.29pp） | `coverage.xml`；`scripts/gates/coverage_ratchet.py --check` |
 | 静态硬下限覆盖 | 达标（行 ≥85% / 分支总 ≥77% / 核心路由 ≥85–90%） | `scripts/gates/check_branch_coverage.py coverage.xml` |
-| 门禁总数 | **25 道全绿**（口径 = `ci.yml` 主工作流**逐提交阻断的门禁检查步骤**，不含测试执行本身；可枚举复算）【K 轮 2026-10-17：① 新增 G16 文档链接完整性门禁（24→25，109 文件/528 链接/0 错误）；② 实测发现 U3 零断言门禁**长期只在 CI、不在本地 `make gates` 链**——HEAD（fde68ae）实际带 1 例零断言违规（`test_class_method_not_confused_with_top_level`，`if ok:` 分支从不执行），即"本地全绿≠CI 绿"再次复现，已把该门补入本地 gates 并修复违规（现 0 违规）；`scripts/gates/` 目录现为 26 脚本、`ci.yml` 引用 **24** 个（可枚举：`grep -oE 'scripts/gates/[a-z_]+[.]py' .github/workflows/ci.yml | sort -u`），主工作流阻断检查步骤 25（coverage 集群拆分为两步）】 | `make gates`；逐项见 §3 |
-| 静态检查 | ruff 全绿 / **809** 文件已格式化 / mypy 0 错（**134** 源文件，含 config.py） | `ruff check .`、`ruff format --check .`、`mypy src/ config.py` |
+| 门禁总数 | **权威口径 = BASELINE.yaml `gates` 节**（2026-10-18 A-05 统一：`scripts/gates/` **26 脚本**、`ci.yml` **24 个唯一引用/27 处调用**；此前 README 23/18、论文 24、git 记录 25 多口径分裂已收口）。主工作流逐提交阻断检查步骤 = 25（coverage 集群拆分为两步）【K 轮 2026-10-17：① 新增 G16 文档链接完整性门禁（24→25，109 文件/528 链接/0 错误）；② 实测发现 U3 零断言门禁**长期只在 CI、不在本地 `make gates` 链**——HEAD（fde68ae）实际带 1 例零断言违规（`test_class_method_not_confused_with_top_level`，`if ok:` 分支从不执行），即"本地全绿≠CI 绿"再次复现，已把该门补入本地 gates 并修复违规（现 0 违规）；可枚举：`grep -oE 'scripts/gates/[a-z_]+[.]py' .github/workflows/ci.yml | sort -u`】 | `make gates`；逐项见 §3 |
+| 静态检查 | ruff 全绿 / **814** 文件已格式化 / mypy 0 错（**134** 源文件，含 config.py） | `ruff check .`、`ruff format --check .`、`mypy src/ config.py` |
 | 构建基线 | `BASELINE.yaml` 与实测逐位对账（含守卫 `TestBaselineNumbersConsistency`） | `pytest tests/test_2026_10_10_optimization_batch.py -q` |
 
 > 一致性提示：**任何一项数值漂移都会让对应门禁转红**。L 轮后覆盖率余量（行 +0.16pp、
@@ -73,6 +73,7 @@
 | B6 | `success` 呈现层降级 | ✅ **已执行（2026-10-16，8c2b655）** | 三指标落图表/表格/显著性基口径：主图四联（检出/假修复/成功率*/覆盖率）；表列 Detection/False-Fix/Repair 前置；显著性基口径 detection（旧批次回退 passed 并标注） | "三指标并列"从文字落到图表，图表与声明一致 |
 | B7 | 原始 LLM 响应归档 | **存储/合规决策** | 现状：`traces/*.trace.jsonl` 只存结构化事件，**不含原始响应**（故无法量化单引号 JSON 发生率，也无法完整离线重放生成） | 提升 Open Science 的 Complete/Exercisable 等级 |
 | B8 | A-19 覆盖率停滞检测**开/关消融批次** | ✅ **已执行（S-2 confirmed + T-4 抢占优先级修复）** | S-2 失败注入消融（on 10/10 vs off 0/10、iterations 1.8 vs 3.0 → confirmed）；T-4 修复默认证据门协议下 repair-invalid 同迭代抢占（停滞优先；默认关黄金表 18/18 零变化），真实 LLM 默认协议复验见 `experiments/results/t_round_a19_default_gate_20261018/` | 停滞检测从"组件在场"成为可引用消融证据 |
+| B9 | E8 T 轮漂移归因 2×2 消融（`{thinking on/off}×{legacy/current profile}`） | **LLM 配额** | 预注册已冻结（`docs/preregistration.md` E8，H1/H2/H3 判据跑前锁定，预估 $6–9；ADR-0034 纪律：授权前不得开跑） | 把"核心阴性是否推理模式不变式"从无归因变为跨配置结论；判定与漂移归因分离 |
 
 ## 3. 已完成事项（按主题，含验证入口）
 
@@ -183,6 +184,13 @@
 | **T-3b/T-3c：z3 SMT 见证层专项批 + result/r 别名修复（2026-10-18，零 LLM）** | 首个专项评估批（QuixBugs 41 缺陷程序）：机制层 pass（witness_rate 0.088531、timeout 0、桶逐子句可复算）；错误归因 `result_alias_not_reached`=110（66%）→ token 感知归一修复 → reached/sat 19→27、witness_rate→0.125116、reach_rate→0.146739；语义安全（新增 unsat 任务 0、NL 通道不变） | `experiments/smt_witness_batch.py`、`src/specs/spec_smt.py`、`tests/test_spec_smt_result_alias.py` 12 例、工件 `t_round_smt_witness_20261018/`（pre-fix）+ `t_round_smt_witness_aliasfix_20261018/`（post-fix）；设计记录 `docs/design/smt_witness_batch_plan.md` §6 |
 | **T-4：A-19 抢占优先级 + 回滚 schema + preflight 探针修复（2026-10-18）** | A-19：停滞判定在 `COVERAGE_STALL_DETECT_ENABLE=true` 时优先于 repair-invalid 同迭代平局（默认关黄金表 18/18 逐位一致锁定）；回滚 verdict 两键双分支投影（键集 93=93）；`run_preflight.py::quota_probe` 的 `LLMClient` ImportError 修复（真实探测 ok=True）；D3b 定位下游消费点后只出设计（`docs/design/cross_file_plan_wiring_prereg.md`） | `src/graph/workflow.py`、`experiments/run_benchmark.py`、`scripts/tools/run_preflight.py`、`tests/test_t_round_semantic_fixes.py` 34 例、`experiments/run_t4_a19_revalidation.sh` + **默认门真实 LLM 复验**工件 `t_round_a19_default_gate_20261018/`（$0.098、两臂 0 crash；预注册 P1/P2/P3 按字面未全满足 → classification **`unexpected_delta`**：ON 10/10 停滞终止/repair-invalid 日志 0，但 preempt 日志 8/10〔另 2 任务无平局走既有尾部短路〕、OFF 1/10 轨迹分叉、Δ iterations=0.2 不可归因；**不得当收益主张**，判据修正项已登记下轮）；汇总 `t_round_semantic_fixes_20261018/README.md` |
 | **T-5：文档↔工件一致性审计与仪器修复（2026-10-18）** | 只读系统审计（P0=4/P1=17/P2=14，含 BASELINE 20 项逐项核对/10 项无法核验）；随后修复：探针重复注册去重（66→68，注册数=可执行数）、`checksum_results --verify` 路径归一（165 条由误判缺失→全通过）、`check_artifacts_tracked` 扫描面扩到 `*_round_*`、本册/BASELINE/VALIDITY/EMSE 按报告逐项收口 | 审计报告 `experiments/results/t_round_artifact_audit_20261018/AUDIT_REPORT.md`；验证 `pytest tests/test_checksum_results_gate.py tests/test_artifacts_tracked_gate.py -q`、`make gates` |
+| **U-1：门禁数量口径统一（评审 A-05，2026-10-18）** | `BASELINE.yaml` 新增 `gates` 节为权威口径：`scripts/gates/` **26 脚本**、`ci.yml` **24 个唯一引用 / 27 处调用**、另 2 个在 perf.yml 等专用工作流、主工作流逐提交阻断步骤 25；README 中英文件树、论文贡献段、本册 headline、`scripts/README.md` 脚本清单同步；历史 CHANGELOG 快照按惯例不回溯 | `ls scripts/gates/*.py | wc -l`；`grep -oE 'scripts/gates/[a-z_]+[.]py' .github/workflows/ci.yml | sort -u | wc -l`；`python scripts/gates/check_baseline.py` |
+| **U-2：测试环境加固与环境标签（A-06/A-08/A-09，零 LLM）** | A-08 `_run_verify` 防御式 mkdir；A-09 4 文件新增能力探测 + `skipif`（真实 `ps` 调用 + **生产 profile** `build_sandbox_command` apply 探针）；A-06 BASELINE `tests.total_failed` + README 中英"已知失败"行改"正常环境口径"并披露沙箱宿主 14-15 例归因 | 受影响 5 文件 **142 passed / 14 skipped / 0 failed**（沙箱口径）；加固后沙箱全量 **8942 passed / 19 skipped / 0 failed**（774.71s）；正常环境全量 8956 passed / 5 skipped / 0 failed（176.43s） |
+| **U-3：T 轮漂移论文化（A-03/A-17）+ E8 预注册** | `paper/draft.typ` 新增 `sec:tround`（B2 **`not_reproduced`** 但 R2 **−25.29pp 仍显著**、漂移三因定位、新旧批不混池）；`docs/preregistration{.md,.en.md}` E8 `{thinking on/off}×{legacy/current profile}` 2×2 消融（H1/H2/H3 判据跑前冻结，$6–9，授权前禁跑） | `pytest tests/test_ar_batch.py -q`（含 `TestPreregBilingualStructureParity`）；论文段人工复核（`paper/` 不入库） |
+| **U-4：P3 评测诚信 checklist v1（IC-1..IC-8，零 LLM）** | `docs/design/evaluation_integrity_checklist.md` + `experiments/eval_integrity_check.py` + `tests/test_eval_integrity_check.py` 12 例；对 B2/df_spec 两个决策级工件实测：硬检查全过，IC-7 识别 608/51 行"协议内未测变异"占位值，IC-4 区分弃权门（34 行）与 ADR-0021 伪影签名 | `python experiments/eval_integrity_check.py --artifact-dir experiments/results/t_round_b2_main_batch_20261018 --artifact-dir experiments/results/emse_df_spec_20261016`；`pytest tests/test_eval_integrity_check.py -q`（12 passed） |
+| **U-5：D3b Step A 跨文件修复计划接线（评审 P4 续作，双开关默认关）** | `src/tools/cross_file.py` 新增 `CROSS_FILE_PLAN_BUILD_ENABLE` / `_CONSUME_ENABLE` 读取器（env_budget 251→253）；`src/graph/debugger.py` `_debugger_node` LLM 分支构建 + `update` 写 `state["cross_file_plan"]`，`_resolve_target_module` 门控消费（plan 读取），OFF/OFF 与历史逐位一致；`docs/design/cross_file_plan_wiring_prereg.md` §1.5 记录两处实现修正；后续 D3b-AB1/Step B 未执行 | `pytest tests/test_cross_file_plan_wiring.py tests/test_debugger_node_branches.py tests/test_nodes_pure_logic_branches.py -q`；`make env-budget`；`make env-snapshot` |
+| **U-6：第三轮独立评审报告交付 + U 轮全量文档同步** | `docs/reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-18.md`（16 节 + 2 附录，含同日收口状态附录；60+ 前沿数据点一手重建、14 项核心声明逐位复验）+ README（最新优化/已知失败/文件树）、BASELINE（tests/coverage/gates）、INDEX 中英、本册、`scripts/README.md`、CHANGELOG 中英同步 | 全量 **8956 passed / 5 skipped / 0 failed**（collected 8961，176.43s；行 96.55% / 分支 92.79%）；`make docs-check`；`make baseline-check` 全绿 |
+
 
 ## 4. 遗留缺口（按"是否值得继续"分级）
 
@@ -242,7 +250,7 @@
 | **N 轮新登记（功能矩阵纪律）** | 新功能落地必须同步新增 e2e 探针（矩阵即功能清单）；`detection_rate` 引用必须区分 N-3 前后口径（历史批次=混判旧口径，未来批次=LLM-suite） |
 
 | **O 轮已收口（仪器治疗）** | oracle 质量 0 correct / 76% fp 的两条缺陷（判分耦合 N-3 修、仪器未自校验 O-1 修）均已有修复+验证；fp 29→2（仅断言型）、instrument_error 27→0、skipped 27 单列、可分类分母 38→11。**残余**：oracle **语义质量**仍为 correct 0（编译器绑定/断言语义，另立项）；harness 只捕获 Exception 子类（段错误由外层 subprocess 兜底）；NL 前件不可机检 |
-| **O 轮已收口（跨文件路径）** | D3 根因澄清为场景频率（非装配缺陷）；analyzer 真实图路由已被强制进入并验证；多文件补丁整体回滚安全语义验证通过；D3c 审计误标已修（11 例回归）。**登记下一轮**：D3b（`build_cross_file_repair_plan` 图内零调用点——接线会改变跨文件 LLM 调用/修复路由，需设计+预注册+同批对照）、`patch_rollback_verdict/rolled_back` 进结果行 schema |
+| **O 轮已收口（跨文件路径）** | D3 根因澄清为场景频率（非装配缺陷）；analyzer 真实图路由已被强制进入并验证；多文件补丁整体回滚安全语义验证通过；D3c 审计误标已修（11 例回归）。**登记下一轮**：D3b（`build_cross_file_repair_plan` 图内零调用点——接线会改变跨文件 LLM 调用/修复路由，需设计+预注册+同批对照；**U 轮 Step A 已实装，见 §3.2 U-5**）、`patch_rollback_verdict/rolled_back` 进结果行 schema |
 | **O 轮已收口（发布工程）** | CI 增零 LLM e2e-probe job（44 探针）+ docker-build job，本地 `make e2e-probe` 同口径；既有 CI 语义零改动、无新 action/secrets；本机无法预演 docker build（首跑验证）与 actionlint（未装）已披露 |
 | **O 轮已收口（运行期卫生）** | branch 测量孤儿（82min/99% CPU）+ RepoExecutor stale pyc 假红（6/15）+ oracle 全 skip 误升 passed 三项根修并回归；其余 `run_with_timeout` 调用点仍按需逐步启用 orphan_guard（热路径开销权衡），巡检器仍是最后防线 |
 | **O 轮已收口（O-2 二臂验证）** | oracle 注入链路真实可用；独立判读下 LLM-suite 检出 19/20 一致（1 例在 temp=0 重跑噪声内）→ 无"oracle 改变检出"证据；O-1 后真实批次 oracle verdict **fp=0**（崩溃→unavailable/silent）。**残余**：sequential pairing（control 补跑晚于 oracle，非同一并发时刻）、小样本 20 任务、本子集无 correct/misguided 故不作质量结论；**后处理墙钟 run-to-run 波动 ≥14%**（control 2102→>2400→2297s）建议下一轮 watchdog 按任务阶段+后处理预算+margin（≥3600s/20 任务）与逐阶段墙钟日志 |
@@ -255,14 +263,17 @@
 | **Q 轮事故（如实披露）** | 跑批准备期零 LLM 自测误用真实执行模式 + 主树并发编辑 TOCTOU → 两臂真实 LLM 意外启动约 4min，被立即终止；无批次数据/无研究证据，花费不可精确记账（粗估 $0.15–0.20，计入 Q 轮预算）；证据目录 `_incident_unintended_llm_launch_20261018/` 标注"禁止作为研究证据"；已加固 runner（真实模式强制 dirty=0/PREREG 冻结/--preflight-only/TOCTOU sha 复核） |
 | **Q 轮新登记（示例质量）** | ~~示例自校验~~ ✅（R-2 已交付，判定「未达有效过滤」）· ~~`postprocess_wall` hook 接入~~ ✅（R-3 已接入）· ~~B8 重做~~ ✅（S-2 失败注入 confirmed；T-4 修默认协议优先级并复验）· **⏳ 仍未做：无 Planner 臂生成器成本/质量评估**（T 轮 K=3 批仅评估 spec-only 采样） |
 | **P 轮新登记（示例通道续）** | ① ~~返回表示归一~~ ✅（P-1.1 已复跑）· ② ~~示例自校验~~ ✅（R-2，判定「未达有效过滤」、根因=规约表达力）· ③ ~~生产接线~~ ✅（Q-1 双门+默认零差异；Q-2/R-1/S-1 A/B 三 seed 决策 `enable_candidate`，生产默认关不变）· ④ ~~O-1 multi-param boundary NameError 修复~~ ✅（已随 P-1 披露） |
-| **O 轮新登记（质量治理）** | oracle 语义质量治理：**⏳ 部分推进**（T-3 K=3 多数一致治理 = 判定阴性、根因收敛到规约表达力；correct 0 的编译器绑定/断言语义仍未闭环）· ~~跨文件 D3b 多模块协同接线+预注册~~ → **设计与预注册草案已交付**（`docs/design/cross_file_plan_wiring_prereg.md`，未接线）· ~~rollback schema 扩充~~ ✅（T-4 已落结果行两键，键集 93=93） |
+| **O 轮新登记（质量治理）** | oracle 语义质量治理：**⏳ 部分推进**（T-3 K=3 多数一致治理 = 判定阴性、根因收敛到规约表达力；correct 0 的编译器绑定/断言语义仍未闭环）· ~~跨文件 D3b 多模块协同接线+预注册~~ → **Step A 已实装**（双开关默认关、OFF/OFF 与历史逐位一致；`docs/design/cross_file_plan_wiring_prereg.md`），Step B / D3b-AB1 待跑批· ~~rollback schema 扩充~~ ✅（T-4 已落结果行两键，键集 93=93） |
 
 | **T 轮已收口（B1/B2 复现缺口）** | B1/B2 两项"LLM 配额阻断"已在 T 轮执行：B1 RT1 三格指纹级复现判 `confirmed`（文本效应主导）；B2 主批次锁指纹复现判 **`not_reproduced`**——**核心负面（vs df）稳健（−25.29pp 显著）、次级排序（vs 裸提示）不稳健**；漂移定位：5 个 logic 新开关 + 旧批无 thinking 模式记录（token 份额 78.6%→36.4%）+ plain_llm 全局漂移。引用必须带批名/协议版本/推理模式披露，旧批与新批不得混池 | 工件与判定见 §3.2 T-1/T-2；BASELINE `target_quality.b2_main_batch_t_round` / `b1_protocol_text_t_round`；下一轮登记 `{thinking on/off} × {legacy/current profile}` 2×2 消融 |
 | **T 轮已收口（仪器自检）** | ① preflight `--check-quota` 引用不存在符号（前置闸自身失效）；② 探针重复注册被静默丢弃（66/66 假绿）；③ SHA256SUMS `./` 前缀与 `--verify` 不兼容；④ 跑前成本估算 input 份额误设（2× 低估）。四项均已修并加回归/负控；教训并入 `docs/MEASUREMENT_INTEGRITY.md` §7 | `tests/test_batch_quota_preflight.py::TestQuotaProbe`、`tests/test_checksum_results_gate.py::TestManifestPathNormalization`、`pytest tests/test_artifacts_tracked_gate.py` |
 | **T 轮新登记（SMT 关联层）** | T-3b 关联层因中位数二分退化（28/41 任务 witness_rate=0）无对照 → 若需"有见证 vs 无见证"的 detection 分组，须**另立新批另预注册**（不得回读 T-3b 做确认性推断）；同时翻译层算子集（Call/Subscript/Attribute/Is/In）仍是 reach 主限制 | `docs/design/smt_witness_batch_plan.md` §6.3 |
 | **T 轮新登记（示例通道）** | 多采样家族（K=2 精确求交 / K=3 多数+canonical）均阴性；下一步按收益：① 示例级独立核验（LLM 二次核验 expected 与规格）；② canonical 模板保留非平凡判别样例；③ 规约强化（关键语义 → `*_expr`）；不得再以"清掉 N 个幻觉"单独作质量提升主张 | `docs/design/oracle_quality_metric.md` §16.3 |
-| **T 轮新登记（跨文件 D3b）** | D3b 接线会改变 debugger target_module/prompt/修复路由（下游已有消费点）→ 两阶段双开关方案 + 同批 A/B 预注册草案已就绪，待下一轮立项 | `docs/design/cross_file_plan_wiring_prereg.md` |
+| **T 轮新登记（跨文件 D3b）** | D3b 接线会改变 debugger target_module/prompt/修复路由（下游已有消费点）→ 两阶段双开关方案 + 同批 A/B 预注册草案已就绪；**U 轮 Step A 已实装（BUILD/CONSUME 双开关默认关，13 例契约测试 + 2 例对偶用例，OFF/OFF 与历史逐位一致）；D3b-AB1 三臂跑批与 Step B 待立项** | `docs/design/cross_file_plan_wiring_prereg.md` + 本册 §3.2 U-5 |
 | **T 轮新登记（B3/B7）** | B3 SWE-bench Lite 重跑仍未执行（T 轮**主动不跑**：前置闸已可工作，但历史失败主因=429/超时的基础设施问题且单次成本/墙钟远高于本批预算；保持 `not_evaluated`，严禁引用 pass_rate）；B7 原始 LLM 响应归档仍待存储/合规决策 | 见 §2 B3/B7 |
+
+| **U 轮已收口（第三轮评审口径/环境/文档）** | A-05 门禁数量口径 · A-06 "0 failed" 环境标签 · A-08+A-09 测试环境加固 · A-03/A-17 论文漂移段 + E8 预注册 · P3 诚信 checklist · D3b Step A 接线 · 第三轮评审报告入库（见 §3.2 U-1..U-6） | — | U 轮全量 **8956 passed / 5 skipped / 0 failed**（176.43s；行 96.55% / 分支 92.79%）；`make gates` 全绿 |
+| **U 轮新登记（评审遗留，需授权/预算）** | A-01 ULT 扩样（LLM 预算）、A-02 独立 docstring 锚预注册（LLM 预算）、A-04 E7 人工裁决（人力）、D3b-AB1 三臂对照 + Step B 多模块协同修复（LLM 预算）、P3 外部工件重放（ULT/TestGenEval 公开产物）；A-07 推送（本地领先 65+ 提交）在 U 轮收口时执行——CI 将首次验证 F/G/H/I/J/K/L/M/N/O/P/Q/R/S/T/U 轮 | 计划与前置件见评审报告 §10/§15、`docs/preregistration.md` E8 | 每项完成前不得对外引用对应能力主张或"已收口" |
 
 ## 5. 口径与术语纪律（对外引用强制）
 
@@ -289,5 +300,8 @@
 | 功能矩阵：发布前必须跑 `make e2e-probe`（零 LLM）与 `make e2e-probe-llm`（真 LLM，需显式配额开关）；新功能未加探针视为功能矩阵缺口；探针 skip 必须带原因（能力缺口披露，不得静默通过） | `scripts/tools/e2e_probe.py` + `docs/design/e2e_probe_matrix.md` + `experiments/results/e2e_probe_20261017/` |
 | oracle 引用（O-1 后）：必须同时给"可分类分母 + skipped 数 + fp 拆分（断言型 vs instrument_error）"；**禁止**把 O-1 前（38 分母/29 fp）与后（11 分母/2 fp）数字混池；修复是仪器治疗不是检出提升 | `experiments/results/emse_oracle_instrument_hardening_20261017/` + `docs/MEASUREMENT_INTEGRITY.md` §6 |
 | oracle 语义质量（correct）与仪器可判定性（fp 拆分/denominator）分开引用；"混判抹掉检出"的历史量级（M-2 14/22）已按仪器伪影修正（O-1 后 1/2），引用旧量级必须带修正注记 | `docs/MEASUREMENT_INTEGRITY.md` §6 + 登记册 §4 A-05 |
-| 跨文件（O-3 后）：图通路只应用入口模块补丁、`cross_file_plan_present=false` 属已知登记状态；引用跨文件修复能力必须披露该限制（多模块协同 D3b 未接线） | `experiments/results/o_round_cross_file_20261017/README.md` §8 |
+| 跨文件（O-3 后）：图通路只应用入口模块补丁、`cross_file_plan_present=false` 属已知登记状态；引用跨文件修复能力必须披露该限制（**D3b Step A 已实装但双开关默认关，生产默认行为不变；Step B 多模块协同修复未接线**） | `experiments/results/o_round_cross_file_20261017/README.md` §8 + `docs/design/cross_file_plan_wiring_prereg.md` |
 | profile 预设优先级（O-2 教训）：`AITESTER_PROFILE=logic` 会 **setdefault 开启 `SPEC_ORACLE_EXEC_ENABLE`**（config.py）；要关闭必须**显式 `=false`**（unset 不等于显式关闭）。批量跑批必须核对两臂 `provenance.env_snapshot` 的开关值互异，dry-run 预检应对该陷阱告警（O-2 invalid attempt 曾因此产生无效对照，已归档披露） | `config.py` `_PROFILE_PRESETS` + `experiments/run_oracle_validation_batch.sh` 预检 |
+| 门禁数量：对外一律引用 `BASELINE.yaml` `gates` 三数字（`scripts/gates/` 26 脚本 / `ci.yml` 24 唯一引用·27 调用点 / 2 个专用工作流）；历史快照中的"25 道""23/18"等只在 CHANGELOG 中保留，不得作当前口径 | `BASELINE.yaml` `gates` 节 + `scripts/README.md` |
+| "0 failed"：必须带环境标签——正常环境口径（CI 3.12/3.13/3.14）；受限宿主加固后亦 0 failed，但须并列 19 skipped = 5 原有 + 14 能力探测，且不得据此声称"正常环境已验证" | `BASELINE.yaml` `tests.total_failed` 注释 + README 中英"已知失败"行 |
+| D3b 跨文件计划：Step A 已实装但双开关（`CROSS_FILE_PLAN_BUILD_ENABLE` / `_CONSUME_ENABLE`）默认关，生产行为与历史逐位一致；对外引用跨文件修复能力必须披露"Step B 多模块协同未接线、AB1 未跑批" | `docs/design/cross_file_plan_wiring_prereg.md` + `tests/test_cross_file_plan_wiring.py` |
