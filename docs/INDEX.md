@@ -18,7 +18,7 @@
 | 参与贡献 / 跑门禁 | [CONTRIBUTING.md](../CONTRIBUTING.md) |
 | 复现实验 / 核对数字 | [REPLICATION.md](../REPLICATION.md) → [BASELINE.yaml](../BASELINE.yaml) |
 | 审阅效度与声明边界 | [docs/VALIDITY.md](VALIDITY.md) → [docs/EVALUATION_SCOPE.md](EVALUATION_SCOPE.md) |
-| 查投稿材料（EMSE） | [docs/emse/EMSE_SUBMISSION_CHECKLIST_2026-10-15.md](emse/EMSE_SUBMISSION_CHECKLIST_2026-10-15.md) |
+| 查投稿材料（EMSE） | [docs/emse/EMSE_OPTIMIZATION_2026-10-15.md](emse/EMSE_OPTIMIZATION_2026-10-15.md)（投稿清单/骨架为本地工件，不入库） |
 
 ## 2. 按角色阅读路径
 
@@ -56,7 +56,7 @@
 2. [docs/adr/README.md](adr/README.md)：ADR 索引（新增架构决策时在此追加一行）。
 3. [CHANGELOG.md](../CHANGELOG.md)：逐批变更日志（历史快照，不作链接门禁的扫描面）。
 4. [docs/HUMAN_ADJUDICATION_PROTOCOL.md](HUMAN_ADJUDICATION_PROTOCOL.md)：人工裁决协议（抽样框 / 量表 / 双人独立 / 冲突解决）。
-5. [docs/emse/EMSE_SUBMISSION_CHECKLIST_2026-10-15.md](emse/EMSE_SUBMISSION_CHECKLIST_2026-10-15.md)：投稿材料收口清单。
+5. `docs/emse/EMSE_SUBMISSION_CHECKLIST_2026-10-15.md`：投稿材料收口清单（**本地工件，不入库**；可复算内容以 [EMSE_OPTIMIZATION_2026-10-15.md](emse/EMSE_OPTIMIZATION_2026-10-15.md) 为准）。
 6. [scripts/gates/](../scripts/gates/)：全部门禁脚本目录（新增门禁在此目录，并接 Makefile / CI）。
 
 ## 3. 核心文档清单
@@ -133,14 +133,12 @@
 | [CHANGELOG.md](../CHANGELOG.md) | 逐批变更日志（历史快照；当前口径以 BASELINE 与本索引指向的文档为准）。 |
 | [docs/reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-18.md](reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-18.md) | 第三轮独立系统性评审报告（2026-10-18）：60+ 前沿数据点一手重建、14 项核心声明逐位复验、A-01..A-20 建议与同日收口状态。 |
 | [docs/reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-17.md](reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-17.md) | 第二轮独立系统性评审报告：发现、证据与处置建议。 |
-| [INDEPENDENT_REVIEW_2026-10-16.md](../INDEPENDENT_REVIEW_2026-10-16.md) | 独立评审报告（根目录批次交付物）。 |
 | [CODE_OPTIMIZATION_2026-10-16.md](../CODE_OPTIMIZATION_2026-10-16.md) | 代码全面审查与优化报告（C 轮）。 |
 | [PHASE1_PRECHECK_2026-10-12.md](../PHASE1_PRECHECK_2026-10-12.md) | 改进方案阶段 1 前置核查报告。 |
 | [SPEC_REPLACE_AB_REPORT_2026-10-12.md](../SPEC_REPLACE_AB_REPORT_2026-10-12.md) | spec_replace A/B 阶段 1 实验报告（QuixBugs，探索性口径）。 |
 | [docs/HUMAN_ADJUDICATION_PROTOCOL.md](HUMAN_ADJUDICATION_PROTOCOL.md) | E7 人工裁决操作协议：抽样框 / 五选一量表 / 双人独立 / 冲突解决。 |
 | [docs/EMSE_COVERAGE_RATCHET_DEVIATION.md](EMSE_COVERAGE_RATCHET_DEVIATION.md) | 覆盖率棘轮偏差登记：实测 vs 水位、归因核验与处置路径。 |
 | [docs/emse/EMSE_OPTIMIZATION_2026-10-15.md](emse/EMSE_OPTIMIZATION_2026-10-15.md) | EMSE 投稿优化记录：审稿可判性收口批次。 |
-| [docs/emse/EMSE_SUBMISSION_SKELETON_2026-10-16.md](emse/EMSE_SUBMISSION_SKELETON_2026-10-16.md) | EMSE 投稿骨架（章节结构、证据映射与待补项）。 |
 | [REPLICATION.md](../REPLICATION.md) | 复现包说明：目录、工件与还原命令（中文）。 |
 | [CITATION.cff](../CITATION.cff) | 引用元数据（软件引用格式）。 |
 | [LICENSE](../LICENSE) | 开源许可证。 |

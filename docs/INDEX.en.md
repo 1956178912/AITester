@@ -19,7 +19,7 @@
 | Contribute code / run the gates | [CONTRIBUTING.en.md](../CONTRIBUTING.en.md) |
 | Reproduce experiments / check numbers | [REPLICATION.md](../REPLICATION.md) (Chinese) → [BASELINE.yaml](../BASELINE.yaml) |
 | Review validity and claim boundaries | [docs/VALIDITY.en.md](VALIDITY.en.md) → [docs/EVALUATION_SCOPE.md](EVALUATION_SCOPE.md) (Chinese) |
-| Find EMSE submission material | [docs/emse/EMSE_SUBMISSION_CHECKLIST_2026-10-15.md](emse/EMSE_SUBMISSION_CHECKLIST_2026-10-15.md) (Chinese) |
+| Find EMSE submission material | [docs/emse/EMSE_OPTIMIZATION_2026-10-15.md](emse/EMSE_OPTIMIZATION_2026-10-15.md) (Chinese; the submission checklist/skeleton are local artifacts, not committed) |
 
 ## 2. Reading paths by role
 
@@ -57,7 +57,7 @@
 2. [docs/adr/README.md](adr/README.md) (Chinese): ADR index (append one row per new architecture decision).
 3. [CHANGELOG.en.md](../CHANGELOG.en.md): per-batch change log (historical snapshot; outside the link gate's scan surface).
 4. [docs/HUMAN_ADJUDICATION_PROTOCOL.md](HUMAN_ADJUDICATION_PROTOCOL.md) (Chinese): human-adjudication protocol (sampling frame / scale / independent double review / conflict resolution).
-5. [docs/emse/EMSE_SUBMISSION_CHECKLIST_2026-10-15.md](emse/EMSE_SUBMISSION_CHECKLIST_2026-10-15.md) (Chinese): submission-material closure checklist.
+5. `docs/emse/EMSE_SUBMISSION_CHECKLIST_2026-10-15.md` (Chinese): submission-material closure checklist (**local artifact, not committed**; recomputable content lives in [EMSE_OPTIMIZATION_2026-10-15.md](emse/EMSE_OPTIMIZATION_2026-10-15.md)).
 6. [scripts/gates/](../scripts/gates/): gate-script directory (add new gates here and wire them into Makefile / CI).
 
 ## 3. Core documents
@@ -134,14 +134,12 @@
 | [CHANGELOG.en.md](../CHANGELOG.en.md) | Per-batch change log (historical snapshot; current calibers live in BASELINE and the documents linked here). |
 | [docs/reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-18.md](reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-18.md) (Chinese) | Third independent systematic review (2026-10-18): 60+ frontier data points rebuilt from primary sources, 14 core claims recomputed bit-for-bit, A-01..A-20 recommendations and same-day close-out status. |
 | [docs/reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-17.md](reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-17.md) (Chinese) | Second independent systematic review: findings, evidence and disposition suggestions. |
-| [INDEPENDENT_REVIEW_2026-10-16.md](../INDEPENDENT_REVIEW_2026-10-16.md) (Chinese) | Independent review report (root-level batch deliverable). |
 | [CODE_OPTIMIZATION_2026-10-16.md](../CODE_OPTIMIZATION_2026-10-16.md) (Chinese) | Full code review and optimization report (round C). |
 | [PHASE1_PRECHECK_2026-10-12.md](../PHASE1_PRECHECK_2026-10-12.md) (Chinese) | Phase-1 pre-check report for the improvement plan. |
 | [SPEC_REPLACE_AB_REPORT_2026-10-12.md](../SPEC_REPLACE_AB_REPORT_2026-10-12.md) (Chinese) | spec_replace A/B phase-1 experiment report (QuixBugs, exploratory caliber). |
 | [docs/HUMAN_ADJUDICATION_PROTOCOL.md](HUMAN_ADJUDICATION_PROTOCOL.md) (Chinese) | E7 human-adjudication protocol: sampling frame / five-choice scale / independent double review / conflict resolution. |
 | [docs/EMSE_COVERAGE_RATCHET_DEVIATION.md](EMSE_COVERAGE_RATCHET_DEVIATION.md) (Chinese) | Coverage-ratchet deviation record: measured vs water line, attribution checks and disposition paths. |
 | [docs/emse/EMSE_OPTIMIZATION_2026-10-15.md](emse/EMSE_OPTIMIZATION_2026-10-15.md) (Chinese) | EMSE submission optimization record: reviewability-closure batch. |
-| [docs/emse/EMSE_SUBMISSION_SKELETON_2026-10-16.md](emse/EMSE_SUBMISSION_SKELETON_2026-10-16.md) (Chinese) | EMSE submission skeleton (section structure, evidence mapping, open items). |
 | [REPLICATION.md](../REPLICATION.md) (Chinese) | Replication-package README: directories, artifacts and restore commands. |
 | [CITATION.cff](../CITATION.cff) | Citation metadata (software citation format). |
 | [LICENSE](../LICENSE) | Open-source licence. |

@@ -41,7 +41,7 @@ A/B gain validation are now explicit:
   real-data gain is stated honestly as "implemented architecture + engine
   capability boundary" — no forced 0/N no-signal A/B.
 
-See [experiments/results/experiment_report_20260925.md](../../experiments/results/experiment_report_20260925.md) §7.4.
+See `experiments/results/experiment_report_20260925.md` §7.4 (local historical report, not committed).
 
 ## 1. Background and Goals
 

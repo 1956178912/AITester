@@ -32,7 +32,7 @@ SWE-bench 仓库级验证（P0/P1，`RepoExecutor`）落地后，跨文件任务
   真实数据收益作为"已识别的架构 + 引擎能力边界"如实陈述，不强行跑
   0/N 的无信息量 A/B。
 
-详见 [experiments/results/experiment_report_20260925.md](../../experiments/results/experiment_report_20260925.md) §7.4。
+详见 `experiments/results/experiment_report_20260925.md` §7.4（本地历史报告，不入库）。
 
 ## 1. 背景与目标
 

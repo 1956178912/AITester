@@ -1647,7 +1647,7 @@ python main.py clean-venv-cache --max-size-mb 512
 - 新三指标（`detection_rate` / `repair_rate` / `false_fix_rate`）已实现，
   待固定 seed 重跑批次（`AITESTER_CACHE_ISOLATE_MODEL=1` + `AITESTER_BASELINE_LOAD_BALANCE=0`）产出工件后统一刷新
 
-详细结果参见 [experiments/results/synthetic_50_final/charts/](experiments/results/synthetic_50_final/charts/)（本地保留，不入库；仓库内 `experiments/results/` 仅跟踪占位说明，历史产物经 .gitignore 排除）
+详细结果参见 `experiments/results/synthetic_50_final/charts/`（本地保留，不入库；仓库内 `experiments/results/` 仅跟踪占位说明，历史产物经 .gitignore 排除）
 
 ### SWE-bench Lite 实验（20个任务）
 
@@ -1655,7 +1655,7 @@ python main.py clean-venv-cache --max-size-mb 512
 
 **仓库级验证（P0/P1，2026-09-25）**：用 `RepoExecutor`（`REPO_LEVEL_EXECUTION=true`）
 按 SWE-bench 官方口径（gold `test_patch` 前后 FAIL_TO_PASS/PASS_TO_PASS 实测）
-验证 lite-20，结果见 [experiments/results/experiment_report_20260925.md](experiments/results/experiment_report_20260925.md) §7：
+验证 lite-20，结果见 `experiments/results/experiment_report_20260925.md` §7：
 
 - 数据管道修复（`SWE_BENCH_ENRICHMENT` 注入真实源码）+ 执行环境修复
   （RepoExecutor 仓库级 clone + pip install -e + venv 隔离）+ 补丁管道修复
