@@ -1,0 +1,6 @@
+  工件来源：现场再生成（源：/Users/wangchenyu/Workspace/AITester/experiments/results/main_batch）；对账臂：['aitester', 'plain_llm', 'plain_llm_df']
+  [OK] /Users/wangchenyu/Workspace/AITester/docs/emse/EMSE_OPTIMIZATION_2026-10-15.md —— 对账臂 ['aitester', 'plain_llm', 'plain_llm_df']，不一致 0 项
+  [OK] T-10 声明对账（严格口径 29 行 / 25 可测；宽松 62 / 55）
+  [OK] 状态登记册覆盖率对账（§1 行/分支声明与 coverage.xml 实测相符，容差 ±0.10pp）
+
+✓ 报告→工件对账通过（1 份文档 × 3 臂 × 11 列，容差 0.0005；工件权威 = mutation_detection_correlation.md）

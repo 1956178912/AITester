@@ -120,8 +120,8 @@ class TestArtifactsManifestE7:
         # T 轮（2026-10-18）：133 → 163（K=3 示例治理 / SMT pre-post-fix / 语义修复汇总 /
         # A-19 默认门复验 / 文档审计 / B1 三格复现链 / 工件入库门禁扩面登记）。
         # T 轮收尾追加：审计/复核报告 SHA + e2e 探针矩阵 README/SHA（163 → 168），
-        # 再追加 B2 复现批 7 件（168 → 175）。
-        assert len(module.MANIFEST) == 175
+        # 再追加 B2 复现批 7 件（168 → 175）与 T 轮收尾检查 3 件（→ 178）。
+        assert len(module.MANIFEST) == 178
 
 
 class TestSurveyPackagingErrata:
