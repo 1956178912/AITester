@@ -59,13 +59,13 @@ jobs:
     steps:
       - name: Check out code
         # O10（2026-09-29 审查 P1）：SHA 固定——actions/checkout@v4 →
-        # 3f3f7fd89f09a93f8006f723897ab77c52b0d3e7（v4.1.1, 2024-01）
-        uses: actions/checkout@3f3f7fd89f09a93f8006f723897ab77c52b0d3e7
+        # b4ffde65f46336ab88eb53be808477a3936bae11（v4.1.1, 2024-01）
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
 
       - name: Set up Python 3.14
         # O10：SHA 固定——actions/setup-python@v6（P1-10：与 test/security
         # 作业同版本对齐，消除同文件 v5/v6 混用）
-        uses: actions/setup-python@8d5bc5b086458bc1c9e4c01b4f9f123f37c1c4c0
+        uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c
         with:
           python-version: '3.14'
           cache: pip
@@ -118,12 +118,12 @@ jobs:
         python-version: ['3.12', '3.13', '3.14']
 
     steps:
-      - uses: actions/checkout@3f3f7fd89f09a93f8006f723897ab77c52b0d3e7
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
 
       - name: Set up Python ${{ matrix.python-version }}
         # O10：SHA 固定——actions/setup-python@v6 →
-        # 8d5bc5b086458bc1c9e4c01b4f9f123f37c1c4c0（v6.0.0, 2025-04）
-        uses: actions/setup-python@8d5bc5b086458bc1c9e4c01b4f9f123f37c1c4c0
+        # e797f83bcb11b83ae66e0230d6156d7c80228e7c（v6.0.0, 2025-04）
+        uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c
         with:
           python-version: ${{ matrix.python-version }}
           # 缓存 pip wheel：chromadb/onnxruntime/grpcio/pyarrow 等 130 个包冷装很重，
@@ -359,8 +359,8 @@ jobs:
       - name: Upload static snapshot (main branch)
         if: matrix.python-version == '3.14' && github.ref == 'refs/heads/main'
         # O10：SHA 固定——actions/upload-artifact@v4 →
-        # 84488ed32758509799cae3ed5e43ef903669d08b（v4.2.0, 2024-02）
-        uses: actions/upload-artifact@84488ed32758509799cae3ed5e43ef903669d08b
+        # 694cdabd8bdb0f10b2cea11669e1bf5453eed0a6（v4.2.0, 2024-02）
+        uses: actions/upload-artifact@694cdabd8bdb0f10b2cea11669e1bf5453eed0a6
         with:
           name: static-report-${{ github.run_number }}
           path: docs/history/static_report_*.md
@@ -419,8 +419,8 @@ jobs:
       - name: Upload coverage to Codecov
         if: matrix.python-version == '3.14'
         # O10：SHA 固定——codecov/codecov-action@v3 →
-        # 675786e5eead34e905aa0f381978be11dd3ed463（v3.4.0, 2024-05）
-        uses: codecov/codecov-action@675786e5eead34e905aa0f381978be11dd3ed463
+        # ab904c41d6ece82784817410c45d8b8c02684457（v3.1.6, 2024-01）
+        uses: codecov/codecov-action@ab904c41d6ece82784817410c45d8b8c02684457
         with:
           file: ./coverage.xml
           fail_ci_if_error: false
@@ -487,7 +487,7 @@ jobs:
     timeout-minutes: 15
     steps:
       # O10：SHA 固定
-      - uses: actions/checkout@3f3f7fd89f09a93f8006f723897ab77c52b0d3e7
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
         with:
           # 周日全量档的 gitleaks 全历史扫描需要完整 git 历史
           #（push/PR 路径的工作树扫描用不到，多拉历史代价可接受）
@@ -495,7 +495,7 @@ jobs:
 
       - name: Set up Python
         # O10：SHA 固定
-        uses: actions/setup-python@8d5bc5b086458bc1c9e4c01b4f9f123f37c1c4c0
+        uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c
         with:
           python-version: '3.12'
           cache: pip
@@ -604,8 +604,8 @@ jobs:
         # 条件"判断 chromadb 上游是否已发布修复版（7 天保留期）。
         if: always()
         # O10：SHA 固定——actions/upload-artifact@v4 →
-        # 84488ed32758509799cae3ed5e43ef903669d08b（v4.2.0，2024-02）
-        uses: actions/upload-artifact@84488ed32758509799cae3ed5e43ef903669d08b
+        # 694cdabd8bdb0f10b2cea11669e1bf5453eed0a6（v4.2.0，2024-02）
+        uses: actions/upload-artifact@694cdabd8bdb0f10b2cea11669e1bf5453eed0a6
         with:
           name: security-reports-${{ github.run_number }}
           path: |
@@ -665,10 +665,10 @@ jobs:
     timeout-minutes: 10
     steps:
       # R10：无需完整 git 历史（gitleaks 已迁出），默认浅检出即可
-      - uses: actions/checkout@3f3f7fd89f09a93f8006f723897ab77c52b0d3e7
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
 
       - name: Set up Python
-        uses: actions/setup-python@8d5bc5b086458bc1c9e4c01b4f9f123f37c1c4c0
+        uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c
         with:
           python-version: '3.12'
           cache: pip
@@ -687,7 +687,7 @@ jobs:
 
       - name: Upload SBOM artifact
         if: always()
-        uses: actions/upload-artifact@84488ed32758509799cae3ed5e43ef903669d08b
+        uses: actions/upload-artifact@694cdabd8bdb0f10b2cea11669e1bf5453eed0a6
         with:
           name: sbom-cyclonedx-${{ github.run_number }}
           path: sbom.cyclonedx.json
@@ -726,11 +726,11 @@ jobs:
     steps:
       - name: Check out code
         # O10：SHA 固定——actions/checkout@v4
-        uses: actions/checkout@3f3f7fd89f09a93f8006f723897ab77c52b0d3e7
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
 
       - name: Set up Python 3.14
         # 与 test/smoke-llm 作业同版本 + 同 pip 缓存口径
-        uses: actions/setup-python@8d5bc5b086458bc1c9e4c01b4f9f123f37c1c4c0
+        uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c
         with:
           python-version: '3.14'
           cache: pip
@@ -850,7 +850,7 @@ jobs:
       - name: Upload e2e probe report
         if: always()
         # O10：SHA 固定——actions/upload-artifact@v4（复用文件内已钉版本）
-        uses: actions/upload-artifact@84488ed32758509799cae3ed5e43ef903669d08b
+        uses: actions/upload-artifact@694cdabd8bdb0f10b2cea11669e1bf5453eed0a6
         with:
           name: e2e-probe-report-${{ github.run_number }}
           path: |
@@ -876,7 +876,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Check out code
-        uses: actions/checkout@3f3f7fd89f09a93f8006f723897ab77c52b0d3e7
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
 
       - name: Build runtime image (Dockerfile)
         # 构建上下文由 .dockerignore 收窄（排除 .venv/experiments/results/.env*），
