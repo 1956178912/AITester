@@ -1,14 +1,18 @@
 #!/usr/bin/env python3
 """工件 git 入库守卫（`scripts/gates/check_artifacts_tracked.py`）的回归锁定。
 
-锁定四件事（2026-10-17 独立评审 A-04）：
+锁定五件事（2026-10-17 独立评审 A-04；T 轮 2026-10-18 扩面）：
 
-1. **emse_* 目录覆盖扫描**：每个 `experiments/results/emse_*/` 目录必须
-   git 入库或显式登记豁免——防"新结果目录静默缺席"复发（四批旗舰工件
-   曾 0 跟踪而无门禁察觉）；
-2. **豁免必须带理由**：`STUDY_DIR_EXEMPTIONS` 的值一律为非空字符串；
-3. **真扫描真的会失败**：构造未跟踪目录必须被 `_scan_emse_dirs` 报出；
-4. **MANIFEST 无重复条目**（重复登记会掩盖清单增长审计）。
+1. **证据目录覆盖扫描**：`experiments/results/` 下 `emse_*` 与 `*_round_*`
+   每个目录必须 git 入库或显式登记豁免——防"新结果目录静默缺席"复发
+   （四批旗舰工件曾 0 跟踪而无门禁察觉；T 轮发现 q/r/s/t 轮次前缀亦在
+   `emse_*` 扫描盲区）；
+2. **豁免必须带理由**：`EVIDENCE_DIR_EXEMPTIONS` 的值一律为非空字符串；
+3. **真扫描真的会失败**：构造未跟踪目录必须被 `_scan_evidence_dirs` 报出
+   （emse_* 与 *_round_* 两种前缀都验）；
+4. **扫描面固定**：`EVIDENCE_DIR_GLOBS` 必须同时含 `emse_*` 与 `*_round_*`
+   （缩小扫描面 = 门禁静默失效）；
+5. **MANIFEST 无重复条目**（重复登记会掩盖清单增长审计）。
 
 注意：本测试在真实仓库上运行（门禁语义依赖 git），不 mock git。
 """
@@ -163,14 +167,19 @@ class TestManifestHygiene:
 
 class TestEmseDirScan:
     def test_exemptions_have_reasons(self):
-        for name, reason in gate.STUDY_DIR_EXEMPTIONS.items():
+        for name, reason in gate.EVIDENCE_DIR_EXEMPTIONS.items():
             assert reason and reason.strip(), f"豁免 {name} 未登记理由"
             assert not name.endswith("/"), "豁免名应为目录名（不带斜杠）"
 
+    def test_evidence_globs_cover_emse_and_round_prefixes(self):
+        """扫描面必须同时覆盖 emse_* 与 *_round_*（T 轮扩面，防再次出现命名盲区）。"""
+        assert "emse_*" in gate.EVIDENCE_DIR_GLOBS
+        assert "*_round_*" in gate.EVIDENCE_DIR_GLOBS
+
     def test_scan_passes_on_current_repo(self):
         """当前仓库（四批旗舰已 force-add 后）覆盖扫描必须零违例。"""
-        offenders = gate._scan_emse_dirs()
-        assert offenders == [], f"emse_* 目录存在未入库且未豁免者: {offenders}"
+        offenders = gate._scan_evidence_dirs()
+        assert offenders == [], f"证据目录存在未入库且未豁免者: {offenders}"
 
     def test_scan_flags_untracked_dir(self, tmp_path, monkeypatch):
         """构造一个未跟踪的 emse_* 目录，扫描必须报错（防扫描退化为永真）。"""
@@ -180,9 +189,22 @@ class TestEmseDirScan:
         (fake_dir / "data.json").write_text("{}", encoding="utf-8")
         monkeypatch.setattr(gate, "PROJECT_ROOT", tmp_path)
         # 在 fake 仓库里 git ls-files 对不存在仓库返回空 → 视为未跟踪
-        offenders = gate._scan_emse_dirs()
+        offenders = gate._scan_evidence_dirs()
         rels = [rel for rel, _ in offenders]
         assert any("emse_fake_untracked_20261017" in rel for rel in rels), f"未检出未跟踪目录: {offenders}"
+
+    def test_scan_flags_untracked_round_dir(self, tmp_path, monkeypatch):
+        """T 轮扩面：未跟踪的 t_round_*/q_round_* 目录也必须被报出（旧扫描面盲区）。"""
+        fake_results = tmp_path / "experiments" / "results"
+        for name in ("t_round_fake_untracked_20261018", "q_round_fake_untracked_20261018"):
+            fake_dir = fake_results / name
+            fake_dir.mkdir(parents=True)
+            (fake_dir / "REPORT.json").write_text("{}", encoding="utf-8")
+        monkeypatch.setattr(gate, "PROJECT_ROOT", tmp_path)
+        offenders = gate._scan_evidence_dirs()
+        rels = " ".join(rel for rel, _ in offenders)
+        assert "t_round_fake_untracked_20261018" in rels, f"未检出未跟踪 t_round 目录: {offenders}"
+        assert "q_round_fake_untracked_20261018" in rels, f"未检出未跟踪 q_round 目录: {offenders}"
 
     def test_exempt_dir_is_skipped(self, tmp_path, monkeypatch):
         """登记豁免的目录即使未跟踪也不报。"""
@@ -190,7 +212,7 @@ class TestEmseDirScan:
         fake_dir = fake_results / "emse_d2_profile_smoke_20261013"
         fake_dir.mkdir(parents=True)
         monkeypatch.setattr(gate, "PROJECT_ROOT", tmp_path)
-        offenders = gate._scan_emse_dirs()
+        offenders = gate._scan_evidence_dirs()
         assert offenders == [], f"豁免目录被误报: {offenders}"
 
 

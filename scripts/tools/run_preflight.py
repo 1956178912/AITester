@@ -162,18 +162,63 @@ def batch_budget_report(expect_tasks: int, parallelism: int) -> dict[str, Any]:
 
 
 def quota_probe() -> dict[str, Any]:
-    """最小 LLM 连通性/配额探测（**消耗 1 次调用**，仅在 --check-quota 时执行）。"""
+    """最小 LLM 连通性/配额探测（**消耗 1 次调用**，仅在 --check-quota 时执行）。
+
+    T 轮 2026-10-18 修复（本函数此前引用了**不存在的符号**）：
+    旧实现 `from src.agents.llm_client import LLMClient` → `llm_client` 模块
+    根本没有 `LLMClient` 类（只有模块级 `_get_llm_config()` 配置三元组与
+    `_get_or_create_chat_client()` 聊天客户端工厂）→ `--check-quota` 恒
+    ImportError、探测结果恒 `skipped=True`，strict 模式下"配额闸自身坏了"
+    会阻断一切批次前置闸（B2 主批次实证）。
+
+    修复口径（最小、真实可用、与生产 LLM 调用路径一致）：
+    1. `import config` 触发 .env / .env.local 加载（本工具不自带凭据文件解析）；
+    2. `_get_llm_config()` 取 (api_key, base_url, model_name)；
+    3. `_get_or_create_chat_client(model, 0.0, api_key, base_url)` 复用进程内
+       客户端缓存（与 BaseAgent 同一入口），`.invoke(...)` 发一次最小请求；
+    4. 三态语义保持不变：
+       - 无凭证 / 配置不完整 → `{"ok": False, "skipped": True, "reason": ...}`
+         （strict 下阻断：跑批缺凭据必须显式可见）；
+       - 网络/配额/鉴权异常 → `{"ok": False, "skipped": False, "reason": ...}`；
+       - 探测成功 → `{"ok": True/False, "skipped": False, "response_prefix": ...}`
+         （ok 取决于响应文本是否含 "ok" 令牌，短请求非 OK 回复也算异常口径）。
+
+    Returns:
+        探测结果字典（含 ok / skipped / reason 或 response_prefix）。
+
+    Note:
+        本函数只发 1 次低温短请求；不写缓存、不改任何 state。
+    """
+    # 先触发 config 导入：config.py 在 import 期执行 load_dotenv() +
+    # load_env_local()，把 .env.local 的 LLM_1_* 注入 os.environ。此前探测在
+    # config 加载前读 os.environ，开发者直接跑（未手工 export）时恒判"无凭证"。
+    try:
+        import config  # noqa: F401  # 副作用导入：加载 .env / .env.local 到 os.environ
+    except Exception as exc:  # pragma: no cover - 依赖/环境异常
+        return {"ok": False, "skipped": True, "reason": f"导入 config 失败：{type(exc).__name__}"}
     if not any(os.getenv(k, "").strip() for k in ("LLM_1_API_KEY", "DEEPSEEK_API_KEY")):
         return {"ok": False, "skipped": True, "reason": "未检测到 LLM_1_API_KEY / DEEPSEEK_API_KEY"}
     try:
-        from src.agents.llm_client import LLMClient  # 延迟导入：零网络体检路径不加载
+        from src.agents.llm_client import (  # 延迟导入：零网络体检路径不加载
+            _get_llm_config,
+            _get_or_create_chat_client,
+        )
     except Exception as exc:  # pragma: no cover - 依赖异常
-        return {"ok": False, "skipped": True, "reason": f"导入 LLMClient 失败：{type(exc).__name__}"}
+        return {"ok": False, "skipped": True, "reason": f"导入 LLM 调用入口失败：{type(exc).__name__}"}
     try:  # pragma: no cover - 需要真实凭据
-        client = LLMClient()
-        resp = client.call("Reply with the single token: OK", temperature=0.0)
-        text = resp if isinstance(resp, str) else str(resp)
-        return {"ok": "ok" in text.lower(), "skipped": False, "response_prefix": text[:40]}
+        api_key, base_url, model_name = _get_llm_config()
+        if not (api_key and base_url and model_name):
+            return {"ok": False, "skipped": True, "reason": "LLM 配置不完整（api_key/base_url/model_name 含空值）"}
+        client = _get_or_create_chat_client(model_name, 0.0, api_key, base_url)
+        resp = client.invoke("Reply with the single token: OK")
+        content = getattr(resp, "content", None)
+        text = content if isinstance(content, str) else str(resp)
+        return {
+            "ok": "ok" in text.lower(),
+            "skipped": False,
+            "response_prefix": text[:40],
+            "model": model_name,
+        }
     except Exception as exc:  # pragma: no cover - 网络/配额异常
         return {"ok": False, "skipped": False, "reason": f"{type(exc).__name__}: {exc}"}
 

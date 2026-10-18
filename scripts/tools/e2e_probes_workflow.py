@@ -1273,20 +1273,12 @@ PROBES: list[Probe] = [
         description="快照回滚协议：P2P 回归失败自动回滚、通过保留、开关可观测",
     ),
     # observability
-    Probe(
-        name="observability-trace-redaction",
-        group="observability",
-        func=probe_observability_trace_redaction,
-        timeout_s=120.0,
-        description="trace JSONL 落盘三事件且敏感串已脱敏",
-    ),
-    Probe(
-        name="observability-event-bus",
-        group="observability",
-        func=probe_observability_event_bus,
-        timeout_s=120.0,
-        description="事件总线发布/订阅/统计可用，关闭开关后 no-op",
-    ),
+    # T 轮（2026-10-18）去重：observability-trace-redaction / observability-event-bus
+    # 曾同时注册于本模块与 e2e_probes_platform.py —— 运行器按 name 去重时把第二份
+    # 记入 load_errors 后静默丢弃（报告仍显示 66/66 pass，注册数实为 68）。
+    # 现统一由 platform 模块（observability 专组）注册；本模块保留同名探针函数
+    # `probe_observability_trace_redaction` / `probe_observability_event_bus`
+    # 供单测直接调用，不再重复注册。
     # analysis
     Probe(
         name="analysis-fl-spectral-topk",

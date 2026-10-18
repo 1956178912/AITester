@@ -129,11 +129,29 @@ def _format_material(material: dict[str, Any] | None) -> str:
     return "\n".join(lines) if lines else "（无规约材料）"
 
 
+# ─── T3（2026-10-18）：canonical input 约束（实验层 prompt 变体）─────────────
+# 动机（承接 S-3 §15.4 下一步②）：自由采样下示例集合重叠有限，精确求交丢弃
+# 有判别力的示例。canonical 模板要求 LLM 优先使用统一的固定边界值集合，以提高
+# 跨采样重叠率，使"多数一致即较可信"的前提更强。
+# 该段落**只在显式 canonical_inputs=True 时**追加；默认 False 时 prompt 与历史
+# 逐字节一致（单测锁定）。文本与 PREREG 冻结文本一致，不得跑后修改。
+CANONICAL_INPUT_SECTION = """标准输入模板（canonical 约束，强制）：
+- 为提高跨采样一致性，input 的每个参数必须优先取自下列固定边界值集合，不得自创大数/长序列：
+  * 整数/浮点参数：0、1、-1（需要正数时用 2 或 3）；
+  * 字符串参数：""（空串），其次用 "abc" 或 "()" 这类 3 字符以内的最小片段；
+  * 列表/元组参数：[]、[0]、[1]、[-1]、[1, 2]；
+  * 二维列表参数（物品/区间/边等）：[]、[[1, 1]]、[[2, 3]]；
+- 多参数函数：每个参数按位从上述集合取值，组成最小合法组合（例：容量用 1 或 2、物品表用 [[1, 1]]）；
+- 若规格列出了边界情况，优先为每个边界输出示例；
+- 只有当上述模板值全部落在规格定义域之外时，才可使用其它小值，且必须同时满足"小且可快速执行"要求。"""
+
+
 def build_spec_examples_prompt(
     material: dict[str, Any] | None,
     signature_params: list[str] | None,
     *,
     max_examples: int = _DEFAULT_EXAMPLES_MAX,
+    canonical_inputs: bool = False,
 ) -> str:
     """构造 spec-only prompt（P-1：**不包含**任何缺陷代码/实现片段）。
 
@@ -141,18 +159,21 @@ def build_spec_examples_prompt(
         material: 规约材料（Planner logic_analysis / 人类 docstring / 锚材料）。
         signature_params: 参数名列表（仅元数据，用于 input 顺序；可以为 None）。
         max_examples: 最多示例数（≤5）。
+        canonical_inputs: T3 实验变体：追加 ``CANONICAL_INPUT_SECTION``（固定边界
+            值模板，提高跨采样重叠）。默认 False → prompt 与历史**逐字节一致**。
 
     Returns:
         prompt 字符串（纯规格；测试会断言不含缺陷代码片段）。
     """
     params = "、".join(signature_params) if signature_params else "（未知；input 用单元素列表）"
     func_name = material.get("function_name") if isinstance(material, dict) else None
+    canonical_section = f"\n\n{CANONICAL_INPUT_SECTION}" if canonical_inputs else ""
     return (
         f"函数名：{func_name or 'unknown'}\n"
         f"参数名（input 列表按此顺序）：{params}\n"
         f"最多示例数：{max(0, int(max_examples))}\n\n"
         "规格材料：\n"
-        f"{_format_material(material)}\n\n"
+        f"{_format_material(material)}{canonical_section}\n\n"
         '请只输出 JSON：{"examples": [{"input": [...], "expected": ...}]}'
     )
 
@@ -281,6 +302,7 @@ def generate_spec_examples(
     max_examples: int = _DEFAULT_EXAMPLES_MAX,
     cache_namespace: str | None = None,
     temperature: float = 0.0,
+    canonical_inputs: bool = False,
 ) -> dict[str, Any]:
     """**每任务 1 次** LLM 调用生成 spec-only 可执行示例（失败透传空 + 原因）。
 
@@ -292,6 +314,8 @@ def generate_spec_examples(
         cache_namespace: 显式缓存命名空间（临时设置 ``AITESTER_CACHE_NAMESPACE``，
             结束时恢复；None = 沿用宿主环境）。
         temperature: 采样温度（默认 0.0，确定性）。
+        canonical_inputs: T3 实验变体（canonical input 约束段落）；默认 False →
+            prompt 与返回记录均与历史一致（零行为变化）。
 
     Returns:
         {"status": "ok"|"empty"|"error", "examples": [...], "reason": str|None,
@@ -300,7 +324,9 @@ def generate_spec_examples(
          "cache_namespace", "task_id"}
         —— 任何失败都不抛异常（examples 空、status/reason 可审计）。
     """
-    prompt = build_spec_examples_prompt(material, signature_params, max_examples=max_examples)
+    prompt = build_spec_examples_prompt(
+        material, signature_params, max_examples=max_examples, canonical_inputs=canonical_inputs
+    )
     result: dict[str, Any] = {
         "task_id": task_id,
         "status": "empty",
@@ -385,21 +411,28 @@ def intersect_examples(
     *,
     k: int = 2,
     max_examples: int = MULTISAMPLE_DEFAULT_MAX_EXAMPLES,
+    majority: int | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """跨采样求交：出现于 ≥threshold 个采样（默认 2）的示例保留（≤max_examples）。
 
     Args:
         samples: 每个采样的 examples 列表（已过 strict parser）。
-        k: 采样总次数（threshold = 2 if k≥2 else 1；k=1 退化 = 单采样全部保留）。
+        k: 采样总次数（默认 majority=None 时 threshold = 2 if k≥2 else 1；
+            k=1 退化 = 单采样全部保留）。
         max_examples: 交集最多保留条数（默认 3，生产口径）。
+        majority: T3 扩展：显式一致阈值（出现于 ≥majority 个采样才保留），钳制
+            到 ``[1, k]``。None（默认）= 历史行为（K=2 时 threshold=2 精确求交）；
+            K=3 时传 majority=2 即「≥2/3 多数一致」。**不新增 audit 键**
+            （threshold 字段已表达实际阈值），保证 S-3 调用口径逐位兼容。
 
     Returns:
-        (intersection, audit)。audit 键位稳定：k/threshold/key_normalization/
-        per_sample_counts/n_samples/n_samples_ok/n_examples_union/
-        n_examples_intersection/n_dropped_non_intersection/dropped/sample_status。
+        (intersection, audit)。audit 键位稳定（T3 未新增键）：k/threshold/
+        key_normalization/per_sample_counts/n_samples/n_samples_ok/
+        n_examples_union/n_examples_intersection/n_examples_intersection_before_cap/
+        n_dropped_non_intersection/dropped。
     """
     k_eff = max(1, int(k))
-    threshold = 2 if k_eff >= 2 else 1
+    threshold = (2 if k_eff >= 2 else 1) if majority is None else max(1, min(k_eff, int(majority)))
     max_n = max(0, int(max_examples))
     per_sample_counts = [len(sample) for sample in samples]
     # 每个采样内去重（同一样本重复示例只算该样本出现一次）
@@ -457,6 +490,8 @@ def generate_examples_multisample(
     max_examples: int = MULTISAMPLE_DEFAULT_MAX_EXAMPLES,
     cache_namespace: str | None = None,
     temperature: float = 0.0,
+    majority: int | None = None,
+    canonical_inputs: bool = False,
 ) -> dict[str, Any]:
     """对同一 spec 材料做 K 次 spec-only 采样，按归一化键求交（自一致性）。
 
@@ -472,11 +507,16 @@ def generate_examples_multisample(
         max_examples: 每个采样请求与交集上限（默认 3）。
         cache_namespace: 缓存命名空间基名；None 时用宿主 env 或默认基名。
         temperature: 采样温度（默认 0.0；服务端仍非严格确定，这是多采样前提）。
+        majority: T3 扩展：显式一致阈值（出现于 ≥majority 个采样才保留）。
+            None（默认）= 历史行为（k=2 时精确 2/2 求交）；k=3 传 2 = 多数一致。
+        canonical_inputs: T3 实验变体：采样 prompt 追加冻结的 canonical input
+            约束段落。默认 False → prompt/返回结构均与 S-3 行为一致（零变化）。
 
     Returns:
-        {"task_id","k","status","examples","samples","audit","usage_totals","wall_s"}。
-        status：``ok``（有交集）/``empty``（无交集）/``error``（全部采样失败）；
-        任何失败都透传空列表并记录原因，不抛异常。
+        {"task_id","k","status","examples","samples","audit","usage_totals",
+        "wall_s","model"}（键位与 S-3 相同；多数阈值经 ``audit["threshold"]``
+        可核）。status：``ok``（有交集）/``empty``（无交集）/``error``（全部
+        采样失败）；任何失败都透传空列表并记录原因，不抛异常。
     """
     k_eff = max(1, int(k))
     base_namespace = cache_namespace or os.environ.get("AITESTER_CACHE_NAMESPACE") or "spec_examples_multisample"
@@ -490,6 +530,7 @@ def generate_examples_multisample(
             max_examples=max_examples,
             cache_namespace=f"{base_namespace}:sample{sample_idx}",
             temperature=temperature,
+            canonical_inputs=canonical_inputs,
         )
         record = dict(record)
         record["sample_idx"] = sample_idx
@@ -498,6 +539,7 @@ def generate_examples_multisample(
         [list(record.get("examples") or []) for record in samples],
         k=k_eff,
         max_examples=max_examples,
+        majority=majority,
     )
     statuses = [str(record.get("status")) for record in samples]
     if intersection:
@@ -539,6 +581,24 @@ def generate_examples_multisample(
         "wall_s": round(time.time() - t0, 3),
         "model": samples[0].get("model") if samples else "unknown",
     }
+
+
+def should_fallback_canonical(record: dict[str, Any]) -> bool:
+    """T3 PREREG 冻结回退判定：canonical 采样的**全部**样本都非 ``ok`` 才回退。
+
+    ``ok`` = 该样本至少解析出 1 条合法示例。因此只在「canonical 约束把示例
+    压成 0 条/解析失败/调用失败」时回退旧 prompt；单样本失败（其它样本 ok）
+    **不**回退（多数一致仍可工作）。空 samples/非 dict → False（fail-open）。
+    """
+    if not isinstance(record, dict):
+        return False
+    samples = record.get("samples") or []
+    if not isinstance(samples, list):
+        return False
+    dict_samples = [sample for sample in samples if isinstance(sample, dict)]
+    if not dict_samples:
+        return False
+    return all(str(sample.get("status")) != "ok" for sample in dict_samples)
 
 
 def _model_name() -> str:

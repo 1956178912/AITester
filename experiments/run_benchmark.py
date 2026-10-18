@@ -1862,6 +1862,17 @@ def _build_task_result(
             # 或有证据背书（False）；None = 本轮无补丁 / 证据门未触发。
             "source_patched_unverified": final_state.get("source_patched_unverified"),
             "patch_evidence_level": final_state.get("patch_evidence_level"),
+            # T 轮 2026-10-18（O 轮登记项落地）：A-03 快照/P2P 回归/自动回滚
+            # 观测字段逐行透出（纯观测，不参与路由——写点位
+            # src/graph/nodes.py::_patch_applier_node，本行只做 state 投影）：
+            #   patch_rollback_verdict: verified / regression_failed / no_oracle /
+            #     regression_error / apply_failed / not_enabled；
+            #     None = 本轮未走 _patch_applier_node（无补丁/未进入修复环），
+            #     "回滚协议未执行"（与 not_enabled"开关关"区分）
+            #   patch_rolled_back: True = 本轮补丁已被 P2P 回归失败自动回滚
+            #     （磁盘恢复成功）；False = 执行过但未回滚；None = 未执行
+            "patch_rollback_verdict": final_state.get("patch_rollback_verdict"),
+            "patch_rolled_back": final_state.get("patch_rolled_back"),
             # M1 三指标（并行产出，不改变 passed 的历史口径）：
             #   detection_rate（生成测试能否让带缺陷代码变红）/
             #   repair_rate（gold 材料独立裁决（自动化 oracle，无人工参与）修复是否正确）/
@@ -2101,6 +2112,11 @@ def _build_task_result(
         # 证据门观测键以 None 占位保持键集合同构
         "source_patched_unverified": None,
         "patch_evidence_level": None,
+        # T 轮 2026-10-18：回滚 verdict schema 失败分支占位（键集合同构）。
+        # 无 final_state ⇒ 无回滚语义：verdict=None（不可判定/未执行）、
+        # rolled_back=False（明确未发生回滚，不得写成 True）
+        "patch_rollback_verdict": None,
+        "patch_rolled_back": False,
         "detection_rate": None,
         # N-3：失败分支无 final_state → LLM-suite 不可判（None）/ oracle 未运行
         # （unavailable）；键集合同构（成功/失败两分支键集合完全一致）。

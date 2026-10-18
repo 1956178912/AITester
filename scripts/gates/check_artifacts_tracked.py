@@ -69,7 +69,8 @@ MANIFEST: tuple[str, ...] = (
     # 独立评审 A-04（2026-10-17）：2026-10-14 之后四批旗舰实验工件此前
     # 全部 0 git 跟踪（新结果目录静默缺口——本守卫的硬编码清单不覆盖
     # 新目录，缺口无声复发）。补齐引用链关键件（df_spec / M4 specir 扩样 /
-    # D1 / ULT df200），并新增 emse_* 目录覆盖扫描（见 _scan_emse_dirs）。
+    # D1 / ULT df200），并新增证据目录覆盖扫描（T 轮扩展为 emse_* + *_round_*，
+    # 见 _scan_evidence_dirs）。
     "experiments/results/emse_df_spec_20261016/DF_SPEC_REPORT.json",
     "experiments/results/emse_df_spec_20261016/SHA256SUMS",
     "experiments/results/emse_df_spec_20261016/benchmark_quixbugs_20261016_232138.json",
@@ -217,11 +218,14 @@ MANIFEST: tuple[str, ...] = (
     "experiments/results/s_round_examples_multisample_20261018/SHA256SUMS",
 )
 
-# emse_* 目录覆盖扫描的显式豁免登记（相对 experiments/results/）。
+# 证据目录覆盖扫描的显式豁免登记（相对 experiments/results/）。
 # 口径：冒烟批次 / 被更新批次取代 / 结论性数字经聚合报告入库的原始数据，
 # 按项目"本地件"惯例保留工作树——但必须**显式登记理由**，禁止静默缺席
 # （独立评审 A-04： silent gap 曾使四批旗舰工件脱离 git 而无人察觉）。
-STUDY_DIR_EXEMPTIONS: dict[str, str] = {
+# T 轮（2026-10-18）扩展：扫描面从 emse_* 扩到所有轮次证据目录
+# （`*_round_*`，如 q_round_/r_round_/s_round_/t_round_）——历史教训是
+# "每次新轮次命名一种前缀，硬编码清单就再漏一次"。
+EVIDENCE_DIR_EXEMPTIONS: dict[str, str] = {
     "emse_d2_profile_smoke_20261013": "D2 profile 冒烟；结论性数字经 df_spec/主批次聚合报告入库",
     "emse_d3_ult_20261013": "D3 cosmic-ray 冒烟；正式 Mut@k 见 emse_ult_mutk_full_20261015（已入库）",
     "emse_dsl_diag_20261014": "DSL diag v1 初版；被 emse_dsl_diag3_20261015（已入库）取代",
@@ -240,6 +244,13 @@ STUDY_DIR_EXEMPTIONS: dict[str, str] = {
     "emse_ult_dfsmoke_20261017": "ULT df 冒烟；正式 200 任务批见 emse_ult_df200_20261017（已入库）",
 }
 
+# 向后兼容别名（T 轮前仅扫 emse_*；既有测试/调用方仍可用旧名）。
+STUDY_DIR_EXEMPTIONS = EVIDENCE_DIR_EXEMPTIONS
+
+# 证据目录扫描面（experiments/results/ 下按 glob 匹配；新增轮次前缀须在此登记，
+# 否则下一轮证据目录又成静默缺口——T 轮把"新增前缀登记"本身变成必须动作）。
+EVIDENCE_DIR_GLOBS: tuple[str, ...] = ("emse_*", "*_round_*")
+
 
 def _is_tracked(path: Path) -> tuple[bool, str]:
     """返回 (是否被 git 跟踪, 状态说明)。缺失 / 未跟踪 / 被忽略分别可辨。"""
@@ -257,36 +268,51 @@ def _is_tracked(path: Path) -> tuple[bool, str]:
     return False, "存在于工作区但未被 git 跟踪（git add 后提交）"
 
 
-def _scan_emse_dirs() -> list[tuple[str, str]]:
-    """覆盖扫描：experiments/results/emse_*/ 每个目录必须入库或显式豁免。
+def _scan_evidence_dirs() -> list[tuple[str, str]]:
+    """覆盖扫描：`experiments/results/` 下轮次证据目录必须入库或显式豁免。
 
-    防"新结果目录静默缺席"复发（独立评审 A-04：四批旗舰工件曾 0 跟踪
-    而无任何门禁察觉——MANIFEST 是硬编码白名单，天然不覆盖未来目录）。
+    扫描面 = `EVIDENCE_DIR_GLOBS`（`emse_*` 与 `*_round_*`）。防"新结果目录
+    静默缺席"复发（独立评审 A-04：四批旗舰工件曾 0 跟踪而无任何门禁察觉——
+    MANIFEST 是硬编码白名单，天然不覆盖未来目录；T 轮进一步发现单靠
+    `emse_*` 前缀也会漏掉 `q/r/s/t_round_*` 新命名）。
+
+    口径：目录内**至少一个**文件被 git 跟踪即通过（可再生物/日志/缓存不入库
+    是项目既有惯例）；整目录 0 跟踪才报错并要求 add -f 或登记豁免。
     """
     offenders: list[tuple[str, str]] = []
     results_root = PROJECT_ROOT / "experiments/results"
     if not results_root.is_dir():
         return offenders
-    for child in sorted(results_root.glob("emse_*")):
-        if not child.is_dir():
-            continue
-        rel = child.relative_to(PROJECT_ROOT).as_posix()
-        name = child.name
-        if name in STUDY_DIR_EXEMPTIONS:
-            continue
-        ls = subprocess.run(["git", "ls-files", "--", rel], cwd=PROJECT_ROOT, capture_output=True, text=True)
-        if ls.returncode != 0:
-            offenders.append((rel, f"git ls-files 失败: {ls.stderr.strip()}"))
-            continue
-        if not ls.stdout.strip():
-            offenders.append(
-                (
-                    rel,
-                    "整个目录 0 git 跟踪。若为证据性批次：git add -f 后提交；"
-                    "若为冒烟/被取代批次：在 STUDY_DIR_EXEMPTIONS 显式登记理由",
+    seen: set[str] = set()
+    for pattern in EVIDENCE_DIR_GLOBS:
+        for child in sorted(results_root.glob(pattern)):
+            if not child.is_dir():
+                continue
+            rel = child.relative_to(PROJECT_ROOT).as_posix()
+            if rel in seen:
+                continue
+            seen.add(rel)
+            name = child.name
+            if name in EVIDENCE_DIR_EXEMPTIONS:
+                continue
+            ls = subprocess.run(["git", "ls-files", "--", rel], cwd=PROJECT_ROOT, capture_output=True, text=True)
+            if ls.returncode != 0:
+                offenders.append((rel, f"git ls-files 失败: {ls.stderr.strip()}"))
+                continue
+            if not ls.stdout.strip():
+                offenders.append(
+                    (
+                        rel,
+                        "整个目录 0 git 跟踪。若为证据性批次：git add -f 后提交；"
+                        "若为冒烟/被取代批次：在 EVIDENCE_DIR_EXEMPTIONS 显式登记理由",
+                    )
                 )
-            )
     return offenders
+
+
+def _scan_emse_dirs() -> list[tuple[str, str]]:
+    """向后兼容别名：等价于 `_scan_evidence_dirs()`（仅 emse_* 时代的历史名）。"""
+    return _scan_evidence_dirs()
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -305,8 +331,8 @@ def main(argv: list[str] | None = None) -> int:
         if not tracked:
             offenders.append((rel, reason))
 
-    emse_offenders = _scan_emse_dirs()
-    offenders.extend(emse_offenders)
+    evidence_offenders = _scan_evidence_dirs()
+    offenders.extend(evidence_offenders)
 
     if offenders:
         print(f"✗ {len(offenders)} 个关键工件/目录未入库（引用链断裂，CI 阻断）：")
@@ -314,7 +340,10 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  - {rel}: {reason}")
         print("修复：git add <路径> 并随本批提交（预注册时间顺序审计的前提）。")
         return 1
-    print(f"✓ {len(MANIFEST)}/{len(MANIFEST)} 关键工件均已入库；emse_* 目录覆盖扫描通过（引用链完整）")
+    print(
+        f"✓ {len(MANIFEST)}/{len(MANIFEST)} 关键工件均已入库；"
+        f"证据目录覆盖扫描通过（{'/'.join(EVIDENCE_DIR_GLOBS)}，引用链完整）"
+    )
     return 0
 
 

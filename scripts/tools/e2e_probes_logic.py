@@ -9,6 +9,8 @@
 - **spec_anchor → oracle 接线**（N-3 修复点：锚材料臂在没有 planner `test_plan` 时也能尝试注入）；
 - oracle 独立判读字段与 replay 工具入口（N-3：`oracle_suite_verdict` / `llm_suite_detection_rate`）；
 - 停滞检测开关（COVERAGE_STALL_DETECT_ENABLE + 消融臂互斥）；
+- T4：A-19 抢占优先级（repair-invalid 同迭代平局下停滞优先；默认关零变化）与
+  回滚 verdict 结果行 schema（patch_rollback_verdict / patch_rolled_back 双分支键集合同构）；
 - mutation advisor 环装配（logic 档）与 branch coverage 注入测量；
 - logic 档最小真实任务（真 LLM ≤1 调用）：spec 相关状态字段落态。
 
@@ -781,6 +783,171 @@ def probe_examples_multisample():
     return ok("多采样自一致性正常（归一化键/求交/审计/单采样 API 保持）", checks=checks)
 
 
+def _stagnation_tie_state() -> dict:
+    """构造"repair-invalid 与停滞窗口同迭代收敛"的最小桩 state（T 轮 A-19 口径）。
+
+    来源：S-2 默认闸冒烟实测（experiments/results/s_round_b8_injection_20261018/）
+    ——证据门默认 true 时 repair_history 连续 patch_applied=False，且
+    execution_trace 最近 K=2 轮 coverage_delta≈0，两个终止条件在同一迭代成立。
+    """
+    return {
+        "test_passed": False,
+        "iteration": 2,
+        "max_iterations": 3,
+        "execution_trace": [
+            {"iteration": 0, "passed": False, "coverage": 0.0, "coverage_delta": None},
+            {"iteration": 1, "passed": False, "coverage": 0.0, "coverage_delta": 0.0},
+            {"iteration": 2, "passed": False, "coverage": 0.0, "coverage_delta": 0.0},
+        ],
+        "repair_history": [{"patch_applied": False}, {"patch_applied": False}],
+    }
+
+
+def probe_stagnation_precedence():
+    """T 轮 A-19 抢占优先级：repair-invalid 同迭代平局下停滞判定优先（默认关零变化）。
+
+    (a) COVERAGE_STALL_DETECT_ENABLE 未设 → 平局返回/标签与历史一致
+        （done + skip_debugger_repair_invalid，零变化）；
+    (b) 开关=true 且停滞判定为真 → 返回 done 且 stop_reason=coverage_stall
+        （修复后由停滞分支拥有终止决定，而非 determine_stop_reason 标签兜底）。
+    """
+    from src.graph import workflow
+
+    saved = os.environ.get("COVERAGE_STALL_DETECT_ENABLE")
+    try:
+        os.environ.pop("COVERAGE_STALL_DETECT_ENABLE", None)
+        off_state = _stagnation_tie_state()
+        off_detected = workflow._coverage_stall_detected(off_state)
+        off_decision = workflow._should_debug(off_state)
+        off_stop = off_state.get("stop_reason")
+
+        os.environ["COVERAGE_STALL_DETECT_ENABLE"] = "true"
+        on_state = _stagnation_tie_state()
+        on_detected = workflow._coverage_stall_detected(on_state)
+        on_decision = workflow._should_debug(on_state)
+        on_stop = on_state.get("stop_reason")
+    finally:
+        if saved is None:
+            os.environ.pop("COVERAGE_STALL_DETECT_ENABLE", None)
+        else:
+            os.environ["COVERAGE_STALL_DETECT_ENABLE"] = saved
+
+    evidence = {
+        "off_detected": off_detected,
+        "off_decision": off_decision,
+        "off_stop_reason": off_stop,
+        "on_detected": on_detected,
+        "on_decision": on_decision,
+        "on_stop_reason": on_stop,
+        "iteration": 2,
+        "max_iterations": 3,
+    }
+    # (a) 默认关零变化：停滞判定关闭、repair-invalid 历史口径不变
+    if off_detected is not False or off_decision != "done" or off_stop != "skip_debugger_repair_invalid":
+        return fail(
+            f"默认关平局行为漂移：detected={off_detected}, decision={off_decision!r}, stop_reason={off_stop!r}",
+            **evidence,
+        )
+    # (b) ON：停滞判定命中且优先归因 coverage_stall
+    if on_detected is not True:
+        return fail(f"ON 臂停滞判定未命中：detected={on_detected}", **evidence)
+    if on_decision != "done" or on_stop != workflow.StopReason.COVERAGE_STALL.value:
+        return fail(
+            f"ON 臂停滞未优先：decision={on_decision!r}, stop_reason={on_stop!r}（期望 done/coverage_stall）",
+            **evidence,
+        )
+    return ok(
+        "A-19 抢占优先级正常：默认关 repair-invalid 平局历史口径不变；ON 时停滞优先（done/coverage_stall）",
+        **evidence,
+    )
+
+
+def probe_rollback_schema_fields():
+    """T 轮回滚 verdict schema：结果行两分支键集合同构 + 字段透传/占位语义。
+
+    验证 `experiments.run_benchmark._build_task_result`：
+    - 成功/失败两分支键集合完全一致（键集合同构）；
+    - 两分支都含 `patch_rollback_verdict` / `patch_rolled_back`；
+    - 成功分支从 final_state 透传（True/False/None 三态语义各一例）；
+    - 失败分支（无 final_state）占位为 (None, False)；
+    - 结果行可 JSON 落盘（json.dumps 往返保真）。
+    """
+    import json
+
+    from experiments.run_benchmark import _build_task_result
+    from src.datasets.dataset_loader import BenchmarkTask
+
+    def _task() -> BenchmarkTask:
+        return BenchmarkTask(
+            task_id="probe__rollback_schema",
+            repo_name="probe/repo",
+            problem_statement="fix a bug",
+            instance_code="def f():\n    return 1\n",
+            test_code="def test_f():\n    assert f() == 1\n",
+            expected_pass_count=0,
+            total_test_count=1,
+            metadata={"source": "e2e_probe"},
+        )
+
+    rows = {
+        "success_rolled_back": _build_task_result(
+            _task(),
+            1.0,
+            final_state={
+                "test_passed": False,
+                "patch_rollback_verdict": "regression_failed",
+                "patch_rolled_back": True,
+            },
+        ),
+        "success_not_enabled": _build_task_result(
+            _task(), 1.0, final_state={"patch_rollback_verdict": "not_enabled", "patch_rolled_back": False}
+        ),
+        "success_not_executed": _build_task_result(_task(), 1.0, final_state={"test_passed": False}),
+        "failure_no_state": _build_task_result(_task(), 0.5, diagnosis="执行异常: probe", error_category="error"),
+    }
+    keysets = {name: set(row) for name, row in rows.items()}
+    evidence = {
+        "row_count": len(rows),
+        "key_count": len(keysets["success_rolled_back"]),
+        "key_set_isomorphic": len({frozenset(v) for v in keysets.values()}) == 1,
+        "probed": {
+            name: {
+                "patch_rollback_verdict": row.get("patch_rollback_verdict"),
+                "patch_rolled_back": row.get("patch_rolled_back"),
+            }
+            for name, row in rows.items()
+        },
+    }
+    missing = [
+        name for name, row in rows.items() if "patch_rollback_verdict" not in row or "patch_rolled_back" not in row
+    ]
+    if missing:
+        return fail(f"结果行缺回滚 verdict 键：{missing}", **evidence)
+    if not evidence["key_set_isomorphic"]:
+        return fail("成功/失败分支键集合不同构（结果行 schema 漂移）", **evidence)
+    projected = [
+        rows["success_rolled_back"].get("patch_rollback_verdict") == "regression_failed",
+        rows["success_rolled_back"].get("patch_rolled_back") is True,
+        rows["success_not_enabled"].get("patch_rollback_verdict") == "not_enabled",
+        rows["success_not_enabled"].get("patch_rolled_back") is False,
+        rows["success_not_executed"].get("patch_rollback_verdict") is None,
+        rows["success_not_executed"].get("patch_rolled_back") is None,
+        rows["failure_no_state"].get("patch_rollback_verdict") is None,
+        rows["failure_no_state"].get("patch_rolled_back") is False,
+    ]
+    if not all(projected):
+        return fail(f"回滚 verdict 投影/占位语义不符：{evidence['probed']}", **evidence)
+    try:
+        json.loads(json.dumps(rows["success_rolled_back"], ensure_ascii=False))
+        json.loads(json.dumps(rows["failure_no_state"], ensure_ascii=False))
+    except (TypeError, ValueError) as exc:
+        return fail(f"结果行不可 JSON 落盘：{type(exc).__name__}: {exc}", **evidence)
+    return ok(
+        "回滚 verdict schema 正常：两分支键集合同构、含 patch_rollback_verdict/patch_rolled_back、投影与占位语义正确、可落盘",
+        **evidence,
+    )
+
+
 PROBES = [
     Probe(
         name="logic-spec-ir-parse",
@@ -915,6 +1082,20 @@ PROBES = [
         requires_llm=True,
         timeout_s=240,
         description="logic 档最小真实任务：spec 链路状态字段落态（真 LLM ≤1 调用）",
+    ),
+    Probe(
+        name="logic-stagnation-precedence",
+        group="logic",
+        func=probe_stagnation_precedence,
+        timeout_s=60,
+        description="T4：A-19 抢占优先级（默认关 repair-invalid 平局零变化 / ON 停滞优先）",
+    ),
+    Probe(
+        name="logic-rollback-schema-fields",
+        group="logic",
+        func=probe_rollback_schema_fields,
+        timeout_s=60,
+        description="T4：回滚 verdict 结果行 schema（双分支键集合同构 + 投影/占位语义 + 可落盘）",
     ),
 ]
 

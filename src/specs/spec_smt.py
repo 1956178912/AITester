@@ -16,7 +16,15 @@
        （那需要被测函数实际语义，无实现判了也是空话）；但**做**"后件
        自身一致性"判定（把 r 视为自由变量，UNSAT = 后件自相矛盾，
        无论实现如何都无解）——该判定零实现语义依赖，见
-       check_postcondition_consistency（R4 补反例环节）。本层前件侧做：
+       check_postcondition_consistency（R4 补反例环节）。T3c（2026-10-18）
+       补 token 感知的 **result→r 别名归一**：SpecIR 表达式通道契约
+       （src/prompts/templates.py）规定后件结果变量写 ``result``，而本层
+       自由变量域为 ``r``——此前含 ``result`` 的后件/不变式子句在排序推断
+       阶段被整体保守拒绝（T3b 实测占 expr error 子句 66%）。现仅对
+       **后件/不变式组**做 AST Name 节点归一（``ast.NodeTransformer`` +
+       ``ast.unparse``；签名参数名确实叫 ``result`` 时不归一，解析失败
+       保守回退原文），前件路径零变化；``usable_bool`` 保留原始子句文本。
+       本层前件侧做：
        - 前件 SAT 见证（合法输入样本）；
        - 前件数值目标 optimize（边界极值输入）；
        - 前件 UNSAT 检测（规约空洞化 finding，check_precondition_vacuity）；
@@ -96,6 +104,61 @@ def _max_witnesses() -> int:
 
 class _Untranslatable(Exception):
     """子句含保守算子集之外的构造（调用 / 幂 / 下标 / …）——整体跳过。"""
+
+
+# ─── 结果变量别名（T3c，2026-10-18：result→r token 感知归一）────────────────
+# 背景（T3b 实测）：SpecIR 表达式通道契约要求后件结果变量写 ``result``，而
+# 本模块后件求解释放变量域为 ``{"r"}``——含 ``result`` 的后件/不变式子句在
+# ``_infer_sorts`` 的"自由名必须属于自由变量域"门被整体保守拒绝（T3b 批
+# 110/166 expr error 子句即此因，占 66%）。修复：在后件组内把 **Name 节点**
+# ``result`` 改写为 ``r``（字符串字面量 / 属性名 / 关键字实参名不命中——
+# token 感知而非子串替换）；解析失败保守回退原文；签名参数名确实为
+# ``result`` 时不归一（防与输入变量冲突，保持历史行为）。
+_RESULT_ALIAS_NAME = "result"
+_RESULT_VAR_NAME = "r"
+
+
+class _ResultAliasNormalizer(ast.NodeTransformer):
+    """把表达式树中的 ``Name(id="result")`` 改写为 ``Name(id="r")``。
+
+    仅表达式内 Name 节点命中：``"result"`` 字符串字面量、``obj.result``
+    属性名、``f(result=...)`` 关键字名均不会被改写（token 感知）。
+    """
+
+    def __init__(self) -> None:
+        self.changed = False
+
+    def visit_Name(self, node: ast.Name) -> ast.AST:
+        if node.id != _RESULT_ALIAS_NAME:
+            return node
+        self.changed = True
+        # 位置信息复制到新节点（ast.unparse 不依赖，但保持 AST 完整）
+        return ast.copy_location(ast.Name(id=_RESULT_VAR_NAME, ctx=node.ctx), node)
+
+
+def _normalize_result_alias(clause: str) -> str:
+    """后件/不变式子句的 ``result`` → ``r`` 别名归一（保守，纯函数）。
+
+    行为（T3c 冻结口径）：
+    - 只改 **Name 节点**（token 感知），字符串/属性/关键字名不动；
+    - 无 ``result`` 出现 → 原样返回**原文**（逐位不变，不引入格式化漂移）；
+    - 语法解析失败 → 原样返回原文（保守回退，由上层既有形态门处理）；
+    - 归一失败（``ast.unparse`` 异常）→ 原样返回原文。
+    """
+    try:
+        tree = ast.parse(clause, mode="eval")
+    except (SyntaxError, ValueError):
+        return clause
+    normalizer = _ResultAliasNormalizer()
+    try:
+        normalized = normalizer.visit(tree)
+        if not normalizer.changed:
+            return clause
+        ast.fix_missing_locations(normalized)
+        return ast.unparse(normalized)
+    except Exception:  # 归一失败必须保守回退原文，不得抛到求解链路
+        logger.debug("SpecSMT result 别名归一失败（保守回退原文）: %r", clause, exc_info=True)
+        return clause
 
 
 # ─── 0. 受限 AST 求值器（S8，2026-10-08 R3：彻底消除裸 eval）────────────────
@@ -667,20 +730,27 @@ def _collect_post_constraints(
     if not usable:
         return None
     # r 作为结果变量纳入自由变量域（后件子句引用 r 是合法语义，非笔误）
-    params = frozenset(signature_params) | {"r"}
-    sorts = _infer_sorts(usable, params)
+    result_var = _RESULT_VAR_NAME
+    params = frozenset(signature_params) | {result_var}
+    # T3c：仅当签名参数里没有 result 时做 result→r 归一（参数名冲突 → 历史行为）。
+    # 排序推断/翻译用归一后文本；usable_bool 保留**原始文本**（可解释性）。
+    if _RESULT_ALIAS_NAME in params:
+        normalized = list(usable)
+    else:
+        normalized = [_normalize_result_alias(clause) for clause in usable]
+    sorts = _infer_sorts(normalized, params)
     if sorts is None or not sorts:
         return None
     constraints: list[Any] = []
     usable_bool: list[str] = []
     try:
-        for clause in usable:
+        for index, clause in enumerate(normalized):
             tree = ast.parse(clause, mode="eval")
             translated = _translate(tree.body, sorts, z3)
             if not z3.is_bool(translated):
                 continue  # 非 Bool 后件子句跳过（与前件层同口径）
             constraints.append(translated)
-            usable_bool.append(clause)
+            usable_bool.append(usable[index])  # 原始子句文本（归一前）
     except _Untranslatable:
         return None
     except Exception:
@@ -698,7 +768,9 @@ def check_postcondition_consistency(
     """后件自洽性检测（UNSAT = 后件约束系统自相矛盾）。
 
     语义：把后件（postconditions + invariants）的可编译子句视为关于
-    ``{signature_params} ∪ {r}`` 的约束系统；``r`` 为自由结果变量。判定：
+    ``{signature_params} ∪ {r}`` 的约束系统；``r`` 为自由结果变量。
+    T3c 起，若 ``result`` 不在签名参数中，子句中的 ``result`` 先经
+    token 感知 AST 归一为 ``r``（``_normalize_result_alias``）；判定：
     - sat：存在某个 (inputs, r) 组合满足全部后件 → 规约自洽；
     - unsat：任何 (inputs, r) 都无法同时满足全部后件 → 规约自相矛盾
       （无论被测实现如何都无解），属"逻辑驱动"能发现的真实规约缺陷，

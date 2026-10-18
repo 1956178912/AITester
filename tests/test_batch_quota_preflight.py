@@ -7,8 +7,12 @@
 2. **估算公式可复算**：任务数 × 最坏臂每任务调用数 × 重试系数，向上取整；
 3. **"上限低于估算"必须阻断**：配置存在但不足时同样不进批次；
 4. **前置闸退出码语义**：非 strict 恒 0（告警）、strict 有阻断项 → 1。
+5. **配额探测可用性**（T 轮 2026-10-18 修复）：`quota_probe` 真实入口
+   （config 加载 → `_get_llm_config` → `_get_or_create_chat_client`）与三态
+   语义（无凭证 skipped / 异常 ok=False / 成功 ok=True），全部 monkeypatch
+   零真实 LLM 调用。
 
-全部用例零网络、零 LLM（`quota_probe` 不在本文件覆盖范围：它需要真实凭据）。
+全部用例零网络、零 LLM（`TestQuotaProbe` 用假客户端/假配置，不消耗真实调用）。
 """
 
 from __future__ import annotations
@@ -235,3 +239,139 @@ class TestProcHygieneGate:
         monkeypatch.setattr(preflight, "git_state", lambda: {"sha": "0" * 40, "dirty": False, "dirty_reason": None})
         monkeypatch.setattr(preflight, "recent_fingerprints", lambda limit=5: [])
         assert preflight.main(["--strict"]) == 0
+
+
+class TestQuotaProbe:
+    """T 轮 2026-10-18：`quota_probe` 引用不存在符号（LLMClient）的修复回归。
+
+    缺陷实证（B2/T1 批次）：旧实现 `from src.agents.llm_client import LLMClient`
+    → ImportError → `--check-quota` 恒 `skipped=True`，strict 模式把"配额闸
+    自身坏了"当阻断项（闸不可用 → 任何批次前置检查失去意义）。
+    本组用例**零真实 LLM 调用**：全部走 monkeypatch 的假客户端 / 假配置。
+    """
+
+    #: 旧缺陷符号（llm_client 模块从未提供）——回归锁：不得再被引用
+    _BROKEN_SYMBOL = "LLMClient"
+
+    @pytest.fixture()
+    def _llm_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("LLM_1_API_KEY", "sk-test-not-real")
+        monkeypatch.setenv("LLM_1_BASE_URL", "https://example.invalid/v1")
+        monkeypatch.setenv("LLM_1_MODEL_NAME", "test-model")
+
+    def test_broken_symbol_removed_from_source(self) -> None:
+        """回归锁：探测实现不得再 import 不存在的 LLMClient 符号（AST 级）。"""
+        import ast
+        import inspect
+
+        source = inspect.getsource(preflight.quota_probe)
+        tree = ast.parse(source)
+        imported: set[str] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.ImportFrom, ast.Import)):
+                imported.update(alias.name for alias in node.names)
+        assert self._BROKEN_SYMBOL not in imported, f"仍 import 不存在符号：{sorted(imported)}"
+        assert "_get_or_create_chat_client" in imported and "_get_llm_config" in imported
+        # 真实模块确无 LLMClient（旧实现 ImportError 的根因）
+        import src.agents.llm_client as llm_client
+
+        assert not hasattr(llm_client, self._BROKEN_SYMBOL)
+
+    def test_no_credentials_is_skipped(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """三态语义①：无凭证 → skipped=True + ok=False（strict 下阻断可解释）。"""
+        monkeypatch.delenv("LLM_1_API_KEY", raising=False)
+        monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+        result = preflight.quota_probe()
+        assert result["ok"] is False
+        assert result["skipped"] is True
+        assert "未检测到" in result["reason"]
+
+    def test_success_invokes_chat_client_with_config(self, monkeypatch: pytest.MonkeyPatch, _llm_env: None) -> None:
+        """成功路径：经 _get_llm_config + _get_or_create_chat_client 真实入口探测。"""
+        import src.agents.llm_client as llm_client
+
+        calls: list[dict] = []
+
+        class _FakeClient:
+            def invoke(self, prompt: str):
+                calls.append({"prompt": prompt})
+                return type("_Msg", (), {"content": "OK"})()
+
+        def _fake_client_factory(model_name, temperature, api_key, base_url):
+            calls.append(
+                {
+                    "model_name": model_name,
+                    "temperature": temperature,
+                    "api_key": api_key,
+                    "base_url": base_url,
+                }
+            )
+            return _FakeClient()
+
+        monkeypatch.setattr(
+            llm_client, "_get_llm_config", lambda: ("sk-test-not-real", "https://example.invalid/v1", "test-model")
+        )
+        monkeypatch.setattr(llm_client, "_get_or_create_chat_client", _fake_client_factory)
+        result = preflight.quota_probe()
+        assert result["ok"] is True and result["skipped"] is False
+        assert result["response_prefix"] == "OK"
+        assert calls[0] == {
+            "model_name": "test-model",
+            "temperature": 0.0,
+            "api_key": "sk-test-not-real",
+            "base_url": "https://example.invalid/v1",
+        }
+        assert calls[1] == {"prompt": "Reply with the single token: OK"}
+
+    def test_incomplete_config_is_skipped(self, monkeypatch: pytest.MonkeyPatch, _llm_env: None) -> None:
+        """三态语义①（变体）：凭据环境变量在但配置三元组有空值 → skipped。"""
+        import src.agents.llm_client as llm_client
+
+        monkeypatch.setattr(llm_client, "_get_llm_config", lambda: ("", "", "test-model"))
+        result = preflight.quota_probe()
+        assert result["ok"] is False and result["skipped"] is True
+        assert "配置不完整" in result["reason"]
+
+    def test_call_exception_is_not_skipped(self, monkeypatch: pytest.MonkeyPatch, _llm_env: None) -> None:
+        """三态语义②：网络/配额异常 → ok=False 且 skipped=False（与无凭证区分）。"""
+        import src.agents.llm_client as llm_client
+
+        class _BoomClient:
+            def invoke(self, prompt: str):
+                raise RuntimeError("quota exhausted")
+
+        monkeypatch.setattr(llm_client, "_get_llm_config", lambda: ("k", "https://example.invalid/v1", "m"))
+        monkeypatch.setattr(llm_client, "_get_or_create_chat_client", lambda *a, **k: _BoomClient())
+        result = preflight.quota_probe()
+        assert result["ok"] is False
+        assert result["skipped"] is False
+        assert "RuntimeError: quota exhausted" in result["reason"]
+
+    def test_non_ok_reply_reports_not_ok(self, monkeypatch: pytest.MonkeyPatch, _llm_env: None) -> None:
+        """探测到非 OK 回复 → ok=False（但不 skipped：链路通了、语义不对）。"""
+        import src.agents.llm_client as llm_client
+
+        class _WrongClient:
+            def invoke(self, prompt: str):
+                return type("_Msg", (), {"content": "busy"})
+
+        monkeypatch.setattr(llm_client, "_get_llm_config", lambda: ("k", "https://example.invalid/v1", "m"))
+        monkeypatch.setattr(llm_client, "_get_or_create_chat_client", lambda *a, **k: _WrongClient())
+        result = preflight.quota_probe()
+        assert result["ok"] is False and result["skipped"] is False
+        assert result["response_prefix"] == "busy"
+
+    def test_strict_blocks_on_failed_probe(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """修复后仍保持 strict 阻断语义：探测失败 → 退出码 1（不因修复而放行）。"""
+        monkeypatch.setattr(
+            preflight,
+            "proc_hygiene",
+            lambda timeout=15.0: {"available": True, "scanned": 100, "leaked_count": 0, "leaked": []},
+        )
+        monkeypatch.setattr(
+            preflight, "batch_budget_report", lambda tasks, parallelism: TestProcHygieneGate._budget_stub()
+        )
+        monkeypatch.setattr(preflight, "git_state", lambda: {"sha": "0" * 40, "dirty": False, "dirty_reason": None})
+        monkeypatch.setattr(preflight, "recent_fingerprints", lambda limit=5: [])
+        monkeypatch.setattr(preflight, "quota_probe", lambda: {"ok": False, "skipped": True, "reason": "无凭证"})
+        assert preflight.main(["--check-quota", "--strict"]) == 1
