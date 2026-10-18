@@ -106,13 +106,13 @@ None = 不可测、遵循保守口径不计为 0）：
 | 项 | 状态 | 阻塞原因 |
 |----|------|----------|
 | **E7 人工复核（唯一能建立 detection 外部校标的动作）** | 未执行 | 需**人力投入**：工作表已备料（`experiments/results/main_batch/e7_review_worksheet.md`，判定列空），预注册口径已定义（五选一）。**建议优先做**：≥40 行分层样本、双人独立、报 Kappa |
-| Prompt Card + 哈希锁 | 未执行 | 需**你提供最新 prompt 全文**（detection-first 段落现内联于 `src/graph/nodes.py:540-547`，over-red 于 `:651-667`）；内容需逐字，不能由我改写 |
+| Prompt Card + 哈希锁 | **已被后续批次收口（2026-10-16）** | 原阻塞（需 prompt 全文）解除：`PROMPT_ARTIFACTS.json` 逐字抽取 + sha256 锁 + `make prompt-artifacts-check`（CI 阻断）；投稿用 `PROMPT_CARD.md` 由 `experiments/prompt_artifacts.py` 生成。**T 轮复核**：行号引用改为函数名口径（`_detection_first_section` / `_over_red_section`），防再次漂移 |
 | QuixBugs 真实缺陷阶梯进正文 | 未执行 | 需确认最新批次口径与授权 |
-| 2×2 消融（协议文本 vs 多一次采样） | 未执行 | 双开关已具备（`DETECTION_FIRST_ENABLE` / `DETECTION_FIRST_SECTION_ENABLE`），零新代码；**需 LLM 配额** |
-| success 呈现层降级（报告首表/CLI/可视化） | 未执行 | 改报告结构与可视化属于口径变更，需你确认后再动（避免影响已归档报告的既有叙事） |
+| 2×2 消融（协议文本 vs 多一次采样） | **已执行（勘误：2026-10-09 RT1 单 seed 三格批；T 轮 T-2 指纹级 3 格×2 seed 复现）** | 原"未执行"系本表成稿时的陈旧状态——`experiments/results/e6_a1_batches/rt1_no_reinforcement_seed42/`（2026-10-09）已有 RT1 批与三格对照（并入 `BASELINE.yaml benchmark.rt1_sampling_control`）；T 轮以干净切点 `a93c1f6` + 指纹 + PREREG 复现，见 `experiments/results/t_round_b1_protocol_text_20261018/` |
+| success 呈现层降级（报告首表/CLI/可视化） | **已执行（2026-10-16，8c2b655，B6）** | 三指标落图表/表格/显著性基口径（主图四联 + 表列 Detection/False-Fix/Repair 前置）；详见登记册 §2 B6 |
 | regression_rate 未进 M1 聚合 | 未执行 | 第四指标未并列，需确认是否纳入论文主表 |
 | 复现包钉 seed/model/temperature/dataset-version | 未执行 | 需确认"三种子"的**实际执行语义**（seed 不传 LLM API，非确定性由缓存命名空间控制） |
-| SWE-bench Lite 重跑 | 未执行 | 需配额；且下载器/跑批入口**无配额预算控制**，重跑前建议先补配额闸 |
+| SWE-bench Lite 重跑 | **仍未执行（配额闸已补，T 轮主动不跑）** | 原阻塞（无配额预算控制）已解除：`src/budget/batch_quota.py` + `scripts/tools/run_preflight.py --strict --check-quota`（T 轮修复了后者的 ImportError 探针缺陷）。T 轮主动不跑的理由：历史 20 次尝试失败主因=429/超时的基础设施问题，单批成本/墙钟远高于本批预算；结论保持 `not_evaluated`，严禁引用 `pass_rate` |
 
 ---
 

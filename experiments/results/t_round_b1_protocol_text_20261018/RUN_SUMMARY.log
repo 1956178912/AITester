@@ -1,0 +1,62 @@
+T2/B1（2026-10-18）：RT1 协议文本消融 —— 3 格 × 2 seed 真 LLM 跑批
+CUT_SHA=a93c1f60ee31b9582e0146f73e3038e6ce0f01a1
+WORKTREE=/Users/wangchenyu/Workspace/AITester-t-b1-a93c1f6
+OUT=/Users/wangchenyu/Workspace/AITester/experiments/results/t_round_b1_protocol_text_20261018
+PREREG_SHA256=5761901e868672ba15f8884a9b62108ec3c5c25306c41158d85600236acaab7f
+BATCH_START_ISO_UTC=2026-10-18T01:20:26Z BATCH_START_EPOCH=1792286426
+PLAN=C1_seed42,C1_seed44,C2_seed42,C2_seed44,C3_seed42,C3_seed44（cell-major，seed 42→44）
+BUDGET_USD_MAX=2.0 COST_HARD_STOP_USD=1.8 WALL_HARD_STOP_SECONDS=5100 PER_RUN_TIMEOUT=1800s
+AMENDMENT=PREREG_CONTINUATION.md（判据未改；C1_seed44 起 ENABLE_MUTATION_SCORING=false 关闭批后辅助测量）RESUME=0
+================================================================
+[1/6] C1_seed42 status=ok rows=87 det=9/87 cost_usd=0.089914 wall=156s exit=0
+          provenance: git_sha=a93c1f60ee31b9582e0146f73e3038e6ce0f01a1 git_dirty=False model_fingerprint.pinned=True
+          log=/Users/wangchenyu/Workspace/AITester/experiments/results/t_round_b1_protocol_text_20261018/logs/C1_seed42.log
+          batch=/Users/wangchenyu/Workspace/AITester/experiments/results/t_round_b1_protocol_text_20261018/staging/C1_seed42/benchmark_synthetic_20261018_092302.json
+          meta=/Users/wangchenyu/Workspace/AITester/experiments/results/t_round_b1_protocol_text_20261018/seed42/meta_C1.json
+[2/6] C1_seed44 status=ok rows=87 det=12/87 cost_usd=0.085611 wall=149s exit=0
+          provenance: git_sha=a93c1f60ee31b9582e0146f73e3038e6ce0f01a1 git_dirty=False model_fingerprint.pinned=True
+          log=/Users/wangchenyu/Workspace/AITester/experiments/results/t_round_b1_protocol_text_20261018/logs/C1_seed44.log
+          batch=/Users/wangchenyu/Workspace/AITester/experiments/results/t_round_b1_protocol_text_20261018/staging/C1_seed44/benchmark_synthetic_20261018_092534.json
+          meta=/Users/wangchenyu/Workspace/AITester/experiments/results/t_round_b1_protocol_text_20261018/seed44/meta_C1.json
+[3/6] C2_seed42 status=ok rows=87 det=10/87 cost_usd=0.168927 wall=227s exit=0
+          provenance: git_sha=a93c1f60ee31b9582e0146f73e3038e6ce0f01a1 git_dirty=False model_fingerprint.pinned=True
+          log=/Users/wangchenyu/Workspace/AITester/experiments/results/t_round_b1_protocol_text_20261018/logs/C2_seed42.log
+          batch=/Users/wangchenyu/Workspace/AITester/experiments/results/t_round_b1_protocol_text_20261018/staging/C2_seed42/benchmark_synthetic_20261018_092924.json
+          meta=/Users/wangchenyu/Workspace/AITester/experiments/results/t_round_b1_protocol_text_20261018/seed42/meta_C2.json
+[4/6] C2_seed44 status=ok rows=87 det=10/87 cost_usd=0.167431 wall=227s exit=0
+          provenance: git_sha=a93c1f60ee31b9582e0146f73e3038e6ce0f01a1 git_dirty=False model_fingerprint.pinned=True
+          log=/Users/wangchenyu/Workspace/AITester/experiments/results/t_round_b1_protocol_text_20261018/logs/C2_seed44.log
+          batch=/Users/wangchenyu/Workspace/AITester/experiments/results/t_round_b1_protocol_text_20261018/staging/C2_seed44/benchmark_synthetic_20261018_093314.json
+          meta=/Users/wangchenyu/Workspace/AITester/experiments/results/t_round_b1_protocol_text_20261018/seed44/meta_C2.json
+[5/6] C3_seed42 status=ok rows=87 det=24/87 cost_usd=0.184313 wall=249s exit=0
+          provenance: git_sha=a93c1f60ee31b9582e0146f73e3038e6ce0f01a1 git_dirty=False model_fingerprint.pinned=True
+          log=/Users/wangchenyu/Workspace/AITester/experiments/results/t_round_b1_protocol_text_20261018/logs/C3_seed42.log
+          batch=/Users/wangchenyu/Workspace/AITester/experiments/results/t_round_b1_protocol_text_20261018/staging/C3_seed42/benchmark_synthetic_20261018_093726.json
+          meta=/Users/wangchenyu/Workspace/AITester/experiments/results/t_round_b1_protocol_text_20261018/seed42/meta_C3.json
+[6/6] C3_seed44 status=ok rows=87 det=27/87 cost_usd=0.180143 wall=273s exit=0
+          provenance: git_sha=a93c1f60ee31b9582e0146f73e3038e6ce0f01a1 git_dirty=False model_fingerprint.pinned=True
+          log=/Users/wangchenyu/Workspace/AITester/experiments/results/t_round_b1_protocol_text_20261018/logs/C3_seed44.log
+          batch=/Users/wangchenyu/Workspace/AITester/experiments/results/t_round_b1_protocol_text_20261018/staging/C3_seed44/benchmark_synthetic_20261018_094201.json
+          meta=/Users/wangchenyu/Workspace/AITester/experiments/results/t_round_b1_protocol_text_20261018/seed44/meta_C3.json
+
+================ 批次汇总（从工件读回，非手填） ================
+TOTAL_ROWS=522 TOTAL_INPUT_TOKENS=411695 TOTAL_OUTPUT_TOKENS=627359 TOTAL_TOKENS=1039054 TOTAL_LLM_CALLS=863
+TOTAL_COST_USD_STANDARD_PRICE=0.876339（价目表标准价，上界口径）
+RUNS_WALL_SUM_SECONDS=1281
+REGENERATED_ROWS={'seed42_C1': 0, 'seed42_C2': 79, 'seed42_C3': 79, 'seed44_C1': 0, 'seed44_C2': 77, 'seed44_C3': 77}
+================================================================
+
+BATCH_END_ISO_UTC=2026-10-18T01:42:05Z BATCH_END_EPOCH=1792287725 BATCH_WALL_SECONDS=1299
+WORKTREE_POST_RUN_DIRTY=0
+WORKTREE_POST_RUN_HEAD=a93c1f60ee31b9582e0146f73e3038e6ce0f01a1
+ALL_RUNS_OK=1 STOP_TRIGGERED=0 STOP_REASON=none
+RUNNER_EXIT=0
+
+# ── 批次后记（零 LLM 补充说明，写入于 2026-10-18T10:10+08:00）────────────────
+# 1) 首跑（修订前，2026-10-18T01:01:44Z 起）因 logic 档批后 mutation/MDO 辅助测量
+#    持续 >10.5min 未结束而被主动中止；未产出批次 JSON/meta（无主终点数据），
+#    原日志归档 _superseded_first_attempt/C1_seed42_pre_amendment.log。
+# 2) 本 RUN_SUMMARY 对应的是修订后统一重跑的六格（BATCH_START_EPOCH=1792286426,
+#    2026-10-18T01:20:26Z）：六格全部以 ENABLE_MUTATION_SCORING=false 运行
+#    （覆盖上方 AMENDMENT 行"C1_seed44 起"的旧表述）；判据未改，详见 PREREG_CONTINUATION.md。
+# 3) 批次墙钟 1299s；六跑逐跑墙钟之和 1281s；估算费用 $0.876339（价目表标准价）。

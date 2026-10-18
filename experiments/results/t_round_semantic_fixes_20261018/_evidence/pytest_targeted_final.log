@@ -1,0 +1,25 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.14.6, pytest-9.1.1, pluggy-1.6.0
+rootdir: /Users/wangchenyu/Workspace/AITester
+configfile: pyproject.toml
+plugins: cov-7.1.0, xdist-3.8.0, hypothesis-6.168.4, timeout-2.4.0, langsmith-0.10.18, anyio-4.14.2
+timeout: 1200.0s
+timeout method: signal
+timeout func_only: False
+collected 217 items
+
+tests/test_t_round_semantic_fixes.py ..................................  [ 15%]
+tests/test_batch_quota_preflight.py ...............................      [ 29%]
+tests/test_e2e_probes_logic.py ...................................       [ 46%]
+tests/test_p_round_stagnation_wiring.py ..........................       [ 58%]
+tests/test_p2_4_coverage_stall.py ............                           [ 63%]
+tests/test_run_benchmark.py ........................................     [ 82%]
+tests/test_workflow.py .......................................           [100%]
+
+=============================== warnings summary ===============================
+.venv/lib/python3.14/site-packages/chromadb/telemetry/opentelemetry/__init__.py:128
+  /Users/wangchenyu/Workspace/AITester/.venv/lib/python3.14/site-packages/chromadb/telemetry/opentelemetry/__init__.py:128: DeprecationWarning: 'asyncio.iscoroutinefunction' is deprecated and slated for removal in Python 3.16; use inspect.iscoroutinefunction() instead
+    if asyncio.iscoroutinefunction(f):
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================== 217 passed, 1 warning in 3.40s ========================

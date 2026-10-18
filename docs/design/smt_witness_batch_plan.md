@@ -78,3 +78,53 @@
   可求解性（本批次）→ 检出关联（探索性）。即使全链走完只得到"规格可编译
   可求解但与检出无稳定关联"，那也是可发表的阴性机制证据（本项目已有
   四次同类诚实阴性的发表先例：D1/M4/df_spec/SpecExpr 确认性）。
+
+---
+
+## 6. 执行记录（T 轮 2026-10-18，**数据产生后追加，设计/判定规则未改**）
+
+> 本节在 §3 冻结规则之后追加；§1–§5 的设计与判定规则逐字未改。执行由 T3b 完成
+> （零 LLM），随后由 T3c 修复其错误归因暴露的 `result`/`r` 别名缺口并复跑。
+
+### 6.1 T3b 首跑（pre-fix 基线）
+
+- 数据集：QuixBugs 50 任务（主判定集 = 41 缺陷程序，与 df_spec 同集）；锚表内容寻址
+  50/50 命中、缺口 0；z3-solver 5.1.0；per-clause timeout 5s（公开 API 映射见下）。
+- 主判定集非空评估子句 D1=184；status 桶：**sat 19 / unsat 0 / unknown 0 / timeout 0 / error 165**。
+- `smt_witness_rate` 全任务均值 **0.088531**（>0 ✔）、`smt_timeout_rate`（pooled
+  timeout/reached）**0.0**（<20% ✔）、每 status 桶可逐子句重聚合（0 mismatch ✔）
+  → **机制层判 `pass`（层在工作）**。
+- **reach_rate 仅 0.103261**：到达求解器的 19 条 19/19 全 sat（0 unsat/unknown/timeout，
+  求解器无异常），瓶颈是"材料未达求解器"。错误归因（启发式文本，逐子句可复算）：
+  `result_alias_not_reached`=110（66%）、`untranslatable_call`=51、其他=5。
+- **关联层：不做**。预注册的中位数二分在本数据上退化（median=0，28/41 任务 witness_rate=0
+  → 低桶为空），按 §3 只报告"无对照"；MDE≈16.57pp 已披露，未做 detection 比较/检验。
+- 工件：`experiments/results/t_round_smt_witness_20261018/`（7 项 SHA verify，只读保留为
+  pre-fix 基线）。
+
+### 6.2 T3c 别名修复 + 复跑（post-fix）
+
+- 根因定位：`src/specs/spec_smt.py::_collect_post_constraints` 的后件自由变量域只有
+  `{"r"}`，而 SpecIR 表达式通道后件普遍引用 `result` → 110 条子句**保守未达求解器**
+  （不是求解失败）。修复：token 感知 AST 归一（仅当 `result` 不在签名参数中时把
+  后件/不变式 `Name(id="result")` → `r`；解析失败保守回退；参数名确为 `result` 时不归一；
+  前件路径零变化；`usable_bool` 保留原始文本）。
+- 复跑（同任务/材料/通道/超时/API，差异仅 src 修复）：**reached 19→27、sat 19→27、
+  error 165→157（unsat/unknown/timeout 均 0→0）**；`smt_witness_rate` 0.088531→**0.125116**、
+  `reach_rate` 0.103261→**0.146739**、有见证任务 13/41→16/41。
+- 110 条旧 alias 子句去向：matched=110；→ sat 8、error 102（primary 96 =
+  `unsupported_call` 84 + `unsupported_is_in_operator` 6 + `unsupported_subscript` 6）。
+  纯别名桶 13→8 reached；余 5 条受 `is`/`in` 算子集限制（非别名问题）。
+- 语义安全：solver_exception=0；单子句 unsat 0→0；全组一致性探针新增 unsat 任务 **0**
+  （expr 通道 skipped 39→sat 2/skipped 37；NL 生产通道 41/41 不变）；未触发停止条件。
+- 工件：`experiments/results/t_round_smt_witness_aliasfix_20261018/`（9 项 SHA verify）；
+  预注册 `PREREG_ALIASFIX.md` 跑前冻结（含 C1–C5 与风险 guard；预注册预期 reach≈32、
+  实测 27 的偏差已披露，仅偏差披露不参与判定）。
+
+### 6.3 口径与后续
+
+- **T3b 与 T3c 并列引用**：T3b = pre-fix 基线，T3c = post-fix 新配置；不得混池、不得删除旧批。
+- 剩余能力边界（翻译层算子集不支持 Call/Subscript/Attribute/Is/In）未变——即使别名修复后，
+  reach 仍受该层限制；引用"见证率"必须同时给 reach_rate 与"error 归因"。
+- 下一步候选：① 扩展翻译层算子集（先白名单评估）；② 关联层需另立新批另预注册
+  （本批不得回读做确认性推断）。

@@ -216,6 +216,40 @@ MANIFEST: tuple[str, ...] = (
     "experiments/results/s_round_examples_multisample_20261018/PREREG.md",
     "experiments/results/s_round_examples_multisample_20261018/MULTISAMPLE_STATS.json",
     "experiments/results/s_round_examples_multisample_20261018/SHA256SUMS",
+    # T 轮（2026-10-18）：真实 LLM 配额解锁后的可引用证据链——
+    # ① K=3 示例治理（判定 high_risk_default_off）；② SMT 见证 pre/post-fix 并列；
+    # ③ 语义修复汇总 + A-19 默认门复验（classification=unexpected_delta）；
+    # ④ 文档↔工件审计报告；⑤ B1/B2 复现批（见各目录）。全部 SHA256SUMS verify 通过。
+    "experiments/results/t_round_oracle_k3_20261018/PREREG.md",
+    "experiments/results/t_round_oracle_k3_20261018/ANALYSIS_REPORT.json",
+    "experiments/results/t_round_oracle_k3_20261018/README.md",
+    "experiments/results/t_round_oracle_k3_20261018/SHA256SUMS",
+    "experiments/results/t_round_smt_witness_20261018/PREREG.md",
+    "experiments/results/t_round_smt_witness_20261018/ANALYSIS_REPORT.json",
+    "experiments/results/t_round_smt_witness_20261018/README.md",
+    "experiments/results/t_round_smt_witness_20261018/SHA256SUMS",
+    "experiments/results/t_round_smt_witness_aliasfix_20261018/PREREG_ALIASFIX.md",
+    "experiments/results/t_round_smt_witness_aliasfix_20261018/COMPARISON.json",
+    "experiments/results/t_round_smt_witness_aliasfix_20261018/ANALYSIS_REPORT.json",
+    "experiments/results/t_round_smt_witness_aliasfix_20261018/README.md",
+    "experiments/results/t_round_smt_witness_aliasfix_20261018/SHA256SUMS",
+    "experiments/results/t_round_semantic_fixes_20261018/README.md",
+    "experiments/results/t_round_semantic_fixes_20261018/A19_REVALIDATION_PREREG.md",
+    "experiments/results/t_round_semantic_fixes_20261018/D3B_DESIGN_AND_PREREG_DRAFT.md",
+    "experiments/results/t_round_semantic_fixes_20261018/SHA256SUMS",
+    "experiments/results/t_round_a19_default_gate_20261018/PREREG.md",
+    "experiments/results/t_round_a19_default_gate_20261018/ANALYSIS.json",
+    "experiments/results/t_round_a19_default_gate_20261018/ISOLATION.json",
+    "experiments/results/t_round_a19_default_gate_20261018/README.md",
+    "experiments/results/t_round_a19_default_gate_20261018/SHA256SUMS",
+    "experiments/results/t_round_artifact_audit_20261018/AUDIT_REPORT.md",
+    "experiments/results/t_round_b1_protocol_text_20261018/PREREG.md",
+    "experiments/results/t_round_b1_protocol_text_20261018/PREREG_CONTINUATION.md",
+    "experiments/results/t_round_b1_protocol_text_20261018/GATES.json",
+    "experiments/results/t_round_b1_protocol_text_20261018/ANALYSIS_REPORT.json",
+    "experiments/results/t_round_b1_protocol_text_20261018/README.md",
+    "experiments/results/t_round_b1_protocol_text_20261018/DOC_RECONCILIATION.md",
+    "experiments/results/t_round_b1_protocol_text_20261018/SHA256SUMS",
 )
 
 # 证据目录覆盖扫描的显式豁免登记（相对 experiments/results/）。

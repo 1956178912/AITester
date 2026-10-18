@@ -1,6 +1,6 @@
 # AITester 文档索引（Documentation Index）
 
-> 最后更新：2026-10-17
+> 最后更新：2026-10-18（T 轮）
 >
 > 本页是全部 Markdown 文档的**导航入口**：先按角色给最短阅读路径，再给核心文档清单
 >（每份一句话说明）。本页的全部链接由 `scripts/gates/check_doc_links.py --strict`
@@ -86,6 +86,8 @@
 | [docs/design/misguided_effective_metric.md](design/misguided_effective_metric.md) | misguided/effective 逐测试三分度量（ISSTA'26 操作化）：分类树、分母、执行口径与已知限制。 |
 | [docs/design/oracle_quality_metric.md](design/oracle_quality_metric.md) | 确定性规约 oracle 质量度量（A-05）：四分类、注入 fidelity、检出贡献与判分耦合限制。 |
 | [docs/design/e2e_probe_matrix.md](design/e2e_probe_matrix.md) | 全功能端到端探针矩阵：功能清单化验证、零 LLM 默认与真 LLM 按需、报告与边界。 |
+| [docs/design/smt_witness_batch_plan.md](design/smt_witness_batch_plan.md) | z3 SMT 见证层最小启用批次：设计、判定规则与 T 轮执行记录（机制层 pass；pre/post-fix 口径）。 |
+| [docs/design/cross_file_plan_wiring_prereg.md](design/cross_file_plan_wiring_prereg.md) | D3b 跨文件图通路接线：下游消费点定位、两阶段双开关方案与预注册草案（未接线）。 |
 | [docs/COST_MODEL.md](COST_MODEL.md) | 成本模型：批后处理墙钟可观测（StageTimer/分位/阈值）、预算口径与批跑建议。 |
 | [docs/dependency_exemptions.md](dependency_exemptions.md) | 依赖豁免登记表：每个豁免的替代方案与到期复核条件。 |
 | [docs/threat_model.md](threat_model.md) | 威胁模型：T1–T8 威胁、攻击面与现有缓解措施。 |
