@@ -104,6 +104,10 @@ jobs:
     # 显式超时上限：防止卡在 pip 网络 / 诊断重跑等步骤最长挂到 GitHub 默认 360 分钟
     timeout-minutes: 30
     strategy:
+      # 2026-10-18（U 轮首次真实 CI）：关闭 fail-fast——此前一档失败会 cancel
+      # 其余档，导致无法获得完整跨版本失败清单（3.12 的失败在 #126 被 cancel，
+      # 诊断步骤来不及跑）；矩阵成本可接受，换取全版本可观测性。
+      fail-fast: false
       matrix:
         # 矩阵与 requirements.lock 的钉版兼容性对齐（lock 生成自 Python 3.14 开发环境；
         # AO 批 2026-10-07 经 PyPI 元数据全量核查：132 钉版 requires_python 无一排除
@@ -391,6 +395,25 @@ jobs:
         run: |
           rm -f .coverage.ci .coverage.ci.*
           pytest tests/ -v --cov=src --cov-branch --cov-report=xml --cov-report=term-missing -n 4 --dist loadfile
+
+      - name: Coverage caliber probe (U 轮：实测值注解，供文档对账/跨平台校准)
+        # 2026-10-18：G6 登记册对账容差 ±0.10pp 在 ubuntu 3.14 档触发失败
+        # （run #126），但步骤日志无匿名访问权限——把 coverage.xml 实测值
+        # 以 ::warning 注解输出，可在 GitHub 页面/API 直接读取，便于定位
+        # "文档声明 vs 实测" 差异（本步只读、不参与判定）。
+        if: matrix.python-version == '3.14'
+        run: |
+          python - <<'PY'
+          import xml.etree.ElementTree as ET
+          root = ET.parse("coverage.xml").getroot()
+          a = root.attrib
+          print(
+              "::warning title=coverage-measured::"
+              f"line-rate={a['line-rate']} branch-rate={a['branch-rate']} "
+              f"lines={a['lines-covered']}/{a['lines-valid']} "
+              f"branches={a['branches-covered']}/{a['branches-valid']}"
+          )
+          PY
 
       - name: Audit log redaction (4.2)
         # 4.2 日志脱敏门禁：扫描全仓 .py 日志调用点，参数含敏感字段名
