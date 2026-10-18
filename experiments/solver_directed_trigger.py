@@ -236,7 +236,12 @@ def _probe(code: str, module_name: str, fn_name: str, args: list[Any], timeout: 
         with open(probe, "w", encoding="utf-8") as f:
             f.write(_probe_source(module_name, fn_name, args_repr))
         try:
-            from src.utils.process_utils import run_with_timeout
+            # A08（2026-10-18 第三方评审 P0，凭证边界）：本探针执行的是**候选
+            # 代码**（LLM 生成/变异版本，不可信）；历史实现显式
+            # `{**os.environ, ...}` 会把宿主 LLM_*_API_KEY / OPENAI_API_KEY /
+            # AWS_* 等凭证注入探针子进程。改走统一最小环境构造器
+            # （untrusted_exec_env：最小白名单 + 探针必需 overrides）。
+            from src.utils.process_utils import run_with_timeout, untrusted_exec_env
 
             res = run_with_timeout(
                 [sys.executable, probe],
@@ -244,7 +249,10 @@ def _probe(code: str, module_name: str, fn_name: str, args: list[Any], timeout: 
                 capture_output=True,
                 text=True,
                 timeout=timeout,
-                env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1", "PYTHONPATH": tmp},
+                env=untrusted_exec_env(
+                    PYTHONDONTWRITEBYTECODE="1",
+                    PYTHONPATH=tmp,
+                ),
                 check=False,
             )
         except subprocess.TimeoutExpired:

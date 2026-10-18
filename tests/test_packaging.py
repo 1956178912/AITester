@@ -193,3 +193,207 @@ def test_setup_py_extras_groups_match_pyproject():
             f"extras[{group}] 依赖漂移：仅 setup.py 有 {sorted(setup_names - py_names)}，"
             f"仅 pyproject 有 {sorted(py_names - setup_names)}"
         )
+
+
+# ─── A13 / A14（2026-10-18 第三方评审 P1）：执行运行依赖 + 发行缺包导入 ────────
+# A13：Executor 子进程固定 `python -m pytest ... --cov`，pytest / pytest-cov
+# 此前只在 dev extra——干净基础 wheel 安装后执行路径缺模块。修复为显式
+# [execution] extra + 执行前能力检查（缺模块时结构化 execution_dependency_missing）。
+# A14：setup.py 只收 src*，src→experiments 的函数内导入在干净 wheel 下必须
+# 保守降级（mutation_advisor / nodes 的 N5 去重层），不得打断节点/路由。
+
+import sys  # noqa: E402
+
+
+def test_execution_extra_declares_executor_runtime_dependencies():
+    """A13：execution extra 必须含 Executor 子进程运行所需模块（双源一致）。"""
+    project = _pyproject_project()
+    execution = {_normalize_dep_name(dep) for dep in project.get("optional-dependencies", {}).get("execution", [])}
+    assert {"pytest", "pytest-cov", "pytest-timeout"} <= execution, (
+        f"execution extra 缺少执行运行依赖: {sorted({'pytest', 'pytest-cov', 'pytest-timeout'} - execution)}"
+    )
+    # 默认安装面刻意不扩大：pytest/pytest-cov 仍不得回核心 dependencies
+    core = {_normalize_dep_name(dep) for dep in project.get("dependencies", [])}
+    assert not ({"pytest", "pytest-cov"} & core)
+    # setup.py 回退路径同组存在（依赖集合一致性由上面的 extras 双源守卫锁定）
+    assert "execution" in _setup_py_extras_require()
+
+
+def test_execution_capability_available_in_project_env():
+    """A13：开发/CI 环境（requirements.lock 含 pytest/pytest-cov）能力检查可用。"""
+    from src.agents import executor_runtime as er
+
+    capability = er.check_execution_capability(require_coverage=True, require_timeout_plugin=True)
+    assert capability["available"] is True
+    assert capability["missing_modules"] == []
+    assert set(capability["required_modules"]) == {"pytest", "pytest_cov", "pytest_timeout"}
+    assert capability["install_hint"] == 'pip install "aitester[execution]"'
+
+
+def test_execution_capability_reports_missing_modules(monkeypatch):
+    """A13：缺模块时返回清晰诊断（缺失清单 + 安装指引），而非晦涩 rc=1。"""
+    from src.agents import executor_runtime as er
+
+    monkeypatch.setattr(
+        er,
+        "_probe_interpreter_modules",
+        lambda interpreter, modules, env=None: (
+            {"pytest": True, "pytest_cov": False, "pytest_timeout": True},
+            None,
+        ),
+    )
+    er.clear_execution_capability_cache()
+    try:
+        capability = er.check_execution_capability(require_coverage=True, require_timeout_plugin=False)
+        assert capability["available"] is False
+        assert capability["missing_modules"] == ["pytest_cov"]
+        assert capability["missing_packages"] == ["pytest-cov"]
+        assert capability["probe"] == "in_process"
+        error_info = er.build_execution_dependency_error(capability)
+        assert error_info["type"] == "execution_dependency_missing"
+        assert "aitester[execution]" in error_info["message"]
+        assert "pytest-cov" in error_info["detail"]
+        assert error_info["missing_modules"] == ["pytest_cov"]
+    finally:
+        er.clear_execution_capability_cache()
+
+
+def test_execution_capability_probe_failure_does_not_block():
+    """A13：探测基础设施自身失败 → available=True（交回执行层真实错误）。"""
+    from src.agents import executor_runtime as er
+
+    capability = er.check_execution_capability("/nonexistent/python-for-probe")
+    # 解释器不存在 → 子进程探测失败 → 保守放行（不误报缺模块）
+    assert capability["available"] is True
+    assert capability["probe"] == "failed"
+    assert capability["probe_error"]
+
+
+def test_command_python_interpreter_handles_kernel_sandbox_argv():
+    """A13：能力检查能从内核沙箱包装后的 argv 中定位解释器。"""
+    from src.agents import executor_runtime as er
+
+    assert er._command_python_interpreter(["pytest", "-q"]) is None  # 无解释器 → 跳过检查
+    assert er._command_python_interpreter([sys.executable, "-m", "pytest"]) == sys.executable
+    wrapped = ["sandbox-exec", "-p", "(version 1)(allow default)", sys.executable, "-m", "pytest"]
+    assert er._command_python_interpreter(wrapped) == sys.executable
+
+
+def test_executor_returns_clear_error_when_execution_deps_missing(monkeypatch, tmp_path):
+    """A13：干净基础 wheel（缺 pytest/pytest-cov）→ 结构化早退，不跑子进程。"""
+    from src.agents import executor_runtime as er
+    from src.agents.executor import ExecutorAgent
+
+    target = tmp_path / "cap_target_mod.py"
+    target.write_text("def add(a, b):\n    return a + b\n", encoding="utf-8")
+    monkeypatch.setattr(
+        er,
+        "check_execution_capability",
+        lambda *a, **k: {
+            "available": False,
+            "interpreter": sys.executable,
+            "required_modules": ["pytest", "pytest_cov"],
+            "missing_modules": ["pytest", "pytest_cov"],
+            "missing_packages": ["pytest", "pytest-cov"],
+            "install_hint": 'pip install "aitester[execution]"',
+            "probe": "in_process",
+            "probe_error": None,
+        },
+    )
+
+    def _must_not_run(*_a, **_k):
+        raise AssertionError("能力检查未通过时不得启动 pytest 子进程")
+
+    monkeypatch.setattr(er, "run_with_timeout", _must_not_run)
+    agent = ExecutorAgent(timeout=10, use_venv=False)
+    result = agent.execute("def test_add():\n    assert add(1, 2) == 3\n", str(target))
+
+    assert result["passed"] is False
+    assert result["error_info"]["type"] == "execution_dependency_missing"
+    assert 'pip install "aitester[execution]"' in result["output"]
+    assert result["error_info"]["missing_modules"] == ["pytest", "pytest_cov"]
+
+
+def test_mutation_advisor_degrades_when_experiments_missing(monkeypatch, caplog):
+    """A14：干净 wheel（无 experiments 包）下 mutation_advisor 节点不崩、feedback=None。"""
+    import logging as _logging
+    from unittest.mock import patch as _patch
+
+    from src.graph.mutation_advisor import _mutation_advisor_node
+
+    monkeypatch.setattr("src.graph.tracing._trace_node", lambda *a, **k: None)
+    with (
+        caplog.at_level(_logging.WARNING, logger="src.graph.mutation_advisor"),
+        _patch.dict(sys.modules, {"experiments": None, "experiments.mutation_testing": None}),
+    ):
+        update = _mutation_advisor_node(
+            {
+                "target_code": "def f():\n    return 1\n",
+                "generated_test": "def test_f():\n    assert f() == 1\n",
+                "iteration": 1,
+            }
+        )
+    assert update == {}  # 保守降级：不写 mutation_feedback、不抛异常
+    # 判别性：确实走了 ImportError 降级分支（而不是碰巧测量层返回空）
+    assert any("experiments 测量层不可用" in record.message for record in caplog.records)
+
+
+def test_src_has_no_module_level_experiments_imports():
+    """A14 全仓守卫：src/ 模块顶层不得 import experiments（wheel 不含该包）。"""
+    offenders: list[str] = []
+    for path in (PROJECT_ROOT / "src").rglob("*.py"):
+        if "__pycache__" in path.parts:
+            continue
+        tree = _ast.parse(path.read_text(encoding="utf-8"))
+        for node in tree.body:  # 仅模块顶层语句（函数内延迟导入不受影响）
+            names: list[str] = []
+            if isinstance(node, _ast.Import):
+                names = [alias.name for alias in node.names]
+            elif isinstance(node, _ast.ImportFrom):
+                names = [node.module or ""]
+            if any(name == "experiments" or name.startswith("experiments.") for name in names):
+                offenders.append(f"{path.relative_to(PROJECT_ROOT)}:{node.lineno}")
+    assert not offenders, f"src/ 顶层 import experiments 会打断干净 wheel 导入: {offenders}"
+
+
+def test_test_suite_dedup_degrades_when_experiments_missing(monkeypatch, caplog):
+    """A14：nodes N5 去重层在缺 experiments 时保守跳过（不打断 generator）。"""
+    import logging as _logging
+    from unittest.mock import patch as _patch
+
+    from src.graph.nodes import _apply_test_suite_dedup
+
+    monkeypatch.setenv("TEST_SUITE_DEDUP_ENABLE", "true")
+    code = "def test_x():\n    assert 1 == 1\n"
+    with (
+        caplog.at_level(_logging.WARNING, logger="src.graph.nodes"),
+        _patch.dict(sys.modules, {"experiments": None, "experiments.test_suite_minimize": None}),
+    ):
+        deduped, removed = _apply_test_suite_dedup(code)
+    assert deduped == code
+    assert removed == 0
+    assert any("去重层不可用" in record.message for record in caplog.records)
+
+
+def test_test_suite_dedup_switch_off_is_noop(monkeypatch):
+    """A14：默认关时 N5 去重层零行为变化（连 experiments 都不尝试导入）。"""
+    from unittest.mock import patch as _patch
+
+    from src.graph.nodes import _apply_test_suite_dedup
+
+    monkeypatch.delenv("TEST_SUITE_DEDUP_ENABLE", raising=False)
+    code = "def test_x():\n    assert 1 == 1\n"
+    with _patch.dict(sys.modules, {"experiments": None, "experiments.test_suite_minimize": None}):
+        assert _apply_test_suite_dedup(code) == (code, 0)
+
+
+def test_execution_capability_subprocess_probe_parses_result():
+    """A13：非当前进程解释器的子进程探测路径可解析（真实解释器 + 缺失模块）。"""
+    from src.agents import executor_runtime as er
+
+    modules, error = er._probe_modules_subprocess(
+        sys.executable,
+        ("pytest", "definitely_missing_module_a16"),
+    )
+    assert error is None
+    assert modules == {"pytest": True, "definitely_missing_module_a16": False}

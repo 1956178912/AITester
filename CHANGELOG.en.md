@@ -1,10 +1,71 @@
-> Last updated: 2026-10-18 (round U: **third-round independent review close-out (zero LLM)** — **A-05 gate-count caliber unification** (the `BASELINE.yaml` `gates` section is now authoritative: 26 scripts / ci.yml 24 unique references across 27 call sites) + **A-06 "0 failed" environment label** (normal-environment caliber + sandbox-host capability-missing attribution) + **A-08/A-09 test-environment hardening** (broker mkdir-shim defense + `ps`/production-profile sandbox capability probes with `skipif`) + **A-03/A-17 round-T drift write-up** (paper `sec:tround` + frozen E8 2×2 ablation pre-registration) + **P3 evaluation-integrity checklist v1 (IC-1..IC-8)** + **D3b Step A cross-file plan wiring** (dual switches default-off); third-round review report landed + full bilingual documentation sync; rounds T/S/R/Q/P/O/N/M/L/K registered the same day)
+> Last updated: 2026-10-18 (round V: **third-party independent review — 23-item remediation** — P0 A08 untrusted-execution credential isolation; P1 A01–A07 and A09–A17 (statistics identity / cache request identity / API routing / usage accounting / node identity / Windows process reaping / reproduction entry / provenance / cross-platform checksums / execution dependencies / wheel missing imports / fail→pass evidence); P2 A18–A23 (checksum manifests / corrupted artifact / CSV / retrieval count / LRU bound); `BASELINE.yaml` refreshed to collected 9130 / passed 9125; review M1–M9 acceptance scripts re-run; zero LLM spend. Previously round U: third-round independent review close-out (A-05/A-06/A-08/A-09 + A-03/A-17 write-up + P3 checklist + D3b Step A); rounds T/S/R/Q/P/O/N/M/L/K registered the same day)
 
 > **Language**: [简体中文](CHANGELOG.md) | English (this file)
 
 # Changelog
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+## [Unreleased] — 2026-10-18 Round V (third-party independent review — 23-item remediation: A08 P0 credential isolation + A01–A07/A09–A17 P1 + A18–A23 P2)
+
+> Round V responds to the third-party independent review (static audit on Windows; report: `AITester_审查报告.md`; the user confirmed all 23 findings as **100% accurate**). The reviewed commit `ff15a2f` is bit-for-bit identical to this round's starting point; each item is fixed with regression locks and the review's M1–M9 acceptance scripts are re-run. A standalone closure report is at `docs/reviews/THIRD_PARTY_REVIEW_2026-10-18_FIX_CLOSURE.md`.
+> Real LLM spend: **$0** (all fixes and verification are at the code / documentation / artifact level; no model calls, no container builds).
+
+### Security — A08 (P0): credential isolation for untrusted execution environments
+
+- **Root cause**: `nested_pytest_env` only removed `PYTEST_PLUGINS/PYTEST_ADDOPTS`, so the M1 scoring path, MDO and P2P scoring side-channels that execute LLM-generated tests/patches/probes inherited host credentials (`LLM_*_API_KEY` / `OPENAI_API_KEY` / `AWS_*` / `MYSQL_PASSWORD` / `SSH_AUTH_SOCK`, …).
+- **Fix**: `src/utils/process_utils.py` gains `untrusted_exec_env()` (reuses the `credential_scrub.build_minimal_env()` minimal allowlist + nested-pytest runtime keys + explicit overrides; `nested_pytest_env` kept as a compatibility alias). Wired into `experiments/_m1_metrics.py` (M1 scoring), `src/measurement/mdo.py` (`_run_probe`, formerly explicit `**os.environ`, and `_run_tests_on_code`), `src/tools/patch_rollback.py` (P2P, formerly no env), `experiments/solver_directed_trigger.py`, `experiments/spec_ambiguity.py` (candidate-code probes); detection gates / repair replay converge automatically through the central constructor and alias.
+- **Regression locks**: `tests/test_untrusted_exec_env.py` 34 cases (M4 pseudo-credential script reproduced verbatim, 15 credential families, final-child-env interception at 6 call sites, a real end-to-end "generated code reads a fake credential" probe, AST wiring lock); the review's M4 rerun prints `sentinel inherited: False`.
+
+### Fixed — A12 (P1): whole-tree reaping of Windows child processes
+
+- `_terminate_process_group` called `os.getpgid/killpg` unguarded on Windows → `AttributeError` escaped, bypassing kill/wait; the `orphan_guard` embedded watchdog had the same root cause.
+- Added an injectable `_is_windows()` platform dispatch: the Windows branch reaps the whole tree via `taskkill /T /F /PID` → falls back to `process.kill()` → bounds-waits the direct child (never hangs); the watchdog script branches on `os.name == "nt"`. The POSIX two-phase killpg path is unchanged verbatim.
+- **Regression locks**: `tests/test_windows_process_termination.py` 16 cases (M5 Mock Windows branch, must not touch POSIX group APIs, taskkill-failure fallback, missing-pid fallback, POSIX regression).
+
+### Fixed — A06/A07 (P1): task→program identity in cluster statistics and "latest None" pairing
+
+- **A06 root cause**: `_rebuilt_task_fingerprints/build_cluster_map` rebuilt the dataset without the real `max_pattern_repeat=2` and stripped the `s<seed>__` prefix before looking up a single-seed table — 223/261 rows of the 3-seed 261-row set were mis-mapped, producing a wrong 26-cluster structure (sign test 2:21:3, p≈6.6e-05).
+- **A06 fix**: three-tier identity resolution (archived `task_metadata` program identity first → map `s<seed>__` prefixes to the correct per-seed reconstruction → conservative `unmapped::` singletons when irreproducible); the rebuild cap is explicitly parameterized (default = the real main-batch value 2; `--cluster-max-pattern-repeat 0` restores the legacy caliber); reports disclose identity source and resolved counts.
+- **A06 acceptance**: main_batch 3 batches, pool-seeds **261 → 31 clusters / 0 unmapped**; aitester vs plain_llm_df detection **5:17:9, sign-test p=0.01690054** (matches archived AC4); the old wrong 26-cluster result is kept as a **negative lock** (reproducible only with explicit cap=None). The erroneous 26-cluster lock in `tests/test_cluster_robust_stats.py` is corrected.
+- **A07 root cause/fix**: `_pair_by_task` / `paired_contingency` skipped None before recording dedup — when the latest record was None the code fell back to an older measurable value; now dedupe first (latest batch wins) then exclude None (latest unmeasurable = the task is unmeasurable). M8 rerun gives `n_common=0`; symmetric regression locks added for latest-None and latest-valid.
+
+### Fixed — A09/A10/A11/A15/A22/A23 (P1/P2): cache identity, request chain, usage accounting, node identity, retrieval count, LRU bound
+
+- **A09**: exact cache keys and the semantic-cache index are now isolated by a **normalized effective request identity** (model/endpoint/effective default temperature/thinking/reasoning_effort/max_tokens/effective JSON mode/namespace/routing); the payload records `request_identity`; legacy cache files hit only under the historical default envelope (read-only fallback). M6 rerun: identity B no longer hits A.
+- **A10**: the production request chain now prefers the thread-local task assignment and falls back to the global chain (partial overrides are not injected, duplicates removed); a successful request records the real configuration and the cache payload carries `request_identity` + `response_identity` (lookup identity vs real response origin are distinguishable). M9-A10 rerun: first request = thread-local B, chain=[B, global-A].
+- **A11**: both the OpenAI and zai paths now **record usage as soon as a response arrives, before finish_reason/empty-response validation**; the retry helper gains `pre_retry_check` (budget re-check before retrying). M9-A11 rerun: two usages accumulate to 22 (15 + 7).
+- **A15**: nodes/clients are keyed by endpoint instance ID (`model@sha256(base_url)[:8]`) with the model name as an attribute; multiple providers of the same model are all retained with independent health/circuit/selection; the single-instance external key is unchanged, `remove_node_by_id()` is added, and Prometheus gains a `node_id` label. M9-A15 rerun: two providers of the same model → 2 nodes, independent health.
+- **A22 (P2)**: `retrieval_relevance` resolves the effective k once and counts relevant items as integers inside top-k (no more `len(refs)` back-derivation).
+- **A23 (P2)**: `_lru_tokens` is maintained on eviction, negative-cache stores and clear; its key set ⊆ the positive cache and is bounded by `_LRU_MAXSIZE`; M7 rerun `before clear 2 2` → `after clear 0 0`.
+
+### Fixed — A13/A14/A16 (P1): execution runtime dependencies, wheel missing imports, fail→pass evidence
+
+- **A13**: `pyproject.toml` + `setup.py` gain an `execution` extra (pytest/pytest-cov/pytest-timeout; the default install surface is not expanded); a pre-execution capability check returns `error_info.type=execution_dependency_missing` (with install guidance) instead of an obscure rc=1. Docs add the `pip install "aitester[execution]"` caliber (README/QUICKSTART/REPLICATION).
+- **A14**: the `experiments` import in `mutation_advisor` moves inside try with conservative degradation (no crash without the package, feedback=None); the `nodes.py` N5 dedup layer gets the same guard; all 12 src→experiments production import sites were audited.
+- **A16**: `run_pytest_with_retry` preserves per-attempt `{attempt,returncode,timed_out,passed}` (`execution_attempts` / `flaky_fail_then_pass`); `executor.py`/`executor_modes.py` propagate it; `_executor_node` writes `flaky_detected/flaky_unverified`, counts, and conservatively sets `test_passed=False` on an observed fail→pass (independent of FLAKY_CHECK_ENABLE); the `run_benchmark` single_agent baseline consumes the same evidence; `_m1_metrics` treats every M1 endpoint of `flaky_unverified=True` tasks as unmeasurable (None) and passes the flaky keys through — finally implementing the long-documented "M1 unmeasurable for flaky tasks" promise in `state.py`/`flaky_gate.py`.
+
+### Fixed — A02/A03/A17/A18/A19/A20 (P1/P2): reproduction entry, provenance, cross-platform checksums, corrupted artifact
+
+- **A02**: `reproduce.sh` gains fail-closed dataset dispatch (examples/swe_bench/synthetic; unknown dataset exits immediately with an error); synthetic forwards `--task-count/--max-pattern-repeat/--seed` (full = main batch 87/2/42, main-batch three arms); a bash 3.2 multibyte-variable hazard is fixed; REPLICATION/docs/INDEX updated.
+- **A03**: `run_benchmark` parses `GIT_SHA` from `.repro_provenance`: without git it becomes the provenance source (`git_sha_source="repro_provenance"`); with git both are recorded and checked for consistency; `unknown` is not treated as a SHA; Dockerfile.repro/REPLICATION updated.
+- **A17**: repository-root `.gitattributes` marks evidence directories `-text` (checkout = repository = LF, byte-faithful on all platforms); `checksum_results.py` distinguishes raw / EOL-only (reported as WARN, not tampering by default) / content mismatch (still FAIL), with a new `--strict-bytes`.
+- **A18**: manifests now cover only actually distributed files (`--write/--verify` exclude `__pycache__`/pyc uniformly; new `--exclude`); 9 stale entries removed and 3 missing ones added at the entry level. Clean-checkout simulation: 64 manifests / 7,048 entries all raw-identical, 64/64 verify pass.
+- **A19**: `recommendations.csv` rewritten with the standard csv writer to fix row 19 quoting (12 columns restored; all other fields semantically unchanged).
+- **A20**: the corrupted trace JSONL root cause is that trace serializes with `json.dumps` and then applies `mask_sensitive_info` to the whole line, while `_SENSITIVE_PATTERNS[3]` greedily swallows the JSON closing tail. Fix: tighten the credential value character class + change trace to "structure-aware redaction before serialization" + a `json.loads` structural guard before writing; the corrupted artifact is **preserved byte-for-byte** and documented in the batch README erratum (line 10 / column 201 / root cause / recheck command).
+
+### Docs — A01/A04/A05/A21 (P1/P2): conclusion contraction, protocol sync, API examples, citation title
+
+- **A01**: the status register and prior review recorded the point estimate +2.86pp crossing the threshold as "non-inferiority holds / loss comes from removing implementation code" → changed to a point-estimate threshold marker (`independent_marker`) + uncertainty disclosure (n=35, 4:3, paired bootstrap 95% CI [−11.43,+17.14]pp, one-sided lower bound −8.57pp, −5pp margin not excluded); causal claims are demoted to candidate hypotheses pending verification; historical reviews get dated errata (original text preserved).
+- **A04**: Algorithm 3 rewritten in zh/en to the current Detection-First Loop (locked tests, two-sided F2P, three-valued terminal states, red-regression gate against "changing the test to get green"); the "single-sided oracle failure = deterministic detection" wording is corrected; `mas_compilation` "net-negative is now a multi-party consensus" becomes a side-by-side qualified statement.
+- **A05**: API reference examples in zh/en rewritten against current signatures (`compute_cyclomatic_complexity` / `apply_patch_to_code(original_code, patch) -> tuple` / `replace_function_code(..., new_function_code)`); stale "RAG/multi-candidate enabled by default" notes corrected (source of truth = reproduce.sh defaults).
+- **A21**: the Carleton title in both READMEs is corrected to *Comparing Automated Unit Test Generation Approaches for a Java Library Management System*.
+
+### Changed — baseline refresh and verification
+
+- `BASELINE.yaml` tests: collected **9130** = passed **9125** + skipped 5 + failed 0 (round V adds 169 cases); coverage refresh in the same file's coverage section.
+- Review M1–M9 rerun: M1 numbers bit-identical (38/240/21, 4/261/0, 117/261/0, 12:80, 31 archived templates); M2 manifests 69 / 7,639 raw matches / 0 missing / 0 mismatch (pre-fix 9 missing); M3 CSV 12/12, corrupted JSONL documented and future writes guarded; M4/M6/M7/M8/M9 assertions all pass (M5 Windows branch covered by Mock unit tests).
+- Gates: `make docs-check`, `check_baseline_numbers`, `check_baseline`, `check_artifact_doc_consistency`, `check_checksum`, `check_zero_assert_tests`, `check_env_budget --check` etc. all green (full commands and results in `docs/reviews/THIRD_PARTY_REVIEW_2026-10-18_FIX_CLOSURE.md`).
 
 ## [Unreleased] — 2026-10-18 Round U (third-round independent-review close-out: A-05/A-06/A-08/A-09 + A-03/A-17 drift write-up + P3 evaluation-integrity checklist + D3b Step A wiring, zero LLM)
 

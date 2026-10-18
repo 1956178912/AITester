@@ -34,11 +34,18 @@ from src.agents.llm_client import (
     _is_zai_compatible,
     _llm_cache_dir,
     _llm_cache_enabled,
+    _openai_extra_body,
+    _raise_if_budget_exceeded,
+    _record_actual_request_config,
     _record_response_usage,
     _redact_log_text,
     _retry_with_exponential_backoff,
     cache_creator_ok,
+    clear_last_request_config,
+    get_last_request_config,
     json_output_mode_enabled,
+    request_identity_fingerprint,
+    request_identity_material,
 )
 from src.agents.rogue_monitor import rogue_monitor_enabled
 from src.utils.env_utils import env_flag_opt_out
@@ -161,10 +168,21 @@ def _lru_store(key: tuple[str, str, float | None], value: str | None, tokens: in
 
     非 None 值写入 LRU 正缓存的同时清除该键的负缓存条目（文件写入成功
     = "该键文件不存在"判定失效，TTL 窗口内同键调用不得再跳过文件重读）。
+
+    A23（2026-10-18 第三方审查 P2）：`_lru_tokens` 是 `_lru_cache` 的并行
+    记账字典（缓存命中时还原"避免的 token"），历史上只在写入时赋值——
+    正缓存按 `_LRU_MAXSIZE` 淘汰 / `_lru_clear()` 清空时 tokens 字典既不
+    淘汰也不清空，长程 benchmark 下成为永久增长的泄漏。现与 `_lru_cache`
+    严格同步：淘汰条目时同步弹出其 token 记录；写负缓存（条目转为负缓存，
+    正缓存失效）时同样弹出残留 token；容量由正缓存淘汰唯一驱动，故
+    `_lru_tokens` 天然受 `_LRU_MAXSIZE` 约束（键集 ⊆ `_lru_cache` 键集）。
     """
     with _lru_lock:
         if value is None:
             _lru_negatives[key] = time.time()
+            # 条目转入负缓存：正缓存值已不存在，token 记录失去宿主 → 同步移除
+            # （防"先正后负"序列残留孤儿 token 键）
+            _lru_tokens.pop(key, None)
             # 2026-09-26 round10 P2：负缓存与正缓存同容量上限（_LRU_MAXSIZE，
             # FIFO 淘汰）——旧实现无 cap，长程 benchmark（数千任务 × 温度
             # 变体）下从未被查的负缓存条目永久驻留，内存无界增长。超限
@@ -178,13 +196,21 @@ def _lru_store(key: tuple[str, str, float | None], value: str | None, tokens: in
         _lru_cache.move_to_end(key)
         _lru_negatives.pop(key, None)
         while len(_lru_cache) > _LRU_MAXSIZE:
-            _lru_cache.popitem(last=False)
+            evicted_key, _evicted_value = _lru_cache.popitem(last=False)
+            # A23：token 字典与正缓存同步淘汰（键集保持 ⊆ 正缓存键集）
+            _lru_tokens.pop(evicted_key, None)
 
 
 def _lru_clear() -> None:
-    """清空进程内 LRU（缓存目录/开关切换或缓存文件被外部清理时调用）。"""
+    """清空进程内 LRU 与全部辅助结构（缓存目录/开关切换或外部清理时调用）。
+
+    A23：清空范围必须覆盖 `_lru_tokens`（并行 token 记账）——M7 验收：
+    `_LRU_MAXSIZE=2` 连续写 3 条后 `len(_lru_cache), len(_lru_tokens)` 为
+    `2 2`（此前 `2 3`），clear 后为 `0 0`（此前 `0 3`）。
+    """
     with _lru_lock:
         _lru_cache.clear()
+        _lru_tokens.clear()
         _lru_negatives.clear()
 
 
@@ -194,22 +220,161 @@ def _budget_exceeded_error() -> Exception:
     D1（N-5）：按快照的实际生效单位取数——USD 口径取 consumed_usd/usd_limit
     （历史上无 USD 生产记账，该分支不可达；USD 接线后必须同口径，否则 USD
     触发时异常消息会把 token 数当美元展示，可诊断性失效）。
-    """
-    from src.budget.cost_budget import BudgetExceededError, get_budget_stats
 
-    stats = get_budget_stats()
-    unit = str(stats.get("unit", "none"))
-    if unit == "usd":
-        return BudgetExceededError(
-            consumed=float(stats.get("consumed_usd", 0.0)),
-            limit=float(stats.get("usd_limit", 0.0)),
-            unit="usd",
-        )
-    return BudgetExceededError(
-        consumed=int(stats.get("consumed_tokens", 0)),
-        limit=int(stats.get("token_limit", 0)),
-        unit=unit,
-    )
+    A11（2026-10-18 第三方审查 P1）：单一实现在 `llm_client._budget_exceeded_error`
+    ——zai 路径重试前预算复查也要抛同一异常，两处不得各持一份单位口径。
+    """
+    from src.agents.llm_client import _budget_exceeded_error as _factory
+
+    return _factory()
+
+
+# ─── A09：有效请求身份（精确缓存键 / 语义索引分区）─────────────────────────
+def _effective_request_identity(
+    temperature: float | None,
+    json_mode: bool,
+    complexity_class: str | None = None,
+) -> dict[str, Any]:
+    """构造规范化的"有效请求身份"（A09，2026-10-18 第三方审查 P1）。
+
+    历史缺陷（base_agent.py:386 一带）：精确缓存键 = prompt + system +
+    （仅显式 temperature）+ json_mode 布尔 + （隔离开启时）模型名 + namespace，
+    **遗漏实际操作参数量**：调用方未显式传 temperature 时实际生效的默认
+    温度（config.TEMPERATURE）、`_openai_extra_body()` 注入的
+    thinking / reasoning_effort / max_tokens、`json_output_mode_enabled()`
+    与 json_mode 共同决定的 JSON 绑定实际值、以及真实请求端点（同 model_name
+    多 provider 场景）。重启进程/切换环境变量后，同一 prompt 仍可能命中
+    旧配置下写入的响应（缓存串味）。
+
+    本函数把"真实请求将携带/生效的全部身份材料"规范化为 dict（供
+    `request_identity_material()` 稳定哈希与缓存 payload 记录；语义缓存用
+    `request_identity_fingerprint()` 同一材料做分区）。字段：
+
+    - ``v``：身份版本号（材料语义升级时递增，旧键自然失效）；
+    - ``model`` / ``endpoint``：**真实请求链首个配置**的模型与端点
+      （`_get_all_api_configs()` 已按 A10 改为线程局部配置优先；端点经
+      脱敏，凭证不进入键材料）。`AITESTER_CACHE_ISOLATE_MODEL=0` 显式
+      退回"跨模型复用"历史口径时两者记 ``None``（用户显式选择不隔离）；
+    - ``temperature``：实际生效采样温度 = 显式覆盖值，否则 config.TEMPERATURE；
+    - ``json_object``：JSON 输出**实际生效值** = json_mode 且
+      LLM_JSON_MODE≠off；
+    - ``thinking`` / ``reasoning_effort`` / ``max_tokens``：请求体实际注入值
+      （来自 `_openai_extra_body()`，未配置为 None）；
+    - ``namespace``：AITESTER_CACHE_NAMESPACE（多 seed 实验隔离材料）；
+    - ``routing``：复杂度路由档位（复杂/简单档会改变"优先请求哪个端点实例"，
+      属于有效请求身份的一部分；None = 历史默认路由）。
+
+    Args:
+        temperature: 调用方显式温度覆盖（None = 使用默认温度）。
+        json_mode: 调用点是否请求结构化 JSON 输出。
+        complexity_class: 复杂度路由档位（"simple"/"medium"/"complex"/None）。
+
+    Returns:
+        可 JSON 序列化的身份 dict（同一请求设置必产出逐字节相同材料）。
+    """
+    from src.utils.logging_utils import mask_sensitive_info
+
+    configs = _get_all_api_configs()
+    primary: tuple[str, str, str] | None = configs[0] if configs else None
+    isolate = env_flag_opt_out("AITESTER_CACHE_ISOLATE_MODEL")
+    extra = _openai_extra_body()
+    return {
+        "v": 2,
+        "model": (primary[2] if primary else None) if isolate else None,
+        "endpoint": (mask_sensitive_info(primary[1]) if primary else None) if isolate else None,
+        "temperature": round(float(temperature if temperature is not None else TEMPERATURE), 6),
+        "json_object": bool(json_mode and json_output_mode_enabled()),
+        "thinking": extra.get("thinking"),
+        "reasoning_effort": extra.get("reasoning_effort"),
+        "max_tokens": extra.get("max_tokens"),
+        "namespace": os.environ.get("AITESTER_CACHE_NAMESPACE", "").strip(),
+        "routing": complexity_class,
+    }
+
+
+def _exact_cache_file(identity: dict[str, Any], user_message: str, system_prompt: str) -> str:
+    """按规范化的有效请求身份计算精确缓存文件路径（A09）。
+
+    键材料 = `user_message \\x00 system_prompt \\x00 id:<身份稳定材料>`；文件名
+    取 md5 前 16 位（与历史一致）。身份材料参与后，不同模型/端点/温度/
+    thinking/JSON/输出上限/namespace 的组合必然映射到不同文件。
+
+    Args:
+        identity: `_effective_request_identity()` 的返回值。
+        user_message: 用户消息文本。
+        system_prompt: System Prompt 文本。
+
+    Returns:
+        规范化的缓存文件绝对路径（目录来自 `_llm_cache_dir()`）。
+    """
+    material = request_identity_material(identity)
+    cache_key = f"{user_message}\x00{system_prompt}\x00id:{material}"
+    digest = hashlib.md5(cache_key.encode("utf-8")).hexdigest()[:16]
+    return os.path.normpath(os.path.join(_llm_cache_dir(), f"{digest}.json"))
+
+
+def _legacy_cache_file(
+    user_message: str,
+    system_prompt: str,
+    temperature: float | None,
+    json_mode: bool,
+) -> str:
+    """按 A09 修复前的历史公式重算旧缓存文件路径（仅用于只读兼容回退）。
+
+    历史键材料（逐字节复刻，顺序与旧实现一致）：prompt + \\x00 + system +
+    （显式 temperature）+（json_mode=True 时 jm1）+（隔离开启且模型名有效时
+    m<model>）+（namespace 非空时 ns<namespace>），最后 md5 前 16 位为文件名。
+    """
+    legacy_key = f"{user_message}\x00{system_prompt}"
+    if temperature is not None:
+        legacy_key += f"\x00t{temperature}"
+    if json_mode:
+        legacy_key += "\x00jm1"
+    if env_flag_opt_out("AITESTER_CACHE_ISOLATE_MODEL"):
+        from src.agents.llm_client import get_first_valid_model_name
+
+        _iso_model = get_first_valid_model_name()
+        if _iso_model:
+            legacy_key += f"\x00m{_iso_model}"
+    _cache_ns = os.environ.get("AITESTER_CACHE_NAMESPACE", "").strip()
+    if _cache_ns:
+        legacy_key += f"\x00ns{_cache_ns}"
+    digest = hashlib.md5(legacy_key.encode("utf-8")).hexdigest()[:16]
+    return os.path.normpath(os.path.join(_llm_cache_dir(), f"{digest}.json"))
+
+
+def _legacy_cache_identity_compatible(identity: dict[str, Any]) -> bool:
+    """旧格式缓存文件（A09 修复前写入）是否仍可作为只读命中候选。
+
+    **旧缓存兼容策略（显式声明与边界）**：旧文件只记录了 prompt/system/
+    response/tokens/creator_uid，没有记录写入时的有效请求身份，因此**无法
+    自证**它是在当前配置下产生的。为兼顾"历史缓存不整体失效"与"不得串味"，
+    仅在当前身份处于**历史默认包络**时接受旧文件：
+
+    - `json_object` 为 False（无 JSON 绑定；旧 jm1 键无法证明有效开关一致）；
+    - thinking 恰为默认 disabled、未设 reasoning_effort / max_tokens
+      （任何输出控制生效都属"身份充足"，此时只用新键、旧文件不命中）；
+    - namespace 为空（多 seed 实验身份显式隔离，不回退旧文件）；
+    - routing 为 None（复杂度路由会改变优先端点实例，旧键未覆盖）。
+
+    满足条件时仍存在**有界残余风险**（已在 docstring 说明）：旧文件写入后
+    若仅改变了不参与旧键的默认 TEMPERATURE / 端点（同 model 换 provider）
+    再改回默认包络，旧条目理论上仍可能被命中。该风险是"旧缓存可复用"的
+    代价；正式实验应显式 `AITESTER_LLM_CACHE=0`（仓库既有约定）或清理
+    缓存目录。反之，任何"身份充足"的配置（thinking/reasoning/max_tokens/
+    JSON/namespace 改变）都不会回退旧文件——旧缓存不误命中。
+    """
+    if identity.get("json_object"):
+        return False
+    if identity.get("thinking") != {"type": "disabled"}:
+        return False
+    if identity.get("reasoning_effort") is not None:
+        return False
+    if identity.get("max_tokens") is not None:
+        return False
+    if identity.get("routing") is not None:
+        return False
+    return not identity.get("namespace")
 
 
 def _reorder_api_groups_by_complexity(
@@ -339,6 +504,21 @@ class BaseAgent:
                 与历史非 JSON 口径的响应严格隔离（同 prompt 不同模式
                 不共享缓存条目）。False 时全路径与历史逐字节一致。
 
+        缓存身份（A09，2026-10-18 第三方审查 P1）：
+        精确缓存键由**规范化的有效请求身份**派生（`_effective_request_identity`：
+        实际生效温度、thinking/reasoning_effort/max_tokens、JSON 输出实际绑定值、
+        真实请求链首选的模型与端点、实验 namespace、复杂度路由档位），语义
+        缓存按同一身份的指纹分区。不同请求设置（含隐式默认值）不再共用缓存条目。
+
+        旧缓存兼容策略（显式声明，勿删）：A09 之前的旧缓存文件没有身份字段、
+        无法自证写入配置；本方法仅在当前身份处于**历史默认包络**（未绑定 JSON、
+        thinking=disabled、无 reasoning_effort/max_tokens、namespace 为空、
+        无复杂度路由）时，
+        按旧公式重算文件路径做**只读回退**，且要求 prompt/system/creator 全量
+        校验一致。任何"身份充足"的配置（上述任一项非默认 / 显式 JSON 模式）
+        只用新键，**旧文件不命中**（不误命中优先于旧缓存复用率）。见
+        `_legacy_cache_identity_compatible` 的残余风险说明。
+
         Returns:
             LLM 返回的文本字符串（来自缓存或实时调用）。
         """
@@ -372,59 +552,33 @@ class BaseAgent:
                 return self._call_llm(user_message, max_retries, temperature=temperature, **_jm_kwargs)
             return self._call_llm(user_message, max_retries, **_jm_kwargs)
 
-        # 生成缓存键（基于 user_message + system_prompt + temperature）
-        # 使用 hashlib.md5 替代 hash()，确保跨会话稳定命中（hash() 在 Python 3.3+ 默认随机化）
-        # 说明：键不含 model（M8：基线/实验场景下跨模型调用时，缓存的是
-        # "成功的 LLM 输出文本"；同一 prompt 在不同模型下的输出可能不同，
-        # 但配额故障转移/模型切换后命中旧结果仍是该 prompt 的合理回答，
-        # 且不再消耗 token——历史口径保持。正式实验须显式 AITESTER_LLM_CACHE=0
-        # 以消除跨模型串味；此注释仅说明设计意图，不改变默认行为）。
-        # 键材料用 \x00 分隔（user_message 与 system_prompt 均可能含冒号）；
-        # 读缓存时先比长度再比全量文本，命中路径零额外成本
-        # 写入缓存记录 temperature（None 归一为默认 TEMPERATURE）：读取校验时
-        # 同键同材料重算，命中要求三要素全一致，语义收敛
-        cache_key = f"{user_message}\x00{self.system_prompt}"
-        if temperature is not None:
-            cache_key += f"\x00t{temperature}"
-        # 2026-10-14 LLM_JSON_MODE：json_mode 计入键材料——同 prompt 的
-        # JSON 模式响应与非 JSON 历史响应严格隔离（不跨模式串味）。仅
-        # True 时追加，False 时键与历史逐字节一致（旧缓存照常命中）。
-        if json_mode:
-            cache_key += "\x00jm1"
-        cache_hash = hashlib.md5(cache_key.encode("utf-8")).hexdigest()[:16]  # 取前16位十六进制，固定长度
-        cache_file = os.path.normpath(os.path.join(_llm_cache_dir(), f"{cache_hash}.json"))
+        # ─── A09（2026-10-18 第三方审查 P1）：缓存键材料 = 规范化有效请求身份 ───
+        # 历史键 = prompt + system +（仅显式 temperature）+ json_mode 布尔 +
+        # （隔离开启时）首个 model_name + namespace——**遗漏实际生效参数**：
+        # 默认温度、thinking/reasoning_effort/max_tokens（_openai_extra_body 注
+        # 入）、JSON 绑定实际生效值、真实请求端点。切配置重启后同一 prompt 仍
+        # 可能命中旧响应（跨模型/参数/seed 串味）。现改为：
+        #   identity = _effective_request_identity(temperature, json_mode)
+        #   键材料   = user_message \x00 system_prompt \x00 id:<身份规范材料>
+        # 同一身份必产出逐字节相同材料（排序 JSON），不同身份必不同文件。
+        #
+        # 旧缓存兼容策略（显式，见 _legacy_cache_identity_compatible）：
+        # 旧文件无身份字段、无法自证，故仅在"当前身份处于历史默认包络"
+        # 时做只读回退；身份充足（thinking/reasoning/max_output/JSON/namespace
+        # 任一非默认、或显式 JSON 模式）时只用新键，旧文件不误命中。
+        identity = _effective_request_identity(temperature, json_mode, complexity_class)
+        identity_fp = request_identity_fingerprint(identity)
+        cache_file = _exact_cache_file(identity, user_message, self.system_prompt)
+        cache_key = f"{user_message}\x00{self.system_prompt}\x00id{identity_fp}"
         lru_key = (cache_file, user_message, temperature)
 
-        # M8（2026-09-29 审查 P0）：跨模型缓存隔离开关。
-        # R13（2026-09-30 独立审查 P0）起**默认开启**（"1"）：缓存键加入
-        # "当前配置链中首个有效 model_name"作为隔离材料——同一 prompt 在
-        # 不同 model 命名空间下不再共享缓存条目（消除跨模型串味，保证
-        # A/B 对照与可复现性）。设 AITESTER_CACHE_ISOLATE_MODEL=0 可显式
-        # 退回"不隔离"历史口径（配额故障转移/模型切换复用旧结果的场景）。
-        if env_flag_opt_out("AITESTER_CACHE_ISOLATE_MODEL"):
-            from src.agents.llm_client import get_first_valid_model_name
-
-            _iso_model = get_first_valid_model_name()
-            if _iso_model:
-                cache_key = f"{cache_key}\x00m{_iso_model}"
-                cache_hash = hashlib.md5(cache_key.encode("utf-8")).hexdigest()[:16]
-                cache_file = os.path.normpath(os.path.join(_llm_cache_dir(), f"{cache_hash}.json"))
-                lru_key = (cache_file, user_message, temperature)
-
-        # X1（2026-10-05 审查 P0-4a）：实验命名空间隔离。
-        # 背景：缓存键（prompt+system+temperature+model）不含实验 seed，
-        # seed 也不传给 API——多 seed 复跑在缓存开启时是同一响应的确定性
-        # 重放，"独立重复"主张不成立（统计独立性失效）。修复口径：
-        # AITESTER_CACHE_NAMESPACE 非空时作为额外键材料参与哈希——
-        # run_benchmark 的 CLI 入口在 seed 指定时自动设为 "seed<N>"
-        # （不同 seed → 不同命名空间 → 各自真实调用；同 seed 复跑仍共享
-        # 缓存 = 可复现性特性保留）。默认空 = 键与历史逐字节一致，零行为变化。
-        _cache_ns = os.environ.get("AITESTER_CACHE_NAMESPACE", "").strip()
-        if _cache_ns:
-            cache_key = f"{cache_key}\x00ns{_cache_ns}"
-            cache_hash = hashlib.md5(cache_key.encode("utf-8")).hexdigest()[:16]
-            cache_file = os.path.normpath(os.path.join(_llm_cache_dir(), f"{cache_hash}.json"))
-            lru_key = (cache_file, user_message, temperature)
+        # A09 旧格式缓存只读回退路径：默认包络下才计算（默认测试/生产环境
+        # 通常命中此分支，历史缓存条目继续可用）；默认包络之外为 None。
+        legacy_file: str | None = None
+        if _legacy_cache_identity_compatible(identity):
+            _legacy_file = _legacy_cache_file(user_message, self.system_prompt, temperature, json_mode)
+            if _legacy_file != cache_file:
+                legacy_file = _legacy_file
 
         # 快路径 1：进程内 LRU 命中（零磁盘 IO）
         hit = _lru_lookup(lru_key)
@@ -454,7 +608,11 @@ class BaseAgent:
         if get_semantic_cache_stats()["enabled"]:
             # 节流 60s 的目录补建（嵌入后端缺失时全路径静默降级，零行为变化）
             maybe_rebuild_semantic_index(_llm_cache_dir())
-            _sem_hit = find_semantic_cache(cache_file, user_message)
+            # A09：语义索引按**同一有效请求身份分区**检索（identity_fp）——
+            # 历史实现 index.find(prompt) 在全索引上找余弦相似项，同 prompt
+            # 的向量相似度可为 1，切模型/system/seed 后仍复用旧身份响应
+            # （跨模型/seed 串味）。分区后只有身份完全一致的条目参与命中。
+            _sem_hit = find_semantic_cache(cache_file, user_message, identity_key=identity_fp)
             if _sem_hit is not None:
                 _sem_resp = _sem_hit[1]
                 # D2 收口（2026-10-16 第十九轮评审）：语义缓存命中同样还原
@@ -479,8 +637,10 @@ class BaseAgent:
                 logger.info("5.1 语义缓存命中（复用响应，相似度 >= 阈值）: %s", cache_key[:50])
                 return _sem_resp
 
-        # 快路径 2：LRU 未命中——完整读文件校验 prompt/system 一致才命中
-        # （防 md5 前16位碰撞误命中），命中后回填 LRU。
+        # 快路径 2：LRU 未命中——完整读**新格式**文件（含身份校验）才命中
+        # （防 md5 前16位碰撞误命中 / 跨身份串味），命中后回填 LRU。
+        # 命中要求：prompt/system 全量一致 + 写入时的 request_identity 与本次
+        # 身份严格相等（A09）+ 创建者归属校验（Clinejection 教训）。
         # 负缓存语义（0.10）：负缓存命中（TTL 窗口内）时跳过文件重读
         # （省"读不存在的文件"IO），过期后重新读文件（恢复外部写入/
         # 目录变更可读的正确性）。文件仍是事实来源，负缓存仅省 IO。
@@ -494,6 +654,8 @@ class BaseAgent:
                     len(cached_data.get("prompt", "")) == len(user_message)
                     and cached_data.get("prompt") == user_message
                     and cached_data.get("system") == self.system_prompt
+                    # A09：身份材料严格相等（旧格式文件无该字段 → 不命中）
+                    and cached_data.get("request_identity") == identity
                     # 19. 创建者归属校验（Clinejection 教训）：uid 可得且条目
                     # 携带非空 creator_uid 时，非本用户条目不命中并告警（防
                     # 共享 CI / 多用户机器的跨用户缓存投毒）。历史无该字段的
@@ -518,6 +680,39 @@ class BaseAgent:
             except Exception as e:
                 logger.debug("缓存读取失败: %s", e)
 
+        # A09 旧格式缓存（修复前写入、无 request_identity 字段）只读回退：
+        # 仅在历史默认包络（_legacy_cache_identity_compatible）下尝试，并以
+        # 旧公式重算文件路径 + prompt/system/creator 全量校验。命中不回写
+        # 文件（只读兼容），但回填**新键** LRU 与 avoided-token 记账，后续
+        # 同调用零磁盘 IO。身份充足（thinking/reasoning/max_output/JSON/
+        # namespace 生效）时本分支为 None —— 旧文件不误命中。
+        # 说明：本回退**不写负缓存**（`_lru_negatives` 只服务新格式键）——
+        # 旧文件是过渡期产物，一次失败的 open 相对一次 LLM 调用可忽略；且
+        # 避免旧键负缓存条目与"写成功后负缓存已清除"的既有口径混淆。
+        if legacy_file is not None:
+            try:
+                with open(legacy_file, encoding="utf-8") as f:
+                    legacy_data = json.load(f)
+                if (
+                    len(legacy_data.get("prompt", "")) == len(user_message)
+                    and legacy_data.get("prompt") == user_message
+                    and legacy_data.get("system") == self.system_prompt
+                    # 新格式文件不得走旧回退（防身份材料被绕过校验）
+                    and "request_identity" not in legacy_data
+                    and cache_creator_ok(legacy_data.get("creator_uid"))
+                ):
+                    _legacy_tokens = int(legacy_data.get("tokens", 0) or 0)
+                    _lru_store(lru_key, legacy_data["response"], _legacy_tokens)
+                    from src.budget.token_usage import record_cache_hit_usage
+
+                    record_cache_hit_usage(_legacy_tokens)
+                    logger.info("LLM 缓存命中 (旧格式只读回退): %s", cache_key[:50])
+                    return legacy_data["response"]
+            except FileNotFoundError:
+                pass  # 无旧格式文件：正常未命中（不写负缓存，见上）
+            except Exception as e:
+                logger.debug("旧格式缓存读取失败: %s", e)
+
         # 未命中，执行实际调用（仅在成功时写缓存；失败如 403 额度用尽则不缓存）
         from src.agents.llm_client import record_cache_hit
 
@@ -529,6 +724,10 @@ class BaseAgent:
         from src.budget.token_usage import get_usage as _get_usage
 
         _before_total = _get_usage().total_tokens
+        # A10：清空"最近成功请求"记录后再调用——故障转移场景下真正返回响应的
+        # 端点可能不是请求链首选；_call_llm 成功时会记录真实配置供下方 payload
+        # 写入 response_identity（provenance/cache 标签取真实请求身份）。
+        clear_last_request_config()
         if complexity_class is not None:
             if temperature is not None:
                 response = self._call_llm(
@@ -541,6 +740,17 @@ class BaseAgent:
         else:
             response = self._call_llm(user_message, max_retries, **_jm_kwargs)
         _call_tokens = max(0, _get_usage().total_tokens - _before_total)
+        # A10：真实响应来源（故障转移后可能 ≠ 请求链首选）。仅内存配置，写入
+        # payload 时只保留脱敏端点 + 模型名（api_key 绝不落盘）。
+        _actual_config = get_last_request_config()
+        _response_identity: dict[str, Any] | None = None
+        if _actual_config is not None:
+            from src.utils.logging_utils import mask_sensitive_info
+
+            _response_identity = {
+                "model": _actual_config[2],
+                "endpoint": mask_sensitive_info(_actual_config[1]),
+            }
 
         # 写入缓存（文件是事实来源；写成功则同步回填 LRU 供后续快路径）
         # 0.10 正确性：写成功 = "该键文件现已存在"，回填 LRU 时同步清除
@@ -567,6 +777,15 @@ class BaseAgent:
                 "prompt": user_message,
                 "system": self.system_prompt,
                 "response": response,
+                # A09：写入时的规范化有效请求身份——读侧命中要求严格相等
+                # （旧格式条目无该字段 → 只可能走默认包络的只读回退）。
+                # 身份含实际生效温度/thinking/reasoning/max_tokens/JSON 绑定/
+                # 模型/端点/namespace，重启进程或切配置后不再误命中。
+                "request_identity": identity,
+                # A10：真实响应来源（模型 + 脱敏端点）。请求首选端点失败而
+                # 故障转移到备用端点时与 request_identity 不同；纯 provenance
+                # 字段，不参与命中判定（api_key 不落盘）。
+                "response_identity": _response_identity,
                 # P0 止血（缓存记账缺口）：记录本次实际调用的 token 总数，
                 # 供下次缓存命中时还原"若未命中会消耗"的量（见命中路径的
                 # record_cache_hit_usage 读取）。
@@ -604,7 +823,9 @@ class BaseAgent:
                 from src.agents.semantic_cache import _semantic_cache_enabled, get_semantic_index
 
                 if _semantic_cache_enabled():
-                    get_semantic_index().upsert(cache_file, user_message, response)
+                    # A09：新条目按本次有效请求身份分区入索引（与 find 分区
+                    # 同源 identity_fp），下轮近似 prompt 只在同身份内命中。
+                    get_semantic_index().upsert(cache_file, user_message, response, identity_key=identity_fp)
             except Exception:
                 logger.debug("语义缓存 upsert 失败（保守跳过，不影响文件缓存）", exc_info=True)
         except Exception as e:
@@ -671,7 +892,7 @@ class BaseAgent:
         # 局部标志）时拒绝本次调用（快速失败，不再空转烧 token）。
         # 开关 COST_BUDGET_ENABLE 默认 false：is_budget_exceeded() 恒 False，
         # 历史口径零变化。
-        from src.budget.cost_budget import is_budget_exceeded
+        from src.budget.cost_budget import BudgetExceededError, is_budget_exceeded
 
         if is_budget_exceeded():
             raise _budget_exceeded_error()
@@ -716,10 +937,17 @@ class BaseAgent:
                 # 每次尝试新模型前先查预算，超出即快速失败（不再空耗剩余组合）
                 if time.time() > deadline:
                     raise RuntimeError(f"LLM 调用超过全局预算 {LLM_CALL_BUDGET_SECONDS}s，快速失败")
+                # A11：重试/故障转移前复查任务级预算——上一响应即使被判不可用，
+                # 其 usage 已记账（见 _invoke_openai / _call_zai），预算可能已耗尽；
+                # 超限立即抛 BudgetExceededError，不再尝试后续模型（默认关零变化）。
+                if is_budget_exceeded():
+                    raise _budget_exceeded_error()
                 try:
                     if is_zai:
                         # BigModel 等非 OpenAI 兼容接口：使用 zai SDK 专属调用
                         text = _call_zai(api_key, base_url, model_name, self.system_prompt, user_message, max_retries)
+                        # A10：zai 路径成功返回后记录真实请求配置（provenance 消费）
+                        _record_actual_request_config(api_key, base_url, model_name)
                     else:
                         # OpenAI 兼容接口：复用缓存的 ChatOpenAI 客户端（连接池跨调用复用）
                         # P0-1 修复（0.6 轮次性能审计）：此前 llm.invoke 单次调用零重试——
@@ -731,6 +959,10 @@ class BaseAgent:
                         def _invoke_openai(
                             client: Any = llm,
                             model: str = model_name,
+                            # B023：显式绑定循环变量，避免闭包晚绑定歧义
+                            # （本函数在迭代内即被重试器同步消费，绑定后语义不变）
+                            _api_key: str = api_key,
+                            _base_url: str = base_url,
                         ) -> str:
                             _invoke_kwargs: dict[str, Any] = {"timeout": LLM_TIMEOUT}
                             if eff_json:
@@ -745,6 +977,15 @@ class BaseAgent:
                                 ],
                                 **_invoke_kwargs,
                             )
+                            # A11（2026-10-18 第三方审查 P1）：收到响应**立即**
+                            # 记账，再判 finish_reason / 空响应。历史实现先对
+                            # 截断（finish_reason=length）与空响应 raise，最后才
+                            # `_record_response_usage`——带 usage 的失败响应其
+                            # token 已真实消耗却漏记，重试/故障转移继续烧 token
+                            # 时统计系统性偏低（成本报表失真）。记账早于任何
+                            # raise 后，每一次已发生的响应消耗都入账；重试前由
+                            # _raise_if_budget_exceeded 复查预算。
+                            _record_response_usage(getattr(response, "usage_metadata", None), model)
                             # 2026-10-14：异常 finish_reason 守卫（DeepSeek 官方
                             # 文档）——length=被 max_tokens 截断 / insufficient_
                             # system_resource=推理系统资源不足中断；残缺响应
@@ -763,14 +1004,16 @@ class BaseAgent:
                             # 空响应视为失败，触发重试（而非直接跨模型切换）
                             if not text_:
                                 raise RuntimeError("LLM 返回空响应")
-                            # token 消耗统计（LangChain 响应的 usage_metadata，可能缺失）
-                            _record_response_usage(getattr(response, "usage_metadata", None), model)
+                            # A10：记录真实请求配置（首选端点成功时即首选；
+                            # 故障转移后记录实际成功端点，供缓存 provenance 使用）
+                            _record_actual_request_config(_api_key, _base_url, model)
                             return text_
 
                         text = _retry_with_exponential_backoff(
                             _invoke_openai,
                             max_retries,
                             base_wait=1,
+                            pre_retry_check=_raise_if_budget_exceeded,
                         )
 
                     # 打印成功日志
@@ -779,6 +1022,10 @@ class BaseAgent:
                     return text
 
                 except Exception as e:
+                    # A11：预算超限是控制流信号（非 API 故障），不得进入
+                    # 限流等待/跨模型故障转移——否则记账后的预算闸被绕过。
+                    if isinstance(e, BudgetExceededError):
+                        raise
                     # O15（2026-09-29 审查 P2）：限流（429 RateLimitError）
                     # 可重试分支——此前 except Exception 吞掉所有异常统一
                     # continue（跨模型切换），外层 except RateLimitError 分支

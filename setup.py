@@ -2,7 +2,14 @@
 AITester 包管理配置文件。
 
 使用 python setup.py install 或 pip install -e . 进行安装。
-包含基础依赖与可选 extras：[rag], [viz], [dev]。
+包含基础依赖与可选 extras：[rag], [viz], [experiments], [ux], [dev],
+[execution], [db], [formal], [ult]。
+
+2026-10-18 第三方评审 A13（P1）：[execution] 是**执行功能运行依赖**
+（pytest / pytest-cov / pytest-timeout）——Executor 子进程固定
+`python -m pytest ... --cov`，干净基础 wheel 缺这些模块时执行路径会失败。
+默认 install_requires 刻意不扩大（不跑执行功能的基础用户不背测试工具
+依赖）；需要运行 Executor / 基准评测时 pip install "aitester[execution]"。
 
 O9（2026-09-29 审查 P0）：PEP 621 [project] 元数据已迁移到
 pyproject.toml（唯一事实来源）。本 setup.py 退化为兼容 shim：
@@ -59,6 +66,12 @@ setup(
         # CLI 富文本与进度条
         "ux": ["rich>=13.0.0", "tqdm>=4.65.0"],
         "dev": ["pytest>=8.0.0", "pytest-cov>=4.0.0", "pytest-timeout>=2.0.0"],
+        # A13（2026-10-18 第三方评审 P1）：与 pyproject [execution] 对齐。
+        # Executor 子进程固定 `python -m pytest ... --cov`（本地 / venv 沙箱
+        # 链路；PYTEST_TIMEOUT_ENABLE=true 时附 --timeout），故执行功能需要
+        # pytest + pytest-cov + pytest-timeout；不进默认 install_requires
+        # （安装面最小化，见模块 docstring）。
+        "execution": ["pytest>=8.0.0", "pytest-cov>=4.0.0", "pytest-timeout>=2.0.0"],
         # O6（2026-10-05 系统审查 P2）：补 db 组——pyproject [db] 有而此处缺，
         # 非 PEP 517 回退路径 pip install ".[db]" 装不到 MySQL 驱动
         # （tests/test_packaging.py 此前只守卫 install_requires，不守卫 extras）

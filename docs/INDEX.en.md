@@ -41,6 +41,7 @@
 5. [BASELINE.yaml](../BASELINE.yaml): machine-readable single source of truth for all current numbers.
 6. [docs/reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-17.md](reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-17.md) (Chinese): second independent systematic review with open items and dispositions.
 7. [docs/reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-18.md](reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-18.md) (Chinese): third independent systematic review (14 core claims recomputed bit-for-bit; A-01..A-20 recommendations and same-day close-out status).
+8. [docs/reviews/THIRD_PARTY_REVIEW_2026-10-18_FIX_CLOSURE.md](reviews/THIRD_PARTY_REVIEW_2026-10-18_FIX_CLOSURE.md) (Chinese): closure report for the 23 findings of the third-party independent review (Windows): P0 A08 + P1/P2 per-item matrix, M1–M9 rerun and residual risks.
 
 ### 2.3 Reproducer
 
@@ -133,6 +134,7 @@
 | [docs/PROJECT_STATUS_REGISTER.md](PROJECT_STATUS_REGISTER.md) (Chinese) | Project status and decision register: done / open / blocked states with verification entry points. |
 | [CHANGELOG.en.md](../CHANGELOG.en.md) | Per-batch change log (historical snapshot; current calibers live in BASELINE and the documents linked here). |
 | [docs/reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-18.md](reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-18.md) (Chinese) | Third independent systematic review (2026-10-18): 60+ frontier data points rebuilt from primary sources, 14 core claims recomputed bit-for-bit, A-01..A-20 recommendations and same-day close-out status. |
+| [docs/reviews/THIRD_PARTY_REVIEW_2026-10-18_FIX_CLOSURE.md](reviews/THIRD_PARTY_REVIEW_2026-10-18_FIX_CLOSURE.md) (Chinese) | Closure report for the 23 findings of the third-party independent review (Windows, 2026-10-18): P0 A08 credential isolation + P1/P2 per-item matrix, M1–M9 rerun, gates and residual risks. |
 | [docs/reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-17.md](reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-17.md) (Chinese) | Second independent systematic review: findings, evidence and disposition suggestions. |
 | [CODE_OPTIMIZATION_2026-10-16.md](../CODE_OPTIMIZATION_2026-10-16.md) (Chinese) | Full code review and optimization report (round C). |
 | [PHASE1_PRECHECK_2026-10-12.md](../PHASE1_PRECHECK_2026-10-12.md) (Chinese) | Phase-1 pre-check report for the improvement plan. |

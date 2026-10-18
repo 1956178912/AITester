@@ -23,10 +23,19 @@ rc=1；判分链路把这次 rc=1 读成「测试红」，于是 specificity 裁
    物化进 tmpdir 靠 ``PYTHONPATH`` 加载」的语义）；
 2. **仓库面扫描**：``experiments/`` 与 ``src/`` 内任何 pytest 子进程调用都不得
    就地展开 ``os.environ``（含「先赋局部变量再传入」的隐蔽写法）；
-3. **行为合约**：干净环境下新 env 与历史 ``{**os.environ, **overrides}`` 逐位
-   等价（差分只允许剔除宿主 pytest 配置键）；宿主注入不可导入的
-   ``PYTEST_PLUGINS`` 时旧写法 rc≠0 / 新写法 rc=0，并对**真实站点函数**
-   （gold 剪枝 ``_run_suite``、testlevel ``run_side``）做最小化端到端调用。
+3. **行为合约**：宿主 pytest 配置 / 凭证 / 任意非白名单键都**不得**进入嵌套
+   pytest 子进程（A08：最小白名单 + 运行期必需键 + 显式 overrides）；宿主注入
+   不可导入的 ``PYTEST_PLUGINS`` 时旧写法 rc≠0 / 新写法 rc=0，并对**真实站点
+   函数**（gold 剪枝 ``_run_suite``、testlevel ``run_side``）做最小化端到端调用。
+
+A08（2026-10-18 第三方评审 P0，凭证边界）：历史口径"整体继承宿主环境、只剔除
+两个 pytest 键"不仅会让宿主的 pytest 配置静默改写测量，还会把宿主凭证
+（``LLM_*_API_KEY`` / ``OPENAI_API_KEY`` / ``AWS_*`` / ``MYSQL_PASSWORD`` /
+``SSH_AUTH_SOCK`` 等）继承进执行 LLM 生成测试/补丁/探针的评分子进程。现统一走
+``src/utils/process_utils.untrusted_exec_env``（最小白名单
+``credential_scrub.build_minimal_env`` + pytest 运行期键 + 显式 overrides）；
+``nested_pytest_env`` 保留为兼容别名。本文件的行为合约随之从"与
+``{**os.environ, **overrides}`` 逐位等价"改为"最小环境 + 凭证零继承"。
 """
 
 from __future__ import annotations
@@ -38,7 +47,11 @@ from pathlib import Path
 
 import pytest
 
-from src.utils.process_utils import nested_pytest_env, run_with_timeout
+from src.utils.process_utils import nested_pytest_env, run_with_timeout, untrusted_exec_env
+
+# 环境构造器函数名：A08 起新入口用 untrusted_exec_env，历史站点保留
+# nested_pytest_env（两者同一实现，后者是前者兼容别名）。
+_ENV_CONSTRUCTOR_NAMES = frozenset(("nested_pytest_env", "untrusted_exec_env"))
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -78,8 +91,6 @@ _EXPECTED_OVERRIDE_KEYS: dict[tuple[str, str], set[str]] = {
     ("src/measurement/mdo.py", "_run_tests_on_code"): {"PYTHONDONTWRITEBYTECODE", "PYTHONPATH"},
 }
 
-_HOST_PYTEST_KEYS = frozenset(("PYTEST_PLUGINS", "PYTEST_ADDOPTS"))
-
 _TRIVIAL_TARGET = "def f():\n    return 1\n"
 _TRIVIAL_TEST = "from m import f\n\n\ndef test_ok() -> None:\n    assert f() == 1\n"
 
@@ -101,11 +112,11 @@ def _function_node(tree: ast.Module, name: str) -> ast.FunctionDef:
 
 
 def _nested_pytest_env_calls(func: ast.FunctionDef) -> list[ast.Call]:
-    """函数体内对 ``nested_pytest_env(...)`` 的调用节点。"""
+    """函数体内对环境构造器（``nested_pytest_env`` / ``untrusted_exec_env``）的调用节点。"""
     return [
         node
         for node in ast.walk(func)
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "nested_pytest_env"
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in _ENV_CONSTRUCTOR_NAMES
     ]
 
 
@@ -307,19 +318,41 @@ def test_no_pytest_spawn_inherits_host_config_via_raw_environ() -> None:
     assert not offenders, f"以下 pytest 子进程仍继承宿主环境（H2 缺陷形态）：{offenders}"
 
 
-# ─────────────────────── 3) 行为合约：等价性 + 端到端负控 ───────────────────────
+# ─────────────────── 3) 行为合约：最小环境 + 凭证零继承 + 端到端负控 ───────────────────
 
 
 @pytest.mark.unit
-def test_nested_pytest_env_strips_only_host_pytest_config_keys(monkeypatch: pytest.MonkeyPatch) -> None:
-    """键集合差分：只剔除 PYTEST_PLUGINS / PYTEST_ADDOPTS，其余键值逐位相同。"""
-    monkeypatch.setenv("PYTEST_PLUGINS", "no_such_host_plugin_xyz")
-    monkeypatch.setenv("PYTEST_ADDOPTS", "--no-header")
-    env = nested_pytest_env()
-    removed = set(os.environ) - set(env)
-    assert removed == _HOST_PYTEST_KEYS, f"仅允许剔除宿主 pytest 配置键，实际剔除 {sorted(removed)}"
-    for key, value in env.items():
-        assert os.environ[key] == value
+def test_untrusted_env_strips_host_pytest_config_and_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A08（P0）：宿主 pytest 配置 / 凭证 / 任意非白名单键都不得进入嵌套运行。"""
+    sentinel_keys = (
+        "PYTEST_PLUGINS",
+        "PYTEST_ADDOPTS",
+        "LLM_1_API_KEY",
+        "LLM_2_API_KEY",
+        "OPENAI_API_KEY",
+        "ANTHROPIC_API_KEY",
+        "DEEPSEEK_API_KEY",
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "MYSQL_PASSWORD",
+        "SSH_AUTH_SOCK",
+        "GITHUB_TOKEN",
+    )
+    for key in sentinel_keys:
+        monkeypatch.setenv(key, "AUDIT_SENTINEL")
+    env = nested_pytest_env(PYTHONDONTWRITEBYTECODE="1")
+    leaked = sorted(key for key in sentinel_keys if key in env)
+    assert not leaked, f"以下宿主键仍被继承进不可信嵌套 pytest（A08 回退）：{leaked}"
+    # 嵌套 pytest 必需项保留（最小白名单 + 运行期键）
+    for needed in ("PATH", "HOME", "TMPDIR", "LANG"):
+        if needed in os.environ:
+            assert env.get(needed) == os.environ[needed], f"必需项 {needed} 未被保留"
+    assert env["PYTHONDONTWRITEBYTECODE"] == "1"
+    # 白名单外任意宿主键同样不继承（"默认拒绝"：新增凭证无需改名单）
+    monkeypatch.setenv("AUDIT_UNKNOWN_HOST_ONLY", "leak")
+    assert "AUDIT_UNKNOWN_HOST_ONLY" not in nested_pytest_env()
+    # A08 新构造器与兼容别名口径一致（单一实现）
+    assert env == untrusted_exec_env(PYTHONDONTWRITEBYTECODE="1")
 
 
 @pytest.mark.unit
@@ -328,39 +361,23 @@ def test_nested_pytest_env_strips_only_host_pytest_config_keys(monkeypatch: pyte
     _H2_SITES + _REFERENCE_SITES,
     ids=[f"{p.split('/')[-1]}::{f}" for p, f in _H2_SITES + _REFERENCE_SITES],
 )
-def test_clean_env_is_bitwise_identical_to_legacy_env(
+def test_site_env_overrides_work_on_minimal_env_without_credentials(
     rel_path: str, func_name: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """干净环境下，5 站点 + 2 参考站点的新旧 env 逐位等价（零行为变化）。"""
-    monkeypatch.delenv("PYTEST_PLUGINS", raising=False)
-    monkeypatch.delenv("PYTEST_ADDOPTS", raising=False)
+    """7 处站点的 override 键在宿主凭证污染下仍生效，且凭证不进入最终 env。"""
+    poisoned = ("PYTEST_PLUGINS", "LLM_1_API_KEY", "OPENAI_API_KEY", "AWS_ACCESS_KEY_ID")
+    for key in poisoned:
+        monkeypatch.setenv(key, "AUDIT_SENTINEL")
     overrides = _materialized_overrides(_function_node(_parse(rel_path), func_name))
     assert overrides, f"{rel_path}::{func_name} 未提取到 override"
-    assert nested_pytest_env(**overrides) == {**os.environ, **overrides}
-
-
-@pytest.mark.unit
-@pytest.mark.parametrize(
-    ("rel_path", "func_name"),
-    _H2_SITES + _REFERENCE_SITES,
-    ids=[f"{p.split('/')[-1]}::{f}" for p, f in _H2_SITES + _REFERENCE_SITES],
-)
-def test_poisoned_host_env_diff_is_exactly_pytest_config_keys(
-    rel_path: str, func_name: str, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """宿主 pytest 配置被污染时，新旧 env 的差分只是两个宿主配置键（其余逐位相同）。"""
-    monkeypatch.setenv("PYTEST_PLUGINS", "no_such_host_plugin_xyz")
-    monkeypatch.setenv("PYTEST_ADDOPTS", "-p no:cacheprovider")
-    monkeypatch.setenv("PATH", os.environ.get("PATH", "/usr/bin:/bin"))
-    overrides = _materialized_overrides(_function_node(_parse(rel_path), func_name))
-    legacy = {**os.environ, **overrides}
-    fixed = nested_pytest_env(**overrides)
-    assert set(legacy) - set(fixed) == _HOST_PYTEST_KEYS
-    assert set(fixed) - set(legacy) == set()
-    for key in fixed:
-        assert fixed[key] == legacy[key], f"{key} 值被意外改写"
+    env = nested_pytest_env(**overrides)
+    for key in poisoned:
+        assert key not in env, f"{rel_path}::{func_name} 的嵌套 env 仍含宿主键 {key}"
     for key, value in overrides.items():
-        assert fixed[key] == value, f"override {key} 未生效"
+        assert env[key] == value, f"{rel_path}::{func_name} 的 override {key} 未生效"
+    # 基础运行环境保留（PATH 是嵌套 pytest / 被测代码派生进程的必需项）
+    if "PATH" in os.environ:
+        assert env.get("PATH") == os.environ["PATH"]
 
 
 def _run_trivial_nested_pytest(tmp_path: Path, env: dict[str, str]) -> int:

@@ -38,6 +38,13 @@ dependencies = [
     # src/ 内 "import pytest" 仅出现在**生成的代码字符串**中（spec_ir /
     # fl_spectral / synthetic_dataset 输出给 LLM 的测试代码），非运行期
     # 直接 import，故运行时不依赖 pytest。
+    # 2026-10-18 第三方评审 A13（P1）勘误：上面"运行时不依赖 pytest"只覆盖
+    # **进程内 import**，漏了 Executor 的**子进程运行依赖**——executor.py /
+    # executor_modes.py 固定构造 `python -m pytest ... --cov`（本地与 venv
+    # 沙箱链路），干净基础 wheel 下执行路径缺 pytest/pytest-cov。修复：新增
+    # [execution] extra 作为"可运行测试执行"的发行安装面；默认安装面仍刻意
+    # 不扩大（不跑执行功能的基础用户不背测试工具依赖，pip-audit / 安装体积
+    # 收敛），需要 Executor / 基准评测时 pip install "aitester[execution]"。
     "click>=8.0.0",
     "python-dotenv>=1.0.0",
     "requests>=2.31.0",
@@ -77,6 +84,16 @@ viz = ["matplotlib>=3.7.0", "pandas>=2.0.0"]
 experiments = ["scipy>=1.10.0", "datasets>=5.0.0"]
 ux = ["rich>=13.0.0", "tqdm>=4.65.0"]
 dev = ["pytest>=8.0.0", "pytest-cov>=4.0.0", "pytest-timeout>=2.0.0"]
+# A13（2026-10-18 第三方评审 P1）：**执行功能运行依赖**（不是开发工具）。
+# Executor 子进程固定 `python -m pytest ... --cov`（executor.py 本地链路 /
+# executor_modes.py venv 沙箱链路；PYTEST_TIMEOUT_ENABLE=true 时追加
+# `--timeout`），因此"安装 aitester 即可运行测试执行"需要本 extra：
+#     pip install "aitester[execution]"
+# 默认安装面（[project].dependencies）刻意不把 pytest 拉进核心依赖——测试
+# 工具只服务执行/评测功能，基础用户与 pip-audit 面保持最小；这是本修复的
+# 明确取舍。执行前 run_pytest_with_retry 会做能力检查（缺模块时返回结构化
+# execution_dependency_missing 诊断），不会以晦涩 rc=1 失败。
+execution = ["pytest>=8.0.0", "pytest-cov>=4.0.0", "pytest-timeout>=2.0.0"]
 # G4（2026-10-05 优化批次·T2）：SMT 见证层（src/specs/spec_smt.py）的
 # 可选求解器依赖。SPEC_SMT_ENABLE=true 且可导入时，SpecIR v2 oracle
 # 追加前件求解见证测试；缺失时该层保守降级为无见证（与 chromadb /

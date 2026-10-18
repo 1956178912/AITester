@@ -1,12 +1,20 @@
-"""S13/S11/T6 回归守卫（2026-10-11 独立评审落地）。
+"""S13/S11/T6 回归守卫（2026-10-11 独立评审落地；A06 2026-10-18 映射修正）。
 
-三块内容，对应外部评审的三个实测缺陷：
+三块内容，对应外部评审的实测缺陷：
 
-- **S13/F2（聚类稳健统计）**：项目把 87 个任务标签当独立样本做配对检验，
-  但实测这些标签只对应 **26 个唯一程序体**（`BUG_PATTERNS` 仅 16 个模板，
-  逐任务"噪声"只是行尾注释）——精确度被高估约 3.35 倍。本文件把 26 这个
-  实测事实**锁死**，并锁定簇级配对检验（先簇内取均值、再在簇级做 t +
-  符号检验 + 效应量）的手算值与退化行为。
+- **S13/F2（聚类稳健统计）+ A06（2026-10-18 第三方评审 P1，任务—程序映射
+  修正）**：项目把任务标签当独立样本做配对检验，但这些标签只对应少数唯一
+  程序体（同一模板的逐任务“噪声”只是行尾注释）。**旧实现重建时漏掉真实
+  `max_pattern_repeat=2`，且把多种子拼接的 `s<seed>__` 前缀剥离后统一查单个
+  seed 的重建表**——seed 42/43/44 的同编号任务不是同一程序。主批归档工件
+  （R-P0-2/R-P0-4：87 任务 × 3 seed = 261 行、cap=2）实测：旧实现错映射
+  **223/261** 行、错误 26 簇（符号检验 2:21:3 / p≈6.6e-05，夸大显著性）；
+  正确口径为 **31 簇 / 5:17:9 / p≈0.01690054**（与归档三种子报告的模板聚类
+  一致）。本文件锁定正确事实：默认重建参数必须带 `max_pattern_repeat=2`
+  （单 seed 87 → 29 簇；三种子 261 → 31 簇）、按 `s<seed>__` 前缀映射到该
+  seed 的重建表、归档 task_metadata 程序身份优先，以及“归档元数据与重建在
+  task_id/pattern_name/noise_seed 三项逐项一致”的等价性证据；并用主批归档
+  工件端到端复算上述数字。
 - **S11/F9（token 记账健全性）**：7 份批次中 `plain_llm` / `plain_llm_df`
   的 `token_usage` 整臂全为 0（含 `llm_calls`）而 `generated_test` 非空——
   成本结论不可计算却仍被输出。本文件锁定"≥50% 行无记账 → 成本列
@@ -18,7 +26,7 @@
   披露，`status` 新增第三态 `provisional_pool`。
 
 纪律：零 LLM 调用；`build_cluster_map` 只读导入 `src/datasets/synthetic_dataset.py`
-（该文件不修改）；数据全部为手工构造或本地合成数据集重建。
+（该文件不修改）；数据全部为手工构造、本地合成数据集重建或已入库归档工件。
 """
 
 from __future__ import annotations
@@ -36,6 +44,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from experiments.statistical_analysis import (
     _NOT_COMPUTABLE_CELL,
     _TOKEN_ACCOUNTING_ZERO_SHARE_THRESHOLD,
+    _cluster_pairs_from_rows,
     _cost_report_lines,
     build_cluster_map,
     cluster_map_summary,
@@ -47,10 +56,22 @@ from experiments.statistical_analysis import (
     strip_line_comments,
     token_accounting_sanity,
 )
+from src.datasets.synthetic_dataset import SyntheticDataset
 
-# 独立评审实测事实（锁定，不得"顺手放宽"）：87 个任务标签 → 26 个唯一程序体
-_EXPECTED_CLUSTERS_87_42 = 26
-_EXPECTED_SIZE_DISTRIBUTION_87_42 = {1: 5, 2: 7, 3: 4, 4: 5, 5: 1, 6: 1, 7: 1, 9: 2}
+# A06（2026-10-18）修正后的主批协议实测事实（锁定）：
+# R-P0-2/R-P0-4 = 87 任务 × seed42 × `max_pattern_repeat=2` → 29 个唯一程序体
+_EXPECTED_CLUSTERS_87_42 = 29
+_EXPECTED_SIZE_DISTRIBUTION_87_42 = {1: 6, 2: 11, 3: 3, 4: 4, 6: 2, 7: 2, 8: 1}
+# 旧实现（漏 max_pattern_repeat，等价于 max_pattern_repeat=None）的错误
+# 分组：26 簇。它**不是**主批协议的事实，只作为 A06 缺陷的反面证据保留。
+_LEGACY_WRONG_CLUSTERS_87_42_NO_CAP = 26
+
+# 主批归档工件（R-P0-2 生死实验，seed → 文件名）；A06 端到端证据测试使用。
+_MAIN_BATCH_DIR = Path(__file__).resolve().parent.parent / "experiments" / "results" / "main_batch"
+_MAIN_BATCH_FILES: dict[int, Path] = {
+    seed: _MAIN_BATCH_DIR / f"benchmark_synthetic_20261006_{ts}.json"
+    for seed, ts in ((42, "140906"), (43, "151907"), (44, "164357"))
+}
 
 _PRICES: dict[str, Any] = {
     "models": {
@@ -82,24 +103,43 @@ def _key_fn(mapping: dict[str, str]):
 
 
 class TestClusterMap:
-    """`build_cluster_map`：簇构造必须可从工件（task_count, seed）复现。"""
+    """`build_cluster_map`：簇构造必须可从工件（真实跑批参数）复现。"""
 
-    def test_87_tasks_seed42_yield_26_clusters(self) -> None:
-        """**实测事实锁定**：87 个任务标签只对应 26 个唯一程序体。
+    def test_87_tasks_seed42_yield_29_clusters(self) -> None:
+        """**A06 修正后的事实锁定**：主批协议（cap=2）下 87 任务 → 29 个唯一程序体。
 
-        这是独立评审实测确认的数字（`BUG_PATTERNS` 仅 16 个模板，噪声只是
-        行尾注释）——聚类稳健统计的全部意义建立在此事实之上，故必须锁死。
+        旧测试锁定 26 簇是错误的：`build_cluster_map` 重建时漏掉主批真实参数
+        `max_pattern_repeat=2`（R-P0-2/R-P0-4），漏 cap 的旧重建把同模板重复
+        次数压到与真实跑批不同的分布。26 只是“旧重建参数”的产物（见
+        `test_missing_max_pattern_repeat_reproduces_legacy_26_clusters`），
+        不是主批事实——故本测试改为锁定正确参数与正确数字。
         """
         cluster_map = build_cluster_map(_synthetic_task_ids(87), task_count=87, seed=42)
         assert len(cluster_map) == 87
         assert cluster_map_summary(cluster_map)["n_clusters"] == _EXPECTED_CLUSTERS_87_42
 
     def test_cluster_size_distribution_locked(self) -> None:
-        """簇规模分布锁定（1×5 / 2×7 / 3×4 / 4×5 / 5×1 / 6×1 / 7×1 / 9×2）。"""
+        """簇规模分布锁定（cap=2：1×6 / 2×11 / 3×3 / 4×4 / 6×2 / 7×2 / 8×1）。"""
         summary = cluster_map_summary(build_cluster_map(_synthetic_task_ids(87), task_count=87, seed=42))
         assert summary["size_distribution"] == _EXPECTED_SIZE_DISTRIBUTION_87_42
         assert sum(k * v for k, v in summary["size_distribution"].items()) == 87
         assert summary["n_unmapped"] == 0
+
+    def test_missing_max_pattern_repeat_reproduces_legacy_26_clusters(self) -> None:
+        """A06 反面证据：显式传 `max_pattern_repeat=None`（旧实现的漏 cap 行为）
+        → 26 簇（1×5 / 2×7 / 3×4 / 4×5 / 5×1 / 6×1 / 7×1 / 9×2）。
+
+        该数字只允许出现在"旧重建参数"路径上；默认路径必须是真实跑批参数
+        cap=2（29 簇）——若有人把默认值改回 None，本组测试会失败。
+        """
+        legacy = cluster_map_summary(
+            build_cluster_map(_synthetic_task_ids(87), task_count=87, seed=42, max_pattern_repeat=None)
+        )
+        assert legacy["n_clusters"] == _LEGACY_WRONG_CLUSTERS_87_42_NO_CAP
+        assert legacy["size_distribution"] == {1: 5, 2: 7, 3: 4, 4: 5, 5: 1, 6: 1, 7: 1, 9: 2}
+        # 默认（真实参数）≠ 旧漏 cap 参数——A06 修复不得静默回退
+        default_summary = cluster_map_summary(build_cluster_map(_synthetic_task_ids(87), task_count=87, seed=42))
+        assert default_summary["n_clusters"] != legacy["n_clusters"]
 
     def test_is_deterministic_and_order_independent(self) -> None:
         """同参两次调用结果一致；任务 ID 顺序不影响簇结构。"""
@@ -108,19 +148,76 @@ class TestClusterMap:
         second = build_cluster_map(ids, task_count=87, seed=42)
         assert first == second
         shuffled = list(reversed(ids))
-        assert cluster_map_summary(build_cluster_map(shuffled, task_count=87, seed=42))["n_clusters"] == 26
+        assert cluster_map_summary(build_cluster_map(shuffled, task_count=87, seed=42))["n_clusters"] == 29
 
     def test_seed_prefix_merged_for_pooled_seeds(self) -> None:
-        """多种子拼接口径（`--pool-seeds`）：`s<seed>__` 前缀先剥离再查表。
+        """多种子拼接口径（`--pool-seeds`）：`s<seed>__` 前缀映射到**该 seed** 的重建表。
 
-        261 = 3 种子 × 87 任务 → 仍为 **26** 簇（同一程序体跨种子必须合并，
-        这正是任务级 n 虚高的来源）。
+        主批协议（seed 42/43/44、cap=2）：3 × 87 = 261 个任务标签 → **31** 个
+        唯一程序体（每个 seed 各 29 个，跨 seed 同一程序体合并）。旧实现剥离
+        前缀后统一查单个 seed 表，得到错误 26 簇——本测试锁定 A06 修复后的
+        分 seed 映射语义（同编号任务跨 seed 不是同一程序，不能按编号合并）。
         """
-        ids = [f"s{seed}__{tid}" for seed in (0, 1, 2) for tid in _synthetic_task_ids(87)]
+        ids = [f"s{seed}__{tid}" for seed in (42, 43, 44) for tid in _synthetic_task_ids(87)]
         summary = cluster_map_summary(build_cluster_map(ids, task_count=87, seed=42))
         assert summary["n_tasks"] == 261
-        assert summary["n_clusters"] == 26
+        assert summary["n_clusters"] == 31
         assert summary["n_unmapped"] == 0
+        # 单 seed 各自 29 簇：跨 seed 合并后 31 < 3×29，且同编号跨 seed 不同程序
+        per_seed = {
+            seed: cluster_map_summary(
+                build_cluster_map([f"s{seed}__{tid}" for tid in _synthetic_task_ids(87)], task_count=87, seed=42)
+            )["n_clusters"]
+            for seed in (42, 43, 44)
+        }
+        assert per_seed == {42: 29, 43: 29, 44: 29}
+
+    def test_seed_prefix_routes_to_that_seed_rebuild(self) -> None:
+        """A06 根因锁定：`s43__synthetic__task_0000` 必须映射到 seed43 的重建任务。
+
+        seed42 与 seed43 的同编号任务不是同一程序（旧实现统一查 seed42 表 →
+        错映射）。显式用 seed=43 重建可得到该 seed 的正确指纹，两种写法必须一致：
+        `s43__task_0000`（前缀路由） == 无前缀 + seed=43（默认 seed 重建）。
+        """
+        prefixed = build_cluster_map(["s43__synthetic__task_0000"], task_count=87, seed=42)["s43__synthetic__task_0000"]
+        same_seed = build_cluster_map(["synthetic__task_0000"], task_count=87, seed=43)["synthetic__task_0000"]
+        seed42 = build_cluster_map(["synthetic__task_0000"], task_count=87, seed=42)["synthetic__task_0000"]
+        assert prefixed == same_seed
+        assert prefixed != seed42, "seed42/43 同编号任务不是同一程序（A06 根因）"
+
+    def test_archived_task_metadata_identity_preferred_over_task_id(self) -> None:
+        """A06 口径：归档 task_metadata 程序身份优先于 task_id 查表。
+
+        构造一个“旧命名/漂移”task_id（不在任何重建表中），但携带归档
+        `task_metadata.pattern_name`：必须按元数据映射到该模板的程序体指纹，
+        而不是保守降级为单例簇。另构造元数据与重建同编号任务冲突的行：
+        以元数据为准并计入 conflict 计数（可审计）。
+        """
+        # seed42 cap=2 重建中 task_0000 = distance_abs_missing
+        expected = build_cluster_map(["synthetic__task_0000"], task_count=87, seed=42)["synthetic__task_0000"]
+        metadata = {
+            "legacy__renamed_task": {"pattern_name": "distance_abs_missing", "noise_seed": 4386},
+        }
+        mapped = build_cluster_map(["legacy__renamed_task"], task_count=87, seed=42, task_metadata=metadata)
+        assert mapped["legacy__renamed_task"] == expected
+
+        # 冲突：task_0001 在 seed42 是 palindrome_case_sensitive，但元数据写
+        # distance_abs_missing → 以元数据为准（等于 task_0000 的指纹），不落单例
+        conflict_metadata = {"synthetic__task_0001": {"pattern_name": "distance_abs_missing", "noise_seed": 1}}
+        conflict_map = build_cluster_map(
+            ["synthetic__task_0001"], task_count=87, seed=42, task_metadata=conflict_metadata
+        )
+        assert conflict_map["synthetic__task_0001"] == expected
+
+    def test_metadata_unresolvable_pattern_degrades_to_singleton(self) -> None:
+        """A06 保守降级：元数据存在但按重建参数无法复现程序身份 → 单例簇。
+
+        此时**不得**回退 task_id 查表（重建参数与批次不一致时 task_id 查表
+        正是跨 seed 错映射的来源）；落 `unmapped::` 单例是参数不一致的诚实信号。
+        """
+        metadata = {"synthetic__task_0000": {"pattern_name": "no_such_pattern", "noise_seed": 1}}
+        mapped = build_cluster_map(["synthetic__task_0000"], task_count=87, seed=42, task_metadata=metadata)
+        assert mapped["synthetic__task_0000"].startswith("unmapped::")
 
     def test_unmapped_task_degrades_to_singleton(self) -> None:
         """查不到的任务（真实基准 / 前缀异常）各成单例簇，不丢弃也不并簇。"""
@@ -582,7 +679,11 @@ class TestClusterRobustReportSection:
         assert "--cluster-robust" not in text
 
     def test_enabled_appends_section_without_changing_history(self, tmp_path: Path) -> None:
-        """开启 → 追加 cluster_robust 节；历史非聚类数字（t 检验表）逐位不变。"""
+        """开启 → 追加 cluster_robust 节；历史非聚类数字（t 检验表）逐位不变。
+
+        A06 修正后默认重建参数 = 主批真实参数 cap=2 → 87 任务 → 29 个程序体
+        （旧测试断言的 26 是漏 cap 的错误分组，已修正）。
+        """
         self._make_fixture(tmp_path)
         off = tmp_path / "off.md"
         on = tmp_path / "on.md"
@@ -599,9 +700,181 @@ class TestClusterRobustReportSection:
         on_text = on.read_text(encoding="utf-8")
 
         assert "## 聚类稳健统计（cluster_robust" in on_text
-        assert "**26 个唯一程序体**" in on_text
-        assert "任务级 n=87 → 簇级 n=26" in on_text or "| 87 | 26 |" in on_text
+        assert "**29 个唯一程序体**" in on_text
+        assert "任务级 n=87 → 簇级 n=29" in on_text or "| 87 | 29 |" in on_text
+        # A06：身份来源披露（本 fixture 无 task_metadata → 全部分 seed 重建命中）
+        assert "身份解析来源：归档元数据 0 / 分 seed 重建 87 / 未映射 0" in on_text
+        assert "max_pattern_repeat=2" in on_text
         # 历史可比性：配对 t 检验表逐位一致
         assert _paired_test_table(on_text) == _paired_test_table(off_text)
-        # 复算命令带同参（簇级数字可复现）
-        assert "--cluster-robust --cluster-task-count 87 --cluster-seed 42" in on_text
+        # 复算命令带同参（簇级数字可复现；A06 起含 max_pattern_repeat）
+        assert ("--cluster-robust --cluster-task-count 87 --cluster-seed 42 --cluster-max-pattern-repeat 2") in on_text
+
+    def test_explicit_legacy_cap_none_is_configurable(self, tmp_path: Path) -> None:
+        """A06：`max_pattern_repeat` 可显式传入——None（历史口径）→ 26 簇。
+
+        该数字只允许出现在显式旧参数路径；默认路径必须是 cap=2（29 簇）。
+        """
+        self._make_fixture(tmp_path)
+        report = tmp_path / "legacy.md"
+        run_all_statistics(
+            str(tmp_path),
+            str(report),
+            price_table={"models": {}},
+            cluster_robust=True,
+            cluster_task_count=87,
+            cluster_seed=42,
+            cluster_max_pattern_repeat=None,
+        )
+        text = report.read_text(encoding="utf-8")
+        assert "**26 个唯一程序体**" in text
+        assert "| 87 | 26 |" in text
+        # CLI 复算命令以 0 表示 None
+        assert "--cluster-max-pattern-repeat 0" in text
+
+
+# ─────────────── A06：主批归档工件端到端证据（261 行 → 31 簇） ───────────────
+
+
+def _main_batch_available() -> bool:
+    return all(path.is_file() for path in _MAIN_BATCH_FILES.values())
+
+
+@pytest.mark.skipif(not _main_batch_available(), reason="主批归档工件不在仓库（A06 端到端证据跳过）")
+class TestMainBatchA06Evidence:
+    """A06 验收证据：用入库三批次工件复算 261 行 → 31 簇 / 5:17:9 / p≈0.0169。
+
+    同时锁定旧实现的缺陷数字（错映射 223/261、错误 26 簇 / 2:21:3 /
+    p≈6.6e-05），防止“修复”被悄悄回退。
+    """
+
+    @staticmethod
+    def _load() -> tuple[dict[int, list[dict]], list[str], dict[str, dict]]:
+        """返回 ({seed: aitester 行}, 带 seed 前缀的全部 task_id, 归档元数据)。"""
+        rows_by_seed: dict[int, list[dict]] = {}
+        task_ids: list[str] = []
+        metadata: dict[str, dict] = {}
+        for seed, path in _MAIN_BATCH_FILES.items():
+            data = json.loads(path.read_text(encoding="utf-8"))
+            rows = data["results"]["aitester"]["details"]
+            assert len(rows) == 87, f"{path.name} 行数应为 87"
+            rows_by_seed[seed] = rows
+            for row in rows:
+                tid = f"s{seed}__{row['task_id']}"
+                task_ids.append(tid)
+                metadata[tid] = row["task_metadata"]
+        return rows_by_seed, task_ids, metadata
+
+    def test_archived_metadata_matches_cap2_rebuild_composition(self) -> None:
+        """**等价性证据**：归档 task_metadata 与 cap=2 重建的组成逐项一致。
+
+        对 3 个 seed × 87 行校验 task_id → (pattern_name, noise_seed) 与
+        `SyntheticDataset(87, seed, max_pattern_repeat=2)` 重建逐项相同；
+        且模板名 → 程序体指纹 1:1（单 seed 29 个模板/29 个指纹、三种子并集
+        31/31）——这是“元数据模板身份”可替代“重建程序体指纹”的依据。
+        """
+        rows_by_seed, _task_ids, _metadata = self._load()
+        template_fingerprints: dict[str, set[str]] = {}
+        for seed, rows in rows_by_seed.items():
+            ds = list(SyntheticDataset(task_count=87, seed=seed, max_pattern_repeat=2))
+            rebuilt = {
+                str(task.task_id): (
+                    str(task.metadata["pattern_name"]),
+                    task.metadata["noise_seed"],
+                    program_fingerprint(task.instance_code),
+                )
+                for task in ds
+            }
+            for row in rows:
+                rebuilt_row = rebuilt[row["task_id"]]
+                assert (
+                    str(row["task_metadata"]["pattern_name"]),
+                    row["task_metadata"]["noise_seed"],
+                ) == (rebuilt_row[0], rebuilt_row[1]), f"seed={seed} {row['task_id']} 归档元数据与重建组成不一致"
+                template_fingerprints.setdefault(rebuilt_row[0], set()).add(rebuilt_row[2])
+        assert all(len(fps) == 1 for fps in template_fingerprints.values()), "同一模板名对应多个程序体指纹"
+        assert len(template_fingerprints) == 31
+
+    def test_pooled_261_rows_map_to_31_clusters_zero_unmapped(self) -> None:
+        """261 个任务标签（3 seed 拼接）→ 31 个唯一程序体，0 行未映射。
+
+        元数据优先与分 seed 重建两条路径必须一致（A06 的两种合法依据）。
+        """
+        _rows_by_seed, task_ids, metadata = self._load()
+        by_metadata = build_cluster_map(task_ids, task_count=87, seed=42, task_metadata=metadata)
+        by_rebuild = build_cluster_map(task_ids, task_count=87, seed=42)
+        for mapping in (by_metadata, by_rebuild):
+            summary = cluster_map_summary(mapping)
+            assert summary["n_tasks"] == 261
+            assert summary["n_clusters"] == 31
+            assert summary["n_unmapped"] == 0
+        assert by_metadata == by_rebuild, "归档元数据身份与 cap=2 分 seed 重建必须给出同一分组"
+
+    def test_legacy_implementation_mis_maps_223_rows_into_26_clusters(self) -> None:
+        """A06 缺陷证据锁定：旧实现（漏 cap + 剥前缀统一查 seed42 表）。
+
+        261 行中 223 行映射错、26 簇——旧测试锁定的 26 即此错误产物；
+        符号检验 2:21:3 / p≈6.6e-05（夸大显著性）。
+        """
+        _rows_by_seed, task_ids, metadata = self._load()
+        correct = build_cluster_map(task_ids, task_count=87, seed=42, task_metadata=metadata)
+        # 旧实现：cap=None 的 seed42 重建表，剥掉 s<seed>__ 前缀后统一查表
+        legacy_table = {
+            str(task.task_id): program_fingerprint(task.instance_code)
+            for task in SyntheticDataset(task_count=87, seed=42)
+        }
+        legacy = {tid: legacy_table[tid.split("__", 1)[1]] for tid in task_ids}
+        assert len(set(legacy.values())) == _LEGACY_WRONG_CLUSTERS_87_42_NO_CAP
+        n_wrong = sum(1 for tid in task_ids if legacy[tid] != correct[tid])
+        assert n_wrong == 223, f"旧实现错映射行数应为 223/261，实测 {n_wrong}"
+
+        # 用旧映射跑同一配对检验 → 错误符号计数（2:21:3 / p≈6.6e-05）
+        per_arm = self._load_rows_per_arm()
+        rows_a = [
+            {**row, "task_id": f"s{seed}__{row['task_id']}"}
+            for seed in (42, 43, 44)
+            for row in per_arm[seed]["aitester"]
+        ]
+        rows_b = [
+            {**row, "task_id": f"s{seed}__{row['task_id']}"}
+            for seed in (42, 43, 44)
+            for row in per_arm[seed]["plain_llm_df"]
+        ]
+        pairs = _cluster_pairs_from_rows(rows_a, rows_b, field="detection_rate")
+        legacy_res = cluster_robust_paired_test(pairs, lambda tid: legacy[tid])
+        assert (legacy_res["sign_wins"], legacy_res["sign_losses"], legacy_res["sign_ties"]) == (2, 21, 3)
+        assert legacy_res["sign_p"] == pytest.approx(6.604194641113281e-05, rel=1e-9)
+
+    def test_pooled_detection_cluster_sign_test_matches_archived_report(self) -> None:
+        """A06 验收：aitester vs plain_llm_df detection 簇级 5:17:9 / p≈0.01690054。
+
+        与归档 `statistical_report_3seed_pooled.md` 的模板聚类稳健性一致
+        （k=31、5 胜 / 17 负 / 9 平、精确二项 p≈0.0169），且共同任务 n=240。
+        """
+        _rows_by_seed, task_ids, metadata = self._load()
+        cluster_map = build_cluster_map(task_ids, task_count=87, seed=42, task_metadata=metadata)
+        per_arm = self._load_rows_per_arm()
+        rows_a = [
+            {**row, "task_id": f"s{seed}__{row['task_id']}"}
+            for seed in (42, 43, 44)
+            for row in per_arm[seed]["aitester"]
+        ]
+        rows_b = [
+            {**row, "task_id": f"s{seed}__{row['task_id']}"}
+            for seed in (42, 43, 44)
+            for row in per_arm[seed]["plain_llm_df"]
+        ]
+        pairs = _cluster_pairs_from_rows(rows_a, rows_b, field="detection_rate")
+        res = cluster_robust_paired_test(pairs, lambda tid: cluster_map[tid])
+        assert res["n_pairs"] == 240
+        assert res["n_clusters"] == 31
+        assert (res["sign_wins"], res["sign_losses"], res["sign_ties"]) == (5, 17, 9)
+        assert res["sign_p"] == pytest.approx(0.01690053939819336, rel=1e-9)
+
+    @staticmethod
+    def _load_rows_per_arm() -> dict[int, dict[str, list[dict]]]:
+        out: dict[int, dict[str, list[dict]]] = {}
+        for seed, path in _MAIN_BATCH_FILES.items():
+            data = json.loads(path.read_text(encoding="utf-8"))
+            out[seed] = {arm: data["results"][arm]["details"] for arm in ("aitester", "plain_llm", "plain_llm_df")}
+        return out

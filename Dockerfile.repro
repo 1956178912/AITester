@@ -5,11 +5,15 @@
 # 一个可复算容器，任意批次实验一条 docker run 复现（provenance 写进
 # 结果 JSON 的 environment 字段，由 run_benchmark 自动附带 git sha）。
 #
-# 构建:  docker build -f Dockerfile.repro -t aitester-repro:$(git rev-parse --short HEAD) .
+# 构建:  docker build --build-arg GIT_SHA=$(git rev-parse HEAD) \
+#             -f Dockerfile.repro -t aitester-repro:$(git rev-parse --short HEAD) .
 # 运行:  docker run --rm -v $(pwd)/experiments/results:/workspace/experiments/results \
 #             -v $(pwd)/.env.local:/workspace/.env.local:ro \
 #             aitester-repro:<sha> \
 #             bash reproduce.sh --dataset synthetic --full
+#        （--dataset synthetic --full = 主批任务规模参数：87 任务 /
+#          --max-pattern-repeat 2 / seed 42 / 主批三臂；单 seed，三种子协议
+#          见 experiments/run_main_batch.py）
 #
 # 口径说明（与 Dockerfile / ci.yml 矩阵下限对齐）：
 # - python:3.12-slim 为发行基准，与 Dockerfile 一致（pyproject
@@ -19,7 +23,11 @@
 #   即"全量依赖"而非 slim_environment 精简口径，保证 BASELINE.yaml
 #   `tests` 节的 total_passed 口径可复现——具体数值以 BASELINE.yaml
 #   为唯一事实来源，此处不硬编码避免漂移）；
-# - git sha 由 docker build --build-arg 注入，结果 provenance 可追溯。
+# - git sha 由 docker build --build-arg 注入；.dockerignore 排除 .git，容器内
+#   无 git 元数据，run_benchmark 因此读取下方 .repro_provenance 的 GIT_SHA 作为
+#   environment/provenance 的提交来源（A03 修复：此前只做存在性检查、不消费
+#   SHA）。若构建时未传 --build-arg，marker 值为 unknown 且**不会被**当作提交
+#   SHA 记录（provenance 如实标注 git_sha_source=null）。
 
 FROM python:3.12-slim
 

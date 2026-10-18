@@ -42,12 +42,14 @@ import json
 import logging
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 import time
 import zlib
 from collections.abc import Callable
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 import openai
@@ -258,6 +260,33 @@ def run_plain_llm_baseline(
     return graph.invoke(state)
 
 
+def _apply_execution_flaky_evidence(state: dict[str, Any], result: dict[str, Any]) -> None:
+    """A16（2026-10-18 第三方评审 P1）：把 Executor 尝试证据写入 single_agent state。
+
+    single_agent 基线绕过工作流 ``_executor_node`` 直接调用 ExecutorAgent，
+    因此不会经过节点侧的 fail→pass 消费——若不同步，该基线仍把"同测试首败
+    次过"记成 ``test_passed=True``，把执行不稳定的证据抹掉（评审 A16 的
+    "检测与判分消费真实序列"要求）。
+
+    与 ``_executor_node`` 同口径（保守）：
+    - ``flaky_fail_then_pass=True``（执行层观察到失败后重试通过）→ 写
+      ``flaky_detected/flaky_unverified=True`` + 真实 pass/total 计数，
+      ``test_passed`` 保守记 False（不稳定结果不能作为成功证据）；
+    - 无该证据（None/False）→ 仅按历史口径写 test_passed，其余键不写
+      （state 默认 None，历史字段/行为逐位不变）。
+    """
+    if not bool(result.get("flaky_fail_then_pass")):
+        state["test_passed"] = bool(result["passed"])
+        return
+    attempts = result.get("execution_attempts") or []
+    records = [a for a in attempts if isinstance(a, dict)]
+    state["test_passed"] = False
+    state["flaky_detected"] = True
+    state["flaky_unverified"] = True
+    state["flaky_pass_count"] = sum(1 for a in records if a.get("passed"))
+    state["flaky_total_count"] = len(records)
+
+
 def run_single_agent_baseline(
     state: AITesterState,
 ) -> dict[str, Any]:
@@ -327,7 +356,8 @@ def run_single_agent_baseline(
     )
     _elapsed = time.perf_counter() - _t0
 
-    state["test_passed"] = result["passed"]
+    # A16：执行证据统一走 helper（fail→pass → 保守判分 + flaky 标记）
+    _apply_execution_flaky_evidence(state, result)
     state["test_output"] = result["output"]
     state["coverage_report"] = result["coverage"]
     state["failed_cases"] = result["failed_cases"]
@@ -377,7 +407,7 @@ def run_single_agent_baseline(
                         target_file=state["target_file"],
                         target_function=state.get("target_function"),
                     )
-                    state["test_passed"] = retry_result["passed"]
+                    _apply_execution_flaky_evidence(state, retry_result)
                     state["test_output"] = retry_result["output"]
                     state["coverage_report"] = retry_result["coverage"]
                     state["failed_cases"] = retry_result["failed_cases"]
@@ -1786,6 +1816,13 @@ def _build_task_result(
             # test_regenerated_pass_unverified：M5 执行层标记（测试重生成后
             # 通过且源码未改 → 假成功通道），直接读 state 键（缺省 None）。
             "test_regenerated_pass_unverified": final_state.get("test_regenerated_pass_unverified"),
+            # A16（2026-10-18 第三方评审 P1）：执行不稳定（fail→pass）证据行级透出
+            # （_executor_node / single_agent helper 写入；历史批次缺键为 None，
+            # 键集合同构）。flaky_unverified=True 时 M1 指标按不可测（None）处理。
+            "flaky_unverified": final_state.get("flaky_unverified"),
+            "flaky_detected": final_state.get("flaky_detected"),
+            "flaky_pass_count": final_state.get("flaky_pass_count"),
+            "flaky_total_count": final_state.get("flaky_total_count"),
             # W3（2026-10-05 审查落地·检出优先协议，DETECTION_FIRST_ENABLE 默认关）：
             # 首轮红灯观测 + 终态标注（red_then_green / all_green_unverified /
             # red_not_repaired——Y1 补失败终局：检出成功但未修复，评估层
@@ -2078,6 +2115,11 @@ def _build_task_result(
         # 通过标记以 None 占位保持键集合同构（假通过通道仅对 passed=True
         # 有意义，失败分支恒无）
         "test_regenerated_pass_unverified": None,
+        # A16：失败分支无执行尝试证据，flaky 键以 None 占位保持键集合同构
+        "flaky_unverified": None,
+        "flaky_detected": None,
+        "flaky_pass_count": None,
+        "flaky_total_count": None,
         # W3（检出优先协议）：失败分支无 final_state，None 占位保持键集合同构
         "detection_first_red_seen": None,
         "detection_first_status": None,
@@ -3713,6 +3755,148 @@ def _attach_postprocess_wall_to_summary(
         logger.warning("%s", message)
 
 
+# ─── A03（2026-10-18 第三方审查，P1）：.repro_provenance 的 GIT_SHA 消费 ──────
+# 背景：Dockerfile.repro 通过 `docker build --build-arg GIT_SHA=...` 把提交 SHA
+# 写入容器内 /workspace/.repro_provenance；但 .dockerignore 排除 .git，容器内
+# `git rev-parse HEAD` 必然失败——历史实现只把 marker 当"是否在复现容器内"的
+# 存在性标记（environment.in_docker_repro），从不读取其中的 GIT_SHA，结果
+# provenance.git_sha 在复现容器内为 None，"build-arg 使提交可追溯"的承诺落空。
+# 现口径（本组 helper 为单一实现，environment 与 provenance 两块共用）：
+#   - 有 git 元数据：以 git rev-parse 为 git_sha 来源，同时记录 marker 值并校验
+#     一致性（git_sha_matches_marker=true/false/null）；
+#   - 无 git（复现容器 / 源码 tar 包）：以 marker 的 GIT_SHA 为来源
+#     （git_sha_source="repro_provenance"）；
+#   - 两者都没有：git_sha=None、git_sha_source=None（如实标注"不可追溯"）。
+# 不新增环境变量；marker 路径固定为工作目录下 .repro_provenance（与
+# Dockerfile.repro 的 WORKDIR=/workspace 口径一致，也与历史 in_docker_repro 检查点一致）。
+_REPRO_PROVENANCE_FILE = ".repro_provenance"
+_REPRO_UNKNOWN_SHA_VALUES = frozenset({"", "unknown", "none", "null"})
+
+
+def _read_repro_provenance_marker(workspace_dir: str | os.PathLike[str] | None = None) -> dict[str, Any]:
+    """读取复现容器 marker（``GIT_SHA=<sha>``）并解析。
+
+    Args:
+        workspace_dir: 工作目录（marker 所在目录）；None = 当前工作目录。
+
+    Returns:
+        dict：``present``（文件是否存在）、``path``（工作目录相对文件名）、
+        ``git_sha``（解析出的 SHA；``unknown``/空值视为未提供 → None）、
+        ``error``（读取异常信息，正常为 None）。
+    """
+    base = Path(workspace_dir) if workspace_dir is not None else Path(os.getcwd())
+    marker = base / _REPRO_PROVENANCE_FILE
+    info: dict[str, Any] = {
+        "present": marker.is_file(),
+        "path": _REPRO_PROVENANCE_FILE,
+        "git_sha": None,
+        "error": None,
+    }
+    if not info["present"]:
+        return info
+    try:
+        text = marker.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as e:
+        info["error"] = f"{type(e).__name__}: {e}"
+        return info
+    for line in text.splitlines():
+        key, sep, value = line.partition("=")
+        if not sep or key.strip().upper() != "GIT_SHA":
+            continue
+        value = value.strip()
+        if value.lower() not in _REPRO_UNKNOWN_SHA_VALUES:
+            info["git_sha"] = value
+        break
+    return info
+
+
+def _resolve_git_provenance(
+    workspace_dir: str | os.PathLike[str] | None = None,
+    repo_dir: str | os.PathLike[str] | None = None,
+) -> dict[str, Any]:
+    """合并 git 元数据与 .repro_provenance marker，得出可审计的提交来源块。
+
+    Args:
+        workspace_dir: marker 所在工作目录；None = 当前工作目录。
+        repo_dir: git 命令执行目录（仓库根）；None = 本文件上一级（仓库根）。
+
+    Returns:
+        dict：``git_sha``（生效 SHA）、``git_sha_source``
+        （``"git" | "repro_provenance" | None``）、``git_available``、
+        ``in_docker_repro``（marker 是否存在，等价历史字段）、
+        ``repro_provenance``（marker 明细：present/path/git_sha/
+        git_sha_matches_git/git_sha_conflict/error）。
+    """
+    marker = _read_repro_provenance_marker(workspace_dir)
+    git_sha: str | None = None
+    cwd = str(repo_dir) if repo_dir is not None else str(Path(__file__).resolve().parent.parent)
+    try:
+        proc = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            cwd=cwd,
+        )
+        if proc.returncode == 0:
+            git_sha = proc.stdout.strip() or None
+    except (OSError, subprocess.SubprocessError):
+        git_sha = None
+
+    marker_sha = marker["git_sha"]
+    matches: bool | None = None
+    conflict = False
+    if marker_sha is not None and git_sha is not None:
+        matches = marker_sha == git_sha
+        conflict = not matches
+        if conflict:
+            logger.warning(
+                "复现容器 marker 的 GIT_SHA=%s 与当前 git HEAD=%s 不一致（构建来源与运行代码不同？），"
+                "已同时记录两者并标记冲突",
+                marker_sha,
+                git_sha,
+            )
+    source = "git" if git_sha is not None else ("repro_provenance" if marker_sha is not None else None)
+    return {
+        "git_sha": git_sha if git_sha is not None else marker_sha,
+        "git_sha_source": source,
+        "git_available": git_sha is not None,
+        "in_docker_repro": bool(marker["present"]),
+        "repro_provenance": {
+            "present": bool(marker["present"]),
+            "path": marker["path"],
+            "git_sha": marker_sha,
+            "git_sha_matches_git": matches,
+            "git_sha_conflict": conflict,
+            "error": marker["error"],
+        },
+    }
+
+
+def _build_environment_provenance(
+    workspace_dir: str | os.PathLike[str] | None = None,
+    git_block: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """构造结果 JSON 的 ``environment`` 块（Python/平台/提交来源/容器标记）。
+
+    Args:
+        workspace_dir: marker 所在工作目录；None = 当前工作目录。
+        git_block: 可选的 ``_resolve_git_provenance`` 结果（避免重复执行 git）；
+            None 时内部解析。
+    """
+    import platform as _platform
+
+    resolved = git_block if git_block is not None else _resolve_git_provenance(workspace_dir)
+    return {
+        "python_version": sys.version.split()[0],
+        "platform": _platform.platform(),
+        "git_sha": resolved["git_sha"],
+        "git_sha_source": resolved["git_sha_source"],
+        "in_docker_repro": resolved["in_docker_repro"],
+        "repro_provenance": resolved["repro_provenance"],
+    }
+
+
 def run_benchmark(
     dataset_name: str = "examples",
     subset: str | None = None,
@@ -3954,20 +4138,11 @@ def run_benchmark(
     # Python 版本 / git sha（有 git 时）/ 容器标记（.repro_provenance 存在时）
     # / 关键开关，写入 summary["environment"]，使任意批次结果 JSON 自带
     # 复现坐标（配合 Dockerfile.repro 的 docker run 一条命令复现）。
-    import platform as _platform
-    import subprocess as _sp
-
-    _env_provenance: dict[str, Any] = {
-        "python_version": sys.version.split()[0],
-        "platform": _platform.platform(),
-        "git_sha": None,
-        "in_docker_repro": os.path.exists(os.path.join(os.getcwd(), ".repro_provenance")),
-    }
-    try:
-        _git_sha = _sp.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, timeout=5).stdout.strip()
-        _env_provenance["git_sha"] = _git_sha or None
-    except (OSError, _sp.SubprocessError):
-        _env_provenance["git_sha"] = None
+    # A03（2026-10-18 第三方审查 P1）：容器内 .git 被排除时，从 marker 的
+    # `GIT_SHA=<sha>` 读取提交 SHA 作为 provenance 来源（不再只做存在性检查）；
+    # 有 git 时同时记录两者并校验一致性。实现见 _build_environment_provenance。
+    _git_block = _resolve_git_provenance(os.getcwd())
+    _env_provenance: dict[str, Any] = _build_environment_provenance(os.getcwd(), git_block=_git_block)
     summary = {
         "timestamp": datetime.now().isoformat(),
         "dataset": dataset_name,
@@ -4069,21 +4244,9 @@ def run_benchmark(
     # subset / seed / baselines / results，无 git commit SHA、无模型版本、
     # 无 temperature、无 ~118 个环境开关快照 → 跨模型/跨代码版本串味且
     # 不可复算）。
-
-    def _git_sha() -> str | None:
-        try:
-            _res = _run_with_timeout(
-                ["git", "rev-parse", "HEAD"],
-                capture_output=True,
-                text=True,
-                cwd=os.path.dirname(os.path.abspath(__file__)) or ".",
-                timeout=10,
-            )
-            if _res.returncode == 0:
-                return _res.stdout.strip()
-        except Exception:
-            pass
-        return None
+    # A03（2026-10-18 第三方审查 P1）：git 元数据与 .repro_provenance marker
+    # 在 environment 块处已统一解析（_git_block），此处直接复用——无 git 的
+    # 复现容器内 git_sha 来自 build-arg 写入的 marker，不再退化为 None。
 
     _env_snapshot_keys = [
         "MAX_ITERATIONS",
@@ -4305,7 +4468,9 @@ def run_benchmark(
     except (ValueError, TypeError):
         _temperature_val = _temperature_raw
 
-    _git_sha_val = _git_sha()
+    # A03：git_sha 由 environment 块的统一解析结果给出（有 git → git HEAD；
+    # 无 git 的复现容器 → .repro_provenance marker 的 build-arg GIT_SHA）。
+    _git_sha_val = _git_block["git_sha"]
 
     # M9（2026-09-29 审查 P0）补充：git dirty 状态（工作树有未提交变更时
     # provenance 须如实标注，否则"git_sha 指向某 commit"具有误导性——
@@ -4325,6 +4490,13 @@ def run_benchmark(
 
     summary["provenance"] = {
         "git_sha": _git_sha_val,
+        # A03：提交来源可审计——"git"（工作树元数据）或 "repro_provenance"
+        # （复现容器 build-arg 写入的 .repro_provenance marker；容器内 .git 被
+        # .dockerignore 排除时仍可追溯）；None = 两来源均不可用。
+        "git_sha_source": _git_block["git_sha_source"],
+        # marker 明细：present/git_sha/git_sha_matches_git/git_sha_conflict/error。
+        # 有 git 时 both 记录并校验一致性；冲突时上面已 logger.warning。
+        "repro_provenance": _git_block["repro_provenance"],
         "git_dirty": _git_dirty(),
         # R15（2026-10-08 R2）：脏树豁免原因入 provenance——--allow-dirty 跑批时
         # 记录"为何带脏树"（如调试/迭代），使豁免可审计（此前豁免无登记，

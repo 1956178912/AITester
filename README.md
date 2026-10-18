@@ -14,8 +14,9 @@
 > **为什么不用"手工设计"的多智能体（2026-10-10 修订：三方并列，撤回原"共识"表述）**：
 > 项目自身 n=261 生死实验（−28pp，vs 检出优先提示协议 plain_llm_df）之外，
 > 2026 年外部证据**方向不一，须并列呈现，不得择一表述为"共识"**：
-> **(a) 不利证据**——Carleton 大学荣誉项目复现（Radaideh & Corriveau，*Understanding the
-> Effect of Agentic Iteration on LLM-Based Unit Test Generation*，**非同行评审**，
+> **(a) 不利证据**——Carleton 大学荣誉项目复现（Radaideh & Corriveau，*Comparing
+> Automated Unit Test Generation Approaches for a Java Library Management System*，
+> **非同行评审**，
 > report-hub.scs.carleton.ca/projectPage/2872）在 **mutation score** 上报告 one-shot
 > Gemini 2.5 Flash **88.35%** vs CANDOR **35.92%**、one-shot GPT-4o **69.90%**
 > vs CANDOR **45.63%**；作者自述该结果为**配置效应而非迭代有害**；
@@ -161,6 +162,10 @@ source .venv/bin/activate
 
 # 1. 安装依赖
 pip install -r requirements.txt
+# 仅 wheel / 非仓库开发安装：运行 Executor 与基准评测请安装执行 extra
+# pip install "aitester[execution]"   # pytest + pytest-cov + pytest-timeout
+# 默认 pip install aitester 不含执行工具；缺模块时 Executor 返回
+# error_info.type=execution_dependency_missing 并提示本命令
 
 # 2. 配置环境变量
 cp .env.example .env

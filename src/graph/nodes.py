@@ -37,6 +37,7 @@ from config import (
 # 的历史 mock 口径依赖此命名空间转发（与 flags re-export 同口径，须保留）。
 from src.agents.debugger import DebuggerAgent  # noqa: F401
 from src.agents.executor import ExecutorAgent  # noqa: F401
+from src.agents.executor_runtime import summarize_execution_attempts
 from src.agents.generator import GeneratorAgent, _repro_test_enabled
 from src.agents.planner import PlannerAgent, spec_oracle_examples_enabled
 from src.agents.rogue_monitor import rogue_monitor_enabled
@@ -829,6 +830,31 @@ def _derive_detection_first_status(passed: bool, red_seen: bool | None) -> str |
     return None
 
 
+def _apply_test_suite_dedup(generated_test: str) -> tuple[str, int]:
+    """N5 测试套件断言去重（TEST_SUITE_DEDUP_ENABLE=true 时启用，默认关）。
+
+    A14（2026-10-18 第三方评审 P1）：`experiments.test_suite_minimize` 属仓库
+    实验树（wheel 只收 src*），旧实现在开关开启时裸 import——干净基础 wheel
+    下 ImportError 直接打断 generator 节点。现导入失败保守降级：保留原文、
+    移除数记 0（与开关关闭路径一致），不阻断主生成流程。
+
+    Args:
+        generated_test: LLM 生成的测试代码。
+
+    Returns:
+        (去重后的测试代码, 移除的重复断言条数)；开关关 / 依赖不可用时原样返回。
+    """
+    if not env_flag("TEST_SUITE_DEDUP_ENABLE"):
+        return generated_test, 0
+    try:
+        from experiments.test_suite_minimize import dedup_assertions as _dedup_assertions
+    except Exception as exc:  # 发行缺包（wheel 不含 experiments）→ 保守降级
+        logger.warning("N5 测试套件去重层不可用（experiments 包缺失/导入失败），保守跳过: %s", exc)
+        return generated_test, 0
+    deduped_code, dedup_removed = _dedup_assertions(generated_test)
+    return deduped_code, len(dedup_removed)
+
+
 def _generator_node(state: AITesterState) -> dict[str, Any]:
     """
     GeneratorAgent 节点：根据测试计划生成 pytest 测试代码。
@@ -1288,13 +1314,9 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
     # 本层在 generator 产出后对 test_code 做 AST 级重复断言去除
     # （experiments/test_suite_minimize.dedup_assertions），纯数据
     # 零 LLM 成本，不改变路由 / 开关默认行为。
-    if env_flag("TEST_SUITE_DEDUP_ENABLE"):
-        from experiments.test_suite_minimize import dedup_assertions as _dedup_assertions
-
-        _deduped_code, _dedup_removed = _dedup_assertions(generated_test)
-        if _dedup_removed:
-            generated_test = _deduped_code
-            logger.info("N5 测试套件断言去重：移除 %d 条重复断言", len(_dedup_removed))
+    generated_test, _dedup_removed = _apply_test_suite_dedup(generated_test)
+    if _dedup_removed:
+        logger.info("N5 测试套件断言去重：移除 %d 条重复断言", _dedup_removed)
 
     # R1c（2026-10-05 审查 P0）：确定性规约 oracle 注入（SPEC_ORACLE_EXEC_ENABLE=true
     # 时启用，默认关时零注入，历史口径不变）。详见 _append_spec_oracle_to_test。
@@ -1471,6 +1493,28 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
 # AITESTER_EXECUTOR_AGENT_CACHE=0 关闭（默认启用，行为不变）。
 
 
+def _executor_attempt_evidence(result: dict[str, Any]) -> dict[str, Any]:
+    """A16（2026-10-18 第三方评审 P1）：从 Executor 结果恢复尝试证据。
+
+    兼容旧结果 dict（无 execution_attempts / flaky_fail_then_pass 字段时
+    行为与历史逐字一致：summary 全零、fail_then_pass=False）。真实序列优先：
+    fail→pass = 同一 (target_code, generated_test) 多次执行结果不一致，是
+    flaky 的直接证据，不能被最后一次成功结果抹掉。
+
+    Args:
+        result: ExecutorAgent.execute 返回 dict。
+
+    Returns:
+        summarize_execution_attempts 汇总 dict，并把 flaky_fail_then_pass
+        显式标记并入 ``fail_then_pass`` 键。
+    """
+    raw_attempts = result.get("execution_attempts")
+    records = [dict(item) for item in raw_attempts if isinstance(item, dict)] if isinstance(raw_attempts, list) else []
+    summary = summarize_execution_attempts(records)
+    summary["fail_then_pass"] = bool(result.get("flaky_fail_then_pass")) or bool(summary["fail_then_pass"])
+    return summary
+
+
 def _executor_node(state: AITesterState) -> dict[str, Any]:
     """
     ExecutorAgent 节点：执行测试并记录结果。
@@ -1510,7 +1554,15 @@ def _executor_node(state: AITesterState) -> dict[str, Any]:
         target_file=state["target_file"],
         target_function=state.get("target_function"),
     )
-    status = "PASS" if result["passed"] else "FAIL"
+    # A16（2026-10-18 第三方评审 P1）：重试层保留每次尝试记录；首败次过
+    # （fail→pass）是"测试自身不稳定"的真实证据——旧实现只留最后一次成功
+    # 结果，flaky 门（仅对 passed=False 生效）永远看不到它。现按真实序列
+    # 保守处理：effective passed = 最后一次 rc==0 且未观察到 fail→pass；
+    # 无该证据时本变量与 result["passed"] 完全相同（历史字段/行为不变）。
+    _attempt_summary = _executor_attempt_evidence(result)
+    _fail_then_pass = bool(_attempt_summary.get("fail_then_pass"))
+    _passed = bool(result["passed"]) and not _fail_then_pass
+    status = "PASS" if _passed else "FAIL"
     logger.info(
         "Executor 完成第 %d 轮测试：%s，覆盖率=%.1f%%，失败用例数=%d",
         state.get("iteration", 0) + 1,
@@ -1521,7 +1573,7 @@ def _executor_node(state: AITesterState) -> dict[str, Any]:
     _trace_node(
         "executor",
         output_summary={
-            "passed": result["passed"],
+            "passed": _passed,
             "coverage": result["coverage"],
             "failed_cases": len(result["failed_cases"]),
         },
@@ -1532,7 +1584,7 @@ def _executor_node(state: AITesterState) -> dict[str, Any]:
 
     # 统一走 rag_guarded 降级守卫（P1 重构）：测试通过时入库成功用例
     _consume_pending_repair = False
-    if result["passed"]:
+    if _passed:
         rag_guarded(
             "add_case",
             lambda r: r.add_case(
@@ -1573,7 +1625,7 @@ def _executor_node(state: AITesterState) -> dict[str, Any]:
     # 纯观测层：探针失败 / 测试全过时 state["runtime_probe_snapshot"]=None，
     # 历史口径不变。默认关闭时零行为变化。
     runtime_probe_snapshot: dict[str, Any] | None = None
-    if not result["passed"] and _runtime_probe_enabled():
+    if not _passed and _runtime_probe_enabled():
         from src.agents.runtime_probe import capture_failure_snapshot
 
         runtime_probe_snapshot = capture_failure_snapshot(
@@ -1595,7 +1647,7 @@ def _executor_node(state: AITesterState) -> dict[str, Any]:
     # 复制一份轨迹，故此处不预先计算 prev_coverage，避免重复扫描）
     new_trace = _record_execution_trace(
         state,
-        passed=result["passed"],
+        passed=_passed,
         coverage=result["coverage"],
         elapsed_seconds=round(time.time() - t0, 2),
     )
@@ -1607,10 +1659,10 @@ def _executor_node(state: AITesterState) -> dict[str, Any]:
     strategy_suggestion = _suggest_iteration_strategy(new_trace, coverage_delta)
 
     # 1.4 事件总线接线：TestsExecuted（纯观测，不改路由）
-    publish_tests_executed(state, passed=result["passed"], coverage=result["coverage"])
+    publish_tests_executed(state, passed=_passed, coverage=result["coverage"])
 
     update: dict[str, Any] = {
-        "test_passed": result["passed"],
+        "test_passed": _passed,
         "test_output": result["output"],
         "coverage_report": result["coverage"],
         "failed_cases": result["failed_cases"],
@@ -1649,7 +1701,28 @@ def _executor_node(state: AITesterState) -> dict[str, Any]:
     # （失败口径：不稳定结果不能作"修复正确"证据），并写 flaky_detected /
     # flaky_pass_count / flaky_total_count（统计层 flaky fraction 消费）。
     # 纯 subprocess（LLM 缓存命中下零成本）；仅失败轮触发（全绿即稳定，免重测）。
-    if _flaky_check_enabled() and not result["passed"]:
+    # A16（2026-10-18 第三方评审 P1）：重试层 fail→pass 证据优先消费。
+    # 旧实现首败次过只保留最后一次成功，flaky 门（仅对 passed=False 生效）
+    # 永远看不到"同测试同代码结果不一致"。观察到 fail→pass ⇒
+    # flaky_detected=True + flaky_unverified=True，test_passed 保守记 False
+    # （不稳定结果不能作"修复正确"证据），pass/total 记真实尝试序列计数。
+    # 该分支不依赖 FLAKY_CHECK_ENABLE（新证据本身即结论），且不再重复执行
+    # detect_flaky 重测（证据已在手，省 subprocess）。
+    _attempt_flaky_handled = False
+    if _fail_then_pass:
+        _attempt_flaky_handled = True
+        update["flaky_detected"] = True
+        update["flaky_pass_count"] = int(_attempt_summary.get("pass_count", 0))
+        update["flaky_total_count"] = int(_attempt_summary.get("attempts", 0))
+        update["flaky_unverified"] = True
+        update["test_passed"] = False
+        logger.warning(
+            "A16 观察到 fail→pass 重试证据（%d 次尝试中 %d 通过 / %d 失败），test_passed 保守记 False（flaky）",
+            int(_attempt_summary.get("attempts", 0)),
+            int(_attempt_summary.get("pass_count", 0)),
+            int(_attempt_summary.get("fail_count", 0)),
+        )
+    if _flaky_check_enabled() and not _passed and not _attempt_flaky_handled:
         from src.agents.flaky_gate import detect_flaky as _detect_flaky
 
         _flaky = _detect_flaky(
@@ -1686,7 +1759,7 @@ def _executor_node(state: AITesterState) -> dict[str, Any]:
     # 通过**不等于缺陷被处理**——这是经典 oracle-from-implementation 假
     # 成功通道。写入 test_regenerated_pass_unverified 标记（纯观测，不改
     # 路由），供评估层把该类任务归入"未验证假通过"而非"修复成功"。
-    if result["passed"] and int(state.get("regeneration_count", 0)) > 0:
+    if _passed and int(state.get("regeneration_count", 0)) > 0:
         update["test_regenerated_pass_unverified"] = True
     # W3（2026-10-05 审查落地·检出优先协议，DETECTION_FIRST_ENABLE 默认关时
     # 零行为变化）：见 config.detection_first_enabled 协议说明。
@@ -1700,9 +1773,9 @@ def _executor_node(state: AITesterState) -> dict[str, Any]:
     #   （LangGraph 后写覆盖）。
     if detection_first_enabled():
         if int(state.get("iteration", 0)) == 0:
-            update["detection_first_red_seen"] = (not result["passed"]) or bool(state.get("detection_first_red_seen"))
+            update["detection_first_red_seen"] = (not _passed) or bool(state.get("detection_first_red_seen"))
         _df_red_seen = update.get("detection_first_red_seen", state.get("detection_first_red_seen"))
-        _df_status = _derive_detection_first_status(bool(result["passed"]), _df_red_seen)
+        _df_status = _derive_detection_first_status(bool(_passed), _df_red_seen)
         if _df_status is not None:
             update["detection_first_status"] = _df_status
     # AC2（2026-10-06 第十轮审查 T-P0-4）：检出优先协议双门——
@@ -1721,7 +1794,7 @@ def _executor_node(state: AITesterState) -> dict[str, Any]:
             specificity_verdict,
         )
 
-        _gate_passed = bool(update.get("test_passed", result["passed"]))
+        _gate_passed = _passed
         if int(state.get("iteration", 0)) == 0 and not _gate_passed:
             _verdict: str | None = None
             if detection_specificity_gate_enabled():
@@ -1787,7 +1860,7 @@ def _executor_node(state: AITesterState) -> dict[str, Any]:
     # O35：回滚成功必须经 update dict 把两个快照键清空——_rollback_last_patch
     # 内部的 state.pop 改写的是节点入参 dict，LangGraph 不回写（否则陈旧
     # 快照路径会留在 state，下一轮失败时重复回滚到更早的版本）。
-    if not result["passed"]:
+    if not _passed:
         # C6（2026-10-05 系统审查 P0）：磁盘与 state 同事务恢复——
         # restored_out 携带快照原文，写回 state["target_code"]，否则下一轮
         # Debugger 分析/补丁基底仍是坏补丁代码（"测原码/修补码"幻象迭代）。
@@ -1806,7 +1879,7 @@ def _executor_node(state: AITesterState) -> dict[str, Any]:
     # 使"注入 oracle 造成的红"与"LLM 断言造成的红"在结果行里可分离（T3 审查
     # 指出的逐位同构缺口）。纯观测：不改路由；未注入轮 / 不可判定轮不写键
     # （返回 None，保留原判定，不臆测）。
-    _oracle_verdict_upgraded = _spec_oracle_verdict_after_run(state, result)
+    _oracle_verdict_upgraded = _spec_oracle_verdict_after_run(state, dict(result, passed=_passed))
     if _oracle_verdict_upgraded is not None:
         update["spec_oracle_verdict"] = _oracle_verdict_upgraded
     return update

@@ -22,11 +22,20 @@ R35/R31（2026-09-30 独立审查 P0）：flaky 测试门禁（重复执行一�
       state["flaky_total_count"]（供统计层"flaky fraction"消费）；
     - 重复执行全部复用同一 ExecutorAgent 实例（同沙箱/v 环境），
       仅重跑 pytest 子进程（缓存命中下 LLM 零成本，纯 subprocess）。
+    - A16（2026-10-18 第三方评审 P1）：**执行重试层自带的 fail→pass 证据**
+      （run_pytest_with_retry 保留每次尝试记录，executor 结果含
+      ``flaky_fail_then_pass`` / ``execution_attempts``）优先于本模块的
+      失败轮重复检测——一旦观察到"首败次过"，_executor_node 即使
+      FLAKY_CHECK_ENABLE 默认关也会写 flaky_detected/flaky_unverified=True
+      并保守记 test_passed=False（执行证据在手时不重复 detect_flaky）。
 
 消费方式（纯观测层 + 保守路由）：
-    - 实验统计：flaky fraction（flaky 任务占比）入工件；
-    - M1 指标：flaky 任务的 detection/repair 按"不可测"处理
-      （None），避免 flaky 假信号污染三指标。
+    - 实验统计：flaky fraction（flaky 任务占比）入工件（run_benchmark 行级
+      透出 flaky_unverified / flaky_detected / flaky_pass_count /
+      flaky_total_count 四键）；
+    - M1 指标：flaky 任务的 detection/repair/false-fix/regression 等端点按
+      "不可测"处理（None，`experiments/_m1_metrics` 已接线消费），避免
+      flaky 假信号污染三指标。
 """
 
 from __future__ import annotations

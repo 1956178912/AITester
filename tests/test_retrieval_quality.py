@@ -179,3 +179,66 @@ class TestEnvReaders:
         assert _recall_enabled() is False
         monkeypatch.setenv("RAG_RETRIEVAL_RECALL_ENABLE", "true")
         assert _recall_enabled() is True
+
+
+class TestA22RelevantCountDirect:
+    """A22（2026-10-18 第三方审查 P2）：一次解析有效 k、直接返回整数相关数。
+
+    历史缺陷：`retrieval_relevance()` 先用内部默认 k 算比例，再
+    `effective_k = k if (k and len(refs) >= k) else len(refs)` 反推——
+    k=None 且 len(refs) > 默认 k 时分母误用 len(refs)，相关数被放大
+    （top-3 内 2 个相关、refs 共 4 条 → round(2/3*4)=3）。
+    """
+
+    def test_k_none_uses_default_k_not_refs_len(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("RAG_RETRIEVAL_RECALL_ENABLE", "true")
+        monkeypatch.setenv("RAG_RECALL_K", "3")
+        # top-3 = [0.9, 0.8, 0.5] → 2 相关；第 4 条 0.95 不在 top-k 内
+        refs = _refs([0.9, 0.8, 0.5, 0.95])
+        out = retrieval_relevance(refs)
+        assert out is not None
+        assert out["retrieval_relevant_count"] == 2, "k=None 时必须按默认 k=3 直接计数（不得用 len(refs) 反推放大）"
+        assert out["retrieval_relevance"] == pytest.approx(round(2 / 3, 4))
+        assert out["retrieval_relevant_count"] <= _recall_k()
+
+    def test_explicit_k_resolved_once(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("RAG_RETRIEVAL_RECALL_ENABLE", "true")
+        refs = _refs([0.9, 0.8, 0.75, 0.7, 0.65])
+        out = retrieval_relevance(refs, k=5, threshold=0.7)
+        assert out is not None
+        assert out["retrieval_relevant_count"] == 4, "0.9/0.8/0.75/0.7 共 4 个相关"
+        assert out["retrieval_relevance"] == pytest.approx(0.8)
+
+    def test_count_consistent_with_recall_and_never_exceeds_k(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("RAG_RETRIEVAL_RECALL_ENABLE", "true")
+        refs = _refs([0.9, 0.8, 0.7, 0.9, 0.9, 0.9])
+        out = retrieval_relevance(refs, k=3, threshold=0.7)
+        assert out is not None
+        # 直接由比例派生关系：recall = count/k（整数计数为事实源）
+        assert out["retrieval_relevance"] == pytest.approx(round(out["retrieval_relevant_count"] / 3, 4))
+        assert 0 <= out["retrieval_relevant_count"] <= 3
+
+    def test_unmeasurable_cases_return_zero_count(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("RAG_RETRIEVAL_RECALL_ENABLE", "true")
+        # refs 不足 k：不可测量（None）+ 计数 0
+        out = retrieval_relevance(_refs([0.9, 0.8]), k=3)
+        assert out is not None
+        assert out["retrieval_relevance"] is None
+        assert out["retrieval_relevant_count"] == 0
+        # 开关关：同样 None + 0
+        monkeypatch.delenv("RAG_RETRIEVAL_RECALL_ENABLE", raising=False)
+        out2 = retrieval_relevance(_refs([0.9, 0.8, 0.7]))
+        assert out2 is not None
+        assert out2["retrieval_relevance"] is None
+        assert out2["retrieval_relevant_count"] == 0
+
+    def test_compute_recall_matches_evaluate_counts(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """比例与整数计数同源：compute_recall_at_k 与 retrieval_relevance 自洽。"""
+        monkeypatch.setenv("RAG_RETRIEVAL_RECALL_ENABLE", "true")
+        refs = _refs([0.95, 0.4, 0.9, 0.85, 0.2])
+        recall = compute_recall_at_k(refs)
+        out = retrieval_relevance(refs)
+        assert recall == pytest.approx(round(2 / 3, 4))  # top-3: 0.95 相关 / 0.4 不相关 / 0.9 相关
+        assert out is not None
+        assert out["retrieval_relevance"] == recall
+        assert out["retrieval_relevant_count"] == 2

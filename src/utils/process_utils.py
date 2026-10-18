@@ -53,6 +53,18 @@ finally 清理** ⇒ 调用进程在超时分支**之前**被外部异常杀死�
 的子进程仍会逃逸出看门狗可触达的进程组（任何进程组信号都到不了），
 需要调用点自行避免该形态；`orphan_guard` 与 `preexec_fn` 不能同用（看门狗
 无法转发任意 Python 钩子），同时给出会 fail-closed 抛 `ValueError`。
+
+A08 / A12 加固（2026-10-18 第三方评审）
+----------------------------------------
+- **A08（P0，凭证边界）**：新增 ``untrusted_exec_env()`` 作为"执行不可信
+  代码"的**统一最小环境构造器**（最小白名单 + 嵌套 pytest 运行期必需键 +
+  显式 overrides）；``nested_pytest_env`` 委托它。M1 判分 / MDO / P2P 等
+  旁路执行面不再把宿主 ``LLM_*_API_KEY`` / ``OPENAI_API_KEY`` / ``AWS_*`` 等
+  凭证继承进执行 LLM 生成代码的子进程。
+- **A12（P1，Windows 回收）**：``_terminate_process_group`` 增加
+  ``_is_windows()``（可注入）平台分支——Windows 用 ``taskkill /T /F``
+  整树回收 + ``process.kill()`` 兜底 + 有界等待直接子进程；看门狗内嵌脚本
+  同步平台分支。POSIX 行为（两段式 killpg）逐字不变。
 """
 
 from __future__ import annotations
@@ -84,7 +96,15 @@ _TERMINATE_GRACE_SECONDS = 0.5
 # 协议：argv[1]=调用方 PID，argv[2:]=真实命令；命令与看门狗同进程组（新会话由
 # run_with_timeout 的 start_new_session 建立），因此超时 killpg 可一次回收两者；
 # 看门狗唯一职责是**父进程死亡时立即回收命令进程组**（与"超时"互补的两条路径）。
-_ORPHAN_GUARD_SCRIPT = r"""
+#
+# A12（2026-10-18 第三方评审 P1）平台分支：Windows 无 ``os.getpgid`` /
+# ``os.killpg``，历史脚本在父进程死亡路径上会 AttributeError 逃逸（看门狗
+# 崩溃 → 命令进程树没人回收）。现按 ``os.name == "nt"`` 分流：POSIX 保持
+# killpg 整组终止；Windows 用 ``taskkill /T /F /PID`` 整树回收，失败回退
+# ``child.kill()`` 并**等待直接子进程**，保证命令进程至少被回收/收尸。
+# 单测可 exec ``_ORPHAN_GUARD_HELPERS`` 后改写 ``_IS_WINDOWS`` 全局模拟
+# Windows 分支（不启动/终止真实进程）。
+_ORPHAN_GUARD_HELPERS = r"""
 import os
 import signal
 import subprocess
@@ -92,14 +112,16 @@ import sys
 import time
 
 _POLL_INTERVAL_S = 0.1
-
-if len(sys.argv) < 3:
-    sys.exit(2)
-_parent_pid = int(sys.argv[1])
-_cmd = sys.argv[2:]
+# 平台判定常量：Windows 无 os.getpgid/killpg。单测在 exec 本段后可改写该
+# 全局（进程内模拟），不依赖真实 Windows 宿主。
+_IS_WINDOWS = os.name == "nt"
 
 
 def _kill_child_group(child):
+    # 回收命令进程树：POSIX killpg 整组；Windows taskkill /T /F。
+    if _IS_WINDOWS:
+        _kill_child_group_windows(child)
+        return
     try:
         os.killpg(os.getpgid(child.pid), signal.SIGKILL)
     except OSError:
@@ -108,6 +130,40 @@ def _kill_child_group(child):
         except OSError:
             pass
 
+
+def _kill_child_group_windows(child):
+    # Windows：taskkill /T /F 终止整棵进程树；不可用/失败回退 kill()。
+    # 无论走哪条分支都等待直接子进程（有界），避免看门狗先退出留下未收尸子进程。
+    try:
+        subprocess.run(
+            ["taskkill", "/T", "/F", "/PID", str(child.pid)],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        pass
+    try:
+        child.wait(timeout=2.0)
+    except subprocess.TimeoutExpired:
+        try:
+            child.kill()
+        except OSError:
+            pass
+        try:
+            child.wait(timeout=2.0)
+        except subprocess.TimeoutExpired:
+            pass
+"""
+
+_ORPHAN_GUARD_SCRIPT = (
+    _ORPHAN_GUARD_HELPERS
+    + r"""
+if len(sys.argv) < 3:
+    sys.exit(2)
+_parent_pid = int(sys.argv[1])
+_cmd = sys.argv[2:]
 
 # 竞态兜底：调用方可能在监督进程 exec 前就已死亡（此时 getppid 已不是原始父 PID）
 if os.getppid() != _parent_pid:
@@ -128,40 +184,131 @@ while True:
         sys.exit(143)
     time.sleep(_POLL_INTERVAL_S)
 """
+)
 
 # 宿主 pytest 配置键：嵌套 pytest 子进程**不得**继承。
 _HOST_PYTEST_ENV_KEYS: tuple[str, ...] = ("PYTEST_PLUGINS", "PYTEST_ADDOPTS")
 
+# ─── 不可信代码执行环境（A08，2026-10-18 第三方评审 P0）─────────────────────
+#
+# 背景：``nested_pytest_env`` 历史实现只剔除上面两个宿主 pytest 配置键，其余
+# 宿主环境原样进入"执行 LLM 生成测试 / 补丁 / 探针"的子进程。评分（M1）、
+# MDO、P2P 回归等**旁路执行面**因此绕过主 Executor 既有的凭证脱敏
+# （``credential_scrub.scrub_os_environ`` / venv / Docker 链路），宿主若配置了
+# ``LLM_*_API_KEY`` / ``OPENAI_API_KEY`` / ``AWS_*`` / ``MYSQL_PASSWORD`` /
+# ``SSH_AUTH_SOCK`` 等，生成代码可读取并外传——威胁模型（docs/threat_model.md）
+# 承诺的"不可信代码只得最小环境"在这些入口失效。
+#
+# 修复口径（A08 验收）：**统一最小白名单**（复用 ``credential_scrub.build_minimal_env``
+# 的"默认拒绝"实现，避免两套名单漂移）+ 下面这组"嵌套 pytest 运行期必需、
+# 且不承载凭证"的键 + 显式 overrides。白名单外的键（含全部凭证 / 宿主 pytest
+# 配置 / 覆盖率注入 / 档位开关）一律不进入子进程——新增凭证变量无需改名单。
+#
+# 注意：``build_minimal_env()`` 是无条件白名单（不读
+# ``CREDENTIAL_SCRUB_WHITELIST_ENABLE`` 开关）——不可信评分子进程始终最小化，
+# 宿主不能用该开关把凭证重新放回判分子进程。
+#
+# 不继承 ``PYTHONWARNINGS`` / ``COVERAGE_*`` / ``TZ`` 等宿主运行期变量是**有意**
+# 的：它们能改变 pytest 退出码/输出口径（测量伪影），不属于"被测代码必需"。
+_UNTRUSTED_EXEC_PRESERVE_KEYS: frozenset[str] = frozenset(
+    {
+        # 测量确定性 / 解释器行为（非凭证；部分站点显式传 0 或 1，其余沿用宿主）
+        "PYTHONDONTWRITEBYTECODE",  # 判分 tmpdir 不落 .pyc（与 -B 同义）
+        "PYTHONHASHSEED",  # 固定哈希随机化 → 跨运行可复现
+        "PYTHONUTF8",  # 跨平台文本编码口径
+        "COLUMNS",  # pytest 输出宽度（部分站点显式覆盖 200）
+        # ── Windows 平台必需：缺失时 Python/subprocess 启动、临时目录、
+        # 动态库解析可能异常（本机 macOS 无法实跑，按 CPython/Windows 通用
+        # 约定补齐；均为 OS 非敏感变量）──
+        "SYSTEMROOT",
+        "WINDIR",
+        "COMSPEC",
+        "PATHEXT",
+        "USERPROFILE",
+        "APPDATA",
+        "LOCALAPPDATA",
+        "PROGRAMDATA",
+        "PROGRAMFILES",
+        "PROGRAMFILES(X86)",
+        "COMMONPROGRAMFILES",
+        "NUMBER_OF_PROCESSORS",
+        "PROCESSOR_ARCHITECTURE",
+    }
+)
+
+
+def untrusted_exec_env(**overrides: str) -> dict[str, str]:
+    """构造"执行不可信代码"的最小环境（A08/P0 统一构造器）。
+
+    用于所有会执行 **LLM 生成测试 / 补丁 / 行为探针** 的子进程入口
+    （M1 判分、MDO、P2P 回归、门/重放等委托原语，以及嵌套 pytest 站点）：
+
+    1. 以 ``credential_scrub.build_minimal_env()`` 的**最小白名单**为基底
+       （PATH / HOME / TMP* / LANG / PYTHONPATH / SSL 证书等非敏感基础键，
+       默认拒绝其余一切键——凭证、宿主 pytest 配置、覆盖率注入、档位开关
+       都不会进入不可信子进程）；
+    2. 叠加 ``_UNTRUSTED_EXEC_PRESERVE_KEYS``（嵌套 pytest 运行期确定性 +
+       Windows 平台必需键，仅在宿主实际设置时保留）；
+    3. 显式 ``overrides`` 最后覆盖（调用点声明"本子进程确实需要"的键，如
+       ``PYTHONPATH=tmpdir`` / ``PYTHONDONTWRITEBYTECODE=1``）。overrides 是
+       可信调用点的显式声明，**不会被凭证规则再次剔除**。
+
+    与历史 ``{**os.environ, **overrides}`` 的差异：非白名单宿主键不再继承。
+    这既是安全边界，也消除"宿主运行期变量静默改写测量口径"的同类伪影
+    （例如宿主 ``PYTHONWARNINGS=error`` / ``COVERAGE_*`` 不应影响判分）。
+
+    Args:
+        **overrides: 需要显式设置的键（优先级最高，值按原样写入）。
+
+    Returns:
+        可直接传给 ``run_with_timeout(env=...)`` 的最小环境字典。
+    """
+    # 函数内延迟导入：process_utils 位于依赖链底层（explore/measurement 都
+    # import 它），避免模块加载期把 config 侧依赖带进所有调用方。
+    from src.utils.credential_scrub import build_minimal_env
+
+    env: dict[str, str] = build_minimal_env()
+    for key in _UNTRUSTED_EXEC_PRESERVE_KEYS:
+        value = os.environ.get(key)
+        if value is not None:
+            env[key] = value
+    # 防御性二次剔除：即使未来最小白名单被扩大，也绝不把宿主 pytest 配置
+    # 带进嵌套运行（H 轮实测：不可导入的 PYTEST_PLUGINS → rc=1 被读成"测试红"）。
+    for key in _HOST_PYTEST_ENV_KEYS:
+        env.pop(key, None)
+    env.update(overrides)
+    return env
+
 
 def nested_pytest_env(**overrides: str) -> dict[str, str]:
-    """为"tmp 目录里再跑一次 pytest"的子进程构造 env（剔除宿主 pytest 配置）。
+    """为"tmp 目录里再跑一次 pytest"构造 env（``untrusted_exec_env`` 兼容别名）。
 
-    历史口径是 ``env={**os.environ, "PYTHONPATH": tmpdir, ...}``：整体继承宿主
-    环境，同时把 ``PYTHONPATH`` 覆盖成 tmpdir。这两件事叠加会**静默改写测量结果**
-    ——宿主若设了 ``PYTEST_PLUGINS``（插件在宿主 sys.path 上、不在 tmpdir 上），
-    嵌套 pytest 会在**收集之前**就 ImportError 退出 rc=1。
+    历史（H 轮 2026-10-16）：本函数只剔除宿主 ``PYTEST_PLUGINS`` /
+    ``PYTEST_ADDOPTS``，其余环境整体继承。宿主若设了 ``PYTEST_PLUGINS``
+    （插件在宿主 sys.path 上、不在 tmpdir 上），嵌套 pytest 会在**收集之前**
+    就 ImportError 退出 rc=1；``detection_gates`` 把 rc=1 读成"测试红"，
+    ``specificity_verdict`` 遂判 ``over_red``（正确结论应是 ``unavailable``）。
 
-    实测复现（2026-10-16 H 轮）：宿主 ``PYTEST_PLUGINS=<不可导入模块>`` 时，
-    ``detection_gates._run_test_against_code`` 把这次 rc=1 读成"测试红"，
-    ``specificity_verdict`` 遂判 ``over_red``（正确结论应是 ``unavailable``——
-    根本没跑起来）。即宿主的 pytest 配置能让 M1 检出裁决与 AC2 双门得出
-    **与被测代码无关**的结论，且日志里看不出任何异常。
+    A08（2026-10-18 第三方评审 P0，凭证边界）：单纯剔除两个 pytest 键**不是**
+    安全边界——M1/MDO/P2P 等评分旁路会把宿主凭证继承进执行 LLM 生成代码的
+    子进程。现委托 ``untrusted_exec_env``：最小白名单 + pytest 运行期键 +
+    overrides，凭证与宿主 pytest 配置都不再进入嵌套运行。
 
-    ``PYTEST_ADDOPTS`` 同理：宿主追加的 ``-p`` / ``--cov`` 等选项会落到嵌套
-    运行上，改变 rc 与输出形态。
-
-    干净环境（两者均未设）下本函数与 ``{**os.environ, **overrides}`` 逐位等价，
-    零行为变化。
+    语义变化（有意，安全默认）：
+    - 宿主 pytest 配置（``PYTEST_PLUGINS`` / ``PYTEST_ADDOPTS``）仍剔除；
+    - 宿主凭证（``LLM_*_API_KEY`` / ``OPENAI_API_KEY`` / ``AWS_*`` /
+      ``MYSQL_PASSWORD`` 等）与其余非白名单键不再继承；
+    - 嵌套 pytest 必需项（PATH / HOME / TMPDIR / PYTHONPATH /
+      PYTHONDONTWRITEBYTECODE / PYTHONHASHSEED / LANG / SSL 证书等）保留；
+    - 显式 overrides（如 ``PYTHONPATH=tmpdir``）优先级最高。
 
     Args:
         **overrides: 需要显式设置的键（如 ``PYTHONPATH=tmpdir``），优先级最高。
 
     Returns:
-        可直接传给 ``run_with_timeout(env=...)`` 的完整环境字典。
+        可直接传给 ``run_with_timeout(env=...)`` 的最小环境字典。
     """
-    env = {k: v for k, v in os.environ.items() if k not in _HOST_PYTEST_ENV_KEYS}
-    env.update(overrides)
-    return env
+    return untrusted_exec_env(**overrides)
 
 
 class CompletedProcess(subprocess.CompletedProcess[str]):
@@ -343,6 +490,87 @@ def _resolve_terminate_grace(grace_seconds: float | None) -> float:
     return min(max(value, 0.0), 10.0)
 
 
+def _is_windows() -> bool:
+    """平台判定：当前是否 Windows（**可注入**：单测 monkeypatch 本函数模拟）。
+
+    单独抽成函数而不是模块级常量，原因：本机（macOS）无法实跑 Windows 分支，
+    A12/M5 验收要求用 Mock 单测覆盖 Windows 回收语义（``monkeypatch.setattr``
+    到本函数即可让 ``_terminate_process_group`` 进入 Windows 分支）。
+    """
+    return os.name == "nt"
+
+
+# taskkill /T /F 单次调用上限（秒）与直接子进程收尸等待上限（秒）。
+# 有界：即使 taskkill 挂死也不让超时回收路径无限等待（本模块核心契约是
+# "一定返回"）。taskkill 本身很短命，10s 已是极端宽限。
+_WINDOWS_TASKKILL_TIMEOUT_SECONDS = 10.0
+_WINDOWS_REAP_TIMEOUT_SECONDS = 5.0
+
+
+def _run_taskkill(pid: int) -> subprocess.CompletedProcess[str] | None:
+    """Windows：``taskkill /T /F /PID <pid>`` 终止整棵进程树。
+
+    返回 ``CompletedProcess``；taskkill 不可用（不在 PATH）或调用异常时返回
+    ``None``，由调用方回退 ``process.kill()``（只保证直接子进程被终止）。
+    不经 shell（列表参数），pid 为整数，无注入面。
+    """
+    try:
+        return subprocess.run(
+            ["taskkill", "/T", "/F", "/PID", str(pid)],
+            capture_output=True,
+            text=True,
+            timeout=_WINDOWS_TASKKILL_TIMEOUT_SECONDS,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as e:  # pragma: no cover - 平台相关
+        logger.debug("taskkill 不可用或调用失败（pid=%s）：%s", pid, e)
+        return None
+
+
+def _wait_and_reap(proc: subprocess.Popen[str], *, label: str) -> None:
+    """有界等待直接子进程退出；仍存活则 ``kill()`` 后再次等待（收尸）。
+
+    无论 ``wait`` 是否超时都不向上抛异常——超时回收路径的本职是"尽量回收 +
+    一定返回"；僵尸残留由调用方/巡检层观测。
+    """
+    with contextlib.suppress(subprocess.TimeoutExpired):
+        proc.wait(timeout=_WINDOWS_REAP_TIMEOUT_SECONDS)
+    if proc.poll() is not None:
+        return
+    logger.debug("%s：直接子进程仍在运行，kill() 兜底", label)
+    with contextlib.suppress(OSError):
+        proc.kill()
+    with contextlib.suppress(subprocess.TimeoutExpired):
+        proc.wait(timeout=_WINDOWS_REAP_TIMEOUT_SECONDS)
+
+
+def _terminate_process_group_windows(proc: subprocess.Popen[str], *, label: str) -> None:
+    """Windows 进程树回收分支（A12/P1）：taskkill /T /F → kill() 兜底 → 等待。
+
+    Windows 没有 ``os.getpgid`` / ``os.killpg``（历史实现在超时路径上抛
+    ``AttributeError``，绕过 kill/wait，子进程树可能残留）。本分支：
+
+    1. ``taskkill /T /F /PID <pid>`` 终止**整棵树**（含孙进程）；
+    2. taskkill 不存在 / 返回非 0 / 抛错 → ``process.kill()`` 终止直接子进程；
+    3. 无论哪条路径都**有界等待直接子进程**（必要时再补一次 kill）——保证
+       直接子进程被回收，不把 "taskkill 失败" 升级成"直接子进程失控"。
+    """
+    pid = getattr(proc, "pid", None)
+    taskkill_ok = False
+    # bool 是 int 子类：显式排除，避免 True 被当成 pid=1
+    if isinstance(pid, int) and not isinstance(pid, bool):
+        completed = _run_taskkill(pid)
+        taskkill_ok = completed is not None and getattr(completed, "returncode", 1) == 0
+        if not taskkill_ok:
+            logger.debug("%s：taskkill 未成功（pid=%s），回退 kill()", label, pid)
+    else:  # pragma: no cover - 防御非常规 Popen 替身
+        logger.debug("%s：无有效 pid（%r），直接 kill() 兜底", label, pid)
+    if not taskkill_ok:
+        with contextlib.suppress(OSError):
+            proc.kill()
+    _wait_and_reap(proc, label=label)
+
+
 def _terminate_process_group(
     proc: subprocess.Popen[str],
     *,
@@ -361,15 +589,25 @@ def _terminate_process_group(
        的形态（组号在组内仍有成员时仍有效）。
     4. 任何 `getpgid`/`killpg` 失败（进程已消亡/无权限）都回退 `proc.kill()`。
 
+    A12（2026-10-18 第三方评审 P1，Windows）：Windows 无 `os.getpgid` /
+    `os.killpg`，历史实现直接 AttributeError 逃逸、绕过 kill/wait。现按
+    `_is_windows()` 分派到 `_terminate_process_group_windows`（taskkill /T /F
+    整树回收 + `process.kill()` 兜底 + 有界等待直接子进程）；POSIX 路径逐字
+    不变（仍为新会话进程组 + 两段式 killpg）。
+
     注意：本函数只覆盖"**调用方存活**时的超时回收"；调用方被外部 SIGKILL
     的路径由 `run_with_timeout(orphan_guard=True)` 的看门狗负责（见模块 docstring）。
 
     Args:
-        proc: 已超时的直接子进程（进程组组长）。
+        proc: 已超时的直接子进程（POSIX 上同时是进程组组长）。
         label: 日志标签。
         grace_seconds: SIGTERM 后宽限秒数（None = 模块默认 0.5s）。
     """
     grace = _resolve_terminate_grace(grace_seconds)
+    if _is_windows():
+        # Windows：无进程组 API，走 taskkill 整树 + kill() 兜底分支。
+        _terminate_process_group_windows(proc, label=label)
+        return
     try:
         pgid: int | None = os.getpgid(proc.pid)
     except (ProcessLookupError, PermissionError, OSError) as e:  # pragma: no cover - 进程已消亡竞态

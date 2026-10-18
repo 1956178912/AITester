@@ -598,7 +598,9 @@ def _render_caliber_block(
         f"比例型端点 95% CI = `experiments/statistical_analysis.bootstrap_paired_diff_ci`"
         f"（配对差值均值，百分位法，{_BOOTSTRAP_N_RESAMPLES} 次重采样，seed={_BOOTSTRAP_SEED}，"
         "order-statistic 分位）。",
-        "- **未含聚类校正**：模板聚类稳健性（26 个唯一程序体 / 31 模板簇）见 canonical 报告 AC4 节，"
+        "- **未含聚类校正**：模板聚类稳健性见 canonical 报告 AC4 节；簇数取决于批次真实生成参数"
+        "（主批 `max_pattern_repeat=2` 口径为 31 模板簇，见 `statistical_analysis.cluster_robust_analysis`；"
+        "2026-10-18 A06 修复后按归档任务元数据 / 分 seed 重建解析程序身份，本报告不硬编码簇数），"
         "本报告的 n 与 CI 均为逐任务独立口径（名义偏乐观）。",
         "",
     ]
@@ -852,8 +854,9 @@ def _render_limitations(
     if corrected is None:
         items.append("- 修正口径 repair/false_fix：默认未现算（重型重放路径），见 §5 说明。")
     items.append(
-        "- 本报告为**逐任务独立口径**：27 模板 → 26 个唯一程序体（S13），跨种子同模板任务相关，"
-        "n 与 CI 名义偏乐观；聚类稳健结论以 canonical 报告 AC4 节为准。"
+        "- 本报告为**逐任务独立口径**：跨种子同模板任务为相关观测（簇数取决于批次真实生成参数，"
+        '主批 `max_pattern_repeat=2` 口径为 31 模板簇；2026-10-18 A06 修复前"26 个唯一程序体"'
+        "系漏 cap 的重建伪影，已废弃），n 与 CI 名义偏乐观；聚类稳健结论以 canonical 报告 AC4 节为准。"
     )
     items.append(
         "- MDE 为**正态近似**（无精确检验对应物），且假定不一致结构在备择下不变；"

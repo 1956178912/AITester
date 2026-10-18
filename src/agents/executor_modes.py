@@ -17,7 +17,11 @@ from typing import Any
 
 from src.agents.executor_imports import auto_fix_imports, extract_module_name_from_file
 from src.agents.executor_output import build_error_info, parse_coverage, parse_failed_cases
-from src.agents.executor_runtime import cleanup_sandbox
+from src.agents.executor_runtime import (
+    cleanup_sandbox,
+    extract_execution_attempts,
+    observed_fail_then_pass,
+)
 from src.agents.kernel_sandbox import interpreter_sandbox_allowances, kernel_sandbox_enabled, sandbox_launch_failure
 from src.utils.credential_scrub import scrub_os_environ
 from src.utils.env_utils import env_flag, env_float, env_int
@@ -127,6 +131,12 @@ def execute_sandboxed(
     # - 观测层：结果 dict 附 kernel_sandbox_obs（与本地链路同字段，供
     #   Fail-Closed 治理协议 / 实验分析消费，纯观测不改结果口径）。
     # 默认关（KERNEL_SANDBOX_ENABLE=false）时本段零行为变化。
+    #
+    # A13（2026-10-18 第三方评审 P1）：本命令固定依赖 pytest + pytest-cov
+    # （`--cov`），宿主/venv 解释器须具备 execution extra
+    # （pip install "aitester[execution]"）；run_pytest_with_retry 在执行前
+    # 做能力检查，缺模块时返回结构化 execution_dependency_missing 诊断，
+    # 而不是把 `No module named pytest` 的 rc=1 误分类为 test_failure。
     cmd = [
         python_path,
         "-m",
@@ -231,6 +241,15 @@ def execute_sandboxed(
                 "failed_cases": failed_cases,
                 **result_extras,
             }
+            # A16（2026-10-18 第三方评审 P1）：重试层保留的每次尝试记录并入
+            # 结果 dict；首败次过（fail→pass）显式标记 flaky_fail_then_pass，
+            # 供 nodes 侧写 flaky 标记并保守处理 test_passed。passed 语义不变
+            # （仍是最后一次执行的 rc==0），本段只新增观测字段。
+            _attempts = extract_execution_attempts(last_result)
+            if _attempts:
+                result["execution_attempts"] = _attempts
+                if observed_fail_then_pass(_attempts):
+                    result["flaky_fail_then_pass"] = True
             if last_result is not None and last_result.returncode != 0:
                 result["error_info"] = build_error_info(last_result, output)
                 result["error_info"]["missing_dependencies"] = sorted(missing_modules)
@@ -361,6 +380,10 @@ def execute_docker(
     - 容器镜像（默认 aitester:latest，对应仓库根 Dockerfile）内置全部
       依赖（构建期 pip install，Docker 层缓存复用），任务代码与测试
       代码经挂载卷传入，容器间完全隔离；
+    - A13（2026-10-18 第三方评审 P1）：Docker 链路的 pytest / pytest-cov
+      由**镜像内依赖**提供（Dockerfile 构建期安装），不做宿主侧能力检查；
+      非 Docker 链路（本地 / venv 沙箱）由 run_pytest_with_retry 在执行前
+      检查 execution extra（缺模块时返回 execution_dependency_missing）；
     - docker CLI 不存在时提前返回 docker_unavailable 诊断，不静默
       降级到本地执行（"以为隔离了其实没有" 会污染对比实验口径）；
     - 相比 venv 模式，镜像构建一次后每任务零安装开销（依赖预安装

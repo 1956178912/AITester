@@ -35,7 +35,13 @@ from src.agents.executor_imports import (
 )
 from src.agents.executor_modes import execute_docker, execute_sandboxed
 from src.agents.executor_output import build_error_info, parse_coverage, parse_failed_cases
-from src.agents.executor_runtime import cleanup_sandbox, cleanup_temp_file, run_pytest_with_retry
+from src.agents.executor_runtime import (
+    cleanup_sandbox,
+    cleanup_temp_file,
+    extract_execution_attempts,
+    observed_fail_then_pass,
+    run_pytest_with_retry,
+)
 from src.utils.credential_scrub import scrub_os_environ
 from src.utils.env_utils import env_flag
 
@@ -344,6 +350,16 @@ class ExecutorAgent:
                 "coverage": coverage,
                 "failed_cases": failed_cases,
             }
+            # A16（2026-10-18 第三方评审 P1）：把重试层保留的每次尝试记录
+            # （rc / timed_out / passed）并入结果 dict；首败次过（fail→pass）
+            # 显式标记 flaky_fail_then_pass，供 nodes 侧写 flaky 标记并保守处理
+            # test_passed。passed 语义与重试逻辑不变（仍是最后一次执行的
+            # rc==0）——本段只新增观测字段，历史字段逐字不变。
+            _attempts = extract_execution_attempts(last_result)
+            if _attempts:
+                result_dict["execution_attempts"] = _attempts
+                if observed_fail_then_pass(_attempts):
+                    result_dict["flaky_fail_then_pass"] = True
             # G3 内核级沙箱观测层（纯观测，不改结果口径；供 Fail-Closed
             # 治理协议 / 实验分析消费，与 Docker 链路的 docker_network_obs 同向）
             if self._kernel_sandbox_obs:

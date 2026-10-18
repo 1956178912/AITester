@@ -47,3 +47,51 @@ McNemar 判别力）——本探针只补 spec_compile_rate 机制观测，不�
 test_2026_10_10_optimization_batch.py 26/26），确认错误为环境性
 （sitecustomize bulk-delete 守卫 / pytest-of-root 争用），非代码回归。
 BASELINE total_passed 维持推导值 5835（collected 5839），实测须提权前台。
+
+## 勘误（2026-10-18，第三方评审 A20）：一处轨迹 JSONL 单行损坏，原字节保留
+
+- **损坏文件**：`traces/ult__string_contrast_aitester_1791954227.trace.jsonl`
+- **位置**：第 10 行（1-based）；`json.loads` 报 `Unterminated string`，
+  字符串起始于第 201 列左右，行尾停在 `...min(s, key=<REDACTED>`，
+  缺少字符串闭合引号与对象闭合花括号（该行共 399 字符）。
+- **字节完整性**：损坏文件**未被修补、未被删除、未被替换**——原字节与
+  本目录 `SHA256SUMS` 第 26 行记录的 sha256
+  `97cf47b9…a7ebbdd22` 逐字节一致；同文件其余 17 行、同批
+  `benchmark_ult_20261014_130937.json` 与其余轨迹均不受影响。
+- **根因（已定位并修复，不改写历史工件）**：`TraceSession._append` 先把记录
+  `json.dumps` 成单行 JSON，再对**整行文本**调用
+  `src/utils/logging_utils.mask_sensitive_info` 脱敏；其中
+  `(?:key|token|secret|password)=(.{8,})(?:\s|$|")` 模式的 `.` 不排除引号/
+  花括号，贪婪匹配会一路吃到行尾并把 JSON 闭合引号与花括号一起吞掉。
+  该行 `output` 内的 LLM 诊断文本含 ``min(s, key=<键函数>)`` 形式，恰好触发
+  该模式——与本文件第 10 行的截断形态逐字吻合（可用旧模式对同类合法 JSON
+  行复现：输出同样停在 `key=<REDACTED>` 且 `json.loads` 抛未闭合字符串）。
+- **修复位置**（2026-10-18）：`src/observability/trace.py` 改为
+  **先对记录结构逐字段脱敏、再序列化**，并在落盘前用 `json.loads` 做结构
+  守卫（失败诊断出口 `dump_recent_to` 同步修复）；`src/utils/logging_utils.py`
+  的该模式值字符类收紧为 token 边界（排除引号/花括号/反斜杠等 JSON 结构
+  字符），不再消费定界符。回归测试：
+  `tests/test_trace_jsonl_integrity.py`（含"诊断文本含 `key=…` 且位于行尾"
+  用例，断言落盘 JSONL 逐行可解析）。
+- **复核方式**：
+
+  ```bash
+  python - <<'PY'
+  import json
+  from pathlib import Path
+  p = Path("experiments/results/emse_ult_specir_probe_20261014/traces/"
+           "ult__string_contrast_aitester_1791954227.trace.jsonl")
+  for no, line in enumerate(p.read_text(encoding="utf-8").splitlines(), 1):
+      if not line.strip():
+          continue
+      try:
+          json.loads(line)
+      except json.JSONDecodeError as e:
+          print("JSONL error:", no, e.msg, e.colno)
+  PY
+  ```
+
+  预期输出仅 `JSONL error: 10 Unterminated string starting at 201`——
+  该行是本批次唯一的已知损坏记录，为**历史工件如实保留**的证据，不参与
+  指标复算（复算消费的是 `benchmark_ult_*.json` 汇总 JSON）。
+

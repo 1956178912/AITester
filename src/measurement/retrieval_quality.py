@@ -72,6 +72,45 @@ def _relevant_threshold() -> float:
         return _RELEVANT_THRESHOLD_DEFAULT
 
 
+def _evaluate_recall(
+    refs: list[dict[str, Any]] | None,
+    *,
+    k: int | None,
+    threshold: float | None,
+) -> tuple[float | None, int]:
+    """一次解析有效 k、直接计数相关条数，返回 (Recall@k, 整数相关数)。
+
+    A22（2026-10-18 第三方审查 P2）修复的单一事实源：
+
+    - 历史缺陷：`retrieval_relevance()` 先用内部默认 k（如 3）算出比例
+      Recall@k，再用 `effective_k = k if (k and len(refs) >= k) else len(refs)`
+      反推相关数——`k=None` 且 `len(refs) > 默认 k` 时 `effective_k=len(refs)`
+      把分母放大，得到**多于实际 top-k 相关数**的计数（如 top-3 内 2 个相关、
+      refs 共 4 条 → round(2/3*4)=3）。比例舍入后再反推整数本身也不可逆。
+    - 现口径：有效 k 只解析一次（显式 k 优先，否则 RAG_RECALL_K），
+      top-k 切片与相关判定在同一函数内完成，**直接返回整数相关数**；
+      Recall@k 由同一计数派生（`count / effective_k`），两条对外 API
+      观察到的相关数与比例严格自洽。
+
+    可测量性（保守 None 口径，与 compute_recall_at_k 文档一致）：
+    refs 为 None / 空、开关关闭、len(refs) < k、k 非正 → `(None, 0)`；
+    否则 `(round(count/k, 4), count)`，count ∈ [0, k]。
+    """
+    if refs is None or not refs:
+        return None, 0
+    if not _recall_enabled():
+        return None, 0
+    effective_k = _recall_k() if k is None else int(k)
+    if effective_k <= 0 or len(refs) < effective_k:
+        return None, 0
+    eff_threshold = _relevant_threshold() if threshold is None else float(threshold)
+    top_k = refs[:effective_k]
+    relevant_count = sum(
+        1 for r in top_k if isinstance(r, dict) and float(r.get("similarity", 0.0) or 0.0) >= eff_threshold
+    )
+    return round(relevant_count / effective_k, 4), relevant_count
+
+
 def compute_recall_at_k(
     refs: list[dict[str, Any]] | None,
     *,
@@ -87,6 +126,10 @@ def compute_recall_at_k(
     similarity 降序排列，top-k 即前 k 个），而非"检索到 k 个案例"
     —— 避免把"检索器总能填满 k 个（即使低相关）"误报为高质量。
 
+    A22：与 `retrieval_relevance()` 共用 `_evaluate_recall()` 的**一次解析
+    + 直接整数计数**口径（有效 k 只解析一次，比例由整数计数派生，不做
+    反向整数还原）。
+
     Args:
         refs: RAG 检索结果列表（每项含 similarity 字段；None 表示未启用
             RAG / 无历史案例）。
@@ -97,25 +140,11 @@ def compute_recall_at_k(
     Returns:
         - refs 为 None / 空列表 → None（不可测量，保守口径）；
         - RAG_RETRIEVAL_RECALL_ENABLE=false（默认）→ None（历史口径零变化）；
-        - 否则 → |相关数| / k ∈ [0.0, 1.0]（k 取 min(k, len(refs))，
-          检索结果不足 k 个时分母按实际可用数计，避免"案例不够"被
-          误报为"召回率低"——分母缩小 = 检索质量无法评估，记 None）。
+        - 否则 → |相关数| / k ∈ [0.0, 1.0]（len(refs) < k 时按不可测量记
+          None——检索结果不足 k 个时分母缩小会抬高数值）。
     """
-    if refs is None or not refs:
-        return None  # 无检索结果 / RAG 未启用 → 不可测量
-    if not _recall_enabled():
-        return None  # 开关关 → 历史口径零变化
-    if k is None:
-        k = _recall_k()
-    if threshold is None:
-        threshold = _relevant_threshold()
-    # 分母：取 min(k, len(refs))；若检索结果不足 k 个，召回率无法在
-    # 完整 top-k 上评估（保守 None，避免分母缩小抬高数值）
-    if len(refs) < k:
-        return None
-    top_k = refs[:k]
-    relevant = sum(1 for r in top_k if isinstance(r, dict) and float(r.get("similarity", 0.0) or 0.0) >= threshold)
-    return round(relevant / k, 4)
+    recall, _relevant_count = _evaluate_recall(refs, k=k, threshold=threshold)
+    return recall
 
 
 def retrieval_relevance(
@@ -132,6 +161,11 @@ def retrieval_relevance(
     "retrieval_total_refs": 0}（键集合同构，None 占位，与
     _m1_metrics 的保守口径一致）。
 
+    A22（2026-10-18 第三方审查 P2）：`retrieval_relevant_count` 直接取
+    `_evaluate_recall()` 返回的**整数相关数**——历史实现用
+    `round(recall * effective_k)` 从已舍入比例反推，且 `k=None` 时
+    `effective_k` 误用 `len(refs)`（refs 多于默认 k 时计数被放大）。
+
     用途：实验分析侧做"检索质量 ↔ 生成质量"相关分析（STVR RQ2：
     检索策略对生成质量的差异化影响）——若 retrieval_relevance 与
     mutation_score / detection_rate 正相关，则 RAG 的增益可归因
@@ -139,12 +173,7 @@ def retrieval_relevance(
     "检索量"而非"检索质量"（审稿人核心可归因性追问）。
     """
     total = len(refs) if refs else 0
-    recall = compute_recall_at_k(refs, k=k, threshold=threshold)
-    relevant_count = 0
-    if recall is not None and refs:
-        # 开关开启且可测量时，相关数 = round(recall * k)（k 取实际 min(k, len)）
-        effective_k = k if (k and len(refs) >= k) else len(refs)
-        relevant_count = round(recall * effective_k)
+    recall, relevant_count = _evaluate_recall(refs, k=k, threshold=threshold)
     return {
         "retrieval_relevance": recall,
         "retrieval_relevant_count": relevant_count,

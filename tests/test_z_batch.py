@@ -263,7 +263,8 @@ class TestZ9BayesianPaired(unittest.TestCase):
         """配对口径与 statistical_analysis._pair_by_task 等价（锁不变量）。
 
         覆盖三类边界：重复 task_id（首见胜出）、None 值（gold 缺失，分母外）、
-        单侧独有 task_id（交集外）。
+        单侧独有 task_id（交集外）。A07：None 过滤发生在 task_id 去重**之后**
+        （先确定最新记录，再按 None 排除）——见下方两条最新值语义用例。
         """
         from experiments.statistical_analysis import _pair_by_task
 
@@ -292,6 +293,49 @@ class TestZ9BayesianPaired(unittest.TestCase):
         self.assertEqual(counts["n01"], n01)
         self.assertEqual(counts["n10"], n10)
         self.assertEqual(counts["n11"] + counts["n01"] + counts["n10"] + counts["n00"], counts["n_common"])
+
+    def test_latest_none_does_not_fall_back_to_older_value(self):
+        """A07/M8（2026-10-18 第三方评审 P1）：最新记录为 None 时不回退旧值。
+
+        旧实现在记录去重（`seen[tid]=...`）**之前**就 `continue` 跳过 None 行，
+        导致“最新记录不可测、旧记录可测”的任务回退旧值（改变分母/配对计数）。
+        现口径：先按 task_id 去重（最新批次优先，与 field 值无关），再排除
+        None——该任务整体不可测。M8 复现用例：两实现都必须给出 n_common=0。
+        """
+        from experiments.bayesian_paired import paired_contingency
+        from experiments.statistical_analysis import _pair_by_task, mcnemar_test
+
+        rows_a = [
+            {"task_id": "same", "detection_rate": None},  # 最新（首见）：不可测
+            {"task_id": "same", "detection_rate": 0.0},  # 旧：可测但不得顶替
+        ]
+        rows_b = [{"task_id": "same", "detection_rate": 1.0}]
+        counts = paired_contingency(rows_a, rows_b, field="detection_rate")
+        self.assertEqual(counts["n_common"], 0)  # M8：严格最新优先后零个可测配对
+        self.assertEqual(counts["n11"] + counts["n01"] + counts["n10"] + counts["n00"], 0)
+        paired_a, paired_b, common = _pair_by_task(rows_a, rows_b, field="detection_rate")
+        self.assertEqual(common, [])
+        self.assertEqual(paired_a, [])
+        self.assertEqual(paired_b, [])
+        _chi2, _p, _n_conc, n_common = mcnemar_test(rows_a, rows_b, field="detection_rate")
+        self.assertEqual(n_common, 0)
+
+    def test_latest_valid_value_wins_over_older_none(self):
+        """A07 对称边界：最新记录可测时正常进入配对（旧 None 不占位）。"""
+        from experiments.bayesian_paired import paired_contingency
+        from experiments.statistical_analysis import _pair_by_task
+
+        rows_a = [
+            {"task_id": "same", "detection_rate": 1.0},  # 最新：可测
+            {"task_id": "same", "detection_rate": None},  # 旧：不参与
+        ]
+        rows_b = [{"task_id": "same", "detection_rate": 1.0}]
+        counts = paired_contingency(rows_a, rows_b, field="detection_rate")
+        self.assertEqual(counts["n_common"], 1)
+        self.assertEqual(counts["n11"], 1)
+        paired_a, paired_b, common = _pair_by_task(rows_a, rows_b, field="detection_rate")
+        self.assertEqual(common, ["same"])
+        self.assertEqual((paired_a, paired_b), ([1], [1]))
 
     def test_insufficient_sample_returns_none_with_note(self):
         rows_a, rows_b = _rows([("only_one", 1, 0)])

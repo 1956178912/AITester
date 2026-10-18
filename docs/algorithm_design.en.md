@@ -103,7 +103,7 @@ Machine-executable compilation of the logic analysis (LA) happens in two layers 
 
 1. **Boundary parametrize layer (v1, `src/specs/spec_ir.py::compile_to_hypothesis`)**: SpecIR `boundaries` (deterministic boundary anchors, input/expected pairs) compile into `@pytest.mark.parametrize` assertions; NL pre/post/invariant clauses produce no tests (R1a fix: the historical version emitted `assert True` tautologies for invariants — a fake-pass channel, now sealed; empty string when no boundary material).
 2. **Restricted-expression DSL layer (v2, `src/specs/spec_ir_v2.py::compile_spec_oracle`)**: expression-shaped clauses such as `r == x * 2` pass whitelist AST validation (11 pure-function call names + attribute whitelist + node-type restrictions) and compile into `assert <expr>`; non-mechanizable clauses degrade to NL provenance comments. **Signature-aware binding (R1b)**: `extract_signature_params` extracts real parameter names from the target function's AST signature (tri-state: None = not found, degrade; [] = zero params; non-empty = per signature); the binding context extends from the hardcoded `{r,x,a,b,y}` to the real parameter set, and call arity is fixed per signature.
-3. **Side-by-side execution wiring (R1c, `SPEC_ORACLE_EXEC_ENABLE`, default off)**: `_generator_node` appends the v2 compilation output to the tail of the LLM-generated tests via `_append_spec_oracle_to_test` so both run **side by side** — LLM tests passing ≠ the spec oracle passing; the latter's failures constitute deterministic detection on the "logic-driven" channel (observation field `state["spec_oracle_injected"]`). Enable via the single switch or one-shot via `AITESTER_PROFILE=scientific`.
+3. **Side-by-side execution wiring (R1c, `SPEC_ORACLE_EXEC_ENABLE`, default off)**: `_generator_node` appends the v2 compilation output to the tail of the LLM-generated tests via `_append_spec_oracle_to_test` so both run **side by side** — LLM tests passing ≠ the spec oracle passing; the oracle's failure on the **buggy** side is only a **one-sided signal** and **does not constitute a "deterministic detection" verdict**: detection must be adjudicated independently by the evaluation layer under the two-sided criterion (red on buggy ∧ green on gold-fixed/repaired code ∧ no collection/syntax errors on either side, i.e. the F2P caliber); one-sided failures serve only as mechanism observations / attribution clues (the evaluation layer must not count them as detection; since N-3 the oracle is judged separately via `oracle_suite_verdict`). Observation field `state["spec_oracle_injected"]`. Enable via the single switch or one-shot via `AITESTER_PROFILE=scientific`.
 
 **Compilation-rate observation**: `spec_compile_rate` (compilable clauses / non-empty clauses) quantifies how much of "logic-driven" is actually mechanized (written to state by the Planner node when `SPEC_IR_DSL_ENABLE=true`).
 
@@ -156,24 +156,47 @@ Each error type $e \in \mathcal{E}$ corresponds to a unique differentiated repai
 
 ### 3.3 Iterative Repair Loop (Algorithm 3)
 
-```
-Algorithm 3: Iterative Repair Loop
-Input:  original source code S, maximum iteration count K
-Output: repaired source code S', whether tests pass (bool)
+> **Protocol note (current ADR-0015 / ADR-0016 caliber, synced 2026-10-18)**: this algorithm is rewritten under the **detection-first ("red before green")** protocol. The historical version (each iteration `T ← Generator(S_current)`, success as soon as `passed`) is inconsistent with the current implementation and the ADRs, and has been corrected per ADR-0015 (detection-first protocol) and ADR-0016 (orchestration as an ablatable container + the **test-file locking principle**). The protocol switches are off by default (ADR-0003 zero-default-behaviour-change principle); the `AITESTER_PROFILE=logic` profile injects `DETECTION_FIRST_ENABLE=true` plus both gates — with the switches off, the historical "all-green first round ends the run" caliber applies and the terminal fields are `None` (key-set isomorphic).
 
-1:  S_current ← S                          // Start from the original code
-2:  for i ← 1 to K do
-3:      T ← Generator(S_current)           // GeneratorAgent generates test code
-4:      (passed, output, failed_cases) ← Executor(T, S_current)
-5:      if passed then return (S_current, true)   // Tests pass, early termination
-6:      e ← Classifier(output, failed_cases)   // ErrorClassifier classifies the error
-7:      patch ← Debugger(S_current, output, e)  // DebuggerAgent generates a repair patch
-8:      S_current ← ApplyPatch(S_current, patch) // PatchApplier applies the patch
-9:  end for
-10: return (S_current, false)               // Reached maximum iterations without passing
+```
+Algorithm 3: Detection-First Iterative Repair Loop (red before green)
+Input:  original buggy code S₀; maximum repair iterations K; regeneration budget R (_MAX_REGENERATIONS)
+Output: repaired code S'; whether detected (detection); whether repaired (repair);
+        terminal label status ∈ {red_then_green, all_green_unverified, red_not_repaired}
+
+1:  S_current ← S₀ ; red_seen ← false ; status ← None
+2:  T ← Generator(S₀)                     // tests are generated before the repair loop and locked inside it
+3:  (passed, output, failed_cases) ← Executor(T, S₀)   // first-round baseline execution (unrepaired code)
+4:  if passed then                         // all-green first round = no defect detected → not success
+5:      T ← RegenerateStrengthened(T, ≤R)  // red-before-green strengthening prompt; capped by R
+6:      if still all green then return (S₀, detection=false, repair=false, all_green_unverified)
+7:  if first round red then
+8:      red_seen ← true ; T* ← T            // red-witness snapshot (the locked test)
+9:      if specificity gate on then
+10:         v ← ExecuteOnGoldFixed(T)       // in-loop two-sided control: gold-fixed side must turn green
+11:         if v == over_red then T ← Regenerate(T, ≤R) ; goto 3  // over-red → replace with defect-specific test, no repair loop
+12: for i ← 1 to K do
+13:     e ← Classifier(output, failed_cases)          // ErrorClassifier (Algorithm 2)
+14:     patch ← Debugger(S_current, output, e)        // generates source-repair patches only
+15:     S_current ← ApplyPatch(S_current, patch)      // PatchApplier; roll back on failure
+16:     (passed, output, failed_cases) ← Executor(T, S_current)
+17:     if passed then
+18:         red-regression gate (if on): if T was regenerated/replaced and S_current is unpatched → T ← T*, mark failed, continue
+19:         status ← red_seen ? red_then_green : all_green_unverified
+20:         return (S_current, detection=red_seen, repair=red_seen, status)
+21: end for
+22: status ← red_seen ? red_not_repaired : all_green_unverified
+23: return (S_current, detection=red_seen, repair=false, status)
 ```
 
-**Implementation location**: `_should_debug()` in [src/graph/workflow.py](../src/graph/workflow.py) controls the routing condition.
+**Success calibers ("passed" alone is not success)**:
+
+- **Detection — two-sided criterion**: F2P = the generated test is red on the original buggy code **∧** green on the gold-fixed (or repaired) code **∧** no collection/syntax/execution errors on either side; red on the buggy side alone (one-sided) is only a mechanism signal and is not counted as detection.
+- **Repair — two-sided criterion**: the protocol loop requires "a red witness exists (the defect was detected) **∧** the patched code is all green"; the evaluation layer's `repair_rate` is adjudicated independently against **gold material** — a repair counts only when the gold tests are all green on the **final code with the patch actually written** (no patch written → 0.0; unmeasurable → None). `all_green_unverified` (never red, yet all green = weak-test false success) **must not be counted as detection/repair success by the evaluation layer**; `red_not_repaired` (detected but not repaired) counts as detection, not repair.
+- **Test locking / no green by swapping tests**: inside the repair loop the test `T` is locked; regeneration is allowed only through three dedicated routes bounded by `R` (all-green first round, specificity gate `over_red`, diagnosis-reported test defect). The red-regression gate detects "previously red + test regenerated + source unpatched", restores the red-witness test and hands control back to the repair-the-source channel — the mechanism guarantee for ADR-0016 decision 4 ("the repair loop must not reach green by swapping tests").
+- **Switches and defaults**: `DETECTION_FIRST_ENABLE` / `DETECTION_SPECIFICITY_GATE_ENABLE` / `RED_REGRESSION_GATE_ENABLE` are all off by default (ADR-0003); the logic profile and explicit experiment batches enable them. With them off, the historical caliber is byte-identical.
+
+**Implementation location**: routing in `_should_debug()` in [src/graph/workflow.py](../src/graph/workflow.py); first-round red observation / terminal labeling in `_executor_node` in [src/graph/nodes.py](../src/graph/nodes.py) (`_derive_detection_first_status` derives the three values from `(passed, red_seen)`); both gates in [src/tools/detection_gates.py](../src/tools/detection_gates.py).
 
 > **Routing-signal priority (2026-10-05 review batch R17)**: when `ROUTE_STRUCTURED_ENABLE=true` (default off), the "test-generation error" routing signal uses a **structured-first, keyword-fallback** policy — `error_category=logic_error` (classified from the failure stack: an assertion failure whose stack never touches the module under test, i.e., a test-side logic error) takes priority over Chinese diagnosis-keyword matching (`_test_gen_signal_hit`); the signal source (`structured_error_category` / `diagnosis_keyword`) is written to trace, making the keyword-fallback rate measurable. Motivation: keyword matching relies on LLM diagnosis text and was misled by source-code exception signatures (AttributeError/NameError/SyntaxError) in the M5 incident into triggering a false pass. With the switch off, behavior is byte-identical to the historical keyword policy.
 

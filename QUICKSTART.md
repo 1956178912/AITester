@@ -18,6 +18,8 @@ source .venv/bin/activate
 
 # 安装依赖
 pip install -r requirements.txt
+# 仅 wheel 安装（非仓库开发）：运行 Executor 与基准评测请安装执行 extra
+# pip install "aitester[execution]"   # requirements.txt 全量安装已含 pytest
 ```
 
 > **一键引导（推荐）**：上面第 2-4 步可由 `bash scripts/tools/bootstrap_dev.sh`

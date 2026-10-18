@@ -102,18 +102,32 @@ def _mutation_advisor_node(state: AITesterState) -> dict[str, Any]:
     t0 = time.time()
 
     # 调用 experiments/mutation_testing 的测量层（纯 subprocess + pytest，
-    # 零 LLM 成本；_run_mutant_tests 沙箱超时 30s，整体节点耗时可控）
-    from experiments.mutation_testing import build_mutation_feedback
+    # 零 LLM 成本；_run_mutant_tests 沙箱超时 30s，整体节点耗时可控）。
+    #
+    # A14（2026-10-18 第三方评审 P1）：experiments/ 不进发行 wheel（setup.py
+    # find_packages 只收 src*），旧实现把该导入放在 try 外——干净基础 wheel 下
+    # logic/scientific 路由进入本节点即 ImportError 直接崩溃。现导入移入 try
+    # 内保守降级（feedback=None + 日志），与本模块 docstring "测量失败 /
+    # 无存活变异体时 mutation_feedback 保持 None（保守降级，不阻断主流程）"
+    # 的承诺一致；节点仅写纯观测键，不改变路由。
+    build_mutation_feedback: Any = None
+    try:
+        from experiments.mutation_testing import build_mutation_feedback as _build_mutation_feedback
+
+        build_mutation_feedback = _build_mutation_feedback
+    except Exception as e:  # 发行缺包（wheel 不含 experiments）→ 保守降级
+        logger.warning("M7 变异顾问节点：experiments 测量层不可用（发行包不含 experiments），保守降级 None: %s", e)
 
     feedback: dict[str, Any] | None = None
-    try:
-        feedback = build_mutation_feedback(
-            source_code=state.get("target_code") or "",
-            test_code=state.get("generated_test") or "",
-        )
-    except Exception as e:
-        logger.debug("M7 变异顾问节点执行异常（保守降级 None）: %s", e)
-        feedback = None
+    if build_mutation_feedback is not None:
+        try:
+            feedback = build_mutation_feedback(
+                source_code=state.get("target_code") or "",
+                test_code=state.get("generated_test") or "",
+            )
+        except Exception as e:
+            logger.debug("M7 变异顾问节点执行异常（保守降级 None）: %s", e)
+            feedback = None
 
     # 仅当评估可用且有存活变异体时写入 state（无存活变异体 = 测试已
     # 全杀死，无需补强，历史口径不变）

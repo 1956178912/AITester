@@ -16,8 +16,8 @@
 - `pyproject.toml:24`：`requires-python = ">=3.12"`；
 - `Dockerfile:6`：`FROM python:3.12-slim`（运行时镜像，`EXECUTOR_USE_DOCKER=true`
   时的被执行侧）；
-- `Dockerfile.repro:24`：`FROM python:3.12-slim`（宿主侧实验复现镜像）；
-- `Dockerfile.repro:14-16` 的口径说明：`python:3.12-slim` 为发行基准，与
+- `Dockerfile.repro:32`：`FROM python:3.12-slim`（宿主侧实验复现镜像）；
+- `Dockerfile.repro:18-20` 的口径说明：`python:3.12-slim` 为发行基准，与
   `Dockerfile` 一致；`pyproject requires-python >=3.12` 为下限，CI 矩阵
   3.12/3.13/3.14 全绿。
 
@@ -27,51 +27,63 @@
 **依赖锁定**：
 
 - `requirements.lock` 共 132 行（`wc -l`），全部为纯 `==` 版本固定
-  （`Dockerfile.repro:17` 明确记载"requirements.lock 为纯 `==` 版本固定，
+  （`Dockerfile.repro:21` 明确记载"requirements.lock 为纯 `==` 版本固定，
   与解释器小版本无关"）；
 - 实际读取到的示例 pin（行号取自 `requirements.lock`）：
   `numpy==2.5.2`（第 64 行）、`pandas==3.0.5`（第 78 行）、
   `scipy==1.18.0`（第 110 行）、`openai==2.54.0`（第 67 行）、
   `pytest==9.1.1`（第 94 行）；
-- 依赖安装口径：`Dockerfile:23-24` 与 `Dockerfile.repro:39-40` 均为
+- 依赖安装口径：`Dockerfile:23-24` 与 `Dockerfile.repro:46-48` 均为
   `COPY requirements.txt ...` + `pip install --no-cache-dir -r requirements.txt`
   （实际安装 `requirements.txt`；`requirements.lock` 作为锁定记录随镜像复制）；
   `Dockerfile:17-22` 记载顶层依赖以 `==` 锁定并"与 requirements.lock 同步，
   由 `scripts/gates/check_lock_sync.py` 在 CI 守卫一致性"；
-- `Dockerfile.repro:18-21` 说明复现镜像采用**全量依赖**口径（含
+- `Dockerfile.repro:22-25` 说明复现镜像采用**全量依赖**口径（含
   chromadb / matplotlib / scipy），而非 `slim_environment` 精简口径。
+- **wheel 安装口径（A13，2026-10-18）**：仅 wheel / 非仓库开发安装时，
+  运行 Executor 与基准评测须安装执行 extra：
+  `pip install "aitester[execution]"`（pytest + pytest-cov + pytest-timeout）；
+  `requirements.txt` 全量安装已含 pytest，仓库开发 / 复现环境无需额外。
+  默认 `pip install aitester` 不含执行工具；缺模块时 Executor 返回
+  `error_info.type=execution_dependency_missing` 并提示该命令（执行前能力
+  检查，不再以晦涩的 rc=1 失败）。
 
 **复现容器（Dockerfile.repro）**：
 
-- 构建（`Dockerfile.repro:8`）：
-  `docker build -f Dockerfile.repro -t aitester-repro:$(git rev-parse --short HEAD) .`
-- 运行（`Dockerfile.repro:9-12`）：
+- 构建（`Dockerfile.repro:8-9`）：
+  `docker build --build-arg GIT_SHA=$(git rev-parse HEAD) -f Dockerfile.repro -t aitester-repro:$(git rev-parse --short HEAD) .`
+- 运行（`Dockerfile.repro:10-15`）：
   `docker run --rm -v $(pwd)/experiments/results:/workspace/experiments/results -v $(pwd)/.env.local:/workspace/.env.local:ro aitester-repro:<sha> bash reproduce.sh --dataset synthetic --full`
-- 系统依赖：`gcc` 与 `git`（`Dockerfile.repro:26-30`，注释说明 `git` 为
+  （`--dataset synthetic --full` = 主批任务规模参数 87 任务 / `--max-pattern-repeat 2`
+  / seed 42 / 主批三臂；本脚本单 seed，三种子协议见
+  `experiments/run_main_batch.py`，见 §5、§6 偏差说明）
+- 系统依赖：`gcc` 与 `git`（`Dockerfile.repro:35-38`，注释说明 `git` 为
   SWE-bench 源码导出脚本所需）；
-- **GIT_SHA provenance 机制**（逐行读取）：
-  - `Dockerfile.repro:32`：`ARG GIT_SHA=unknown`（构建参数，缺省 `unknown`）；
-  - `Dockerfile.repro:44`：
+- **GIT_SHA provenance 机制**（逐行读取 + A03 修复后口径）：
+  - `Dockerfile.repro:8-14`：构建命令显式传 `--build-arg GIT_SHA=$(git rev-parse HEAD)`；
+  - `Dockerfile.repro:40`：`ARG GIT_SHA=unknown`（未传时的缺省值）；
+  - `Dockerfile.repro:52`：
     `RUN echo "GIT_SHA=${GIT_SHA}" > /workspace/.repro_provenance`
     （容器内落盘标记文件）；
-  - `Dockerfile.repro:22`：注释"git sha 由 docker build --build-arg 注入，
-    结果 provenance 可追溯"；
-  - 运行侧消费点：`experiments/run_benchmark.py:3089-3094` 构造
-    `summary["environment"]`，其中
-    `"in_docker_repro": os.path.exists(os.path.join(os.getcwd(), ".repro_provenance"))`
-    （第 3093 行），并在第 3096 行执行 `git rev-parse HEAD` 写入
-    `environment.git_sha` —— 即容器标记与 git sha 一并进入结果 JSON。
-  - 如实说明：`Dockerfile.repro:8` 给出的构建命令本身未显式传
-    `--build-arg GIT_SHA=...`；若不传，标记文件内容为 `GIT_SHA=unknown`
-    （镜像 tag 仍携带 short sha）。复现者若需标记文件与提交一致，应自行
-    追加 `--build-arg GIT_SHA=$(git rev-parse HEAD)`。
+  - 运行侧消费点（A03 修复，2026-10-18）：`.dockerignore` 排除 `.git`，容器内
+    `git rev-parse HEAD` 必然失败——`experiments/run_benchmark.py` 的
+    `_read_repro_provenance_marker` / `_resolve_git_provenance` /
+    `_build_environment_provenance` 读取 marker 的 `GIT_SHA`：
+    - 无 git（复现容器 / 源码包）：`environment.git_sha` 与
+      `provenance.git_sha` = marker SHA，`git_sha_source="repro_provenance"`；
+    - 有 git：以 `git rev-parse HEAD` 为 `git_sha`，同时记录 marker 值并校验
+      一致性（`provenance.repro_provenance.git_sha_matches_git` /
+      `git_sha_conflict`；不一致时 logger.warning）；
+    - `environment.in_docker_repro` 仍表示"marker 是否存在"；
+    - marker 值为 `unknown`（构建未传 build-arg）时**不**当作提交 SHA：
+      `git_sha_source=null` 并如实标注不可追溯。
   - 仓库内调用点核查：全仓检索 `Dockerfile.repro` 仅命中其自身注释、
-    `experiments/run_benchmark.py:3085`（注释）、
+    `experiments/run_benchmark.py`（provenance 实现）、
     `docs/design/real_benchmark_upgrade.md:47`、
-    `docs/study/SUBMISSION_CHECKLIST_2026-10-15.md:50`（人工命令）与本
-    文件；在 `*.yml` / `*.yaml` / `*.sh` / `Makefile` 中检索
-    `build-arg GIT_SHA` / `GIT_SHA=` **0 命中**，即仓库内**没有**自动传递
-    `--build-arg GIT_SHA` 的调用点（CI 未构建该镜像）。
+    `docs/study/SUBMISSION_CHECKLIST_2026-10-15.md:50`（人工命令）、
+    `reproduce.sh` 头注释与本文件；在 `*.yml` / `*.yaml` / `Makefile` 中检索
+    `build-arg GIT_SHA` / `GIT_SHA=` **0 命中**，即仓库内**没有**自动构建该镜像
+    的 CI 调用点（镜像构建为人工/外部步骤）。
 
 ## 2. 模型与执行设置（Model and Execution Settings）
 
@@ -202,64 +214,104 @@ valid_apis, harness}`。因此：
 
 `reproduce.sh` 的 6 个步骤（逐段读取该文件）：
 
-1. **Step 1/6 检查运行环境**（`reproduce.sh:112-152`）：检查 `python3`
-   （"请安装 Python 3.12+"，第 115-118 行）、按需创建并激活 `.venv`
-   （第 123-131 行）、检查 `.env`（缺失则从 `.env.example` 复制，第 133-139 行）、
+1. **Step 1/6 检查运行环境**（`reproduce.sh:170-227`）：检查 `python3`
+   （"请安装 Python 3.12+"，第 191-193 行）、按需创建并激活 `.venv`
+   （第 199-206 行）、检查 `.env`（缺失则从 `.env.example` 复制，第 209-214 行）、
    检查 LLM 敏感配置 `.env.local`（缺失则从 `config.local.example` 复制并提示
-   "请填入 LLM_1_API_KEY 后再运行"，第 141-152 行）；若 `LLM_1_API_KEY` 未设置
-   或仍为占位值则告警（第 150-152 行）。
-2. **Step 2/6 安装 Python 依赖**（`reproduce.sh:154-159`）：
+   "请填入 LLM_1_API_KEY 后再运行"，第 218-222 行）；若 `LLM_1_API_KEY` 未设置
+   或仍为占位值则告警（第 225-227 行）。
+2. **Step 2/6 安装 Python 依赖**（`reproduce.sh:229-234`）：
    `pip install -q -r requirements.txt`，并额外
    `pip install -q scipy matplotlib pandas`。
-3. **Step 3/6 运行单元测试**（`reproduce.sh:161-178`）：
+3. **Step 3/6 运行单元测试**（`reproduce.sh:236-253`）：
    `python -m pytest tests/ -v --tb=short`，输出经 `tee` 写入
-   `experiments/results/test_output.log`（第 171 行）；测试失败默认**硬失败**
-   退出（第 172-178 行），仅当显式设置
+   `experiments/results/test_output.log`（第 246 行）；测试失败默认**硬失败**
+   退出（第 248-253 行），仅当显式设置
    `REPRODUCE_ALLOW_TEST_FAILURES=1` 才告警继续。
-4. **Step 4/6 准备数据集**（`reproduce.sh:180-201`）：`--dataset swe_bench` 时
-   从 HuggingFace 下载（quick=mini 50 任务 / full=lite 500 任务，第 181-195 行）；
-   `--dataset examples` 使用内置示例数据集（3 个预定义 bug 任务，第 196-197 行）；
-   未知数据集回退 `examples`（第 198-201 行）。此步不调用 LLM。
-5. **Step 5/6 运行基准测试**（`reproduce.sh:203-243`）：
+4. **Step 4/6 准备数据集**（`reproduce.sh:255-278`，A02 修复后口径）：
+   `--dataset swe_bench` 时从 HuggingFace 下载（quick=mini 50 任务 /
+   full=lite 500 任务，第 257-270 行）；`--dataset examples` 使用内置示例数据集
+   （3 个预定义 bug 任务，第 271-272 行）；**`--dataset synthetic` 使用内置合成
+   数据集**（本地生成，无需下载，第 273-274 行）；未知数据集**不再回退**
+   examples——参数解析段（`reproduce.sh:96-135`）已 fail-closed 报错退出，
+   此处仅双保险（第 275-278 行）。此步不调用 LLM。
+5. **Step 5/6 运行基准测试**（`reproduce.sh:280-332`）：
    `python experiments/run_benchmark.py --dataset "$DATASET" --baselines "$BASELINES"
-   $TASK_LIMIT_ARG $ENABLE_RAG --output-dir experiments/results $VERBOSE`
-   （第 232-238 行）；同时显式设置 `AITESTER_TRACE_DIR`
-   （默认 `experiments/results/traces`，第 211-214 行）；变异得分默认关闭
-   （`ENABLE_MUTATION_SCORING` 未设为 true 时不启用，第 216-226 行）。
+   $TASK_LIMIT_ARG $TASK_COUNT_ARG $MAX_PATTERN_REPEAT_ARG $SEED_ARG $ENABLE_RAG
+   --output-dir experiments/results $VERBOSE`
+   （第 318-327 行）；synthetic 参数透传（`--task-count` / `--max-pattern-repeat`
+   / `--seed`）构建于第 288-293 行；同时显式设置 `AITESTER_TRACE_DIR`
+   （默认 `experiments/results/traces`，第 297-298 行）；变异得分默认关闭
+   （`ENABLE_MUTATION_SCORING` 未设为 true 时不启用，第 305-310 行）。
    **本步是真正需要真实 API Key 的步骤**——基准测试由 LLM 生成/修复驱动，
    密钥来自 `.env.local` 的 `LLM_1_API_KEY`（Step 1 只做存在性检查与告警，
    不会因为缺 Key 而终止）。
-6. **Step 6/6 生成可视化**（`reproduce.sh:245-248`）：
+6. **Step 6/6 生成可视化**（`reproduce.sh:334-337`）：
    `python experiments/visualize_results.py`，生成柱状图、统计检验图、CSV
    表格与 Markdown 汇总报告。
 
-结果文件位置（`reproduce.sh:256-261`）：`experiments/results/benchmark_*.json`、
+**A02 修复（2026-10-18）：数据集分支与主批入口对齐**。`reproduce.sh` 现显式
+支持 `--dataset synthetic`：参数解析段归一 `synth` 别名并 fail-closed 未知值
+（`reproduce.sh:96-135`）。`--dataset synthetic --full` 的默认参数 = 主批入口
+参数 `--task-count 87 --max-pattern-repeat 2 --seed 42` + 主批三臂
+`aitester,plain_llm,plain_llm_df`（用户显式 `--baselines` 可覆盖；
+quick 模式为 3 任务）。与主批**完整协议**（3 seed 42/43/44 × 3 臂、逻辑档
+`AITESTER_PROFILE=logic`、`TEMPERATURE=0.0`、冷缓存）的差异：本脚本单次运行
+单 seed，且不代设 profile/温度环境变量；三种子协议入口是
+`experiments/run_main_batch.py` / `experiments/run_t1_b2_main_batch.sh`，
+不同 seed 批次不可直接合并统计。回归锁定：
+`tests/test_reproduce_zero_llm.py::TestReproduceShDatasetBranch`。
+
+结果文件位置（`reproduce.sh:345-351`）：`experiments/results/benchmark_*.json`、
 `experiments/results/charts/baseline_comparison.png`、
 `experiments/results/charts/statistical_significance.png`、
 `experiments/results/charts/results_table.csv`、
 `experiments/results/charts/summary_stats.md`。
 
-Docker 化路径同样落在 Step 5（`Dockerfile.repro:9-12` 的 `docker run ... bash
+Docker 化路径同样落在 Step 5（`Dockerfile.repro:10-15` 的 `docker run ... bash
 reproduce.sh --dataset synthetic --full`），故需将 `.env.local` 只读挂载进容器。
 
 ## 6. 预期产物与已知偏差（Expected Artifacts and Known Deviations）
 
-**逐目录校验和（SHA256SUMS）**（以 `find` / `git ls-files` 实测）：
+**逐目录校验和（SHA256SUMS）**（`find` / `git ls-files` / 校验实测，2026-10-18）：
 
-- `experiments/results/` 下共 **24** 个校验和文件：其中 **17** 个名为
-  `SHA256SUMS`、**7** 个名为 `SHA256SUMS.txt`；
-- 其中 **18** 个已被 git 跟踪，**6** 个未跟踪（`git ls-files
-  'experiments/results/**SHA256SUMS*'` 实测 18 条；未跟踪的 6 个为
-  `experiments/results/analysis/SHA256SUMS`、
-  `emse_d1_quixbugs_ab_20261013/SHA256SUMS`、
-  `emse_d2_profile_smoke_20261013/SHA256SUMS`、
-  `emse_quixbugs_mutk_20261014/SHA256SUMS.txt`、
-  `emse_quixbugs_specir_expand_20261014/SHA256SUMS.txt`、
-  `spec_ab_scale87_20261012/SHA256SUMS`）；
-- 未跟踪原因：`.gitignore:158` 的 `experiments/results/**` 规则
-  （`git check-ignore -v` 实证命中该行）；
-- 主批次校验文件：`experiments/results/main_batch/SHA256SUMS`（2,030 行，
-  已跟踪）。
+- 全仓共 **69** 个校验和文件：**62** 个名为 `SHA256SUMS`、**7** 个名为
+  `SHA256SUMS.txt`（外部 `shasum -a 256` 风格）；其中 `experiments/results/`
+  下 68 个（61 + 7）、`docs/reviews/review_recompute/` 下 1 个；
+- 其中 **64** 个已被 git 跟踪（58 `SHA256SUMS` + 6 `SHA256SUMS.txt`），
+  **5** 个未跟踪（`experiments/results/analysis/SHA256SUMS`、
+  `prompt_artifacts_2026-10-15/SHA256SUMS`、`emse_d2_profile_smoke_20261013/SHA256SUMS`、
+  `spec_ab_scale87_20261012/SHA256SUMS`、`emse_quixbugs_mutk_20261014/SHA256SUMS.txt`）；
+- 未跟踪原因：`.gitignore` 的 `experiments/results/**` 规则（`git check-ignore -v`
+  实证命中）；未跟踪目录为本地留档，不在干净检出中（clean clone 不校验）；
+- 已跟踪清单共记录 **7,048** 条；本机全仓（含 5 个未跟踪清单）共 **7,639** 条；
+  **2026-10-18 复核结果：0 缺失 / 0 内容不符 / 0 仅换行差异（macOS 原始字节
+  逐条一致）**；用 `git archive HEAD` 模拟干净检出（叠加本次修复文件）校验：
+  64 份清单、7,048 条全部原始字节一致、0 缺失，64/64 目录 `--verify` 通过；
+- 主批次校验文件：`experiments/results/main_batch/SHA256SUMS`（2,029 行，已跟踪）；
+- **跨平台字节口径（A17 修复）**：仓库根 `.gitattributes` 对
+  `experiments/results/**` 与 `docs/reviews/review_recompute/**` 设 `-text`
+  （证据工件按二进制保真，检出字节 = 入库字节 = LF；不使用 `text eol=lf`，
+  以免改写历史 CRLF 字节）。Windows `core.autocrlf=true` 的干净检出因此同样
+  按原始字节匹配；受影响的历史 Windows 检出需重新检出才恢复字节。
+  `scripts/gates/checksum_results.py --verify` 现区分
+  **原始字节 / 仅 EOL 差异 / 内容不符** 三类：EOL 差异单独报告且默认不判
+  （不再把换行约定误报为篡改），内容不符仍失败；`--strict-bytes` 可把 EOL
+  差异升级为失败（发布/归档字节闸）；
+- **清单只覆盖分发文件（A18 修复）**：`--write`/`--verify` 统一排除
+  `__pycache__` / `*.pyc` 等解释器缓存（历史 p/r/s 轮清单曾记录 4 个未分发的
+  `_helpers/__pycache__/*.pyc`，已在本次清除）；本次同时清除
+  `docs/reviews/review_recompute/recompute_run.log` 与
+  `spec_ab_scale87_20261012/logs/*.log`（4 个 gitignored 日志）等失效条目，
+  并为 3 个已分发但漏记的文件补条目（`emse_d1_quixbugs_ab_20261013/README.md`、
+  `r4_batches/README.md`、`r4_batches/replay_r4_ab_arm_a_v2.md`）。其余
+  `--exclude` 可排除本机留档文件。仍存在的本机差异：3 个本地工作树未入库
+  文件（`emse_d2_profile_smoke_20261013/README.md`、`spec_ab_scale87_20261012/README.md`、
+  `emse_ult_mutk_20261014/MUTK_RECOMPUTE.json`）会被工作树 `--verify` 报
+  "清单外新增"——它们不入 git、干净检出中不存在，故不影响干净检出校验。
+- 校验入口：`python scripts/gates/checksum_results.py --write`（生成/刷新，
+  只写规范名 `SHA256SUMS`）/ `--verify`（按清单校验；对外部工具生成的
+  `SHA256SUMS.txt` 变体同样支持）/ `--verify --strict-bytes`（严格字节闸）。
 
 **已知偏差（如实声明）**：
 
@@ -277,19 +329,33 @@ reproduce.sh --dataset synthetic --full`），故需将 `.env.local` 只读挂�
 3. **主批次实际运行环境与复现镜像不同**：该 JSON 的
    `environment.python_version = "3.14.6"`、
    `environment.platform = "macOS-27.0.1-arm64-arm-64bit-Mach-O"`、
-   `in_docker_repro = false`，而 `Dockerfile.repro:24` 基准为
+   `in_docker_repro = false`，而 `Dockerfile.repro:32` 基准为
    `python:3.12-slim` —— 主批次并非在复现容器内执行。
 4. **任务数口径待对账**：`benchmark_synthetic_20261006_140906.json` 的
    `total_tasks = 87`，而 `docs/DATA_CARD.md:21` 记载合成基准"主批次在用
    （n=50 任务；参数化 87/120 变体用于确认性/校准批次）"。
    `[待补充：确认该 87 任务工件与数据卡"主批次 n=50"的口径对应关系]`
-5. **校验和文件的生成/校验入口**：仓库提供
-   `python scripts/gates/checksum_results.py --write`（生成/刷新）与
-   `--verify`（按清单校验，报告缺失/多余/哈希不符），默认
-   `--results-dir experiments/results`，清单文件名常量为 `SHA256SUMS`
-   （`scripts/gates/checksum_results.py:7-16, 28, 90-93`）。
-   `[待补充：7 个 SHA256SUMS.txt 变体（非 SHA256SUMS 常量名）的生成来源与
-   校验口径]`
+5. **校验和文件的生成/校验入口（A17/A18 修复后口径）**：仓库提供
+   `python scripts/gates/checksum_results.py --write`（生成/刷新，排除
+   `__pycache__` 等非分发文件，只写规范名 `SHA256SUMS`）与 `--verify`
+   （按清单校验：缺失/清单外新增/内容不符判失败；**仅换行差异**单独报告、
+   默认不判，`--strict-bytes` 可升级为失败），默认
+   `--results-dir experiments/results`；清单名常量为 `SHA256SUMS`，
+   `--verify` 兼容外部工具生成的 `SHA256SUMS.txt` 变体
+   （`scripts/gates/checksum_results.py`；回归：
+   `tests/test_checksum_results_gate.py`）。证据工件换行策略见仓库根
+   `.gitattributes`（上方 A17 条目）。
+6. **轨迹 JSONL 一处历史损坏（A20，如实保留）**：
+   `experiments/results/emse_ult_specir_probe_20261014/traces/
+   ult__string_contrast_aitester_1791954227.trace.jsonl` 第 10 行为非法 JSON
+   （未闭合字符串，第 201 列起，行尾停在 `...min(s, key=<REDACTED>`）。
+   该文件**未修补、未删除**，原始字节与所在目录 `SHA256SUMS` 记录一致；
+   损坏位置/根因/影响范围/复核命令见该批次
+   `experiments/results/emse_ult_specir_probe_20261014/README.md` 的"勘误"节。
+   根因（`TraceSession._append` 对已序列化 JSON 整行做文本脱敏，`key=<值>`
+   模式贪婪吞掉 JSON 闭合定界符）已于 2026-10-18 修复，未来轨迹逐行保证
+   合法 JSON（`tests/test_trace_jsonl_integrity.py` 锁定）；该损坏行不参与
+   任何指标复算（复算消费同批汇总 JSON `benchmark_ult_*.json`）。
 
 ## 7. 引用与许可（Citation and License）
 

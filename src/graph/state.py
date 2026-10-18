@@ -522,6 +522,11 @@ class AITesterState(TypedDict, total=False):
     # flaky_pass_count / flaky_total_count 供统计层 flaky fraction 消费；
     # flaky_unverified = True 时该轮结果不可信（M1 指标按"不可测"处理）。
     # 默认 None / False（未启用 / 未检测 / 稳定失败）。
+    # A16（2026-10-18 第三方评审 P1）：执行重试层观察到"首败次过"（fail→pass，
+    # 同一 target_code + generated_test 两次执行结果不一致）时，_executor_node
+    # **即使 FLAKY_CHECK_ENABLE 默认关**也写 flaky_detected/flaky_unverified=True
+    # 并把 test_passed 保守记 False（执行证据在手即不再重复 detect_flaky）；
+    # M1 侧已接线消费该标记（检测/修复/假修复/回归等端点记 None，见 _m1_metrics）。
     flaky_detected: bool | None
     flaky_pass_count: int | None
     flaky_total_count: int | None

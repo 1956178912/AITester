@@ -1,0 +1,26 @@
+# A17（2026-10-18 第三方审查，P1）：证据工件的跨平台字节稳定性。
+#
+# 背景：`experiments/results/` 与 `docs/reviews/review_recompute/` 下的证据
+# 工件（批次 JSON / 逐任务 traces / 日志 / 复算 CSV / 小结 MD）按**原始字节**
+# 逐条记录在各自目录的 `SHA256SUMS` 中。Windows 默认 `core.autocrlf=true` 的
+# 检出会把入库 LF 转成 CRLF，导致 6,974 条清单记录仅"LF 归一化后"匹配
+#（评审实测），复现者会误以为工件被篡改；本机 macOS（core.autocrlf 未设）
+# 实测原始字节 7,636 条全部一致、LF-only 0 条。
+#
+# 策略：证据工件按二进制处理（`-text`）——git 不做任何换行转换：
+#   * 入库字节 = 检出字节 = 生成机上的原始字节（当前全部为 LF）；
+#   * 任意平台（macOS / Linux / Windows autocrlf=true）干净检出后 SHA256
+#     均按原始字节一致，清单可直接校验；
+#   * 新增批次工件无需逐目录配置，随批次提交即继承本策略。
+#
+# 为何不用 `text eol=lf`：若历史工件本身含 CRLF 字节，`eol=lf` 会在检出时
+# 改写字节、反而与清单不符；`-text` 对 LF/CRLF 两种历史字节都是保真的。
+# 校验侧诊断：`scripts/gates/checksum_results.py --verify` 把"仅换行差异"
+# 单独报告（默认不判篡改，内容不符仍失败），`--strict-bytes` 可强制按字节
+# 失败（发布/归档严格字节闸）。
+experiments/results/** -text
+docs/reviews/review_recompute/** -text
+
+# 清单文件本身也按字节保真（内容为 sha256 + 相对路径，纯 LF 文本）。
+**/SHA256SUMS -text
+**/SHA256SUMS.txt -text

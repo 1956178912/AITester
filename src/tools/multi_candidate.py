@@ -299,7 +299,10 @@ def select_best_candidate(
                 target_file=tmp_path,
                 target_function=target_function,
             )
-            candidate.exec_passed = bool(result.get("passed"))
+            # A16（2026-10-18 第三方评审 P1）：执行验证同样不得把"首败次过"
+            # （重试掩盖的不稳定）记为候选通过——与 _executor_node/run_benchmark
+            # 的保守判分同口径（默认关闭的候选执行验证零行为变化）。
+            candidate.exec_passed = bool(result.get("passed")) and not bool(result.get("flaky_fail_then_pass"))
             candidate.exec_coverage = float(result.get("coverage", 0.0) or 0.0)
             score = (candidate.exec_passed, candidate.exec_coverage)
             if score > best_score:
