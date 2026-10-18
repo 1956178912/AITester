@@ -73,6 +73,9 @@ class TestZeroLlmProbesPass:
             "observability-postprocess-wall",
             "logic-examples-self-validation",
             "logic-examples-multisample",
+            # T4（T 轮 2026-10-18）：A-19 抢占优先级 + 回滚 verdict 结果行 schema
+            "logic-stagnation-precedence",
+            "logic-rollback-schema-fields",
         ],
     )
     def test_probe_passes(self, probe_name):
@@ -185,3 +188,33 @@ class TestNegativeControls:
         outcome = logic.probe_spec_anchor_oracle_wiring()
         assert outcome.status == "fail"
         assert "not_attempted" in outcome.detail
+
+
+class TestT4ProbesNegativeControls:
+    """T4（T 轮 2026-10-18）新探针的"探针的探针"：依赖打坏后必须 fail。"""
+
+    def test_stagnation_precedence_detects_lost_priority(self, monkeypatch):
+        from src.graph import workflow
+
+        # 模拟 A-19 优先级修复被回退：停滞判定恒 False → ON 臂退化为
+        # repair-invalid 历史口径（stop_reason=skip_debugger_repair_invalid）
+        monkeypatch.setattr(workflow, "_coverage_stall_detected", lambda state: False)
+        outcome = logic.probe_stagnation_precedence()
+        assert outcome.status == "fail"
+        assert "停滞判定未命中" in outcome.detail
+
+    def test_rollback_schema_detects_missing_keys(self, monkeypatch):
+        import experiments.run_benchmark as rb
+
+        real_build = rb._build_task_result
+
+        def _strip_keys(*args, **kwargs):
+            row = dict(real_build(*args, **kwargs))
+            row.pop("patch_rollback_verdict", None)
+            row.pop("patch_rolled_back", None)
+            return row
+
+        monkeypatch.setattr(rb, "_build_task_result", _strip_keys)
+        outcome = logic.probe_rollback_schema_fields()
+        assert outcome.status == "fail"
+        assert "缺回滚 verdict 键" in outcome.detail

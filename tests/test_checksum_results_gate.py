@@ -102,3 +102,47 @@ class TestWriteVerifyRoundTrip:
         _make_tree(tmp_path)
         assert gate.verify_manifest(tmp_path) == 1
         assert "清单不存在" in capsys.readouterr().out
+
+
+class TestManifestPathNormalization:
+    """T 轮（2026-10-18，审计 P2-14）：外部工具生成的路径写法必须可校验。
+
+    实测触发：`emse_docstring_anchor_20261017/SHA256SUMS` 由 `shasum` 以 `./x`
+    形式生成，`--verify` 把 165 条全部误判"缺失 + 清单外新增"，而
+    `shasum -a 256 -c` 165/165 OK——同一份事实两种工具两种结论。
+    """
+
+    def _rewrite_manifest(self, root: Path, transform) -> None:
+        manifest = root / gate.MANIFEST_NAME
+        lines = manifest.read_text(encoding="utf-8").splitlines()
+        out = []
+        for line in lines:
+            digest, _, rel = line.partition("  ")
+            out.append(f"{digest}  {transform(rel)}")
+        manifest.write_text("\n".join(out) + "\n", encoding="utf-8")
+
+    def test_dot_slash_prefix_verifies(self, tmp_path: Path):
+        _make_tree(tmp_path)
+        assert gate.write_manifest(tmp_path) == 0
+        self._rewrite_manifest(tmp_path, lambda rel: f"./{rel}")
+        assert gate.verify_manifest(tmp_path) == 0
+
+    def test_asterisk_binary_marker_verifies(self, tmp_path: Path):
+        _make_tree(tmp_path)
+        assert gate.write_manifest(tmp_path) == 0
+        self._rewrite_manifest(tmp_path, lambda rel: f"*{rel}")
+        assert gate.verify_manifest(tmp_path) == 0
+
+    def test_windows_backslash_verifies(self, tmp_path: Path):
+        _make_tree(tmp_path)
+        assert gate.write_manifest(tmp_path) == 0
+        self._rewrite_manifest(tmp_path, lambda rel: rel.replace("/", "\\"))
+        assert gate.verify_manifest(tmp_path) == 0
+
+    def test_still_detects_missing_after_normalization(self, tmp_path: Path):
+        """归一化不得把真缺失洗白。"""
+        _make_tree(tmp_path)
+        assert gate.write_manifest(tmp_path) == 0
+        self._rewrite_manifest(tmp_path, lambda rel: f"./{rel}")
+        (tmp_path / "a.json").unlink()
+        assert gate.verify_manifest(tmp_path) == 1

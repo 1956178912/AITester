@@ -1,4 +1,4 @@
-"""S-3 多采样示例自一致性过滤器测试（K=2 spec-only 采样求交；零真实 LLM）。
+"""多采样示例自一致性过滤器测试（S-3 K=2 求交 + T3 K=3 多数一致/canonical；零真实 LLM）。
 
 覆盖：
 1. **键归一**：dict 键序无关、ensure_ascii=False、list/tuple 经 JSON 等价、
@@ -10,6 +10,10 @@
    env 恢复；usage_totals 汇总；确定性（同输入两次调用的交集顺序稳定）。
 4. **不破坏单采样 API**：``generate_spec_examples`` 返回结构与既有契约一致
    （无 samples/audit 新增键）。
+5. **T3（2026-10-18）**：K=3 + majority=2 多数一致（2/3 保留、1/3 丢弃、
+   顺序/审计稳定）；majority 参数钳制与默认（None）历史兼容；canonical input
+   约束 prompt 变体（默认**逐字节不变**、canonical 追加冻结段落）；canonical
+   失败回退判定（K/K 样本非 ok 才回退）与 fail-open。
 """
 
 from __future__ import annotations
@@ -280,3 +284,218 @@ def test_single_sample_api_unchanged(monkeypatch: pytest.MonkeyPatch) -> None:
     # 单采样 API 契约未变：不新增 samples/audit 键
     assert "samples" not in record and "audit" not in record
     assert set(record) >= {"status", "examples", "reason", "prompt_sha256", "usage", "wall_s", "task_id"}
+
+
+# ═══ 5. T3：K=3 多数一致 + canonical input 约束 ═════════════════════════════
+def _ex(inp: Any, exp: Any) -> dict[str, Any]:
+    return {"input": inp, "expected": exp}
+
+
+_EX_A = _ex([1], 2)
+_EX_B = _ex([2], 4)
+_EX_C = _ex([3], 6)
+_EX_D = _ex([4], 8)
+
+
+class TestMajority:
+    """K=3 + majority=2：2/3 一致保留；1/3 丢弃；顺序与审计稳定。"""
+
+    def test_two_of_three_kept_one_dropped(self) -> None:
+        sample0 = [_EX_A, _EX_C, _EX_D]
+        sample1 = [_EX_A, _EX_B]
+        sample2 = [_EX_B, _EX_D]
+        intersection, audit = gen.intersect_examples([sample0, sample1, sample2], k=3, majority=2)
+        # A 出现在 0/1；B 出现在 1/2；D 出现在 0/2（均 ≥2/3）；C 仅 0 → 丢弃。
+        # 保留顺序 = 跨样本首次出现顺序：A(s0) → D(s0) → B(s1)。
+        assert intersection == [_EX_A, _EX_D, _EX_B]
+        assert audit["k"] == 3 and audit["threshold"] == 2
+        assert audit["n_examples_union"] == 4
+        assert audit["n_examples_intersection"] == 3
+        assert audit["n_dropped_non_intersection"] == 1
+        dropped = audit["dropped"][0]
+        assert dropped["input"] == [3] and dropped["present_in_samples"] == [0]
+
+    def test_all_three_kept_when_unanimous(self) -> None:
+        shared = [_EX_A, _EX_B, _EX_C]
+        intersection, audit = gen.intersect_examples([shared, shared, shared], k=3, majority=2)
+        assert intersection == shared
+        assert audit["n_dropped_non_intersection"] == 0
+
+    def test_one_of_three_only_dropped(self) -> None:
+        samples = [[_EX_A], [_EX_B], [_EX_C]]
+        intersection, audit = gen.intersect_examples(samples, k=3, majority=2)
+        assert intersection == []
+        assert audit["n_dropped_non_intersection"] == 3
+        assert [d["present_in_samples"] for d in audit["dropped"]] == [[0], [1], [2]]
+
+    def test_majority_three_strict(self) -> None:
+        samples = [[_EX_A, _EX_B], [_EX_A, _EX_C], [_EX_A, _EX_B]]
+        intersection, audit = gen.intersect_examples(samples, k=3, majority=3)
+        assert intersection == [_EX_A]
+        assert audit["threshold"] == 3
+
+    def test_majority_clamped(self) -> None:
+        samples = [[_EX_A], [_EX_A], [_EX_A]]
+        _i, audit_huge = gen.intersect_examples(samples, k=3, majority=99)
+        assert audit_huge["threshold"] == 3
+        _i2, audit_zero = gen.intersect_examples(samples, k=3, majority=0)
+        assert audit_zero["threshold"] == 1
+
+    def test_default_none_matches_legacy_threshold(self) -> None:
+        """默认 majority=None：K=2 → 2/2；K≥2 → threshold=2（历史行为）。"""
+        samples = [[_EX_A, _EX_B], [_EX_A]]
+        legacy, legacy_audit = gen.intersect_examples(samples, k=2)
+        explicit, explicit_audit = gen.intersect_examples(samples, k=2, majority=2)
+        assert legacy == explicit == [_EX_A]
+        assert legacy_audit == explicit_audit
+        assert legacy_audit["threshold"] == 2
+        # K=3 默认 threshold 仍是 2（旧公式），语义与显式 majority=2 相同
+        _i0, audit_k3 = gen.intersect_examples([[_EX_A], [_EX_A], [_EX_B]], k=3)
+        _i1, audit_k3_explicit = gen.intersect_examples([[_EX_A], [_EX_A], [_EX_B]], k=3, majority=2)
+        assert audit_k3 == audit_k3_explicit
+        # 旧 S-3 测试锁定的 audit 键集合在 T3 扩展后保持不变
+        assert set(legacy_audit) == {
+            "k",
+            "threshold",
+            "key_normalization",
+            "per_sample_counts",
+            "n_samples",
+            "n_samples_ok",
+            "n_examples_union",
+            "n_examples_intersection",
+            "n_examples_intersection_before_cap",
+            "n_dropped_non_intersection",
+            "dropped",
+        }
+
+    def test_cap_order_first_appearance(self) -> None:
+        shared4 = [_ex([i], i) for i in range(4)]
+        samples = [[shared4[0], shared4[1], shared4[2], shared4[3]], [shared4[1]], [shared4[2]]]
+        intersection, audit = gen.intersect_examples(samples, k=3, majority=2, max_examples=2)
+        # 先 sample0 顺序（0 只出现一次被丢）→ 1、2 保留并截断 2 条
+        assert intersection == [shared4[1], shared4[2]]
+        assert audit["n_examples_intersection_before_cap"] == 2
+        assert audit["n_examples_intersection"] == 2
+
+
+class TestCanonicalPrompt:
+    """canonical input 约束 = 可选 prompt 变体；默认逐字节不变。"""
+
+    @staticmethod
+    def _material() -> dict[str, Any]:
+        return {"function_name": "add", "postconditions": ["返回值等于两数之和"]}
+
+    def test_canonical_false_prompt_byte_identical(self) -> None:
+        """默认 False：与历史 prompt 手工构造逐字节一致。"""
+        material = self._material()
+        prompt = gen.build_spec_examples_prompt(material, ["a", "b"], max_examples=3)
+        expected = (
+            "函数名：add\n"
+            "参数名（input 列表按此顺序）：a、b\n"
+            "最多示例数：3\n\n"
+            "规格材料：\n"
+            f"{gen._format_material(material)}\n\n"
+            '请只输出 JSON：{"examples": [{"input": [...], "expected": ...}]}'
+        )
+        assert prompt == expected
+        assert gen.CANONICAL_INPUT_SECTION not in prompt
+
+    def test_canonical_true_appends_frozen_section_once(self) -> None:
+        material = self._material()
+        base = gen.build_spec_examples_prompt(material, ["a", "b"], max_examples=3)
+        canonical = gen.build_spec_examples_prompt(material, ["a", "b"], max_examples=3, canonical_inputs=True)
+        assert canonical.count(gen.CANONICAL_INPUT_SECTION) == 1
+        assert canonical == base.replace(
+            "\n\n请只输出 JSON",
+            f"\n\n{gen.CANONICAL_INPUT_SECTION}\n\n请只输出 JSON",
+            1,
+        )
+        # 冻结文本关键约束（PREREG 口径）
+        for token in ("标准输入模板", "整数/浮点参数", "字符串参数", "二维列表参数", "最小合法组合"):
+            assert token in gen.CANONICAL_INPUT_SECTION
+
+    def test_canonical_passed_to_llm_and_sha_recorded(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        calls = _mock_sequence(
+            monkeypatch,
+            [_resp([_EX_A]), _resp([_EX_A]), _resp([_EX_A]), _resp([_EX_A])],
+        )
+        record = gen.generate_examples_multisample(
+            {"function_name": "f"}, k=3, majority=2, max_examples=3, canonical_inputs=True
+        )
+        assert record["status"] == "ok" and len(record["samples"]) == 3
+        expected_prompt = gen.build_spec_examples_prompt(
+            {"function_name": "f"}, None, max_examples=3, canonical_inputs=True
+        )
+        for prompt in calls["prompts"][:3]:
+            assert gen.CANONICAL_INPUT_SECTION in prompt
+        assert record["samples"][0]["prompt_sha256"] == gen._sha256_text(expected_prompt)
+
+    def test_default_multisample_keeps_s3_record_shape(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """默认 k=2/majority=None/canonical=False：返回键位与 S-3 相同（无新增键）。"""
+        _mock_sequence(monkeypatch, [_resp([_EX_A]), _resp([_EX_A])])
+        record = gen.generate_examples_multisample({"function_name": "f"})
+        assert set(record) == {
+            "task_id",
+            "k",
+            "status",
+            "examples",
+            "samples",
+            "audit",
+            "usage_totals",
+            "wall_s",
+            "model",
+        }
+        assert record["examples"] == [_EX_A]
+        assert record["audit"]["threshold"] == 2
+        # 单采样返回记录也不新增键
+        single = gen.generate_spec_examples({"function_name": "f"})
+        assert set(single) == {
+            "task_id",
+            "status",
+            "examples",
+            "reason",
+            "prompt_sha256",
+            "prompt_chars",
+            "response_sha256",
+            "response_chars",
+            "usage",
+            "wall_s",
+            "model",
+            "max_output_tokens",
+            "cache_namespace",
+        }
+
+
+class TestCanonicalFallback:
+    """PREREG 冻结回退判定：3/3 样本非 ok 才回退；单样本失败不回退（fail-open）。"""
+
+    def test_all_not_ok_falls_back(self) -> None:
+        assert gen.should_fallback_canonical(
+            {"samples": [{"status": "empty"}, {"status": "error"}, {"status": "empty"}]}
+        )
+
+    def test_one_ok_no_fallback(self) -> None:
+        assert not gen.should_fallback_canonical(
+            {"samples": [{"status": "empty"}, {"status": "ok"}, {"status": "error"}]}
+        )
+
+    def test_no_samples_no_fallback_fail_open(self) -> None:
+        assert not gen.should_fallback_canonical({})
+        assert not gen.should_fallback_canonical({"samples": []})
+        assert not gen.should_fallback_canonical({"samples": ["bad"]})
+        assert not gen.should_fallback_canonical(None)  # type: ignore[arg-type]
+
+    def test_two_of_three_not_ok_falls_back(self) -> None:
+        assert gen.should_fallback_canonical(
+            {"samples": [{"status": "error"}, {"status": "error"}, {"status": "empty"}]}
+        )
+
+    def test_canonical_llm_error_fail_open(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def boom(prompt: str, temperature: float = 0.0) -> str:
+            raise RuntimeError("down")
+
+        monkeypatch.setattr(gen, "_call_examples_llm", boom)
+        record = gen.generate_examples_multisample({"function_name": "f"}, k=3, majority=2, canonical_inputs=True)
+        assert record["status"] == "error"
+        assert record["examples"] == []
+        assert gen.should_fallback_canonical(record) is True

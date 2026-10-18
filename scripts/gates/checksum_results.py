@@ -79,7 +79,18 @@ def verify_manifest(results_dir: Path) -> int:
         if not line.strip():
             continue
         digest, _, rel = line.partition("  ")
-        recorded[rel.strip()] = digest.strip()
+        rel = rel.strip()
+        # T 轮 2026-10-18（审计 P2-14）：路径写法归一——`shasum` 生成的清单可能带
+        # `./` 前缀（相对当前目录）或 `sha256sum -b` 的二进制标记 `*`；Windows
+        # 工具链可能写反斜杠。三者 POSIX 语义下指向同一文件，不归一化会把
+        # "格式差异"误报成"缺失/清单外新增"（实测：emse_docstring_anchor_20261017
+        # 的 165 条 `./` 前缀清单被 --verify 全判缺失，而 `shasum -c` 165/165 OK）。
+        if rel.startswith("*"):
+            rel = rel[1:]
+        while rel.startswith("./"):
+            rel = rel[2:]
+        rel = rel.replace("\\", "/")
+        recorded[rel] = digest.strip()
 
     failures: list[str] = []
     for rel, digest in sorted(recorded.items()):

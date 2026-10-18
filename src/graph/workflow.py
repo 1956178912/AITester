@@ -615,6 +615,11 @@ def _recent_repairs_invalid(state: AITesterState) -> bool:
 # OFF 时 _coverage_stall_detected 恒 False、determine_stop_reason 的停滞
 # 分支恒 False，零行为变化；ON 时 _should_debug / _route_after_diagnosis
 # 在进入 debug 前短路为 done——A-19 wiring 修复 2026-10-18）。
+# **T 轮 2026-10-18（承接 S-2 登记缺陷）**：_should_debug 内新增"repair-invalid
+# 同迭代平局的停滞优先"守卫（仅 ON 生效；OFF 零变化）——默认证据门协议下
+# repair-invalid 与停滞窗口同迭代收敛时，由停滞分支如实归因 coverage_stall，
+# 不再只是 determine_stop_reason 标签兜底。该修复不改变迭代数（平局止于同
+# 一迭代），省迭代收益仍由 gate-off 场景的尾部短路提供。
 # 判定口径：从 state["execution_trace"]（3.2 默认常开的执行反馈轨迹）
 # 取最近 K 轮（COVERAGE_STALL_ROUNDS，默认 2）的 coverage_delta，
 # 全部 |delta| < eps（COVERAGE_STALL_EPS，默认 0.5 个百分点；按绝对值
@@ -678,10 +683,15 @@ def _should_debug(state: AITesterState) -> str:
     """
     判断是否进入调试修复环节的路由函数。
 
-    路由条件：
-    - 测试已通过 → 结束流程（"done"）
+    路由条件（按判定顺序）：
+    - 测试已通过 → 结束流程（"done"；检出优先协议命中时 "regenerate"）
+    - 连续修复无效（repair-invalid）→ 结束流程（"done"）；**T 轮 2026-10-18
+      起**在 COVERAGE_STALL_DETECT_ENABLE=true 且同迭代停滞成立时，停滞判定
+      优先于 repair-invalid skip 生效（归因 coverage_stall；默认关零变化）
     - 已达到最大迭代次数 → 若诊断表明是测试生成错误，重新生成测试（"regenerate"）
                          → 否则结束流程（"done"）
+    - 诊断表明测试生成错误（未达上限）→ 重新生成测试（"regenerate"）
+    - 覆盖率停滞（COVERAGE_STALL_DETECT_ENABLE=true，默认关）→ 结束流程（"done"）
     - 否则 → 进入 debugger（"debug"）
 
     Args:
@@ -755,7 +765,46 @@ def _should_debug(state: AITesterState) -> str:
     # 达上限时由下方上限分支统一决策（关键词命中 → 一次 regenerate 机会，
     # 否则 done）；repair_invalid 的"连续修复无效快速终止"语义仅在早期迭代
     # 生效（此时继续修代码确无意义，省 token 口径不变）。
-    if state.get("iteration", 0) < state.get("max_iterations", MAX_ITERATIONS) and _recent_repairs_invalid(state):
+    #
+    # ── A-19 抢占优先级修复（T 轮 2026-10-18，承接 S-2 登记缺陷）──────────
+    # 缺陷：生产默认协议（PATCH_EVIDENCE_GATE_ENABLE=true）下证据门反复拒绝
+    # 写盘 → repair_history 连续 patch_applied=False，与停滞窗口在**同一迭代**
+    # 收敛。修复前本分支先命中 → 函数末尾的停滞短路永不执行，ON 臂的
+    # coverage_stall 只是 determine_stop_reason 优先级兜底产出的**标签**
+    # （日志仍写"连续多次修复无效"）——A-19 在默认协议下"只改标签、不省迭代"
+    # （S-2 默认闸冒烟实测：ON/OFF 均 iterations=2）。
+    # 修复：停滞判定在"repair-invalid 命中"这一同迭代平局中优先生效（仅
+    # COVERAGE_STALL_DETECT_ENABLE=true 时）。**零变化证据**：OFF（默认）时
+    # _coverage_stall_enabled() 恒 False → 本守卫不可达，路由结果 / 终止标签 /
+    # 日志与历史逐位一致（tests/test_t_round_semantic_fixes.py 的改动前黄金表
+    # 逐行比对锁定）。
+    # 范围限定：只处理 repair-invalid 平局，其余分支相对顺序/优先级不变——
+    # 排在 repair-invalid 之前的 test_passed / detection-first / specificity-gate
+    # 照旧先判；排在 repair-invalid 之后的迭代上限 / test_defect 再生成 /
+    # 关键词 regenerate 在平局态**修复前后都不可达**（历史实现由 repair-invalid
+    # 先返回 done，本守卫只是把同一终止点改由停滞分支拥有），非平局态照旧。
+    # 注意：本修复**不承诺**迭代节省（平局止于同一迭代），省迭代仍由 gate-off
+    # 场景的尾部短路提供。
+    _repair_invalid_hit = state.get("iteration", 0) < state.get("max_iterations", MAX_ITERATIONS) and (
+        _recent_repairs_invalid(state)
+    )
+    if _repair_invalid_hit and _coverage_stall_enabled() and _coverage_stall_detected(state):
+        logger.info(
+            "P2-4 覆盖率停滞（同迭代优先于 repair-invalid，连续 %d 轮 |delta|<eps 且测试未通过）：跳过 Debugger 提前结束",
+            _coverage_stall_rounds(),
+        )
+        state["stop_reason"] = StopReason.COVERAGE_STALL.value
+        _trace_node(
+            "_should_debug",
+            decision="done",
+            output_summary={
+                "reason": StopReason.COVERAGE_STALL.value,
+                "iteration": int(state.get("iteration", 0)),
+                "preempted": StopReason.REPAIR_INVALID.value,
+            },
+        )
+        return "done"
+    if _repair_invalid_hit:
         logger.info("连续多次修复无效，跳过 Debugger")
         _stop_reason = determine_stop_reason(state)
         _trace_node(
@@ -843,8 +892,10 @@ def _should_debug(state: AITesterState) -> str:
     # _coverage_stall_detected），提前 done（不再空耗修复轮次）。
     # OFF 时 _coverage_stall_enabled() 恒 False → 本分支零行为变化。
     # 放置点：所有 test_passed / detection-first / specificity-gate /
-    # repair-invalid / test_defect-cap / keyword-regenerate 分支之后，
-    # 仅拦截"本将进入 debugger"的路径（不抢占任何既有路由语义）。
+    # test_defect-cap / keyword-regenerate 分支之后，仅拦截"本将进入
+    # debugger"的路径。**T 轮 2026-10-18 优先级修复**：repair-invalid 同迭代
+    # 平局已在上方 repair-invalid 分支处以停滞优先短路处理（本处不再覆盖该
+    # 平局；本分支负责"无 repair-invalid 平局"的停滞提前结束）。
     if _coverage_stall_enabled() and _coverage_stall_detected(state):
         logger.info(
             "P2-4 覆盖率停滞（连续 %d 轮 |delta|<eps 且测试未通过）：跳过 Debugger 提前结束",

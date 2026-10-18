@@ -224,9 +224,12 @@ class AITesterState(TypedDict, total=False):
     #   并恢复红证人；RED_REGRESSION_GATE_ENABLE=true 时写）。
     red_regression_violation: bool | None
     # 2026-09-29 审查 P0（StopReason 统一停止条件）：工作流终止原因枚举值
-    # （"test_passed" / "max_iterations" / "skip_debugger_repair_invalid" /
+    # （"test_passed" / "test_passed_converged" / "max_iterations" /
+    # "max_iterations_reached" / "skip_debugger_repair_invalid" /
     # "test_defect_regeneration_cap" / "test_gen_diagnosis_early" /
     # "test_gen_diagnosis" / "budget_exceeded" / "regression_detected" /
+    # "coverage_stall"（P2-4 停滞检测，COVERAGE_STALL_DETECT_ENABLE=true 时；
+    # T 轮 2026-10-18 起在 repair-invalid 同迭代平局中优先归因）/
     # "recursion_limit" / "unknown"）。由 determine_stop_reason 单点判定，
     # 路由函数在返回 "done" 时写入 state["stop_reason"]（纯观测，不参与
     # 路由），供实验层"终止原因分布可解释"消费。缺省 None = 未终止
