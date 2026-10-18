@@ -355,19 +355,22 @@ ranked = rank_knowledge_entries(entries, "syntax")  # Frequency × time-decay ra
 
 ### CodeAnalyzer
 
-An AST code analysis tool providing precise code replacement capabilities.
+An AST code analysis tool providing cyclomatic-complexity computation and precise code replacement.
 
 ```python
-from src.tools.code_analyzer import analyze_complexity, replace_function_code
+from src.tools.code_analyzer import compute_cyclomatic_complexity, replace_function_code
 
-# Compute cyclomatic complexity
-complexity = analyze_complexity(code_string)
+# Cyclomatic complexity (McCabe: 1 + decision points such as if/for/while/except; returns int)
+complexity = compute_cyclomatic_complexity(source_code)
 
-# Replace a function implementation
-new_code = replace_function_code(
-    original_code,
-    function_name,
-    new_body,
+# AST-precise function-definition replacement: new_function_code must be a complete
+# `def` block (the whole function definition, not just the body); returns a
+# (new_code, success) tuple — invalid syntax / function not found returns
+# (source_code, False) unchanged
+new_code, ok = replace_function_code(
+    source_code,
+    "divide",
+    "def divide(a, b):\n    if b == 0:\n        raise ValueError('b must not be zero')\n    return a / b",
 )
 ```
 
@@ -375,31 +378,35 @@ new_code = replace_function_code(
 
 | Function | Parameters | Return Value | Description |
 |------|------|--------|------|
-| `analyze_complexity()` | `code: str` | `int` | Computes cyclomatic complexity |
-| `replace_function_code()` | `original_code`, `function_name`, `new_body` | `str` | AST-precise replacement of a function body |
+| `compute_cyclomatic_complexity()` | `source_code: str` | `int` | Computes cyclomatic complexity (McCabe: 1 + decision points; `and/or` combined paths counted as `len(values) - 1`) |
+| `replace_function_code()` | `source_code`, `function_name`, `new_function_code` (complete `def`) | `tuple[str, bool]` | AST-precise replacement of the whole function definition; invalid syntax / same-named function not found → `(source_code, False)` |
 
 ---
 
 ### PatchApplier
 
-A patch application tool supporting full-file and single-function modes.
+A patch application tool supporting full-file and single-function modes (the mode is auto-detected from the patch shape; no explicit argument needed).
 
 ```python
 from src.tools.patch_applier import apply_patch_to_code
 
-# Apply a full-file patch
-fixed_code = apply_patch_to_code(
+# No mode / function_name parameters: full-file vs single-function mode is
+# auto-detected from the patch shape (patch starts with a docstring / has a
+# top-level import at line start / is a multi-function patch → full-file mode;
+# otherwise the first `def` name in the patch locates the same-named function
+# in the original code and replaces it).
+# Returns (repaired code, success); on failure returns (original_code, False).
+
+# Full-file mode: the patch contains a top-level import at line start (auto-detected)
+fixed_code, ok = apply_patch_to_code(
     original_code=buggy_code,
-    patch="```python\ndef divide(a, b): return a / b\n```",
-    mode="full_file",
+    patch="```python\nimport math\n\n\ndef divide(a, b):\n    if b == 0:\n        raise ValueError('b must not be zero')\n    return a / b\n```",
 )
 
-# Single-function mode (recommended)
-fixed_code = apply_patch_to_code(
+# Single-function mode: the patch must contain a complete def (body-only text is rejected → ok=False)
+fixed_code, ok = apply_patch_to_code(
     original_code=buggy_code,
-    patch="return a / b",
-    mode="function",
-    function_name="divide",
+    patch="def divide(a, b):\n    if b == 0:\n        raise ValueError('b must not be zero')\n    return a / b",
 )
 ```
 
@@ -407,9 +414,9 @@ fixed_code = apply_patch_to_code(
 
 | Function | Parameters | Return Value | Description |
 |------|------|--------|------|
-| `apply_patch_to_code()` | `original_code`, `patch`, `mode`, `function_name` | `str` | Apply a patch to code |
+| `apply_patch_to_code()` | `original_code`, `patch` | `tuple[str, bool]` | Auto-detects full-file/single-function mode (no `mode`/`function_name` parameters); strips Markdown code fences (python-labelled) and the `python:` prefix from the patch text; empty patch / target function not found / full-file patch missing an original function → `(original_code, False)` |
 | `apply_multi_function_patch()` | `code: str`, `patches: list[dict]` | `tuple[str, bool]` | Repair multiple functions simultaneously: each patch entry is `{"function_name": str, "patch": str}`; applied in descending order of function start line (to avoid line-number offset). 0.2 performance optimization: the sort key reuses the pre-split lines (O(n+m); previously each patch split the code itself, O(n·m)) |
-| `safe_apply_patch()` | `code`, `patch` | `tuple[str, bool]` | Apply the patch, then run a syntax check; on failure automatically roll back to the original code |
+| `safe_apply_patch()` | `code`, `patch` | `tuple[str, bool]` | Applies the patch, then runs a syntax check and a dangerous-API guard diff check; on failure automatically rolls back to the original code |
 
 ---
 
@@ -869,7 +876,7 @@ print(MODEL_NAME)  # Name of the default model (LLM_1)
 | `API_CIRCUIT_BACKOFF` | bool | true | 4.4 API circuit-breaker exponential backoff switch: `mark_failure` now cools down for `base * 2^open_count` (capped by `half_open_probe_penalty_cap_seconds`), so a dead provider's cooldown grows monotonically; set to false to revert to the 4.2 fixed-cooldown baseline (for comparison experiments) |
 | `API_PROMETHEUS_EXPORT` | bool | false | 4.4 Prometheus metrics export switch: when enabled, `APIManager.to_prometheus_text()` outputs 7 metric groups (health / circuit_state / open_remaining_s / open_count / probe_success_rate / success_rate / avg_response_ms) for monitoring; pure side-band, no impact on existing routing behavior |
 | `ASSERTION_AUGMENT_ENABLE` | bool | false | 3.4 Assertion augmentation: AST-extracts existing asserts in the code under test and injects them into the prompt |
-| `ENABLE_MULTI_CANDIDATE_PATCH` | bool | false | 3.1 Multi-candidate patch generation with static/execution validation screening (off by default; when there are no candidates, falls back to a single patch); the `reproduce.sh` reproduction flow explicitly enables it by default (can revert to the historical baseline with `--no-multi-candidate`) |
+| `ENABLE_MULTI_CANDIDATE_PATCH` | bool | false | 3.1 Multi-candidate patch generation with static/execution validation screening (off by default; when there are no candidates, falls back to a single patch); `reproduce.sh` has **also defaulted to off since W7 (2026-10-05)** (A/B measured −2pp success rate and +256% tokens) — pass `--multi-candidate` explicitly for the comparison; `--no-multi-candidate` is retained for compatibility only (no-op) |
 | `AITESTER_TRACE_DIR` | str | unset (no-op) | 4.1 Output directory for the structured JSONL tracing layer (when unset, the tracing layer is a no-op and does not affect execution); `reproduce.sh` enables it by default (`experiments/results/traces`) |
 | `BENCHMARK_PARALLELISM` | int | 0 | Parallelism level (0 = serial) |
 | `LLM_JSON_MODE` | str | "on" | ADR-0031 (2026-10-14, DeepSeek official JSON Output): seven JSON-contract call sites (Planner plan / Debugger patch·strict-retry·critic·break-cases·defect-classification / FaultLocalizer localization) bind `response_format={"type":"json_object"}` (guaranteeing valid JSON strings); `off` restores the historical byte-identical caliber (old-batch replay); registered in env_budget and `_env_snapshot_keys` (auditable per-batch provenance) |

@@ -211,12 +211,42 @@ class TestNestedPytestEnv:
         assert env["PYTHONDONTWRITEBYTECODE"] == "1"
         assert env["PATH"] == "/usr/bin"
 
-    def test_clean_env_is_bitwise_identical_to_legacy_dict(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """干净环境下与历史 `{**os.environ, **overrides}` 逐位等价（零行为变化）。"""
-        monkeypatch.delenv("PYTEST_PLUGINS", raising=False)
-        monkeypatch.delenv("PYTEST_ADDOPTS", raising=False)
+    def test_credentials_and_non_whitelist_host_keys_are_not_inherited(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A08（2026-10-18 评审 P0）：宿主凭证/非白名单键不得进入嵌套 pytest 子进程。
+
+        历史口径（H 轮）只剔除 PYTEST_PLUGINS/PYTEST_ADDOPTS，其余环境整体
+        继承；M1/MDO/P2P 等评分旁路因此把宿主凭证带进执行 LLM 生成代码的
+        子进程。修复后为最小白名单（credential_scrub.build_minimal_env）+
+        嵌套 pytest 运行期键 + overrides。
+        """
+        sentinels = {
+            "LLM_1_API_KEY": "AUDIT_SENTINEL",
+            "OPENAI_API_KEY": "sk-audit-sentinel",
+            "AWS_ACCESS_KEY_ID": "AKIA_AUDIT_SENTINEL",
+            "AWS_SECRET_ACCESS_KEY": "audit-secret",
+            "MYSQL_PASSWORD": "audit-mysql-password",
+            "SSH_AUTH_SOCK": "/tmp/audit-agent.sock",
+            "SOME_HOST_ONLY_VARIABLE": "audit-host-value",
+        }
+        for key, value in sentinels.items():
+            monkeypatch.setenv(key, value)
+        env = nested_pytest_env(PYTHONDONTWRITEBYTECODE="1")
+        leaked = sorted(key for key in sentinels if key in env)
+        assert not leaked, f"宿主凭证/非白名单键仍被继承进不可信子进程：{leaked}"
+        # 嵌套 pytest 必需项保留（白名单 / 运行期键）
+        assert env.get("PATH") == os.environ.get("PATH")
+        assert env["PYTHONDONTWRITEBYTECODE"] == "1"
+        for needed in ("HOME", "TMPDIR", "LANG"):
+            if needed in os.environ:
+                assert env.get(needed) == os.environ[needed]
+
+    def test_untrusted_exec_env_is_the_shared_constructor(self) -> None:
+        """nested_pytest_env 是 untrusted_exec_env 的兼容别名（口径单一实现）。"""
+        from src.utils.process_utils import untrusted_exec_env
+
         overrides = {"PYTHONDONTWRITEBYTECODE": "1", "PYTHONPATH": "/tmp/x"}
-        assert nested_pytest_env(**overrides) == {**os.environ, **overrides}
+        assert nested_pytest_env(**overrides) == untrusted_exec_env(**overrides)
+        assert "LLM_1_API_KEY" not in untrusted_exec_env()
 
     def test_unimportable_host_plugin_breaks_legacy_env_but_not_helper(self, tmp_path, monkeypatch) -> None:
         """端到端复现：宿主插件不可导入 → 旧口径 rc≠0（被测代码根本没跑），新口径 rc=0。

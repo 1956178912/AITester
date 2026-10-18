@@ -295,6 +295,88 @@ class TestRegressionRate:
         assert _compute_regression_rate(_make_task(), None) is None
 
 
+class TestFlakyUnverifiedExclusion:
+    """A16（2026-10-18 第三方评审 P1）：fail→pass 不稳定任务的 M1 不可测口径。
+
+    修复前 `src/graph/state.py` 与 `src/agents/flaky_gate.py` 文档承诺
+    "flaky 任务的 M1 指标按不可测处理"，但 `_m1_metrics` 没有任何 flaky
+    消费实现——重试层保留 fail→pass 证据后若不消费，detection / repair
+    / false-fix 仍会基于一次可能翻转的运行结果计算（测量伪影）。
+    本类锁定：``flaky_unverified=True`` → 全部 M1 端点 None、oracle 判定
+    unavailable、假通过标记不写入；非 flaky / 无 final_state 时新增键存在
+    且为 None（历史 JSON 键集合同构）。
+    """
+
+    def test_all_metrics_none_when_flaky_unverified(self):
+        """flaky_unverified=True → 六类 M1 端点全部 None + oracle unavailable。"""
+        from experiments._m1_metrics import build_m1_task_metrics
+
+        metrics = build_m1_task_metrics(
+            _make_task(),
+            {
+                "generated_test": LEGIT_F2P,
+                "test_passed": False,
+                "patch": FIXED_CODE,
+                "flaky_unverified": True,
+                "flaky_detected": True,
+            },
+        )
+        assert metrics["flaky_unverified"] is True
+        assert metrics["flaky_detected"] is True
+        for key in (
+            "detection_rate",
+            "llm_suite_detection_rate",
+            "repair_rate",
+            "false_fix_rate",
+            "test_error_rate",
+            "regression_rate",
+        ):
+            assert metrics[key] is None, f"flaky 任务 {key} 应为不可测（None），实际 {metrics[key]!r}"
+        assert metrics["oracle_suite_verdict"] == "unavailable"
+
+    def test_direct_compute_repair_rate_is_none_when_flaky(self):
+        """直接调用站点同样受保护（run_benchmark 行构造直接调 compute 原语）。"""
+        from experiments._m1_metrics import _compute_repair_rate
+
+        state = {
+            "generated_test": LEGIT_F2P,
+            "test_passed": True,
+            "patch": FIXED_CODE,
+            "flaky_unverified": True,
+        }
+        assert _compute_repair_rate(_make_task(), state) is None
+
+    def test_regeneration_marker_suppressed_when_flaky(self):
+        """flaky 时"重生成后通过"同样不可信 → test_regenerated_pass_unverified 不写。"""
+        from experiments._m1_metrics import build_m1_task_metrics
+
+        metrics = build_m1_task_metrics(
+            _make_task(),
+            {
+                "test_passed": True,
+                "regeneration_count": 1,
+                "flaky_unverified": True,
+            },
+        )
+        assert metrics["test_regenerated_pass_unverified"] is None
+
+    def test_non_flaky_new_keys_present_and_none(self):
+        """历史（非 flaky）批次：新增 flaky 键存在且为 None，键集合同构。"""
+        from experiments._m1_metrics import build_m1_task_metrics
+
+        metrics = build_m1_task_metrics(_make_task(), {"test_passed": False})
+        assert metrics["flaky_unverified"] is None
+        assert metrics["flaky_detected"] is None
+
+    def test_no_final_state_new_keys_present_and_none(self):
+        """失败分支 final_state=None：新增 flaky 键仍存在（JSON 结构向后兼容）。"""
+        from experiments._m1_metrics import build_m1_task_metrics
+
+        metrics = build_m1_task_metrics(_make_task(), None)
+        assert metrics["flaky_unverified"] is None
+        assert metrics["flaky_detected"] is None
+
+
 if __name__ == "__main__":
     import sys
 

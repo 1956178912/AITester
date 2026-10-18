@@ -6,15 +6,25 @@
 #   bash reproduce.sh                    # 快速模式（3 个任务，内置示例数据集）
 #   bash reproduce.sh --full             # 完整模式（全部任务）
 #   bash reproduce.sh --dataset swe_bench  # 使用 SWE-bench 数据集
+#   bash reproduce.sh --dataset synthetic --full  # 合成数据集主批口径（87 任务，
+#                                        # max-pattern-repeat=2，seed=42，三臂）
 #   bash reproduce.sh --quick --verbose  # 快速模式 + 详细日志
+#
+# A02（2026-10-18 第三方审查，P1）：数据集口径 fail-closed——只支持
+# examples / swe_bench / synthetic；未知 --dataset 立即报错退出（历史行为是
+# 静默回退 examples，这与 REPLICATION.md 推荐 `--dataset synthetic --full`
+# 的"主批复现"承诺矛盾：实际跑的是 3 任务示例集）。
 #
 # P1（2026-10 Docker 化实验复现）：任意批次可用 Docker 一条命令复现，
 # 结果 JSON 自带 environment provenance 块（git sha / python 版本 /
 # 容器标记），由 Dockerfile.repro 构建的镜像执行：
-#   docker build -f Dockerfile.repro -t aitester-repro:$(git rev-parse --short HEAD) .
+#   docker build --build-arg GIT_SHA=$(git rev-parse HEAD) \
+#         -f Dockerfile.repro -t aitester-repro:$(git rev-parse --short HEAD) .
 #   docker run --rm -v $(pwd)/experiments/results:/workspace/experiments/results \
 #         -v $(pwd)/.env.local:/workspace/.env.local:ro \
-#         aitester-repro:<sha> bash reproduce.sh --full
+#         aitester-repro:<sha> bash reproduce.sh --dataset synthetic --full
+#   （容器内 .git 被 .dockerignore 排除；run_benchmark 读取 .repro_provenance
+#    的 GIT_SHA 作为 provenance 来源——见 A03 修复）
 #
 # 所有命令在项目根目录（本脚本所在目录）下执行
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -42,9 +52,13 @@ error() { echo -e "${RED}[ERROR]${NC} $*"; exit 1; }
 # ─── 参数解析 ───────────────────────────────────────────────────────────────────
 # 默认参数值
 MODE="quick"        # quick | full：控制任务数量
-DATASET="examples"  # examples | swe_bench | synthetic：数据集选择
+DATASET="examples"  # examples | swe_bench | synthetic：数据集选择（未知值 fail-closed）
 TASK_LIMIT=3        # 由 MODE 决定（quick=3，full=不限）；默认 quick 即 3，与文档一致
+TASK_COUNT=""       # synthetic 任务数透传（run_benchmark --task-count）；空=按 MODE 默认
+MAX_PATTERN_REPEAT=""  # synthetic 同池模板重复上限（run_benchmark --max-pattern-repeat）
+SEED="42"           # 数据采样/合成种子（run_benchmark --seed；主批默认 42）
 BASELINES="aitester,plain_llm,single_agent"  # 基线方法列表
+BASELINES_USER_SET="false"  # 是否由用户显式 --baselines 指定
 VERBOSE=""          # 是否输出详细日志
 # 2.3 RAG：W7（2026-10-05 审查落地·阴性证据驱动）默认关闭——RAG A/B 对照实验
 #（experiments/results/rag_ab_*，docs/experiment_ab_results_2026-09-28.md）实测
@@ -64,7 +78,10 @@ while [[ $# -gt 0 ]]; do
         --quick)     MODE="quick"; TASK_LIMIT=3; shift ;;
         --full)      MODE="full";  TASK_LIMIT="";  shift ;;
         --dataset)   DATASET="$2"; shift 2 ;;
-        --baselines) BASELINES="$2"; shift 2 ;;
+        --task-count) TASK_COUNT="$2"; shift 2 ;;
+        --max-pattern-repeat) MAX_PATTERN_REPEAT="$2"; shift 2 ;;
+        --seed)      SEED="$2"; shift 2 ;;
+        --baselines) BASELINES="$2"; BASELINES_USER_SET="true"; shift 2 ;;
         --enable-rag) ENABLE_RAG="--enable-rag"; shift ;;
         --no-rag)    ENABLE_RAG=""; shift ;;
         --multi-candidate) MULTI_CANDIDATE="true"; shift ;;
@@ -75,6 +92,47 @@ while [[ $# -gt 0 ]]; do
         *) error "未知参数: $1" ;;
     esac
 done
+
+# ─── A02（2026-10-18 第三方审查，P1）：数据集口径 fail-closed + synthetic 分支 ──
+# 历史行为：未知 --dataset 静默回退 examples。REPLICATION.md 推荐
+# `reproduce.sh --dataset synthetic --full` 作为主批复现入口，但脚本无 synthetic
+# 分支 → 实际跑 3 任务示例集，"主批复现"承诺落空。现口径：
+#   1. 只接受 examples / swe_bench / synthetic（synth 归一为 synthetic）；
+#   2. 其余 --dataset 立即报错退出（fail-closed，不替换数据集）；
+#   3. synthetic：quick 默认 3 任务；full 默认复现主批入口参数
+#      `--task-count 87 --max-pattern-repeat 2 --seed 42` + 主批三臂
+#      （aitester/plain_llm/plain_llm_df，用户显式 --baselines 可覆盖）。
+#      与主批"3 seed（42/43/44）"完整协议的区别：本脚本单次运行单 seed；
+#      三种子协议入口是 experiments/run_main_batch.py / run_t1_b2_main_batch.sh，
+#      不同 seed 批次不可直接合并统计（见 REPLICATION.md §6 已知偏差）。
+case "$DATASET" in
+    examples|swe_bench) ;;
+    synthetic|synth) DATASET="synthetic" ;;
+    *)
+        error "未知数据集: ${DATASET}（支持: examples | swe_bench | synthetic；其他真实数据集请直接用 experiments/run_benchmark.py --dataset <name>）"
+        ;;
+esac
+
+if [[ "$DATASET" == "synthetic" ]]; then
+    if [[ -z "$TASK_COUNT" ]]; then
+        if [[ "$MODE" == "full" ]]; then
+            TASK_COUNT=87
+        else
+            TASK_COUNT=3
+        fi
+    fi
+    if [[ "$MODE" == "full" && -z "$MAX_PATTERN_REPEAT" ]]; then
+        MAX_PATTERN_REPEAT=2
+    fi
+    if [[ "$MODE" == "full" && "$BASELINES_USER_SET" != "true" ]]; then
+        # 主批次臂集（benchmark_synthetic_20261006_140906.json: baselines 三臂）
+        BASELINES="aitester,plain_llm,plain_llm_df"
+    fi
+    # synthetic 规模由 --task-count 控制；清空 --task-limit 避免二次截断
+    # （quick 模式默认 --task-limit 3 会覆盖用户显式 --task-count 的意图）。
+    TASK_LIMIT=""
+    info "synthetic 参数: --task-count $TASK_COUNT --seed $SEED${MAX_PATTERN_REPEAT:+ --max-pattern-repeat $MAX_PATTERN_REPEAT}"
+fi
 
 # 2.3 RAG（W7 口径，2026-10-05）：默认关闭（阴性证据：token +40.7% 无成功率
 # 增益，见 rag_ab A/B 对照）；显式 --enable-rag 时开启（rag_data/ 持久化目录
@@ -120,7 +178,9 @@ info "Step 1/6: 检查环境..."
 # AITESTER_BATCH_MAX_CALLS 未配置即视为阻断（"未配置 ≠ 无限"）。
 if [[ "${AITESTER_RUN_PREFLIGHT:-false}" == "true" ]]; then
     info "前置闸(EMSE): AITESTER_RUN_PREFLIGHT=true → 执行 scripts/tools/run_preflight.py --strict"
-    if ! python3 scripts/tools/run_preflight.py --expect-tasks "${TASK_LIMIT:-261}" --strict; then
+    # A02：预期任务数口径——显式 --task-limit > synthetic --task-count > 历史默认 261
+    EXPECTED_TASKS="${TASK_LIMIT:-${TASK_COUNT:-261}}"
+    if ! python3 scripts/tools/run_preflight.py --expect-tasks "$EXPECTED_TASKS" --strict; then
         error "批次前置闸未通过（配额/指纹/工作树）：修好后再跑，或显式设 AITESTER_RUN_PREFLIGHT=false 跳过（不推荐）"
     fi
 else
@@ -188,7 +248,7 @@ if [[ $TEST_EXIT -ne 0 ]]; then
     if [[ "${REPRODUCE_ALLOW_TEST_FAILURES:-0}" == "1" ]]; then
         warn "部分单元测试失败（REPRODUCE_ALLOW_TEST_FAILURES=1，继续执行——复现结论将不可信）"
     else
-        error "单元测试失败（exit=$TEST_EXIT）。复现实验前必须先让全量测试通过；如确需带失败继续，设 REPRODUCE_ALLOW_TEST_FAILURES=1"
+        error "单元测试失败（exit=${TEST_EXIT}）。复现实验前必须先让全量测试通过；如确需带失败继续，设 REPRODUCE_ALLOW_TEST_FAILURES=1"
     fi
 fi
 
@@ -210,9 +270,11 @@ print(f'已下载到: {path}')
 "
 elif [[ "$DATASET" == "examples" ]]; then
     info "Step 4/6: 使用内置示例数据集（无需下载，包含 3 个预定义 bug 任务）"
+elif [[ "$DATASET" == "synthetic" ]]; then
+    info "Step 4/6: 使用内置合成数据集（本地生成 --task-count ${TASK_COUNT}，无需下载）"
 else
-    warn "未知数据集 '$DATASET'，回退到 examples"
-    DATASET="examples"
+    # 参数解析段已 fail-closed；此处双保险（任何路径都不得静默替换数据集）
+    error "未知数据集 '$DATASET'（支持: examples | swe_bench | synthetic）"
 fi
 
 # ─── 步骤 5/6：运行基准测试 ───────────────────────────────────────────────────────
@@ -222,6 +284,13 @@ mkdir -p experiments/results
 # 构建任务数量限制参数
 TASK_LIMIT_ARG=""
 [[ -n "$TASK_LIMIT" ]] && TASK_LIMIT_ARG="--task-limit $TASK_LIMIT"
+
+# A02：synthetic 真实参数透传（与 run_benchmark 主批入口一致）
+TASK_COUNT_ARG=""
+[[ -n "$TASK_COUNT" ]] && TASK_COUNT_ARG="--task-count $TASK_COUNT"
+MAX_PATTERN_REPEAT_ARG=""
+[[ -n "$MAX_PATTERN_REPEAT" ]] && MAX_PATTERN_REPEAT_ARG="--max-pattern-repeat $MAX_PATTERN_REPEAT"
+SEED_ARG="--seed $SEED"
 
 # 3.2 结构化追踪：显式设置 AITESTER_TRACE_DIR 收集逐智能体快照/Token 明细/
 # 墙钟耗时/决策路径（默认 no-op，此处主动启用以支撑论文案例分析）
@@ -235,19 +304,24 @@ info "结构化追踪(3.2): AITESTER_TRACE_DIR=$AITESTER_TRACE_DIR"
 # 本复现流程默认不启用，保持历史实验口径与耗时预算不变。
 if [[ -n "${ENABLE_MUTATION_SCORING:-}" ]]; then
     export ENABLE_MUTATION_SCORING
-    info "变异得分(1.2): ENABLE_MUTATION_SCORING=$ENABLE_MUTATION_SCORING（耗时显著增加，确认已知晓）"
+    info "变异得分(1.2): ENABLE_MUTATION_SCORING=${ENABLE_MUTATION_SCORING}（耗时显著增加，确认已知晓）"
 else
     info "变异得分(1.2): 默认关闭（启用请设 ENABLE_MUTATION_SCORING=true）"
 fi
 
 # 运行多基线对比实验（自动保存 JSON 结果到 experiments/results/）
-# 2.3 RAG：$ENABLE_RAG 在合成/内置数据集默认设为 --enable-rag（见参数解析段）
+# 2.3 RAG：$ENABLE_RAG 显式传参（默认关，见 W7 阴性证据口径）
 # 3.2 结构化追踪：显式设置 AITESTER_TRACE_DIR 收集逐智能体快照/Token 明细/
 # 墙钟耗时/决策路径（默认 no-op，此处主动启用以支撑论文案例分析）
+# A02：$TASK_COUNT_ARG / $MAX_PATTERN_REPEAT_ARG 为 synthetic 主批参数透传；
+# $SEED_ARG 固定透传（主批 seed=42，多 seed 协议见 REPLICATION.md §5/§6）。
 python experiments/run_benchmark.py \
     --dataset "$DATASET" \
     --baselines "$BASELINES" \
     $TASK_LIMIT_ARG \
+    $TASK_COUNT_ARG \
+    $MAX_PATTERN_REPEAT_ARG \
+    $SEED_ARG \
     $ENABLE_RAG \
     --output-dir experiments/results \
     $VERBOSE
@@ -278,5 +352,7 @@ echo ""
 echo "下一步建议:"
 echo "  1. 打开 summary_stats.md 查看统计检验结果（p 值、Cohen's d）"
 echo "  2. 如需运行更多任务，使用 --full 参数"
-echo "  3. 如需完整 SWE-bench 实验，使用 --dataset swe_bench --full"
+echo "  3. 主批合成数据集复现（87 任务 / max-pattern-repeat 2 / seed 42 / 三臂）："
+echo "     bash reproduce.sh --dataset synthetic --full"
+echo "  4. 如需完整 SWE-bench 实验，使用 --dataset swe_bench --full"
 echo ""

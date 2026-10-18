@@ -1,10 +1,71 @@
 > **语言 / Language**：[English](CHANGELOG.en.md) | 简体中文（本文）
 >
-> Last updated: 2026-10-18（U 轮：**第三轮独立评审收口（零 LLM）**——**A-05 门禁数量口径统一**（`BASELINE.yaml` `gates` 节为权威口径：26 脚本 / ci.yml 24 唯一引用·27 调用点） + **A-06 "0 failed" 环境标签**（正常环境口径 + 沙箱宿主能力缺失归因披露） + **A-08/A-09 测试环境加固**（broker mkdir 垫片防御 + ps/生产 profile 沙箱能力探测 `skipif`） + **A-03/A-17 T 轮漂移论文化**（论文 `sec:tround` + E8 2×2 消融预注册冻结） + **P3 评测诚信 checklist v1（IC-1..IC-8）** + **D3b Step A 跨文件计划接线**（双开关默认关）；第三轮独立评审报告入库 + 全量双语文档同步；T/S/R/Q/P/O/N/M/L/K 轮同日登记）
+> Last updated: 2026-10-18（V 轮：**第三方独立评审 23 项修复**——P0 A08 不可信执行环境凭证隔离；P1 A01–A07、A09–A17（统计身份/缓存请求身份/API 路由/消耗记账/节点身份/Windows 回收/复现入口/来源追踪/跨平台校验/执行依赖/发行缺包/fail→pass 证据）；P2 A18–A23（校验清单/损坏工件/CSV/检索计数/LRU 边界）；`BASELINE.yaml` 刷新 collected 9130 / passed 9125；评审 M1–M9 验收脚本复跑；零 LLM 花费。此前 U 轮：第三轮独立评审收口（A-05/A-06/A-08/A-09 + A-03/A-17 论文化 + P3 checklist + D3b Step A）；T/S/R/Q/P/O/N/M/L/K 轮同日登记）
 
 # Changelog
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
+
+## [Unreleased] — 2026-10-18 V 轮（第三方独立评审 23 项修复：A08 P0 凭证隔离 + A01–A07/A09–A17 P1 + A18–A23 P2）
+
+> V 轮响应第三方独立评审（Windows 环境静态审查，评审报告：`AITester_审查报告.md`；用户确认 23 项结论 **100% 准确**）。评审提交 `ff15a2f` 与本轮起点逐位一致；逐项修复 + 回归锁 + 评审 M1–M9 验收脚本复跑，另有独立收口报告 `docs/reviews/THIRD_PARTY_REVIEW_2026-10-18_FIX_CLOSURE.md`。
+> 真实 LLM 花费：**$0**（全部为代码/文档/工件层修复与零 LLM 验证；不调用模型、不构建容器）。
+
+### Security — A08（P0）：不可信执行环境凭证隔离
+
+- **根因**：`nested_pytest_env` 只剔除 `PYTEST_PLUGINS/PYTEST_ADDOPTS`，M1 判分、MDO、P2P 等评分旁路执行 LLM 生成测试/补丁/探针的子进程继承宿主凭证（`LLM_*_API_KEY` / `OPENAI_API_KEY` / `AWS_*` / `MYSQL_PASSWORD` / `SSH_AUTH_SOCK` …）。
+- **修复**：`src/utils/process_utils.py` 新增统一 `untrusted_exec_env()`（复用 `credential_scrub.build_minimal_env()` 最小白名单 + 嵌套 pytest 运行期键 + 显式 overrides；`nested_pytest_env` 保留兼容别名）。接线：`experiments/_m1_metrics.py`（M1 判分）、`src/measurement/mdo.py`（`_run_probe` 原显式 `**os.environ` 与 `_run_tests_on_code`）、`src/tools/patch_rollback.py`（P2P 原不传 env）、`experiments/solver_directed_trigger.py`、`experiments/spec_ambiguity.py`（候选代码探针）；detection gates/repair replay 等经中心构造器与兼容别名自动收敛。
+- **回归锁**：`tests/test_untrusted_exec_env.py` 34 例（M4 伪凭证脚本逐字复刻、15 类凭证族、6 个调用点最终子进程 env 截获、真实端到端"被测代码读取伪凭证"、AST 接线锁）；评审 M4 复跑 `sentinel inherited: False`。
+
+### Fixed — A12（P1）：Windows 子进程整树回收
+
+- `_terminate_process_group` 在 Windows 无 `os.getpgid/killpg` → AttributeError 逃逸、绕过 kill/wait；`orphan_guard` 内嵌看门狗同根因。
+- 新增可注入 `_is_windows()` 平台分派：Windows 分支 `taskkill /T /F /PID` 整树回收 → 失败回退 `process.kill()` → 有界等待直接子进程（不挂死）；看门狗脚本按 `os.name == "nt"` 分流。POSIX 两段式 killpg 逐字不变。
+- **回归锁**：`tests/test_windows_process_termination.py` 16 例（M5 Mock Windows 分支、不得触碰 POSIX API、taskkill 失败兜底、无 pid 兜底、POSIX 回归）。
+
+### Fixed — A06/A07（P1）：簇级统计的任务—程序身份与"最新 None"配对
+
+- **A06 根因**：`_rebuilt_task_fingerprints/build_cluster_map` 重建漏真实 `max_pattern_repeat=2`，且把 `s<seed>__` 前缀剥离后统一查单 seed 表——三种子 261 行错映射 223/261、错误 26 簇（符号检验 2:21:3、p≈6.6e-05）。
+- **A06 修复**：三层身份解析（归档 `task_metadata` 程序身份优先 → `s<seed>__` 前缀映射到该 seed 的正确重建 → 无法复现保守 `unmapped::` 单例）；重建 cap 可显式传参（默认主批真实值 2，`--cluster-max-pattern-repeat 0` 回退历史口径）；报告披露身份来源与 resolved 计数。
+- **A06 验收**：main_batch 三批次 pool-seeds **261 → 31 簇 / 0 未映射**，aitester vs plain_llm_df detection **5:17:9、符号检验 p=0.01690054**（与归档 AC4 一致）；旧错误 26 簇保留为**反面锁定**（显式 cap=None 才可复现）。修正 `tests/test_cluster_robust_stats.py` 中错误的 26 簇锁定。
+- **A07 根因/修复**：`_pair_by_task` / `paired_contingency` 在去重记录前跳过 None → 最新记录 None 时回退旧可测值；改为先去重（最新批次优先）再排除 None（最新不可测 = 该任务整体不可测）。M8 复跑 `n_common=0`；新增最新 None/最新有效对称回归锁。
+
+### Fixed — A09/A10/A11/A15/A22/A23（P1/P2）：缓存身份、请求链、消耗记账、节点身份、检索计数、LRU 边界
+
+- **A09**：精确缓存键与语义缓存索引统一按**规范化有效请求身份**（model/endpoint/有效默认温度/thinking/reasoning_effort/max_tokens/JSON 实际生效值/namespace/路由）隔离；payload 记录 `request_identity`；旧格式缓存仅在历史默认包络下只读回退。M6 复跑：B 身份不再命中 A。
+- **A10**：生产请求链改为线程局部任务分配**优先**、全局链随后故障转移（半截配置不注入、去重）；成功请求记录真实配置并在缓存 payload 写 `request_identity` + `response_identity`（查找身份 vs 真实响应来源可区分）。M9-A10 复跑：首请求 = 线程局部 B、链=[B, global-A]。
+- **A11**：OpenAI 与 zai 路径改为**收到响应先记账 usage、再判 finish_reason/空响应**；重试器新增 `pre_retry_check`（重试前复查预算）。M9-A11 复跑：两次 usage 累计 22（15 + 7）。
+- **A15**：节点/客户端改以端点实例 ID（`model@sha256(base_url)[:8]`）标识，模型名为属性；同 model 多 provider 全部保留、健康/熔断/选路独立；单实例对外键不变，新增 `remove_node_by_id()`，Prometheus 追加 `node_id`。M9-A15 复跑：同 model 两端点 2 节点、健康独立。
+- **A22（P2）**：`retrieval_relevance` 一次解析有效 k、top-k 内直接整数计数（不再用 `len(refs)` 反推）。
+- **A23（P2）**：`_lru_tokens` 随正缓存淘汰、负缓存写入与 clear 同步维护，键集 ⊆ 正缓存且受 `_LRU_MAXSIZE` 约束；M7 复跑 `before clear 2 2` → `after clear 0 0`。
+
+### Fixed — A13/A14/A16（P1）：执行运行依赖、发行缺包导入、fail→pass 证据
+
+- **A13**：`pyproject.toml` + `setup.py` 新增 `execution` extra（pytest/pytest-cov/pytest-timeout，默认安装面不扩大）；执行前能力检查，缺模块返回 `error_info.type=execution_dependency_missing`（含安装指引），不再晦涩 rc=1。文档补 `pip install "aitester[execution]"` 口径（README/QUICKSTART/REPLICATION）。
+- **A14**：`mutation_advisor` 的 `experiments` 导入移入 try 内保守降级（缺包不崩、feedback=None）；`nodes.py` N5 去重层同护栏；全仓 src→experiments 生产导入点排查（12 处）。
+- **A16**：`run_pytest_with_retry` 保留每次尝试 `{attempt,returncode,timed_out,passed}`（`execution_attempts` / `flaky_fail_then_pass`）；`executor.py`/`executor_modes.py` 传播；`_executor_node` 观察到首败次过即写 `flaky_detected/flaky_unverified`、计数与保守 `test_passed=False`（不依赖 FLAKY_CHECK_ENABLE）；`run_benchmark` single_agent 基线同步消费；`_m1_metrics` 对 `flaky_unverified=True` 任务全部 M1 端点按不可测（None）处理并透传 flaky 键——真正落地 `state.py`/`flaky_gate.py` 既有"M1 不可测"承诺。
+
+### Fixed — A02/A03/A17/A18/A19/A20（P1/P2）：复现入口、来源追踪、跨平台校验、损坏工件
+
+- **A02**：`reproduce.sh` 新增 fail-closed 数据集分派（examples/swe_bench/synthetic，未知 dataset 立即报错退出）；synthetic 透传 `--task-count/--max-pattern-repeat/--seed`（full = 主批 87/2/42、主批三臂）；修 bash 3.2 多字节变量隐患；同步 REPLICATION/docs/INDEX。
+- **A03**：`run_benchmark` 解析 `.repro_provenance` 的 `GIT_SHA`：无 git 时作为 provenance 来源（`git_sha_source="repro_provenance"`），有 git 时记录两者并校验一致性；`unknown` 不当 SHA；同步 Dockerfile.repro/REPLICATION。
+- **A17**：仓库根 `.gitattributes` 对证据目录设 `-text`（检出=入库=LF，跨平台字节保真）；`checksum_results.py` 区分 raw / EOL-only（单独 WARN，默认不判篡改）/ 内容不符（仍 FAIL），新增 `--strict-bytes`。
+- **A18**：清单只覆盖实际分发文件（`--write/--verify` 统一排除 `__pycache__`/pyc，新增 `--exclude`）；条目级清除 9 条失效、补 3 条漏记。干净检出模拟：64 清单 / 7,048 条全部 raw 一致、64/64 verify 通过。
+- **A19**：`recommendations.csv` 用标准 csv writer 修复第 19 行引用（12 列复正，其余逐字段语义不变）。
+- **A20**：损坏 trace JSONL 根因 = trace 先 `json.dumps` 后整行 `mask_sensitive_info`，而 `_SENSITIVE_PATTERNS[3]` 贪婪吞掉行尾 JSON 闭合。修复：脱敏模式值字符类收紧 + trace 改"先结构感知脱敏再序列化" + 落盘前 `json.loads` 结构守卫；损坏工件**原字节保留**并在批次 README 加勘误（第 10 行 / 第 201 列 / 根因 / 复核命令）。
+
+### Docs — A01/A04/A05/A21（P1/P2）：结论收缩、协议同步、API 示例、引用题名
+
+- **A01**：登记册与既有评审把点估计 +2.86pp 越阈写成"非劣成立/损失来自移除实现代码"→改为点估计阈值标记（`independent_marker`）+ 不确定性披露（n=35、4:3、bootstrap 95% CI [−11.43,+17.14]pp、单侧下界 −8.57pp 未排除 −5pp）；因果主张降为待验证候选机制假设；历史评审采用日期化勘误（原文保留）。
+- **A04**：Algorithm 3 中英重写为现行 Detection-First Loop（锁定测试、双侧 F2P、三值终态、红回归门禁"换测试变绿"）；修正"单侧 oracle 失败=确定性检出"表述；`mas_compilation` "净负已是多方共识"改为三方并列限定。
+- **A05**：API 参考中英示例按当前签名重写（`compute_cyclomatic_complexity` / `apply_patch_to_code(original_code, patch) -> tuple` / `replace_function_code(..., new_function_code)`）；修正 RAG/多候选默认开启旧说明（以 reproduce.sh 默认值为准）。
+- **A21**：README 中英 Carleton 题名更正为《Comparing Automated Unit Test Generation Approaches for a Java Library Management System》。
+
+### Changed — 基线刷新与验证
+
+- `BASELINE.yaml` tests：collected **9130** = passed **9125** + skipped 5 + failed 0（V 轮净增 169 例）；coverage 刷新见同文件 coverage 节。
+- 评审 M1–M9 复跑：M1 数值逐位一致（38/240/21、4/261/0、117/261/0、12:80、31 归档模板）；M2 清单 69 份 / 7,639 条 raw / 0 缺失 / 0 不符（修复前 9 missing）；M3 CSV 12/12、损坏 JSONL 有书面归因且后续写入受守卫；M4/M6/M7/M8/M9 对应断言全部通过（M5 Windows 分支以 Mock 单测覆盖）。
+- 门禁：`make docs-check`、`check_baseline_numbers`、`check_baseline`、`check_artifact_doc_consistency`、`check_checksum`、`check_zero_assert_tests`、`check_env_budget --check` 等全绿（完整命令与结果见 `docs/reviews/THIRD_PARTY_REVIEW_2026-10-18_FIX_CLOSURE.md`）。
 
 ## [Unreleased] — 2026-10-18 U 轮（第三轮独立评审收口：A-05/A-06/A-08/A-09 + A-03/A-17 漂移论文化 + P3 评测诚信 checklist + D3b Step A 接线，零 LLM）
 

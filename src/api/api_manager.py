@@ -9,6 +9,19 @@
 - 限流控制：防止单节点过载
 - 大规模节点池支持（100+ 模型）
 
+节点身份（A15，2026-10-18 第三方审查 P1）：
+历史实现以 `model_name` 作为 `health_nodes` / `_client_cache` 的键，同模型名
+两个 provider 配置在注册时后者覆盖前者（节点数、健康状态、客户端全部只剩
+一个）。现节点以**端点实例 ID**（`模型名@端点哈希`）标识、模型名作为节点
+属性（`node.config.model_name`）：
+- 同 model_name 多 provider 配置**全部保留**，各有独立健康状态/熔断状态/
+  统计与客户端，选路互不影响；
+- 兼容历史对外接口：某模型只有唯一实例时节点键仍沿用模型名（`get_status`
+  输出键、`health_nodes` 取值、`add_node`/`remove_node` 语义不变）；出现
+  同模型第二个实例时自动把原"裸模型名键"升级为实例 ID 键（两节点都保留）；
+- `remove_node(model_name)` 保留历史语义（按模型名移除，同模型多实例会
+  一次移除全部）；新增 `remove_node_by_id(node_id)` 精确移除单个实例。
+
 节点健康状态（APIHealth）、轮换策略（RotationStrategy）与管理器配置
 （APIManagerConfig）等纯数据模型已拆分到 `src/api/api_health.py`
 （代码可维护性优化），本模块通过 re-import 复用，保持历史导入路径不变。
@@ -22,6 +35,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import random
 import threading
@@ -129,34 +143,145 @@ class APIManager:
             self._start_health_checker()
 
     def _init_clients(self) -> None:
-        """初始化所有 LLM 客户端并注册到健康节点"""
+        """初始化所有 LLM 客户端并注册到健康节点。
+
+        A15：注册走 `_register_client_node()`——节点以端点实例 ID 标识，
+        同 model_name 多 provider 配置全部保留（不再后者覆盖前者）；某模型
+        只有唯一实例时节点键沿用模型名以保持历史接口/测试口径。
+        """
         for _idx, llm_config in enumerate(LLM_CONFIGS, start=1):
-            client = openai.OpenAI(
-                api_key=llm_config.api_key, base_url=llm_config.base_url, timeout=self.config.timeout
-            )
-            self._client_cache[llm_config.model_name] = client
-            # 3.4 成本感知：从配置读取该模型的成本权重（未配置默认 1.0=基准）
-            # 2026-09-26 round8：传入在手的 llm_config（注册时序修复）——此时节点
-            # 尚未入池（health_nodes[name] 在下一行才赋值），不传入会让 _cost_weight_for
-            # 的反查恒 None，LLM_N_COST_WEIGHT 静默失效
-            cost_weight = self._cost_weight_for(llm_config.model_name, llm_config)
-            health = APIHealth(
-                config=llm_config,
-                max_consecutive_failures=self.config.max_consecutive_failures,
-                cost_weight=cost_weight,
-                # 4.1：把配置里的熔断冷却时长注入节点（mark_failure 触发熔断时写入）
-                circuit_cooldown_seconds=self.config.circuit_cooldown_seconds,
-                # 4.2：半开探测失败惩罚时长上限注入节点（_probe_circuit_half_open 消费）
-                half_open_probe_penalty_cap_seconds=self.config.half_open_probe_penalty_cap_seconds,
-            )
-            self.health_nodes[llm_config.model_name] = health
+            self._register_client_node(llm_config)
+        logger.info("已完成 %d 个 LLM 节点初始化", len(self.health_nodes))
+
+    # ─── A15：节点身份（端点实例 ID）与注册/查找辅助 ─────────────────────
+    @staticmethod
+    def _endpoint_instance_id(llm_config: LLMConfig) -> str:
+        """端点实例 ID：`模型名@端点哈希`（端点 base_url 的 sha256 前 8 位）。
+
+        为什么用哈希而不是裸 base_url：节点 ID 会出现在 `get_status` 输出键
+        与日志中，部分网关把 token 放在 base_url 路径/查询串里——哈希避免
+        凭证随节点身份外泄，同时保证"同模型不同端点"的 ID 互不相同。
+        """
+        digest = hashlib.sha256(str(llm_config.base_url).encode("utf-8")).hexdigest()[:8]
+        return f"{llm_config.model_name}@{digest}"
+
+    def _promote_model_key_locked(self, model_name: str) -> None:
+        """把以裸模型名为键的节点升级为端点实例 ID 键（调用方必须持 self._lock）。
+
+        A15：历史接口/测试以模型名为 `health_nodes` 键。当同模型第二个
+        provider 实例注册时，原节点必须改用实例 ID 键，两个节点才能共存；
+        客户端缓存同键迁移。仅处理"键恰好等于模型名"的那一个节点（其余
+        同模型节点已是实例 ID 键）。
+        """
+        node = self.health_nodes.pop(model_name, None)
+        if node is None:
+            return
+        base_id = self._endpoint_instance_id(node.config)
+        key = base_id
+        suffix = 2
+        while key in self.health_nodes:
+            key = f"{base_id}#{suffix}"
+            suffix += 1
+        self.health_nodes[key] = node
+        if model_name in self._client_cache:
+            self._client_cache[key] = self._client_cache.pop(model_name)
+
+    def _register_client_node(self, llm_config: LLMConfig) -> str:
+        """注册一个端点实例（客户端 + 健康节点）；返回注册后使用的节点键。
+
+        注册规则（A15）：
+        1. 同一端点实例（api_key/base_url/model_name 全同）重复注册 → 原地
+           替换（历史"同配置覆盖"语义，避免重复实例）；
+        2. 该 model_name 已有其他实例 → 先把裸模型名键升级为实例 ID 键，
+           新实例使用自己的实例 ID 键（同模型多 provider 全部保留）；
+        3. 该 model_name 尚无实例 → 沿用模型名作节点键（历史接口兼容）。
+
+        Note:
+            调用方负责持锁（`_init_clients` 构造期单线程无需持锁；`add_node`
+            持 self._lock 调用）。
+        """
+        node_identity = (llm_config.api_key, llm_config.base_url, llm_config.model_name)
+        existing_key: str | None = None
+        for _key, _node in self.health_nodes.items():
+            if (_node.config.api_key, _node.config.base_url, _node.config.model_name) == node_identity:
+                existing_key = _key
+                break
+        cost_weight = self._cost_weight_for(llm_config.model_name, llm_config)
+        client = openai.OpenAI(api_key=llm_config.api_key, base_url=llm_config.base_url, timeout=self.config.timeout)
+        health = APIHealth(
+            config=llm_config,
+            max_consecutive_failures=self.config.max_consecutive_failures,
+            cost_weight=cost_weight,
+            # 4.1：把配置里的熔断冷却时长注入节点（mark_failure 触发熔断时写入）
+            circuit_cooldown_seconds=self.config.circuit_cooldown_seconds,
+            # 4.2：半开探测失败惩罚时长上限注入节点（_probe_circuit_half_open 消费）
+            half_open_probe_penalty_cap_seconds=self.config.half_open_probe_penalty_cap_seconds,
+        )
+        if existing_key is not None:
+            # 1) 同端点实例重复注册：原地替换节点/客户端（键不变）
+            self.health_nodes[existing_key] = health
+            self._client_cache[existing_key] = client
             logger.info(
-                "注册 LLM 节点: %s (%s, cost_weight=%.2f)",
+                "更新 LLM 节点: %s (%s, cost_weight=%.2f)",
                 llm_config.model_name,
                 _redact(llm_config.base_url),
                 cost_weight,
             )
-        logger.info("已完成 %d 个 LLM 节点初始化", len(self.health_nodes))
+            return existing_key
+        same_model = [n for n in self.health_nodes.values() if n.config.model_name == llm_config.model_name]
+        if same_model:
+            # 2) 同模型已有实例：裸模型名键升级为实例 ID 键，新实例使用实例 ID
+            self._promote_model_key_locked(llm_config.model_name)
+            base_key = self._endpoint_instance_id(llm_config)
+            key = base_key
+            suffix = 2
+            while key in self.health_nodes:
+                key = f"{base_key}#{suffix}"
+                suffix += 1
+        else:
+            # 3) 该模型首个实例：沿用模型名（历史接口兼容）
+            key = llm_config.model_name
+        self.health_nodes[key] = health
+        self._client_cache[key] = client
+        logger.info(
+            "注册 LLM 节点: %s (%s, cost_weight=%.2f)",
+            llm_config.model_name,
+            _redact(llm_config.base_url),
+            cost_weight,
+        )
+        return key
+
+    def _node_key(self, node: APIHealth) -> str:
+        """取节点在 `health_nodes` 中的当前键（按对象身份查找，含并发快照）。
+
+        测试/外部代码可能直接把节点塞进字典（键为模型名等任意字符串），故
+        不能只依赖端点实例 ID 推导；找不到时回退实例 ID（调用方多为只读）。
+        """
+        for key, candidate in list(self.health_nodes.items()):
+            if candidate is node:
+                return key
+        return self._endpoint_instance_id(node.config)
+
+    def _client_for_node(self, node: APIHealth) -> Any | None:
+        """取节点对应的 OpenAI 客户端（A15：客户端缓存按节点键存储）。
+
+        兼容历史口径：旧实现 `_client_cache[model_name]`——测试/嵌入式调用
+        可能仍以模型名注入客户端，故按节点键未命中时回退模型名查找。
+        """
+        client = self._client_cache.get(self._node_key(node))
+        if client is not None:
+            return client
+        return self._client_cache.get(node.config.model_name)
+
+    def _nodes_for_model(self, model_name: str) -> list[APIHealth]:
+        """返回 model_name 对应的全部端点实例（同模型多 provider 依次返回）。
+
+        顺序：健康且未熔断的实例优先，其次半开探测候选，最后熔断/不健康
+        实例；同档内保持节点注册顺序（稳定）。A15 前同模型只有一个节点，
+        该排序退化为"取唯一节点"，历史行为不变。
+        """
+        matches = [n for n in self.get_all_nodes() if n.config.model_name == model_name]
+        return sorted(matches, key=lambda n: (n.in_circuit_open, not n.is_healthy))
 
     def _cost_weight_for(self, model_name: str, llm_config: LLMConfig | None = None) -> float:
         """取模型的成本权重（3.4）：优先读 APIManagerConfig.node_cost_weights，
@@ -189,8 +314,11 @@ class APIManager:
             cw = float(getattr(llm_config, "cost_weight", 0.0) or 0.0)
             if cw > 0.0:
                 return cw
-        # 回退：从已注册节点反查 LLMConfig.cost_weight（外部调用 / 节点已入池场景）
-        node = self.health_nodes.get(model_name)
+        # 回退：从已注册节点反查 LLMConfig.cost_weight（外部调用 / 节点已入池场景）。
+        # A15：节点键改为端点实例 ID（模型名不再是键），按节点属性扫描；同模型
+        # 多 provider 时取注册顺序第一个带成本信息的实例（node_cost_weights
+        # 按模型名覆盖仍是最高优先级，逐实例成本见传入 llm_config 分支）。
+        node = next((h for h in self.health_nodes.values() if h.config.model_name == model_name), None)
         # cost_weight 缺失（旧配置对象）或 0.0（未配置）时回退 1.0 基准
         if node is not None and float(getattr(node.config, "cost_weight", 0.0) or 0.0):
             return float(node.config.cost_weight)
@@ -353,7 +481,8 @@ class APIManager:
             logger.debug("健康检查跳过（熔断冷却期内，等待半开窗口）: %s", node.config.model_name)
             return False
         is_half_open_probe = self._enter_half_open_probe(node)
-        client = self._client_cache.get(node.config.model_name)
+        # A15：按节点身份取客户端（同模型多端点各有自己的客户端）
+        client = self._client_for_node(node)
         if not client:
             # U4（2026-10-05 系统性审查落地）：直写 is_healthy → 带锁公共接口
             # （补连续失败计数联动，与并发 mark_success/mark_failure 互斥）
@@ -547,9 +676,15 @@ class APIManager:
         return self._fallback_default_nodes(model)
 
     def _fallback_default_nodes(self, model: str | None) -> tuple[list[APIHealth], list[APIHealth]]:
-        """历史口径的节点列表构建（无复杂度路由时走此路径）。"""
-        if model and model in self.health_nodes:
-            nodes_to_try = [self.health_nodes[model]]
+        """历史口径的节点列表构建（无复杂度路由时走此路径）。
+
+        A15：显式指定 model 时返回该模型的**全部端点实例**（同模型多
+        provider 按健康状态排序依次尝试），而非历史"按模型名键取唯一节点"
+        ——后者在键改为实例 ID 后会丢节点；同模型只有唯一实例时行为不变。
+        """
+        model_nodes = self._nodes_for_model(model) if model else []
+        if model_nodes:
+            nodes_to_try = model_nodes
         else:
             primary = self.select_node()
             if primary:
@@ -587,8 +722,10 @@ class APIManager:
             return None
         if len(candidates) == 1:
             return candidates[0]
-        # 按 cost_weight 排序（None / 0 视为 1.0 基准，与 _cost_weight_for 同口径）
-        weighted = [(self._cost_weight_for(n.config.model_name), n) for n in candidates]
+        # 按 cost_weight 排序（None / 0 视为 1.0 基准，与 _cost_weight_for 同口径）。
+        # A15：传入节点在手配置——同模型多 provider 时按**实例**成本档位排序
+        # （此前按 model_name 反查，实例 ID 化后会丢实例成本信息）。
+        weighted = [(self._cost_weight_for(n.config.model_name, n.config), n) for n in candidates]
         if complexity_class == "complex":
             weighted.sort(key=lambda x: x[0], reverse=True)  # 最贵/最强在前
         elif complexity_class == "simple":
@@ -690,7 +827,7 @@ class APIManager:
                 结果显式透传，与下方各异常 handler 消费同一判定点，口径唯一）。
                 None 时本函数内部预检（保持旧签名调用方兼容，口径与 call() 一致）。
         """
-        client = self._client_cache.get(node.config.model_name)
+        client = self._client_for_node(node)
         if not client:
             return None
         start = time.time()
@@ -847,6 +984,9 @@ class APIManager:
             circuit_remaining = max(0.0, h.circuit_open_until - now) if h.circuit_open_until > 0 else 0.0
             nodes_summary[name] = {
                 "model": h.config.model_name,
+                # A15：端点实例 ID（同模型多 provider 时键为实例 ID，本字段
+                # 始终给出稳定的实例身份；唯一实例时键仍为模型名以兼容历史）。
+                "node_id": self._endpoint_instance_id(h.config),
                 "base_url": mask_sensitive_info(h.config.base_url),
                 "is_healthy": h.is_healthy,
                 "success_rate": round(h.success_rate, 3),
@@ -898,6 +1038,12 @@ class APIManager:
         - aitester_api_success_rate{model="..."}: 节点成功率
         - aitester_api_avg_response_time_ms{model="..."}: 平均响应时间
 
+        A15（2026-10-18 第三方审查 P1）：标签增加 `node_id`（端点实例 ID）——
+        同 model_name 多 provider 实例并存时，仅用 model 标签会让两个节点
+        塌缩成同一时序（重复样本互相覆盖/冲突）。`model` 标签保留（既有
+        dashboard 查询 `{model="..."}` 匹配语义不变），`node_id` 提供实例级
+        区分。唯一实例时 node_id 稳定为 `模型名@端点哈希`。
+
         用法：HTTP 端点 /metrics 定期调用本方法（需先设
         API_PROMETHEUS_EXPORT=true），或在 CI 监控脚本中导出到 Prometheus
         textfile collector。无节点或开关关闭时返回空字符串。
@@ -925,7 +1071,8 @@ class APIManager:
         lines.append("# TYPE aitester_api_avg_response_time_ms gauge")
         state_map = {"closed": 0, "open": 1, "half_open": 2}
         for node in status.get("nodes", {}).values():
-            labels = f'model="{node["model"]}"'
+            # A15：model 保留（兼容既有查询），node_id 区分同模型多端点实例
+            labels = f'model="{node["model"]}",node_id="{node.get("node_id", "")}"'
             lines.append(f"aitester_api_health{{{labels}}} {1 if node['is_healthy'] else 0}")
             lines.append(f"aitester_api_circuit_state{{{labels}}} {state_map.get(node.get('circuit_state'), 0)}")
             lines.append(
@@ -983,40 +1130,70 @@ class APIManager:
         logger.info("已重置所有 API 节点统计")
 
     def add_node(self, config: LLMConfig) -> None:
-        """
-        动态添加新节点
+        """动态添加新节点。
+
+        A15：同 model_name 不同端点的配置各自注册为独立节点（不再按模型名
+        覆盖）；同一端点实例（api_key/base_url/model_name 全同）重复添加时
+        原地替换（历史"覆盖"语义）。某模型只有唯一实例时节点键仍为模型名。
+
         Args:
             config: LLM 配置对象
         """
         with self._lock:
-            client = openai.OpenAI(api_key=config.api_key, base_url=config.base_url, timeout=self.config.timeout)
-            self._client_cache[config.model_name] = client
-            health = APIHealth(
-                config=config,
-                max_consecutive_failures=self.config.max_consecutive_failures,
-                cost_weight=self._cost_weight_for(config.model_name, config),
-                circuit_cooldown_seconds=self.config.circuit_cooldown_seconds,
-                half_open_probe_penalty_cap_seconds=self.config.half_open_probe_penalty_cap_seconds,
-            )
-            self.health_nodes[config.model_name] = health
-            logger.info("动态添加节点: %s (%s)", config.model_name, _redact(config.base_url))
+            key = self._register_client_node(config)
+        logger.info("动态添加节点: %s (%s, 节点键=%s)", config.model_name, _redact(config.base_url), key)
 
     def remove_node(self, model_name: str) -> bool:
-        """
-        动态移除节点
+        """动态移除节点（历史兼容签名：按模型名或现有节点键移除）。
+
+        A15：同 model_name 多 provider 场景下，按模型名移除会**一次移除该
+        模型的全部端点实例**（历史语义只有唯一节点，无歧义）；需要精确移除
+        单个端点实例时用 `remove_node_by_id()`。
+
         Args:
-            model_name: 模型名称
+            model_name: 模型名称（或现有 `health_nodes` 键）
+
         Returns:
             是否成功移除
         """
         with self._lock:
             if model_name in self.health_nodes:
                 del self.health_nodes[model_name]
-                if model_name in self._client_cache:
-                    del self._client_cache[model_name]
+                self._client_cache.pop(model_name, None)
                 logger.info("移除节点: %s", model_name)
                 return True
-            return False
+            # A15：键已升级为端点实例 ID 时，按模型名移除同名全部实例
+            targets = [k for k, n in self.health_nodes.items() if n.config.model_name == model_name]
+            if not targets:
+                return False
+            for key in targets:
+                del self.health_nodes[key]
+                self._client_cache.pop(key, None)
+                logger.info("移除节点: %s（模型 %s，节点键 %s）", model_name, model_name, key)
+            return True
+
+    def remove_node_by_id(self, node_id: str) -> bool:
+        """按端点实例 ID 精确移除单个节点（A15 新增：同模型多 provider 场景）。
+
+        匹配规则：参数等于节点在 `health_nodes` 中的键，或等于节点配置推导出的
+        端点实例 ID（`模型名@端点哈希`）。
+
+        Returns:
+            True = 恰好移除一个节点；False = 未找到。
+        """
+        with self._lock:
+            key = node_id if node_id in self.health_nodes else None
+            if key is None:
+                key = next(
+                    (k for k, n in self.health_nodes.items() if self._endpoint_instance_id(n.config) == node_id),
+                    None,
+                )
+            if key is None:
+                return False
+            del self.health_nodes[key]
+            self._client_cache.pop(key, None)
+            logger.info("按端点实例 ID 移除节点: %s", node_id)
+            return True
 
     def _start_health_checker(self) -> None:
         """启动后台健康检查守护线程。

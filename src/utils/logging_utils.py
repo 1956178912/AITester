@@ -73,8 +73,24 @@ _SENSITIVE_PATTERNS: list[tuple[re.Pattern[str], _SensitiveReplacement]] = [
         re.compile(r"(?<![A-Za-z0-9/._~+-])([A-Za-z0-9+_=][A-Za-z0-9+/_=-]{39,}={0,2})(?![A-Za-z0-9+/_=])"),
         _redact_base64_like,
     ),
-    # Base64 编码的密钥
-    (re.compile(r'(?:key|token|secret|password)=(.{8,})(?:\s|$|")'), r"key=<REDACTED>"),
+    # Base64 编码的密钥（A20 修复：值字符类收紧，见下）
+    #
+    # 历史模式 `(?:key|token|secret|password)=(.{8,})(?:\s|$|")` 的 `.` 不排除
+    # 引号/花括号，且贪婪吃满到行内最后一个空格/引号/EOL——在**已序列化的
+    # JSONL 行**上脱敏时会把行尾闭合引号与花括号一并吞掉，产出非法 JSON
+    # （2026-10-14 EMSE ULT 轨迹第 10 行实测：行尾停在 `min(s, key=<REDACTED>`，
+    # 字符串/对象未闭合；该批工件字节保留，勘误见
+    # experiments/results/emse_ult_specir_probe_20261014/README.md）。
+    # 现口径：值只取"凭证 token 形态"字符（排除空白与 JSON 结构/转义字符
+    # `" ' \ { } [ ] , : ;`），匹配结束于 token 边界，不再消费任何定界符——
+    # 文本脱敏语义（>=8 位非空 token 被替换为 `key=<REDACTED>`）不变，
+    # 但对 JSON 行是结构安全的（trace.py 另有一层"先脱敏结构、再序列化"守卫）。
+    # 引号值（`key="v"` / JSON 序列化后的 `key=\"v\"`）先消费开引号再匹配 token：
+    # 结束时只留下关闭引号（日志文本略有残引号，JSON 结构仍闭合）。
+    (
+        re.compile(r'(?:key|token|secret|password)=(?:\\?["\'])?([^\s"\'\\{}\[\],:;]{8,})'),
+        r"key=<REDACTED>",
+    ),
     # O17 残留（2026-09-29 审查 D.4-4 + 2026-10-02 修复）：大写命名凭证赋值
     # （MYSQL_PASSWORD= / DB_SECRET= / AWS_SECRET_ACCESS_KEY= 等）不匹配上面
     # 小写锚定模式（大小写敏感），值被原样放进日志/trace 即成泄露面。

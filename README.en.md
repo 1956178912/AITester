@@ -17,8 +17,8 @@
 > prompt protocol `plain_llm_df`), the 2026 external evidence points in
 > **different directions and must be presented side by side — it is not a consensus**:
 > **(a) Unfavourable evidence** — a Carleton University honours-project replication
-> (Radaideh & Corriveau, *Understanding the Effect of Agentic Iteration on LLM-Based
-> Unit Test Generation*, **not peer-reviewed**,
+> (Radaideh & Corriveau, *Comparing Automated Unit Test Generation Approaches for a
+> Java Library Management System*, **not peer-reviewed**,
 > report-hub.scs.carleton.ca/projectPage/2872) reports, on **mutation score**, one-shot
 > Gemini 2.5 Flash **88.35%** vs CANDOR **35.92%**, and one-shot GPT-4o **69.90%**
 > vs CANDOR **45.63%**; the authors note the effect is a **configuration effect
@@ -159,6 +159,10 @@ source .venv/bin/activate
 
 # 1. Install dependencies
 pip install -r requirements.txt
+# Wheel / non-repo installs only: install the execution extra to run the Executor and benchmarks
+# pip install "aitester[execution]"   # pytest + pytest-cov + pytest-timeout
+# A default `pip install aitester` does NOT include execution tools; when modules are missing the
+# Executor returns error_info.type=execution_dependency_missing and points to this command
 
 # 2. Configure environment variables
 cp .env.example .env
@@ -528,7 +532,7 @@ The `COST_AWARE` strategy in `APIManager` ranks by a composite score of "success
 - `RotationStrategy.COST_AWARE` / `_select_node_cost_aware()` / the cost alert branch in [src/api/api_manager.py](src/api/api_manager.py)
 
 ### 5.4 RAG Included in Main Experiments (2.3)
-`reproduce.sh` explicitly passes `--enable-rag` by default for synthetic/built-in datasets (`rag_data/` is persisted and reused across experiments); `--no-rag` falls back to the config default; `run_benchmark.py` adds a `--no-rag` option that, together with `--enable-rag`, overrides `config.ENABLE_RAG`.
+`reproduce.sh` now defaults RAG to **off** after **W7 (2026-10-05 review landing, negative-evidence-driven)** (RAG A/B measured token +40.7% negative with no success-rate gain; see `docs/experiment_ab_results_2026-09-28.md`); run a comparison explicitly with `--enable-rag`. The `--no-rag` / `--enable-rag` flags of `run_benchmark.py` both override `config.ENABLE_RAG`.
 
 ### 5.5 Result Analysis Script (4.3 + 1.1/1.2 first-round metric extensions)
 `experiments/analyze_results.py` extracts from the benchmark JSON: success rate / coverage / iteration count distribution / token efficiency / per-baseline failure-reason distribution (1.2 refined categories counted separately) / RAG retrieval quality / repair convergence efficiency (first-attempt success rate, iteration and time statistics for successful vs failed tasks) / multi-dimensional quality proxies (coverage and time proxies, optional `generated_test` assertion-line-count proxy, failure category Top N); it prints a Markdown summary to the terminal and writes `analysis_summary.md`; when legacy JSON lacks `token_metrics`/`rag_metrics`/`generated_test` keys, it automatically falls back or degrades gracefully without crashing.

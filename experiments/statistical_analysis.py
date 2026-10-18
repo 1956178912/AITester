@@ -23,14 +23,20 @@ R2（2026-10-05 审查：统计协议完整性）新增（全部为增量，历�
 
 S13/S11（2026-10-11 独立评审落地，均为增量；历史数字与默认输出不变）：
 
-- **唯一程序体聚类稳健统计（S13/F2）**：`build_cluster_map`（用与实验相同的
-  (task_count, seed) 重建合成数据集 → `instance_code` 去注释后 sha256 取簇 ID；
-  实测 87 个任务标签只对应 **26 个唯一程序体**——`BUG_PATTERNS` 仅 16 个模板，
-  逐任务"噪声"只是行尾注释）与 `cluster_robust_paired_test`（**先按簇求均值、
-  再在簇级做配对检验**：t + 精确符号检验 + Cliff's δ/A12 效应量 + 簇内判定
-  一致率）。由 `--cluster-robust` 开关启用，**默认关闭**（历史口径逐位不变）；
-  报告新增 `cluster_robust` 节。动机：把 87 个相关任务当独立样本使精确度被
-  高估约 3.35 倍（δ=−28.3pp @n=240 → −24.6pp @26 簇）。
+- **唯一程序体聚类稳健统计（S13/F2；A06 2026-10-18 映射修正）**：
+  `build_cluster_map`（优先用归档 `task_metadata.pattern_name` 程序身份；缺失时
+  按 `s<seed>__` 前缀在与跑批同参 `(task_count, seed, max_pattern_repeat)` 的
+  重建数据集里查 `instance_code` 去注释后 sha256 簇 ID）与
+  `cluster_robust_paired_test`（**先按簇求均值、再在簇级做配对检验**：t + 精确
+  符号检验 + Cliff's δ/A12 效应量 + 簇内判定一致率）。由 `--cluster-robust`
+  开关启用，**默认关闭**（历史口径逐位不变）；报告新增 `cluster_robust` 节。
+  正确事实（主批 R-P0-2/R-P0-4：87 任务 × seed 42/43/44、`max_pattern_repeat=2`）：
+  单 seed 87 个任务标签 → **29** 个唯一程序体；三种子拼接 261 个任务标签 →
+  **31** 个唯一程序体。历史实现漏 `max_pattern_repeat` 且剥离 seed 前缀后统一
+  查单 seed 表，把 261 行中的 223 行映射错、得错误 26 簇（符号检验 2:21:3 /
+  p≈6.6e-05）；修正后 31 簇 / 5:17:9 / p≈0.0169（与归档三种子报告一致）。
+  动机：把同一程序体的多个相关任务当独立样本会高估精确度（任务标签/程序体比
+  ≈ 3.0（单 seed）/ 8.4（三种子池化））。
 - **token 记账健全性（S11/F9）**：`token_accounting_sanity` —— 某臂 ≥50% 行的
   `token_usage` 为 0/缺失（且有结果行）时判 `NOT_COMPUTABLE`，成本列一律输出
   `NOT_COMPUTABLE` + 原因（**不输出数字**），`$/solved` 同步诚实降级。
@@ -44,7 +50,7 @@ S13/S11（2026-10-11 独立评审落地，均为增量；历史数字与默认�
         --batches main_batch/benchmark_synthetic_20261001_112528.json,main_batch/benchmark_synthetic_20261001_112801.json
     python experiments/statistical_analysis.py --results-dir experiments/results \
         --output experiments/results/statistical_report_cluster_robust.md \
-        --pool-seeds --cluster-robust
+        --pool-seeds --cluster-robust --cluster-max-pattern-repeat 2
 """
 
 from __future__ import annotations
@@ -53,12 +59,13 @@ import argparse
 import functools
 import hashlib
 import json
+import logging
 import math
 import random
 import re
 import sys
 from collections import Counter
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -97,12 +104,19 @@ _SUPPORTED_DATASETS = frozenset({"synthetic", "quixbugs"})
 # 常量集中在模块配置区（`run_all_statistics` 的默认参数在导入期求值，须先于
 # 其定义存在）；簇级实现见文件后部 S13 区块（build_cluster_map /
 # cluster_robust_paired_test / cluster_robust_analysis）。
-_CLUSTER_ROBUST_BATCH = "S13（2026-10-11 独立评审落地）"
+_CLUSTER_ROBUST_BATCH = "S13（2026-10-11 独立评审落地；A06 2026-10-18 映射修正）"
 _DEFAULT_CLUSTER_TASK_COUNT = 87
 _DEFAULT_CLUSTER_SEED = 42
+# A06（2026-10-18 第三方评审 P1）：主批协议（R-P0-2/R-P0-4）实测跑批参数为
+# `--task-count 87 --max-pattern-repeat 2 --seed {42,43,44}`。旧实现重建时漏掉
+# 该参数，得到错误的程序体分组；现以真实参数为默认值，并允许调用方显式传入
+# （None = 无重复上限的历史口径，仅用于 2026-10-06 之前的旧批次）。
+_DEFAULT_CLUSTER_MAX_PATTERN_REPEAT = 2
 _UNMAPPED_CLUSTER_PREFIX = "unmapped::"
-# AB4 多种子拼接口径的 task_id 前缀（`s<seed>__`）：同一程序体跨种子必须合并
-_SEED_PREFIX_RE = re.compile(r"^s\d+__(.+)$")
+# AB4 多种子拼接口径的 task_id 前缀（`s<seed>__`）：A06 起前缀同时是"该行属于
+# 哪个 seed 的重建"的依据——同编号任务跨种子不是同一程序，必须映射到各自 seed
+# 的重建表；剥离前缀后的同一程序体跨种子再合并为同一簇。
+_SEED_PREFIX_RE = re.compile(r"^s(\d+)__(.+)$")
 # 报告的簇级对比顺序（与历史 comparisons 的基线顺序一致）
 _CLUSTER_ROBUST_BASELINES = ("plain_llm", "plain_llm_df", "single_agent")
 # 簇级稳健分析默认覆盖的指标（诚实指标在前，passed 自指口径仅作诊断）
@@ -353,6 +367,13 @@ def _pair_by_task(
     （文件系统属性，不可复算）改为文件名内嵌时间戳降序（实验属性，
     _sort_batch_files_deterministic），本函数首见 = 最新批次，docstring、
     实现与可复算性三者一致。
+    A07（2026-10-18 第三方评审 P1）：“最新批次优先”此前只在 None 值行上
+    失效——旧实现在记录去重（`seen[tid] = ...`）**之前**就 `continue` 跳过
+    None 行，于是"最新记录为 None、旧记录可测"的任务会回退到旧值，改变
+    分母与配对计数（M8 可复现：最新 None 仍形成 1 对）。现口径分两步：
+    **先对全部行按 task_id 去重（最新批次优先，与 field 值无关），再排除
+    None**——最新记录不可测 = 该任务整体不可测（不回退旧值，与 M1
+    “None 不进分母”一致）。
 
     Args:
         results_a: 基线 A（通常为 AITester）结果列表。
@@ -360,39 +381,43 @@ def _pair_by_task(
         field: 配对所用的二值结果行字段（2026-10-05 独立审查 P0：
             "passed"（历史默认，自指指标）外新增 "detection_rate" /
             "repair_rate" 等 M1 诚实指标——逐任务值 0.0/1.0/None，
-            None（无 gold 材料，M1 分母外）跳过该任务，不并入分母）。
+            None（无 gold 材料，M1 分母外）在**去重之后**跳过该任务，
+            不并入分母；同 task_id 的旧可测值不得顶替最新 None）。
 
     Returns:
         (paired_a, paired_b, common_task_ids)
     """
-    import logging
-
     _logger = logging.getLogger(__name__)
 
-    def _dedup(rows: list[dict], label: str) -> dict[str, int]:
-        seen: dict[str, int] = {}
+    def _dedup(rows: list[dict], label: str) -> tuple[dict[str, int], int]:
+        """返回 (可测二值映射, 重复行数)；去重与 None 过滤严格分两步（A07）。"""
+        latest: dict[str, dict] = {}
+        n_duplicates = 0
         for r in rows:
             tid = r.get("task_id")
             if not tid:
                 continue
-            if tid in seen:
+            if tid in latest:
                 # 首见优先：最新批次的数据胜出（排序主键 = 内嵌时间戳降序），重复行跳过
+                n_duplicates += 1
                 _logger.debug("%s task_id=%r 重复行跳过（首见=最新批次优先去重）", label, tid)
                 continue
+            # A07：先按 task_id 占位去重（不看 field 值）——最新记录即使
+            # 不可测也占位，防止旧值顶替；None 过滤在去重完成后进行。
+            latest[tid] = r
+        seen: dict[str, int] = {}
+        for tid, r in latest.items():
             val = r.get(field)
             if val is None:
                 # M1 诚实指标的 None = 无 gold 材料（分母外），非"未通过"——
                 # 记 0 会把"无法测量"混入"测量为失败"，分母口径失真
                 continue
             seen[tid] = 1 if val else 0
-        return seen
+        return seen, n_duplicates
 
-    pass_a = _dedup(results_a, "基线A")
-    pass_b = _dedup(results_b, "基线B")
+    pass_a, dup_a = _dedup(results_a, "基线A")
+    pass_b, dup_b = _dedup(results_b, "基线B")
 
-    n_a, n_b = len(pass_a), len(pass_b)
-    dup_a = sum(1 for r in results_a if r.get("task_id") and r.get("task_id") in pass_a) - n_a
-    dup_b = sum(1 for r in results_b if r.get("task_id") and r.get("task_id") in pass_b) - n_b
     if dup_a > 0 or dup_b > 0:
         _logger.warning(
             "task_id 去重：基线A %d 行/基线B %d 行（重复 task_id 最新批次优先），建议检查是否存在跨批次重复运行",
@@ -1350,6 +1375,7 @@ def run_all_statistics(
     cluster_robust: bool = False,
     cluster_task_count: int = _DEFAULT_CLUSTER_TASK_COUNT,
     cluster_seed: int = _DEFAULT_CLUSTER_SEED,
+    cluster_max_pattern_repeat: int | None = _DEFAULT_CLUSTER_MAX_PATTERN_REPEAT,
 ) -> list[dict]:
     """
     运行所有统计检验并生成报告
@@ -1376,7 +1402,13 @@ def run_all_statistics(
             历史报告与既有非聚类数字逐位不变（历史可比性）。
         cluster_task_count: S13——重建合成数据集的任务数（与实验一致，
             默认 87；仅 cluster_robust=True 时使用）。
-        cluster_seed: S13——重建合成数据集的种子（与实验一致，默认 42）。
+        cluster_seed: S13——无 `s<seed>__` 前缀时的默认重建种子
+            （与实验一致，默认 42）。
+        cluster_max_pattern_repeat: A06（2026-10-18）——重建合成数据集的同池
+            模板重复上限，**须与跑批一致**：主批 R-P0-2/R-P0-4 真实参数为 2
+            （默认值）；None = 2026-10-06 之前无上限的历史口径。旧实现漏掉
+            该参数并剥离 seed 前缀后统一查单 seed 表，导致主批 261 行错映射
+            223 行（错误 26 簇），A06 修复为元数据优先 + 分 seed 重建 → 31 簇。
 
     Returns:
         比较结果列表，每项含 comparison / n_pairs / t_stat / p_value / sig /
@@ -1658,14 +1690,26 @@ def run_all_statistics(
 
     # S13（2026-10-11 独立评审落地）：唯一程序体聚类稳健统计——**默认关闭**，
     # 开启时只**追加**报告节与控制台输出，不改动上方任何历史数字。
+    # A06（2026-10-18）：重建参数传真实 max_pattern_repeat（默认 2），并让
+    # cluster_robust_analysis 从结果行的 task_metadata 取归档程序身份。
     cluster_analysis: dict[str, Any] | None = None
     if cluster_robust:
-        cluster_analysis = cluster_robust_analysis(data, task_count=cluster_task_count, seed=cluster_seed)
+        cluster_analysis = cluster_robust_analysis(
+            data,
+            task_count=cluster_task_count,
+            seed=cluster_seed,
+            max_pattern_repeat=cluster_max_pattern_repeat,
+        )
         _csum = cluster_analysis["cluster_map_summary"]
+        _ires = cluster_analysis.get("identity_resolution") or {}
         print("\n" + "=" * 70)
         print(f"聚类稳健统计（S13：唯一程序体口径；任务 {_csum['n_tasks']} → 簇 {_csum['n_clusters']}）")
         print("=" * 70)
-        print(f"  未映射任务（各成单例簇）：{_csum['n_unmapped']}")
+        print(
+            f"  身份来源：归档元数据 {_ires.get('n_from_metadata', 0)} / 分 seed 重建 "
+            f"{_ires.get('n_from_rebuild', 0)} / 未映射（各成单例簇）{_csum['n_unmapped']}"
+            f"；元数据-重建组成逐项一致 {_ires.get('n_composition_verified', 0)}/{_csum['n_tasks']}"
+        )
         for _c in cluster_analysis["comparisons"]:
             print(
                 f"  [{_c['metric']}] {_c['comparison']}: 任务级 n={_c['n_pairs']} → 簇级 n={_c['n_clusters']}"
@@ -1703,9 +1747,13 @@ def run_all_statistics(
             + (f" --batches {','.join(source_files)}" if source_files else "")
             + (" --allow-schema-mixed" if allow_schema_mixed else "")
             + (" --pool-seeds" if pool_seeds else "")
-            # S13：聚类稳健口径的复算命令须带同参（否则簇级数字不可复现）
+            # S13/A06：聚类稳健口径的复算命令须带同参（否则簇级数字不可复现）；
+            # CLI 以 0 表示 None（历史无 max_pattern_repeat 上限口径）。
             + (
-                f" --cluster-robust --cluster-task-count {cluster_task_count} --cluster-seed {cluster_seed}"
+                f" --cluster-robust --cluster-task-count {cluster_task_count}"
+                f" --cluster-seed {cluster_seed}"
+                f" --cluster-max-pattern-repeat "
+                f"{0 if cluster_max_pattern_repeat is None else cluster_max_pattern_repeat}"
                 if cluster_robust
                 else ""
             )
@@ -2184,26 +2232,33 @@ def run_cluster_sensitivity(
 
 # ──────────── S13（2026-10-11 独立评审落地）：唯一程序体聚类稳健统计 ────────────
 #
-# 背景（独立评审实测 F2）：项目把 87 个任务标签当独立样本做配对检验，但这些
-# 标签只对应 **26 个唯一程序体**——`BUG_PATTERNS` 仅 16 个模板，逐任务的
-# "噪声"只是行尾注释（`# noise_seed=`），去注释后程序体逐字节相同。簇内任务
-# 高度相关，独立性假设不成立 → 方差被低估、**精确度被高估约 3.35 倍**
-# （任务级 n=240 得 δ=−28.3pp；按唯一程序体聚类 n=26 得 δ=−24.6pp、
-# 95% CI [−33.7,−15.6]；分 seed 波动 aitester 13.8–19.0% / df 41.4–49.4%）。
+# 背景（独立评审实测 F2；A06 2026-10-18 修正映射）：项目把任务标签当独立样本
+# 做配对检验，但标签只对应少数唯一程序体——同一模板的逐任务"噪声"只是行尾
+# 注释（`# noise_seed=`），去注释后程序体逐字节相同。簇内任务高度相关，独立性
+# 假设不成立 → 方差被低估、精确度被高估。
+# 正确事实（主批 R-P0-2/R-P0-4：87 任务 × seed 42/43/44、max_pattern_repeat=2）：
+# 单 seed 87 个任务标签 → **29** 个唯一程序体（任务标签/程序体比 ≈ 3.0）；
+# 三种子拼接 261 个任务标签 → **31** 个唯一程序体（且任务级 n=240 的
+# δ=−28.3pp；按唯一程序体聚类后 31 簇 δ≈−18.2pp、95% CI [−33.5,−2.9]pp
+# （t 口径）、符号检验 5:17:9 / p≈0.0169）。
+# 历史实现（A06 缺陷）漏掉真实 `max_pattern_repeat` 且剥离 `s<seed>__` 前缀后
+# 统一查单个 seed 的重建表——同编号任务跨 seed 不是同一程序，主批 261 行中
+# 223 行被映射错、得错误 26 簇（符号检验 2:21:3 / p≈6.6e-05，夸大显著性）。
 #
 # 本节做法（`--cluster-robust` 开关，**默认关闭** → 历史口径逐位不变）：
-# 1. **簇的构造可从工件复现**：用与实验相同的 (task_count, seed) 重建合成
-#    数据集（`src/datasets/synthetic_dataset.py`，**只读**导入），对
-#    `instance_code` 去注释后 sha256 取簇 ID（`build_cluster_map`）；
+# 1. **簇的构造可从工件复现**：优先用归档 task_metadata 中的程序身份
+#    （pattern_name），缺失时按 `s<seed>__` 前缀在与跑批同参 (task_count,
+#    seed, max_pattern_repeat) 的重建数据集里查表，对 `instance_code` 去注释后
+#    sha256 取簇 ID（`build_cluster_map` / `_resolve_cluster_identity`）；
 # 2. **簇内先取均值，再在簇级做配对检验**（等价于"每个程序体只投一票"）：
 #    簇级配对 t（CI 给 t 与百分位 bootstrap 双口径）+ 精确符号检验；
 # 3. 报告同时给**效应量**（Cliff's δ + A12）与**簇内判定一致率**
 #    （concordance：同一程序体的任务是否给出同一方向判定——直接量化
-#    "把相关观测当独立样本"的严重程度；实测 aitester 仅 56.7%、df 33.3%）。
+#    "把相关观测当独立样本"的严重程度）。
 #
 # 诚实边界：本节的簇级数字**不替换**任何历史任务级数字（两者并列，冲突时
-# 以簇级保守口径为准）；簇的构造若换成真实基准（task_id 无法映射）则退化为
-# 单例簇（见 build_cluster_map 的保守降级）。
+# 以簇级保守口径为准）；簇的构造若换成真实基准（task_id/元数据无法映射）则
+# 退化为单例簇（见 build_cluster_map 的保守降级）。
 
 # S13 常量定义在文件头部模块配置区（`_DEFAULT_CLUSTER_TASK_COUNT` 等需在
 # run_all_statistics 的默认参数求值前就存在）；下方为簇级实现。
@@ -2228,66 +2283,239 @@ def program_fingerprint(code: str) -> str:
     return hashlib.sha256(strip_line_comments(code).encode("utf-8")).hexdigest()
 
 
+def _split_seed_prefix(task_id: str) -> tuple[int | None, str]:
+    """拆分 AB4 多种子拼接口径的 `s<seed>__` 前缀 → (seed, 无前缀 task_id)。
+
+    无前缀时返回 (None, 原 task_id)。A06 起该前缀同时是"该行属于哪个 seed
+    的重建"的依据（同编号任务跨 seed 不是同一程序）。
+    """
+    m = _SEED_PREFIX_RE.match(task_id)
+    if m is None:
+        return None, task_id
+    return int(m.group(1)), m.group(2)
+
+
 def _strip_seed_prefix(task_id: str) -> str:
     """剥离 AB4 多种子拼接口径的 `s<seed>__` 前缀（无前缀时原样返回）。"""
-    m = _SEED_PREFIX_RE.match(task_id)
-    return m.group(1) if m else task_id
+    return _split_seed_prefix(task_id)[1]
 
 
-@functools.lru_cache(maxsize=8)
-def _rebuilt_task_fingerprints(task_count: int, seed: int) -> tuple[tuple[str, str], ...]:
-    """S13：用 (task_count, seed) 重建合成数据集 → ((task_id, 程序体指纹), ...)。
+@functools.lru_cache(maxsize=32)
+def _rebuilt_task_table(
+    task_count: int,
+    seed: int,
+    max_pattern_repeat: int | None,
+) -> tuple[tuple[str, str, str, int | None], ...]:
+    """A06：用**真实跑批参数**重建合成数据集。
 
-    lru_cache：同参数只重建一次（默认 87 任务，每报告一次构建，开销可忽略）；
-    返回 tuple 以保证缓存值不可变（调用方不得原地修改）。
+    返回 ((task_id, 程序体指纹, 模板名, noise_seed), ...)。
+
+    - `max_pattern_repeat` 必须与跑批一致（主批 R-P0-2/R-P0-4 = 2；
+      None = 2026-10-06 之前无重复上限的历史口径）——A06 根因即旧实现
+      重建时漏掉该参数，导致同编号任务被映射到错误程序；
+    - `pattern_name` / `noise_seed` 进入重建表用于**校验归档 task_metadata**
+      （程序身份等价性证据：任务编号 + 模板名 + noise_seed 三项逐项一致）；
+    - lru_cache：同参数只重建一次（87 任务，开销可忽略）；返回 tuple
+      保证缓存值不可变（调用方不得原地修改）。
     """
     from src.datasets.synthetic_dataset import SyntheticDataset
 
-    tasks = list(SyntheticDataset(task_count=task_count, seed=seed))
-    return tuple((str(t.task_id), program_fingerprint(t.instance_code)) for t in tasks)
+    tasks = list(SyntheticDataset(task_count=task_count, seed=seed, max_pattern_repeat=max_pattern_repeat))
+    return tuple(
+        (
+            str(t.task_id),
+            program_fingerprint(t.instance_code),
+            str(t.metadata.get("pattern_name") or ""),
+            t.metadata.get("noise_seed"),
+        )
+        for t in tasks
+    )
+
+
+def _rebuilt_task_fingerprints(
+    task_count: int = _DEFAULT_CLUSTER_TASK_COUNT,
+    seed: int = _DEFAULT_CLUSTER_SEED,
+    max_pattern_repeat: int | None = _DEFAULT_CLUSTER_MAX_PATTERN_REPEAT,
+) -> tuple[tuple[str, str], ...]:
+    """A06：重建数据集 → ((task_id, 程序体指纹), ...)（`_rebuilt_task_table` 薄封装）。"""
+    return tuple((tid, fp) for tid, fp, _pattern, _noise in _rebuilt_task_table(task_count, seed, max_pattern_repeat))
+
+
+def _resolve_cluster_identity(
+    task_ids: Iterable[str],
+    *,
+    task_count: int = _DEFAULT_CLUSTER_TASK_COUNT,
+    seed: int = _DEFAULT_CLUSTER_SEED,
+    max_pattern_repeat: int | None = _DEFAULT_CLUSTER_MAX_PATTERN_REPEAT,
+    task_metadata: Mapping[str, Mapping[str, Any]] | None = None,
+) -> tuple[dict[str, str], dict[str, int]]:
+    """A06：task_id → 唯一程序体簇 ID，并统计身份解析来源。
+
+    每个 task_id 的解析优先级：
+    1. **归档元数据程序身份**（`task_metadata.pattern_name`，工件内不可变）：
+       指纹 = 本次重建表并集中该模板名对应的程序体指纹（模板名 → 指纹必须
+       唯一；歧义模板不参与解析）。这优先于 task_id 查表——A06 的错映射
+       正是"同编号任务跨 seed 不是同一程序"造成的，pattern_name 才是程序
+       身份。与重建同编号任务冲突时打 warning、以元数据为准（并计数）；
+    2. **分 seed 重建表**：仅当该行**没有**可用元数据身份时（元数据缺失或
+       未提供 pattern_name），按 `s<seed>__` 前缀确定该行所属 seed（无前缀
+       用默认 `seed`），剥离前缀后查**该 seed** 的 (task_count,
+       max_pattern_repeat) 重建 task_id 表；
+    3. **保守降级**：均无法命中 → `unmapped::<task_id>` 单例簇（宁可多算
+       簇、不臆造相关性）。特别地：**元数据存在但按给定重建参数无法复现其
+       程序身份**（pattern_name 不在重建并集中/歧义）时不得回退 task_id
+       查表——那正是跨 seed 错映射的来源；计 `n_metadata_unresolved` 并
+       落单例簇（重建参数与批次不一致的诚实信号）。
+
+    等价性证据（主批实测，见 tests/test_cluster_robust_stats.py）：三批次归档
+    `task_metadata` 与对应 seed 的 (87, cap=2) 重建在 task_id/pattern_name/
+    noise_seed 三项上逐行一致（87/87 × 3）；且模板名 → 指纹 1:1（单 seed 29
+    个模板/29 个指纹，三种子并集 31/31）——因此"元数据模板身份"与"重建
+    程序体指纹"分组等价。
+
+    Returns:
+        (cluster_map, stats)；stats 含 n_tasks / n_from_metadata /
+        n_from_rebuild / n_unmapped / n_metadata_unresolved /
+        n_metadata_conflicts / n_composition_verified（归档元数据与重建三项
+        逐项一致的行数）。
+    """
+    unique_ids = list(dict.fromkeys(str(t) for t in task_ids))
+    stats: dict[str, int] = {
+        "n_tasks": len(unique_ids),
+        "n_from_metadata": 0,
+        "n_from_rebuild": 0,
+        "n_unmapped": 0,
+        "n_metadata_unresolved": 0,
+        "n_metadata_conflicts": 0,
+        "n_composition_verified": 0,
+    }
+    if not unique_ids:
+        return {}, stats
+
+    metadata_by_id: Mapping[str, Mapping[str, Any]] = task_metadata or {}
+
+    base_of: dict[str, str] = {}
+    seed_of: dict[str, int] = {}
+    for tid in unique_ids:
+        eff_seed, base = _split_seed_prefix(tid)
+        seed_of[tid] = seed if eff_seed is None else int(eff_seed)
+        base_of[tid] = base
+
+    # 每个涉及的 seed 各重建一份（A06：分 seed 映射；漏 cap 的旧实现是根因之一）
+    tables: dict[int, tuple[tuple[str, str, str, int | None], ...]] = {
+        eff_seed: _rebuilt_task_table(task_count, eff_seed, max_pattern_repeat)
+        for eff_seed in sorted(set(seed_of.values()))
+    }
+    by_id: dict[int, dict[str, tuple[str, str, int | None]]] = {
+        eff_seed: {tid: (fp, pattern, noise) for tid, fp, pattern, noise in table} for eff_seed, table in tables.items()
+    }
+    # 本次涉及的全部 seed 重建并集：模板名 → 程序体指纹（歧义模板名不参与解析）
+    pattern_fps: dict[str, set[str]] = {}
+    for table in tables.values():
+        for _tid, fp, pattern, _noise in table:
+            if pattern:
+                pattern_fps.setdefault(pattern, set()).add(fp)
+    pattern_fp: dict[str, str] = {p: next(iter(fps)) for p, fps in pattern_fps.items() if len(fps) == 1}
+
+    _logger = logging.getLogger(__name__)
+    cluster_map: dict[str, str] = {}
+    for tid in unique_ids:
+        eff_seed = seed_of[tid]
+        rebuilt = by_id[eff_seed].get(base_of[tid])
+        metadata = metadata_by_id.get(tid)
+        pattern = (
+            str(metadata.get("pattern_name")) if isinstance(metadata, Mapping) and metadata.get("pattern_name") else ""
+        )
+        noise = metadata.get("noise_seed") if isinstance(metadata, Mapping) else None
+        fp_meta = pattern_fp.get(pattern) if pattern else None
+        fp_rebuild = rebuilt[0] if rebuilt is not None else None
+
+        if rebuilt is not None and metadata is not None and pattern and rebuilt[1] == pattern and rebuilt[2] == noise:
+            # 等价性证据：归档任务编号 + 模板名 + noise_seed 与重建三项一致
+            stats["n_composition_verified"] += 1
+
+        if fp_meta is not None:
+            if fp_rebuild is not None and fp_rebuild != fp_meta:
+                stats["n_metadata_conflicts"] += 1
+                _logger.warning(
+                    "聚类映射：task_id=%r 的归档 task_metadata.pattern_name=%r 与重建同编号任务不一致；"
+                    "按归档程序身份（元数据优先）映射",
+                    tid,
+                    pattern,
+                )
+            cluster_map[tid] = fp_meta
+            stats["n_from_metadata"] += 1
+        elif pattern:
+            # 元数据存在但按给定重建参数无法复现该程序身份 → 保守单例簇；
+            # 不回退 task_id 查表（跨 seed 同编号错映射的来源）。
+            stats["n_metadata_unresolved"] += 1
+            cluster_map[tid] = f"{_UNMAPPED_CLUSTER_PREFIX}{tid}"
+        elif fp_rebuild is not None:
+            cluster_map[tid] = fp_rebuild
+            stats["n_from_rebuild"] += 1
+        else:
+            cluster_map[tid] = f"{_UNMAPPED_CLUSTER_PREFIX}{tid}"
+    # n_unmapped 与实际单例簇总数对齐（含元数据无法复现的保守降级行）
+    stats["n_unmapped"] = sum(
+        1 for cluster_id in cluster_map.values() if cluster_id.startswith(_UNMAPPED_CLUSTER_PREFIX)
+    )
+    return cluster_map, stats
 
 
 def build_cluster_map(
     task_ids: Iterable[str],
     task_count: int = _DEFAULT_CLUSTER_TASK_COUNT,
     seed: int = _DEFAULT_CLUSTER_SEED,
+    *,
+    max_pattern_repeat: int | None = _DEFAULT_CLUSTER_MAX_PATTERN_REPEAT,
+    task_metadata: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> dict[str, str]:
-    """S13：task_id → 唯一程序体簇 ID（**可从工件复现**）。
+    """A06（2026-10-18）：task_id → 唯一程序体簇 ID（**可从工件复现**）。
 
-    口径：
-    - 用 (task_count, seed) 重建合成数据集（与实验同参；只读导入
-      `src/datasets/synthetic_dataset.py`）；
-    - 簇 ID = `instance_code` 去注释后 sha256（`program_fingerprint`）；
-    - 多种子拼接口径（`--pool-seeds`）的 task_id 带 `s<seed>__` 前缀（AB4），
-      剥离前缀后再查表——同一程序体**跨种子合并**为同一簇（这正是聚类
-      稳健性要修正的相关性来源）；
+    口径（A06 修复后）：
+    - **优先用归档任务元数据中的不可变程序身份**：`task_metadata.pattern_name`
+      映射到该模板的程序体指纹（去注释 sha256；模板名 → 指纹在本次重建
+      并集中必须唯一）——程序身份优先于 task_id，因为 seed42/43/44 的
+      **同编号任务不是同一程序**；
+    - 元数据缺失时按 `s<seed>__` 前缀映射到**该 seed** 的、带真实
+      `max_pattern_repeat` 的 (task_count, seed) 重建表查 `task_id`；
+    - 同一程序体**跨种子合并**为同一簇（这正是聚类稳健性要修正的相关性
+      来源）；簇 ID = `instance_code` 去注释后 sha256（`program_fingerprint`）；
     - **保守降级**：查不到的任务不并入任何簇、也不丢弃，而是各成
-      `unmapped::<task_id>` 单例簇——宁可多算簇（CI 偏窄）也不臆造相关性
-      （把无关任务并簇会人为抬高簇内一致率）。**实测成因**：2026-10-05
-      P1-4 之前的批次 task_id 末段是 pattern 名（如
-      `synthetic__boundary_and_exception_0024`），而重建数据集已按 P1-4
-      中性化为 `synthetic__task_XXXX`，故跨代混批时旧命名行全部落单例簇
-      （实测 10 份 main_batch 混批：311 行 → 76 簇，其中 50 行为旧命名；
-      同代批次内 aitester vs plain_llm_df 的 253 行 → **26** 簇，与独立
-      评审一致）。真实基准（QuixBugs）任务同理落单例簇。
+      `unmapped::<task_id>` 单例簇——宁可多算簇（CI 偏宽）也不臆造相关性
+      （把无关任务并簇会人为抬高簇内一致率）。成因：重建参数与批次不一致
+      （如漏 `max_pattern_repeat`）、旧命名 task_id（2026-10-05 P1-4 前末段
+      为 pattern 名）、真实基准（QuixBugs）任务——重建数据集无法命中。
 
-    实测（独立评审复核）：`task_count=87, seed=42` 时 87 个任务标签 →
-    **26** 个簇，簇规模分布 1×5 / 2×7 / 3×4 / 4×5 / 5×1 / 6×1 / 7×1 / 9×2。
+    实测（主批 R-P0-2/R-P0-4，2026-10-06 三批次 = 87 任务 × seed 42/43/44，
+    cap=2）：单 seed 87 个任务标签 → **29** 个唯一程序体（簇规模分布
+    1×6 / 2×11 / 3×3 / 4×4 / 6×2 / 7×2 / 8×1）；三种子拼接 261 个任务标签
+    → **31** 个唯一程序体。历史实现（漏 cap + 剥前缀后统一查 seed=42 表）
+    把 261 行中的 223 行映射错、错误分组 26 簇（符号检验 2:21:3 /
+    p≈6.6e-05）；A06 修复后为 31 簇 / 5:17:9 / p≈0.0169（与归档三种子
+    报告的模板聚类一致）。`max_pattern_repeat=None`（历史口径）时单 seed
+    87 → 26 簇——26 是**不在主批协议内**的旧重建参数产物，不得当作主批事实。
 
     Args:
-        task_ids: 待映射的任务 ID（可重复、顺序无关）。
+        task_ids: 待映射的任务 ID（可重复、顺序无关；多种子拼接口径带
+            `s<seed>__` 前缀）。
         task_count: 重建数据集的任务数（与实验一致，默认 87）。
-        seed: 重建数据集的种子（与实验一致，默认 42）。
+        seed: 无 `s<seed>__` 前缀时的默认重建种子（默认 42）。
+        max_pattern_repeat: 重建数据集的同池模板重复上限（须与跑批一致；
+            默认 2 = 主批 R-P0-2/R-P0-4 真实参数；None = 历史无上限口径）。
+        task_metadata: 可选 {task_id: task_metadata}（结果行原样携带的
+            归档程序身份；`cluster_robust_analysis` 自动从数据行收集）。
 
     Returns:
         {task_id: cluster_id}；空输入返回空 dict（不抛异常）。
     """
-    lookup = dict(_rebuilt_task_fingerprints(task_count, seed))
-    cluster_map: dict[str, str] = {}
-    for raw_tid in task_ids:
-        tid = str(raw_tid)
-        fingerprint = lookup.get(_strip_seed_prefix(tid))
-        cluster_map[tid] = fingerprint if fingerprint is not None else f"{_UNMAPPED_CLUSTER_PREFIX}{tid}"
+    cluster_map, _stats = _resolve_cluster_identity(
+        task_ids,
+        task_count=task_count,
+        seed=seed,
+        max_pattern_repeat=max_pattern_repeat,
+        task_metadata=task_metadata,
+    )
     return cluster_map
 
 
@@ -2340,10 +2568,13 @@ def cluster_robust_paired_test(
     bootstrap_resamples: int = _BOOTSTRAP_N_RESAMPLES,
     seed: int = _BOOTSTRAP_SEED,
 ) -> dict[str, Any]:
-    """S13：聚类稳健配对检验——**簇内先取均值，再在簇级做配对检验**。
+    """S13（A06 修正）：聚类稳健配对检验——**簇内先取均值，再在簇级做配对检验**。
 
-    为什么必须聚类：87 个任务标签只对应 26 个唯一程序体（簇内高度相关），
-    逐任务配对检验的独立性假设不成立，方差被低估、精确度被高估约 3.35 倍。
+    为什么必须聚类：任务标签只对应少数唯一程序体（簇内高度相关）——主批
+    R-P0-2/R-P0-4（87 任务、max_pattern_repeat=2）单 seed 87 标签 → 29 个
+    程序体，三种子拼接 261 标签 → 31 个程序体（A06 修正后的正确事实；旧实现
+    因漏 cap + 跨 seed 错映射得到 26 簇，见 build_cluster_map docstring）。
+    逐任务配对检验的独立性假设不成立，方差被低估、精确度被高估。
     本函数把每个程序体压缩成一个观测（簇内均值），再做 k=簇数 的配对检验
     ——等价于"每个程序体只投一票"，是评审要求的保守口径。
 
@@ -2491,20 +2722,47 @@ def cluster_robust_analysis(
     *,
     task_count: int = _DEFAULT_CLUSTER_TASK_COUNT,
     seed: int = _DEFAULT_CLUSTER_SEED,
+    max_pattern_repeat: int | None = _DEFAULT_CLUSTER_MAX_PATTERN_REPEAT,
     fields: tuple[tuple[str, str], ...] = _CLUSTER_ROBUST_FIELDS,
 ) -> dict[str, Any]:
-    """S13：对全部基线对比产出簇级配对检验（报告与下游共用的唯一入口）。
+    """S13（A06 修正）：对全部基线对比产出簇级配对检验（报告与下游共用的唯一入口）。
 
-    步骤：收集全部任务 ID → `build_cluster_map`（一次重建、全臂共用）→
-    逐 (指标, 基线) 调 `cluster_robust_paired_test`。
+    步骤：收集全部任务 ID 与**归档 task_metadata**（程序身份）→
+    `_resolve_cluster_identity`（元数据优先 + 分 seed 重建，一次构建、全臂
+    共用）→ 逐 (指标, 基线) 调 `cluster_robust_paired_test`。
+
+    Args:
+        data: {baseline: [结果行]}（load_experiment_results* 加载）。
+        task_count / seed / max_pattern_repeat: 重建参数；须与跑批一致
+            （主批 R-P0-2/R-P0-4：87 / seed 前缀决定 / 2）。
+        fields: 参与簇级分析的 (field, 报告标签) 列表。
 
     Returns:
-        {task_count, dataset_seed, cluster_map_summary, comparisons:[...]}；
+        {task_count, dataset_seed, max_pattern_repeat, cluster_map_summary,
+         identity_resolution, comparisons:[...]}；
         `comparisons` 每项为 `cluster_robust_paired_test` 的返回字典 +
-        {metric, field, comparison, baseline}。
+        {metric, field, comparison, baseline}；`identity_resolution` 为 A06
+        身份来源统计（元数据 / 分 seed 重建 / 未映射 / 组成验证数）。
     """
     task_ids = [str(r["task_id"]) for rows in data.values() for r in (rows or []) if r.get("task_id")]
-    cluster_map = build_cluster_map(task_ids, task_count=task_count, seed=seed)
+    # A06：归档 task_metadata 是程序身份的首选依据；同一 task_id 跨臂元数据
+    # 相同，首见即可（跨批次重复行由 _pair_by_task 的去重口径另行处理）。
+    task_metadata: dict[str, Mapping[str, Any]] = {}
+    for rows in data.values():
+        for row in rows or []:
+            tid = row.get("task_id")
+            if not tid or str(tid) in task_metadata:
+                continue
+            metadata = row.get("task_metadata")
+            if isinstance(metadata, Mapping):
+                task_metadata[str(tid)] = metadata
+    cluster_map, identity_resolution = _resolve_cluster_identity(
+        task_ids,
+        task_count=task_count,
+        seed=seed,
+        max_pattern_repeat=max_pattern_repeat,
+        task_metadata=task_metadata or None,
+    )
 
     def _key(tid: str) -> str:
         """簇键：映射命中取簇 ID；未映射任务各成单例簇（保守降级）。"""
@@ -2529,34 +2787,63 @@ def cluster_robust_analysis(
     return {
         "task_count": task_count,
         "dataset_seed": seed,
+        "max_pattern_repeat": max_pattern_repeat,
         "cluster_map_summary": cluster_map_summary(cluster_map),
+        "identity_resolution": identity_resolution,
         "comparisons": comparisons,
     }
 
 
 def _cluster_robust_report_lines(analysis: dict[str, Any]) -> list[str]:
-    """S13：报告 `cluster_robust` 节（簇结构披露 + 簇级配对检验表）。"""
+    """A06（2026-10-18）：报告 `cluster_robust` 节（簇结构披露 + 簇级配对检验表）。
+
+    文案中的程序体数/簇规模/身份来源全部取自本次分析结果（动态），不再写死
+    历史错误分组数（旧文案的 “26 个唯一程序体 / 3.35 倍” 是漏 `max_pattern_repeat`
+    且剥离 seed 前缀后统一查单 seed 表的产物，见 A06）。
+    """
     summary = analysis["cluster_map_summary"]
+    identity = analysis.get("identity_resolution") or {}
     dist_text = (
         " / ".join(f"{size}×{count}" for size, count in sorted(summary["size_distribution"].items())) or "（无）"
     )
+    max_pattern_repeat = analysis.get("max_pattern_repeat", _DEFAULT_CLUSTER_MAX_PATTERN_REPEAT)
+    cap_text = "None（历史口径，无同池模板重复上限）" if max_pattern_repeat is None else str(max_pattern_repeat)
+    ratio_text = f"{summary['n_tasks'] / summary['n_clusters']:.2f}" if summary["n_clusters"] else "n/a"
+    n_metadata = int(identity.get("n_from_metadata", 0))
+    n_rebuild = int(identity.get("n_from_rebuild", 0))
+    n_conflicts = int(identity.get("n_metadata_conflicts", 0))
+    n_unresolved = int(identity.get("n_metadata_unresolved", 0))
+    n_verified = int(identity.get("n_composition_verified", 0))
+    conflict_text = f"（元数据与重建同编号任务冲突 {n_conflicts} 行，按元数据程序身份为准）" if n_conflicts else ""
     lines = [
         "",
         "## 聚类稳健统计（cluster_robust，S13——唯一程序体口径）",
         "",
         f"{_CLUSTER_ROBUST_BATCH}：历史上的配对检验把任务标签当独立样本，但实测"
-        f"这些标签只对应 **{summary['n_clusters']} 个唯一程序体**（`BUG_PATTERNS` 仅 16 个"
-        "模板，逐任务差异只是行尾注释 `# noise_seed=`）——簇内观测高度相关，"
-        "独立性假设不成立，**精确度被高估约 3.35 倍**。",
+        f"这些标签只对应 **{summary['n_clusters']} 个唯一程序体**（同一模板逐任务差异"
+        "只是行尾注释 `# noise_seed=`，去注释后逐字节相同）——簇内观测高度相关，"
+        f"独立性假设不成立，任务级精确度被高估（任务标签/程序体比 ≈ {ratio_text}）。",
         "",
-        f"- 簇构造（可从工件复现）：`SyntheticDataset(task_count={analysis['task_count']}, "
-        f"seed={analysis['dataset_seed']})` 重建 → `instance_code` 去注释后 sha256 取簇 ID"
-        "（`build_cluster_map`）；多种子拼接的 `s<seed>__` 前缀先剥离，"
-        "同一程序体跨种子合并；",
+        "- **A06（2026-10-18）映射修正**：旧实现用 `SyntheticDataset(task_count, seed)` "
+        "重建（遗漏真实 `max_pattern_repeat`），且把多种子拼接的 `s<seed>__` 前缀剥离后"
+        "统一查**单个** seed 的重建表——seed42/43/44 的同编号任务不是同一程序"
+        "（主批 261 行实测错映射 223 行、错误分组 26 簇/2:21:3/p≈6.6e-05；修正后 "
+        "31 簇/5:17:9/p≈0.0169，与归档三种子报告的模板聚类一致）。现口径：",
+        "  1. **优先**采用归档任务元数据中的不可变程序身份（`task_metadata.pattern_name`"
+        " → 去注释程序体指纹；模板名→指纹须唯一）；",
+        "  2. 元数据缺失时按 `s<seed>__` 前缀映射到**该 seed** 的、带真实 "
+        f"`max_pattern_repeat={cap_text}` 的 (task_count={analysis['task_count']}, seed) 重建表；",
+        "  3. 仍无法命中 → `unmapped::<task_id>` 单例簇（保守降级，不臆造相关性）。",
+        f"- 身份解析来源：归档元数据 {n_metadata} / 分 seed 重建 {n_rebuild} / "
+        f"未映射 {int(identity.get('n_unmapped', summary['n_unmapped']))}"
+        f"（其中元数据存在但按当前重建参数无法复现程序身份 {n_unresolved} 行——不回退"
+        f" task_id 查表，保守单例）{conflict_text}；"
+        f"元数据与重建在 task_id/pattern_name/noise_seed 三项逐项一致 {n_verified}/"
+        f"{summary['n_tasks']} 行（组成验证 = 元数据身份与程序体指纹分组等价的证据）。",
         f"- 簇结构：任务 {summary['n_tasks']} 个 → 簇 {summary['n_clusters']} 个；"
         f"簇规模分布（规模×簇数）：{dist_text}；未映射任务 {summary['n_unmapped']} 个"
-        "（各成单例簇——保守降级，不臆造相关性；常见成因 = 2026-10-05 P1-4 前的"
-        "旧命名 task_id（末段为 pattern 名）或真实基准任务，重建数据集无法命中）；",
+        "（各成单例簇——保守降级；常见成因 = 重建参数与批次不一致、旧命名 task_id"
+        "（2026-10-05 P1-4 前末段为 pattern 名）或真实基准任务，重建数据集无法命中）；",
         "- 口径：**簇内先取均值，再在簇级做配对检验**（每个程序体只投一票）。"
         "本节的簇级数字**不替换**上方任务级数字；冲突时以本节（保守）为准。",
         "",
@@ -2584,7 +2871,7 @@ def _cluster_robust_report_lines(analysis: dict[str, Any]) -> list[str]:
         "符号检验 p 只看簇级胜负符号（最保守）；Cliff's δ / A12 为效应量"
         "（阈值见文末效应量说明）；簇内一致率 = size≥2 的簇内「最多数方向」"
         "占比按簇内配对数加权平均——1.0 表示同一程序体的所有任务方向一致，"
-        "越低说明任务级 n 的独立性假设越不可信（实测 aitester 56.7% / df 33.3%）。",
+        "越低说明任务级 n 的独立性假设越不可信。",
         "",
     ]
     return lines
@@ -2660,7 +2947,15 @@ def main() -> None:
         "--cluster-seed",
         type=int,
         default=_DEFAULT_CLUSTER_SEED,
-        help="S13：重建合成数据集的种子（须与实验一致，默认 42）",
+        help="S13/A06：无 s<seed>__ 前缀时的默认重建种子（须与实验一致，默认 42）",
+    )
+    parser.add_argument(
+        "--cluster-max-pattern-repeat",
+        type=int,
+        default=_DEFAULT_CLUSTER_MAX_PATTERN_REPEAT,
+        help="A06（2026-10-18）：重建合成数据集的同池模板重复上限，须与跑批一致"
+        "（主批 R-P0-2/R-P0-4 = 2，默认）；传 0 表示 None（2026-10-06 之前"
+        "无重复上限的历史口径）——旧实现漏掉该参数是错误任务—程序映射的根因之一",
     )
     args = parser.parse_args()
 
@@ -2688,6 +2983,8 @@ def main() -> None:
         cluster_robust=args.cluster_robust,
         cluster_task_count=args.cluster_task_count,
         cluster_seed=args.cluster_seed,
+        # A06：CLI 以 0 表示 None（历史无 max_pattern_repeat 上限口径）
+        cluster_max_pattern_repeat=(None if args.cluster_max_pattern_repeat < 1 else args.cluster_max_pattern_repeat),
     )
 
 

@@ -20,6 +20,8 @@ source .venv/bin/activate
 
 # Install dependencies
 pip install -r requirements.txt
+# Wheel installs only (non-repo dev): install the execution extra to run the Executor and benchmarks
+# pip install "aitester[execution]"   # the full requirements.txt install already includes pytest
 ```
 
 > **One-command bootstrap (recommended)**: steps 2-4 above are automated by

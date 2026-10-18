@@ -15,6 +15,7 @@ LLM 客户端管理与调用工具模块。
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import json
 import logging
 import os
@@ -250,6 +251,7 @@ def _retry_with_exponential_backoff(
     base_wait: int = 1,
     retryable_exceptions: tuple[type[Exception], ...] = (),
     non_retryable_exceptions: tuple[type[Exception], ...] = (),
+    pre_retry_check: Callable[[], None] | None = None,
 ) -> Any:
     """带指数退避的重试通用工具函数。
 
@@ -267,6 +269,13 @@ def _retry_with_exponential_backoff(
             （限流 / 网络抖动 / 服务端 5xx）区分开，避免对必然失败的操作
             做无意义的指数退避（zai 路径 (Exception,) 兜底会误把空响应
             也按可重试处理，浪费 5+10+20=35s 墙钟才最终抛出）。
+        pre_retry_check: A11（2026-10-18 第三方审查 P1）新增的可选回调——
+            每次**实际重试前**调用（已判定可重试、退避等待之前）。调用方
+            用它复查任务级预算（`is_budget_exceeded`）：上一响应即使被判
+            "不可用"（finish_reason 异常 / 空响应），其 usage 也已记账
+            （A11 同批修复），故重试前必须复查预算，超限即抛
+            BudgetExceededError 快速失败，不再空烧 token。回调抛出的异常
+            **直接向上传播**（不参与本函数的重试判定）。
 
     Returns:
         函数执行的返回值。
@@ -289,6 +298,9 @@ def _retry_with_exponential_backoff(
                 raise
             last_error = e
             if attempt < max_retries:
+                # A11：重试前复查预算（回调异常直接传播，不进重试计数）
+                if pre_retry_check is not None:
+                    pre_retry_check()
                 # 指数退避：base_wait * 2^attempt（默认 1s → 1,2,4；zai base=5 → 5,10,20）
                 # 此前误写为 base_wait**attempt：base_wait=1 时退化为固定 1s，zai 时膨胀为 5,25,125
                 wait_time = base_wait * (2**attempt)
@@ -405,6 +417,50 @@ def _record_response_usage(usage: Any, model_name: str) -> bool:
         return True
 
 
+def _budget_exceeded_error() -> Exception:
+    """A11（2026-10-18 第三方审查 P1）：任务级预算超限异常工厂（单一实现）。
+
+    历史实现只存在于 `base_agent._budget_exceeded_error()`（惰性构造避免模块
+    加载期依赖 cost_budget）；A11 后 llm_client 的 zai 路径也要在**重试前**
+    复查预算并抛同一异常，故工厂上移到本模块、base_agent 委托调用——两条
+    调用路径共用一份单位口径（D1：USD 取 consumed_usd/usd_limit，否则
+    token 口径），异常消息不会把 token 数当美元展示。
+
+    Returns:
+        BudgetExceededError 实例（延迟构造：cost_budget 仍只在调用期导入）。
+    """
+    from src.budget.cost_budget import BudgetExceededError, get_budget_stats
+
+    stats = get_budget_stats()
+    unit = str(stats.get("unit", "none"))
+    if unit == "usd":
+        return BudgetExceededError(
+            consumed=float(stats.get("consumed_usd", 0.0)),
+            limit=float(stats.get("usd_limit", 0.0)),
+            unit="usd",
+        )
+    return BudgetExceededError(
+        consumed=int(stats.get("consumed_tokens", 0)),
+        limit=int(stats.get("token_limit", 0)),
+        unit=unit,
+    )
+
+
+def _raise_if_budget_exceeded() -> None:
+    """A11：重试前预算复查回调（超限即抛，供 `_retry_with_exponential_backoff`）。
+
+    背景：A11 后"收到响应立即记账"——即使是 finish_reason 异常 / 空响应，
+    其已发生的 token 消耗也已入账。此时继续在同一 API 内指数退避重试或
+    跨模型故障转移，可能在预算已耗尽后继续烧 token；故每次**实际重试前**
+    复查任务级预算（COST_BUDGET_ENABLE 默认 false 时 `is_budget_exceeded()`
+    恒 False，零行为变化）。
+    """
+    from src.budget.cost_budget import is_budget_exceeded
+
+    if is_budget_exceeded():
+        raise _budget_exceeded_error()
+
+
 # 智谱系域名判定（bigmodel.cn / zhipuai）
 # 2026-09-26 优化：模块级预编译 alternation 正则（此前每次 _is_zai_compatible
 # 调用都重建 list + `any` 子串扫描；--parallel 多任务热路径上 LLM 路由决策
@@ -471,6 +527,10 @@ def _call_zai(
     #  被基类覆盖，列举属死代码）
     from zai.core._errors import APIReachLimitError, APIStatusError  # noqa: F401
 
+    # A11：预算超限异常（重试前复查预算抛出）需原样向上传播，不包装成
+    # "zai API 调用失败"（避免被上层误判为 API 故障继续故障转移）
+    from src.budget.cost_budget import BudgetExceededError
+
     # 复用缓存的智谱 AI 客户端（连接池跨调用复用）
     client = _get_or_create_zai_client(api_key, base_url)
 
@@ -492,6 +552,12 @@ def _call_zai(
             timeout=LLM_TIMEOUT,
             **kwargs,
         )
+        # A11（2026-10-18 第三方审查 P1）：收到响应**立即**记账，再做可用性
+        # 判定。历史实现先判空响应、后 `_record_response_usage`——带 usage 的
+        # 空响应/截断响应抛错后 usage 漏记，且重试/故障转移继续烧 token 时
+        # 消耗统计系统性偏低。记账早于任何 raise 后，无论本次响应最终是否
+        # 可用，其已发生的 token 消耗都入账（与 OpenAI 路径同序）。
+        _record_response_usage(getattr(response, "usage", None), model_name)
         msg = response.choices[0].message
         # 优先取 content（普通响应），回退到 reasoning_content（深度思考内容）
         text = (msg.content or msg.reasoning_content or "").strip()
@@ -501,8 +567,6 @@ def _call_zai(
             # _call_zai 的 non_retryable_exceptions 立即向上抛出，
             # 避免 (Exception,) 兜底误判为空响应可重试而做无效指数退避。
             raise LLMEmptyResponseError("LLM 返回空响应")
-        # token 消耗统计（zai 路径响应携带 OpenAI 风格的 usage 字段，可能缺失）
-        _record_response_usage(getattr(response, "usage", None), model_name)
         logger.info("zai API 调用成功 (model=%s)", model_name)
         return text
 
@@ -512,16 +576,47 @@ def _call_zai(
         # 指数退避之外：该错误是确定性失败，重试必然复现，立即抛出交
         # 调用方（base_agent._call_llm）按既有"空响应触发同 API 内有限
         # 重试 + 跨模型故障转移"语义处理，不再浪费 5+10+20=35s 墙钟。
+        # A11：pre_retry_check 在每次重试前复查任务级预算（上一响应即使被判
+        # 不可用，其 usage 也已记账；超限则快速失败而非继续重试烧 token）。
         return _retry_with_exponential_backoff(
             func=_do_zai_call,
             max_retries=max_retries,
             base_wait=_ZAI_RATE_LIMIT_WAIT_BASE_SECONDS,  # zai 限流基准 5 秒
             retryable_exceptions=_ZAI_RETRYABLE_EXCEPTIONS,
             non_retryable_exceptions=(LLMEmptyResponseError,),
+            pre_retry_check=_raise_if_budget_exceeded,
         )
+    except BudgetExceededError:
+        # A11：预算超限是控制流信号（不属 API 故障），不得被包装成普通
+        # RuntimeError 后交给上层故障转移继续尝试其他模型（那样会绕过预算闸）。
+        raise
     except Exception as e:
         # 重新抛出带有明确上下文的异常（异常文本可能含请求头凭证，先脱敏）
         raise RuntimeError(f"zai API 调用失败: {_redact_log_text(str(e))}") from e
+
+
+def _thread_local_api_override() -> tuple[str, str, str] | None:
+    """A10（2026-10-18 第三方审查 P1）：读取线程局部指定的 LLM 配置三元组。
+
+    线程局部存储由 `experiments/run_benchmark.py::_set_thread_api` 在任务
+    分配时写入（api_key / base_url / model_name），用于 `--parallel` 下每个
+    任务线程使用自己的端点。历史缺陷：生产请求链 `_call_llm` 读
+    `_get_all_api_configs()`——后者只枚举全局 `LLM_CONFIGS`，线程局部指定
+    配置从未进入真实请求链（任务被"分配"给 B，实际仍按全局首配置 A 请求），
+    而缓存/来源标签却经 `get_first_valid_model_name()` 取到了 B。
+
+    回退口径与 `_get_llm_config` 逐字节一致：未显式覆盖的字段对称回退
+    `LLM_CONFIGS[0]`；`api_key` 为空（无覆盖）时返回 None。
+
+    Returns:
+        (api_key, base_url, model_name)；无线程局部覆盖时 None。
+    """
+    api_key = getattr(_thread_local, "api_key", "")
+    if not api_key:
+        return None
+    model = getattr(_thread_local, "model_name", "") or (LLM_CONFIGS[0].model_name if LLM_CONFIGS else "")
+    base_url = getattr(_thread_local, "base_url", "") or (LLM_CONFIGS[0].base_url if LLM_CONFIGS else "")
+    return (api_key, base_url, model)
 
 
 def _get_llm_config() -> tuple[str, str, str]:
@@ -534,12 +629,9 @@ def _get_llm_config() -> tuple[str, str, str]:
         (api_key, base_url, model_name) 三元组；配置缺失时返回空字符串。
     """
     # 优先使用线程局部覆盖的配置（由测试或并发场景设置）
-    if hasattr(_thread_local, "api_key") and _thread_local.api_key:
-        # 未显式覆盖的字段对称回退全局配置：只设 api_key 不设 base_url 时
-        # 此前裸取 _thread_local.base_url 会 AttributeError
-        model = getattr(_thread_local, "model_name", LLM_CONFIGS[0].model_name if LLM_CONFIGS else "")
-        base_url = getattr(_thread_local, "base_url", "") or (LLM_CONFIGS[0].base_url if LLM_CONFIGS else "")
-        return _thread_local.api_key, base_url, model
+    override = _thread_local_api_override()
+    if override is not None:
+        return override
     # 回退到全局配置（按优先级取第一个有效配置）
     if LLM_CONFIGS:
         cfg = LLM_CONFIGS[0]
@@ -560,6 +652,10 @@ def get_first_valid_model_name() -> str | None:
     用于 AITESTER_CACHE_ISOLATE_MODEL=1 时把"当前模型命名空间"加入
     缓存键，消除跨模型缓存串味（见 base_agent._call_llm_with_cache 的
     M8 隔离逻辑）。
+
+    A10（2026-10-18 第三方审查 P1）：本函数只返回"首个有效模型名"标签，
+    真实请求链的配置优先级由 `_get_all_api_configs()` 统一（线程局部 >
+    全局；标签与真实首请求一致，见该函数 docstring）。
     """
     if getattr(_thread_local, "model_name", ""):
         return _thread_local.model_name
@@ -573,11 +669,102 @@ def _get_all_api_configs() -> list[tuple[str, str, str]]:
 
     用于 _call_llm 的 API 自动切换逻辑：当主 API 失败时依次尝试备用 API。
 
+    A10（2026-10-18 第三方审查 P1）修复：**线程局部指定的配置优先**。
+    历史实现只枚举全局 `LLM_CONFIGS`——`run_benchmark._set_thread_api` 为
+    任务写入的线程局部端点从未进入生产请求链（真实请求仍从全局首配置
+    开始），而缓存标签却取线程局部模型名，导致"分配与实际/标签脱节"。
+    现口径：
+    1. 线程局部完整三元组存在（api_key/base_url/model_name，缺失字段按
+       `_get_llm_config` 同款回退）→ 作为**首个**请求配置；
+    2. 全局 `LLM_CONFIGS` 其余配置原序跟在后面——线程局部端点失败时仍按
+       既定全局链故障转移（行为不倒退）；
+    3. 线程局部配置与全局某项完全相同时不重复（避免同一端点试两遍）；
+    4. 无线程局部覆盖 / 覆盖不完整（缺 api_key/base_url/model）→ 返回全局
+       链（历史口径，绝不注入半截配置遮蔽可用全局端点）。
+
     Returns:
         列表，每项为 (api_key, base_url, model_name)，仅包含已配置的项。
-        若 LLM_CONFIGS 为空则返回空列表。
+        若 LLM_CONFIGS 为空且无线程局部覆盖则返回空列表。
     """
-    return [(c.api_key, c.base_url, c.model_name) for c in LLM_CONFIGS]
+    global_configs = [(c.api_key, c.base_url, c.model_name) for c in LLM_CONFIGS]
+    override = _thread_local_api_override()
+    # 仅完整三元组才进入请求链（半截配置请求必然失败，不应排在可用全局端点前）
+    if override is None or not all(override):
+        return global_configs
+    if override in global_configs:
+        return global_configs
+    return [override, *global_configs]
+
+
+# ─── A10：实际请求身份记录（provenance / 缓存标签）────────────────────────────
+# 背景（2026-10-18 第三方审查 P1）：缓存/provenance 标签必须描述**真实发出
+# 的请求**，而不是"本来想发的请求"。多端点故障转移场景下首选端点 B 失败、
+# 备用端点 A 成功时，缓存条目的"请求身份"是 B（查找键），而"响应来源"是 A
+# （真实消耗与输出所属端点）。本组函数记录本线程最近一次成功返回的真实配置，
+# 供 base_agent 写入缓存 payload（response_identity）与日志；api_key 只留
+# 内存线程局部（绝不进入缓存文件/工件）。
+def _record_actual_request_config(api_key: str, base_url: str, model_name: str) -> None:
+    """记录本线程最近一次真实发出并成功返回的 LLM 请求配置（内存 only）。"""
+    _thread_local.last_request_config = (api_key, base_url, model_name)
+
+
+def get_last_request_config() -> tuple[str, str, str] | None:
+    """读取本线程最近一次成功请求的 (api_key, base_url, model_name)。
+
+    Returns:
+        三元组；本线程尚无成功请求记录时 None（调用方按未知来源处理）。
+    """
+    return getattr(_thread_local, "last_request_config", None)
+
+
+def clear_last_request_config() -> None:
+    """清除本线程的"最近成功请求"记录（每次 _call_llm 调用前调用，防陈旧）。"""
+    with contextlib.suppress(AttributeError):
+        delattr(_thread_local, "last_request_config")
+
+
+# ─── A09：规范化的"有效请求身份"（缓存键材料 / 语义索引分区）──────────────────
+# 2026-10-18 第三方审查 P1：精确缓存键与语义缓存都必须以**实际生效的请求身份**
+# 隔离——同一 prompt 在"有效默认温度 / thinking / reasoning_effort / max_tokens /
+# JSON 输出模式实际生效值 / 模型与端点 / 实验 namespace"任一不同时，响应不可
+# 互换，不得命中彼此缓存。这里把身份规范化为可 JSON 序列化的 dict，并提供
+# 稳定材料（供精确键哈希）与短指纹（供语义索引分区过滤，避免长串散列成本）。
+def request_identity_material(identity: dict[str, Any] | None) -> str:
+    """把请求身份 dict 规范化为稳定排序的 JSON 材料（确定性哈希输入）。
+
+    规范化口径（同一身份必然产出逐字节相同材料）：
+    - `sort_keys=True`：dict 键序不影响身份；
+    - `separators=(",", ":")`：紧凑分隔符，无空白抖动；
+    - `ensure_ascii=False`：中文模型名/路径按原字符参与哈希（UTF-8 编码）；
+    - `default=str`：异常类型（如未来加入的枚举）降级为字符串而非抛错。
+
+    Args:
+        identity: `base_agent._effective_request_identity()` 产出的身份 dict。
+
+    Returns:
+        规范化 JSON 字符串；identity 为 None/空时返回空串（无身份材料）。
+    """
+    if not identity:
+        return ""
+    return json.dumps(identity, sort_keys=True, ensure_ascii=False, separators=(",", ":"), default=str)
+
+
+def request_identity_fingerprint(identity: dict[str, Any] | None) -> str:
+    """请求身份的短指纹（md5 前 16 位十六进制），供语义索引分区过滤。
+
+    与 `request_identity_material()` 同源（同一规范化 JSON），故精确缓存键与
+    语义缓存分区使用同一身份定义，不会出现"精确层隔离、语义层串味"的口径分裂。
+
+    Args:
+        identity: 请求身份 dict。
+
+    Returns:
+        16 位十六进制指纹；identity 为空时返回空串（调用方按"无身份"处理）。
+    """
+    material = request_identity_material(identity)
+    if not material:
+        return ""
+    return hashlib.md5(material.encode("utf-8")).hexdigest()[:16]
 
 
 # ─── LLM 文件缓存开关（省 token）────────────────────────────────────────────

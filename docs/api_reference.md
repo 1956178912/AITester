@@ -451,19 +451,21 @@ ranked = rank_knowledge_entries(entries, "syntax")  # 频次×时间衰减排序
 
 ### CodeAnalyzer
 
-AST 代码分析工具，提供精确的代码替换能力。
+AST 代码分析工具，提供圈复杂度计算与精确的代码替换能力。
 
 ```python
-from src.tools.code_analyzer import analyze_complexity, replace_function_code
+from src.tools.code_analyzer import compute_cyclomatic_complexity, replace_function_code
 
-# 计算圈复杂度
-complexity = analyze_complexity(code_string)
+# 计算圈复杂度（McCabe：1 + if/for/while/except 等决策点；返回 int）
+complexity = compute_cyclomatic_complexity(source_code)
 
-# 替换函数实现
-new_code = replace_function_code(
-    original_code,
-    function_name,
-    new_body,
+# AST 精确替换函数定义：new_function_code 必须是完整的 def 代码块
+# （整段函数定义，不是仅函数体）；返回 (new_code, success) 元组，
+# 语法非法 / 找不到同名函数时原样返回 (source_code, False)
+new_code, ok = replace_function_code(
+    source_code,
+    "divide",
+    "def divide(a, b):\n    if b == 0:\n        raise ValueError('b must not be zero')\n    return a / b",
 )
 ```
 
@@ -471,31 +473,33 @@ new_code = replace_function_code(
 
 | 函数 | 参数 | 返回值 | 说明 |
 |------|------|--------|------|
-| `analyze_complexity()` | `code: str` | `int` | 计算圈复杂度 |
-| `replace_function_code()` | `original_code`, `function_name`, `new_body` | `str` | AST 精确替换函数体 |
+| `compute_cyclomatic_complexity()` | `source_code: str` | `int` | 计算圈复杂度（McCabe：1 + 决策点计数，`and/or` 组合路径按 `len(values) - 1` 计入） |
+| `replace_function_code()` | `source_code`, `function_name`, `new_function_code`（完整 `def`） | `tuple[str, bool]` | AST 精确替换整个函数定义；语法非法/未找到同名函数 → `(source_code, False)` |
 
 ---
 
 ### PatchApplier
 
-补丁应用工具，支持完整文件和单函数模式。
+补丁应用工具，支持完整文件和单函数模式（模式由补丁形态自动判定，无需显式传参）。
 
 ```python
 from src.tools.patch_applier import apply_patch_to_code
 
-# 应用完整文件补丁
-fixed_code = apply_patch_to_code(
+# 无 mode / function_name 参数：完整文件 vs 单函数模式由补丁形态自动判定
+# （补丁以 docstring 开头 / 含行首顶层 import / 多函数补丁 → 完整文件模式；
+#  否则按补丁内首个 def 的函数名，定位原代码同名函数做单函数替换）。
+# 返回 (修复后代码, 是否成功)；失败时原样返回 (original_code, False)。
+
+# 完整文件模式：补丁含行首顶层 import（自动判定）
+fixed_code, ok = apply_patch_to_code(
     original_code=buggy_code,
-    patch="```python\ndef divide(a, b): return a / b\n```",
-    mode="full_file",
+    patch="```python\nimport math\n\n\ndef divide(a, b):\n    if b == 0:\n        raise ValueError('b must not be zero')\n    return a / b\n```",
 )
 
-# 单函数模式（推荐）
-fixed_code = apply_patch_to_code(
+# 单函数模式：补丁须含完整 def（仅函数体文本会被拒绝 → ok=False）
+fixed_code, ok = apply_patch_to_code(
     original_code=buggy_code,
-    patch="return a / b",
-    mode="function",
-    function_name="divide",
+    patch="def divide(a, b):\n    if b == 0:\n        raise ValueError('b must not be zero')\n    return a / b",
 )
 ```
 
@@ -503,9 +507,9 @@ fixed_code = apply_patch_to_code(
 
 | 函数 | 参数 | 返回值 | 说明 |
 |------|------|--------|------|
-| `apply_patch_to_code()` | `original_code`, `patch`, `mode`, `function_name` | `str` | 应用补丁到代码 |
+| `apply_patch_to_code()` | `original_code`, `patch` | `tuple[str, bool]` | 自动判定完整文件/单函数模式（无 `mode`/`function_name` 参数）；补丁文本自动剥离 Markdown 代码围栏（python 标记）与 `python:` 前缀；空补丁/找不到目标函数/完整文件漏原函数 → `(original_code, False)` |
 | `apply_multi_function_patch()` | `code: str`, `patches: list[dict]` | `tuple[str, bool]` | 多函数同时修复：每项 patch 为 `{"function_name": str, "patch": str}`；按函数起始行号从高到低应用（避免行号偏移）。0.2 性能优化：排序 key 复用预切分行（O(n+m)，此前每个 patch 各自 split 一遍代码 O(n·m)） |
-| `safe_apply_patch()` | `code`, `patch` | `tuple[str, bool]` | 应用补丁后做语法校验，失败自动回滚到原始代码 |
+| `safe_apply_patch()` | `code`, `patch` | `tuple[str, bool]` | 应用补丁后做语法校验与危险 API 守卫差集检查，失败自动回滚到原始代码 |
 
 ---
 
@@ -959,7 +963,7 @@ print(MODEL_NAME)  # 默认模型（LLM_1）名称
 | `API_CIRCUIT_BACKOFF` | bool | true | 4.4 API 熔断器指数退避开关：`mark_failure` 冷却期改按 `base * 2^open_count` 指数退避（封顶 `half_open_probe_penalty_cap_seconds`），彻底死掉的 provider 冷却期单调增长；设 false 回退 4.2 固定冷却期口径（便于对比实验） |
 | `API_PROMETHEUS_EXPORT` | bool | false | 4.4 Prometheus 指标导出开关：启用后 `APIManager.to_prometheus_text()` 输出 7 类指标（health / circuit_state / open_remaining_s / open_count / probe_success_rate / success_rate / avg_response_ms）供监控抓取；纯旁路不影响既有路由行为 |
 | `ASSERTION_AUGMENT_ENABLE` | bool | false | 3.4 断言增强：AST 提取被测代码现有 assert 注入 prompt |
-| `ENABLE_MULTI_CANDIDATE_PATCH` | bool | false | 3.1 多候选补丁生成与静态/执行验证筛选（默认关，无候选回退单补丁）；`reproduce.sh` 复现流程默认显式启用（`--no-multi-candidate` 可回退历史口径） |
+| `ENABLE_MULTI_CANDIDATE_PATCH` | bool | false | 3.1 多候选补丁生成与静态/执行验证筛选（默认关，无候选回退单补丁）；`reproduce.sh` 自 **W7（2026-10-05）起同样默认关闭**（A/B 实测成功率 −2pp 且 token +256%），需对照时显式 `--multi-candidate` 开启；`--no-multi-candidate` 仅为兼容保留（空操作） |
 | `AITESTER_TRACE_DIR` | str | 未设（no-op） | 4.1 结构化 JSONL 追踪层输出目录（未设时追踪层 no-op，不影响运行）；`reproduce.sh` 默认启用（`experiments/results/traces`） |
 | `BENCHMARK_PARALLELISM` | int | 0 | 并行度（0=串行） |
 | `LLM_JSON_MODE` | str | "on" | ADR-0031（2026-10-14，DeepSeek 官方 JSON Output）：七处 JSON 契约调用点（Planner 测试计划 / Debugger 补丁·严格重试·批评者·击穿用例·缺陷分类 / FaultLocalizer 定位）绑定 `response_format={"type":"json_object"}`（保证响应为合法 JSON 字符串）；`off` 恢复历史逐字节口径（旧批次复现）；已登记 env_budget 与 `_env_snapshot_keys`（批次 provenance 可审计） |

@@ -1243,3 +1243,116 @@ class TestSingletonThreadHygiene:
         assert result is not None
         mock_client_b.chat.completions.create.assert_called_once()
         assert "model_a -> model_b" in caplog.text
+
+
+# ════════════════════════════════════════════════════════════════════════════
+#  Section A15: 端点实例身份（同 model_name 多 provider 全保留）
+# ════════════════════════════════════════════════════════════════════════════
+
+
+@pytest.mark.unit
+class TestA15EndpointInstanceIdentity:
+    """A15（2026-10-18 第三方审查 P1）：节点/客户端以端点实例 ID 为键。
+
+    历史缺陷：`_client_cache[model_name]` / `health_nodes[model_name]`——同
+    model_name 两个 provider 配置后者覆盖前者（节点数、健康状态、客户端只剩
+    一个）。修复后两个端点实例全部保留、各有独立健康状态/客户端/选路；某模型
+    唯一实例时节点键仍沿用模型名（历史接口兼容）。
+    """
+
+    @staticmethod
+    def _add_same_model(mgr: APIManager) -> None:
+        mgr.add_node(LLMConfig("key-a", "https://a.example.com/v1", "shared-model"))
+        mgr.add_node(LLMConfig("key-b", "https://b.example.com/v1", "shared-model"))
+
+    def test_same_model_two_providers_both_kept(self):
+        mgr = _empty_mgr()
+        self._add_same_model(mgr)
+        assert len(mgr.health_nodes) == 2, "同 model_name 两个 provider 配置必须都保留"
+        assert len(mgr.get_all_nodes()) == 2
+        # 模型名是属性，不再是带歧义的节点键
+        assert {n.config.model_name for n in mgr.health_nodes.values()} == {"shared-model"}
+        keys = list(mgr.health_nodes)
+        assert all(key != "shared-model" for key in keys)
+        assert len(set(keys)) == 2
+        assert len(mgr._client_cache) == 2, "两个端点实例各自持有独立客户端"
+        status = mgr.get_status()
+        assert status["total_nodes"] == 2
+        assert len(status["nodes"]) == 2
+        assert len({info["node_id"] for info in status["nodes"].values()}) == 2
+        assert {info["model"] for info in status["nodes"].values()} == {"shared-model"}
+
+    def test_health_state_and_routing_independent(self):
+        mgr = _empty_mgr()
+        self._add_same_model(mgr)
+        victim, other = mgr.get_all_nodes()
+        for _ in range(victim.max_consecutive_failures):
+            victim.mark_failure("error")
+        assert victim.is_healthy is False
+        assert other.is_healthy is True, "同模型另一 provider 的健康状态不得被连带影响"
+        healthy = mgr.get_healthy_nodes()
+        assert other in healthy and victim not in healthy
+        assert mgr.select_node() is other
+        # 指定模型：健康实例优先进入首选序列，但故障实例仍保留为后续候选
+        nodes_to_try, _fallback = mgr._build_node_list("shared-model")
+        assert nodes_to_try[0] is other
+        assert victim in nodes_to_try
+
+    def test_call_falls_over_between_same_model_providers(self):
+        mgr = _empty_mgr()
+        self._add_same_model(mgr)
+        keys = list(mgr.health_nodes)
+        response = MagicMock()
+        failing = _mock_client(side_effect=RuntimeError("provider A down"))
+        healthy = _mock_client(return_value=response)
+        mgr._client_cache = {keys[0]: failing, keys[1]: healthy}
+        result = mgr.call(messages=[{"role": "user", "content": "hi"}], model="shared-model")
+        assert result is response
+        failing.chat.completions.create.assert_called_once()
+        healthy.chat.completions.create.assert_called_once()
+
+    def test_init_with_same_model_configs_keeps_both(self):
+        configs = [
+            LLMConfig("k1", "https://one.example.com/v1", "dup-model"),
+            LLMConfig("k2", "https://two.example.com/v1", "dup-model"),
+        ]
+        with patch("src.api.api_manager.LLM_CONFIGS", configs), patch("src.api.api_manager.openai.OpenAI"):
+            mgr = APIManager(enable_health_checker=False)
+        assert len(mgr.health_nodes) == 2
+        assert all(key != "dup-model" for key in mgr.health_nodes)
+        assert {n.config.model_name for n in mgr.health_nodes.values()} == {"dup-model"}
+
+    def test_single_instance_keeps_legacy_model_key(self):
+        """唯一实例时节点键仍为模型名（历史 get_status/取值接口兼容）。"""
+        mgr = _empty_mgr()
+        mgr.add_node(LLMConfig("k", "https://only.example.com/v1", "solo-model"))
+        assert "solo-model" in mgr.health_nodes
+        info = mgr.get_status()["nodes"]["solo-model"]
+        assert info["model"] == "solo-model"
+        assert info["node_id"].startswith("solo-model@")
+
+    def test_remove_node_by_id_removes_single_instance(self):
+        mgr = _empty_mgr()
+        self._add_same_model(mgr)
+        first_node = next(iter(mgr.health_nodes.values()))
+        node_id = mgr._endpoint_instance_id(first_node.config)
+        assert mgr.remove_node_by_id(node_id) is True
+        assert len(mgr.health_nodes) == 1
+        assert mgr.remove_node_by_id(node_id) is False
+
+    def test_remove_node_by_model_name_removes_all_instances(self):
+        mgr = _empty_mgr()
+        self._add_same_model(mgr)
+        assert mgr.remove_node("shared-model") is True
+        assert len(mgr.health_nodes) == 0
+        assert len(mgr._client_cache) == 0
+        assert mgr.remove_node("shared-model") is False
+
+    def test_same_config_added_twice_updates_in_place(self):
+        """同一端点实例重复注册：原地更新（历史"同配置覆盖"语义），不产生重复节点。"""
+        mgr = _empty_mgr()
+        config = LLMConfig("k", "https://same.example.com/v1", "same-model")
+        mgr.add_node(config)
+        mgr.add_node(LLMConfig("k", "https://same.example.com/v1", "same-model"))
+        assert len(mgr.health_nodes) == 1
+        assert "same-model" in mgr.health_nodes

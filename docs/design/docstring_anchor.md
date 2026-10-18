@@ -165,8 +165,12 @@ python experiments/build_docstring_anchor_table.py --union    # union 表
 
 L 轮三臂正式批判定 `not_confirmed`：**df 86.11%（31/36）/ doc 60.00%（21/35）
 / union 61.76%（21/34）**，doc vs df δ=−25.71pp（双向精确 p=0.0352）。
-doc/union 两条 replace 臂几乎重合、且都**移除了实现代码**——指向"代码移除"
-是检出损失主因，而非"锚不独立"。
+doc/union 两条 replace 臂几乎重合、且都**移除了实现代码**——**候选机制假设
+（待验证，A01 口径）**：检出损失或与"代码移除"有关；但"代码移除是检出损失
+主因、而非锚不独立"目前只有单批描述性证据支撑（replace 两臂重合），不足以
+完成因果归因，也不足以排除"锚不独立"——需机制消融验证后才可作为解释使用，
+不得表述为因果定论（详见 `docs/PROJECT_STATUS_REGISTER.md` M-4 行 2026-10-18
+修订与 `docs/reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-18.md` 文首勘误注记）。
 
 **增广是这一解释的直接可证伪预测**：保留完整缺陷代码，把人类规格锚作为
 **独立 prompt 段并列追加**（不替换代码）。

@@ -94,6 +94,61 @@ def _summarize(value: Any) -> Any:
     return value
 
 
+# ─── A20：结构感知脱敏（写盘前）──────────────────────────────────────────────
+# 历史实现把**已序列化的 JSON 行**整体交给文本脱敏（mask_sensitive_info）：
+# 该函数面向日志文本设计，其中的 `key=<value>` 赋值模式不做 JSON 结构感知，
+# 贪婪匹配可能吞掉行尾闭合引号/花括号，使 JSONL 单行不可解析（2026-10-14
+# EMSE ULT 探针轨迹第 10 行实测；损坏工件按"保留原字节 + 文档化勘误"处置）。
+# 现口径：序列化**之前**递归处理记录的键与字符串值（结构感知），序列化后
+# 仍由 TraceSession._append / dump_recent_to 的 json.loads 守卫兜底。
+# 脱敏语义与日志口径一致（同一 mask_sensitive_info 实现），不做二次派生。
+
+
+def _redact_json_value(value: Any, mask: Callable[[str], str]) -> Any:
+    """递归复制并脱敏任意 JSON 可表示结构（键与字符串值都过 mask）。
+
+    Args:
+        value: 任意值（dict / list / tuple / str / 标量 / 其他对象）。
+        mask: 文本脱敏函数（mask_sensitive_info 或 fallback 版）。
+
+    Returns:
+        脱敏后的新结构；非字符串标量原样返回；无法 JSON 表示的对象转为
+        mask(str(value))（避免 json.dumps 的 default=str 绕过脱敏）。
+    """
+    if isinstance(value, str):
+        return mask(value)
+    if isinstance(value, dict):
+        # 键同样过脱敏（凭证可能出现在 by_model 之类的映射键上）；JSON 合法
+        # 标量键（int/float/bool/None）保持原样，其余对象键转字符串后脱敏。
+        return {_redact_json_value(key, mask): _redact_json_value(item, mask) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_redact_json_value(item, mask) for item in value]
+    if isinstance(value, (int, float, bool)) or value is None:
+        return value
+    return mask(str(value))
+
+
+def _redact_record(record: dict[str, Any]) -> dict[str, Any]:
+    """返回记录的结构感知脱敏副本（不修改入参，键与字符串值均脱敏）。
+
+    脱敏模块不可用（理论上不会：纯标准库）时原样返回，与历史降级口径一致——
+    观测层脱敏失败不阻断写入，但会由调用方的 json.loads 结构守卫兜底。
+
+    Args:
+        record: 单条追踪事件 dict。
+
+    Returns:
+        脱敏后的新 dict（可安全 json.dumps 成一行合法 JSON）。
+    """
+    try:
+        from src.utils.logging_utils import mask_sensitive_info as _mask
+
+        return _redact_json_value(record, _mask)
+    except Exception:
+        logger.warning("追踪记录结构脱敏失败（降级原样序列化）", exc_info=True)
+        return record
+
+
 class TraceSession:
     """单任务的结构化追踪会话（JSONL 追加式记录）。
 
@@ -182,23 +237,29 @@ class TraceSession:
         # record_node 的 output 与 task_end 的 extra 亦在入口处摘要——
         # 此处不再二次摘要 meta（旧版浅拷贝 + 重建 meta dict 是冗余深处理），
         # 记录对象本身只读序列化，无副作用。
-        # 异常路径拆分（此前 except 同时吞 json.dumps 失败与脱敏 import 失败，
-        # 记录静默丢弃且无任何告警——观测层失败应可察觉）：序列化失败即丢弃
-        # 本条（记 warning），脱敏 import 失败则降级原样写入（不阻断主流程）。
+        #
+        # A20（2026-10-18 第三方审查，P2）：**必须先对记录结构脱敏、再序列化**。
+        # 历史实现先 json.dumps(record) 得到单行 JSON，再对**整行**调
+        # mask_sensitive_info；logging_utils 的 `key=<value>` 赋值模式（旧值字符类
+        # `.{8,}` 贪婪匹配到行尾）会把 JSON 行尾闭合引号/花括号一并吞掉，产出
+        # 非法 JSONL（实测：EMSE ULT 探针 2026-10-14 轨迹第 10 行，行尾停在
+        # `min(s, key=<REDACTED>`）。现改为逐字段递归脱敏（见 _redact_record），
+        # 序列化后再用 json.loads 做结构守卫——坏行丢弃并告警，绝不写坏 JSONL。
+        redacted = _redact_record(record)
         try:
-            line = json.dumps(record, ensure_ascii=False, default=str)
+            line = json.dumps(redacted, ensure_ascii=False, default=str)
         except Exception as e:
             # 自定义对象 __str__ 抛异常等场景：记录无法序列化，记 warning 后放弃
             logger.warning("追踪记录序列化失败（丢弃本条）: %s", e)
             return
+        # A20 结构完整性守卫：合法 JSONL 是该观测层对消费方的硬契约。
+        # 默认 json.dumps 的产物本应合法；此处兜底断言"脱敏链路没有破坏结构"，
+        # 不合法即丢弃（宁可少一条观测记录，也不写坏行污染整份轨迹）。
         try:
-            from src.utils.logging_utils import mask_sensitive_info
-
-            line = mask_sensitive_info(line)
-        except Exception:
-            # 脱敏不可用（理论上不会：纯标准库模块）时原样写入，
-            # 不阻断观测层主流程（与 logging_utils 三级降级末档同口径）
-            pass
+            json.loads(line)
+        except ValueError as e:
+            logger.warning("追踪记录脱敏后不是合法 JSON（丢弃本条，禁止写坏行）: %s", e)
+            return
         lock = self._lock_for(self._file_path)
         try:
             with lock, open(self._file_path, "a", encoding="utf-8") as f:
@@ -393,21 +454,22 @@ def dump_recent_to(target_dir: str, limit: int | None = None) -> str | None:
     # 而 dump_recent_to 是 --dump-trace-on-failure 的落盘出口——此前逐行
     # json.dumps 直写，把 sk-/URL 凭证原样写进 ./tmp_trace/*.jsonl，
     # 违反本模块"所有写入文本统一过 mask_sensitive_info"的契约
-    # （模块 docstring L22）。现与 _append 同口径逐行脱敏；脱敏模块
-    # 不可用时降级原样写入（与 _append 的降级档一致，不阻断诊断出口）。
-    try:
-        from src.utils.logging_utils import mask_sensitive_info as _mask_fn
-
-        _mask: Callable[[str], str] | None = _mask_fn
-    except Exception:
-        # 纯标准库模块，理论上不会失败；失败时降级为不脱敏（与 _append 口径一致）
-        _mask = None
+    # （模块 docstring L22）。
+    # A20（2026-10-18）：与 _append 同一路径——**先结构脱敏再序列化**（历史
+    # 做法是对已序列化整行 mask，可能吞掉 JSON 定界符产出坏行），写盘前逐行
+    # json.loads 结构守卫；不合法行丢弃并告警（诊断出口不得产出坏 JSONL）。
     try:
         with open(path, "w", encoding="utf-8") as f:
             for snap in recent:
                 for record in snap.get("records", []):
-                    line = json.dumps(record, ensure_ascii=False, default=str)
-                    f.write((_mask(line) if _mask is not None else line) + "\n")
+                    redacted = _redact_record(record)
+                    try:
+                        line = json.dumps(redacted, ensure_ascii=False, default=str)
+                        json.loads(line)
+                    except Exception as e:  # 诊断出口：坏行不落盘
+                        logger.warning("失败诊断快照记录非法 JSON（丢弃该行）: %s", e)
+                        continue
+                    f.write(line + "\n")
                 # 快照级收尾标记（非 TraceSession 事件，供诊断区分任务边界）
                 f.write(
                     json.dumps(

@@ -663,3 +663,115 @@ class TestStagnationArm:
         assert env_flag("COVERAGE_STALL_DETECT_ENABLE") is True
         rb._apply_stagnation_arm(disable=True)
         assert env_flag("COVERAGE_STALL_DETECT_ENABLE") is False
+
+
+class TestReproProvenanceGitSha:
+    """A03（2026-10-18 第三方审查 P1）：`.repro_provenance` 的 GIT_SHA 必须被消费。
+
+    评审证据：Dockerfile.repro 用 `--build-arg GIT_SHA` 把提交 SHA 写入
+    `/workspace/.repro_provenance`，而 `.dockerignore` 排除 `.git`——容器内
+    `git rev-parse HEAD` 必然失败；历史实现只检查 marker **是否存在**
+    （`environment.in_docker_repro`），从不读取 GIT_SHA，导致复现容器内
+    `provenance.git_sha=None`，"build-arg 使提交可追溯"落空。
+
+    修复口径（这些用例锁定）：
+    - 有 git：git HEAD 为来源，marker 值同时记录并校验一致性；
+    - 无 git（复现容器 / 源码包）：marker 的 GIT_SHA 作为 provenance 来源；
+    - 两者都无：git_sha=None 且来源=None（如实标注不可追溯）。
+    """
+
+    _MARKER_SHA = "0123456789abcdef0123456789abcdef01234567"
+
+    def _write_marker(self, directory, value: str | None = None) -> None:
+        content = f"GIT_SHA={self._MARKER_SHA if value is None else value}\n"
+        (directory / ".repro_provenance").write_text(content, encoding="utf-8")
+
+    @staticmethod
+    def _head_sha() -> str:
+        import subprocess
+
+        repo = rb.Path(rb.__file__).resolve().parent.parent
+        return subprocess.run(
+            ["git", "rev-parse", "HEAD"], capture_output=True, text=True, cwd=str(repo), timeout=10
+        ).stdout.strip()
+
+    def test_marker_git_sha_used_when_git_unavailable(self, tmp_path):
+        """复现容器场景（无 .git）：git_sha 来自 marker，来源如实标注。"""
+        self._write_marker(tmp_path)
+        block = rb._resolve_git_provenance(workspace_dir=tmp_path, repo_dir=tmp_path)
+        assert block["git_sha"] == self._MARKER_SHA
+        assert block["git_sha_source"] == "repro_provenance"
+        assert block["git_available"] is False
+        assert block["in_docker_repro"] is True
+        assert block["repro_provenance"]["present"] is True
+        assert block["repro_provenance"]["git_sha"] == self._MARKER_SHA
+        assert block["repro_provenance"]["git_sha_matches_git"] is None
+
+    def test_git_available_and_marker_consistent(self, tmp_path):
+        """有 git 且 marker 与 HEAD 一致：来源=git，一致性=True、无冲突。"""
+        head = self._head_sha()
+        assert head
+        self._write_marker(tmp_path, value=head)
+        block = rb._resolve_git_provenance(workspace_dir=tmp_path)
+        assert block["git_sha"] == head
+        assert block["git_sha_source"] == "git"
+        assert block["git_available"] is True
+        assert block["repro_provenance"]["git_sha_matches_git"] is True
+        assert block["repro_provenance"]["git_sha_conflict"] is False
+
+    def test_git_available_and_marker_mismatch_flagged(self, tmp_path):
+        """有 git 但 marker SHA 不同：记住两者并标记冲突（不得静默取一个）。"""
+        self._write_marker(tmp_path, value="deadbeef" * 5)
+        block = rb._resolve_git_provenance(workspace_dir=tmp_path)
+        assert block["git_sha"] == self._head_sha()
+        assert block["git_sha_source"] == "git"
+        assert block["repro_provenance"]["git_sha"] == "deadbeef" * 5
+        assert block["repro_provenance"]["git_sha_matches_git"] is False
+        assert block["repro_provenance"]["git_sha_conflict"] is True
+
+    def test_unknown_marker_value_is_not_used_as_sha(self, tmp_path):
+        """`ARG GIT_SHA` 缺省值 unknown 不是提交 SHA——不得写进 provenance。"""
+        self._write_marker(tmp_path, value="unknown")
+        block = rb._resolve_git_provenance(workspace_dir=tmp_path, repo_dir=tmp_path)
+        assert block["git_sha"] is None
+        assert block["git_sha_source"] is None
+        assert block["in_docker_repro"] is True  # 容器标记仍在
+        assert block["repro_provenance"]["git_sha"] is None
+
+    def test_no_marker_and_no_git(self, tmp_path):
+        """两者都不可用：如实标注 None，不伪造来源。"""
+        block = rb._resolve_git_provenance(workspace_dir=tmp_path, repo_dir=tmp_path)
+        assert block["git_sha"] is None
+        assert block["git_sha_source"] is None
+        assert block["in_docker_repro"] is False
+        assert block["repro_provenance"]["present"] is False
+
+    def test_environment_block_carries_source_fields(self, tmp_path):
+        """environment 块含 git_sha_source / repro_provenance（结果 JSON 可审计）。"""
+        self._write_marker(tmp_path)
+        env = rb._build_environment_provenance(
+            tmp_path, git_block=rb._resolve_git_provenance(tmp_path, repo_dir=tmp_path)
+        )
+        assert set(env) >= {
+            "python_version",
+            "platform",
+            "git_sha",
+            "git_sha_source",
+            "in_docker_repro",
+            "repro_provenance",
+        }
+        assert env["git_sha"] == self._MARKER_SHA
+        assert env["git_sha_source"] == "repro_provenance"
+        assert env["in_docker_repro"] is True
+        assert env["repro_provenance"]["git_sha"] == self._MARKER_SHA
+
+    def test_run_benchmark_wires_environment_and_provenance_blocks(self):
+        """静态接线守卫：run_benchmark 必须使用统一解析结果（防回退为存在性检查）。"""
+        import inspect
+
+        source = inspect.getsource(rb.run_benchmark)
+        assert "_build_environment_provenance" in source
+        assert '"git_sha_source": _git_block["git_sha_source"]' in source
+        assert '"repro_provenance": _git_block["repro_provenance"]' in source
+        # 旧实现的两个只查存在性的表达式不得回归
+        assert 'os.path.exists(os.path.join(os.getcwd(), ".repro_provenance"))' not in source

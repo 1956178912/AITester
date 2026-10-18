@@ -546,8 +546,13 @@ def _run_pytest_in_tmp(
         # orphan_guard 起一个父死亡看门狗（与 pytest 同进程组）：调用方消亡后
         # 0.1s 级检测并 killpg 回收本 pytest 进程组；超时路径仍由 killpg 整组回收。
         # 嵌套 pytest 命令自身不建新会话，故看门狗对新会话逃逸形态的边界不在此处触发。
+        # A08（2026-10-18 第三方评审 P0，凭证边界）：本子进程执行的是 LLM
+        # 生成测试 + 被测代码（不可信），此前只剔除宿主 pytest 配置，宿主
+        # LLM_*_API_KEY / OPENAI_API_KEY / AWS_* 等凭证随环境整体继承。改用
+        # 统一构造器 untrusted_exec_env（最小白名单 + 显式 overrides）——
+        # M1 判分是主基准必经路径，凭证不得进入被评判子进程。
         try:
-            from src.utils.process_utils import nested_pytest_env, run_with_timeout
+            from src.utils.process_utils import run_with_timeout, untrusted_exec_env
 
             res = run_with_timeout(
                 [
@@ -571,11 +576,12 @@ def _run_pytest_in_tmp(
                 text=True,
                 logger_name="m1_metrics",
                 orphan_guard=True,
-                # H 轮（2026-10-16）：改用 nested_pytest_env——裸 {**os.environ}
-                # 会把宿主 PYTEST_PLUGINS/PYTEST_ADDOPTS 带进嵌套运行，而 PYTHONPATH
-                # 已被覆盖成 tmpdir，宿主插件因此不可导入 → rc=1 被读成"测试红"
-                # → detection_gates 误判 over_red（实测复现，详见该函数文档串）。
-                env=nested_pytest_env(
+                # H 轮（2026-10-16）：剔除宿主 PYTEST_PLUGINS/PYTEST_ADDOPTS——
+                # 否则宿主插件在 PYTHONPATH=tmpdir 的嵌套运行里不可导入 → rc=1
+                # 被读成"测试红" → detection_gates 误判 over_red（实测复现，
+                # 详见 nested_pytest_env 文档串）。A08 起改走最小环境构造器：
+                # 宿主凭证同样不进入本子进程（覆盖 pytest 配置 + 凭证）。
+                env=untrusted_exec_env(
                     PYTHONDONTWRITEBYTECODE="1",
                     PYTHONPATH=pythonpath,
                 ),
@@ -677,6 +683,22 @@ def _gold_fixed_code(task: Any) -> str:
     return _target_code_after_patch(original_code, fixed)
 
 
+def _is_flaky_unverified(final_state: dict[str, Any] | None) -> bool:
+    """A16（2026-10-18 第三方评审）：该任务是否已观测到执行不稳定（fail→pass）。
+
+    背景：``nodes._executor_node`` 在重试层保留每次尝试记录后，若观察到同一
+    (target_code, generated_test) 先失败后通过（fail→pass），写
+    ``state["flaky_unverified"]=True``（与历史 flaky 门禁同字段语义）。
+    此时该任务的执行结果本身不确定，**全部 M1 指标按"不可测"（None）处理**，
+    不得用一次可能翻转的运行结果污染 detection / repair / false-fix 分母
+    （这正是 flaky_gate / state.py 文档承诺的"M1 不可测"口径；A16 修复前
+    该承诺只有标记、没有下游消费实现）。
+
+    缺失 / None / False → 视为非 flaky（历史批次零行为变化）。
+    """
+    return bool((final_state or {}).get("flaky_unverified"))
+
+
 def _compute_detection_rate(task: Any, final_state: dict[str, Any] | None) -> float | None:
     """M1 检出率（**fail-to-pass 三段判定**，SWT-Bench 口径）。
 
@@ -708,6 +730,10 @@ def _compute_detection_rate(task: Any, final_state: dict[str, Any] | None) -> fl
     ``llm_suite_detection_rate`` / ``oracle_suite_verdict`` 两键。
     """
     if final_state is None:
+        return None
+    if _is_flaky_unverified(final_state):
+        # A16：执行不稳定（fail→pass）→ 该任务检出结果不可测（None），
+        # 与 flaky_gate/state.py 的"M1 按不可测处理"承诺一致。
         return None
     mat = _extract_gold_material(task)
     if mat is None:
@@ -776,6 +802,9 @@ def _compute_test_error_rate(task: Any, final_state: dict[str, Any] | None) -> f
     """
     if final_state is None:
         return None
+    if _is_flaky_unverified(final_state):
+        # A16：执行不稳定 → 测试执行错误率同样不可测（None）。
+        return None
     mat = _extract_gold_material(task)
     if mat is None:
         return None
@@ -827,6 +856,9 @@ def _compute_repair_rate(task: Any, final_state: dict[str, Any] | None) -> float
     会被误判 repair=1.0；早退消除该假阳性。
     """
     if final_state is None:
+        return None
+    if _is_flaky_unverified(final_state):
+        # A16：执行不稳定（fail→pass）→ 修复率不可测（None），不得记 0/1。
         return None
     mat = _extract_gold_material(task)
     if mat is None:
@@ -884,6 +916,9 @@ def _compute_false_fix_rate(task: Any, final_state: dict[str, Any] | None) -> fl
     """
     if final_state is None:
         return None
+    if _is_flaky_unverified(final_state):
+        # A16：执行不稳定 → passed 本身不可信，假修复率不可测（None）。
+        return None
     mat = _extract_gold_material(task)
     if mat is None:
         return None
@@ -914,6 +949,9 @@ def _compute_regression_rate(task: Any, final_state: dict[str, Any] | None) -> f
     SWE-bench / 无 P2P 材料 → None。
     """
     if final_state is None:
+        return None
+    if _is_flaky_unverified(final_state):
+        # A16：执行不稳定 → 回归率不可测（None）。
         return None
     mat = _extract_gold_material(task)
     if mat is None:
@@ -984,6 +1022,9 @@ def _compute_oracle_suite_verdict(task: Any, final_state: dict[str, Any] | None)
     """
     if final_state is None:
         return "unavailable"
+    if _is_flaky_unverified(final_state):
+        # A16：执行不稳定 → oracle 独立判定同样不可测（fail-closed unavailable）。
+        return "unavailable"
     mat = _extract_gold_material(task)
     if mat is None:
         return "unavailable"
@@ -1044,6 +1085,9 @@ def build_m1_task_metrics(task: Any, final_state: dict[str, Any] | None) -> dict
     2026-09-30 独立审查 N1：新增 test_error_rate（测试执行错误率，
     坏测试直接防线）；detection_rate 改 F2P 三段判定。
     2026-09-30 独立审查 R4：新增 regression_rate（修复引入回归观测）。
+    2026-10-18 第三方评审 A16（P1）：新增 flaky_unverified / flaky_detected
+    透传键；观测到执行不稳定（fail→pass）时全部 M1 指标按不可测（None）
+    处理——修复前 state.py / flaky_gate.py 只有该承诺，没有下游消费实现。
     """
     detection_rate: float | None = None
     repair_rate: float | None = None
@@ -1054,7 +1098,12 @@ def build_m1_task_metrics(task: Any, final_state: dict[str, Any] | None) -> dict
     # 历史逐位一致、oracle 判定为 unavailable 且零子进程成本）。
     llm_suite_detection_rate: float | None = None
     oracle_suite_verdict = "unavailable"
+    # A16：flaky 标记原值透传（None = 历史批次/未启用；True = 观测到不稳定）。
+    flaky_unverified: bool | None = None
+    flaky_detected: bool | None = None
     if final_state is not None:
+        flaky_unverified = final_state.get("flaky_unverified")
+        flaky_detected = final_state.get("flaky_detected")
         detection_rate = _compute_detection_rate(task, final_state)
         llm_suite_detection_rate = detection_rate  # 同一实现/同一次判定
         oracle_suite_verdict = _compute_oracle_suite_verdict(task, final_state)
@@ -1067,6 +1116,8 @@ def build_m1_task_metrics(task: Any, final_state: dict[str, Any] | None) -> dict
         final_state is not None
         and bool(final_state.get("test_passed"))
         and int(final_state.get("regeneration_count", 0)) > 0
+        # A16：执行不稳定时"重生成后通过"同样不可信，不得记假通过标记。
+        and not _is_flaky_unverified(final_state)
     ):
         test_regenerated_pass_unverified = True
     return {
@@ -1080,4 +1131,7 @@ def build_m1_task_metrics(task: Any, final_state: dict[str, Any] | None) -> dict
         "test_error_rate": test_error_rate,
         "regression_rate": regression_rate,
         "test_regenerated_pass_unverified": test_regenerated_pass_unverified,
+        # A16：flaky 执行证据透传（键集合同构；历史批次为 None）
+        "flaky_unverified": flaky_unverified,
+        "flaky_detected": flaky_detected,
     }

@@ -9,6 +9,7 @@ import json
 import os
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -337,19 +338,18 @@ class TestGetAllApiConfigs:
 def _cache_file_for(user_message: str, system_prompt: str, cache_dir) -> Path:
     """计算给定消息对应的缓存文件路径（与 base_agent 实现同步，用于测试预置/断言）。
 
-    R13（2026-09-30 独立审查 P0）：跨模型缓存隔离默认开启
-    （AITESTER_CACHE_ISOLATE_MODEL 默认 "1"），键材料追加
-    "\x00m{model}"——与 base_agent._call_llm_with_cache 的 M8 隔离
-    逻辑同口径（取 llm_client.get_first_valid_model_name() 当前配置链
-    首个有效模型名；无配置时不追加）。
+    A09（2026-10-18 第三方审查 P1）：缓存键 = user_message + system_prompt +
+    规范化有效请求身份（实际生效温度/thinking/reasoning/max_tokens/JSON 绑定/
+    模型/端点/namespace）。本 helper 直接复用生产 helper 的同一套材料，
+    保证测试与实现不漂移（旧实现手抄"仅 prompt+system+model"公式已过期）。
     """
-    key = f"{user_message}\x00{system_prompt}"
-    from src.agents.llm_client import get_first_valid_model_name
+    from src.agents import base_agent as _ba
 
-    model = get_first_valid_model_name()
-    if model:
-        key = f"{key}\x00m{model}"
-    digest = hashlib.md5(key.encode()).hexdigest()[:16]
+    identity = _ba._effective_request_identity(None, False)
+    from src.agents.llm_client import request_identity_material
+
+    material = f"{user_message}\x00{system_prompt}\x00id:{request_identity_material(identity)}"
+    digest = hashlib.md5(material.encode()).hexdigest()[:16]
     return Path(cache_dir) / f"{digest}.json"
 
 
@@ -450,6 +450,11 @@ class TestCallLlmWithCache:
             agent._call_llm = MagicMock(return_value="live response")
             # 预置一条"语义近似"的缓存文件（不同文件名 = 精确缓存未命中）
             seeded = cache_env / "seeded_semantic.json"
+            # A09：新格式缓存条目携带 request_identity（语义索引按身份分区），
+            # 手工预置的旧格式条目不会进入任何身份分区（旧文件不误命中）。
+            from src.agents import base_agent as _ba
+
+            _identity = _ba._effective_request_identity(None, False)
             seeded.write_text(
                 json.dumps(
                     {
@@ -457,6 +462,7 @@ class TestCallLlmWithCache:
                         "system": "sys prompt",
                         "response": "semantic response",
                         "tokens": 777,
+                        "request_identity": _identity,
                     }
                 ),
                 encoding="utf-8",
@@ -864,3 +870,202 @@ class TestGetLlmConfigIntegration:
         assert api_key == "real_key"
         assert base_url == "https://api.example.com/v1"
         assert model_name == "example-model"
+
+
+# ─── A10（2026-10-18 第三方审查 P1）：线程局部配置接入生产请求链 ───────────────
+
+
+@pytest.mark.unit
+class TestA10ThreadLocalRequestChain:
+    """生产 `_call_llm` 必须优先使用线程局部指定配置（任务分配生效），失败仍按
+    全局链故障转移；缓存/provenance 标签取真实请求身份。"""
+
+    @staticmethod
+    def _set_thread_api(monkeypatch: pytest.MonkeyPatch, api_key: str, base_url: str, model: str) -> None:
+        from src.agents import llm_client as lc
+
+        monkeypatch.setattr(lc._thread_local, "api_key", api_key, raising=False)
+        monkeypatch.setattr(lc._thread_local, "base_url", base_url, raising=False)
+        monkeypatch.setattr(lc._thread_local, "model_name", model, raising=False)
+
+    @staticmethod
+    def _set_global_configs(monkeypatch: pytest.MonkeyPatch, configs: list) -> None:
+        from src.agents import llm_client as lc
+
+        monkeypatch.setattr(lc, "LLM_CONFIGS", configs)
+
+    @staticmethod
+    def _new_agent() -> BaseAgent:
+        with patch("src.agents.base_agent._get_or_create_chat_client", lambda *a, **k: SimpleNamespace()):
+            return BaseAgent("sys prompt")
+
+    def test_get_all_api_configs_prefers_thread_local(self, monkeypatch: pytest.MonkeyPatch):
+        from config import LLMConfig
+        from src.agents import llm_client as lc
+
+        self._set_global_configs(
+            monkeypatch,
+            [LLMConfig("global-key", "https://global.example/v1", "global-model")],
+        )
+        self._set_thread_api(monkeypatch, "b-key", "https://b.example/v1", "model-B")
+        assert lc._get_all_api_configs() == [
+            ("b-key", "https://b.example/v1", "model-B"),
+            ("global-key", "https://global.example/v1", "global-model"),
+        ]
+
+    def test_get_all_api_configs_dedupes_identical_override(self, monkeypatch: pytest.MonkeyPatch):
+        from config import LLMConfig
+        from src.agents import llm_client as lc
+
+        cfg = LLMConfig("k", "https://a.example/v1", "m")
+        self._set_global_configs(monkeypatch, [cfg])
+        self._set_thread_api(monkeypatch, "k", "https://a.example/v1", "m")
+        assert lc._get_all_api_configs() == [("k", "https://a.example/v1", "m")]
+
+    def test_incomplete_override_without_global_does_not_inject_broken_config(self, monkeypatch: pytest.MonkeyPatch):
+        from src.agents import llm_client as lc
+
+        self._set_global_configs(monkeypatch, [])
+        monkeypatch.setattr(lc._thread_local, "api_key", "b-key", raising=False)
+        assert lc._get_all_api_configs() == [], "缺 base_url/model 的半截覆盖不得进入请求链"
+
+    def test_production_call_uses_thread_local_endpoint_first(self, monkeypatch: pytest.MonkeyPatch):
+        from config import LLMConfig
+
+        self._set_global_configs(
+            monkeypatch,
+            [LLMConfig("global-key", "https://global.example/v1", "global-model")],
+        )
+        self._set_thread_api(monkeypatch, "b-key", "https://b.example/v1", "model-B")
+        from src.agents import base_agent as ba
+
+        monkeypatch.setattr(ba, "_is_zai_compatible", lambda url: False)
+        seen: list[tuple[str, str, str]] = []
+
+        def _get_client(model: str, temperature: float, api_key: str, base_url: str):
+            seen.append((model, api_key, base_url))
+            return SimpleNamespace(
+                invoke=lambda messages, **kwargs: SimpleNamespace(
+                    content="B 端点响应", response_metadata={"finish_reason": "stop"}, usage_metadata=None
+                )
+            )
+
+        monkeypatch.setattr(ba, "_get_or_create_chat_client", _get_client)
+        agent = self._new_agent()
+        assert agent._call_llm("问题") == "B 端点响应"
+        assert seen[0] == ("model-B", "b-key", "https://b.example/v1"), "首个真实请求必须发往线程局部指定端点 B"
+
+    def test_thread_local_primary_failure_falls_back_to_global_chain(self, monkeypatch: pytest.MonkeyPatch):
+        from config import LLMConfig
+        from src.agents import base_agent as ba
+
+        self._set_global_configs(
+            monkeypatch,
+            [LLMConfig("global-key", "https://global.example/v1", "global-model")],
+        )
+        self._set_thread_api(monkeypatch, "b-key", "https://b.example/v1", "model-B")
+        monkeypatch.setattr(ba, "_is_zai_compatible", lambda url: False)
+        monkeypatch.setattr("time.sleep", lambda s: None)
+        seen: list[str] = []
+
+        def _get_client(model: str, temperature: float, api_key: str, base_url: str):
+            seen.append(model)
+            if model == "model-B":
+
+                def _boom(messages, **kwargs):
+                    raise RuntimeError("B 端点不可用（模拟）")
+
+                return SimpleNamespace(invoke=_boom)
+            return SimpleNamespace(
+                invoke=lambda messages, **kwargs: SimpleNamespace(
+                    content="全局端点恢复", response_metadata={"finish_reason": "stop"}, usage_metadata=None
+                )
+            )
+
+        monkeypatch.setattr(ba, "_get_or_create_chat_client", _get_client)
+        agent = self._new_agent()
+        assert agent._call_llm("问题", max_retries=0) == "全局端点恢复"
+        assert seen == ["model-B", "global-model"], "线程局部端点失败后仍按既定全局链故障转移"
+
+    def test_cache_identity_and_provenance_use_real_request_identity(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ):
+        """A10+A09：首选 B 失败、全局 A 成功时——缓存键/请求身份是 B，
+        响应来源（provenance）记录真实成功的 A。"""
+        from config import LLMConfig
+        from src.agents import base_agent as ba
+
+        cache_dir = tmp_path / "cache_a10"
+        monkeypatch.setenv("AITESTER_CACHE_ISOLATE_MODEL", "1")
+        monkeypatch.delenv("AITESTER_CACHE_NAMESPACE", raising=False)
+        monkeypatch.delenv("LLM_THINKING_MODE", raising=False)
+        monkeypatch.setenv("LLM_MAX_OUTPUT_TOKENS", "")
+        monkeypatch.setattr(ba, "_llm_cache_enabled", lambda: True)
+        monkeypatch.setattr(ba, "_llm_cache_dir", lambda: str(cache_dir))
+        self._set_global_configs(
+            monkeypatch,
+            [LLMConfig("global-key", "https://global.example/v1", "global-model")],
+        )
+        self._set_thread_api(monkeypatch, "b-key", "https://b.example/v1", "model-B")
+        monkeypatch.setattr(ba, "_is_zai_compatible", lambda url: False)
+        monkeypatch.setattr("time.sleep", lambda s: None)
+        ba.clear_llm_lru_cache()
+
+        def _get_client(model: str, temperature: float, api_key: str, base_url: str):
+            if model == "model-B":
+
+                def _boom(messages, **kwargs):
+                    raise RuntimeError("B 端点不可用（模拟）")
+
+                return SimpleNamespace(invoke=_boom)
+            return SimpleNamespace(
+                invoke=lambda messages, **kwargs: SimpleNamespace(
+                    content="A 端点响应", response_metadata={"finish_reason": "stop"}, usage_metadata=None
+                )
+            )
+
+        monkeypatch.setattr(ba, "_get_or_create_chat_client", _get_client)
+        agent = self._new_agent()
+        assert agent._call_llm_with_cache("标签问题", max_retries=0) == "A 端点响应"
+        identity = ba._effective_request_identity(None, False)
+        assert identity["model"] == "model-B", "缓存标签必须取真实请求链首选身份 B（A10 修复前取全局 A）"
+        cache_file = ba._exact_cache_file(identity, "标签问题", agent.system_prompt)
+        payload = json.loads(Path(cache_file).read_text(encoding="utf-8"))
+        assert payload["request_identity"]["model"] == "model-B"
+        assert payload["response_identity"]["model"] == "global-model", "provenance 必须记录真实成功的端点"
+        ba.clear_llm_lru_cache()
+
+
+@pytest.mark.unit
+class TestA11ZaiUsageAccounting:
+    """A11：zai 路径收到响应立即记账，再做空响应可用性判定。"""
+
+    @patch("src.agents.llm_client._get_or_create_zai_client")
+    def test_zai_usage_recorded_before_empty_response_raise(self, mock_factory):
+        from src.budget.token_usage import get_usage, reset
+
+        reset()
+        client = MagicMock()
+        message = MagicMock()
+        message.content = ""
+        message.reasoning_content = None
+        response = SimpleNamespace(
+            choices=[SimpleNamespace(message=message)],
+            usage=SimpleNamespace(prompt_tokens=8, completion_tokens=2),
+        )
+        client.chat.completions.create.return_value = response
+        mock_factory.return_value = client
+
+        with pytest.raises(RuntimeError, match="zai API 调用失败"):
+            _call_zai(
+                api_key="k",
+                base_url="https://open.bigmodel.cn/api",
+                model_name="glm-4.7-flash",
+                system_prompt="s",
+                user_message="u",
+                max_retries=0,
+            )
+        usage = get_usage()
+        assert usage.total_tokens == 10, "A11：空响应的 usage 必须先入账再抛错"
+        assert usage.llm_calls == 1
+        reset()

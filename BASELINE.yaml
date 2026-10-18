@@ -11,10 +11,10 @@
 #   - 过期内容不得就地标注在本文件，历史快照归 docs/history/。
 
 version: "1"
-last_verified: "2026-10-18"   # 全量回归实测日期（U 轮收口批次，CI 同口径）：collected **8961** = passed **8956** + skipped 5 + failed 0（正常环境实测 176.43s，coverage 同轮采集）；沙箱宿主实测 8942 passed / 19 skipped / 0 failed（774.71s）。此前 P3 批次 8946；T 轮 8934；S 轮 8846/8841）
+last_verified: "2026-10-18"   # 全量回归实测日期（V 轮：第三方评审 23 项修复后的终态，CI 同口径）：collected **9130** = passed **9125** + skipped 5 + failed 0（xdist -n 4 loadfile；V 轮净增 169 例：新文件 test_untrusted_exec_env.py 34 / test_windows_process_termination.py 16 / test_trace_jsonl_integrity.py 15，既有文件内新增/参数化 +104）。此前 U 轮 collected 8961 = 8956 + 5；沙箱宿主口径见 tests.total_failed 注释。
 
 tests:
-  total_passed: 8956          # 全量 pytest tests/（2026-10-18 U 轮收口实测：collected **8961**，**8956 passed / 5 skipped / 0 failed**，176.43s；登记口径 = collected − skipped（正常环境 5）。净增构成：T 轮 +88 例 + 第三轮独立评审收口批次 +14 例（P3 校验器回归锁 12 + 消费关对偶用例 2）+ D3b Step A +13 例（`tests/test_cross_file_plan_wiring.py`）。此前 P3 批次登记 8941）
+  total_passed: 9125          # 全量 pytest tests/（2026-10-18 V 轮第三方评审修复后实测：collected **9130**，**9125 passed / 5 skipped / 0 failed**；登记口径 = collected − skipped（正常环境 5）。V 轮净增 169 例来自 A08/A12（凭证隔离 + Windows 回收）、A06/A07（簇映射 + 最新 None 配对）、A09/A10/A11/A15/A22/A23（缓存身份/路由/记账/节点身份/检索计数/LRU）、A13/A14/A16（执行依赖/发行缺包/fail→pass 证据）、A02/A03/A17/A18/A19/A20（复现入口/来源追踪/校验清单/损坏工件）、A01/A04/A05/A21（文档口径）的回归锁。此前 U 轮 8956）
   # T 轮新增/更新用例来源：test_t_round_semantic_fixes.py 34 / test_spec_smt_result_alias.py 12 /
   # test_smt_witness_batch.py 8 / test_examples_multisample.py 23→39（+16）/ test_batch_quota_preflight.py
   # QuotaProbe 7 / test_checksum_results_gate.py 路径归一 4 / test_e2e_probes_logic.py 2 探针 2 负控 / 既有两例更新。
@@ -24,7 +24,7 @@ tests:
   total_skipped: 5           # 2026-10-16 实测 5〔含 3 可选依赖缺失优雅跳过 + 1〔test_ult_adapter cosmic-ray 在场时"不可用口径不可演练"反跳〕+ 1 新增来源待定位〕
   total_xfailed: 0           # 2026-10-15：上一批次登记的 strict xfail（`parse_coverage` 小写 total 回退失效）已随缺陷修复解除；套件重新回到零 xfail。历史：2026-10-12 推导式变量误杀修复后转正 → 本批为第二轮零 xfail
   slim_environment: 1863     # 上一次精简环境实测（2026-10-05 N 批次；此后续批次未重测精简环境——新增用例均为纯 stdlib 或仅依赖既有可选依赖口径）
-  suite_seconds: 176           # 全量耗时：U 轮收口全量本机实测 176.43s（xdist -n 4 loadfile + `--cov=src --cov-branch`，COVERAGE_FILE 隔离；含覆盖率采集开销）。
+  suite_seconds: 184           # 全量耗时：V 轮修复后全量本机实测 184.00s（xdist -n 4 loadfile + `--cov=src --cov-branch`，COVERAGE_FILE 隔离；含覆盖率采集开销）。
 
 # ⚠️ 口径澄清（R5 审查 2026-10-09，MET-01）：本节是 **meta_coverage**——
 #   即 AITester **自身源码**（--cov=src）的测试覆盖率，不是被测代码的覆盖率。
@@ -32,7 +32,7 @@ tests:
 #   ULT/TOSEM'26）中的 "coverage" 一律指**被测代码**。对外引用必须显式区分；
 #   被测代码覆盖率见下方 target_quality 节。
 coverage:                    # = meta_coverage（项目自身源码），勿与 target_quality 混用
-  line_total_pct: 96.53      # --cov=src 总行覆盖（**CI ubuntu 3.14 实测** 2026-10-18 首次真实 CI〔17501/18131 = 96.5308%〕；ratchet 水位 96.4 不变，余量 +0.13pp。本地 macOS 3.14 同轮实测 96.55%（17506/18131）——跨平台差 0.02pp；登记册对账容差 U 轮起 ±0.20pp（原 ±0.10pp 被实测跨平台分支差 0.13pp 超出，见 `scripts/gates/check_artifact_doc_consistency.py` 注释））
+  line_total_pct: 96.48      # --cov=src 总行覆盖（**2026-10-18 V 轮第三方审查修复后本地 macOS 3.14 实测**〔17883/18535 = 96.4823%〕；基线：U 轮 CI ubuntu 3.14 实测 96.53%（17501/18131），跨平台差历史 ≤0.13pp，待 V 轮推送后按 CI 校准。ratchet 水位 96.4 不变，余量 +0.08pp；登记册对账容差 ±0.20pp，见 `scripts/gates/check_artifact_doc_consistency.py` 注释）
   line_core_modules:         # 逐模块行覆盖（%，coverage.xml 实测四舍五入；**本地 macOS 3.14 快照**——CI ubuntu 逐模块值未采集，跨平台总差见上）。2026-10-16 I 轮逐项复核：**10 项中 1 项变动**（planner 98 → **100**，I 轮新增的 3 个写侧测试收复了 `planner.py:352/379`——即 ADR-0032 决策 2「Planner M10 归因改写」的写侧，此前**从未被任何测试执行过**）；graph_nodes 仍记 78，但其分数由 0.7776 升至 0.7789（分母 +4，见该行注）。其余 8 项 0 变动。G 轮复核记录：10 项中 1 项变动（dependency 95 → 96）；F 轮回填时的存量漂移记录：
                              # 本节此前为早期批次快照，10 项中 9 项已低于实测 3–14pp（如
                              # code_analyzer 记 89 / 实测 99、rag_retriever 记 86 / 实测 98），
@@ -40,17 +40,17 @@ coverage:                    # = meta_coverage（项目自身源码），勿与 
     # T 轮（2026-10-18，审计 P0-04）：全部按 coverage.xml 实测刷新（此前 4 项声明
     # 100%/1.0000 被同节引用的产物推翻——"文档高于工件"；任何"核心路由函数子集 100%"
     # 类主张必须另给可复算命令与函数级分母，不得用逐文件 100% 替代）。
-    base_agent: 98.80        # agents/base_agent.py（329/333；branch 97.22%）
-    api_manager: 100.00      # api/api_manager.py（459/459；branch 96.91%）
+    base_agent: 97.67        # agents/base_agent.py（378/387；branch 94.62%——V 轮 A09/A10/A11/A23 新增缓存身份/请求链/记账/LRU 逻辑后按 coverage.xml 实测刷新）
+    api_manager: 98.87       # api/api_manager.py（523/529；branch 95.26%——V 轮 A15 端点实例 ID 节点身份重构后按 coverage.xml 实测刷新）
     dataset_loader: 93.85    # datasets/dataset_loader.py（290/309；branch 86.46%）
-    graph_nodes: 99.87       # graph/nodes.py（746/747；branch 99.04%——J-4 后仅 1 行未覆盖）
+    graph_nodes: 99.87       # graph/nodes.py（772/773；branch 99.04%——V 轮 A16 fail→pass 消费/new 护栏后分母 +26、仍仅 1 行未覆盖）
     code_analyzer: 99.38     # tools/code_analyzer.py（160/161；branch 93.75%）
     planner: 99.09           # agents/planner.py（109/110；branch 91.67%——原"1.0000/91 行"系过期分母，实测分母 110）
     dependency: 96.26        # tools/dependency.py（309/321；branch 90.74%）
     multi_candidate: 98.67   # tools/multi_candidate.py（296/300；branch 94.26%）
     cross_file: 92.98        # tools/cross_file.py（278/299；branch 84.78%——U 轮 D3b Step A 新增 21 行后按 coverage.xml 实测刷新）
     rag_retriever: 98.10     # rag/retriever.py（207/211；branch 98.57%）
-  branch_total_pct: 92.66  # --cov=src --cov-branch（**CI ubuntu 3.14 实测** 2026-10-18 首次真实 CI〔6273/6770 = 92.6588%〕；ratchet 水位 92.5 不变，余量 +0.16pp。本地 macOS 3.14 同轮 92.79%（6282/6770）——**跨平台差 0.13pp**（9 条平台专属分支），故登记册对账容差校准为 ±0.20pp；T 轮同口径为 92.80%（6275/6762））
+  branch_total_pct: 92.71  # --cov=src --cov-branch（**2026-10-18 V 轮第三方审查修复后本地 macOS 3.14 实测**〔6406/6910 = 92.7062%〕；基线：U 轮 CI ubuntu 3.14 实测 92.66%（6273/6770）、macOS 92.79%，跨平台差 0.13pp，符号对账容差 ±0.20pp；ratchet 水位 92.5 不变，余量 +0.21pp）
   branch_core_routing:       # 核心条件路由模块分支覆盖（scripts/gates/check_branch_coverage.py 门槛 85%）
     # T 轮（2026-10-18，审计 P0-04）：按 coverage.xml 实测刷新（此前两项声明 1.0000 被产物推翻）。
     graph_workflow: 99.17   # _should_debug / _route_after_diagnosis / determine_stop_reason 条件路由（branch 实测；行覆盖 361/362=99.72%）

@@ -19,7 +19,8 @@
 McNemar / t 检验表保持不变，本模块只新增"贝叶斯配对分析"章节。
 
 配对口径：与 statistical_analysis._pair_by_task 完全同语义
-（task_id 首见去重〔调用方保证最新批次在前〕、field 值 None 跳过、
+（task_id 最新批次优先去重〔调用方保证最新批次在前〕→ **再去重结果上**
+排除 field 值 None〔A07：最新记录不可测 = 该任务整体不可测，不回退旧值〕，
 真值 → 1 / 假值 → 0），由 tests/test_z_batch.py 的等价性用例锁定，
 不依赖 import（避免 statistical_analysis ↔ 本模块循环依赖）。
 
@@ -54,17 +55,25 @@ def paired_contingency(
 ) -> dict[str, int]:
     """按 task_id 配对并统计 2×2 列联表计数。
 
-    语义与 statistical_analysis._pair_by_task 一致（首见去重 / None 跳过 /
-    真值→1）；返回 {"n_common", "n11", "n01", "n10", "n00"}
-    （n01 = A=1 且 B=0，n10 = A=0 且 B=1，与 mcnemar_test 的命名对齐）。
+    语义与 statistical_analysis._pair_by_task 一致：task_id 最新批次优先
+    去重（首见胜出）→ 在去重结果上排除 None（不可测；A07：最新记录不可测
+    时该任务整体不可测，不得回退更早的测量值）→ 真值 1/假值 0；返回
+    {"n_common", "n11", "n01", "n10", "n00"}（n01 = A=1 且 B=0，
+    n10 = A=0 且 B=1，与 mcnemar_test 的命名对齐）。
     """
 
     def _dedup(rows: list[dict]) -> dict[str, int]:
-        seen: dict[str, int] = {}
+        """最新批次优先去重（不看 field 值占位）→ 再排除 None（A07）。"""
+        latest: dict[str, dict] = {}
         for r in rows:
             tid = r.get("task_id")
-            if not tid or tid in seen:
+            if not tid or tid in latest:
                 continue
+            # 首见 = 最新批次（调用方排序保证）；即使该行不可测也占位，
+            # 防止旧批次的可测值顶替最新 None。
+            latest[tid] = r
+        seen: dict[str, int] = {}
+        for tid, r in latest.items():
             val = r.get(field)
             if val is None:
                 continue

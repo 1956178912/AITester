@@ -20,6 +20,15 @@
 （SEMANTIC_CACHE_ENABLE，默认 false）——污染检测是"检测"语义，
 语义缓存是"复用"语义，互不影响。
 
+A09（2026-10-18 第三方审查 P1）：**按有效请求身份分区**。索引条目记录
+写入时的规范化请求身份指纹（模型/端点/有效温度/thinking/reasoning/
+max_output/JSON 实际生效值/namespace，见 base_agent._effective_request_identity
+与 llm_client.request_identity_fingerprint），查找只在同一分区内做相似度
+匹配——修复历史缺陷：`index.find(prompt)` 在全索引上匹配，同一 user_message
+的向量相似度可为 1，切模型/seed/参数后仍复用旧响应（跨身份串味）。
+旧格式缓存文件无身份字段 → 以自身 cache_file 作分区（只可能被同一精确缓存
+键命中），不会误入任何新身份分区（"旧文件不误命中"）。
+
 开关（环境变量，调用期读取，保留测试的 patch.dict 切换能力）：
     SEMANTIC_CACHE_ENABLE    默认 false（开启语义级匹配）
     SEMANTIC_CACHE_THRESHOLD 余弦阈值，默认 0.92（保守：宁可漏命中不可误命中）
@@ -66,20 +75,33 @@ def _max_index_entries() -> int:
 
 @dataclass
 class _SemanticEntry:
-    """语义索引条目：一个缓存文件的嵌入向量 + 响应文本。"""
+    """语义索引条目：一个缓存文件的嵌入向量 + 响应文本 + 身份分区键。"""
 
     cache_file: str
     prompt: str
     response: str
     embedding: list[float] = field(default_factory=list)
+    # A09（2026-10-18 第三方审查 P1）：有效请求身份分区键——同一身份才允许
+    # 语义复用；跨模型/system/参数/seed 的条目绝不参与彼此的相似度匹配。
+    identity_key: str = ""
 
 
 class SemanticCacheIndex:
-    """进程内语义缓存索引（嵌入向量 + 余弦命中判定）。
+    """进程内语义缓存索引（嵌入向量 + 余弦命中判定，按请求身份分区）。
 
     设计约束：
     - 索引只增不删（进程生命周期内）；同 cache_file 重复 upsert 时
       更新向量（嵌入后端切换场景），键唯一；
+    - **身份分区（A09）**：每条目记录其写入时的有效请求身份键
+      （`identity_key`，由 base_agent 的规范化身份指纹派生）；`find` 只在
+      调用方给定分区内做相似度比较——历史实现 `index.find(prompt)` 在全
+      索引上找余弦相似项，同 prompt 向量相似度可为 1，切模型/seed 后仍
+      复用旧身份响应（跨身份串味）。`identity_key=None`（低层直调/旧文件）
+      时退化为按 cache_file 自身分区（最严格：不可能跨 cache_file 命中），
+      身份分区的强制入口是 `find_semantic_cache()`；
+    - 未显式提供 identity_key 的 upsert（旧文件 / 直调）以 cache_file 作为
+      分区键——对旧格式缓存条目而言这是安全的（只可能被同一精确缓存键命中），
+      且不会误入任何"身份充足"的新分区；
     - 命中判定 O(N·D)（N = 索引条目数 ≤ SEMANTIC_CACHE_MAX_ENTRIES，
       D = 向量维度 ~384-768）：N=256、D=768 时约 20 万次乘法，
       纯 Python ~几十 ms，相比一次 LLM 调用（秒级）可接受；
@@ -112,8 +134,26 @@ class SemanticCacheIndex:
             self._misses = 0
             self._embed_failures = 0
 
-    def upsert(self, cache_file: str, prompt: str, response: str) -> bool:
-        """把缓存条目做嵌入后加入索引（嵌入失败时记统计并返回 False）。"""
+    def upsert(
+        self,
+        cache_file: str,
+        prompt: str,
+        response: str,
+        identity_key: str | None = None,
+    ) -> bool:
+        """把缓存条目做嵌入后加入索引（嵌入失败时记统计并返回 False）。
+
+        Args:
+            cache_file: 条目归属的精确缓存文件路径（索引键，必须唯一）。
+            prompt: 写入时的 user_message。
+            response: 缓存响应文本。
+            identity_key: A09 有效请求身份分区键；None 时退化为以 cache_file
+                作为分区键（旧文件 / 低层直调的安全默认——只可能被同一精确
+                缓存键自身命中，不会跨身份误命中）。
+
+        Returns:
+            True = 入索引成功；False = 语义缓存关闭 / 空材料 / 嵌入不可用。
+        """
         if not _semantic_cache_enabled():
             return False
         if not prompt or not response:
@@ -128,15 +168,22 @@ class SemanticCacheIndex:
             return False
         with self._lock:
             self._entries[cache_file] = _SemanticEntry(
-                cache_file=cache_file, prompt=prompt, response=response, embedding=vec
+                cache_file=cache_file,
+                prompt=prompt,
+                response=response,
+                embedding=vec,
+                identity_key=identity_key if identity_key is not None else cache_file,
             )
         return True
 
-    def find(self, prompt: str) -> tuple[str, str] | None:
-        """按语义相似度查找缓存响应。
+    def find(self, prompt: str, identity_key: str | None = None) -> tuple[str, str] | None:
+        """按语义相似度查找缓存响应（A09：仅在指定请求身份分区内匹配）。
 
         Args:
             prompt: 当前 LLM 调用的 user_message 文本。
+            identity_key: 请求身份分区键（base_agent 传入规范化身份指纹）；
+                None 时不限分区（低层直调的历史口径；`find_semantic_cache()`
+                总会传入显式分区，生产链路不会走全索引匹配）。
 
         Returns:
             (命中的 cache_file, 缓存响应文本)；无命中或嵌入不可用时 None。
@@ -157,7 +204,10 @@ class SemanticCacheIndex:
         best_score = 0.0
         best_response: str | None = None
         with self._lock:
-            items = list(self._entries.values())
+            # A09：身份分区过滤——只有同一有效请求身份的条目参与余弦比较
+            items = [
+                entry for entry in self._entries.values() if identity_key is None or entry.identity_key == identity_key
+            ]
         if not items:
             with self._lock:
                 self._misses += 1
@@ -253,7 +303,7 @@ def build_semantic_index_from_cache_dir(cache_dir: str, max_entries: int | None 
     # 现构建侧校验：creator_uid 与当前创建者标签不一致的条目不入索引
     # （单点、命中路径零成本；uid 不可得 / 条目无 creator 字段时兼容历史，
     # 与 L1 的 cache_creator_ok 规则完全一致）。
-    from src.agents.llm_client import cache_creator_ok
+    from src.agents.llm_client import cache_creator_ok, request_identity_fingerprint
 
     for f in files:
         try:
@@ -265,7 +315,14 @@ def build_semantic_index_from_cache_dir(cache_dir: str, max_entries: int | None 
                 continue  # 非本用户条目不入语义索引（防跨用户投毒）
             prompt = str(data.get("prompt", ""))
             response = str(data.get("response", ""))
-            if index.upsert(f, prompt, response):
+            # A09：从条目记录的 request_identity 派生身份分区键（与
+            # base_agent 写入/查找使用同一 `request_identity_fingerprint`，
+            # 口径单一）。旧格式条目无该字段 → identity_key=None（upsert 内
+            # 退化为按 cache_file 分区：只可能被同一精确缓存键命中，不会
+            # 误入任何新身份分区，即"旧文件不误命中"）。
+            _identity = data.get("request_identity")
+            identity_key = request_identity_fingerprint(_identity) if isinstance(_identity, dict) else None
+            if index.upsert(f, prompt, response, identity_key=identity_key):
                 added += 1
         except (OSError, json.JSONDecodeError, TypeError, ValueError):
             continue  # 损坏文件跳过（与文件缓存读侧"半截 JSON 降级重调"同口径）
@@ -279,29 +336,40 @@ def build_semantic_index_from_cache_dir(cache_dir: str, max_entries: int | None 
     return added
 
 
-def find_semantic_cache(cache_file: str, prompt: str, response_for_update: str | None = None) -> tuple[str, str] | None:
+def find_semantic_cache(
+    cache_file: str,
+    prompt: str,
+    response_for_update: str | None = None,
+    identity_key: str | None = None,
+) -> tuple[str, str] | None:
     """语义命中查找 + 新条目入索引的复合入口（_call_llm_with_cache 接线点）。
 
     流程：
-    1. 索引未命中时按需从 cache_file 所在目录补建（节流 60s）；
-    2. find(prompt) 命中 → 返回 (cache_file, response)；
-    3. 未命中且提供了 response_for_update（LLM 调用成功后）→ 新条目
-       入索引（下轮近似 prompt 可命中）。
+    1. 按请求身份分区做语义查找（A09：仅同身份条目参与匹配）；
+    2. 未命中且提供了 response_for_update（LLM 调用成功后）→ 新条目
+       按同一身份分区入索引（下轮近似 prompt 可命中）；
+    3. 索引目录补建由调用方经 maybe_rebuild_semantic_index 节流触发。
 
     Args:
-        cache_file: 本次调用的文件缓存键路径（索引条目的归属键）。
+        cache_file: 本次调用的精确缓存文件路径（索引条目的归属键）。
+            未显式给 identity_key 时**作为身份分区键的后备**（安全默认：
+            旧格式缓存条目只可能被同一精确缓存键命中，跨身份绝不误命中；
+            M6 语义身份缺失验证即依赖该口径）。
         prompt: 本次 LLM 调用的 user_message。
         response_for_update: 非 None 时把该响应作为新条目入索引（调用后路径）。
+        identity_key: A09 有效请求身份指纹（base_agent 传入）；None 时
+            退化为按 cache_file 分区（旧调用方 / 低层直调兼容）。
 
     Returns:
         (命中的 cache_file, 响应文本) 或 None（降级精确缓存口径）。
     """
+    partition_key = identity_key if identity_key is not None else cache_file
     index = get_semantic_index()
-    hit = index.find(prompt)
+    hit = index.find(prompt, identity_key=partition_key)
     if hit is not None:
         return hit
     if response_for_update is not None:
-        index.upsert(cache_file, prompt, response_for_update)
+        index.upsert(cache_file, prompt, response_for_update, identity_key=partition_key)
     return None
 
 

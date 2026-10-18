@@ -6,6 +6,8 @@
 **评审人角色**：跨学科科研评审 / 技术战略顾问 / Python 项目架构师 / 代码审查专家
 **与既有评审的关系**：本报告为第三轮独立评审（前两轮：`INDEPENDENT_REVIEW_2026-10-16.md`、`docs/reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-17.md`）。第 11 节对两份既有评审的核心结论逐条独立复核。**本报告同样不信任上述两份既有评审的结论**，凡未亲自复验者均标注。
 
+> **勘误注记（2026-10-18 追加，A01；历史原文保留不改）**：本报告正文中的"增广臂非劣"相关表述（§6 P2、§7 G2、§10 A-02、§11 IR-17 行、§12.3 等）系评审当日依据 M-4 工件**点估计**（δ=+2.86pp，预注册 non-inferiority 边际 −5pp，角色 = `independent_marker`）作出的方向性判断。按同日第三方审查 A01 的口径更正：该 +2.86pp **仅为点估计阈值标记，不构成统计非劣性结论**——配对 n=35、4 胜/3 负/28 平，经验配对 bootstrap 双侧 95% CI **[−11.43,+17.14]pp**、单侧 95% 下界 **−8.57pp**，**未排除 −5pp 非劣界**。正文相应"非劣"字样应读作"**点估计越阈（不确定性未排除非劣界）**"；"加独立规格不伤/删实现才伤""检出损失来自移除实现代码"应读作**待验证的候选机制假设**，不得作为因果定论或统计结论引用。更正以此注记及各处行内〔2026-10-18 勘误〕为准；历史评审原文不删除、不改写。
+
 ---
 
 ## 0. 执行摘要
@@ -287,14 +289,14 @@ AITester/                              # HEAD=cffe991，工作树干净；main �
 
 ### P2：独立 docstring 规格锚——把 spec-first 从"再描述"升级为"独立规格增广"
 
-- **技术路径**：df_spec 显著负（−25.7pp，A）已定位根因 = **锚材料是缺陷代码的再描述**（非独立正确规格）。修复方向有项目自有数据支撑：L 轮 docstring 锚三臂中**增广臂 82.9% vs df 80.6%（非劣）**而替换臂 60.0% vs 86.1%（显著负）——即"**加独立规格**不伤、"**删实现**才伤"，与 Zhao/Song/Cohen（ISSTA 2026，A）"代码必须被移除而非仅补充"的结论在 Python 单函数设定下形成**受控的边界细化**。下一步：人类 docstring 增广 + SpecExpr 机器化子句 + 误导三分度量（项目已有 `misguided_metrics.py`）预注册二臂。
+- **技术路径**：df_spec 显著负（−25.7pp，A）已定位根因 = **锚材料是缺陷代码的再描述**（非独立正确规格）。修复方向有项目自有数据支撑：L 轮 docstring 锚三臂中**增广臂 82.9% vs df 80.6%（非劣）**而替换臂 60.0% vs 86.1%（显著负）——即"**加独立规格**不伤、"**删实现**才伤"，与 Zhao/Song/Cohen（ISSTA 2026，A）"代码必须被移除而非仅补充"的结论在 Python 单函数设定下形成**受控的边界细化**。下一步：人类 docstring 增广 + SpecExpr 机器化子句 + 误导三分度量（项目已有 `misguided_metrics.py`）预注册二臂。 〔2026-10-18 勘误（A01）：此处"非劣"为点估计阈值标记（+2.86pp），**非统计非劣性结论**；n=35、4:3，经验配对 bootstrap 双侧 95% CI [−11.43,+17.14]pp（单侧 95% 下界 −8.57pp）未排除 −5pp；"加独立规格不伤/删实现才伤"为**待验证的候选机制假设**（详见文首勘误注记）。〕
 - **差异化点**：前沿（Zhao/Song/Cohen）止步于 NL docstring 替换；项目独有**可编译规约 + 确定性 oracle 注入 + 逐子句拒绝归因**，可把"规约质量"变成可测量量（spec_expr_coverage 0.61-0.72，B）。
 - **理论基础**（一手）：Zhao/Song/Cohen（A）：misguided 0.46%→3.84%、effective 8.51%→2.98%；MAST（A）：47% 多 agent 失败归因验证环节；项目 A 级数据：df_spec 负性 + over_red 22.5%→46.0%。
-- **预期提升**：增广臂 detection 相对 df **非劣且 ≥+5pp**；oracle-correct 示例 Δ≥5 任务（已在 3/3 seed 复现 +6，A）。**置信度：中**。证据等级：**E（幅度）+ A（机制）**。
+- **预期提升**：增广臂 detection 相对 df **非劣且 ≥+5pp**；oracle-correct 示例 Δ≥5 任务（已在 3/3 seed 复现 +6，A）。**置信度：中**。证据等级：**E（幅度）+ A（机制）**。 〔2026-10-18 勘误（A01）：引用本条的"非劣"观测时须同时给出不确定性，不得以点估计（+2.86pp）替代区间判据。〕
 - **实验验证**：QuixBugs 41 缺陷程序 + ULT probe25；臂 = {df, df+docstring-augment, df+specir-augment}；指标 = F2P detection + misguided/effective 三分 + $/task；McNemar + BH-FDR；预注册先落盘；3 cache namespace；temp=0。
-- **反事实推演**：Zhao 设定为 Defects4J Java，迁移未证——但项目增广臂非劣数据是首个 Python 单函数证据；护城河 = 规约机器化 + 误导量化体系（可成为基准贡献）。可复制性：中（需复刻 DSL 门 + oracle 链）。
+- **反事实推演**：Zhao 设定为 Defects4J Java，迁移未证——但项目增广臂非劣数据是首个 Python 单函数证据；护城河 = 规约机器化 + 误导量化体系（可成为基准贡献）。可复制性：中（需复刻 DSL 门 + oracle 链）。 〔2026-10-18 勘误（A01）：文中"增广臂非劣数据"为点估计越阈，非统计非劣（n=35、4:3，单侧 95% 下界 −8.57pp 未排除 −5pp）。〕
 - **里程碑**：短期（1-2 月）：预注册 + QuixBugs 二臂；中期（3-6 月）：ULT 复验 + 三分解剖；长期（6-12 月）：与 Zhao/Song/Cohen 设定差异的跨语言对照。
-- **成功判定**：增广臂 ≥ df −5pp（非劣）且 misguided 率相对 df 下降 ≥30%，p<0.05；**失败判定**：<df −10pp → spec anchoring 在本系统关闭，转入"协议 + 评测诚信"定位。
+- **成功判定**：增广臂 ≥ df −5pp（非劣；按**区间判据**判定，点估计仅作方向标记，见文首勘误注记）且 misguided 率相对 df 下降 ≥30%，p<0.05；**失败判定**：<df −10pp → spec anchoring 在本系统关闭，转入"协议 + 评测诚信"定位。
 
 ### P3：评测诚信 checklist 基准化——把"测量伪影系列"升级为可引用的评估方法论贡献
 
@@ -347,7 +349,7 @@ AITester/                              # HEAD=cffe991，工作树干净；main �
 | # | 维度 | 项目现状（证据） | 2025-2026 前沿要求（一手） | 差距 | 严重度 |
 |---|---|---|---|---|---|
 | G1 | 外部效度 | synthetic 为主；QuixBugs n=41；ULT n=24-25 且 accuracy 21.0% < 均值 41.32%（A/B） | ULT/TestGenEval/SWE-bench 家族标定（A） | **主结论建立在合成模板；唯一可标定维度落后 20.3pp** | **高** |
-| G2 | 规格锚增益 | 三连阴性（D1/M4/df_spec，A）；增广臂非劣（A） | Zhao/Song/Cohen spec-based 有效（A） | 有理论盟友、实证转化弱；根因已定位（锚 provenance） | 高 |
+| G2 | 规格锚增益 | 三连阴性（D1/M4/df_spec，A）；增广臂非劣（A；2026-10-18 勘误 A01：点估计阈值标记，统计非劣未确立） | Zhao/Song/Cohen spec-based 有效（A） | 有理论盟友、实证转化弱；根因已定位（锚 provenance） | 高 |
 | G3 | 多智能体增益 | 编排净负 −25~−38pp（A） | AgentCoder/TraceCoder/TwinMem 正向（A/B） | 落后（已诚实降级）；与 Konstantinou/BOAD 阴性证据一致 | 高（已止损） |
 | G4 | 动态分析接口 | FLT 有设计未落地；4 个 None 任务无判定通道 | ADI FLT 63.8%@$1.28（A） | 缺位 | 中 |
 | G5 | 形式化自修复 | z3 见证层机制 pass 未启用（B）；ESBMC-AI 路线未走 | ESBMC-AI 90.4%（A）；STRATUS 1.5×（A） | 缺位 | 中 |
@@ -400,7 +402,7 @@ AITester/                              # HEAD=cffe991，工作树干净；main �
 | # | 对应文件/位置 | 问题 | 一手前沿依据 | 建议内容 | 类型 | 优先级 | 预期收益 | 成本/风险 | 验证指标 | 时间线 | 工具/命令 |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | A-01 | `experiments/emse_ult_*`、`src/datasets/dataset_ult.py` | ULT accuracy 21.0% < 41.32% 均值，无可标定性能 | ULT（TOSEM 2026，A） | 落地 P1：n≥200 三臂扩样 + TestGenEval-Lite 对标，预注册 | 必须改进 | **P0** | 外部效度；可比性 | 中（~$3-6 LLM 预算） | accuracy ≥41.32% p<0.05 | 1-2 月 | `python -m experiments.emse_ult_dfsmoke_accuracy`；预注册件落盘 |
-| A-02 | `experiments/emse_docstring_anchor_*`、`src/agents/planner.py` | df_spec 负性根因（锚=再描述）已定位但独立锚未预注册 | Zhao/Song/Cohen（ISSTA 2026，A） | 落地 P2：docstring 增广臂预注册 + 误导三分判据 | 必须改进 | **P0** | spec 路线决断 | 中（~$0.5-1） | 增广臂非劣 ∧ misguided −30% | 1-2 月 | `emse_docstring_augment_analysis.py` |
+| A-02 | `experiments/emse_docstring_anchor_*`、`src/agents/planner.py` | df_spec 负性根因（锚=再描述）已定位但独立锚未预注册 | Zhao/Song/Cohen（ISSTA 2026，A） | 落地 P2：docstring 增广臂预注册 + 误导三分判据 | 必须改进 | **P0** | spec 路线决断 | 中（~$0.5-1） | 增广臂非劣（按区间判据，不以点估计替代）∧ misguided −30% | 1-2 月 | `emse_docstring_augment_analysis.py` |
 | A-03 | `paper/draft.typ` §RQ4/§repro；`docs/design/emse_layered_narrative.md` | T 轮 B2 not_reproduced 与漂移发现（thinking 模式/协议开关）未入论文 | 项目 A 级工件（B2 README §0.6） | 补 T 轮复现段 + 漂移定位 + `{thinking on/off}×{profile}` 2×2 消融预注册 | 必须改进 | **P0** | 论文与工件同步 | 低 | SRC 注释可追溯；2×2 预注册落盘 | 2-4 周 | `make paper-audit` |
 | A-04 | `docs/preregistration.md` E7 节 | 人工 adjudication 未执行 | ISSTA'26 对 proxy 指标的限定（A） | 执行 n≥100 双人盲审 + Cohen's κ，或论文显式删除人工暗示 | 必须改进 | P0 | 结论强度 | 中（人力） | κ≥0.7 | 1-2 月 | `docs/HUMAN_ADJUDICATION_PROTOCOL.md` 已在场 |
 | A-05 | `.github/workflows/ci.yml`；README；论文 §repro | 门禁数量口径 24/25/27 三处不一致 | 项目自设单一事实源纪律 | 统一为可复算口径（如 `ls scripts/gates/*.py \| wc -l` = 26；ci.yml 调用点去重计数），加文档门禁锁定 | 必须改进 | P1 | 诚信细节 | 低 | 三处数字一致 | 1 周 | `grep -c "scripts/gates/" .github/workflows/ci.yml` |
@@ -439,7 +441,7 @@ AITester/                              # HEAD=cffe991，工作树干净；main �
 | IR-16 P3"评测诚信方法论基准化"方向 | IR-16 §6 | 素材在场性核验（4 伪影 ADR + 口径矩阵 + Mut@k 修正）+ MAST/ULT/ISSTA'26 一手依据 | 方向成立且是当前最高杠杆路径 | **支持** | A |
 | IR-16 A-03"ULT DOI 疑错挂→已更正为归属正确" | IR-16 §11 | 本次未重取 ACM DL 页面（两轮评审已核验 DOI 10.1145/3805043） | 接受其更正（未重复核验，明示） | **支持（转引）** | B（转引两轮 A 级核验） |
 | IR-17 结论"9 支持/2 部分/1 无法验证/1 需修正"（对 IR-16） | IR-17 §0.1 | 抽查其中 3 条（ULT DOI、token 记账、四批工件入库） | 抽查项与本次观察一致（token 记账 D2 已收口、工件已入库） | **支持（抽查）** | B |
-| IR-17 建议"改用人类 docstring 作独立规格锚" | IR-17 §0.2 | L 轮 docstring 三臂数据在场（替换 60.0 vs 86.1 负；增广 82.9 vs 80.6 非劣） | **方向被项目自身新数据细化**：增广可、替换伤——与 Zhao/Song/Cohen 形成受控边界 | **支持（且已推进）** | A |
+| IR-17 建议"改用人类 docstring 作独立规格锚" | IR-17 §0.2 | L 轮 docstring 三臂数据在场（替换 60.0 vs 86.1 负；增广 82.9 vs 80.6 点估计越阈，2026-10-18 勘误 A01：统计非劣未确立） | **方向被项目自身新数据细化**：增广可、替换伤——与 Zhao/Song/Cohen 形成受控边界 | **支持（且已推进）** | A |
 | "24 个 CI 门禁"（IR-16/IR-17/README/论文） | 多处 | `ls scripts/gates/*.py`=26；ci.yml 调用 27 处；git 记录"25 道全绿" | **口径三处不一致，需统一** | **部分推翻（数字口径）** | A（实测） |
 | "领先 origin 26 提交"（工作记忆/旧材料） | 会话记忆 | `git rev-list --count main ^origin/main` = **65** | 数字过期（项目已推进多轮） | **推翻（过期表述）** | A |
 
@@ -473,7 +475,7 @@ NL/SpecExpr 规约（Planner，BNF 单一事实源）
 
 | 阶段 | 时间 | 动作 | KPI |
 |---|---|---|---|
-| 短期 | 1-3 月 | A-01/A-02/A-03/A-04/A-07 落地；P1 ULT 扩样；P2 预注册 | ULT accuracy ≥41.32%（p<0.05 vs plain_llm）；docstring 增广臂非劣判据落盘；κ≥0.7；origin/main=HEAD 且 CI 绿；论文 T 轮漂移段 + 2×2 预注册 |
+| 短期 | 1-3 月 | A-01/A-02/A-03/A-04/A-07 落地；P1 ULT 扩样；P2 预注册 | ULT accuracy ≥41.32%（p<0.05 vs plain_llm）；docstring 增广臂非劣判据（**区间口径**）落盘；κ≥0.7；origin/main=HEAD 且 CI 绿；论文 T 轮漂移段 + 2×2 预注册 |
 | 中期 | 3-6 月 | P4 FLT；P6 形式化修复二臂；P3 checklist v1 + 2 个外部数据集重放；TestGenEval-Lite 子集 | 非终止类检出转化 ≥3；形式化臂 false_fix ≤20%；外部重放"未修正即高估"定量结论 ≥2 例 |
 | 长期 | 6-12 月 | 方法论文（FSE/ICSE/ISSTA/TOSEM）+ 系统论文；P5 第三次决断；A-16 第二模型交叉 | ≥1 篇一手 venue 录用；编排增益关闭或转正；关键结论两模型同向 |
 
@@ -486,7 +488,7 @@ NL/SpecExpr 规约（Planner，BNF 单一事实源）
 ## 13. 实验、验证与评估计划（摘要）
 
 1. **P1 外部标定主实验**：ULT n≥200 {plain_llm, plain_llm_df, df+docstring-augment}；指标 accuracy/Mut@k/$；McNemar + BH-FDR + Wilson CI；3 cache namespace；temp=0；预注册先落盘；对照 = ULT 12 模型均值（A）+ MIST-RL（B）。
-2. **P2 规格锚实验**：QuixBugs 41 + ULT probe25；三臂；F2P + misguided 三分 + 成本；判据冻结（非劣 + misguided −30%）。
+2. **P2 规格锚实验**：QuixBugs 41 + ULT probe25；三臂；F2P + misguided 三分 + 成本；判据冻结（**区间非劣** + misguided −30%）。
 3. **P3 checklist 重放**（零 LLM）：对 ULT 官方 12 模型公开结果、TestGenEval 公开产物应用 checklist，输出"未修正即高估"量化表。
 4. **P4/P6 零 LLM 复算**：超时/FLT 行为、z3 反例引导修复可离线复算部分先行。
 5. **P5 编排决断**：synthetic + QuixBugs matched-budget 三臂（df / df+记忆 / aitester）。

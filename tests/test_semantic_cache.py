@@ -13,6 +13,9 @@
 
 from __future__ import annotations
 
+import os
+from unittest.mock import patch
+
 import pytest
 
 import src.utils.embedding_utils as embedding_utils
@@ -190,3 +193,83 @@ class TestIndexBuild:
         # 同文件重复扫描：upsert 幂等（键唯一），条目数不增长
         build_semantic_index_from_cache_dir(str(tmp_path), max_entries=3)
         assert get_semantic_cache_stats()["entries"] == 3
+
+
+class TestA09IdentityPartition:
+    """A09（2026-10-18 第三方审查 P1）：语义索引按有效请求身份分区。
+
+    M6 验收脚本等价锁定：不同 cache_file（= 不同请求身份）的条目不得互相
+    命中，即使 prompt 嵌入完全相同（相似度 1.0）。
+    """
+
+    def test_m6_cross_identity_cache_file_not_hit(self, _embed_on) -> None:
+        """M6：A 身份（MODEL_A_SEED42）条目不得被 B 身份（MODEL_B_SEED44）命中。"""
+        index = get_semantic_index()
+        index.upsert("MODEL_A_SEED42.json", "same user prompt", "MODEL_A_RESPONSE")
+        with patch.object(sc, "get_semantic_index", return_value=index):
+            assert find_semantic_cache("MODEL_B_SEED44.json", "same user prompt") is None
+            # 同身份（同 cache_file 分区）仍可命中，证明隔离不是"全禁"
+            hit = find_semantic_cache("MODEL_A_SEED42.json", "same user prompt")
+        assert hit == ("MODEL_A_SEED42.json", "MODEL_A_RESPONSE")
+
+    def test_explicit_identity_partitions_isolated(self, _embed_on) -> None:
+        index = get_semantic_index()
+        index.upsert("f_a.json", "alpha prompt", "resp-a", identity_key="fp-a")
+        index.upsert("f_b.json", "alpha prompt", "resp-b", identity_key="fp-b")
+        with patch.object(sc, "get_semantic_index", return_value=index):
+            assert find_semantic_cache("f_query.json", "alpha prompt", identity_key="fp-a") == (
+                "f_a.json",
+                "resp-a",
+            )
+            assert find_semantic_cache("f_query.json", "alpha prompt", identity_key="fp-b") == (
+                "f_b.json",
+                "resp-b",
+            )
+            assert find_semantic_cache("f_query.json", "alpha prompt", identity_key="fp-c") is None
+
+    def test_response_update_enters_same_identity_partition(self, _embed_on) -> None:
+        out = find_semantic_cache("f9.json", "alpha prompt", response_for_update="new_resp", identity_key="fp-1")
+        assert out is None  # 首查未命中
+        assert find_semantic_cache("f9.json", "alpha prompt", identity_key="fp-2") is None, (
+            "A09：新条目只进入写入身份的分区，其他身份不得命中"
+        )
+        hit = find_semantic_cache("f9.json", "alpha prompt", identity_key="fp-1")
+        assert hit == ("f9.json", "new_resp")
+
+    def test_build_derives_identity_partition_from_payload(self, _embed_on, tmp_path) -> None:
+        import json
+
+        from src.agents.llm_client import request_identity_fingerprint
+
+        identity_a = {"v": 2, "model": "model-A", "temperature": 0.2}
+        identity_b = {"v": 2, "model": "model-B", "temperature": 0.2}
+        (tmp_path / "a.json").write_text(
+            json.dumps({"prompt": "alpha prompt", "response": "resp-a", "request_identity": identity_a}),
+            encoding="utf-8",
+        )
+        (tmp_path / "b.json").write_text(
+            json.dumps({"prompt": "alpha prompt", "response": "resp-b", "request_identity": identity_b}),
+            encoding="utf-8",
+        )
+        assert build_semantic_index_from_cache_dir(str(tmp_path)) == 2
+        fingerprint_a = request_identity_fingerprint(identity_a)
+        hit_a = find_semantic_cache("query.json", "alpha prompt", identity_key=fingerprint_a)
+        assert hit_a is not None
+        assert (os.path.basename(hit_a[0]), hit_a[1]) == ("a.json", "resp-a")
+        fingerprint_b = request_identity_fingerprint(identity_b)
+        hit_b = find_semantic_cache("query.json", "alpha prompt", identity_key=fingerprint_b)
+        assert hit_b is not None
+        assert (os.path.basename(hit_b[0]), hit_b[1]) == ("b.json", "resp-b")
+
+    def test_build_legacy_file_not_in_any_identity_partition(self, _embed_on, tmp_path) -> None:
+        """旧格式（无 request_identity）文件以自身 cache_file 分区，不误入身份分区。"""
+        import json
+
+        (tmp_path / "legacy.json").write_text(
+            json.dumps({"prompt": "alpha prompt", "response": "legacy-resp"}),
+            encoding="utf-8",
+        )
+        assert build_semantic_index_from_cache_dir(str(tmp_path)) == 1
+        assert find_semantic_cache("query.json", "alpha prompt", identity_key="fp-any") is None, (
+            "A09：旧格式条目不参与身份分区语义命中（旧文件不误命中）"
+        )

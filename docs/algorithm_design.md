@@ -112,7 +112,7 @@ Output: 测试计划 P = (LA, TC)，其中 LA 为逻辑分析，TC 为测试用�
 
 1. **边界参数化层（v1，`src/specs/spec_ir.py::compile_to_hypothesis`）**：SpecIR 的 `boundaries`（确定性边界锚点，输入/期望值对）编译为 `@pytest.mark.parametrize` 断言；NL 前置/后置/不变量子句不产出测试（R1a 修复：历史版本对 invariants 产出 `assert True` 恒真断言——假通过通道，已封堵；无边界材料时保守返回空串）。
 2. **受限表达式 DSL 层（v2，`src/specs/spec_ir_v2.py::compile_spec_oracle`）**：形如 `r == x * 2` 的表达式子句经白名单 AST 验证（11 个纯函数调用白名单 + 属性白名单 + 节点类型限制）编译为 `assert <expr>`；不可机器化子句降级为 NL 溯源注释。**签名感知绑定（R1b）**：`extract_signature_params` 从被测函数 AST 签名提取真实参数名（三态：None=未找到降级 / []=0 参 / 非空=按签名），绑定上下文从硬编码 `{r,x,a,b,y}` 扩展为真实参数集，调用元数按签名修正。**v3 文法升阶（P0-A-1，2026-10-12 独立评审优化批次）**：①有限域量化——`<quant>` 产生式（`all(...)` / `any(...)` 推导式形态）+ 自由变量分析 `_free_names`（comprehension/lambda 作用域精确版，循环变量只在推导式内绑定，越界引用按 `unknown_name` 拒绝）；②字符串纯方法白名单——15 个无副作用方法（`startswith/endswith/split/join/strip/lstrip/rstrip/lower/upper/isdigit/isalpha/isalnum/isspace/find/count/replace`）入 `<attr>` 白名单（`title/center/encode/format` 等刻意不收，作为反例教学形态）；③迭代域内建——`range` / `enumerate` 单独出现亦无害。提示契约（`src/agents/planner.py` BNF 段 + 7 正例 + 5 反例 + 自检）与编译器白名单经 `spec_expr_grammar_terminals()` 单一事实源同步（新增 `quantifiers` 键供 BNF `<quant>` 渲染）。原 P2-L3 已知假阴性（推导式变量被标识符门误杀，strict xfail）经 v3 自由变量分析修复后转正，套件现 0 xfail。
-3. **并列执行接线（R1c，`SPEC_ORACLE_EXEC_ENABLE` 默认关）**：`_generator_node` 经 `_append_spec_oracle_to_test` 把 v2 编译产物追加到 LLM 生成测试尾部**并列**执行——LLM 测试通过 ≠ 规约 oracle 通过，后者的失败构成"逻辑驱动"通道的确定性检出（观测字段 `state["spec_oracle_injected"]`）。启用方式：单开关，或 `AITESTER_PROFILE=scientific` 一键。
+3. **并列执行接线（R1c，`SPEC_ORACLE_EXEC_ENABLE` 默认关）**：`_generator_node` 经 `_append_spec_oracle_to_test` 把 v2 编译产物追加到 LLM 生成测试尾部**并列**执行——LLM 测试通过 ≠ 规约 oracle 通过；oracle 在缺陷代码（buggy 侧）上的失败只是**单侧信号**，**不构成"确定性检出"判定**：检出须按双侧判据（buggy 红 ∧ gold fixed/修复后绿 ∧ 两侧无收集/语法错误，即 F2P 口径）由实验评估层独立裁决，单侧失败仅作机制观测与归因线索（评估层不得直接计为 detection；N-3 起 oracle 单独以 `oracle_suite_verdict` 判读）。观测字段 `state["spec_oracle_injected"]`。启用方式：单开关，或 `AITESTER_PROFILE=scientific` 一键。
 
 **编译率观测**：`spec_compile_rate`（可编译子句数/非空子句总数）量化"逻辑驱动"的实际机器化程度（`SPEC_IR_DSL_ENABLE=true` 时由 Planner 节点写入 state）。
 
@@ -200,24 +200,47 @@ UNKNOWN 曾占失败样本 75%）。演进路径建议（按成本递增）：
 
 ### 3.3 迭代修复循环（Algorithm 3）
 
-```
-Algorithm 3: Iterative Repair Loop
-Input:  原始源代码 S，最大迭代次数 K
-Output: 修复后的源代码 S'，测试是否通过 bool
+> **协议说明（ADR-0015 / ADR-0016 现行口径，2026-10-18 同步更正）**：本算法按**检出优先（"先红后绿"）**协议重写。历史版本（每次迭代 `T ← Generator(S_current)`、`passed` 即成功）与现行实现和 ADR 不一致，已按 ADR-0015（检出优先协议）与 ADR-0016（编排为可消融容器 + **测试文件锁定原则**）更正。协议开关默认关（ADR-0003 默认行为不变原则）；`AITESTER_PROFILE=logic` 档注入 `DETECTION_FIRST_ENABLE=true` 与两道门开关，关闭时退回"首轮全绿即结束"的历史口径、终态字段为 `None`（键集合同构）。
 
-1:  S_current ← S                          // 从原始代码开始
-2:  for i ← 1 to K do
-3:      T ← Generator(S_current)           // GeneratorAgent 生成测试代码
-4:      (passed, output, failed_cases) ← Executor(T, S_current)
-5:      if passed then return (S_current, true)   // 测试通过，提前终止
-6:      e ← Classifier(output, failed_cases)   // ErrorClassifier 分类错误
-7:      patch ← Debugger(S_current, output, e)  // DebuggerAgent 生成修复补丁
-8:      S_current ← ApplyPatch(S_current, patch) // PatchApplier 应用补丁
-9:  end for
-10: return (S_current, false)               // 达到最大迭代仍未通过
+```
+Algorithm 3: Detection-First Iterative Repair Loop（先红后绿）
+Input:  原始缺陷代码 S₀；最大迭代次数 K；再生成预算 R（_MAX_REGENERATIONS）
+Output: 修复后代码 S'；是否检出 detection；是否修复 repair；
+        终态标注 status ∈ {red_then_green, all_green_unverified, red_not_repaired}
+
+1:  S_current ← S₀ ; red_seen ← false ; status ← None
+2:  T ← Generator(S₀)                     // 测试在修复循环前生成，循环内锁定
+3:  (passed, output, failed_cases) ← Executor(T, S₀)   // 首轮基线执行（代码未修复）
+4:  if passed then                         // 首轮全绿 = 未检出缺陷，不视为成功
+5:      T ← RegenerateStrengthened(T, ≤R)  // 先红后绿强化提示；受 R 上限保护
+6:      若仍全绿 then return (S₀, detection=false, repair=false, all_green_unverified)
+7:  if 首轮红 then
+8:      red_seen ← true ; T* ← T            // 红证人快照（锁定测试）
+9:      if 特异性门开启 then
+10:         v ← ExecuteOnGoldFixed(T)       // 在环双侧对照：gold fixed 侧须转绿
+11:         if v == over_red then T ← Regenerate(T, ≤R) ; goto 3  // 过红 → 换缺陷特异测试，不进修复循环
+12: for i ← 1 to K do
+13:     e ← Classifier(output, failed_cases)          // ErrorClassifier（Algorithm 2）
+14:     patch ← Debugger(S_current, output, e)        // 只生成源码修复补丁
+15:     S_current ← ApplyPatch(S_current, patch)      // PatchApplier；失败回滚
+16:     (passed, output, failed_cases) ← Executor(T, S_current)
+17:     if passed then
+18:         红回归门（若开启）：T 曾被再生成替换且 S_current 未修补 → T ← T*，置失败，continue
+19:         status ← red_seen ? red_then_green : all_green_unverified
+20:         return (S_current, detection=red_seen, repair=red_seen, status)
+21: end for
+22: status ← red_seen ? red_not_repaired : all_green_unverified
+23: return (S_current, detection=red_seen, repair=false, status)
 ```
 
-**实现位置**：[src/graph/workflow.py](../src/graph/workflow.py) 中的 `_should_debug()` 控制路由条件。
+**判定口径（"passed"本身不是成功）**：
+
+- **检出（detection）双侧判据**：F2P = 生成测试在 buggy 原始代码上红 **∧** 在 gold fixed（或修补后）代码上绿 **∧** 两侧均无收集/语法/执行错误；仅 buggy 侧红（单侧）只作机制信号，不判检出。
+- **修复（repair）双侧判据**：逻辑闭环要求"先有红证人（曾检出）**∧** 修补后绿"；评估层 `repair_rate` 另以 **gold 材料独立裁决**——gold 测试在**补丁已写盘的最终代码**上全绿才计修复成功（无补丁写盘记 0.0，不可测记 None）。`all_green_unverified`（从未红即全绿 = 弱测试假成功）**评估层不得计为检出/修复成功**；`red_not_repaired`（检出但未修复）计检出、不计修复。
+- **测试锁定 / 不得靠换测试达成绿灯**：修复循环内测试 `T` 锁定；再生成仅允许经三类受 `R` 上限保护的专用路由（首轮全绿、特异性门 `over_red`、诊断判为测试缺陷）。红回归门检测"曾见红 + 测试被再生成 + 源码未修补"时恢复红证人测试并交回修源码通道——这是 ADR-0016 决策 4"修复循环内不得以换测试方式达成绿灯"的机制保证。
+- **开关与默认**：`DETECTION_FIRST_ENABLE` / `DETECTION_SPECIFICITY_GATE_ENABLE` / `RED_REGRESSION_GATE_ENABLE` 均默认关（ADR-0003）；logic 档与显式实验批次开启。关闭时历史口径逐字节不变。
+
+**实现位置**：路由在 [src/graph/workflow.py](../src/graph/workflow.py) 的 `_should_debug()`；首轮红灯/终态标注在 [src/graph/nodes.py](../src/graph/nodes.py) 的 `_executor_node`（`_derive_detection_first_status` 由 `(passed, red_seen)` 推导三值）；双门判定在 [src/tools/detection_gates.py](../src/tools/detection_gates.py)。
 
 > **路由信号优先级（2026-10-05 审查批次 R17）**：`ROUTE_STRUCTURED_ENABLE=true`（默认关）时，"测试生成错误"路由信号采用**结构化优先、关键词兜底**口径——`error_category=logic_error`（错误分类器从失败栈判定：断言失败但栈未触及被测模块，即测试自身逻辑错误）优先于中文诊断关键词匹配（`_test_gen_signal_hit`）；信号来源（`structured_error_category` / `diagnosis_keyword`）写入 trace，可度量关键词兜底触发率。动机：关键词匹配依赖 LLM 诊断文本，曾在 M5 事故中被源码异常签名（AttributeError/NameError/SyntaxError）误判触发假通过。开关关时与历史关键词口径逐字节一致。
 

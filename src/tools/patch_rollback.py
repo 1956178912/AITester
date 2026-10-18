@@ -167,6 +167,9 @@ def run_p2p_regression(
       时，上一条的"收集错误 / 超时 / IO 异常"口径一律改判
       regression_failed（触发回滚）——"回归无法裁决 = 不能证明补丁安全
       = 回滚"。fail_closed=None 时读环境开关（默认 false 历史口径）。
+    - A08（2026-10-18 第三方评审 P0）：子进程 env 经
+      ``process_utils.untrusted_exec_env``（最小白名单 + ``PYTHONPATH=tmpdir``）
+      构造，不继承宿主凭证（历史实现不传 env → 继承完整宿主环境）。
 
     Returns:
         {"verdict": str, "returncode": int | None, "output_tail": str}
@@ -192,13 +195,23 @@ def run_p2p_regression(
         # 进程组 kill 保证必然返回；超时 → returncode=-9 + timed_out。
         # 与原 TimeoutExpired 分支同口径：fail_closed → regression_failed
         # （回归无法裁决 = 不能证明补丁安全 = 回滚），否则 regression_error。
-        from src.utils.process_utils import run_with_timeout
+        #
+        # A08（2026-10-18 第三方评审 P0，凭证边界）：历史实现**未传 env**，
+        # 子进程默认继承宿主完整环境——而 P2P 子进程执行的是 LLM 生成的回归
+        # 测试 + 补丁后代码（不可信），宿主 LLM_*_API_KEY / OPENAI_API_KEY /
+        # AWS_* 等凭证因此可达。现走统一最小环境构造器（最小白名单 +
+        # PYTHONPATH=tmpdir 显式覆盖），与 M1/MDO 判分同口径。
+        from src.utils.process_utils import run_with_timeout, untrusted_exec_env
 
         proc = run_with_timeout(
             [sys.executable, "-m", "pytest", test_path, "-p", "no:cacheprovider", "--tb=line", "-q"],
             timeout=out_timeout,
             cwd=tmpdir,
             text=True,
+            env=untrusted_exec_env(
+                PYTHONDONTWRITEBYTECODE="1",
+                PYTHONPATH=tmpdir,
+            ),
         )
         if proc.timed_out:
             # 超时口径与历史 TimeoutExpired 分支逐字一致

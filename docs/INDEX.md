@@ -40,11 +40,16 @@
 5. [BASELINE.yaml](../BASELINE.yaml)：全部当前数字的机器可读单一来源。
 6. [docs/reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-17.md](reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-17.md)：第二轮独立系统性评审（含遗留项与处置）。
 7. [docs/reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-18.md](reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-18.md)：第三轮独立系统性评审（14 项核心声明逐位复验；A-01..A-20 建议与同日收口状态）。
+8. [docs/reviews/THIRD_PARTY_REVIEW_2026-10-18_FIX_CLOSURE.md](reviews/THIRD_PARTY_REVIEW_2026-10-18_FIX_CLOSURE.md)：第三方独立审查（Windows）23 项修复收口报告（P0 A08 + P1/P2 逐项矩阵、M1–M9 复跑与残余风险）。
 
 ### 2.3 复现者
 
 1. [REPLICATION.md](../REPLICATION.md)：复现包构成、工件清单与还原步骤。
 2. [reproduce.sh](../reproduce.sh)：主批次复现入口（消耗 LLM 配额，勿自动触发）。
+   数据集分支 fail-closed：`--dataset examples|swe_bench|synthetic` 之外的值直接报错退出；
+   主批合成数据集复现用 `bash reproduce.sh --dataset synthetic --full`
+   （= 87 任务 / `--max-pattern-repeat 2` / seed 42 / 主批三臂；
+   三种子协议见 `experiments/run_main_batch.py`，详见 REPLICATION.md §5）。
 3. [docs/usage_examples.md](usage_examples.md)：单文件 / 批量 / 消融 / 成本预算的完整用法。
 4. [docs/performance_guide.md](performance_guide.md)：性能参数、预算口径与调优。
 5. [docs/troubleshooting.md](troubleshooting.md)：环境 / 依赖 / Docker / RAG 卡点。
@@ -132,6 +137,7 @@
 | [docs/PROJECT_STATUS_REGISTER.md](PROJECT_STATUS_REGISTER.md) | 项目状态与决策登记册：已完成 / 遗留 / 阻断三类状态与验证入口。 |
 | [CHANGELOG.md](../CHANGELOG.md) | 逐批变更日志（历史快照；当前口径以 BASELINE 与本索引指向的文档为准）。 |
 | [docs/reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-18.md](reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-18.md) | 第三轮独立系统性评审报告（2026-10-18）：60+ 前沿数据点一手重建、14 项核心声明逐位复验、A-01..A-20 建议与同日收口状态。 |
+| [docs/reviews/THIRD_PARTY_REVIEW_2026-10-18_FIX_CLOSURE.md](reviews/THIRD_PARTY_REVIEW_2026-10-18_FIX_CLOSURE.md) | 第三方独立审查（Windows，2026-10-18）23 项修复收口报告：P0 A08 凭证隔离 + P1/P2 逐项矩阵、M1–M9 复跑、门禁与残余风险。 |
 | [docs/reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-17.md](reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-17.md) | 第二轮独立系统性评审报告：发现、证据与处置建议。 |
 | [CODE_OPTIMIZATION_2026-10-16.md](../CODE_OPTIMIZATION_2026-10-16.md) | 代码全面审查与优化报告（C 轮）。 |
 | [PHASE1_PRECHECK_2026-10-12.md](../PHASE1_PRECHECK_2026-10-12.md) | 改进方案阶段 1 前置核查报告。 |

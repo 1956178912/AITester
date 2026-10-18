@@ -294,19 +294,23 @@ def _run_probe(code: str, module_name: str, timeout_seconds: int) -> str | None:
         probe_path = os.path.join(tmpdir, "_mdo_probe.py")
         with open(probe_path, "w", encoding="utf-8") as f:
             f.write(_behavior_probe_source(module_name))
-        env = {
-            **os.environ,
-            "PYTHONDONTWRITEBYTECODE": "1",
-            "PYTHONPATH": tmpdir,
-        }
+        # A08（2026-10-18 第三方评审 P0，凭证边界）：行为探针执行的是**被测
+        # 代码**（不可信）；历史实现显式 `{**os.environ, ...}` 把宿主凭证
+        # （LLM_*_API_KEY / OPENAI_API_KEY / AWS_* 等）原样注入探针子进程
+        # ——MDO 是评分旁路，必须与主 Executor 同口径。改用统一的最小环境
+        # 构造器（最小白名单 + 探针必需 overrides）。
+        from src.utils.process_utils import run_with_timeout, untrusted_exec_env
+
+        env = untrusted_exec_env(
+            PYTHONDONTWRITEBYTECODE="1",
+            PYTHONPATH=tmpdir,
+        )
         # 2026-10-11 全面优化批次：run_with_timeout 接线（孤儿风险消除）——
         # 行为探针执行被测代码派生的子进程（探针体内 _call），孙进程持管道
         # 写端时裸 subprocess.run(timeout=) 的 communicate 可能永久阻塞
         # （2026-10-09 批后挂死事故同构风险面）。文件后端 + 进程组 kill 保证
         # 本函数必然返回；超时 → returncode=-9 + timed_out → 走失败分支
         # （与历史 TimeoutExpired → None 同口径）。
-        from src.utils.process_utils import run_with_timeout
-
         res = run_with_timeout(
             [sys.executable, probe_path],
             timeout=timeout_seconds,
@@ -343,7 +347,9 @@ def _run_tests_on_code(
         # communicate 可能永久阻塞（与 M1 判分层 2026-10-11 P0-4 同构）。
         # 超时 → returncode=-9 + timed_out=True → 返回 None（fail-closed，
         # 与历史 TimeoutExpired → None 同口径）。
-        from src.utils.process_utils import nested_pytest_env, run_with_timeout
+        # A08（2026-10-18 第三方评审 P0）：本子进程执行 LLM 生成的测试套件 +
+        # 被测代码，环境必须与 M1 判分同口径最小化（凭证不进不可信子进程）。
+        from src.utils.process_utils import run_with_timeout, untrusted_exec_env
 
         res = run_with_timeout(
             [
@@ -362,7 +368,8 @@ def _run_tests_on_code(
             # PYTHONPATH 已覆盖成 tmpdir，宿主插件在嵌套运行里不可导入会让
             # pytest 在收集前就 rc=1 退出，被读成"测试红"（与 _m1_metrics
             # 同构缺陷，实测复现见 nested_pytest_env 文档串）。
-            env=nested_pytest_env(
+            # A08 起改走统一最小环境构造器：宿主凭证同样不进本子进程。
+            env=untrusted_exec_env(
                 PYTHONDONTWRITEBYTECODE="1",
                 PYTHONPATH=tmpdir,
             ),

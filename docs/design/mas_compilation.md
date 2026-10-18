@@ -8,10 +8,23 @@
 ### 1.1 C2 净负发现（项目自身）
 
 E2 双门后 `aitester vs plain_llm_df δ=−0.3673` 结构性劣后（ADR-0016），
-"多智能体编排"在本系统检出口径下为**可消融容器**（非主断言）。R4 又获
-外部背书：UC Berkeley MAST（NeurIPS 2025，7 框架 41–86.7% 失败率）与
-Nature MI 2026（260 配置 MAS 编码全线劣化 −1.3%~−12.8%）——多智能体对
-"单链决策类任务（编码/测试生成）"净负已是多方共识。
+"多智能体编排"在本系统检出口径下为**可消融容器**（非主断言）。外部证据
+**方向不一，须并列呈现，不得择一表述为"共识"**（README 2026-10-10 更正
+纪律：撤回原"共识"表述）：
+- 不利证据：UC Berkeley MAST（NeurIPS 2025，7 框架 41–86.7% 失败率；
+  arXiv:2503.13657）与 Nature MI 2026（260 配置 MAS 编码全线劣化
+  −1.3%~−12.8%）；
+- 有利证据：CANDOR（TOSEM 2026，DOI 10.1145/3803418）在 HumanEvalJava
+  上报告多智能体 line/branch/mutation 0.991/0.970/0.980；TestAgent
+  （FSE Companion 2026，DOI 10.1145/3803437.3806428）line 92.34% /
+  mutation 83.69%；
+- 不利证据（复现研究）：ICST 2026 Konstantinou 等（arXiv:2601.09695）在
+  6 个 Java 仓库 / 393 类 / 3,657 方法上报告 Plain-LLM 全面优于
+  HITS/SymPrompt/CoverUp/TestSpark（指标为 coverage/mutation，不能替换为
+  本系统 detection）。
+因此本设计的可辩护前提是**待检验的窄假设**——"手工编排在单链决策类
+任务（编码/测试生成）上的优势有限或无优势"；项目自身 C2 净负只是本系统
+检出口径下的结果，不构成对"多智能体范式"的普遍结论，也不得表述为共识。
 
 ### 1.2 建设性出路（compilation advantage）
 
