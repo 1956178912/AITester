@@ -78,6 +78,36 @@ def cross_file_max_modules() -> int:
     return _DEFAULT_MAX_MODULES
 
 
+# ─── D3b Step A：plan 构建/消费双开关（2026-10-18 第三轮独立评审落地）───────
+# 设计依据 docs/design/cross_file_plan_wiring_prereg.md §3 Step A：
+# 构建（BUILD）与消费（CONSUME）解耦，便于分阶段 A/B（A1 构建不消费测成本
+# 上界、A2 全链路测能力）；双开关默认 false，OFF/OFF 与历史行为逐位一致。
+_CROSS_FILE_PLAN_BUILD_ENV_VAR = "CROSS_FILE_PLAN_BUILD_ENABLE"
+_CROSS_FILE_PLAN_CONSUME_ENV_VAR = "CROSS_FILE_PLAN_CONSUME_ENABLE"
+
+
+def cross_file_plan_build_enabled() -> bool:
+    """D3b Step A 构建开关（CROSS_FILE_PLAN_BUILD_ENABLE=true 时启用，默认 false）。
+
+    启用且跨文件任务时，`_debugger_node` 调 `build_cross_file_repair_plan_cached`
+    （协调器-提议者：每模块一次 debug 调用）构建修复计划并写
+    `state["cross_file_plan"]`；关闭时该键保持 analyzer 写入的 None 占位
+    （零 LLM 调用、零行为变化）。
+    """
+    return env_flag(_CROSS_FILE_PLAN_BUILD_ENV_VAR)
+
+
+def cross_file_plan_consume_enabled() -> bool:
+    """D3b Step A 消费开关（CROSS_FILE_PLAN_CONSUME_ENABLE=true 时启用，默认 false）。
+
+    启用时 `_resolve_target_module` 才读取 `cross_file_plan.target_modules`；
+    关闭时即使 plan 已在 state 也不消费（回退依赖边末元素口径），保证
+    "构建"与"消费"可独立 A/B。注意：关闭消费而开启构建 = 白烧 LLM 调用
+    无收益（A1 臂的成本上界测量正是利用这一点）。
+    """
+    return env_flag(_CROSS_FILE_PLAN_CONSUME_ENV_VAR)
+
+
 # ─── 数据结构 ─────────────────────────────────────────────────────────────────
 
 

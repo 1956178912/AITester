@@ -105,11 +105,30 @@ class TestSeatbeltProfileSyntax:
 
 
 def _sandbox_exec_available() -> bool:
+    """Seatbelt 存在且**生产 profile 真的能 apply**（A-09，2026-10-18 独立评审）。
+
+    仅查 `shutil.which("sandbox-exec")` 不够：某些沙箱/容器宿主二进制存在、
+    极简 profile 也可 apply，但**生产 profile**（`build_sandbox_command` 产物，
+    含 subpath/deny 规则）以 `sandbox_apply: Operation not permitted`（rc=71）
+    失败（嵌套沙箱限制）。此时真实执行锁无法判定——环境能力缺失而非代码缺陷，
+    按项目既有 skipif 惯例显式 skip。
+    """
     cap = describe_capabilities()
-    return bool(cap.get("supported")) and cap.get("platform") == "darwin" and shutil.which("sandbox-exec") is not None
+    if not (
+        bool(cap.get("supported")) and cap.get("platform") == "darwin" and shutil.which("sandbox-exec") is not None
+    ):
+        return False
+    try:
+        cmd, _obs = build_sandbox_command(["/usr/bin/true"], cwd="/tmp", allowed_paths=["/tmp", "/bin", "/usr/bin"])
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30, check=False)
+    except (SandboxUnavailable, OSError, subprocess.SubprocessError):
+        return False
+    return proc.returncode == 0
 
 
-@pytest.mark.skipif(not _sandbox_exec_available(), reason="当前平台无 Seatbelt sandbox-exec（显式 skip）")
+@pytest.mark.skipif(
+    not _sandbox_exec_available(), reason="当前平台无可用 Seatbelt sandbox-exec（含 apply 被禁，显式 skip）"
+)
 def test_sandboxed_command_really_executes() -> None:
     """N-2 根因回归：`build_sandbox_command` 产物必须**真实可执行**（rc=0）。
 

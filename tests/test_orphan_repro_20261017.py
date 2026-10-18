@@ -55,6 +55,32 @@ _HANG_SCRIPT = "import time\nwhile True:\n    time.sleep(0.2)\n"
 # ─────────────────────────── 进程观测工具 ───────────────────────────
 
 
+def _ps_works() -> bool:
+    """ps 不仅存在，而且当前进程真的能读进程表（A-09，2026-10-18 独立评审）。
+
+    实测：某些沙箱/容器宿主 `ps` 二进制存在但执行即
+    `PermissionError: [Errno 1] Operation not permitted`（WorkBuddy 沙箱、
+    受限 CI 镜像）。此时孤儿/僵尸观测类用例无法判定——属环境能力缺失而非
+    代码缺陷，按项目既有 skipif 降级惯例（与缺可选依赖时 importorskip 同
+    口径）显式 skip，不得以 fail 冒充"回归"。
+    """
+    try:
+        proc = subprocess.run(
+            ["ps", "-axo", "pid=,ppid=,stat=,command="],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return proc.returncode == 0 and bool(proc.stdout.strip())
+
+
+_PS_OK = _ps_works()
+_PS_SKIP_REASON = "宿主环境禁止 ps 读取进程表（沙箱/容器限制），孤儿观测用例无法判定——非代码缺陷（A-09）"
+
+
 def _token(name: str) -> str:
     """生成进程唯一标记（pid+微秒，保证并发测试之间不串）。"""
     return f"{_TOKEN_PREFIX}{name}_{os.getpid()}_{int(time.time() * 1_000_000) % 1_000_000}"
@@ -175,6 +201,7 @@ def _spawn_parent(script: str, token: str) -> subprocess.Popen[str]:
     )
 
 
+@pytest.mark.skipif(not _PS_OK, reason=_PS_SKIP_REASON)
 class TestParentDeathGap:
     """父进程死亡缺口的复现与修复锁（真子进程，短命、finally 清理）。"""
 
@@ -375,6 +402,7 @@ class TestOrphanGuardContract:
         )
         assert guarded.returncode == 128 + 9, f"guard 下信号退出应归一为 128+n，实际 {guarded.returncode}"
 
+    @pytest.mark.skipif(not _PS_OK, reason=_PS_SKIP_REASON)
     def test_guard_timeout_still_returns_and_kills_tree(self) -> None:
         """看门狗不改变超时语义：timed_out=True、rc=-9、整树回收、及时返回。"""
         token = _token("guard_timeout")
@@ -387,6 +415,7 @@ class TestOrphanGuardContract:
         assert elapsed < 0.5 + 2.5, f"guard 超时返回过慢：{elapsed:.2f}s"
         assert _wait_until(lambda: not _live_token_rows(token), timeout=4), "看门狗超时后残留进程"
 
+    @pytest.mark.skipif(not _PS_OK, reason=_PS_SKIP_REASON)
     def test_guard_two_process_layer_shape(self) -> None:
         """进程树形态锁定：父→看门狗（新会话组长）→命令；命令与看门狗同进程组。"""
         token = _token("shape")
@@ -417,6 +446,7 @@ class TestOrphanGuardContract:
 # ─────────────────────────── 4. 非僵尸进程判定 ───────────────────────────
 
 
+@pytest.mark.skipif(not _PS_OK, reason=_PS_SKIP_REASON)
 class TestNonZombieJudgement:
     """ "已被回收"不得被僵尸进程伪装：僵尸不占 CPU、不算存活孤儿。"""
 

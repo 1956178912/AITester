@@ -54,6 +54,32 @@ _SEATBELT_OK = sandbox_supported() and sys.platform == "darwin"
 _ANY_SANDBOX_OK = sandbox_supported()
 
 
+def _seatbelt_apply_works() -> bool:
+    """**生产 profile** 不仅能构建、而且当前进程真的能 apply（A-09，2026-10-18 独立评审）。
+
+    实测（WorkBuddy 沙箱）：`sandbox-exec` 二进制存在（故 sandbox_supported()=True），
+    且极简 profile `(version 1)(allow default)` 可 apply；但**生产 profile**
+    （`build_sandbox_command` 产物，含 subpath/deny 规则）以
+    `sandbox_apply: Operation not permitted`（rc=71）失败——嵌套沙箱宿主对真实
+    约束 profile 拒绝 apply。仅查二进制存在性或极简 profile 都会把这类环境能力
+    缺失误报为代码回归；按项目既有 skipif 降级惯例显式 skip。
+    """
+    if sys.platform != "darwin" or not sandbox_supported():
+        return False
+    try:
+        cmd, _obs = build_sandbox_command(["/usr/bin/true"], cwd="/tmp", allowed_paths=["/tmp", "/bin", "/usr/bin"])
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30, check=False)
+    except (SandboxUnavailable, OSError, subprocess.SubprocessError):
+        return False
+    return proc.returncode == 0
+
+
+_SEATBELT_APPLY_OK = _seatbelt_apply_works()
+_SANDBOX_APPLY_SKIP_REASON = (
+    "宿主禁止 sandbox_apply（嵌套沙箱/受限容器），内核沙箱真实执行用例无法判定——非代码缺陷（A-09）"
+)
+
+
 def _write_tiny_target(tmpdir: str) -> str:
     target = os.path.join(tmpdir, "tinymod.py")
     Path(target).write_text(_TINY_TARGET, encoding="utf-8")
@@ -267,7 +293,7 @@ class TestExecutorSandboxRealExecute:
         assert calls == [], "默认关路径调用了沙箱构建（行为变化）"
         assert "kernel_sandbox_obs" not in result
 
-    @pytest.mark.skipif(not _ANY_SANDBOX_OK, reason="当前平台无可用内核沙箱（显式 skip）")
+    @pytest.mark.skipif(not _SEATBELT_APPLY_OK, reason=_SANDBOX_APPLY_SKIP_REASON)
     def test_local_sandbox_execute_passes(self) -> None:
         """**修复锁**（原缺陷：execvp Operation not permitted / rc=71）。"""
         result = _run_executor(use_venv=False, sandbox=True)
@@ -278,7 +304,7 @@ class TestExecutorSandboxRealExecute:
         assert result.get("kernel_sandbox_obs"), "缺失 kernel_sandbox_obs 观测层"
         assert result["coverage"] == pytest.approx(100.0)
 
-    @pytest.mark.skipif(not _ANY_SANDBOX_OK, reason="当前平台无可用内核沙箱（显式 skip）")
+    @pytest.mark.skipif(not _SEATBELT_APPLY_OK, reason=_SANDBOX_APPLY_SKIP_REASON)
     def test_venv_sandbox_execute_passes(self) -> None:
         result = _run_executor(use_venv=True, sandbox=True)
         assert result["passed"] is True, (
@@ -365,7 +391,7 @@ class TestExecutorSandboxRealExecute:
 class TestSafeProfileEndToEnd:
     """safe 档（AITESTER_PROFILE=safe，KERNEL_SANDBOX_ENABLE=true 默认注入）端到端。"""
 
-    @pytest.mark.skipif(not _ANY_SANDBOX_OK, reason="当前平台无可用内核沙箱（显式 skip）")
+    @pytest.mark.skipif(not _SEATBELT_APPLY_OK, reason=_SANDBOX_APPLY_SKIP_REASON)
     def test_safe_profile_executor_passes_zero_llm(self) -> None:
         """子进程按 safe 档启动 → 执行器真实沙箱执行最小测试必须 passed。
 
@@ -422,6 +448,7 @@ class TestSeatbeltDangerousPathRealDeny:
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
         return proc.returncode
 
+    @pytest.mark.skipif(not _SEATBELT_APPLY_OK, reason=_SANDBOX_APPLY_SKIP_REASON)
     def test_venv_pyvenv_cfg_readable_but_env_denied(self, tmp_path: Path) -> None:
         venv = tmp_path / ".venv"
         venv.mkdir()

@@ -14,7 +14,10 @@ from __future__ import annotations
 
 
 class TestResolveTargetModuleBranches:
-    def test_cross_file_with_target_modules(self):
+    def test_cross_file_with_target_modules(self, monkeypatch):
+        # D3b Step A（2026-10-18）：plan 消费受 CROSS_FILE_PLAN_CONSUME_ENABLE
+        # 门控（默认关）；本用例显式开开关验证 plan 首元素口径。
+        monkeypatch.setenv("CROSS_FILE_PLAN_CONSUME_ENABLE", "true")
         from src.graph.nodes import _resolve_target_module
 
         state = {
@@ -26,6 +29,22 @@ class TestResolveTargetModuleBranches:
             "cross_file_plan": {"target_modules": ["module_b", "module_c"]},
         }
         assert _resolve_target_module(state) == "module_b"
+
+    def test_cross_file_plan_ignored_when_consume_off(self, monkeypatch):
+        # D3b Step A 对偶用例：消费关（默认）时 plan 在场也不消费，
+        # 回退依赖边末元素（历史口径逐位保持）。
+        monkeypatch.delenv("CROSS_FILE_PLAN_CONSUME_ENABLE", raising=False)
+        from src.graph.nodes import _resolve_target_module
+
+        state = {
+            "module_name": "task__test",
+            "cross_file_deps": [
+                {"target_module": "module_b"},
+                {"target_module": "module_c"},
+            ],
+            "cross_file_plan": {"target_modules": ["module_b", "module_c"]},
+        }
+        assert _resolve_target_module(state) == "module_c"
 
     def test_cross_file_fallback_to_deps_last(self):
         from src.graph.nodes import _resolve_target_module

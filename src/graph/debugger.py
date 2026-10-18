@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import time
 from typing import Any, cast
 
@@ -102,7 +103,7 @@ def _build_failure_frequency_section(state: AITesterState) -> str:
     return hint
 
 
-def _resolve_target_module(state: AITesterState) -> str | None:
+def _resolve_target_module(state: AITesterState, plan: dict[str, Any] | None = None) -> str | None:
     """2026-10 P0（A/B 阴性结果驱动）：解析定位/探针用的 target_module。
 
     跨文件任务（state 携带 cross_file_deps / cross_file_plan 的 target_modules）
@@ -113,26 +114,36 @@ def _resolve_target_module(state: AITesterState) -> str | None:
     （L3.5 三模块深链定位无法激活的根因）。
 
     解析口径（保守，单文件零变化）：
-    - 跨文件任务（state.get("cross_file_deps") 非空）且 cross_file_plan
-      携带 target_modules（analyze 节点解析出的被调方模块名列表）→
-      取首元素；
-    - 单文件任务 / 无 cross_file_deps / 无 target_modules → 取
-      state["module_name"]（历史口径逐字节不变）。
+    - 跨文件任务（state.get("cross_file_deps") 非空）且 **D3b 消费开关 ON**
+      （`CROSS_FILE_PLAN_CONSUME_ENABLE`，默认 false）且 cross_file_plan
+      携带 target_modules → 取首元素；`plan` 参数非 None 时优先用调用方
+      刚构建的计划（避免经 state 回读的时序歧义）；
+    - 单文件任务 / 无 cross_file_deps / 消费开关 OFF / 无 target_modules →
+      取 state["module_name"]（历史口径逐字节不变；消费开关 OFF 时即使
+      plan 已在 state 也走此路径——D3b Step A 的"构建不消费"语义）。
 
     Args:
         state: 当前工作流状态。
+        plan: 调用方（`_debugger_node`）刚构建的 cross_file_plan dict
+            （D3b Step A）；None 时回读 state["cross_file_plan"]。
 
     Returns:
         定位/探针用的 target_module（str），单文件任务恒为
         state["module_name"]。
     """
+    from src.tools.cross_file import cross_file_plan_consume_enabled
+
     cross_file_deps = state.get("cross_file_deps")
     if cross_file_deps:
-        cross_file_plan = state.get("cross_file_plan") or {}
-        target_modules = cross_file_plan.get("target_modules") or []
-        if target_modules:
-            return target_modules[0]
-        # cross_file_plan 缺失时（analyze 节点未产出计划），回退到
+        # D3b Step A：消费开关仅门控 **plan 读取**；依赖边末元素回退是历史
+        # 口径（plan 未入图前跨文件任务的既有行为），任何开关下都保留——
+        # 否则默认配置（CONSUME 关）会把回退也跳过，构成行为变化。
+        if cross_file_plan_consume_enabled():
+            cross_file_plan = plan if plan is not None else (state.get("cross_file_plan") or {})
+            target_modules = cross_file_plan.get("target_modules") or []
+            if target_modules:
+                return target_modules[0]
+        # cross_file_plan 缺失时（analyze 节点未产出计划 / 消费开关关），回退到
         # cross_file_deps 里 target_module 字段去重集合的**末元素**
         # （依赖链末位 = 最内层被调用方，如 module_a → module_b → module_c
         # 中的 module_c；缺陷通常在最内层被调用模块）
@@ -382,9 +393,55 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
                 )
                 logger.info("确定性接管命中（%s），跳过本轮 LLM 修复调用", _det.get("method"))
 
+        # D3b Step A：本节点构建的跨文件修复计划（None = 未构建：BUILD 关 /
+        # 非跨文件 / 确定性接管分支 / 构建失败）。在 if/else 之前初始化，
+        # 保证确定性接管分支下变量已定义；仅 LLM 分支且 BUILD 开时赋值，
+        # 末尾经 update 写 state["cross_file_plan"]。
+        _cf_plan_dict: dict[str, Any] | None = None
+
         if _det_result is not None:
             result = _det_result
         else:
+            # D3b Step A（2026-10-18 第三轮独立评审落地；构建开关默认关）：
+            # CROSS_FILE_PLAN_BUILD_ENABLE=true 且跨文件任务（deps 非空）时，
+            # 经 build_cross_file_repair_plan_cached（协调器-提议者：每模块一次
+            # debug 调用）构建修复计划，本节点 update 写 state["cross_file_plan"]；
+            # 是否消费由 _resolve_target_module 的 CONSUME 开关决定（解耦 A/B）。
+            # 关闭时本段零执行、LLM 调用/路由/返回键集合与历史逐位一致。
+            # 置于 LLM 分支而非 analyzer 节点：builder 需要 debugger 实例与
+            # test_output/failed_cases（analyzer 运行时点不可得）——与设计文档
+            # §3 的节点选择偏差已在文档"实现备注"登记。
+            if state.get("cross_file_deps"):
+                from src.tools.cross_file import (
+                    build_cross_file_repair_plan_cached as _build_cf_plan,
+                )
+                from src.tools.cross_file import cross_file_enabled as _cf_enabled
+                from src.tools.cross_file import (
+                    cross_file_plan_build_enabled as _cf_build_enabled,
+                )
+
+                if _cf_build_enabled() and _cf_enabled():
+                    _cf_entry = state.get("module_name") or os.path.basename(state.get("target_file") or "")
+                    try:
+                        _cf_plan = _build_cf_plan(
+                            entry_modules=[_cf_entry] if _cf_entry else [],
+                            source_files={_cf_entry: state["target_code"]} if _cf_entry else {},
+                            debugger=agent,
+                            target_code=state["target_code"],
+                            test_output=state.get("test_output") or "",
+                            failed_cases=state.get("failed_cases") or [],
+                            focus_function=state.get("target_function"),
+                            target_module=state.get("module_name"),
+                        )
+                        _cf_plan_dict = _cf_plan.to_dict()
+                        logger.info(
+                            "D3b Step A：构建跨文件修复计划（modules=%s，patches=%d）",
+                            _cf_plan_dict.get("target_modules"),
+                            len(_cf_plan_dict.get("per_module_patches") or {}),
+                        )
+                    except Exception as _cf_exc:  # 观测层失败不得阻断修复主流程
+                        logger.warning("D3b Step A：计划构建失败，降级为无计划口径：%s", _cf_exc)
+                        _cf_plan_dict = None
             result = agent.debug(
                 target_code=state["target_code"],
                 test_output=state.get("test_output") or "",
@@ -395,7 +452,9 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
                 # 应取 cross_file_plan.target_modules[0]（被调方真实模块名，如 module_c），
                 # 而非 state["module_name"]（task_id 末段，如 synthetic__xxx__test）。
                 # 单文件任务两者一致（module_name = 被测文件名 stem），行为不变。
-                target_module=_resolve_target_module(state),
+                # D3b Step A：plan 参数 = 本节点刚构建的计划（CONSUME 开关关时
+                # _resolve_target_module 忽略之，逐位保持历史口径）。
+                target_module=_resolve_target_module(state, plan=_cf_plan_dict),
                 # P0 1.1 分层代码压缩：跨文件任务时，把 cross_file_analyzer 构建的
                 # 各模块"目标函数 + CODE_FOCUS_DEPTH 层调用链"聚焦上下文注入 prompt，
                 # 替代"整模块全文 → 截断后靠猜"的旧口径（纯静态文本，零 LLM token）
@@ -878,6 +937,11 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
                     "M12 暂停未生效（无 checkpointer），继续工作流（risk_level=%s）",
                     _risk_result.get("risk_level"),
                 )
+    # D3b Step A（2026-10-18）：本节点构建的跨文件修复计划落 state。仅在
+    # BUILD 开且构建成功时写键（None 时不写——保持 OFF 时返回键集合与历史
+    # 逐位一致，下游 analyzer 写入的 None 占位不被覆盖）。
+    if _cf_plan_dict is not None:
+        update["cross_file_plan"] = _cf_plan_dict
     return update
 
 

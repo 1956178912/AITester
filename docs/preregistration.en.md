@@ -1,6 +1,6 @@
-# Pre-registration: E1–E4 Validation Experiments (Detection-First Protocol + Logic Chain + Double Gates)
+# Pre-registration: E1–E8 Validation Experiments (E1–E4 detection-first protocol + logic chain + double gates; E6–E8 added later, E5 exploratory)
 
-Last updated: 2026-10-07 (**E2 iteration batch**: the user approved
+Last updated: 2026-10-18 (**E8 amendment**: the round-T drift-attribution `{thinking on/off}×{legacy/current profile}` 2x2 ablation pre-registration is frozen — H1/H2/H3 criteria locked before any run, estimated $6–9, no runs before authorization); previously 2026-10-07 (**E2 iteration batch**: the user approved
 spending the pre-registered "exactly one" gate/routing fix re-run —
 three defect fixes as iteration preconditions: (1) fl_at_k 0/174 root
 cause = implementation deviating from the R8 docstring design (system
@@ -36,8 +36,9 @@ with no standalone citable artifact).
 
 Scope of effect: E1 (contract smoke) / E2 (double-gate replication) /
 E3 (all-metrics, merged into E2) / E4 (first real-benchmark run) /
-E6 (budget-matched four-arm) / E7 (repair-ceiling stratified sampling).
-E6/E7 were added by the AL batch (2026-10-06) — the amendment precedes any
+E6 (budget-matched four-arm) / E7 (repair-ceiling stratified sampling) / E8 (round-T drift-attribution 2x2 ablation).
+E8 was added by round U (2026-10-18) — likewise before any E8 data exists
+(not authorized, zero calls, no batches). E6/E7 were added by the AL batch (2026-10-06) — the amendment precedes any
 E6/E7 data (the E7 sampling script has not been run against real artifacts;
 no E6 batches exist). E5 (model gradient) is **exploratory**, not bound by
 this document, and must be labeled as such when reported.
@@ -312,6 +313,57 @@ this document, and must be labeled as such when reported.
   classification. The review verdict remains a human judgment — the
   worksheet prepares materials, it does not adjudicate.
 
+## E8: Round-T Drift Attribution 2×2 Ablation ({thinking on/off} × {legacy/current profile})
+
+- **Motivation (third-round independent review A-03/A-17, 2026-10-18)**: the
+  round-T B2 fingerprint-locked replication was judged `not_reproduced`
+  (secondary ordering R1/R3 fails) while the core negative R2 remained
+  significant (−25.29 pp); drift diagnosis found that the two batch
+  generations ran under **different inference modes** (old batch = provider
+  default reasoning, output tokens 78.6%; new batch = thinking disabled,
+  36.4%) and that the `plain_llm` single-prompt arm drifted globally
+  (1.53%→11.88%) ⇒ **the two generations must not be pooled**, and "whether
+  −28 pp varies with inference mode / protocol switches" is unattributed.
+  This experiment decomposes the drift into a decidable 2×2, answering
+  "is the core negative an inference-mode invariant".
+- **Design**: 2×2 = {`LLM_THINKING_MODE` on/off} × {R-P0-2 cut `b533cff`
+  legacy profile, round-T cut `a93c1f6` current profile}; arms =
+  {aitester, plain_llm, plain_llm_df}; synthetic n=87 × 1 seed (42) first,
+  extended to seed {44} if significance is ambiguous; `TEMPERATURE=0`, cold
+  cache (`AITESTER_LLM_CACHE=0`), clean worktree, `model_fingerprint.pinned=true`,
+  per-seed hard gates (same as B2: clean tree / pinned fingerprint / 87 rows /
+  exit=0 / identical task sets).
+  - How the legacy-profile cell is obtained: `git worktree add` to `b533cff`
+    and run there (that cut has no `LLM_THINKING_MODE` switch; its "default
+    reasoning mode" IS the on-cell caliber), recording `git_sha` in
+    provenance; the current-profile cell uses `a93c1f6` with the same caliber.
+  - Cost estimate (at round-T measured unit prices; thinking-on ≈ 2.2× the
+    tokens of thinking-off): four cells × three arms ≈ **$6–9**; revised
+    after the first-cell dry run (a revision may change the budget only, not
+    the criteria, and must be committed before any data exists).
+- **Primary endpoint**: the within-cell paired detection delta δ for
+  `aitester` vs. `plain_llm_df` (exact McNemar + bootstrap CI + Bayesian
+  ROPE ±5 pp; BH-FDR across the family of four primary contrasts).
+- **Pre-registered criteria (frozen; no post-hoc changes)**:
+  - **H1 (inference-mode invariance)**: in all four cells `aitester − df` is
+    negative with 95% CI entirely below zero → the core negative is robust to
+    inference mode and protocol switches; "orchestration net negative" is
+    upgraded to a cross-configuration conclusion;
+  - **H2 (mode dependence)**: any cell's δ turns positive with CI excluding
+    zero → the core negative holds only under specific inference modes, and
+    the paper's main conclusion must be restated per cell (no merging);
+  - **H3 (drift attribution)**: the plain_llm arm's across-cell variance
+    exceeds the between-cell variance of the two treatment arms → the
+    secondary-ordering drift is mainly a global baseline-arm drift rather
+    than protocol switches;
+  - mixed results → report the dominant cell honestly; no selective quoting.
+- **Stopping rule**: one-shot 2×2, no iteration clause; any cell failing its
+  hard gates is voided and disclosed (remaining cells must not be presented
+  as "all cells passed").
+- **Budget gate**: this experiment requires LLM-quota authorization
+  (estimated $6–9); no runs before authorization (same discipline as
+  ADR-0034: freeze criteria first, then request budget, then run).
+
 ## Statistical Analysis Plan (common to all experiments)
 
 - Test family: McNemar (continuity correction) + BH-FDR (α=0.05) +
@@ -372,6 +424,7 @@ this document, and must be labeled as such when reported.
 | E4 | **executed (2026-10-09; both arms, fully settled: `aitester` + `plain_llm_df`)** | `experiments/results/e6_a1_batches/e4_quixbugs_aitester/` (`benchmark_quixbugs_20261009_215514.json`) + `e4_quixbugs_plain_llm_df/` (`benchmark_quixbugs_20261009_223101.json`), each with 50 traces and logs | **41-defect-program caliber: BOTH arms have detection 0/41 = 0.0%**; aitester repair 35/40 = 87.5%, false_fix 2.5%, token/task 17,156, red_seen 40/41; df repair 0 (no repair channel), token/task 2,370, red_seen 41/41. **Paired McNemar (detection): discordant pairs = 0, p = 1.0000** (41/41 identical); Bayesian delta=+0.0000, 95% CI [-0.0659, +0.0672], P(|delta|<=ROPE)=0.8943 | **Primary endpoint FAILED** (neither arm has detection > 0). **Mechanism settled**: red tests are widespread (red_seen 40-41/41) but **non-specific** - stage 2 of the F2P three-stage verdict (green on fixed) does not hold, so "0% detection" precisely means **"red without specificity"** (wrong/over-strict assertions, or the 30s execution timeout), sharing a root with the synthetic over-red channel. The **"repair relies on non-F2P signals" hypothesis is refuted**: repair is adjudicated independently by the gold tests and does not intersect the generated-test channel. **On the real benchmark, orchestration vs plain prompting shows no detection difference** (p=1.0) while orchestration costs 7.2x the tokens. Limitation: each arm ran at its own standard budget, not an equal-budget comparison | 2026-10-09 |
 | E6 | **executed (2026-10-09, two phases: cold-cache standard + matched)** | `experiments/results/e6_a1_batches/e6_phase1_standard_coldcache/` (three standard arms) + `e6_phase2_matched_coldcache/` (two matched arms), with SHA256SUMS/README | Four-arm detection: aitester standard 6.9% (6/87, 8,857 tok) · aitester matched 2.3% (2/87, 87/87 capped) · df standard 31.0% (27/87, 2,586 tok) · df matched 26.4% (23/87, 2,602 tok) | **Budget confounding refuted**: df(matched) vs aitester(standard) chi2=13.474 p=0.0002 (BH q=0.0002); raising df's budget leaves its consumption unchanged (2,586 to 2,602) with no significant detection change (p=0.2888) → **-28pp attributed to orchestration structure; ADR-0016 reinforced**. Limitation: aitester(matched)'s cap is below its per-task need (84/87 rows capped early), so that arm measures orchestration under budget starvation, not a strict equal-energy comparison | 2026-10-09 |
 | E7 | pending manual review (candidate list generated, batch AO) | — | — | — | — |
+| E8 | pending budget authorization (pre-registration frozen 2026-10-18; estimated $6–9; ADR-0034 discipline: no runs before authorization) | — | — | — | — |
 | **A1 ablation (outside preregistration, 2026-10-09 review report §5 path A1)** | **running (2026-10-09, see the A1 design declaration below)** | to be deposited | — | **declared before data** | — |
 
 ### E6 execution addendum (2026-10-09, registered **before any data**)
