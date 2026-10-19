@@ -228,6 +228,37 @@ class TestStratifiedSelection:
     def test_empty_strata_ok(self) -> None:
         assert select_stratified_sample({}, 0.1, 42) == []
 
+    def test_three_paths_nested_on_archived_frame(self) -> None:
+        """E7 三路径（10% / 56% / 100%）在归档抽样框上逐级嵌套且同序。
+
+        这条性质支撑"路径 A 的裁决成果升级到 B 或全框普查时零返工"。
+
+        **它不是 `random.sample()` 的算法保证**：同 seed 不同 k 的样本并不保证
+        嵌套——在 150 组合成参数上实测 13% 集合不嵌套、33% 顺序不一致。它在
+        本项目 (72 行 / seed=42 / 单层 sbfl) 下成立，属于当前备料的**有效性
+        事实**。若改抽样实现或抽样框导致本测试转红，正确解读是"备料失效、
+        须重新生成"，而不是"测试过时"。
+        """
+        from experiments.repair_sample_selection import _DEFAULT_BATCHES
+        from experiments.statistical_analysis import load_experiment_results_with_sources
+
+        results, _sources = load_experiment_results_with_sources(
+            "experiments/results/main_batch",
+            list(_DEFAULT_BATCHES),
+            allow_schema_mixed=False,
+            pool_seeds=True,
+        )
+        strata = stratify(build_sampling_frame(results.get("aitester") or []))
+
+        def ids(fraction: float) -> list[str]:
+            return [str(r["task_id"]) for r in select_stratified_sample(strata, fraction, 42)]
+
+        n8, n41, n72 = ids(0.10), ids(0.56), ids(1.0)
+        assert (len(n8), len(n41), len(n72)) == (8, 41, 72), "三路径样本量与备料不符"
+        assert len(set(n72)) == 72, "全框普查不得出现重复行"
+        assert set(n8) <= set(n41) <= set(n72), "集合嵌套破裂：升级路径会遗漏已裁决行"
+        assert n72[: len(n8)] == n8, "顺序不一致：已裁决行在升级后的位置会变"
+
 
 class TestRenderManifest:
     """候选清单渲染：参数披露 + 判定口径 + 待复核列。"""
