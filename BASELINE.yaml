@@ -11,10 +11,10 @@
 #   - 过期内容不得就地标注在本文件，历史快照归 docs/history/。
 
 version: "1"
-last_verified: "2026-10-19"   # 全量回归实测日期（X 轮：论文复现性闭环与系统评审——6 个零 LLM 复算入口脚本入库 + 607 子句语料归档 + 2 个输入批次入库，CI 同口径）：collected **9158** = passed **9153** + skipped 5 + failed 0（xdist -n 4 loadfile；X 轮净增 14 例：test_emse_recompute_entrypoints.py 9〔语料重放逐位复现/确定性/结构锁/旧门常量恢复 + ULT 与 Mut@k 三入口分类契约 + 池化口径聚合〕+ test_analyze_t1_b2_manual_sections.py 5〔T 轮 README 手工节生成-保留机制〕）。此前 W 轮 collected 9144 = 9139 + 5；沙箱宿主口径见 tests.total_failed 注释。
+last_verified: "2026-10-19"   # 全量回归实测日期（Y 轮：修复覆盖率缺口审计——以 coverage.xml 行集合为权威，审计 ff15a2f→HEAD 的 src/ 修复新增代码，552 行中 37 行（6.70%）从未被测试执行；补齐 3 组 P1 契约缺口共 5 例回归锁，逐项经变异验证）：collected **9163** = passed **9158** + skipped 5 + failed 0（xdist -n 4 loadfile；Y 轮净增 5 例：test_fix_coverage_audit_2026_10_19.py〔A11 跨模型预算复查 / A11 zai 预算透传 / A15 同端点后缀 / A09 旧键材料 ×2〕）。此前 X 轮 collected 9158 = 9153 + 5；W 轮 collected 9144 = 9139 + 5；沙箱宿主口径见 tests.total_failed 注释。
 
 tests:
-  total_passed: 9153          # 全量 pytest tests/（2026-10-19 X 轮论文复现性闭环与系统评审后实测：collected **9158**，正常环境口径 **9153 passed / 5 skipped / 0 failed**；登记口径 = collected − skipped。X 轮净增 14 例：`tests/test_emse_recompute_entrypoints.py` 9（可编译率语料重放逐位复现归档报告 + 确定性 + 607 行结构锁 + 旧门判分模块常量恢复；ULT accuracy / QuixBugs·ULT Mut@k / 健全性审计三入口的 pass/fail 分类契约；`_aggregate` 池化口径）+ `tests/test_analyze_t1_b2_manual_sections.py` 5（T 轮 README 手工节 MANUAL 标记生成-保留机制）。**本机沙箱实测口径**：9138 passed / 19 skipped / 1 failed（失败 = 基线一致性守卫本身，见下；14 项 skip 为 ps/嵌套沙箱能力缺失：orphan_repro 8 + executor_sandbox/kernel 5 + platform 1），全部归因环境能力而非代码缺陷。此前 W 轮 9139 passed / collected 9144）
+  total_passed: 9158          # 全量 pytest tests/（2026-10-19 Y 轮修复覆盖率缺口审计后实测：collected **9163**，正常环境口径 **9158 passed / 5 skipped / 0 failed**；本轮净增 5 例 = `tests/test_fix_coverage_audit_2026_10_19.py`〔A11 跨模型故障转移前预算复查 / A11 zai 路径预算异常透传 / A15 同端点不同 key 的实例 ID 后缀 / A09 旧格式缓存键材料逐字节复刻 ×2〕，全部经"抹掉目标分支必红"变异验证）。此前 X 轮（2026-10-19 论文复现性闭环与系统评审）collected **9158**，正常环境口径 **9153 passed / 5 skipped / 0 failed**；登记口径 = collected − skipped。X 轮净增 14 例：`tests/test_emse_recompute_entrypoints.py` 9（可编译率语料重放逐位复现归档报告 + 确定性 + 607 行结构锁 + 旧门判分模块常量恢复；ULT accuracy / QuixBugs·ULT Mut@k / 健全性审计三入口的 pass/fail 分类契约；`_aggregate` 池化口径）+ `tests/test_analyze_t1_b2_manual_sections.py` 5（T 轮 README 手工节 MANUAL 标记生成-保留机制）。**本机沙箱实测口径**：9143 passed / 19 skipped / 1 failed（失败 = 基线一致性守卫本身，见下；14 项 skip 为 ps/嵌套沙箱能力缺失：orphan_repro 8 + executor_sandbox/kernel 5 + platform 1），全部归因环境能力而非代码缺陷。此前 W 轮 9139 passed / collected 9144）
   # T 轮新增/更新用例来源：test_t_round_semantic_fixes.py 34 / test_spec_smt_result_alias.py 12 /
   # test_smt_witness_batch.py 8 / test_examples_multisample.py 23→39（+16）/ test_batch_quota_preflight.py
   # QuotaProbe 7 / test_checksum_results_gate.py 路径归一 4 / test_e2e_probes_logic.py 2 探针 2 负控 / 既有两例更新。
@@ -24,7 +24,7 @@ tests:
   total_skipped: 5           # 2026-10-16 实测 5〔含 3 可选依赖缺失优雅跳过 + 1〔test_ult_adapter cosmic-ray 在场时"不可用口径不可演练"反跳〕+ 1 新增来源待定位〕；W 轮沙箱宿主实测 19（= 5 + 14 项 ps/嵌套沙箱能力缺失，见 total_passed 注）
   total_xfailed: 0           # 2026-10-15：上一批次登记的 strict xfail（`parse_coverage` 小写 total 回退失效）已随缺陷修复解除；套件重新回到零 xfail。历史：2026-10-12 推导式变量误杀修复后转正 → 本批为第二轮零 xfail
   slim_environment: 1863     # 上一次精简环境实测（2026-10-05 N 批次；此后续批次未重测精简环境——新增用例均为纯 stdlib 或仅依赖既有可选依赖口径）
-  suite_seconds: 178           # 全量耗时：X 轮（一）后本机沙箱实测 177.80s（xdist -n 4 loadfile，COVERAGE_FILE 隔离；W 轮同口径 186.48s）
+  suite_seconds: 182           # 全量耗时：Y 轮后本机沙箱实测 181.98s（xdist -n 4 loadfile，含 5 例新增回归锁；X 轮同口径 177.80s，W 轮 186.48s）
 
 # ⚠️ 口径澄清（R5 审查 2026-10-09，MET-01）：本节是 **meta_coverage**——
 #   即 AITester **自身源码**（--cov=src）的测试覆盖率，不是被测代码的覆盖率。

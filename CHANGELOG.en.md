@@ -1,10 +1,66 @@
-> Last updated: 2026-10-19 (round X: **paper reproducibility closure and systematic review** — zero-LLM recomputation cross-check of 12 claims all reproduce; five reproducibility gaps fixed (six zero-LLM recompute entry scripts + two input batches + the 607-clause corpus archived + a corpus-replay path + Appendix A extended with 5 artifact-map rows); T-round README manual-section rewrite hazard closed (MANUAL-marker preservation); 14 regression locks. Previously round W: second-round third-party review residuals closed (A07/A09/A10); round V: 23-item third-party review remediation; rounds U/T/S/R/Q/P/O/N/M/L/K registered the same day)
+> Last updated: 2026-10-19 (round Y: **fix-coverage gap audit** — per-line audit of every fix added between `ff15a2f` and HEAD under `src/`, using the `coverage.xml` line set as authority: 37 of 552 lines (6.70%) were never executed by any test; five regression locks close the A11 cross-model budget recheck, the A11 zai budget passthrough, the A15 same-endpoint suffix and the A09 legacy-key material, each mutation-verified; the audit tool is now in the repo. Previously round X: paper reproducibility closure and systematic review (12/12 zero-LLM recomputations reproduce + five reproducibility gaps fixed + 14 regression locks); round W: second-round third-party review residuals closed (A07/A09/A10); round V: 23-item third-party review remediation; rounds U/T/S/R/Q/P/O/N/M/L/K registered the same day)
 
 > **Language**: [简体中文](CHANGELOG.md) | English (this file)
 
 # Changelog
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+## [Unreleased] — 2026-10-19 Round Y: fix-coverage gap audit (zero LLM, $0)
+
+> Systematic audit of the recurrence pattern exposed by the last two review rounds
+> ("fixes cover the main path but miss a branch"): per-line coverage of every fix
+> added between `ff15a2f` and HEAD under `src/`, using the `coverage.xml` line set
+> as the authoritative notion of an executable line. Real LLM spend: **$0**.
+> Full report: `docs/reviews/FIX_COVERAGE_AUDIT_2026-10-19.md`.
+
+### Audit — 37 of 552 fix-added lines (6.70%) were never executed by any test
+
+- Method: added-line numbers from `git diff --unified=0 ff15a2f HEAD -- src/`
+  intersected with the `coverage.xml` line set. **Key lesson**: an initial
+  self-built bytecode check (`co_lines()`) counted every parameter line of a
+  multi-line function signature as executable, producing a bogus "1400 lines /
+  63% uncovered" figure; coverage.py decides executable lines from real trace
+  events and is the only defensible source.
+- Already well covered (not gaps): `process_utils.py` (A08 P0 + A12) all 48 lines
+  (including the Windows branch via mocks), `semantic_cache.py` (A09 follow-up)
+  all 12 lines, `nodes.py` (A14/A16) all 43 lines.
+- Tool added: `scripts/tools/audit_fix_coverage.py` (re-runnable for any
+  "fix baseline → HEAD" range; it is an audit, not a gate — exit code stays 0).
+
+### Fixed — three P1 contract gaps closed with 5 regression locks (all mutation-verified)
+
+- **A11 budget recheck before cross-model failover** (`base_agent.py:1022-1023`):
+  A11 has two recheck layers; existing tests only locked the first
+  (`pre_retry_check`, i.e. before an in-model retry, requires `max_retries>0`).
+  The second layer (before switching to the next model) had zero coverage —
+  reverting it lets a task keep burning models after the budget is exhausted.
+  **Mutation evidence**: with that branch reverted, the existing
+  `test_budget_rechecked_before_retry` still passes (it exercises layer one) and
+  only the new test fails, with `model-2` observed as invoked.
+- **A11 budget-exception passthrough on the zai path** (`llm_client.py:589-592`):
+  `except BudgetExceededError: raise` had zero coverage; reverting it wraps the
+  budget signal into `RuntimeError("zai API call failed")`, so the caller treats
+  it as an ordinary API failure and continues failing over.
+- **A15 endpoint-instance ID suffix** (`api_manager.py:239-240`): instance IDs are
+  derived from `base_url` only (credentials deliberately kept out of node keys),
+  so *same model / same base_url / different api_key* (the common quota-rotation
+  setup) yields the same ID and the second instance must degrade to `<id>#2`.
+  All eight existing A15 tests use distinct base URLs, so this branch never ran;
+  reverting it collapses two instances into one (`len(keys)` 2→1).
+- **A09 legacy cache-key material, byte-exact** (`base_agent.py:361, 370`): the
+  `jm1` (json_mode) and `ns<namespace>` material branches had zero coverage.
+  Dropping a component silently invalidates every historical cache entry
+  (observed as duplicate billing with a fully green suite); dropping `ns` is
+  worse — cross-namespace semantic reuse.
+
+### Recorded — remaining 31 lines classified (not fixed, non-blocking)
+
+- `executor_runtime.py` 14 lines (probe-subprocess failure branches / type
+  guards), `trace.py` 9 lines (A20's three "never write a corrupt line" guards —
+  **recommended next round**, lockable by injecting invalid JSON),
+  `api_manager.py` 4 lines (early return / extreme edge), `base_agent.py` 2 lines
+  (broad `except`), `llm_client.py` 2 lines (empty-identity returns).
 
 ## [Unreleased] — 2026-10-19 Round X: paper reproducibility closure and systematic review (zero LLM, $0)
 
