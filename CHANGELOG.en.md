@@ -1,10 +1,44 @@
-> Last updated: 2026-10-19 (round W: **second-round third-party review residuals closed** — A07 unified "latest record" selection across all statistics entry points; A09 semantic-cache partition now includes the system-prompt identity; A10 explicit task assignment outranks the global chain and complexity routing; two global-state leaks fixed as follow-ups (examples-generator env injection never restored, run_single_task thread-local assignment never cleared); 14 regression locks (12 counterexamples + 2 leak locks), counterexamples fail on the pre-fix commit; zero LLM spend. Previously round V: 23-item third-party review remediation; rounds U/T/S/R/Q/P/O/N/M/L/K registered the same day)
+> Last updated: 2026-10-19 (round X (part 1): **paper reproducibility closure** — zero-LLM recomputation cross-check of 12 claims all reproduce; four reproducibility gaps fixed (six zero-LLM recompute entry scripts committed + the 607-clause corpus archived + a corpus-replay path + Appendix A extended with 5 artifact-map rows); 9 regression locks. Previously round W: second-round third-party review residuals closed (A07/A09/A10); round V: 23-item third-party review remediation; rounds U/T/S/R/Q/P/O/N/M/L/K registered the same day)
 
 > **Language**: [简体中文](CHANGELOG.md) | English (this file)
 
 # Changelog
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+## [Unreleased] — 2026-10-19 Round X (part 1): paper reproducibility closure (zero-LLM recomputation cross-check + four gap fixes)
+
+> Preparatory audit for paper finalization: every core number cited in the paper was
+> recomputed with zero LLM calls (12/12 reproduce), and the recompute entry points
+> cited in Appendix A were audited. Real LLM spend: **$0**. Full report:
+> `docs/reviews/X_ROUND_ZERO_LLM_VERIFICATION_2026-10-19.md`.
+
+### Verified — zero-LLM recomputation cross-check (12/12 reproduce)
+
+- Main-batch three-seed statistics (overview / McNemar chi-square 27.2250 and 48.7935 / Bayesian delta +0.1393 and -0.2787 / paired t / cluster-robust 31 clusters, sign-test p 0.0018 and 0.0169), df_spec primary contrast (JSON bit-identical), T-round B2 replication (bit-identical), df_doc replacement and augmentation (bit-identical), ULT accuracy 42/200 (all 200 semantic fields identical), B1 protocol text, gate-count caliber (26/24/27 all match); fingerprints of 5 key batch JSONs match.
+- The W-round A07 pairing fix has zero effect on historical batch numbers (consistent with the fix note).
+
+### Fixed — reproducibility gap G1: compilability recompute chain (corpus archived + replay path)
+
+- **Gap**: `emse_dsl_extend_recheck.py` (and its dependency `emse_dsl_diag3.py`) was gitignored, and its corpus derives from the author machine's `~/.cache/aitester/llm` — the paper's "clause-level compilability 0.8847 to 0.9127" was not recomputable from the artifact package.
+- **Fix**: both scripts committed; the corpus was frozen as `CORPUS_607.json` at the archived report's mtime cut (2026-10-15 12:45:38, exactly reconstructing 719 planner entries to 607 deduplicated clauses); the script gained `--dump-corpus` / `--from-corpus` / `--out`. **Replaying the archived corpus reproduces RECHECK_REPORT.json bit-for-bit** (locked by regression tests).
+- **Regression locks**: `test_corpus_replay_reproduces_archived_report` (bit-identical + headline numbers pinned), `test_corpus_replay_deterministic`, `test_corpus_schema_lock`, `test_prior_gate_reason_restores_module_constants`.
+
+### Fixed — reproducibility gaps G2/G3: five zero-LLM recompute entry scripts committed
+
+- **Gap**: `emse_ult_dfsmoke_accuracy.py` (ULT accuracy 42/200), `emse_quixbugs_mutk_full.py` / `emse_ult_mutk_full.py` / `emse_test_sanity_audit.py` (**paper Table 5 mutation scores**) were gitignored (batch 7/8 discipline "ignored without test references" — but paper numbers depend on them directly, invalidating that premise).
+- **Fix**: five scripts committed; `.gitignore` drops six ignore entries and updates two discipline notes; the two Mut@k artifact READMEs drop the "gitignored" wording + SHA256SUMS regenerated.
+- **Regression locks**: `test_ult_dfsmoke_run_one_classification`, `test_mutk_aggregate_pooled_caliber` (pooled caliber / skips / sanity-gate exclusions separated), `test_sanity_gate_classification` (keyword-call contract across three entry points whose parameter orders differ — positional mismatch was measured to splice test text into the filename, a rc=5 false negative).
+
+### Fixed — reproducibility gap G4: Appendix A extended with 5 artifact-map rows
+
+- **Gap**: Appendix A (self-described typeset form of the SRC notes) lacked 5 quantitative mappings: compilability re-score, ULT estimate, oracle quality / SMT witness, design sensitivity, over-red audit.
+- **Fix**: Appendix A extended to 12 rows; caption updated (corpus-replay path); every entry point verified in-repo via `git ls-files` (`smt_witness_batch.py` was already tracked — a bash-grep encoding misreport; the Grep tool is used from now on).
+- Paper compiles to 19 pages; Appendix A/B visually verified page by page via SVG-to-Chrome screenshots.
+
+### Recorded — T-round README rewrite hazard (unfixed; handed to the X-round review)
+
+- `analyze_t1_b2_main_batch.py --write` regenerates the README from scratch; the manually appended "0.6 T-round findings" section (32 lines) in the archived copy would be silently dropped (demonstrated on a /tmp copy during this round's recomputation). Proposed fix: generation-preservation markers or moving the section to a handwritten file.
 
 ## [Unreleased] — 2026-10-19 Round W (second-round third-party review residuals: A07/A09/A10 P1 fixes)
 

@@ -11,20 +11,20 @@
 #   - 过期内容不得就地标注在本文件，历史快照归 docs/history/。
 
 version: "1"
-last_verified: "2026-10-19"   # 全量回归实测日期（W 轮：第二轮第三方复核残留 A07/A09/A10 补修后，CI 同口径）：collected **9144** = passed **9139** + skipped 5 + failed 0（xdist -n 4 loadfile；W 轮净增 14 例：test_review_73481bb_residuals.py 12 + 注入/线程恢复锁 2）。此前 V 轮 collected 9130 = 9125 + 5；沙箱宿主口径见 tests.total_failed 注释。
+last_verified: "2026-10-19"   # 全量回归实测日期（X 轮（一）：论文复现性闭环——6 个零 LLM 复算入口脚本入库 + 607 子句语料归档，CI 同口径）：collected **9153** = passed **9148** + skipped 5 + failed 0（xdist -n 4 loadfile；X 轮（一）净增 9 例：tests/test_emse_recompute_entrypoints.py 语料重放逐位复现/确定性/结构锁/旧门常量恢复 + ULT 与 Mut@k 三入口分类契约 + 池化口径聚合）。此前 W 轮 collected 9144 = 9139 + 5；沙箱宿主口径见 tests.total_failed 注释。
 
 tests:
-  total_passed: 9139          # 全量 pytest tests/（2026-10-19 W 轮补修后实测：collected **9144**，正常环境口径 **9139 passed / 5 skipped / 0 failed**；登记口径 = collected − skipped。W 轮净增 14 例：`tests/test_review_73481bb_residuals.py` 12（A07/A09/A10 三项复核残留的最小反例 + 相邻形状回归锁；同一文件在修复前提交 `73481bb` 干净检出上实测 10 failed / 2 passed）+ 两处全局状态泄漏的恢复锁 2（multisample env 注入恢复 / run_single_task 线程局部恢复）。**本机沙箱实测口径**：9124 passed / 19 skipped / 1 failed（失败 = 基线一致性守卫本身，见下；14 项 skip 为 ps/嵌套沙箱能力缺失：orphan_repro 8 + executor_sandbox/kernel 5 + platform 1），全部归因环境能力而非代码缺陷。此前 V 轮 9125 passed / collected 9130）
+  total_passed: 9148          # 全量 pytest tests/（2026-10-19 X 轮（一）论文复现性闭环后实测：collected **9153**，正常环境口径 **9148 passed / 5 skipped / 0 failed**；登记口径 = collected − skipped。X 轮（一）净增 9 例：`tests/test_emse_recompute_entrypoints.py`（可编译率语料重放逐位复现归档报告 + 确定性 + 607 行结构锁 + 旧门判分模块常量恢复；ULT accuracy / QuixBugs·ULT Mut@k / 健全性审计三入口的 pass/fail 分类契约；`_aggregate` 池化口径）。**本机沙箱实测口径**：9133 passed / 19 skipped / 1 failed（失败 = 基线一致性守卫本身，见下；14 项 skip 为 ps/嵌套沙箱能力缺失：orphan_repro 8 + executor_sandbox/kernel 5 + platform 1），全部归因环境能力而非代码缺陷。此前 W 轮 9139 passed / collected 9144）
   # T 轮新增/更新用例来源：test_t_round_semantic_fixes.py 34 / test_spec_smt_result_alias.py 12 /
   # test_smt_witness_batch.py 8 / test_examples_multisample.py 23→39（+16）/ test_batch_quota_preflight.py
   # QuotaProbe 7 / test_checksum_results_gate.py 路径归一 4 / test_e2e_probes_logic.py 2 探针 2 负控 / 既有两例更新。
   # 第三轮独立评审收口批次（2026-10-18，零 LLM）：A-08 防御式 mkdir / A-09 能力探测 skipif（4 文件，沙箱内 14 例显式 skip）
   # + P3 `tests/test_eval_integrity_check.py` 12 例（IC-1..IC-8 校验器回归锁）。
-  total_failed: 0            # 口径 = **正常环境**（CI 3.12/3.13/3.14 矩阵口径）。2026-10-18 第三轮独立评审实测补充：加固前沙箱宿主（broker/ps/嵌套 sandbox 受限）全量实跑 15 failed/8914 passed，失败全部归因环境能力缺失而非代码缺陷——① broker mkdir 垫片不尊重 exist_ok（TestVerifyP2PGate）；② 沙箱禁 ps（孤儿检测 10 例）与禁生产 profile sandbox_apply（内核沙箱真实执行 5 例）。A-08/A-09 加固后（防御式 mkdir + 能力探测 skipif）**沙箱内复跑 0 failed**（D3b 批次后为 8942 passed / 19 skipped / 0 failed，774.71s；U 轮收口正常环境全量 8956 passed / 5 skipped / 0 failed，176.43s）。引用"0 failed"时正常环境口径外，可带"加固后受限环境亦 0 failed"标签。**W 轮（2026-10-19）沙箱实测注**：末次全量 9124 passed / 19 skipped / 1 failed——唯一失败 = `TestBaselineNumbersConsistency::test_tests_and_mypy_are_current`（守卫语义即"BASELINE 数字过期即红"，本轮刷新后转绿；沙箱 14 项能力 skip 的清单与归因见 total_passed 注）。沙箱内 xdist 文件配对顺序波动下的随机转红已随 W 轮两处全局状态泄漏修复消除（连续 3 次全量仅此守卫一败、无位置漂移）
+  total_failed: 0            # 口径 = **正常环境**（CI 3.12/3.13/3.14 矩阵口径）。2026-10-18 第三轮独立评审实测补充：加固前沙箱宿主（broker/ps/嵌套 sandbox 受限）全量实跑 15 failed/8914 passed，失败全部归因环境能力缺失而非代码缺陷——① broker mkdir 垫片不尊重 exist_ok（TestVerifyP2PGate）；② 沙箱禁 ps（孤儿检测 10 例）与禁生产 profile sandbox_apply（内核沙箱真实执行 5 例）。A-08/A-09 加固后（防御式 mkdir + 能力探测 skipif）**沙箱内复跑 0 failed**（D3b 批次后为 8942 passed / 19 skipped / 0 failed，774.71s；U 轮收口正常环境全量 8956 passed / 5 skipped / 0 failed，176.43s）。引用"0 failed"时正常环境口径外，可带"加固后受限环境亦 0 failed"标签。**X 轮（一，2026-10-19）沙箱实测注**：末次全量 9133 passed / 19 skipped / 1 failed——唯一失败 = `TestBaselineNumbersConsistency::test_tests_and_mypy_are_current`（守卫语义即"BASELINE 数字过期即红"，本轮刷新后转绿；沙箱 14 项能力 skip 的清单与归因见 total_passed 注）。沙箱内 xdist 文件配对顺序波动下的随机转红已随 W 轮两处全局状态泄漏修复消除（连续 3 次全量仅此守卫一败、无位置漂移）
   total_skipped: 5           # 2026-10-16 实测 5〔含 3 可选依赖缺失优雅跳过 + 1〔test_ult_adapter cosmic-ray 在场时"不可用口径不可演练"反跳〕+ 1 新增来源待定位〕；W 轮沙箱宿主实测 19（= 5 + 14 项 ps/嵌套沙箱能力缺失，见 total_passed 注）
   total_xfailed: 0           # 2026-10-15：上一批次登记的 strict xfail（`parse_coverage` 小写 total 回退失效）已随缺陷修复解除；套件重新回到零 xfail。历史：2026-10-12 推导式变量误杀修复后转正 → 本批为第二轮零 xfail
   slim_environment: 1863     # 上一次精简环境实测（2026-10-05 N 批次；此后续批次未重测精简环境——新增用例均为纯 stdlib 或仅依赖既有可选依赖口径）
-  suite_seconds: 186           # 全量耗时：W 轮补修后本机沙箱实测 186.48s（xdist -n 4 loadfile + `--cov=src --cov-branch`，COVERAGE_FILE 隔离；含覆盖率采集开销）。
+  suite_seconds: 178           # 全量耗时：X 轮（一）后本机沙箱实测 177.80s（xdist -n 4 loadfile，COVERAGE_FILE 隔离；W 轮同口径 186.48s）
 
 # ⚠️ 口径澄清（R5 审查 2026-10-09，MET-01）：本节是 **meta_coverage**——
 #   即 AITester **自身源码**（--cov=src）的测试覆盖率，不是被测代码的覆盖率。

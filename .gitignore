@@ -142,12 +142,15 @@ experiments/emse_compile_rate_calib.py
 # tests/test_emse_*.py 跟踪而脚本 gitignore 曾致 fresh clone（CI/artifact 复现）
 # 收集即 ImportError（4 文件全红，本地因脚本在盘而不可见）。契约锁定的脚本随测试入库；
 # 无测试引用的纯编排/诊断脚本（下列未删条目）维持 gitignored。
+# X 轮（2026-10-19）：论文复现性闭环——零 LLM 复算入口有论文数字直接依赖的
+# 随测试入库：① 子句可编译率 0.8847→0.9127 重放（emse_dsl_diag3 /
+# emse_dsl_extend_recheck，语料切点归档 CORPUS_607.json）；② ULT accuracy
+# 42/200（emse_ult_dfsmoke_accuracy）；③ Table 5 mutation 分数
+# （emse_quixbugs_mutk_full / emse_ult_mutk_full / emse_test_sanity_audit）。
+# 回归锁统一在 tests/test_emse_recompute_entrypoints.py。
 experiments/emse_t08_gates_recompute.py
 experiments/emse_quixbugs_mutk.py
 experiments/emse_batch5_orchestrator.py
-experiments/emse_dsl_diag3.py
-experiments/emse_dsl_extend_recheck.py
-experiments/emse_ult_dfsmoke_accuracy.py
 experiments/results/emse_*/
 
 # Private data and experiments
@@ -215,9 +218,9 @@ review_report_graph_api.md
 .mimosa/hook-status/
 # 批次八（2026-10-15）：无入库测试引用的纯编排/诊断脚本维持 gitignored
 #（"有入库测试锁定契约的脚本必须随测试入库"的规则反面）。
-experiments/emse_quixbugs_mutk_full.py
-experiments/emse_ult_mutk_full.py
-experiments/emse_test_sanity_audit.py
+# X 轮（2026-10-19）：论文 Table 5（mutation 分数修正）的复算入口
+#（emse_quixbugs_mutk_full / emse_ult_mutk_full / emse_test_sanity_audit）
+# 有论文数字直接依赖，随 tests/test_emse_recompute_entrypoints.py 入库。
 # 批次九（2026-10-15）：下列脚本**有**入库测试锁定契约（tests/test_emse_*.py
 # 直接 import），故按批次七纪律**入库**——gitignore 会致 fresh clone 收集即
 # ImportError（本地因脚本在盘而不可见）。
