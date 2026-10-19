@@ -43,6 +43,7 @@
 - 反例测试：`tests/test_review_73481bb_residuals.py`（12 例）。同一文件在修复前提交 `73481bb` 的干净检出上实测 **10 failed / 2 passed**，修复后 **12 passed**。
 - 受影响模块既有回归（13 文件，含连带修复触及的 `test_examples_multisample.py`/`test_oracle_examples.py`/`test_run_benchmark.py`）：**442 例全部通过**（含两种文件顺序各跑一遍的污染复查）。
 - 逐项收口与边界说明：`docs/reviews/THIRD_PARTY_REVIEW_2026-10-18_FIX_CLOSURE.md` §5。
+- **CI Security 门禁修复（W 轮文档同步批次实测发现，属 V 轮推送即存在的失败）**：`gitleaks detect --no-git`（v8.28.0 + 仓库配置，干净检出精确复现）命中 `tests/test_trace_jsonl_integrity.py`（V 轮新增）的 **9 条 generic-api-key**——全部为"必须被 `<REDACTED>` 脱敏"断言的夹具假值（`abcdefgh123456` ×6 / `placeholderSecret123` / `supersecretvalue` / `sk-ws-ABCDEFGH1234567890xy`）。按 `.gitleaks.toml` 既定治理口径**逐字面量**登记豁免并注明用途（非整目录豁免，真实泄漏仍会检出）；干净检出复扫 **0 findings / 退出码 0**。
 
 ## [Unreleased] — 2026-10-18 V 轮（第三方独立评审 23 项修复：A08 P0 凭证隔离 + A01–A07/A09–A17 P1 + A18–A23 P2）
 

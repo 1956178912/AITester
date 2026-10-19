@@ -43,6 +43,7 @@ All notable changes to this project will be documented in this file. Format foll
 - Counterexample suite: `tests/test_review_73481bb_residuals.py` (12 cases). On a clean checkout of the pre-fix commit `73481bb` the same file produced **10 failed / 2 passed**; after the fix **12 passed**.
 - Existing regressions in affected modules (13 files, including the follow-up-touched `test_examples_multisample.py`/`test_oracle_examples.py`/`test_run_benchmark.py`): **442 cases all pass** (pollution rechecked in both file orders).
 - Per-item closure and boundaries: `docs/reviews/THIRD_PARTY_REVIEW_2026-10-18_FIX_CLOSURE.md` §5.
+- **CI Security gate fix (found while verifying the round-W doc sync; the failure pre-dates this batch and was introduced by the round-V push)**: `gitleaks detect --no-git` (v8.28.0 + repo config, reproduced bit-for-bit on a clean checkout) flagged **9 generic-api-key findings** in `tests/test_trace_jsonl_integrity.py` (added in round V) — all fixed fixture literals for "must be `<REDACTED>`" assertions (`abcdefgh123456` ×6 / `placeholderSecret123` / `supersecretvalue` / `sk-ws-ABCDEFGH1234567890xy`). Registered **per-literal** allowlist entries in `.gitleaks.toml` with justification per the file's governance (no directory-wide exemption; genuine leaks still detected); clean-checkout rescan gives **0 findings / exit 0**.
 
 ## [Unreleased] — 2026-10-18 Round V (third-party independent review — 23-item remediation: A08 P0 credential isolation + A01–A07/A09–A17 P1 + A18–A23 P2)
 

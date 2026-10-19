@@ -46,6 +46,19 @@ regexes = [
     '''eyJhbGciOiJIUzI1NiJ9\.eyJzdWIiOiJwbGFjZWhvbGRlciJ9\.cGxhY2Vob2xkZXJzaWduYXR1cmU''',
     # tests/test_model_fingerprint.py:230 — 探针异常文本必须脱敏的假 sk- 夹具
     '''sk-abcdef0123456789abcdef0123456789''',
+    # V 轮（2026-10-18）：tests/test_trace_jsonl_integrity.py — JSONL 写盘
+    # 脱敏守卫测试的固定假值（"必须被 <REDACTED> 脱敏"的断言输入，
+    # 全部为键盘序列/占位词，非真实凭证；2026-10-19 W 轮文档同步批次
+    # 复现 CI Security 失败后按本文件治理口径逐字面量登记）：
+    #   :89  key="placeholderSecret123"（引号赋值 JSON 可解析性夹具）
+    #   :101 key=supersecretvalue（赋值形态参数化夹具）
+    #   :156 sk-ws-ABCDEFGH1234567890xy（sk- 前缀断言缺席夹具）
+    #   :158/:171/:187/:201/:204/:211 abcdefgh123456（key=/token= 锚定
+    #   回归夹具——与既有 abcd123456efgh 同类的键盘序列假值）
+    '''placeholderSecret123''',
+    '''supersecretvalue''',
+    '''sk-ws-ABCDEFGH1234567890xy''',
+    '''abcdefgh123456''',
 ]
 
 [[allowlists]]
