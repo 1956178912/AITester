@@ -1,6 +1,6 @@
 # AITester Documentation Index
 
-> Last updated: 2026-10-18 (round U: third-round independent-review close-out + A-03/A-17 drift write-up + P3 evaluation-integrity checklist + D3b Step A wiring; round T same day)
+> Last updated: 2026-10-19 (round Y4: authoritative responses to the third round's eight open questions; rounds Y/Y2/Y3 fix-coverage audits — three reports plus the reusable audit tool — registered in the core-document table)
 >
 > This page is the **navigation entry** for all Markdown documents: shortest reading
 > paths by role first, then the core-document list (one line per document). Every link
@@ -42,6 +42,7 @@
 6. [docs/reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-17.md](reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-17.md) (Chinese): second independent systematic review with open items and dispositions.
 7. [docs/reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-18.md](reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-18.md) (Chinese): third independent systematic review (14 core claims recomputed bit-for-bit; A-01..A-20 recommendations and same-day close-out status).
 8. [docs/reviews/THIRD_PARTY_REVIEW_2026-10-18_FIX_CLOSURE.md](reviews/THIRD_PARTY_REVIEW_2026-10-18_FIX_CLOSURE.md) (Chinese): closure report for the 23 findings of the third-party independent review (Windows): P0 A08 + P1/P2 per-item matrix, M1–M9 rerun and residual risks; §5 appends the second-round residuals A07/A09/A10 (2026-10-19).
+9. [docs/reviews/REVIEW_CLARIFICATIONS_2026-10-19.md](reviews/REVIEW_CLARIFICATIONS_2026-10-19.md) (Chinese): the **authoritative response entry** for §15's eight open questions of the third round (five closed, two awaiting a project decision, one not done with an explicit cost); each item gives artifact path + recompute command + capability boundary.
 
 ### 2.3 Reproducer
 
@@ -135,6 +136,10 @@
 | [CHANGELOG.en.md](../CHANGELOG.en.md) | Per-batch change log (historical snapshot; current calibers live in BASELINE and the documents linked here). |
 | [docs/reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-18.md](reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-18.md) (Chinese) | Third independent systematic review (2026-10-18): 60+ frontier data points rebuilt from primary sources, 14 core claims recomputed bit-for-bit, A-01..A-20 recommendations and same-day close-out status. |
 | [docs/reviews/THIRD_PARTY_REVIEW_2026-10-18_FIX_CLOSURE.md](reviews/THIRD_PARTY_REVIEW_2026-10-18_FIX_CLOSURE.md) (Chinese) | Closure report for the 23 findings of the third-party independent review (Windows, 2026-10-18): P0 A08 credential isolation + P1/P2 per-item matrix, M1–M9 rerun, gates and residual risks; §5 records the second-round residuals A07/A09/A10 (2026-10-19). |
+| [docs/reviews/REVIEW_CLARIFICATIONS_2026-10-19.md](reviews/REVIEW_CLARIFICATIONS_2026-10-19.md) (Chinese) | Authoritative responses to the third round's eight open questions: five closed with artifact paths and recompute commands, two awaiting a project decision, one explicitly not done with its cost stated. |
+| [docs/reviews/FIX_COVERAGE_AUDIT_2026-10-19.md](reviews/FIX_COVERAGE_AUDIT_2026-10-19.md) (Chinese) | Fix-coverage gap audit (round Y): 37 of 552 fix-added lines under `src/` were never executed by any test; five mutation-verified regression locks. |
+| [docs/reviews/FIX_COVERAGE_AUDIT_ROUND2_2026-10-19.md](reviews/FIX_COVERAGE_AUDIT_ROUND2_2026-10-19.md) (Chinese) | Round-Y2 audit closure: A20 degradation chain, A06 production-entry wiring, A16 flaky evidence; first audit of `experiments/`. |
+| [docs/reviews/FIX_COVERAGE_AUDIT_ROUND3_2026-10-19.md](reviews/FIX_COVERAGE_AUDIT_ROUND3_2026-10-19.md) (Chinese) | Round-Y3 wrap-up: two dead functions removed, three A03 provenance degradation paths, and the repo-wide uncovered-line map (637 lines / 83 files). |
 | [docs/reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-17.md](reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-17.md) (Chinese) | Second independent systematic review: findings, evidence and disposition suggestions. |
 | [CODE_OPTIMIZATION_2026-10-16.md](../CODE_OPTIMIZATION_2026-10-16.md) (Chinese) | Full code review and optimization report (round C). |
 | [PHASE1_PRECHECK_2026-10-12.md](../PHASE1_PRECHECK_2026-10-12.md) (Chinese) | Phase-1 pre-check report for the improvement plan. |

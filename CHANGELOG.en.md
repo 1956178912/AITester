@@ -1,10 +1,40 @@
-> Last updated: 2026-10-19 (round Y3: **audit wrap-up and a repo-wide uncovered-line map** — two dead functions removed (`_strip_seed_prefix` / `_rebuilt_task_fingerprints`, coverage denominator −8 lines); three A03 provenance degradation paths closed (marker read failure / malformed lines / git exception), each mutation-verified; first repo-wide classification of 652 uncovered lines, with an explicit rationale for not testing frozen features. Previously round Y2: audit closure and first audit of experiments/ (three gap groups, 8 tests); round Y: fix-coverage gap audit (37 of 552 lines unexecuted + five regression locks + the audit tool); round X: paper reproducibility closure and systematic review; round W: second-round third-party review residuals closed (A07/A09/A10); round V: 23-item third-party review remediation; rounds U/T/S/R/Q/P/O/N/M/L/K registered the same day)
+> Last updated: 2026-10-19 (round Y4: **responses to the third round's open questions** — all eight items closed out (five closed, two awaiting a project decision, one not done with its cost stated), each with artifact path + recompute command + capability boundary; clarified the two ULT batch calibers (2/20=10.0% vs 42/200=21.0%) and why the 26/24/27 gate counts differ; the index now registers the three audit reports. Previously round Y3: audit wrap-up and a repo-wide uncovered-line map (two dead functions removed + three A03 provenance paths + the 637-line map); round Y2: audit closure and first audit of experiments/ (three gap groups, 8 tests); round Y: fix-coverage gap audit (37 of 552 lines unexecuted + five regression locks); round X: paper reproducibility closure and systematic review; rounds W/V: second/first third-party review remediation; rounds U/T/S/R/Q/P/O/N/M/L/K registered the same day)
 
 > **Language**: [简体中文](CHANGELOG.md) | English (this file)
 
 # Changelog
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+## [Unreleased] — 2026-10-19 Round Y4: responses to the third round's open questions (zero LLM, $0)
+
+> The third independent review's §15 listed eight open questions, but the answers were
+> scattered across the register, ADRs, the paper and earlier audit reports — a reviewer had
+> to stitch together 4+ documents. This round consolidates them into a single authoritative
+> entry.
+
+### Added — `docs/reviews/REVIEW_CLARIFICATIONS_2026-10-19.md`
+
+- Item-by-item responses: **five closed** (ULT recompute path / `SPEC_SMT_ENABLE` end-to-end /
+  orchestration-search unblocking / gate-count caliber / post-B2 narrative), **two awaiting a
+  project decision** (E7 schedule and n-caliber, roadmap acceptance), **one not done with its
+  cost stated** (synthetic representativeness calibration).
+- Every item gives **artifact path + recompute command + capability boundary**. Example: the
+  SMT batch only proves "the layer works"; the association layer has no contrast because the
+  median split degenerates (`MDE ≈ 16.57pp` disclosed), so it must **never** be phrased as
+  "witnesses improve detection".
+- Two easily-confused calibers clarified: ① ULT has `2/20 = 10.0%` (smoke batch) and
+  `42/200 = 21.0%` (formal batch) artifacts — the review asked about the latter; ② the
+  26/24/27 gate counts differ because of a dedicated workflow plus repeated call sites,
+  **not a contradiction**; authority = `BASELINE.yaml#gates`.
+
+### Changed — documentation index
+
+- `docs/INDEX.md` / `.en.md`: the reviewer 15-minute path gains a "clarifications" entry
+  (right after the review reports, so the next round does not re-ask); the core-document table
+  registers the Y/Y2/Y3 audit reports.
+- The English index's "Last updated" had been stuck at 2026-10-18 (round U); refreshed to
+  2026-10-19.
 
 ## [Unreleased] — 2026-10-19 Round Y3: audit wrap-up and a repo-wide uncovered-line map (zero LLM, $0)
 

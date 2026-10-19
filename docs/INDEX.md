@@ -1,6 +1,6 @@
 # AITester 文档索引（Documentation Index）
 
-> 最后更新：2026-10-18（U 轮：第三轮独立评审收口 + A-03/A-17 漂移论文化 + P3 评测诚信 checklist + D3b Step A 接线；T 轮同日）
+> 最后更新：2026-10-19（Y4 轮：第三轮评审 §15 八项待澄清问题的权威回应入库；Y/Y2/Y3 三轮修复覆盖率审计报告与可复用审计工具登记入核心文档清单）
 >
 > 本页是全部 Markdown 文档的**导航入口**：先按角色给最短阅读路径，再给核心文档清单
 >（每份一句话说明）。本页的全部链接由 `scripts/gates/check_doc_links.py --strict`
@@ -41,6 +41,7 @@
 6. [docs/reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-17.md](reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-17.md)：第二轮独立系统性评审（含遗留项与处置）。
 7. [docs/reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-18.md](reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-18.md)：第三轮独立系统性评审（14 项核心声明逐位复验；A-01..A-20 建议与同日收口状态）。
 8. [docs/reviews/THIRD_PARTY_REVIEW_2026-10-18_FIX_CLOSURE.md](reviews/THIRD_PARTY_REVIEW_2026-10-18_FIX_CLOSURE.md)：第三方独立审查（Windows）23 项修复收口报告（P0 A08 + P1/P2 逐项矩阵、M1–M9 复跑与残余风险）；§5 追加第二轮复核残留 A07/A09/A10 补修记录（2026-10-19）。
+9. [docs/reviews/REVIEW_CLARIFICATIONS_2026-10-19.md](reviews/REVIEW_CLARIFICATIONS_2026-10-19.md)：第三轮评审 §15 八项待澄清问题的**权威回应入口**（5 项已闭合、2 项待项目方裁定、1 项未做且有明确代价；每项给工件路径 + 复算命令 + 能力边界）。
 
 ### 2.3 复现者
 
@@ -138,6 +139,10 @@
 | [CHANGELOG.md](../CHANGELOG.md) | 逐批变更日志（历史快照；当前口径以 BASELINE 与本索引指向的文档为准）。 |
 | [docs/reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-18.md](reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-18.md) | 第三轮独立系统性评审报告（2026-10-18）：60+ 前沿数据点一手重建、14 项核心声明逐位复验、A-01..A-20 建议与同日收口状态。 |
 | [docs/reviews/THIRD_PARTY_REVIEW_2026-10-18_FIX_CLOSURE.md](reviews/THIRD_PARTY_REVIEW_2026-10-18_FIX_CLOSURE.md) | 第三方独立审查（Windows，2026-10-18）23 项修复收口报告：P0 A08 凭证隔离 + P1/P2 逐项矩阵、M1–M9 复跑、门禁与残余风险；§5 为第二轮复核残留 A07/A09/A10 补修记录（2026-10-19）。 |
+| [docs/reviews/REVIEW_CLARIFICATIONS_2026-10-19.md](reviews/REVIEW_CLARIFICATIONS_2026-10-19.md) | 第三轮评审 §15 八项待澄清问题的**权威回应入口**：5 项已闭合（给工件路径 + 复算命令 + 能力边界）、2 项待项目方裁定、1 项未做且代价明确。 |
+| [docs/reviews/FIX_COVERAGE_AUDIT_2026-10-19.md](reviews/FIX_COVERAGE_AUDIT_2026-10-19.md) | Y 轮修复覆盖率缺口审计：`src/` 552 行修复新增中 37 行从未被测试执行；5 例变异验证的回归锁。 |
+| [docs/reviews/FIX_COVERAGE_AUDIT_ROUND2_2026-10-19.md](reviews/FIX_COVERAGE_AUDIT_ROUND2_2026-10-19.md) | Y2 轮审计收口：A20 三级降级链、A06 生产入口接线、A16 flaky 证据；`experiments/` 首次审计。 |
+| [docs/reviews/FIX_COVERAGE_AUDIT_ROUND3_2026-10-19.md](reviews/FIX_COVERAGE_AUDIT_ROUND3_2026-10-19.md) | Y3 轮收尾：清理 2 个死函数、补 A03 provenance 三条降级路径、产出全仓未覆盖行地图（637 行 / 83 文件）。 |
 | [docs/reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-17.md](reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-17.md) | 第二轮独立系统性评审报告：发现、证据与处置建议。 |
 | [CODE_OPTIMIZATION_2026-10-16.md](../CODE_OPTIMIZATION_2026-10-16.md) | 代码全面审查与优化报告（C 轮）。 |
 | [PHASE1_PRECHECK_2026-10-12.md](../PHASE1_PRECHECK_2026-10-12.md) | 改进方案阶段 1 前置核查报告。 |
