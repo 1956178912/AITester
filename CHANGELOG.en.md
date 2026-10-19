@@ -1,10 +1,49 @@
-> Last updated: 2026-10-19 (round Y4: **responses to the third round's open questions** — all eight items closed out (five closed, two awaiting a project decision, one not done with its cost stated), each with artifact path + recompute command + capability boundary; clarified the two ULT batch calibers (2/20=10.0% vs 42/200=21.0%) and why the 26/24/27 gate counts differ; the index now registers the three audit reports. Previously round Y3: audit wrap-up and a repo-wide uncovered-line map (two dead functions removed + three A03 provenance paths + the 637-line map); round Y2: audit closure and first audit of experiments/ (three gap groups, 8 tests); round Y: fix-coverage gap audit (37 of 552 lines unexecuted + five regression locks); round X: paper reproducibility closure and systematic review; rounds W/V: second/first third-party review remediation; rounds U/T/S/R/Q/P/O/N/M/L/K registered the same day)
+> Last updated: 2026-10-19 (round Y5: **E7's three paths fully provisioned + a nesting regression lock** — the n=72 full-frame census artifacts are now ready so work can start as soon as the path is chosen; corrected the protocol's over-promise that "n=8 ⊆ n=41 needs zero rework" (13% of 150 synthetic combinations are not set-nested — it is a fact of the current parameters, not an algorithmic guarantee), now guarded by a regression lock. Previously round Y4: responses to the third round's eight open questions (five closed / two awaiting a decision / one not done); round Y3: audit wrap-up and a repo-wide uncovered-line map; round Y2: audit closure and first audit of experiments/; round Y: fix-coverage gap audit; round X: paper reproducibility closure; rounds W/V: second/first third-party review remediation; rounds U/T/S/R/Q/P/O/N/M/L/K registered the same day)
 
 > **Language**: [简体中文](CHANGELOG.md) | English (this file)
 
 # Changelog
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+## [Unreleased] — 2026-10-19 Round Y5: E7's three paths fully provisioned + a nesting regression lock (zero LLM, $0)
+
+> Only paths A (n=8) and B (n=41) had been provisioned for E7 adjudication, while the
+> statistically recommended full-frame census (n=72) had not — choosing it would have meant
+> waiting another round. This round closes that gap and corrects one claim that was being
+> read as an algorithmic guarantee. Real LLM spend: **$0**.
+
+### Added — full-frame census (n=72) provisioning
+
+- Generated `e7_repair_sample_candidates_n72.md` (72 candidates = 72 frame rows) and
+  `e7_review_worksheet_n72.md` (72 candidate sections, ~557KB), `--fraction 1.0 --seed 42`.
+- All three paths are now ready; once the user picks one, work can start immediately:
+  A (n=8, ~1h) / B (n=41, ~4-7h) / C′ (n=72, ~6-12h).
+- **Note**: the E7 artifacts (four files: last round's n=41 pair and this round's n=72 pair)
+  and `SHA256SUMS` remain **in the local working tree** per the user's earlier "do not commit
+  yet" instruction, to be committed together once the E7 path is decided; this round's
+  protocol clarification and regression lock are committed now.
+
+### Fixed — honest labelling of "nesting" (the old wording over-promised)
+
+- Protocol §2.1 previously said "the first 8 rows of the n=41 sample match the archived n=8
+  exactly … so upgrading to path B needs zero rework", which reads like an algorithmic
+  guarantee. Actual check across 150 synthetic parameter combinations (30 seeds × 5 frame
+  sizes): **13% are not set-nested and 33% are not order-consistent** —
+  `random.Random.sample()` does not guarantee nesting across different `k` with the same seed.
+- The property **does hold** for this project (72 rows / seed=42 / single `sbfl` stratum); it
+  is an **effectiveness fact of the current provisioning**, not a dependable algorithmic
+  contract. The protocol now carries an explicit caveat, including the correct reading when the
+  regression lock turns red: "the provisioning is stale and must be regenerated", **not**
+  "the test is obsolete".
+
+### Added — regression lock
+
+- `test_three_paths_nested_on_archived_frame` (`tests/test_al_batch.py`): locks the three
+  paths' **sample sizes (8/41/72) + set nesting + order consistency + no duplicates** on the
+  archived frame.
+- Mutation-verified: switching the selection implementation from "take the first k" to "take
+  the last k" turns this test red while the other 22 stay green.
 
 ## [Unreleased] — 2026-10-19 Round Y4: responses to the third round's open questions (zero LLM, $0)
 
