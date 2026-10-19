@@ -1,10 +1,51 @@
-> Last updated: 2026-10-19 (round Y2: **audit closure and first audit of experiments/** — three A20 degradation guards, A06's production-entry metadata wiring and A16's flaky-evidence branch closed with 8 mutation-verified regression locks; `experiments/` core library modules are fully locked, with uncovered lines confined to CLI shells; two dead functions and six error-handling lines recorded. Previously round Y: fix-coverage gap audit (37 of 552 lines unexecuted + five regression locks + the audit tool); round X: paper reproducibility closure and systematic review; round W: second-round third-party review residuals closed (A07/A09/A10); round V: 23-item third-party review remediation; rounds U/T/S/R/Q/P/O/N/M/L/K registered the same day)
+> Last updated: 2026-10-19 (round Y3: **audit wrap-up and a repo-wide uncovered-line map** — two dead functions removed (`_strip_seed_prefix` / `_rebuilt_task_fingerprints`, coverage denominator −8 lines); three A03 provenance degradation paths closed (marker read failure / malformed lines / git exception), each mutation-verified; first repo-wide classification of 652 uncovered lines, with an explicit rationale for not testing frozen features. Previously round Y2: audit closure and first audit of experiments/ (three gap groups, 8 tests); round Y: fix-coverage gap audit (37 of 552 lines unexecuted + five regression locks + the audit tool); round X: paper reproducibility closure and systematic review; round W: second-round third-party review residuals closed (A07/A09/A10); round V: 23-item third-party review remediation; rounds U/T/S/R/Q/P/O/N/M/L/K registered the same day)
 
 > **Language**: [简体中文](CHANGELOG.md) | English (this file)
 
 # Changelog
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+## [Unreleased] — 2026-10-19 Round Y3: audit wrap-up and a repo-wide uncovered-line map (zero LLM, $0)
+
+> Closure of the round-Y2 leftovers, and the audit scope widened from "lines added by fixes"
+> to the whole repository. Real LLM spend: **$0**.
+> Full report: `docs/reviews/FIX_COVERAGE_AUDIT_ROUND3_2026-10-19.md`.
+
+### Removed — two dead functions with zero call sites
+
+- `experiments/statistical_analysis.py`: `_strip_seed_prefix` (was 2290-2292) and
+  `_rebuilt_task_fingerprints` (was 2327-2333) have no call sites anywhere, including all
+  395 test files; they are A06 refactor leftovers superseded by `_split_seed_prefix` and
+  `_rebuilt_task_table`.
+- **Benefit**: removes the "looks used but is dead" confusion and shrinks the coverage
+  denominator by 8 lines that were permanently uncovered and inflated the gap count.
+- Verified: `ast.parse` + ruff + the 105 statistics-related tests all green.
+
+### Fixed — three A03 provenance degradation paths (`run_benchmark.py`, 3 tests)
+
+- marker read failure (`OSError`/`UnicodeDecodeError`) → record the `error` field, do not raise;
+- malformed marker lines (no `=` / key is not `GIT_SHA`) → skip and keep parsing;
+- git invocation failure → `git_available=False`, fall back to the marker as the source.
+- **Why it matters**: if these raised instead, a single permission error or a missing git
+  binary would crash a whole batch at startup — which is the *normal* state inside the
+  reproduction container (no git). All three paths had zero executions.
+- Mutation-verified: injecting them one at a time turns exactly one target test red each
+  time while the other two stay green.
+
+### Audit — repo-wide uncovered-line map (first time)
+
+- Full `coverage.xml`: **652 uncovered lines across 83 files**.
+- Classified into **frozen features** (`orchestration_search`, 74 lines = 11.3%, frozen by
+  ADR-0034), **fault-tolerance/defensive branches** (`helpers`' regex fallback tier,
+  `spec_ir_v2`'s SMT-witness conservative fallbacks, `trace`'s remaining A20 guards),
+  **multi-dataset adapters** (47 lines, unreachable without the datasets locally) and
+  **platform probes**.
+- **Explicitly not recommended** to chase "fewer uncovered lines": testing a frozen feature
+  produces the false comfort of "tests exist but semantics are unverified". Next-round order:
+  ① `helpers` tier-2 regex fallback (LLM-output tolerance is a real need); ② the four
+  documented conservative boundaries of `spec_ir_v2`'s SMT witness; ③ dataset adapters
+  (after confirming local dataset availability).
 
 ## [Unreleased] — 2026-10-19 Round Y2: audit closure and first audit of experiments/ (zero LLM, $0)
 
