@@ -2508,6 +2508,19 @@ def run_single_task(
         )
     # 创建临时目录存放任务相关文件（避免修改原始文件）
     tmp_dir = tempfile.mkdtemp(prefix=f"aitester_{task.task_id}_")
+    # W 轮（2026-10-19 复核残留连带修复）：线程局部 API 分配快照-恢复。
+    # `_set_thread_api` 把任务分配写入当前线程的 llm_client._thread_local
+    # （api_key/base_url/model_name）。并行跑批下每个工作线程在任务开始时
+    # 重新分配、行为不变；但进程内单线程调用方（CLI / 库调用 / 测试）此前会
+    # 把最后一次任务的分配**永久留在主线程**，污染后续所有 `_get_llm_config`
+    # / `_get_all_api_configs` 调用（真实 env 凭证进入后续请求身份）。测试
+    # 全量跑中该泄漏曾使 test_base_agent::TestGetLlmConfig 按 worker 文件
+    # 配对顺序随机转红。任务结束时恢复进入前状态（含"未设置"状态）。
+    from src.agents.llm_client import _thread_local as _task_thread_local
+
+    _tl_attrs = ("api_key", "base_url", "model_name")
+    _tl_prev: dict[str, Any] = {attr: getattr(_task_thread_local, attr, None) for attr in _tl_attrs}
+    _tl_had: dict[str, bool] = {attr: hasattr(_task_thread_local, attr) for attr in _tl_attrs}
     try:
         # M3 门禁（2026-09-29 审查 P0 + D.4-7）：harness_invalid 时跳过执行，
         # 直接构建失败结果（不计入"0 解出"统计）。
@@ -2883,6 +2896,12 @@ def run_single_task(
     finally:
         # 清理临时目录
         shutil.rmtree(tmp_dir, ignore_errors=True)
+        # 恢复线程局部 API 分配（W 轮连带修复：不留任务级分配在调用线程）
+        for _attr in _tl_attrs:
+            if _tl_had[_attr]:
+                setattr(_task_thread_local, _attr, _tl_prev[_attr])
+            elif hasattr(_task_thread_local, _attr):
+                delattr(_task_thread_local, _attr)
 
 
 def _diff_codes(original: str, fixed: str, fromfile: str, tofile: str) -> str:

@@ -1,6 +1,6 @@
 # 项目状态与决策登记册（Status & Decision Register）
 
-- 最后更新：2026-10-18（**V 轮**：第三方独立审查（Windows 静态审查，报告 `AITester_审查报告.md`，23 项结论经用户确认 100% 准确）**修复收口**——P0 A08 不可信执行环境凭证隔离；P1 A01–A07、A09–A17（统计身份/缓存请求身份/API 路由/消耗记账/节点身份/Windows 回收/复现入口/来源追踪/跨平台校验/执行依赖/发行缺包/fail→pass 证据）；P2 A18–A23（校验清单/损坏工件/CSV/检索计数/LRU 边界）；`BASELINE.yaml` 刷新 collected 9130 / passed 9125，评审 M1–M9 验收脚本复跑；另附收口报告 `docs/reviews/THIRD_PARTY_REVIEW_2026-10-18_FIX_CLOSURE.md`。**此前 U 轮**：第三轮独立评审收口（**零 LLM**）——**A-05 门禁数量口径统一**（`BASELINE.yaml` `gates` 节为权威口径：26 脚本 / ci.yml 24 唯一引用·27 调用点 / 2 个专用工作流；README 中英文件树、论文贡献段、本册 headline 同步）+ **A-06 "0 failed" 环境标签**（正常环境口径 + 沙箱宿主能力缺失归因披露）+ **A-08/A-09 测试环境加固**（broker mkdir 垫片防御 + ps/生产 profile 沙箱能力探测 skipif；受限环境亦 0 failed）+ **A-03/A-17 T 轮漂移论文化**（论文 `sec:tround` + E8 2×2 消融预注册冻结）+ **P3 评测诚信 checklist v1**（IC-1..IC-8 零 LLM 校验器 + B2/df_spec 实测）+ **D3b Step A 跨文件计划接线**（双开关默认关、OFF/OFF 与历史逐位一致）+ 第三轮独立评审报告入库；§1 快照按 U 轮收口全量实测刷新（collected 8961 / 176.43s）。此前 **T 轮**：真实 LLM 配额解锁——**B2 主批次锁指纹复现批**（3 seed×3 臂，干净树+`model_fingerprint.pinned=true`；判定与数字见 §3.2 T-1 与 BASELINE `target_quality.b2_*`）+ **B1/RT1 协议文本指纹级复现**（3 格×2 seed；并勘误 VALIDITY/EMSE 的"未执行"陈旧声明）→ 见 T-2；**oracle 示例 K=3 多数一致+canonical 治理**判定 `high_risk_default_off`（"自洽≠正确"，T-3）；**z3 SMT 见证层首个专项批**（A-18/Q7 机制层 pass）+ 由错误归因驱动的 `result`/`r` 别名修复（reach 10.3%→14.7%，T-3b/T-3c）；**A-19 抢占优先级修复 + 回滚 verdict schema + preflight 配额探针缺陷修复**（T-4）；**文档↔工件系统审计**（P0=4/P1=17/P2=14）并与本册 §1/§2/§4/§4.1 同批收口（T-5）。此前 **S 轮**：A-19 失败注入判 confirmed + 多采样示例治理（默认关）+ 3-seed 生产化决策 `enable_candidate`；此前 R/Q/P/O/N/M/L/K 轮同日登记；§1 快照随 BASELINE 同步至当日终态）
+- 最后更新：2026-10-19（**W 轮**：第二轮第三方复核（Windows 只读静态审查，提交 `73481bb`，报告确认 **P0=0 / P1=3 / P2=0 / P3=0**）的残留补修——A07 统计"最新记录"选择收敛为共享原语（主配对/贝叶斯/模板敏感性同源）、A09 语义缓存分区加入 system 提示词摘要（身份 `v`=3）、A10 显式任务分配在所有形状下居首并明确"显式分配 > 复杂度路由 > 全局顺序"；反例回归锁 `tests/test_review_73481bb_residuals.py` 12 例（修复前干净检出 10 failed / 2 passed）；零 LLM。**此前 V 轮**：第三方独立审查（Windows 静态审查，报告 `AITester_审查报告.md`，23 项结论经用户确认 100% 准确）**修复收口**——P0 A08 不可信执行环境凭证隔离；P1 A01–A07、A09–A17（统计身份/缓存请求身份/API 路由/消耗记账/节点身份/Windows 回收/复现入口/来源追踪/跨平台校验/执行依赖/发行缺包/fail→pass 证据）；P2 A18–A23（校验清单/损坏工件/CSV/检索计数/LRU 边界）；`BASELINE.yaml` 刷新 collected 9130 / passed 9125，评审 M1–M9 验收脚本复跑；另附收口报告 `docs/reviews/THIRD_PARTY_REVIEW_2026-10-18_FIX_CLOSURE.md`。**此前 U 轮**：第三轮独立评审收口（**零 LLM**）——**A-05 门禁数量口径统一**（`BASELINE.yaml` `gates` 节为权威口径：26 脚本 / ci.yml 24 唯一引用·27 调用点 / 2 个专用工作流；README 中英文件树、论文贡献段、本册 headline 同步）+ **A-06 "0 failed" 环境标签**（正常环境口径 + 沙箱宿主能力缺失归因披露）+ **A-08/A-09 测试环境加固**（broker mkdir 垫片防御 + ps/生产 profile 沙箱能力探测 skipif；受限环境亦 0 failed）+ **A-03/A-17 T 轮漂移论文化**（论文 `sec:tround` + E8 2×2 消融预注册冻结）+ **P3 评测诚信 checklist v1**（IC-1..IC-8 零 LLM 校验器 + B2/df_spec 实测）+ **D3b Step A 跨文件计划接线**（双开关默认关、OFF/OFF 与历史逐位一致）+ 第三轮独立评审报告入库；§1 快照按 U 轮收口全量实测刷新（collected 8961 / 176.43s）。此前 **T 轮**：真实 LLM 配额解锁——**B2 主批次锁指纹复现批**（3 seed×3 臂，干净树+`model_fingerprint.pinned=true`；判定与数字见 §3.2 T-1 与 BASELINE `target_quality.b2_*`）+ **B1/RT1 协议文本指纹级复现**（3 格×2 seed；并勘误 VALIDITY/EMSE 的"未执行"陈旧声明）→ 见 T-2；**oracle 示例 K=3 多数一致+canonical 治理**判定 `high_risk_default_off`（"自洽≠正确"，T-3）；**z3 SMT 见证层首个专项批**（A-18/Q7 机制层 pass）+ 由错误归因驱动的 `result`/`r` 别名修复（reach 10.3%→14.7%，T-3b/T-3c）；**A-19 抢占优先级修复 + 回滚 verdict schema + preflight 配额探针缺陷修复**（T-4）；**文档↔工件系统审计**（P0=4/P1=17/P2=14）并与本册 §1/§2/§4/§4.1 同批收口（T-5）。此前 **S 轮**：A-19 失败注入判 confirmed + 多采样示例治理（默认关）+ 3-seed 生产化决策 `enable_candidate`；此前 R/Q/P/O/N/M/L/K 轮同日登记；§1 快照随 BASELINE 同步至当日终态）
 - **自我对账**：本册的覆盖率声明由 `scripts/gates/check_artifact_doc_consistency.py`
   的 `check_status_register()` 与 `coverage.xml` 实测对账——数字实质性错报即 CI 红，
   因此本册不允许手工美化。对账口径 = **锚定 §1 声明行 + ±0.20pp 容差**（U 轮 2026-10-18 跨平台校准；见下）。
@@ -32,20 +32,20 @@
 - 阅读顺序建议：§1 现状快照 → §2 阻断项与解锁路径 → §3 已完成事项（含验证入口）
   → §4 遗留缺口 → §5 口径与术语纪律。
 
-## 1. 现状快照（2026-10-18 V 轮收口批次实测，CI 同口径）
+## 1. 现状快照（2026-10-19 W 轮补修批次实测，CI 同口径）
 
 | 维度 | 数值 | 验证入口 |
 |---|---|---|
-| 全量测试 | **9125 passed / 5 skipped / 0 failed**（登记口径 = collected **9130** − skipped 5；2026-10-18 V 轮第三方审查修复后全量实测（xdist -n 4 loadfile + `--cov`，COVERAGE_FILE 隔离）。V 轮净增 169 例：新文件 `test_untrusted_exec_env.py` 34 / `test_windows_process_termination.py` 16 / `test_trace_jsonl_integrity.py` 15，既有文件内新增/参数化 +104；修复前 U 轮基线 8956 passed / collected 8961，零代码回归。沙箱宿主口径见 BASELINE `tests.total_failed` 注释） | `pytest tests/ -n 4 --dist loadfile`；`BASELINE.yaml` `tests` 节 |
-| 总行覆盖 | **96.48%**（**V 轮修复后本地 macOS 3.14 实测** 17883/18535；基线 U 轮 CI ubuntu 3.14 为 96.53%（17501/18131），跨平台差历史 ≤0.13pp，V 轮推送后按 CI 校准；ratchet 水位 **96.4** 不变，余量 +0.08pp） | `coverage.xml`；`scripts/gates/coverage_ratchet.py --check` |
-| 总分支覆盖 | **92.71%**（**V 轮修复后本地 macOS 3.14 实测** 6406/6910；基线 U 轮 CI ubuntu 3.14 为 92.66%（6273/6770）、macOS 92.79%；水位 **92.5** 不变，余量 +0.21pp） | `coverage.xml`；`scripts/gates/coverage_ratchet.py --check` |
+| 全量测试 | **9139 passed / 5 skipped / 0 failed**（登记口径 = collected **9144** − skipped 5；2026-10-19 W 轮第二轮复核残留补修后全量实测（xdist -n 4 loadfile + `--cov`，COVERAGE_FILE 隔离）。W 轮净增 14 例：`test_review_73481bb_residuals.py` 12（A07/A09/A10 反例；修复前干净检出 10 failed / 2 passed）+ 两处全局状态泄漏恢复锁 2；修复前 V 轮基线 9125 passed / collected 9130。沙箱宿主口径：9124 passed / 19 skipped / 1 failed（唯一失败 = 基线一致性守卫，见 BASELINE `tests.total_failed` 注）） | `pytest tests/ -n 4 --dist loadfile`；`BASELINE.yaml` `tests` 节 |
+| 总行覆盖 | **96.49%**（**W 轮补修后本地 macOS 3.14 实测** 17898/18550；基线 U 轮 CI ubuntu 3.14 为 96.53%（17501/18131），跨平台差历史 ≤0.13pp，W 轮推送后按 CI 校准；ratchet 水位 **96.4** 不变，余量 +0.09pp） | `coverage.xml`；`scripts/gates/coverage_ratchet.py --check` |
+| 总分支覆盖 | **92.70%**（**W 轮补修后本地 macOS 3.14 实测** 6409/6914；基线 U 轮 CI ubuntu 3.14 为 92.66%（6273/6770）、macOS 92.79%；水位 **92.5** 不变，余量 +0.20pp） | `coverage.xml`；`scripts/gates/coverage_ratchet.py --check` |
 | 静态硬下限覆盖 | 达标（行 ≥85% / 分支总 ≥77% / 核心路由 ≥85–90%） | `scripts/gates/check_branch_coverage.py coverage.xml` |
 | 门禁总数 | **权威口径 = BASELINE.yaml `gates` 节**（2026-10-18 A-05 统一：`scripts/gates/` **26 脚本**、`ci.yml` **24 个唯一引用/27 处调用**；此前 README 23/18、论文 24、git 记录 25 多口径分裂已收口）。主工作流逐提交阻断检查步骤 = 25（coverage 集群拆分为两步）【K 轮 2026-10-17：① 新增 G16 文档链接完整性门禁（24→25，109 文件/528 链接/0 错误）；② 实测发现 U3 零断言门禁**长期只在 CI、不在本地 `make gates` 链**——HEAD（fde68ae）实际带 1 例零断言违规（`test_class_method_not_confused_with_top_level`，`if ok:` 分支从不执行），即"本地全绿≠CI 绿"再次复现，已把该门补入本地 gates 并修复违规（现 0 违规）；可枚举：`grep -oE 'scripts/gates/[a-z_]+[.]py' .github/workflows/ci.yml | sort -u`】 | `make gates`；逐项见 §3 |
-| 静态检查 | ruff 全绿 / **814** 文件已格式化 / mypy 0 错（**134** 源文件，含 config.py） | `ruff check .`、`ruff format --check .`、`mypy src/ config.py` |
+| 静态检查 | ruff 全绿 / **820** 文件已格式化 / mypy 0 错（**134** 源文件，含 config.py） | `ruff check .`、`ruff format --check .`、`mypy src/ config.py` |
 | 构建基线 | `BASELINE.yaml` 与实测逐位对账（含守卫 `TestBaselineNumbersConsistency`） | `pytest tests/test_2026_10_10_optimization_batch.py -q` |
 
-> 一致性提示：**任何一项数值漂移都会让对应门禁转红**。V 轮后覆盖率余量（行 +0.08pp、
-> 分支 +0.21pp）仍小于 ratchet 0.5pp 步长，因此本表不允许手工维护——它必须随 `BASELINE.yaml` 同步刷新。
+> 一致性提示：**任何一项数值漂移都会让对应门禁转红**。W 轮后覆盖率余量（行 +0.09pp、
+> 分支 +0.20pp）仍小于 ratchet 0.5pp 步长，因此本表不允许手工维护——它必须随 `BASELINE.yaml` 同步刷新。
 > **V 轮（2026-10-18，第三方审查修复后）覆盖率口径**：本地 macOS 3.14 全量实测
 > 96.48%（17883/18535）/ 92.71%（6406/6910）；U 轮基线（CI ubuntu 3.14 权威口径）
 > 为 96.53%（17501/18131）/ 92.66%（6273/6770），跨平台差历史 ≤0.13pp。
@@ -54,7 +54,7 @@
 > ubuntu CI 实测 96.53%（17501/18131）/ 92.66%（6273/6770），macOS 本地 96.55%（17506/18131）/
 > 92.79%（6282/6770）——**分支跨平台差 0.13pp**（9 条平台专属分支）> 原 ±0.10pp 容差，导致
 > "声明 ubuntu 则本地红 / 声明 macOS 则 CI 红"的双向假红，故容差校准为 **±0.20pp**；
-> 防回退仍由 `coverage_ratchet.py` 只升水位独立把守（V 轮 96.48 ≥ 96.4 / 92.71 ≥ 92.5 均过）。
+> 防回退仍由 `coverage_ratchet.py` 只升水位独立把守（W 轮 96.49 ≥ 96.4 / 92.70 ≥ 92.5 均过；V 轮 96.48 / 92.71 亦过）。
 > **K 轮新增元层指标**：`BASELINE.yaml` 新增 `self_mutation` 节（项目自身测试套件变异强度），
 > 与 `target_quality.mutation_score`（LLM 测试 × 任务代码）**口径不同、禁止混引**。
 > **G 轮登记的"覆盖率测量非确定性"已在 H 轮完全收口，I 轮复核仍成立**：三处独立噪声源
@@ -104,6 +104,7 @@
 
 | 事项 | 交付物 | 验证入口 |
 |---|---|---|
+| **W 轮（2026-10-19）第二轮第三方复核 P1×3 残留补修**：A07 统计"最新记录"选择收敛为共享原语（主配对/贝叶斯/模板敏感性同源）；A09 语义缓存分区加入 system 提示词摘要（身份 `v`=3）；A10 显式任务分配在所有形状下居首，并明确"显式分配 > 复杂度路由 > 全局顺序"。**连带修复**（验证中发现的全局状态泄漏，非评审编号）：`generate_spec_examples` 的 `LLM_MAX_OUTPUT_TOKENS` 注入不恢复（进程级 env 泄漏）、`run_single_task` 的线程局部 API 分配不清理（真实凭证滞留主线程）——两者即 xdist 文件配对顺序随机转红的根因 | `experiments/_row_pairing.py`、`experiments/statistical_analysis.py`、`experiments/bayesian_paired.py`、`experiments/spec_examples_generator.py`、`experiments/run_benchmark.py`、`src/agents/base_agent.py`、`src/agents/llm_client.py`、`src/agents/semantic_cache.py`、`docs/reviews/THIRD_PARTY_REVIEW_2026-10-18_FIX_CLOSURE.md` §5 | `pytest tests/test_review_73481bb_residuals.py tests/test_examples_multisample.py tests/test_run_benchmark.py -q`（12+新增锁；反例文件在修复前干净检出 10 failed / 2 passed）；受影响模块既有回归全绿 |
 | SWE-bench 限流信号计数口径修复（旧口径漏计 `issues`） | `experiments/emse_optimization.py::swebench_infra_facts` + `signal_breakdown` | `pytest tests/test_emse_optimization.py -q`；`make swebench-disclosure` |
 | false-fix 复算分支可达性修复（stale 日期过滤导致永不触发） | `experiments/emse_optimization.py::_load_main_batch_rows` | 同上（`source` 断言为 `main_batch_artifact`） |
 | false-fix 边际分母语义修复（改为"被度量指标可测"） | `experiments/emse_optimization.py::false_fix_caliber` | 同上（59.58% / 100% 逐位复算） |

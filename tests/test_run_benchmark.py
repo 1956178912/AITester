@@ -138,6 +138,44 @@ class TestRunSingleTask:
         # 成功基线被调用一次，异常基线调用后抛出（无重试）
         assert len(calls) == 1
 
+    def test_thread_local_api_assignment_restored_after_task(self, tmp_path, monkeypatch):
+        """W 轮连带修复：run_single_task 结束后线程局部 API 分配恢复原状。
+
+        `_set_thread_api` 把任务分配写入当前线程 `_thread_local`；并行跑批
+        下每任务重新分配、行为不变，但进程内单线程调用方（CLI/库/测试）此前
+        会把最后一次分配（真实 env 凭证）永久留在主线程，污染后续
+        `_get_llm_config` / `_get_all_api_configs` 与缓存身份。
+        """
+        from src.agents.llm_client import _thread_local
+
+        monkeypatch.setitem(
+            rb.BASELINE_REGISTRY,
+            "ok",
+            lambda state: {
+                "test_passed": True,
+                "coverage_report": 0.0,
+                "iteration": 0,
+                "diagnosis": None,
+                "error_category": None,
+                "rag_stats": None,
+            },
+        )
+        # 进入前：线程局部无分配
+        for attr in ("api_key", "base_url", "model_name"):
+            monkeypatch.delattr(_thread_local, attr, raising=False)
+        rb.run_single_task(_make_task(), ["ok"], str(tmp_path))
+        for attr in ("api_key", "base_url", "model_name"):
+            assert not hasattr(_thread_local, attr), f"任务结束后线程局部 {attr} 不得残留"
+
+        # 进入前已有分配 → 恢复为原值（不被任务分配覆盖）
+        monkeypatch.setattr(_thread_local, "api_key", "outer-key", raising=False)
+        monkeypatch.setattr(_thread_local, "base_url", "https://outer.example/v1", raising=False)
+        monkeypatch.setattr(_thread_local, "model_name", "outer-model", raising=False)
+        rb.run_single_task(_make_task(), ["ok"], str(tmp_path))
+        assert _thread_local.api_key == "outer-key"
+        assert _thread_local.base_url == "https://outer.example/v1"
+        assert _thread_local.model_name == "outer-model"
+
 
 class TestComputeMutationScoresForBaseline:
     """1.2 变异得分接线：_compute_mutation_scores_for_baseline 逐任务写回 mutation_score。"""

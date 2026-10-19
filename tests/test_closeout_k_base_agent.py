@@ -234,7 +234,7 @@ class TestFileCachePaths:
 
         assert agent._call_llm_with_cache("隔离键问题") == "隔离缓存响应"
         assert calls["invoke"] == 1
-        identity = base_agent._effective_request_identity(None, False)
+        identity = base_agent._effective_request_identity(None, False, system_prompt=agent.system_prompt)
         # A09：隔离开启时身份含真实请求链首选模型（_patch_llm 的 model-1）
         assert identity["model"] == "model-1"
         cache_file = Path(base_agent._exact_cache_file(identity, "隔离键问题", agent.system_prompt))
@@ -254,7 +254,7 @@ class TestFileCachePaths:
         _patch_llm(monkeypatch, _fake_response("负缓存后仍真实调用"))
         agent = _agent()
         message = "负缓存问题"
-        identity = base_agent._effective_request_identity(None, False)
+        identity = base_agent._effective_request_identity(None, False, system_prompt=agent.system_prompt)
         cache_file = os.path.normpath(base_agent._exact_cache_file(identity, message, agent.system_prompt))
         base_agent._lru_store((cache_file, message, None), None)
 

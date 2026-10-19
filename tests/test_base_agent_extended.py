@@ -345,7 +345,7 @@ def _cache_file_for(user_message: str, system_prompt: str, cache_dir) -> Path:
     """
     from src.agents import base_agent as _ba
 
-    identity = _ba._effective_request_identity(None, False)
+    identity = _ba._effective_request_identity(None, False, system_prompt=system_prompt)
     from src.agents.llm_client import request_identity_material
 
     material = f"{user_message}\x00{system_prompt}\x00id:{request_identity_material(identity)}"
@@ -454,7 +454,7 @@ class TestCallLlmWithCache:
             # 手工预置的旧格式条目不会进入任何身份分区（旧文件不误命中）。
             from src.agents import base_agent as _ba
 
-            _identity = _ba._effective_request_identity(None, False)
+            _identity = _ba._effective_request_identity(None, False, system_prompt="sys prompt")
             seeded.write_text(
                 json.dumps(
                     {
@@ -1027,7 +1027,7 @@ class TestA10ThreadLocalRequestChain:
         monkeypatch.setattr(ba, "_get_or_create_chat_client", _get_client)
         agent = self._new_agent()
         assert agent._call_llm_with_cache("标签问题", max_retries=0) == "A 端点响应"
-        identity = ba._effective_request_identity(None, False)
+        identity = ba._effective_request_identity(None, False, system_prompt=agent.system_prompt)
         assert identity["model"] == "model-B", "缓存标签必须取真实请求链首选身份 B（A10 修复前取全局 A）"
         cache_file = ba._exact_cache_file(identity, "标签问题", agent.system_prompt)
         payload = json.loads(Path(cache_file).read_text(encoding="utf-8"))

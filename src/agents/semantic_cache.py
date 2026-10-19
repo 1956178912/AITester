@@ -20,14 +20,17 @@
 （SEMANTIC_CACHE_ENABLE，默认 false）——污染检测是"检测"语义，
 语义缓存是"复用"语义，互不影响。
 
-A09（2026-10-18 第三方审查 P1）：**按有效请求身份分区**。索引条目记录
-写入时的规范化请求身份指纹（模型/端点/有效温度/thinking/reasoning/
-max_output/JSON 实际生效值/namespace，见 base_agent._effective_request_identity
-与 llm_client.request_identity_fingerprint），查找只在同一分区内做相似度
+A09（2026-10-18 第三方审查 P1；2026-10-19 复核残留补修）：**按有效请求身份
+分区**。索引条目记录写入时的规范化请求身份指纹（模型/端点/**system 提示词
+摘要**/有效温度/thinking/reasoning/max_output/JSON 实际生效值/namespace，
+见 base_agent._effective_request_identity 与
+llm_client.request_identity_fingerprint），查找只在同一分区内做相似度
 匹配——修复历史缺陷：`index.find(prompt)` 在全索引上匹配，同一 user_message
-的向量相似度可为 1，切模型/seed/参数后仍复用旧响应（跨身份串味）。
-旧格式缓存文件无身份字段 → 以自身 cache_file 作分区（只可能被同一精确缓存
-键命中），不会误入任何新身份分区（"旧文件不误命中"）。
+的向量相似度可为 1，切模型/seed/参数/**角色（system）**后仍复用旧响应
+（跨身份串味）。2026-10-19 补修前的遗漏正是 system 维度：精确缓存文件名
+含完整 system 文本、语义分区键却只含其余材料，导致不同角色可跨 system
+命中。旧格式缓存文件无身份字段 → 以自身 cache_file 作分区（只可能被同一
+精确缓存键命中），不会误入任何新身份分区（"旧文件不误命中"）。
 
 开关（环境变量，调用期读取，保留测试的 patch.dict 切换能力）：
     SEMANTIC_CACHE_ENABLE    默认 false（开启语义级匹配）

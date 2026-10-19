@@ -82,6 +82,7 @@ if str(PROJECT_ROOT) not in sys.path:
 # Z9（2026-10-06 审查落地）：贝叶斯配对分析（Dirichlet 后验，纯 stdlib）。
 # 与 NHST 并列呈现、不替换——详见 bayesian_paired.py 模块 docstring
 # （方法学依据：Furia et al., TSE 2019 对 SE 实验 NHST 的批评）。
+from experiments._row_pairing import latest_binary_by_task, latest_rows_by_task  # noqa: E402
 from experiments.bayesian_paired import bayesian_paired_analysis, interpret_bayes  # noqa: E402
 
 # 参与对比的基线（AITester 完整管线 + 两个简化基线）
@@ -390,21 +391,17 @@ def _pair_by_task(
     _logger = logging.getLogger(__name__)
 
     def _dedup(rows: list[dict], label: str) -> tuple[dict[str, int], int]:
-        """返回 (可测二值映射, 重复行数)；去重与 None 过滤严格分两步（A07）。"""
-        latest: dict[str, dict] = {}
-        n_duplicates = 0
-        for r in rows:
-            tid = r.get("task_id")
-            if not tid:
-                continue
-            if tid in latest:
-                # 首见优先：最新批次的数据胜出（排序主键 = 内嵌时间戳降序），重复行跳过
-                n_duplicates += 1
-                _logger.debug("%s task_id=%r 重复行跳过（首见=最新批次优先去重）", label, tid)
-                continue
-            # A07：先按 task_id 占位去重（不看 field 值）——最新记录即使
-            # 不可测也占位，防止旧值顶替；None 过滤在去重完成后进行。
-            latest[tid] = r
+        """返回 (可测二值映射, 重复行数)；去重与 None 过滤严格分两步（A07）。
+
+        选择逻辑收敛到 `experiments._row_pairing.latest_rows_by_task`——与
+        模板敏感性分支、贝叶斯配对共用同一实现（2026-10-19 复核残留补修：
+        三处各自维护曾导致模板分支继续"跳过 None + 后写覆盖"）。
+        """
+        latest = latest_rows_by_task(rows)
+        # 重复行数 = 带 task_id 的行数 − 去重后条目数（缺 task_id 的行不参与配对）
+        n_duplicates = sum(1 for r in rows if r.get("task_id")) - len(latest)
+        if n_duplicates:
+            _logger.debug("%s 重复 task_id %d 行跳过（首见=最新批次优先去重）", label, n_duplicates)
         seen: dict[str, int] = {}
         for tid, r in latest.items():
             val = r.get(field)
@@ -2127,19 +2124,17 @@ def template_cluster_sensitivity(
 
     仅消费行级 detection_rate 与 task_metadata.pattern_name；缺失
     pattern_name 的行按 "unknown" 簇处理（敏感性口径，不丢弃观测）。
+
+    A07（2026-10-19 复核残留补修）：去重/None 过滤与规范的 `_pair_by_task`
+    完全同源——`_row_pairing.latest_binary_by_task` 先按 task_id 首见占位
+    （最新批次在前），再排除 None；模板元数据从**同一条**最新行读取。
+    历史实现"先跳过 None 再后写覆盖"会让最新 None 被旧 0 顶替、最新可测值
+    被旧值覆盖，且模板归属取到旧行。
     """
     lines = [f"### {label_a} vs {label_b}（模板聚类稳健敏感性）", ""]
 
-    def _binary(rows: list[dict]) -> dict[Any, float]:
-        out: dict[Any, float] = {}
-        for r in rows:
-            det = r.get("detection_rate")
-            if det is None:
-                continue
-            out[r.get("task_id")] = 1.0 if det > 0 else 0.0
-        return out
-
-    bin_a, bin_b = _binary(rows_a), _binary(rows_b)
+    bin_a, latest_a = latest_binary_by_task(rows_a, field="detection_rate")
+    bin_b, latest_b = latest_binary_by_task(rows_b, field="detection_rate")
     common = sorted(set(bin_a) & set(bin_b), key=str)
     b_cnt = sum(1 for t in common if bin_a[t] > bin_b[t])
     c_cnt = sum(1 for t in common if bin_b[t] > bin_a[t])
@@ -2147,11 +2142,10 @@ def template_cluster_sensitivity(
 
     # 模板簇结构（按臂内可测行聚合；两臂合并估计 ICC 更稳健）
     clusters: dict[Any, list[float]] = {}
-    for bin_map in (bin_a, bin_b):
-        row_by_id = {r.get("task_id"): r for r in (rows_a if bin_map is bin_a else rows_b)}
+    for bin_map, latest_map in ((bin_a, latest_a), (bin_b, latest_b)):
         for t, v in bin_map.items():
-            pat = _rows_pattern_name(row_by_id.get(t, {})) or "unknown"
-            clusters.setdefault(pat, []).append(v)
+            pat = _rows_pattern_name(latest_map.get(t, {})) or "unknown"
+            clusters.setdefault(pat, []).append(float(v))
     k = len(clusters)
     n_obs = sum(len(v) for v in clusters.values())
     m_bar = n_obs / k if k else 0.0
@@ -2163,17 +2157,15 @@ def template_cluster_sensitivity(
     n_eff = n_obs / deff if deff > 0 else n_obs
     chi2_adj = chi2 * (n_eff / n_obs)
 
-    # 模板级配对符号检验
+    # 模板级配对符号检验（元数据与数值同源：均取各自最新行）
     tmpl_a: dict[Any, list[float]] = {}
-    row_by_id_a = {r.get("task_id"): r for r in rows_a}
     for t, v in bin_a.items():
-        pat = _rows_pattern_name(row_by_id_a.get(t, {})) or "unknown"
-        tmpl_a.setdefault(pat, []).append(v)
+        pat = _rows_pattern_name(latest_a.get(t, {})) or "unknown"
+        tmpl_a.setdefault(pat, []).append(float(v))
     tmpl_b: dict[Any, list[float]] = {}
-    row_by_id_b = {r.get("task_id"): r for r in rows_b}
     for t, v in bin_b.items():
-        pat = _rows_pattern_name(row_by_id_b.get(t, {})) or "unknown"
-        tmpl_b.setdefault(pat, []).append(v)
+        pat = _rows_pattern_name(latest_b.get(t, {})) or "unknown"
+        tmpl_b.setdefault(pat, []).append(float(v))
     common_pats = sorted(set(tmpl_a) & set(tmpl_b), key=str)
     wins_a = sum(1 for p in common_pats if sum(tmpl_a[p]) / len(tmpl_a[p]) > sum(tmpl_b[p]) / len(tmpl_b[p]))
     wins_b = sum(1 for p in common_pats if sum(tmpl_b[p]) / len(tmpl_b[p]) > sum(tmpl_a[p]) / len(tmpl_a[p]))

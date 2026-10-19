@@ -647,4 +647,17 @@ class TestReuseExamples:
             p1._load_reused_examples(path)
 
     def test_main_reuse_missing_fail_closed(self, tmp_path: Path) -> None:
-        assert p1.main(["--reuse-examples", str(tmp_path / "missing.json"), "--out", str(tmp_path / "out")]) == 2
+        # W 轮测试卫生：p1.main 是 CLI 生命周期入口，会对进程环境
+        # `os.environ.setdefault("LLM_MAX_OUTPUT_TOKENS", ...)`（批内沿用口径，
+        # CLI 退出即回收，不在 main 内恢复）。测试内调用属于"把 CLI 当库用"，
+        # 必须自行快照恢复，避免向同进程后续测试泄漏（该泄漏曾使
+        # test_closeout_k_base_agent 的默认包络旧缓存回退用例按文件配对顺序
+        # 随机转红）。
+        previous = os.environ.get("LLM_MAX_OUTPUT_TOKENS")
+        try:
+            assert p1.main(["--reuse-examples", str(tmp_path / "missing.json"), "--out", str(tmp_path / "out")]) == 2
+        finally:
+            if previous is None:
+                os.environ.pop("LLM_MAX_OUTPUT_TOKENS", None)
+            else:
+                os.environ["LLM_MAX_OUTPUT_TOKENS"] = previous

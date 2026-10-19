@@ -8,6 +8,11 @@
 > **回归结论**：全量测试 **9125 passed / 5 skipped / 0 failed**（collected
 > 9130，xdist `-n 4 --dist loadfile`）；评审 M1–M9 验收脚本复跑通过（M5 的
 > Windows 分支以 Mock 单测覆盖，本机 macOS 无法实跑 `taskkill`）。
+>
+> **2026-10-19 复核追加（重要）**：第二轮第三方复核（提交 `73481bb`）确认
+> **P0=0、P1=3**——A07/A09/A10 三项为本轮修复的**未覆盖子场景**，故本报告
+> 原先"23 项全量收口"应读作 **"20 项有针对性修订/历史披露 + 3 项部分修复"**。
+> 三项已于 2026-10-19 补修并有反例回归锁，见 §5。
 
 ## 1. 逐项收口矩阵
 
@@ -29,9 +34,9 @@
 | A04 协议叙事失同步 | Algorithm 3 中英重写为 Detection-First Loop；修正"单侧 oracle 失败=确定性检出"；`mas_compilation` 改三方并列 | `docs/algorithm_design.md/.en.md`、`docs/design/mas_compilation.md` | `make docs-check`；人工核对 ADR-0015/0016 口径 |
 | A05 API 示例失效 | API 参考中英示例/表格按当前签名重写（`compute_cyclomatic_complexity`、`apply_patch_to_code -> tuple`、`replace_function_code(..., new_function_code)`）；默认开关说明对齐 | `docs/api_reference.md/.en.md`、`README.en.md` | 文档示例抽取执行 + `inspect.signature` 核对；`make docs-check` |
 | A06 簇映射错误 | 三层身份解析（归档元数据优先 → 分 seed 正确重建 cap=2 → 保守单例）；旧错误 26 簇保留为反面锁定 | `experiments/statistical_analysis.py`、`tests/test_cluster_robust_stats.py` | main_batch 复算：261→31 簇、5:17:9、p=0.01690054；`pytest tests/test_cluster_robust_stats.py -q` |
-| A07 最新 None 回退 | 先去重（最新批次优先）再排除 None；两处实现统一 | `experiments/statistical_analysis.py`、`experiments/bayesian_paired.py` | 审查 M8 → `n_common=0`；`pytest tests/test_z_batch.py -q` |
-| A09 缓存身份 | 精确键与语义索引统一按规范化有效请求身份隔离；旧缓存仅默认包络只读回退 | `src/agents/base_agent.py`、`src/agents/semantic_cache.py` | 审查 M6 → B 身份返回 `None`；`pytest tests/test_semantic_cache.py tests/test_closeout_k_base_agent.py -q` |
-| A10 请求链/标签 | 线程局部任务分配优先、全局链故障转移；成功请求记录真实配置（`request_identity`/`response_identity`） | `src/agents/llm_client.py`、`src/agents/base_agent.py` | 审查 M9-A10：首请求=线程局部 B、链=[B, global-A]；`pytest tests/test_closeout_k_llm_client.py -q` |
+| A07 最新 None 回退 | 先去重（最新批次优先）再排除 None；**2026-10-19 补修**：主配对/贝叶斯/模板敏感性三处统一接入 `experiments/_row_pairing.py` 共享原语（此前模板分支仍"跳过 None + 后写覆盖"） | `experiments/statistical_analysis.py`、`experiments/bayesian_paired.py`、`experiments/_row_pairing.py` | 审查 M8 → `n_common=0`；**M3 复跑 → `discordant 2:1`（修复前 1:2）**；`pytest tests/test_review_73481bb_residuals.py -q`（A07 四例） |
+| A09 缓存身份 | 精确键与语义索引统一按规范化有效请求身份隔离；旧缓存仅默认包络只读回退；**2026-10-19 补修**：身份材料加入 `system_prompt` sha256 摘要（`v` 2→3），跨角色语义命中消除 | `src/agents/base_agent.py`、`src/agents/semantic_cache.py` | 审查 M6 → B 身份返回 `None`；**M2 复跑 → 跨 system 语义未命中（修复前命中 A）**；`pytest tests/test_semantic_cache.py tests/test_closeout_k_base_agent.py tests/test_review_73481bb_residuals.py -q` |
+| A10 请求链/标签 | 线程局部任务分配优先、全局链故障转移；成功请求记录真实配置（`request_identity`/`response_identity`）；**2026-10-19 补修**：全局列表已含 override 时同样提到链首（此前直接早退），并明确契约"显式分配 > 复杂度路由 > 全局顺序"（复杂度重排后二次钉住） | `src/agents/llm_client.py`、`src/agents/base_agent.py` | 审查 M9-A10：首请求=线程局部 B、链=[B, global-A]；**M1 复跑 → 全局 [A,B] + 分配 B 时为 [B,A]（修复前 [A,B]）**；`pytest tests/test_closeout_k_llm_client.py tests/test_review_73481bb_residuals.py -q` |
 | A11 消耗漏记 | 收到响应先记账 usage、再判 finish_reason/空响应；重试前复查预算 | `src/agents/base_agent.py`、`src/agents/llm_client.py` | 审查 M9-A11：两次 usage 累计 22；相关 mock 测试 |
 | A12 Windows 回收 | 可注入平台分派；Windows `taskkill /T /F` + `kill()` 兜底 + 有界等待；看门狗脚本同步分流 | `src/utils/process_utils.py` | 审查 M5 语义 → `pytest tests/test_windows_process_termination.py -q`（16 passed） |
 | A13 执行运行依赖 | 新增 `execution` extra（pytest/pytest-cov/pytest-timeout）；执行前能力检查 `execution_dependency_missing` | `pyproject.toml`、`setup.py`、`src/agents/executor_runtime.py`、`executor_modes.py` | `pytest tests/test_packaging.py -q`；`tomllib` 解析 + extras 静态校验 |
@@ -89,3 +94,52 @@
 8. **A01 的历史快照**：`CHANGELOG` 历史条目与历史评审原文保留（按历史快照纪律）；现行文档已收缩口径并加勘误。
 9. **A14 的冻结组件**：`src/graph/orchestration_search.py` 对 experiments 的导入按 ADR-0034 冻结范围未加固（非生产预设路径；触发条件 = 干净 wheel + 显式 oracle 化 search 真实评估）。
 10. **未执行**：本轮未真实构建 Docker 镜像、未真实调用 LLM、未在 Windows 主机实跑（M5 以 Mock 覆盖；M2 以 CRLF 模拟覆盖）。
+
+## 5. 第二轮复核残留补修（2026-10-19，P1×3，零 LLM）
+
+**触发**：第二轮第三方复核（Windows 只读静态审查，提交 `73481bb`）确认
+P0=0、P1=3、P2=0、P3=0；三项均为本轮修复的**未覆盖子场景**，不新增编号。
+
+**修复原则**：不复述结论，逐项消除报告给出的最小反例，并把反例固化为
+回归锁 `tests/test_review_73481bb_residuals.py`（12 例；同一文件在修复前
+提交上实测 **10 failed / 2 passed**，修复后 **12 passed**）。
+
+| 编号 | 报告根因 | 本次修复 | 反例锁定 |
+|---|---|---|---|
+| A07 | `template_cluster_sensitivity._binary` 先跳过 None 再字典赋值（后写覆盖），且 `row_by_id` 用后写覆盖字典取模板元数据 | 新增 `experiments/_row_pairing.py`：`latest_rows_by_task`（首见=最新，不看字段值）+ `latest_binary_by_task`（去重后排除 None，数值与元数据同源）。`_pair_by_task`、`template_cluster_sensitivity`、`bayesian_paired.paired_contingency` 三处共用 | 报告 §M3 反例 → `discordant 2:1`；最新 None 不回退；模板元数据取最新行（k=2 而非 3）；同 seed/同批重复行 |
+| A09 | `_effective_request_identity` 不含 `system_prompt`，精确文件名分离但语义分区键相同 → 跨角色可命中 | 身份字典新增 `system`（sha256 前 16 位摘要），版本 `v` 2→3；生产调用点传入 `self.system_prompt`；语义索引重建从 payload 派生身份（自动同源）；`_legacy_cache_identity_compatible` 明确 system 维度的旧键隔离说明 | 报告 §M2 反例 → 跨 system 语义未命中；两个不同 system 的 BaseAgent 同 prompt 各调用一次（调用级回归）；同 system 仍可命中 |
+| A10 | `_get_all_api_configs` 在 `override in global_configs` 时直接返回全局链，正常轮询分配被静默丢弃 | 统一为 `[override, *其余全局配置（去重、原序）]`；新增 `_pin_thread_api_group` 在复杂度重排后二次钉住分配组，明确契约 **显式分配 > 复杂度路由 > 全局顺序** | 报告 §M1 反例 → `[B, A]`；同 base_url 不同 model 组内重排；真实调用链首客户端 = B；`complex` 档不夺走显式分配 |
+
+**边界（不夸大修复范围）**：
+
+0. **连带修复（验证过程中发现，非评审编号项）**：全量回归中按 xdist 文件
+   配对顺序随机转红的用例定位为**既有测试间全局状态污染**而非本次修复引入，
+   共两处生产级泄漏 + 一处测试卫生：
+   ① `experiments/spec_examples_generator.py::generate_spec_examples` 注入
+   `LLM_MAX_OUTPUT_TOKENS=512` 后**从不恢复**（只恢复了 namespace），一次
+   示例生成即永久改变同进程后续所有 LLM 调用的请求体与缓存身份（已改为
+   快照-恢复，与 namespace 同款；显式配置优先、异常路径同样恢复）；
+   ② `experiments/run_benchmark.py::run_single_task` 经 `_set_thread_api`
+   把任务分配（真实 env 凭证）写入当前线程后**从不清理**——并行跑批行为
+   不变，但进程内单线程调用方（CLI/库/测试）会把最后一次分配永久留在主
+   线程，污染后续 `_get_llm_config`/`_get_all_api_configs` 与缓存身份（已在
+   函数 finally 中快照-恢复线程局部三元组）；③
+   `oracle_examples_replay.main` 对进程环境 `setdefault` 该键属 CLI 生命周期
+   口径（不改），但 `test_oracle_examples.py` 把 CLI 当库调用后未恢复——
+   已在测试内显式快照恢复。
+   回归锁：`test_examples_multisample.py::test_generate_restores_max_output_tokens_env`
+   （未配置→移除 / 显式→原样 / 异常→恢复）+ `test_run_benchmark.py::test_thread_local_api_assignment_restored_after_task`
+   （无分配→不残留 / 已有分配→恢复原值）。
+1. **历史工件不重算**：三项均为"条件性错误"——只在输入含跨批重复 task_id、
+   启用语义缓存且跨 system、或线程分配形状命中时触发。归档主批（无重复
+   task_id、语义缓存默认关、A10 相关批次以单端点为主）的既有数字不因本次
+   修复而改写；是否需要重算受影响批次，按报告 §P 的口径在运行验收后再定。
+2. **A09 旧缓存**：`v` 升版使旧精确缓存文件自然失效（miss 后重新生成）；
+   旧格式只读回退仍受 `_legacy_cache_identity_compatible` 的默认包络约束，
+   且旧键公式本身含 system 文本、读侧校验 `system` 等值，不跨 system 命中。
+3. **A10 优先级**：本次把"显式分配优先于复杂度路由"定为产品契约；若未来
+   需要"复杂度路由可覆盖任务分配"，必须显式改契约并同步本表与测试，不得
+   静默调换顺序。
+4. **运行验收**：A07/A09/A10 的验收均为进程内最小反例与调用级回归（零
+   网络、零 LLM、零缓存文件写入生产目录）；真实多端点/真实语义后端的
+   端到端验收仍需在具备凭据的环境单独执行（报告 §M 的其余项同）。
