@@ -36,7 +36,7 @@
 
 | 维度 | 数值 | 验证入口 |
 |---|---|---|
-| 全量测试 | **9139 passed / 5 skipped / 0 failed**（登记口径 = collected **9144** − skipped 5；2026-10-19 W 轮第二轮复核残留补修后全量实测（xdist -n 4 loadfile + `--cov`，COVERAGE_FILE 隔离）。W 轮净增 14 例：`test_review_73481bb_residuals.py` 12（A07/A09/A10 反例；修复前干净检出 10 failed / 2 passed）+ 两处全局状态泄漏恢复锁 2；修复前 V 轮基线 9125 passed / collected 9130。沙箱宿主口径：9124 passed / 19 skipped / 1 failed（唯一失败 = 基线一致性守卫，见 BASELINE `tests.total_failed` 注）） | `pytest tests/ -n 4 --dist loadfile`；`BASELINE.yaml` `tests` 节 |
+| 全量测试 | **9148 passed / 5 skipped / 0 failed**（登记口径 = collected **9153** − skipped 5；2026-10-19 X 轮（一）论文复现性闭环后全量实测（xdist -n 4 loadfile + `--cov`，COVERAGE_FILE 隔离）。X 轮（一）净增 9 例：`tests/test_emse_recompute_entrypoints.py`（可编译率语料重放逐位复现 + 三入口分类契约 + 池化口径）；修复前 W 轮基线 9139 passed / collected 9144。沙箱宿主口径：9133 passed / 19 skipped / 1 failed（唯一失败 = 基线一致性守卫，见 BASELINE `tests.total_failed` 注）） | `pytest tests/ -n 4 --dist loadfile`；`BASELINE.yaml` `tests` 节 |
 | 总行覆盖 | **96.49%**（**W 轮补修后本地 macOS 3.14 实测** 17898/18550；基线 U 轮 CI ubuntu 3.14 为 96.53%（17501/18131），跨平台差历史 ≤0.13pp，W 轮推送后按 CI 校准；ratchet 水位 **96.4** 不变，余量 +0.09pp） | `coverage.xml`；`scripts/gates/coverage_ratchet.py --check` |
 | 总分支覆盖 | **92.70%**（**W 轮补修后本地 macOS 3.14 实测** 6409/6914；基线 U 轮 CI ubuntu 3.14 为 92.66%（6273/6770）、macOS 92.79%；水位 **92.5** 不变，余量 +0.20pp） | `coverage.xml`；`scripts/gates/coverage_ratchet.py --check` |
 | 静态硬下限覆盖 | 达标（行 ≥85% / 分支总 ≥77% / 核心路由 ≥85–90%） | `scripts/gates/check_branch_coverage.py coverage.xml` |

@@ -61,6 +61,7 @@ python experiments/emse_ult_mutk_full.py --groups specir,gold --out experiments/
 
 ## 关联
 
-- 脚本：`experiments/emse_ult_mutk_full.py`（gitignored，无测试引用）；
+- 脚本：`experiments/emse_ult_mutk_full.py`（X 轮 2026-10-19 随论文 Table 5
+  复算链入库，契约锁 `tests/test_emse_recompute_entrypoints.py`）；
 - 审计：`experiments/results/emse_test_sanity_20261015/`；
 - 叙事：`docs/design/layered_narrative.md` §3（批次八修正版）。

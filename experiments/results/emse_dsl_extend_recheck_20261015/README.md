@@ -56,6 +56,21 @@
 
 ## 复算
 
+**主路径（fresh clone / 工件包；X 轮 2026-10-19 补齐）**——语料已归档为
+`CORPUS_607.json`（719 planner 条目 → 607 去重子句，切点 = 本报告 mtime
+2026-10-15 12:45:38 本地时；派生数据，无隐私字段），重放不读 `~/.cache`：
+
 ```bash
-python3 experiments/emse_dsl_extend_recheck.py   # gitignored 脚本
+python3 experiments/emse_dsl_extend_recheck.py \
+    --from-corpus experiments/results/emse_dsl_extend_recheck_20261015/CORPUS_607.json
+```
+
+实测逐位复现本报告（rates / transitions / recovered / by_dataset / task_level
+全部一致）；回归锁 `tests/test_emse_recompute_entrypoints.py`。
+
+**作者机路径（缓存随时间增长，导出的是当前语料、非归档语料）**：
+
+```bash
+python3 experiments/emse_dsl_extend_recheck.py                          # 默认：读 ~/.cache 打分
+python3 experiments/emse_dsl_extend_recheck.py --dump-corpus <out.json> # 导出去重子句语料
 ```

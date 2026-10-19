@@ -1,10 +1,43 @@
 > **语言 / Language**：[English](CHANGELOG.en.md) | 简体中文（本文）
 >
-> Last updated: 2026-10-19（W 轮：**第二轮第三方复核残留补修**——A07 统计"最新记录"选择三处入口统一、A09 语义缓存分区加入 system 身份、A10 显式任务分配优先于全局顺序与复杂度路由；连带修复两处全局状态泄漏（示例生成器 env 注入不恢复、run_single_task 线程局部分配不清理）；14 例回归锁（12 反例 + 2 泄漏锁），反例在修复前提交上 10 failed；零 LLM。此前 V 轮：第三方独立评审 23 项修复；U/T/S/R/Q/P/O/N/M/L/K 轮同日登记）
+> Last updated: 2026-10-19（X 轮（一）：**论文复现性闭环**——零 LLM 复算核对 12 项全吻合；修复四个复现性缺口（6 个复算入口脚本入库 + 607 子句语料归档 + 语料重放路径 + 附录 A 补 5 行量化映射）；9 例回归锁。此前 W 轮：第二轮第三方复核残留补修（A07/A09/A10）；V 轮：第三方独立评审 23 项修复；U/T/S/R/Q/P/O/N/M/L/K 轮同日登记）
 
 # Changelog
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
+
+## [Unreleased] — 2026-10-19 X 轮（一）：论文复现性闭环（零 LLM 复算核对 + 四缺口修复）
+
+> 论文定稿核对的前置工作：对论文引用的核心数字逐一零 LLM 复算（12 项全吻合），
+> 并审计附录 A 引用的复算入口。真实 LLM 花费：**$0**。详细报告：
+> `docs/reviews/X_ROUND_ZERO_LLM_VERIFICATION_2026-10-19.md`。
+
+### Verified — 零 LLM 复算核对（12 项全吻合）
+
+- 主批三种子统计（概览 / McNemar χ²=27.2250 与 48.7935 / 贝叶斯 δ=+0.1393 与 −0.2787 / 配对 t / 簇稳健 31 簇·符号检验 p=0.0018 与 0.0169）、df_spec 主对比（JSON 逐位一致）、T 轮 B2 复现批（逐位一致）、df_doc 锚替换与增广（逐位一致）、ULT accuracy 42/200（200 条语义字段全同）、B1 协议文本、门禁计数口径（26/24/27 三项全中）；5 个关键批次 JSON 指纹匹配。
+- W 轮 A07 配对修复对历史批次数字零影响（与修复说明一致）。
+
+### Fixed — 复现性缺口 G1：可编译率复算链（语料归档 + 重放路径）
+
+- **缺口**：`emse_dsl_extend_recheck.py`（及依赖的 `emse_dsl_diag3.py`）被 gitignore，且语料派生自作者机 `~/.cache/aitester/llm`——论文"子句可编译率 0.8847→0.9127"无法从工件包复算。
+- **修复**：两脚本入库；语料按归档报告 mtime 切点（2026-10-15 12:45:38，实测精确重建 719 planner 条目→607 去重子句）固化为 `CORPUS_607.json`；脚本新增 `--dump-corpus` / `--from-corpus` / `--out`。**从归档语料重放逐位复现 RECHECK_REPORT.json**（回归锁实证）。
+- **回归锁**：`test_corpus_replay_reproduces_archived_report`（逐位复现 + 关键数字钉住）、`test_corpus_replay_deterministic`、`test_corpus_schema_lock`、`test_prior_gate_reason_restores_module_constants`。
+
+### Fixed — 复现性缺口 G2/G3：五个零 LLM 复算入口入库
+
+- **缺口**：`emse_ult_dfsmoke_accuracy.py`（ULT accuracy 42/200）、`emse_quixbugs_mutk_full.py` / `emse_ult_mutk_full.py` / `emse_test_sanity_audit.py`（**论文 Table 5 mutation 分数**）被 gitignore（批次七/八纪律"无测试引用故 ignore"——但论文数字直接依赖它们，纪律前提失效）。
+- **修复**：五脚本入库；`.gitignore` 移除 6 条 ignore 条目并更新两处纪律注释；Mut@k 两工件目录 README 去掉"gitignored"表述 + SHA256SUMS 重生。
+- **回归锁**：`test_ult_dfsmoke_run_one_classification`、`test_mutk_aggregate_pooled_caliber`（池化口径/跳过/健全性门剔除分列）、`test_sanity_gate_classification`（三入口参数序不同的关键字调用契约——实测位置参数错配会把测试文本拼进文件名致 rc=5 假阴性）。
+
+### Fixed — 复现性缺口 G4：附录 A 补 5 行量化映射
+
+- **缺口**：附录 A（自称 SRC 注释的排版形式）缺 5 处量化引用：可编译率重评、ULT 估计、oracle 质量/SMT 见证、设计敏感性、过红审计。
+- **修复**：附录 A 扩至 12 行；表题更新（语料重放路径说明）；全部入口经 `git ls-files` 实证在库（`smt_witness_batch.py` 经验证已在库——bash grep 编码误报，本会话后续一律用 Grep 工具）。
+- 论文编译 19 页；附录 A/B 逐页 SVG→Chrome 截图目检通过。
+
+### Recorded — T 轮 README 重写隐患（未修，列入 X 轮评审）
+
+- `analyze_t1_b2_main_batch.py --write` 从零重生成 README，归档版手工追加的"0.6 T 轮发现"节（32 行）会被静默丢失（本轮复算在 /tmp 副本上实证）。建议生成-保留标记或移入手写文件。
 
 ## [Unreleased] — 2026-10-19 W 轮（第二轮第三方复核：A07/A09/A10 三项 P1 残留补修）
 
