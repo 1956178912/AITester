@@ -871,7 +871,10 @@ benchmark:
       arms_final:
         aitester: {detection: "17/37 (45.9%)", token_per_task: 16038}
         plain_llm_df: {detection: "31/37 (83.8%)", token_per_task: 1905}
-      paired_mcnemar_arms: {discordant: 14, chi2: 12.071, p: 0.0005}
+      # 同一对比两种 McNemar 变体（2026-10-19 X 轮对齐）：项目报告约定 = 精确二项双尾
+      # （b=0/c=14 → 2×0.5^14 = 1.22e-4，论文 Table 1 row 2 引用此值）；χ² 渐近口径
+      # （连续性校正 (|b−c|−1)²/(b+c) = 12.071 → p=5.06e-4，原记 0.0005）并列保留。
+      paired_mcnemar_arms: {discordant: 14, chi2: 12.071, p_asymptotic: 0.0005, p_exact: 0.000122}
       paired_bayes_arms: {delta: -0.3415, ci: [-0.5020, -0.1848], p_rope: 0.0001}
       verdict: "真实基准上完整编排检出显著低于纯提示（45.9% vs 83.8%，p=0.0005），成本高 8.4×"
       supersedes: "结果十五/十八的 detection=0/41 与'红得不特异'归因"

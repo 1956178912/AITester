@@ -85,6 +85,58 @@ SHA256SUMS；`.gitattributes` 已设 `-text` 保证字节一致）。
 `tests/test_analyze_t1_b2_manual_sections.py`（5 例，hermetic——用归档报告
 直接渲染，不重跑批次分析）。
 
+## 3.5 扩大复算核对（2026-10-19 续，X 轮三阶段）
+
+上轮覆盖 12 项后，本轮把论文**全部量化声明**核完：
+
+| 声明 | 位置 | 核验方式 | 结果 |
+|---|---|---|---|
+| Table 1 row 2（QuixBugs FIXED：45.9% vs 83.8%，14 不一致对全偏 prompt，exact p=1.2e-4） | 正文+表 | 计数出自 BASELINE §e4_resettled（17/37、31/37，第三方评审 C4 A 级"子代理从原始 JSON 复算一致"）；b=0/c=14 → 精确二项双尾 p=1.221e-4 复算吻合 | **一致** |
+| Table 1 row 3（E6 control：9.2% vs 34.5% vs 0.0%，χ²=16.962、p=3.8e-5、δ=−25.3pp） | 正文+表 | 计数出自 e6 README/BASELINE（8/87、30/87、0/87；评审 C12 A 级）；b=24/c=2 → χ²_cc=16.9615、p=3.814e-5、δ=25.29pp 复算吻合 | **一致** |
+| Table 1 row 4（budget-capped：2.3% vs 26.4%，−24.1pp） | 正文+表 | 计数出自 BASELINE §e6_matched phase2（2/87、23/87）；率差 21/87=24.14pp 复算吻合；论文已标注"lower bound"口径 | **一致** |
+| Row 1 效应量 g=0.739 | 正文 | Cliff δ 量级 \|b−c\|/(b+c)=68/92=0.7391 复算吻合 | **一致** |
+| plain prompt 对比 +13.9pp（χ²=27.2250、p=1.8e-7） | 正文 | b=37/c=3 → χ²_cc=27.2250（逐位）、p=1.811e-7 复算吻合 | **一致** |
+| M4 三组（primary 2:5/n=35/δ=−8.57/p=0.4531/BF=0.5625；repeat 2:7/−14.29/0.1797/1.1172；merged 4:12/n=70/−11.43/0.0768/1.587） | RQ4 | 用项目自身 `mcnemar_exact_p`/`bayes_factor_10`/`mde_two_proportion` 从归档 b/c 复算，**14/14 个值逐位一致**（δ/p/BF/MDE 全对） | **一致** |
+| T 轮 false-fix 边际率 76.6%/81.6%/49.4%（各 261） | §tround | 归档 ANALYSIS_REPORT pooled：200/261、213/261、129/261 复算吻合 | **一致** |
+| 主批 false-fix 口径 59.6%(143/240)、87.7%(229/261)、2.7%(7/261) | §tround | 与上轮已验 canonical 报告概览（passed 143/229/7、measurable 240/261/261）一致 | **一致** |
+
+**修复的实质分歧（论文 ↔ BASELINE p 值变体不一致）**：Table 1 row 2 的同一对比，论文用项目约定
+的**精确二项双尾** p=1.2e-4（正确），BASELINE §e4_resettled 原只记 **χ² 渐近** p=0.0005
+（χ²_cc=12.071 → 5.06e-4，亦正确但变体不同）——审稿人对照两处会看到 4× 差异。已对齐：
+BASELINE 改为 `p_asymptotic: 0.0005, p_exact: 0.000122` 并列并注明约定；论文补渐近口径
+交叉引用（"asymptotic χ² = 12.07, p = 5 × 10⁻⁴"）。
+
+**范围说明**：SpecExpr synthetic 确认性（δ=−0.57pp/n=174）、scale87 勘误（+11.43pp）等数字
+经查**不在当前论文正文**（v0.2 修订时已出论文，仅存 BASELINE/CHANGELOG 内部记录）——
+论文验证范围以正文为界，内部记录另有第三方评审 C15/C16 等级 B 审计。
+
+## 3.6 论文一致性审计（2026-10-19 续，X 轮三阶段·Task 5）
+
+对 `paper/draft.typ` 做三方对账（数字 ↔ 工件 ↔ 措辞）：
+
+**交叉引用完整性**：22 个 `@sec/@tab/@fig` 引用全部解析到 24 个标签；18 个文献引用全部在
+`refs.bib`（`Mut@k` 的 `@k` 为记号误报，非引用）。
+
+**量化声明追缴（本轮新增，全部对上）**：
+
+| 声明 | 核验 | 结果 |
+|---|---|---|
+| Table 5 列 1（原始值 0.9610/0.9543/0.928） | 归档 `MUTK_QUXBUGS_RECOMPUTE`（443/461=0.960954）+ `MUTK_REPORT`（0.9543/0.928） | **一致** |
+| Table 5 列 2（截断·健全 0.9323/0.7444/0.64） | **从归档交叉重算**：截断运行逐任务 killed/total（10-14 工件）× 全量运行健全子集（29/9/5 任务）→ 248/266=0.9323、67/90=0.7444、32/50=0.6400 | **逐位一致** |
+| Table 5 列 3（全量·健全 0.9396/0.6749/0.4395） | 归档全量运行 aggregate（1182/1258、1590/2356、847/1927） | **一致** |
+| oracle 质量（correct 0.0 / fp 0.763） | 归档 ORACLE_QUALITY_REPORT 41 口径 counts {correct:0, fp:29, silent:9} → rates 0.0/0.7632/0.2368 | **一致** |
+| 过红审计（167/669、P1×4、P3×1） | 归档 OVERRED_P1_P4.json 计数 + BATCH5_REPORT §3 五例模式表 | **一致** |
+| SMT 见证（19/19 sat、165/184 rejected、10.3% reach、13/41 任务） | 归档 ANALYSIS_REPORT primary_41 桶：sat=19+error=165=184；reach 0.103261；tasks_with_any_sat=13 | **一致** |
+| ULT accuracy Wilson CI [15.9, 27.2] | 42/200 Wilson 95% 复算 | **逐位一致** |
+
+**措辞-证据一致性**：风险模式扫描（not_confirmed 读作确认 / 暗示人工裁决 / 阴性结果用
+significant / discovery 当 confirmatory / causal 用语）**零命中**；必备披露齐全
+（no human adjudication、allow-dirty×2、not_reproduced、concurrent work）；
+Appendix B 的 "discovery evidence, not confirmatory evidence" 标注正确。
+
+**审计结论**：论文全部量化声明（Table 1–6、正文所有数字）均可追溯至归档工件或已复算；
+未发现新的数字性错误；唯一实质分歧（BASELINE p 值变体）已在 §3.5 修复。
+
 ## 4. 验证
 
 **第一阶段**：
