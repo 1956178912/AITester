@@ -48,6 +48,7 @@ from experiments.statistical_analysis import (
     _cost_report_lines,
     build_cluster_map,
     cluster_map_summary,
+    cluster_robust_analysis,
     cluster_robust_paired_test,
     cost_analysis,
     cost_per_solved,
@@ -244,6 +245,62 @@ class TestClusterMap:
         # 程序体不同 → 指纹不同（聚类不能把不同实现合并）
         other = "def solve(xs):\n    return sum(xs) + 1\n"
         assert program_fingerprint(other) != program_fingerprint(base)
+
+
+# ─────────────── A06 生产入口接线（2026-10-19 Y 轮审计补口） ───────────────
+
+
+class TestA06EntryWiring:
+    """A06 层 1（归档元数据优先）在**生产入口**是否真的被接通。
+
+    审计来源：`ff15a2f`→HEAD 的逐行覆盖率审计显示
+    `statistical_analysis.cluster_robust_analysis` 的元数据收集分支
+    （`task_metadata[str(tid)] = metadata`）从未被任何测试执行。
+
+    为什么危险：本文件已有 8 个 `build_cluster_map` 用例覆盖"层 1 逻辑本身"，
+    但它们都**绕过生产入口**、直接传入 metadata。若入口的收集循环被破坏
+    （例如不再读 `row["task_metadata"]`），层 1 永不触发，簇统计会静默退回
+    task_id 查表——正是 A06 修掉的跨 seed 错映射（223/261 行、26 簇），
+    而全部既有测试仍然全绿。
+    """
+
+    @staticmethod
+    def _row(task_id: str, detection: float, pattern: str, noise: int) -> dict[str, Any]:
+        return {
+            "task_id": task_id,
+            "detection_rate": detection,
+            "passed": int(detection),
+            "task_metadata": {"pattern_name": pattern, "noise_seed": noise},
+        }
+
+    def test_archived_metadata_is_collected_and_used(self) -> None:
+        """行内 task_metadata 必须被入口收集，并使身份解析走"元数据"层。"""
+        # seed42 cap=2 重建中 synthetic__task_0000 = distance_abs_missing
+        data = {
+            "aitester": [self._row("synthetic__task_0000", 1.0, "distance_abs_missing", 4386)],
+            "plain_llm_df": [self._row("synthetic__task_0000", 0.0, "distance_abs_missing", 4386)],
+        }
+        result = cluster_robust_analysis(data, task_count=87, seed=42, max_pattern_repeat=2)
+
+        identity = result["identity_resolution"]
+        assert identity["n_from_metadata"] == 1, "入口未把行内 task_metadata 传给身份解析"
+        assert identity["n_from_rebuild"] == 0, "层 1 命中时不应回退到 task_id 重建"
+        assert result["cluster_map_summary"]["n_unmapped"] == 0
+
+    def test_metadata_overrides_conflicting_task_id_rebuild(self) -> None:
+        """入口端到端：元数据与同编号重建冲突时以元数据为准（A06 核心语义）。"""
+        # task_0001 重建为 palindrome_case_sensitive，元数据却写 distance_abs_missing
+        data = {
+            "aitester": [self._row("synthetic__task_0001", 1.0, "distance_abs_missing", 1)],
+            "plain_llm_df": [self._row("synthetic__task_0001", 0.0, "distance_abs_missing", 1)],
+        }
+        result = cluster_robust_analysis(data, task_count=87, seed=42, max_pattern_repeat=2)
+
+        identity = result["identity_resolution"]
+        assert identity["n_metadata_conflicts"] == 1, "冲突须可审计（计入 conflict 计数）"
+        assert identity["n_from_metadata"] == 1, "冲突时以元数据为准，不得回退 task_id"
+        assert identity["n_from_rebuild"] == 0, "回退 task_id 会重现跨 seed 错映射（A06 缺陷）"
+        assert result["cluster_map_summary"]["n_clusters"] == 1
 
 
 # ─────────────── S13：簇级配对检验（手算值 + 退化行为） ───────────────

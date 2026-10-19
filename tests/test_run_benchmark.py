@@ -813,3 +813,55 @@ class TestReproProvenanceGitSha:
         assert '"repro_provenance": _git_block["repro_provenance"]' in source
         # 旧实现的两个只查存在性的表达式不得回归
         assert 'os.path.exists(os.path.join(os.getcwd(), ".repro_provenance"))' not in source
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  A16 证据消费（2026-10-19 Y 轮审计补口）
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# 审计来源：`ff15a2f`→HEAD 的逐行覆盖率审计显示
+# `_apply_execution_flaky_evidence` 的 flaky 分支（第 281-287 行）零执行——
+# 既有测试只覆盖了"非 flaky → 写 test_passed"的快速返回路径。
+#
+# 为什么危险：single_agent 基线绕过工作流节点直接调 ExecutorAgent，若不消费
+# 执行层的 fail→pass 证据，它会把"同测试首败次过"记成 `test_passed=True`，
+# 把执行不稳定抹成成功证据——正是 A16 要消除的判分偏差。
+
+
+def test_flaky_evidence_is_consumed_conservatively() -> None:
+    """flaky 证据存在时：保守记 False + 写真实 pass/total 计数。"""
+    state: dict[str, Any] = {}
+    result = {
+        "flaky_fail_then_pass": True,
+        "passed": True,  # 最终一次执行通过——不得直接当成功
+        "execution_attempts": [{"passed": False}, {"passed": True}, {"passed": True}],
+    }
+    rb._apply_execution_flaky_evidence(state, result)
+
+    assert state["test_passed"] is False, "不稳定结果不能作为成功证据"
+    assert state["flaky_detected"] is True
+    assert state["flaky_unverified"] is True
+    assert state["flaky_pass_count"] == 2
+    assert state["flaky_total_count"] == 3
+
+
+def test_flaky_evidence_filters_non_dict_attempts() -> None:
+    """尝试记录里的非 dict 条目必须被过滤（不得让 len 虚高或计数崩溃）。"""
+    state: dict[str, Any] = {}
+    result = {
+        "flaky_fail_then_pass": True,
+        "passed": True,
+        "execution_attempts": [{"passed": True}, "脏数据", None, {"passed": False}],
+    }
+    rb._apply_execution_flaky_evidence(state, result)
+
+    assert state["flaky_pass_count"] == 1
+    assert state["flaky_total_count"] == 2, "非 dict 条目不计入总数"
+
+
+def test_non_flaky_path_writes_only_test_passed() -> None:
+    """无 flaky 证据时只写 test_passed——其余键保持未设置（历史口径零变化）。"""
+    state: dict[str, Any] = {}
+    rb._apply_execution_flaky_evidence(state, {"passed": True})
+
+    assert state == {"test_passed": True}, f"非 flaky 路径不得写入额外证据键：{state}"

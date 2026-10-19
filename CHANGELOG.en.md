@@ -1,10 +1,68 @@
-> Last updated: 2026-10-19 (round Y: **fix-coverage gap audit** — per-line audit of every fix added between `ff15a2f` and HEAD under `src/`, using the `coverage.xml` line set as authority: 37 of 552 lines (6.70%) were never executed by any test; five regression locks close the A11 cross-model budget recheck, the A11 zai budget passthrough, the A15 same-endpoint suffix and the A09 legacy-key material, each mutation-verified; the audit tool is now in the repo. Previously round X: paper reproducibility closure and systematic review (12/12 zero-LLM recomputations reproduce + five reproducibility gaps fixed + 14 regression locks); round W: second-round third-party review residuals closed (A07/A09/A10); round V: 23-item third-party review remediation; rounds U/T/S/R/Q/P/O/N/M/L/K registered the same day)
+> Last updated: 2026-10-19 (round Y2: **audit closure and first audit of experiments/** — three A20 degradation guards, A06's production-entry metadata wiring and A16's flaky-evidence branch closed with 8 mutation-verified regression locks; `experiments/` core library modules are fully locked, with uncovered lines confined to CLI shells; two dead functions and six error-handling lines recorded. Previously round Y: fix-coverage gap audit (37 of 552 lines unexecuted + five regression locks + the audit tool); round X: paper reproducibility closure and systematic review; round W: second-round third-party review residuals closed (A07/A09/A10); round V: 23-item third-party review remediation; rounds U/T/S/R/Q/P/O/N/M/L/K registered the same day)
 
 > **Language**: [简体中文](CHANGELOG.md) | English (this file)
 
 # Changelog
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+## [Unreleased] — 2026-10-19 Round Y2: audit closure and first audit of experiments/ (zero LLM, $0)
+
+> Closure of the round-Y audit: the remaining `src/` A20 guard gaps are closed, and the
+> same method is applied to `experiments/` for the first time — the area round Y
+> explicitly disclosed as unaudited. Real LLM spend: **$0**.
+> Full report: `docs/reviews/FIX_COVERAGE_AUDIT_ROUND2_2026-10-19.md`.
+
+### Fixed — A20 three-level degradation chain (`trace.py`, 3 tests)
+
+- A20's contract is "rather lose an observation record than write a corrupt line", implemented
+  as three degradations: ① `_redact_record` returns the record as-is when structural
+  redaction raises; ② `_append`'s `json.loads` guard drops the line; ③ `dump_recent_to`
+  skips the line when serialization fails (e.g. `__str__` raises).
+- **An existing test is misnamed**: in
+  `test_dump_with_unserializable_object_does_not_emit_bad_line` the `_Weird.__str__`
+  returns a normal string, so it exercises the success path and never the drop branch.
+- Mutation-verified: injecting the three degradations one at a time turns exactly one
+  target test red each time while the other 17 stay green.
+
+### Fixed — A06 production-entry metadata wiring (`statistical_analysis.py:2749-2750`, 2 tests)
+
+- A06 layer 1 (archived `task_metadata.pattern_name` wins over task_id lookup) has eight
+  `build_cluster_map` tests, but **no test goes through the production entry
+  `cluster_robust_analysis`** — the "collect metadata from rows" branch never executed.
+- **Consequence**: if that collection breaks, layer 1 never fires and clustering silently
+  falls back to task_id lookup — exactly the cross-seed mis-mapping A06 fixed
+  (223/261 rows, 26 clusters, an inflated p≈6.6e-05) — with every existing test green.
+- Mutation-verified: forcing the collection condition false turns **only the 2 new tests
+  red; the 46 existing ones (including the 8 layer-1 tests) stay green**.
+
+### Fixed — A16 flaky-evidence consumption (`run_benchmark.py:281-287`, 3 tests)
+
+- `_apply_execution_flaky_evidence` conservatively records `test_passed=False` plus real
+  pass/total counts when `flaky_fail_then_pass=True`; existing tests only covered the
+  non-flaky fast path, so this branch never executed.
+- **Consequence**: the single_agent baseline would record "failed first, passed on retry"
+  as success, erasing execution instability — precisely the scoring bias A16 removed.
+
+### Audit — first audit of `experiments/`
+
+- 992 fix-added lines, 550 unexecuted (55.44%), but **this is not a defect signal**:
+  531 of those lines are the `argparse` + `main()` shells of the six zero-LLM recompute
+  entry scripts added in round X (verified function-level by
+  `test_emse_recompute_entrypoints.py`).
+- Core library modules are clean: `_m1_metrics` 19/0, `_row_pairing` 20/0,
+  `bayesian_paired` 3/0, `spec_examples_generator` 4/0, the two A08 call sites 1/0.
+- The audit tool gained `--pathspec`, so `src/` and `experiments/` can each be re-audited.
+
+### Recorded — dead code and remaining gaps (no production code changed)
+
+- **Dead code**: `_strip_seed_prefix` (`statistical_analysis.py:2290`) and
+  `_rebuilt_task_fingerprints` (`2327`) have no call sites anywhere (tests included);
+  they are A06 refactor leftovers and are safe to delete. Left in place this round per the
+  minimal-change principle; recommended for cleanup next round.
+- **Remaining**: `statistical_analysis.py:2747` (duplicate/empty task_id `continue`) and
+  six lines in `run_benchmark.py` covering provenance read failures / malformed markers /
+  git exceptions (error handling; recommended next round).
 
 ## [Unreleased] — 2026-10-19 Round Y: fix-coverage gap audit (zero LLM, $0)
 
