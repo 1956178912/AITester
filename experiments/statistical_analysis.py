@@ -2287,11 +2287,6 @@ def _split_seed_prefix(task_id: str) -> tuple[int | None, str]:
     return int(m.group(1)), m.group(2)
 
 
-def _strip_seed_prefix(task_id: str) -> str:
-    """剥离 AB4 多种子拼接口径的 `s<seed>__` 前缀（无前缀时原样返回）。"""
-    return _split_seed_prefix(task_id)[1]
-
-
 @functools.lru_cache(maxsize=32)
 def _rebuilt_task_table(
     task_count: int,
@@ -2322,15 +2317,6 @@ def _rebuilt_task_table(
         )
         for t in tasks
     )
-
-
-def _rebuilt_task_fingerprints(
-    task_count: int = _DEFAULT_CLUSTER_TASK_COUNT,
-    seed: int = _DEFAULT_CLUSTER_SEED,
-    max_pattern_repeat: int | None = _DEFAULT_CLUSTER_MAX_PATTERN_REPEAT,
-) -> tuple[tuple[str, str], ...]:
-    """A06：重建数据集 → ((task_id, 程序体指纹), ...)（`_rebuilt_task_table` 薄封装）。"""
-    return tuple((tid, fp) for tid, fp, _pattern, _noise in _rebuilt_task_table(task_count, seed, max_pattern_repeat))
 
 
 def _resolve_cluster_identity(

@@ -1,10 +1,44 @@
 > **语言 / Language**：[English](CHANGELOG.en.md) | 简体中文（本文）
 >
-> Last updated: 2026-10-19（Y2 轮：**审计收口与 experiments 侧首次审计**——补齐 A20 三级降级链 3 例、A06 生产入口元数据接线 2 例、A16 flaky 证据消费 3 例，全部经变异验证；experiments/ 核心库模块已充分锁定，未覆盖集中于 CLI 薄壳；记录 2 个死函数与 6 行错误处理缺口。此前 Y 轮：修复覆盖率缺口审计（552 行中 37 行零覆盖 + 5 例回归锁 + 审计工具入库）；X 轮：论文复现性闭环与系统评审；W 轮：第二轮第三方复核残留补修（A07/A09/A10）；V 轮：第三方独立评审 23 项修复；U/T/S/R/Q/P/O/N/M/L/K 轮同日登记）
+> Last updated: 2026-10-19（Y3 轮：**审计收尾与全仓未覆盖地图**——删除 2 个零调用点死函数（`_strip_seed_prefix` / `_rebuilt_task_fingerprints`，覆盖分母 −8 行）；补齐 A03 provenance 三条降级路径 3 例（marker 读取失败 / 行格式不符 / git 异常，逐项变异验证）；首次产出全仓 652 行未覆盖行分类地图，并明确「不为冻结功能补测」的判断依据。此前 Y2 轮：审计收口与 experiments 侧首次审计（A20/A06/A16 三组缺口 8 例）；Y 轮：修复覆盖率缺口审计（552 行中 37 行零覆盖 + 5 例回归锁 + 审计工具入库）；X 轮：论文复现性闭环与系统评审；W 轮：第二轮第三方复核残留补修（A07/A09/A10）；V 轮：第三方独立评审 23 项修复；U/T/S/R/Q/P/O/N/M/L/K 轮同日登记）
 
 # Changelog
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
+
+## [Unreleased] — 2026-10-19 Y3 轮：审计收尾与全仓未覆盖地图（零 LLM，$0）
+
+> Y2 轮遗留项收口，并把审计视野从"修复新增行"扩展到全仓。真实 LLM 花费：**$0**。
+> 详细报告：`docs/reviews/FIX_COVERAGE_AUDIT_ROUND3_2026-10-19.md`。
+
+### Removed — 2 个零调用点死函数
+
+- `experiments/statistical_analysis.py`：`_strip_seed_prefix`（原 2290-2292）与
+  `_rebuilt_task_fingerprints`（原 2327-2333）在全仓（含 395 个测试文件）零调用点，
+  系 A06 重构遗留（分别被 `_split_seed_prefix` / `_rebuilt_task_table` 取代）。
+- **收益**：消除"看似在用实则死掉"的误导，覆盖分母 −8 行（此前恒为未覆盖，虚高缺口数）。
+- 验证：`ast.parse` + ruff + 统计相关 105 例全绿。
+
+### Fixed — A03 provenance 三条降级路径（`run_benchmark.py`，3 例）
+
+- marker 读取失败（`OSError`/`UnicodeDecodeError`）→ 记录 `error` 字段，不抛异常；
+- marker 行格式不符（无 `=` / key 非 `GIT_SHA`）→ 跳过并继续解析；
+- git 调用异常 → `git_available=False`，回落 marker 作为来源。
+- **为什么重要**：若退化为抛异常，一次权限异常或 git 缺失就能让整批实验在启动阶段
+  崩溃——而这正是复现容器（无 git）的常态。三条路径此前零执行。
+- 变异验证：逐项单独注入，每次仅目标用例变红、其余 2 例全绿。
+
+### Audit — 全仓未覆盖行地图（首次）
+
+- `coverage.xml` 全量口径：**652 行未覆盖 / 83 个文件**。
+- 分类：**冻结功能**（`orchestration_search` 74 行，占 11.3%，ADR-0034 已冻结）、
+  **容错/防御分支**（`helpers` 的正则回退档、`spec_ir_v2` 的 SMT 见证保守回落、
+  `trace` 的 A20 其余守卫）、**多数据集适配层**（47 行，本地缺数据集不可达）、
+  **平台探测分支**。
+- **明确不建议**以"降低未覆盖行数"为目标补测：为冻结功能补测会产生"测试存在但
+  语义未验证"的假安全感。下轮优先序：① `helpers` 档 2 正则回退（LLM 输出容错是
+  真实需求）；② `spec_ir_v2` 的 SMT 见证 4 条保守边界（有明确 docstring 契约）；
+  ③ 数据集适配层（需先确认本地数据集可用性）。
 
 ## [Unreleased] — 2026-10-19 Y2 轮：审计收口与 experiments 侧首次审计（零 LLM，$0）
 

@@ -865,3 +865,57 @@ def test_non_flaky_path_writes_only_test_passed() -> None:
     rb._apply_execution_flaky_evidence(state, {"passed": True})
 
     assert state == {"test_passed": True}, f"非 flaky 路径不得写入额外证据键：{state}"
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  A03 复现来源解析的降级路径（2026-10-19 Y2 审计补口）
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# 审计来源：`ff15a2f`→HEAD 的逐行覆盖率审计显示，marker 读取失败、marker 行
+# 格式不符、git 调用异常三条降级路径零执行。它们共同保证"溯源不可得时如实
+# 记录 error / 回落 marker，而不是抛异常中断整批跑测"——若退化，一次权限
+# 异常就能让整批实验在启动阶段崩溃，而既有测试全绿。
+
+
+def test_marker_read_error_is_recorded_not_raised(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Any
+) -> None:
+    """marker 存在但读不出（权限/编码）→ 记录 error，不抛异常。"""
+    (tmp_path / ".repro_provenance").write_text("GIT_SHA=deadbeefcafe", encoding="utf-8")
+
+    def _boom(self: Any, *args: Any, **kwargs: Any) -> str:
+        raise OSError("权限不足")
+
+    monkeypatch.setattr("pathlib.Path.read_text", _boom)
+    info = rb._read_repro_provenance_marker(tmp_path)
+
+    assert info["present"] is True, "文件存在性判定不受读取失败影响"
+    assert info["git_sha"] is None
+    assert "OSError" in (info["error"] or ""), "异常类型须如实记录，供批次审计"
+
+
+def test_marker_ignores_malformed_lines(tmp_path: Any) -> None:
+    """marker 行格式不符（无 `=` / key 非 GIT_SHA）必须跳过，不得中断解析。"""
+    (tmp_path / ".repro_provenance").write_text(
+        "no-equals-here\nSOMETHING=1\n  git_sha = deadbeefcafe  \n", encoding="utf-8"
+    )
+    info = rb._read_repro_provenance_marker(tmp_path)
+
+    assert info["git_sha"] == "deadbeefcafe", "前两行应被跳过，键名大小写不敏感"
+
+
+def test_git_exception_degrades_to_marker(monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> None:
+    """git 调用异常（未安装/权限）→ git_available=False，回落 marker 作为来源。"""
+    (tmp_path / ".repro_provenance").write_text("GIT_SHA=deadbeefcafe", encoding="utf-8")
+
+    def _boom(*args: Any, **kwargs: Any) -> Any:
+        raise OSError("git 不可用")
+
+    monkeypatch.setattr(rb.subprocess, "run", _boom)
+    resolved = rb._resolve_git_provenance(workspace_dir=tmp_path, repo_dir=tmp_path)
+
+    assert resolved["git_available"] is False
+    assert resolved["git_sha"] == "deadbeefcafe"
+    assert resolved["git_sha_source"] == "repro_provenance", "无 git 时以 marker 为来源"
+    assert resolved["repro_provenance"]["git_sha_matches_git"] is None
+    assert resolved["repro_provenance"]["git_sha_conflict"] is False
