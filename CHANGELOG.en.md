@@ -40,6 +40,13 @@ All notable changes to this project will be documented in this file. Format foll
 
 - `analyze_t1_b2_main_batch.py --write` regenerates the README from scratch; the manually appended "0.6 T-round findings" section (32 lines) in the archived copy would be silently dropped (demonstrated on a /tmp copy during this round's recomputation). Proposed fix: generation-preservation markers or moving the section to a handwritten file.
 
+### Verified — round X (part 3) extended recomputation cross-check + paper consistency audit (zero LLM)
+
+- **Extended cross-check**: Table 1 rows 2/3/4 (QuixBugs FIXED 45.9% vs 83.8% exact p=1.2e-4; E6 control chi2=16.962/p=3.8e-5/delta=-25.3pp; budget-capped 2.3% vs 26.4%) all statistically self-consistent (counts carry grade-A third-party audits C4/C12); M4's three cases reproduce 14/14 values (delta/p/BF/MDE) bit-for-bit with the project's own functions; T-round false-fix rates (76.6/81.6/49.4%) and main-batch calibers (59.6/87.7/2.7%) match archived pooled data.
+- **Paper consistency audit**: 22 cross-references all resolve, 18 citations all in refs.bib; Table 5's three columns all traced (column 2 "truncated + sanity-gated" **recomputed by intersecting** archived truncated per-task data with the full-run sanity subset: 248/266=0.9323, 67/90=0.7444, 32/50=0.6400 — exact hits); oracle quality (correct 0.0/fp 0.7632), over-red audit (167/669, P1x4/P3x1), SMT witness (19/19 sat, 165/184, 10.3%), ULT Wilson CI [15.9,27.2] all match archived artifacts; zero risky-wording hits, all required disclosures present.
+- **Real discrepancy fixed**: Table 1 row 2's p-value uses the project's exact-binomial convention (1.2e-4) while BASELINE §e4_resettled recorded only the chi-square asymptotic (0.0005) — a 4x apparent gap for the same contrast. Aligned: BASELINE now records `p_asymptotic`/`p_exact` side by side with the convention noted; the paper carries the asymptotic cross-reference.
+- SpecExpr synthetic (-0.57pp/n=174) and scale87 (+11.43pp) confirmed **not in the current paper body** (dropped in the v0.2 revision); verification scope is the paper text.
+
 ### Fixed — round X (part 2) systematic review: same-class gap sweep + input batches committed + README rewrite hazard closed
 
 - **Sweep (all path forms, not just .py)**: of 70 experiments scripts referenced by docs, 3 are not in-repo — all non-live references (1 version-history snapshot + 2 design-plan entries explicitly marked "designed, not implemented"); artifact-README recompute references: 0 gaps; of 106 paths referenced by tracked files, 2 are real input gaps; of 10 README-generating scripts only the T-round instance had a manual-section loss risk; dangerous-pattern scan of the 6 newly committed scripts: all CLEAN.
