@@ -1,10 +1,49 @@
 > **语言 / Language**：[English](CHANGELOG.en.md) | 简体中文（本文）
 >
-> Last updated: 2026-10-19（X 轮：**论文复现性闭环与系统评审**——零 LLM 复算核对 12 项全吻合；修复五个复现性缺口（6 个复算入口脚本 + 2 个输入批次 + 607 子句语料归档 + 语料重放路径 + 附录 A 补 5 行量化映射）；T 轮 README 手工节重写隐患修复（MANUAL 标记保留机制）；14 例回归锁。此前 W 轮：第二轮第三方复核残留补修（A07/A09/A10）；V 轮：第三方独立评审 23 项修复；U/T/S/R/Q/P/O/N/M/L/K 轮同日登记）
+> Last updated: 2026-10-19（Y 轮：**修复覆盖率缺口审计**——以 coverage.xml 行集合为权威，审计 ff15a2f→HEAD 的 src/ 修复新增代码，552 行中 37 行（6.70%）从未被测试执行；补齐 A11 跨模型预算复查 / A11 zai 预算透传 / A15 同端点后缀 / A09 旧键材料 共 5 例回归锁，逐项经变异验证；审计工具入库。此前 X 轮：论文复现性闭环与系统评审（12 项零 LLM 复算全吻合 + 五个复现性缺口修复 + 14 例回归锁）；W 轮：第二轮第三方复核残留补修（A07/A09/A10）；V 轮：第三方独立评审 23 项修复；U/T/S/R/Q/P/O/N/M/L/K 轮同日登记）
 
 # Changelog
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
+
+## [Unreleased] — 2026-10-19 Y 轮：修复覆盖率缺口审计（零 LLM，$0）
+
+> 针对前两轮评审暴露的复发模式（"修复覆盖主路径、漏掉分支路径"）做系统审计：
+> 以 `coverage.xml` 行集合为权威口径，审计 `ff15a2f`→HEAD 的 `src/` 修复新增代码。
+> 真实 LLM 花费：**$0**。详细报告：`docs/reviews/FIX_COVERAGE_AUDIT_2026-10-19.md`。
+
+### Audit — 552 行修复新增代码中 37 行（6.70%）从未被测试执行
+
+- 口径：`git diff --unified=0 ff15a2f HEAD -- src/` 的 `+` 侧行号 ∩ `coverage.xml` 行集合。
+  **关键教训**：最初自建字节码判定（`co_lines()`）把跨行函数签名的每个参数行都算成可执行行，
+  得出"1400 行 / 63% 未覆盖"的假象；coverage.py 用真实 trace 行事件判定，才是唯一权威口径。
+- 已充分覆盖（非缺口）：`process_utils.py`（A08 P0 + A12）48 行全绿（含 Windows 分支 Mock 覆盖）、
+  `semantic_cache.py`（A09 补修）12 行全绿、`nodes.py`（A14/A16）43 行全绿。
+- 工具入库：`scripts/tools/audit_fix_coverage.py`（可对任意"修复起点→HEAD"重跑；审计非门禁，有缺口也返回 0）。
+
+### Fixed — 三组 P1 契约缺口补回归锁（5 例，全部经变异验证）
+
+- **A11 跨模型故障转移前的预算复查**（`base_agent.py:1022-1023`）：A11 的预算复查有两层，
+  既有测试只锁住第一层 `pre_retry_check`（同模型重试前，需 `max_retries>0`）；第二层
+  （跨模型切换前）零覆盖——回退后第一个模型失败即继续烧第二个模型，预算闸被绕过。
+  **变异验证**：抹掉该分支后既有 `test_budget_rechecked_before_retry` **仍然通过**（它走第一层），
+  仅新增用例变红，日志显示 `model-2` 被调用。
+- **A11 zai 路径的预算异常透传**（`llm_client.py:589-592`）：`except BudgetExceededError: raise`
+  零覆盖；回退后预算超限被包装成 `RuntimeError("zai API 调用失败")`，上层误判为普通 API 故障
+  继续故障转移。
+- **A15 同端点不同 key 的实例 ID 后缀**（`api_manager.py:239-240`）：实例 ID 只由 `base_url`
+  派生（刻意不让凭证进节点键），故**同 model / 同 base_url / 不同 api_key**（配额轮询的常见配置）
+  会算出相同 ID，第二个实例必须退化为 `<id>#2`。现有 8 个 A15 测试全部使用不同 `base_url`，
+  该分支从未执行；回退后两个实例塌缩为一个（`len(keys)` 2→1）。
+- **A09 旧格式缓存键材料的逐字节复刻**（`base_agent.py:361, 370`）：`jm1`（json_mode）与
+  `ns<namespace>` 两个材料分支零覆盖。漏项会让历史缓存**全部失效**（表现为重复计费，功能测试全绿）；
+  `ns` 漏项更隐蔽——跨实验命名空间会互相命中缓存，造成静默污染。
+
+### Recorded — 剩余 31 行缺口分类（未补，非阻塞）
+
+- `executor_runtime.py` 14 行（探测子进程失败分支 / 类型守卫）、`trace.py` 9 行
+  （A20 三处"坏行不落盘"守卫——**建议下轮补**，可用非法 JSON 注入锁定）、`api_manager.py`
+  4 行（早退 / 极边界）、`base_agent.py` 2 行（宽泛 `except`）、`llm_client.py` 2 行（空身份返回值）。
 
 ## [Unreleased] — 2026-10-19 X 轮：论文复现性闭环与系统评审（零 LLM，$0）
 

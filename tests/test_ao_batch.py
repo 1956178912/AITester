@@ -87,10 +87,11 @@ class TestReadmeEnHeader:
 
     def test_head_updated_line_current(self) -> None:
         """头部日期行为 2026-10-19 且提及最新轮次（行锁随最新批次推进——
-        W 轮批 2026-10-19 合法更新本锁；此前锁停留在批次 XIV/2026-10-07，
-        而 U/V 两轮未随该约定推进日期行，W 轮文档同步时一并收口）。"""
+        Y 轮批 2026-10-19 合法更新本锁。历史：W 轮补到 2026-10-19 时发现
+        U/V 两轮未随该约定推进日期行（旧锁停留在批次 XIV/2026-10-07）；
+        X 轮漏维护本锁，Y 轮文档同步时一并收口 X/Y 两轮）。"""
         assert "Last updated: 2026-10-19" in README_EN_HEAD
-        assert "second-round third-party review residuals" in README_EN_HEAD
+        assert "fix-coverage gap audit" in README_EN_HEAD
 
 
 class TestDeprecationTimeline:
