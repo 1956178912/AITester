@@ -1,0 +1,251 @@
+{
+  "task_id": "ult__num_agreeing_tuples",
+  "baseline": "aitester",
+  "test_plan": {
+    "function_name": "num_agreeing_tuples",
+    "description": "比较两个排列在去掉首尾元素后，所有长度为k的索引组合上相对顺序模式（序数）一致的元组数量，返回(一致数, 总数)。",
+    "logic_analysis": {
+      "input_domain": "perm1, perm2: 序列（列表/元组），要求长度相等且各自元素唯一；k: 整数，0<=k<=len(perm1)-2（因先切片去掉首尾）",
+      "output_domain": "元组(agree, agree+disagree)，其中agree为序数模式一致的组合数，agree+disagree为组合总数C(len(perm1)-2,k)",
+      "preconditions": [
+        "len(perm1)==len(perm2)",
+        "perm1与perm2各自元素互不相同（set长度等于自身长度）",
+        "k为非负整数且不超过切片后长度"
+      ],
+      "postconditions": [
+        "返回二元组(agree,total)",
+        "total等于itertools.combinations(range(len(perm1)-2),k)的元素个数",
+        "0<=agree<=total"
+      ],
+      "edge_cases": [
+        "k=0：组合为空，返回(0,0)",
+        "切片后长度为0（原长度<=2）",
+        "k等于切片后长度",
+        "perm1与perm2完全相同",
+        "perm1与perm2完全逆序",
+        "长度不等",
+        "存在重复元素"
+      ]
+    },
+    "test_cases": [
+      {
+        "case_name": "正常_两排列完全相同",
+        "input_args": {
+          "perm1": [
+            1,
+            2,
+            3,
+            4
+          ],
+          "perm2": [
+            1,
+            2,
+            3,
+            4
+          ],
+          "k": 2
+        },
+        "expected_output": [
+          3,
+          3
+        ],
+        "category": "normal",
+        "description": "切片后[2,3]，C(2,2)=1个组合，序数模式一致，期望(1,1)？需按代码计算：切片后perm1=[2,3],perm2=[2,3]，k=2，组合仅(0,1)，tuple1=[2,3],tuple2=[2,3]，ordinals均为[0,1]，agree=1,total=1，故期望(1,1)",
+        "logic_coverage": "分支2(ordinals1==ordinals2)真分支,循环for"
+      },
+      {
+        "case_name": "正常_两排列逆序",
+        "input_args": {
+          "perm1": [
+            1,
+            2,
+            3,
+            4
+          ],
+          "perm2": [
+            4,
+            3,
+            2,
+            1
+          ],
+          "k": 2
+        },
+        "expected_output": [
+          0,
+          1
+        ],
+        "category": "normal",
+        "description": "切片后perm1=[2,3],perm2=[3,2]，k=2，组合(0,1)，tuple1=[2,3]序数[0,1]，tuple2=[3,2]序数[1,0]，不一致，agree=0,total=1",
+        "logic_coverage": "分支2假分支,循环for"
+      },
+      {
+        "case_name": "边界_k为0",
+        "input_args": {
+          "perm1": [
+            1,
+            2,
+            3
+          ],
+          "perm2": [
+            3,
+            2,
+            1
+          ],
+          "k": 0
+        },
+        "expected_output": [
+          0,
+          0
+        ],
+        "category": "boundary",
+        "description": "k=0时combinations产生1个空组合？itertools.combinations(range(n),0)产生1个空元组，tuple1=[]，ordinals1=[]，ordinals2=[]，相等，agree=1,total=1。需按实际代码：切片后长度1，C(1,0)=1，故期望(1,1)",
+        "logic_coverage": "边界k=0,循环for"
+      },
+      {
+        "case_name": "边界_切片后长度为0",
+        "input_args": {
+          "perm1": [
+            1,
+            2
+          ],
+          "perm2": [
+            2,
+            1
+          ],
+          "k": 0
+        },
+        "expected_output": [
+          1,
+          1
+        ],
+        "category": "boundary",
+        "description": "切片后为空，C(0,0)=1，空组合序数均为[]，agree=1,total=1",
+        "logic_coverage": "边界空集合,循环for"
+      },
+      {
+        "case_name": "边界_k等于切片后长度",
+        "input_args": {
+          "perm1": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ],
+          "perm2": [
+            5,
+            4,
+            3,
+            2,
+            1
+          ],
+          "k": 3
+        },
+        "expected_output": [
+          0,
+          1
+        ],
+        "category": "boundary",
+        "description": "切片后长度3，C(3,3)=1，唯一组合序数模式逆序不一致，期望(0,1)",
+        "logic_coverage": "边界k=切片长度,循环for"
+      },
+      {
+        "case_name": "错误_长度不等",
+        "input_args": {
+          "perm1": [
+            1,
+            2,
+            3
+          ],
+          "perm2": [
+            1,
+            2
+          ],
+          "k": 1
+        },
+        "expected_output": null,
+        "category": "error",
+        "description": "触发raise Exception('Incompatible lists')，期望抛出异常，具体异常消息由代码确定",
+        "logic_coverage": "异常路径raise"
+      },
+      {
+        "case_name": "错误_perm1有重复元素",
+        "input_args": {
+          "perm1": [
+            1,
+            1,
+            2
+          ],
+          "perm2": [
+            1,
+            2,
+            3
+          ],
+          "k": 1
+        },
+        "expected_output": null,
+        "category": "error",
+        "description": "len(set(perm1))!=len(perm1)触发异常",
+        "logic_coverage": "异常路径raise"
+      },
+      {
+        "case_name": "错误_perm2有重复元素",
+        "input_args": {
+          "perm1": [
+            1,
+            2,
+            3
+          ],
+          "perm2": [
+            1,
+            1,
+            2
+          ],
+          "k": 1
+        },
+        "expected_output": null,
+        "category": "error",
+        "description": "len(set(perm2))!=len(perm2)触发异常",
+        "logic_coverage": "异常路径raise"
+      }
+    ],
+    "logic_degraded": false,
+    "coverage_completeness": 1.0
+  },
+  "generated_test": "import itertools\nimport pytest\n\nfrom num_agreeing_tuples import num_agreeing_tuples\n\n\n# ---------------------------------------------------------------------------\n# 辅助函数：根据规约计算 total 的期望值\n# ---------------------------------------------------------------------------\ndef _expected_total(perm1, k):\n    \"\"\"根据规约：total == len(list(itertools.combinations(range(len(perm1)-2), k)))\"\"\"\n    return len(list(itertools.combinations(range(len(perm1) - 2), k)))\n\n\n# ---------------------------------------------------------------------------\n# 正常用例\n# ---------------------------------------------------------------------------\ndef test_num_agreeing_tuples_identical_permutations():\n    \"\"\"两排列完全相同：切片后 [2,3] 与 [2,3]，唯一组合序数模式一致。\n\n    期望值来源：规约后置条件 + 计划用例描述（切片后长度 2，k=2，C(2,2)=1）。\n    \"\"\"\n    perm1 = [1, 2, 3, 4]\n    perm2 = [1, 2, 3, 4]\n    k = 2\n    agree, total = num_agreeing_tuples(perm1, perm2, k)\n    assert total == _expected_total(perm1, k) == 1\n    assert agree == 1\n    assert 0 <= agree <= total\n\n\ndef test_num_agreeing_tuples_reversed_permutations():\n    \"\"\"两排列完全逆序：切片后 [2,3] 与 [3,2]，序数模式不一致。\n\n    期望值来源：规约后置条件 + 计划用例描述（C(2,2)=1，序数模式相反）。\n    \"\"\"\n    perm1 = [1, 2, 3, 4]\n    perm2 = [4, 3, 2, 1]\n    k = 2\n    agree, total = num_agreeing_tuples(perm1, perm2, k)\n    assert total == _expected_total(perm1, k) == 1\n    assert agree == 0\n    assert 0 <= agree <= total\n\n\n# ---------------------------------------------------------------------------\n# 边界用例\n# ---------------------------------------------------------------------------\ndef test_num_agreeing_tuples_k_zero():\n    \"\"\"k=0：itertools.combinations(range(n), 0) 产生 1 个空组合。\n\n    期望值来源：规约后置条件 total == len(combinations(range(len-2), 0))。\n    注意：规约中\"边界情况：k=0：组合为空，返回(0,0)\"与后置条件\n    total == C(len-2, 0) 存在冲突（C(n,0)=1）。此处以后置条件为准，\n    并记录实际行为，需人工确认。\n    \"\"\"\n    perm1 = [1, 2, 3]\n    perm2 = [3, 2, 1]\n    k = 0\n    agree, total = num_agreeing_tuples(perm1, perm2, k)\n    # 后置条件：total == C(len(perm1)-2, 0) == C(1, 0) == 1\n    assert total == _expected_total(perm1, k)\n    assert 0 <= agree <= total\n\n\ndef test_num_agreeing_tuples_sliced_length_zero():\n    \"\"\"切片后长度为 0（原长度 <= 2）：range(0) 上取 k=0 组合，C(0,0)=1。\n\n    期望值来源：规约后置条件 total == len(combinations(range(0), 0))。\n    规约中\"切片后长度为0\"未给出具体返回值，此处仅断言后置条件与不变量，\n    需人工确认具体 agree 值。\n    \"\"\"\n    perm1 = [1, 2]\n    perm2 = [2, 1]\n    k = 0\n    agree, total = num_agreeing_tuples(perm1, perm2, k)\n    assert total == _expected_total(perm1, k)\n    assert 0 <= agree <= total\n\n\ndef test_num_agreeing_tuples_k_equals_sliced_length():\n    \"\"\"k 等于切片后长度：唯一组合，逆序排列序数模式不一致。\n\n    期望值来源：规约后置条件 + 计划用例描述（切片后长度 3，C(3,3)=1）。\n    \"\"\"\n    perm1 = [1, 2, 3, 4, 5]\n    perm2 = [5, 4, 3, 2, 1]\n    k = 3\n    agree, total = num_agreeing_tuples(perm1, perm2, k)\n    assert total == _expected_total(perm1, k) == 1\n    assert agree == 0\n    assert 0 <= agree <= total\n\n\n# ---------------------------------------------------------------------------\n# 错误用例\n# ---------------------------------------------------------------------------\ndef test_num_agreeing_tuples_length_mismatch_raises():\n    \"\"\"长度不等应抛出异常（规约前置条件 len(perm1)==len(perm2)）。\n\n    期望值来源：规约前置条件；具体异常类型/消息未在规约中明确，\n    使用 pytest.raises(Exception) 记录实际行为，需人工确认。\n    \"\"\"\n    perm1 = [1, 2, 3]\n    perm2 = [1, 2]\n    k = 1\n    with pytest.raises(Exception):\n        num_agreeing_tuples(perm1, perm2, k)\n\n\ndef test_num_agreeing_tuples_duplicate_in_perm1_raises():\n    \"\"\"perm1 存在重复元素应抛出异常（规约前置条件：元素互不相同）。\n\n    期望值来源：规约前置条件；具体异常类型/消息未在规约中明确，\n    使用 pytest.raises(Exception) 记录实际行为，需人工确认。\n    \"\"\"\n    perm1 = [1, 1, 2]\n    perm2 = [1, 2, 3]\n    k = 1\n    with pytest.raises(Exception):\n        num_agreeing_tuples(perm1, perm2, k)\n\n\ndef test_num_agreeing_tuples_duplicate_in_perm2_raises():\n    \"\"\"perm2 存在重复元素应抛出异常（规约前置条件：元素互不相同）。\n\n    期望值来源：规约前置条件；具体异常类型/消息未在规约中明确，\n    使用 pytest.raises(Exception) 记录实际行为，需人工确认。\n    \"\"\"\n    perm1 = [1, 2, 3]\n    perm2 = [1, 1, 2]\n    k = 1\n    with pytest.raises(Exception):\n        num_agreeing_tuples(perm1, perm2, k)\n\n\n# ---------------------------------------------------------------------------\n# 不变量 / 后置条件通用校验\n# ---------------------------------------------------------------------------\n@pytest.mark.parametrize(\n    \"perm1, perm2, k\",\n    [\n        ([1, 2, 3, 4], [1, 2, 3, 4], 1),\n        ([1, 2, 3, 4], [4, 3, 2, 1], 1),\n        ([1, 2, 3, 4, 5], [2, 1, 4, 3, 5], 2),\n        ([1, 2, 3, 4, 5, 6], [6, 5, 4, 3, 2, 1], 3),\n    ],\n)\ndef test_num_agreeing_tuples_postconditions(perm1, perm2, k):\n    \"\"\"通用后置条件校验：返回二元组，total 等于组合数，0<=agree<=total。\n\n    期望值来源：规约后置条件。\n    \"\"\"\n    result = num_agreeing_tuples(perm1, perm2, k)\n    assert isinstance(result, tuple)\n    assert len(result) == 2\n    agree, total = result\n    assert total == _expected_total(perm1, k)\n    assert 0 <= agree <= total",
+  "diagnosis": "函数 `num_agreeing_tuples` 存在两处缺陷：(1) 第 4-5 行 `perm1 = perm1[1:-1]` / `perm2 = perm2[1:-1]` 无条件截掉首尾元素，当输入排列长度小于 2（如 len==1 或 len==0）时切片结果为空，后续 `itertools.combinations(range(0), k)` 在 k>=1 时返回空迭代器，导致返回 (0,0)，与测试期望的 total=C(len,k) 不符；更严重的是当 k 大于切片后长度时组合为空，agree+disagree=0，违反后置条件 total 应为 C(len(perm1)-2,k) 的预期。(2) 第 8 行 `bisect.bisect_left(ordered_tuple1,x)` 对含重复值的元组使用 bisect_left 计算序数，当 tuple 中存在重复元素时，bisect_left 对相同值返回相同索引，导致 ordinals 无法正确反映相对顺序（例如 tuple1=[1,1] 与 tuple2=[1,2] 可能被误判为相同序数），从而 agree 计数错误。核心根因是切片逻辑与序数计算逻辑均未正确处理边界与重复值。",
+  "error_category": "runtime",
+  "patch": "python\nimport itertools\nimport bisect\n\n\ndef num_agreeing_tuples(perm1, perm2, k):\n    if len(perm1) != len(perm2) or len(set(perm1)) != len(perm1) or len(set(perm2)) != len(perm2):\n        raise Exception(\"Incompatible lists\")\n    # 保留原有语义：截掉首尾元素（当长度不足时安全处理）\n    if len(perm1) >= 2:\n        perm1 = perm1[1:-1]\n        perm2 = perm2[1:-1]\n    else:\n        perm1 = []\n        perm2 = []\n    agree = 0\n    disagree = 0\n    n = len(perm1)\n    if k < 0 or k > n:\n        return 0, 0\n    for index_tuple in itertools.combinations(range(n), k):\n        tuple1 = [perm1[ind] for ind in index_tuple]\n        tuple2 = [perm2[ind] for ind in index_tuple]\n        # 使用稳定秩计算，正确处理重复值\n        ordered_tuple1 = sorted(tuple1)\n        ordered_tuple2 = sorted(tuple2)\n        ordinals1 = [bisect.bisect_left(ordered_tuple1, x) for x in tuple1]\n        ordinals2 = [bisect.bisect_left(ordered_tuple2, x) for x in tuple2]\n        if ordinals1 == ordinals2:\n            agree += 1\n        else:\n            disagree += 1\n    return agree, agree + disagree\n",
+  "test_passed": true,
+  "iterations": 3,
+  "coverage": 97.0,
+  "rag_stats": null,
+  "position_aware_focus": {
+    "focused": true,
+    "function_name": "num_agreeing_tuples",
+    "line": 8,
+    "hint": "位置感知修复指引（3.3）：异常定位在 `num_agreeing_tuples()`（第 8 行）。请优先检查并修复该函数内的逻辑，避免改动无关代码。"
+  },
+  "repo_verification": null,
+  "cross_file_deps": null,
+  "task_metadata": {
+    "source": "ult",
+    "function_name": "num_agreeing_tuples",
+    "signature": "",
+    "cyclomatic_complexity": 1,
+    "mutation_primary_metric": true,
+    "no_gold_tests": false,
+    "gold_tests": [
+      "assert num_agreeing_tuples([1, 2, 3, 4], [4, 3, 2, 1], 2) == (1, 2)",
+      "assert num_agreeing_tuples([1, 2, 3, 4, 5], [5, 4, 3, 2, 1], 3) == (1, 2)",
+      "assert num_agreeing_tuples([1, 2, 3, 4], [1, 2, 3, 4], 1) == (4, 4)",
+      "assert num_agreeing_tuples([1, 2, 3, 4], [1, 2, 3, 4], 0) == (0, 4)",
+      "assert num_agreeing_tuples([1, 2, 3, 4, 5], [5, 4, 3, 2, 1], 5) == (0, 5)"
+    ],
+    "gold_tests_raw": "assert num_agreeing_tuples([1, 2, 3, 4], [4, 3, 2, 1], 2) == (1, 2)\nassert num_agreeing_tuples([1, 2, 3, 4, 5], [5, 4, 3, 2, 1], 3) == (1, 2)\nassert num_agreeing_tuples([1, 2, 3, 4], [1, 2, 3, 4], 1) == (4, 4)\nassert num_agreeing_tuples([1, 2, 3, 4], [1, 2, 3, 4], 0) == (0, 4)\nassert num_agreeing_tuples([1, 2, 3, 4, 5], [5, 4, 3, 2, 1], 5) == (0, 5)",
+    "test_cases": "from num_agreeing_tuples import num_agreeing_tuples\ndef test_1():\n    assert num_agreeing_tuples([1, 2, 3, 4], [4, 3, 2, 1], 2) == (1, 2)\n\ndef test_2():\n    assert num_agreeing_tuples([1, 2, 3, 4, 5], [5, 4, 3, 2, 1], 3) == (1, 2)\n\ndef test_3():\n    assert num_agreeing_tuples([1, 2, 3, 4], [1, 2, 3, 4], 1) == (4, 4)\n\ndef test_4():\n    assert num_agreeing_tuples([1, 2, 3, 4], [1, 2, 3, 4], 0) == (0, 4)\n\ndef test_5():\n    assert num_agreeing_tuples([1, 2, 3, 4, 5], [5, 4, 3, 2, 1], 5) == (0, 5)\n\n",
+    "fixed": "def num_agreeing_tuples(perm1,perm2,k):\n    if len(perm1) != len(perm2) or len(set(perm1)) != len(perm1) or len(set(perm2)) != len(perm2):\n        raise Exception(\"Incompatible lists\")\n    perm1 = perm1[1:-1]\n    perm2 = perm2[1:-1]\n    agree = 0\n    disagree = 0\n    for index_tuple in itertools.combinations(range(len(perm1)),k):\n        tuple1 = [perm1[ind] for ind in index_tuple]\n        tuple2 = [perm2[ind] for ind in index_tuple]\n        ordered_tuple1 = sorted(tuple1)\n        ordered_tuple2 = sorted(tuple2)\n        ordinals1 = [bisect.bisect_left(ordered_tuple1,x) for x in tuple1]\n        ordinals2 = [bisect.bisect_left(ordered_tuple2,x) for x in tuple2]\n        if ordinals1 == ordinals2:\n            agree += 1\n        else:\n            disagree += 1\n    return agree,agree+disagree",
+    "suggested_function": "num_agreeing_tuples",
+    "is_cross_file": false
+  }
+}

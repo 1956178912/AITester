@@ -1,0 +1,803 @@
+{
+  "task_id": "ult__get_robot_angles",
+  "baseline": "aitester",
+  "test_plan": {
+    "function_name": "get_robot_angles",
+    "description": "将人类手指角度映射为机器人手指角度：索引/中指/拇指（前3个）为反向映射（人类角度越大机器人角度越小），小指张开度（第4个）为正向映射；超出范围时钳制到对应极值。",
+    "logic_analysis": {
+      "input_domain": "min_human_angles/max_human_angles/min_robot_angles/max_robot_angles 为长度至少4的数值序列；human_angles 为长度至少4的数值序列；robot_angles 为长度至少4的可变序列（原地修改并返回）",
+      "output_domain": "返回 robot_angles（长度至少4的数值序列），前3个元素为反向插值或钳制值，第4个元素为正向插值或钳制值",
+      "preconditions": [
+        "各角度序列长度均 >= 4",
+        "max_human_angles[i] > min_human_angles[i]（插值分支要求 hand_range != 0）",
+        "max_robot_angles[i] != min_robot_angles[i]（插值分支要求 robot_range != 0）",
+        "robot_angles 为可变序列且可被索引赋值"
+      ],
+      "postconditions": [
+        "返回对象与传入的 robot_angles 为同一对象（原地修改）",
+        "前3个索引：human_angle >= max_human_angle 时 robot_angles[i]=min_robot_angle；human_angle <= min_human_angle 时 robot_angles[i]=max_robot_angle；严格区间内按 (max_human_angle - human_angle)*robot_range/hand_range 插值",
+        "索引3：human_spread >= max_human_spread 时 robot_angles[3]=max_robot_spread；human_spread <= min_human_spread 时 robot_angles[3]=min_robot_spread；严格区间内按 (human_spread - min_human_spread)*robot_range_spread/hand_range_spread 插值",
+        "前3个循环中的 else 分支不可达（条件已穷尽 >=、<=、严格区间），仅当出现 NaN 等异常比较结果时可能触发，触发时 robot_angles 被替换为 min_robot_angles[:] 并 break"
+      ],
+      "edge_cases": [
+        "human_angle 恰好等于 max_human_angle（走 >= 分支，取 min_robot_angle）",
+        "human_angle 恰好等于 min_human_angle（走 <= 分支，取 max_robot_angle）",
+        "human_spread 恰好等于 max_human_spread（取 max_robot_spread）",
+        "human_spread 恰好等于 min_human_spread（取 min_robot_spread）",
+        "human_angle 为 NaN 导致所有比较为 False，触发 else 分支替换整个 robot_angles",
+        "hand_range 或 robot_range 为 0 导致除零",
+        "human_angles 长度小于 4 导致索引越界",
+        "robot_angles 为不可变序列导致赋值失败"
+      ]
+    },
+    "test_cases": [
+      {
+        "case_name": "前3指均在有效区间内反向插值",
+        "input_args": {
+          "min_human_angles": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "max_human_angles": [
+            100,
+            100,
+            100,
+            100
+          ],
+          "min_robot_angles": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "max_robot_angles": [
+            100,
+            100,
+            100,
+            100
+          ],
+          "human_angles": [
+            50,
+            50,
+            50,
+            50
+          ],
+          "robot_angles": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "expected_output": [
+          50,
+          50,
+          50,
+          50
+        ],
+        "category": "normal",
+        "description": "验证前3指严格区间内反向插值公式 (max_human-human)*robot_range/hand_range，以及第4指正向插值公式 (spread-min_human)*robot_range/hand_range",
+        "logic_coverage": "human_angle < max_human_angle and human_angle > min_human_angle; human_spread < max_human_spread and human_spread > min_human_spread"
+      },
+      {
+        "case_name": "前3指等于上界钳制到min_robot",
+        "input_args": {
+          "min_human_angles": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "max_human_angles": [
+            100,
+            100,
+            100,
+            100
+          ],
+          "min_robot_angles": [
+            10,
+            10,
+            10,
+            10
+          ],
+          "max_robot_angles": [
+            90,
+            90,
+            90,
+            90
+          ],
+          "human_angles": [
+            100,
+            100,
+            100,
+            50
+          ],
+          "robot_angles": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "expected_output": [
+          10,
+          10,
+          10,
+          50
+        ],
+        "category": "boundary",
+        "description": "验证 human_angle >= max_human_angle 时取 min_robot_angle（防止手张太开）",
+        "logic_coverage": "human_angle >= max_human_angle"
+      },
+      {
+        "case_name": "前3指等于下界钳制到max_robot",
+        "input_args": {
+          "min_human_angles": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "max_human_angles": [
+            100,
+            100,
+            100,
+            100
+          ],
+          "min_robot_angles": [
+            10,
+            10,
+            10,
+            10
+          ],
+          "max_robot_angles": [
+            90,
+            90,
+            90,
+            90
+          ],
+          "human_angles": [
+            0,
+            0,
+            0,
+            50
+          ],
+          "robot_angles": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "expected_output": [
+          90,
+          90,
+          90,
+          50
+        ],
+        "category": "boundary",
+        "description": "验证 human_angle <= min_human_angle 时取 max_robot_angle（防止手合太紧）",
+        "logic_coverage": "human_angle <= min_human_angle"
+      },
+      {
+        "case_name": "前3指超出上界钳制",
+        "input_args": {
+          "min_human_angles": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "max_human_angles": [
+            100,
+            100,
+            100,
+            100
+          ],
+          "min_robot_angles": [
+            10,
+            10,
+            10,
+            10
+          ],
+          "max_robot_angles": [
+            90,
+            90,
+            90,
+            90
+          ],
+          "human_angles": [
+            150,
+            150,
+            150,
+            50
+          ],
+          "robot_angles": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "expected_output": [
+          10,
+          10,
+          10,
+          50
+        ],
+        "category": "boundary",
+        "description": "验证 human_angle 大于 max_human_angle 时仍取 min_robot_angle",
+        "logic_coverage": "human_angle >= max_human_angle"
+      },
+      {
+        "case_name": "前3指低于下界钳制",
+        "input_args": {
+          "min_human_angles": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "max_human_angles": [
+            100,
+            100,
+            100,
+            100
+          ],
+          "min_robot_angles": [
+            10,
+            10,
+            10,
+            10
+          ],
+          "max_robot_angles": [
+            90,
+            90,
+            90,
+            90
+          ],
+          "human_angles": [
+            -50,
+            -50,
+            -50,
+            50
+          ],
+          "robot_angles": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "expected_output": [
+          90,
+          90,
+          90,
+          50
+        ],
+        "category": "boundary",
+        "description": "验证 human_angle 小于 min_human_angle 时仍取 max_robot_angle",
+        "logic_coverage": "human_angle <= min_human_angle"
+      },
+      {
+        "case_name": "第4指等于上界取max_robot_spread",
+        "input_args": {
+          "min_human_angles": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "max_human_angles": [
+            100,
+            100,
+            100,
+            100
+          ],
+          "min_robot_angles": [
+            10,
+            10,
+            10,
+            10
+          ],
+          "max_robot_angles": [
+            90,
+            90,
+            90,
+            90
+          ],
+          "human_angles": [
+            50,
+            50,
+            50,
+            100
+          ],
+          "robot_angles": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "expected_output": [
+          50,
+          50,
+          50,
+          90
+        ],
+        "category": "boundary",
+        "description": "验证 human_spread >= max_human_spread 时取 max_robot_spread（正向映射）",
+        "logic_coverage": "human_spread >= max_human_spread"
+      },
+      {
+        "case_name": "第4指等于下界取min_robot_spread",
+        "input_args": {
+          "min_human_angles": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "max_human_angles": [
+            100,
+            100,
+            100,
+            100
+          ],
+          "min_robot_angles": [
+            10,
+            10,
+            10,
+            10
+          ],
+          "max_robot_angles": [
+            90,
+            90,
+            90,
+            90
+          ],
+          "human_angles": [
+            50,
+            50,
+            50,
+            0
+          ],
+          "robot_angles": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "expected_output": [
+          50,
+          50,
+          50,
+          10
+        ],
+        "category": "boundary",
+        "description": "验证 human_spread <= min_human_spread 时取 min_robot_spread",
+        "logic_coverage": "human_spread <= min_human_spread"
+      },
+      {
+        "case_name": "第4指超出上界",
+        "input_args": {
+          "min_human_angles": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "max_human_angles": [
+            100,
+            100,
+            100,
+            100
+          ],
+          "min_robot_angles": [
+            10,
+            10,
+            10,
+            10
+          ],
+          "max_robot_angles": [
+            90,
+            90,
+            90,
+            90
+          ],
+          "human_angles": [
+            50,
+            50,
+            50,
+            200
+          ],
+          "robot_angles": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "expected_output": [
+          50,
+          50,
+          50,
+          90
+        ],
+        "category": "boundary",
+        "description": "验证 human_spread 大于 max_human_spread 时取 max_robot_spread",
+        "logic_coverage": "human_spread >= max_human_spread"
+      },
+      {
+        "case_name": "第4指低于下界",
+        "input_args": {
+          "min_human_angles": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "max_human_angles": [
+            100,
+            100,
+            100,
+            100
+          ],
+          "min_robot_angles": [
+            10,
+            10,
+            10,
+            10
+          ],
+          "max_robot_angles": [
+            90,
+            90,
+            90,
+            90
+          ],
+          "human_angles": [
+            50,
+            50,
+            50,
+            -100
+          ],
+          "robot_angles": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "expected_output": [
+          50,
+          50,
+          50,
+          10
+        ],
+        "category": "boundary",
+        "description": "验证 human_spread 小于 min_human_spread 时取 min_robot_spread",
+        "logic_coverage": "human_spread <= min_human_spread"
+      },
+      {
+        "case_name": "前3指NaN触发else分支",
+        "input_args": {
+          "min_human_angles": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "max_human_angles": [
+            100,
+            100,
+            100,
+            100
+          ],
+          "min_robot_angles": [
+            10,
+            10,
+            10,
+            10
+          ],
+          "max_robot_angles": [
+            90,
+            90,
+            90,
+            90
+          ],
+          "human_angles": [
+            null,
+            50,
+            50,
+            50
+          ],
+          "robot_angles": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "expected_output": [
+          10,
+          10,
+          10,
+          10
+        ],
+        "category": "error",
+        "description": "human_angle 为 NaN 时所有比较为 False，进入 else 分支将 robot_angles 替换为 min_robot_angles[:] 并 break；期望值依据 else 分支赋值逻辑",
+        "logic_coverage": "human_angle < max_human_angle and human_angle > min_human_angle; else 分支"
+      },
+      {
+        "case_name": "human_angles长度不足4",
+        "input_args": {
+          "min_human_angles": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "max_human_angles": [
+            100,
+            100,
+            100,
+            100
+          ],
+          "min_robot_angles": [
+            10,
+            10,
+            10,
+            10
+          ],
+          "max_robot_angles": [
+            90,
+            90,
+            90,
+            90
+          ],
+          "human_angles": [
+            50,
+            50,
+            50
+          ],
+          "robot_angles": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "expected_output": null,
+        "category": "error",
+        "description": "human_angles 长度小于4，访问 human_angles[3] 将抛出 IndexError；期望值未知（异常类型由运行时决定，代码未捕获）",
+        "logic_coverage": "human_spread >= max_human_spread"
+      },
+      {
+        "case_name": "hand_range为零导致除零",
+        "input_args": {
+          "min_human_angles": [
+            50,
+            50,
+            50,
+            50
+          ],
+          "max_human_angles": [
+            50,
+            50,
+            50,
+            50
+          ],
+          "min_robot_angles": [
+            10,
+            10,
+            10,
+            10
+          ],
+          "max_robot_angles": [
+            90,
+            90,
+            90,
+            90
+          ],
+          "human_angles": [
+            50,
+            50,
+            50,
+            50
+          ],
+          "robot_angles": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "expected_output": null,
+        "category": "error",
+        "description": "max_human_angle == min_human_angle 时严格区间分支不可达（human_angle 不可能同时严格大于和小于同值），不会触发除零；期望值未知，需确认实际行为",
+        "logic_coverage": "human_angle < max_human_angle and human_angle > min_human_angle"
+      },
+      {
+        "case_name": "robot_angles为不可变序列",
+        "input_args": {
+          "min_human_angles": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "max_human_angles": [
+            100,
+            100,
+            100,
+            100
+          ],
+          "min_robot_angles": [
+            10,
+            10,
+            10,
+            10
+          ],
+          "max_robot_angles": [
+            90,
+            90,
+            90,
+            90
+          ],
+          "human_angles": [
+            50,
+            50,
+            50,
+            50
+          ],
+          "robot_angles": "(0,0,0,0)"
+        },
+        "expected_output": null,
+        "category": "error",
+        "description": "robot_angles 为元组时索引赋值将抛出 TypeError；期望值未知（异常类型由运行时决定，代码未捕获）",
+        "logic_coverage": "human_angle < max_human_angle and human_angle > min_human_angle"
+      },
+      {
+        "case_name": "混合边界与插值组合",
+        "input_args": {
+          "min_human_angles": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "max_human_angles": [
+            100,
+            100,
+            100,
+            100
+          ],
+          "min_robot_angles": [
+            10,
+            10,
+            10,
+            10
+          ],
+          "max_robot_angles": [
+            90,
+            90,
+            90,
+            90
+          ],
+          "human_angles": [
+            100,
+            0,
+            50,
+            100
+          ],
+          "robot_angles": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "expected_output": [
+          10,
+          90,
+          50,
+          90
+        ],
+        "category": "normal",
+        "description": "验证前3指分别走上界钳制、下界钳制、插值，第4指走上界钳制，覆盖多分支组合",
+        "logic_coverage": "human_angle >= max_human_angle; human_angle <= min_human_angle; human_angle < max_human_angle and human_angle > min_human_angle; human_spread >= max_human_spread"
+      },
+      {
+        "case_name": "循环遍历3个手指索引",
+        "input_args": {
+          "min_human_angles": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "max_human_angles": [
+            100,
+            100,
+            100,
+            100
+          ],
+          "min_robot_angles": [
+            10,
+            10,
+            10,
+            10
+          ],
+          "max_robot_angles": [
+            90,
+            90,
+            90,
+            90
+          ],
+          "human_angles": [
+            25,
+            50,
+            75,
+            50
+          ],
+          "robot_angles": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "expected_output": [
+          65,
+          50,
+          35,
+          50
+        ],
+        "category": "normal",
+        "description": "验证 for i in range(3) 循环对索引0/1/2分别执行反向插值，索引3单独正向插值",
+        "logic_coverage": "for(range(3)); human_angle < max_human_angle and human_angle > min_human_angle; human_spread < max_human_spread and human_spread > min_human_spread"
+      }
+    ],
+    "logic_degraded": false,
+    "coverage_completeness": 1.0
+  },
+  "generated_test": "import math\nimport pytest\n\nfrom get_robot_angles import get_robot_angles\n\n\n# ---------------------------------------------------------------------------\n# Helpers\n# ---------------------------------------------------------------------------\n\ndef _default_args():\n    \"\"\"Return a fresh, valid set of arguments satisfying all preconditions.\"\"\"\n    return dict(\n        min_human_angles=[0, 0, 0, 0],\n        max_human_angles=[100, 100, 100, 100],\n        min_robot_angles=[10, 10, 10, 10],\n        max_robot_angles=[90, 90, 90, 90],\n        human_angles=[50, 50, 50, 50],\n        robot_angles=[0, 0, 0, 0],\n    )\n\n\n# ---------------------------------------------------------------------------\n# Normal cases\n# ---------------------------------------------------------------------------\n\ndef test_get_robot_angles_reverse_interpolation_first_three_and_forward_fourth():\n    \"\"\"前3指严格区间内反向插值，第4指严格区间内正向插值。\n\n    期望值来源：规约后置条件\n      - 前3指: (max_human - human) * robot_range / hand_range\n      - 第4指: (human - min_human) * robot_range / hand_range\n    输入 50/100 区间，robot 10..90，故前3指 = (100-50)*80/100 = 40，\n    第4指 = (50-0)*80/100 = 40。\n    \"\"\"\n    args = _default_args()\n    args[\"human_angles\"] = [50, 50, 50, 50]\n    result = get_robot_angles(**args)\n    assert result == [40, 40, 40, 40]\n\n\ndef test_get_robot_angles_returns_same_object_in_place():\n    \"\"\"返回对象与传入的 robot_angles 为同一对象（原地修改）。\"\"\"\n    args = _default_args()\n    robot_angles = args[\"robot_angles\"]\n    result = get_robot_angles(**args)\n    assert result is robot_angles\n\n\ndef test_get_robot_angles_mixed_boundary_and_interpolation():\n    \"\"\"混合边界与插值组合。\n\n    期望值来源：规约后置条件\n      - 索引0: human=100 == max_human -> min_robot = 10\n      - 索引1: human=0 == min_human -> max_robot = 90\n      - 索引2: human=50 严格区间 -> (100-50)*80/100 = 40\n      - 索引3: human=100 == max_human_spread -> max_robot_spread = 90\n    \"\"\"\n    args = _default_args()\n    args[\"human_angles\"] = [100, 0, 50, 100]\n    result = get_robot_angles(**args)\n    assert result == [10, 90, 40, 90]\n\n\ndef test_get_robot_angles_loop_over_three_finger_indices():\n    \"\"\"验证 for i in range(3) 对索引 0/1/2 分别反向插值，索引 3 单独正向插值。\n\n    期望值来源：规约后置条件\n      - 索引0: human=25 -> (100-25)*80/100 = 60\n      - 索引1: human=50 -> (100-50)*80/100 = 40\n      - 索引2: human=75 -> (100-75)*80/100 = 20\n      - 索引3: human=50 -> (50-0)*80/100 = 40\n    \"\"\"\n    args = _default_args()\n    args[\"human_angles\"] = [25, 50, 75, 50]\n    result = get_robot_angles(**args)\n    assert result == [60, 40, 20, 40]\n\n\n# ---------------------------------------------------------------------------\n# Boundary cases\n# ---------------------------------------------------------------------------\n\ndef test_get_robot_angles_first_three_at_upper_bound_clamp_to_min_robot():\n    \"\"\"human_angle == max_human_angle 时取 min_robot_angle。\n\n    期望值来源：规约边界情况 + 后置条件（>= 分支）。\n    \"\"\"\n    args = _default_args()\n    args[\"human_angles\"] = [100, 100, 100, 50]\n    result = get_robot_angles(**args)\n    assert result[:3] == [10, 10, 10]\n\n\ndef test_get_robot_angles_first_three_at_lower_bound_clamp_to_max_robot():\n    \"\"\"human_angle == min_human_angle 时取 max_robot_angle。\n\n    期望值来源：规约边界情况 + 后置条件（<= 分支）。\n    \"\"\"\n    args = _default_args()\n    args[\"human_angles\"] = [0, 0, 0, 50]\n    result = get_robot_angles(**args)\n    assert result[:3] == [90, 90, 90]\n\n\ndef test_get_robot_angles_first_three_above_upper_bound_clamp():\n    \"\"\"human_angle > max_human_angle 时仍取 min_robot_angle。\n\n    期望值来源：规约后置条件（>= 分支）。\n    \"\"\"\n    args = _default_args()\n    args[\"human_angles\"] = [150, 150, 150, 50]\n    result = get_robot_angles(**args)\n    assert result[:3] == [10, 10, 10]\n\n\ndef test_get_robot_angles_first_three_below_lower_bound_clamp():\n    \"\"\"human_angle < min_human_angle 时仍取 max_robot_angle。\n\n    期望值来源：规约后置条件（<= 分支）。\n    \"\"\"\n    args = _default_args()\n    args[\"human_angles\"] = [-50, -50, -50, 50]\n    result = get_robot_angles(**args)\n    assert result[:3] == [90, 90, 90]\n\n\ndef test_get_robot_angles_fourth_at_upper_bound_takes_max_robot_spread():\n    \"\"\"human_spread == max_human_spread 时取 max_robot_spread。\n\n    期望值来源：规约边界情况 + 后置条件（>= 分支）。\n    \"\"\"\n    args = _default_args()\n    args[\"human_angles\"] = [50, 50, 50, 100]\n    result = get_robot_angles(**args)\n    assert result[3] == 90\n\n\ndef test_get_robot_angles_fourth_at_lower_bound_takes_min_robot_spread():\n    \"\"\"human_spread == min_human_spread 时取 min_robot_spread。\n\n    期望值来源：规约边界情况 + 后置条件（<= 分支）。\n    \"\"\"\n    args = _default_args()\n    args[\"human_angles\"] = [50, 50, 50, 0]\n    result = get_robot_angles(**args)\n    assert result[3] == 10\n\n\ndef test_get_robot_angles_fourth_above_upper_bound():\n    \"\"\"human_spread > max_human_spread 时取 max_robot_spread。\n\n    期望值来源：规约后置条件（>= 分支）。\n    \"\"\"\n    args = _default_args()\n    args[\"human_angles\"] = [50, 50, 50, 200]\n    result = get_robot_angles(**args)\n    assert result[3] == 90\n\n\ndef test_get_robot_angles_fourth_below_lower_bound():\n    \"\"\"human_spread < min_human_spread 时取 min_robot_spread。\n\n    期望值来源：规约后置条件（<= 分支）。\n    \"\"\"\n    args = _default_args()\n    args[\"human_angles\"] = [50, 50, 50, -100]\n    result = get_robot_angles(**args)\n    assert result[3] == 10\n\n\n# ---------------------------------------------------------------------------\n# Error / edge cases\n# ---------------------------------------------------------------------------\n\ndef test_get_robot_angles_nan_triggers_else_branch_replaces_with_min_robot():\n    \"\"\"human_angle 为 NaN 时所有比较为 False，触发 else 分支。\n\n    期望值来源：规约后置条件（else 分支将 robot_angles 替换为\n    min_robot_angles[:] 并 break）。期望 robot_angles 变为 min_robot_angles。\n    \"\"\"\n    args = _default_args()\n    args[\"human_angles\"] = [float(\"nan\"), 50, 50, 50]\n    result = get_robot_angles(**args)\n    assert result == [10, 10, 10, 10]\n\n\ndef test_get_robot_angles_human_angles_too_short_raises():\n    \"\"\"human_angles 长度小于 4 导致索引越界。\n\n    期望值来源：规约边界情况（索引越界）。异常类型由运行时决定，\n    此处仅断言抛出 IndexError。\n    \"\"\"\n    args = _default_args()\n    args[\"human_angles\"] = [50, 50, 50]\n    with pytest.raises(IndexError):\n        get_robot_angles(**args)\n\n\ndef test_get_robot_angles_immutable_robot_angles_raises():\n    \"\"\"robot_angles 为不可变序列（元组）导致索引赋值失败。\n\n    期望值来源：规约边界情况（不可变序列赋值失败）。\n    异常类型由运行时决定，此处仅断言抛出 TypeError。\n    \"\"\"\n    args = _default_args()\n    args[\"robot_angles\"] = (0, 0, 0, 0)\n    with pytest.raises(TypeError):\n        get_robot_angles(**args)\n\n\ndef test_get_robot_angles_zero_hand_range_records_behavior():\n    \"\"\"hand_range 为 0（max_human == min_human）时的行为。\n\n    期望值来源不明，需人工确认：规约指出插值分支要求 hand_range != 0，\n    但当 max_human == min_human 时严格区间分支不可达（human 不可能同时\n    严格大于和小于同值），因此不会触发除零。此处仅记录实际行为，\n    断言不抛异常且返回原 robot_angles 对象。\n    \"\"\"\n    args = _default_args()\n    args[\"min_human_angles\"] = [50, 50, 50, 50]\n    args[\"max_human_angles\"] = [50, 50, 50, 50]\n    args[\"human_angles\"] = [50, 50, 50, 50]\n    robot_angles = args[\"robot_angles\"]\n    result = get_robot_angles(**args)\n    assert result is robot_angles",
+  "diagnosis": "第 27 行（对应插值分支）计算 `robot_angles[i] = (max_human_angle - human_angle) * robot_range / hand_range` 时，只计算了相对偏移量，未加上 `min_robot_angle` 基准偏移。当 `min_robot_angle != 0` 时，插值结果会偏小（例如测试中期望 40 实际得 30，差值恰为 min_robot_angle=10）。正确公式应为 `min_robot_angle + (max_human_angle - human_angle) * robot_range / hand_range`。第 41-43 行的 spread 分支公式正确（已含 min_robot_spread 偏移），无需修改。",
+  "error_category": "assertion",
+  "patch": "python\ndef get_robot_angles(min_human_angles, max_human_angles, min_robot_angles, max_robot_angles, human_angles, robot_angles):\n\n    # approach for index, middle and thumb: high finger human_angle should lead to small robot_angles\n    for i in range(3):\n\n        human_angle = human_angles[i]\n        max_human_angle = max_human_angles[i]\n        min_human_angle = min_human_angles[i]\n        max_robot_angle = max_robot_angles[i]\n        min_robot_angle = min_robot_angles[i]\n\n        # preventing to open hand too far\n        if human_angle >= max_human_angle:\n            robot_angles[i] = min_robot_angle\n\n        # preventing to close hand too far\n        elif human_angle <= min_human_angle:\n            robot_angles[i] = max_robot_angle\n\n        # angles in valid working range, interpolating\n        elif (human_angle < max_human_angle) and (human_angle > min_human_angle):\n            hand_range = max_human_angle - min_human_angle\n            robot_range = max_robot_angle - min_robot_angle\n            robot_angles[i] = min_robot_angle + (max_human_angle - human_angle) * robot_range / hand_range\n\n        else:\n            robot_angles = min_robot_angles[:]\n            break\n\n    # approach for spread: high finger human_angle should lead to high robot_angles human_angle\n    human_spread = human_angles[3]\n    max_human_spread = max_human_angles[3]\n    min_human_spread = min_human_angles[3]\n    max_robot_spread = max_robot_angles[3]\n    min_robot_spread = min_robot_angles[3]\n\n    if human_spread >= max_human_spread:\n        robot_angles[3] = max_robot_spread\n    elif human_spread <= min_human_spread:\n        robot_angles[3] = min_robot_spread\n    elif (human_spread < max_human_spread) and (human_spread > min_human_spread):\n        hand_range_spread = max_human_spread - min_human_spread\n        robot_range_spread = max_robot_spread - min_robot_spread\n        robot_angles[3] = min_robot_spread + (human_spread - min_human_spread) * robot_range_spread / hand_range_spread\n    else:\n        robot_angles = min_robot_angles[:]\n\n    return robot_angles\n",
+  "test_passed": false,
+  "iterations": 3,
+  "coverage": 99.0,
+  "rag_stats": null,
+  "position_aware_focus": {
+    "focused": false,
+    "function_name": null,
+    "line": 188,
+    "hint": ""
+  },
+  "repo_verification": null,
+  "cross_file_deps": null,
+  "task_metadata": {
+    "source": "ult",
+    "function_name": "get_robot_angles",
+    "signature": "",
+    "cyclomatic_complexity": 1,
+    "mutation_primary_metric": true,
+    "no_gold_tests": false,
+    "gold_tests": [
+      "assert get_robot_angles([0, 0, 0, 90], [180, 180, 180, 90], [0, 0, 0, 0], [180, 180, 180, 90], [90, 90, 90, 90], [90, 90, 90, 90]) == [0, 0, 0, 90]",
+      "assert get_robot_angles([0, 0, 0, 0], [180, 180, 180, 90], [0, 0, 0, 0], [180, 180, 180, 90], [180, 180, 180, 90], [180, 180, 180, 90]) == [0, 0, 0, 0]",
+      "assert get_robot_angles([90, 90, 90, 0], [180, 180, 180, 90], [0, 0, 0, 0], [180, 180, 180, 90], [90, 90, 90, 45], [90, 90, 90, 45]) == [90, 90, 90, 45]",
+      "assert get_robot_angles([180, 180, 180, 90], [180, 180, 180, 90], [0, 0, 0, 0], [180, 180, 180, 90], [180, 180, 180, 90], [180, 180, 180, 90]) == [0, 0, 0, 90]",
+      "assert get_robot_angles([0, 0, 0, 0], [180, 180, 180, 90], [180, 180, 180, 90], [0, 0, 0, 0], [0, 0, 0, 0], [180, 180, 180, 90]) == [180, 180, 180, 90]"
+    ],
+    "gold_tests_raw": "assert get_robot_angles([0, 0, 0, 90], [180, 180, 180, 90], [0, 0, 0, 0], [180, 180, 180, 90], [90, 90, 90, 90], [90, 90, 90, 90]) == [0, 0, 0, 90]\nassert get_robot_angles([0, 0, 0, 0], [180, 180, 180, 90], [0, 0, 0, 0], [180, 180, 180, 90], [180, 180, 180, 90], [180, 180, 180, 90]) == [0, 0, 0, 0]\nassert get_robot_angles([90, 90, 90, 0], [180, 180, 180, 90], [0, 0, 0, 0], [180, 180, 180, 90], [90, 90, 90, 45], [90, 90, 90, 45]) == [90, 90, 90, 45]\nassert get_robot_angles([180, 180, 180, 90], [180, 180, 180, 90], [0, 0, 0, 0], [180, 180, 180, 90], [180, 180, 180, 90], [180, 180, 180, 90]) == [0, 0, 0, 90]\nassert get_robot_angles([0, 0, 0, 0], [180, 180, 180, 90], [180, 180, 180, 90], [0, 0, 0, 0], [0, 0, 0, 0], [180, 180, 180, 90]) == [180, 180, 180, 90]",
+    "test_cases": "from get_robot_angles import get_robot_angles\ndef test_1():\n    assert get_robot_angles([0, 0, 0, 90], [180, 180, 180, 90], [0, 0, 0, 0], [180, 180, 180, 90], [90, 90, 90, 90], [90, 90, 90, 90]) == [0, 0, 0, 90]\n\ndef test_2():\n    assert get_robot_angles([0, 0, 0, 0], [180, 180, 180, 90], [0, 0, 0, 0], [180, 180, 180, 90], [180, 180, 180, 90], [180, 180, 180, 90]) == [0, 0, 0, 0]\n\ndef test_3():\n    assert get_robot_angles([90, 90, 90, 0], [180, 180, 180, 90], [0, 0, 0, 0], [180, 180, 180, 90], [90, 90, 90, 45], [90, 90, 90, 45]) == [90, 90, 90, 45]\n\ndef test_4():\n    assert get_robot_angles([180, 180, 180, 90], [180, 180, 180, 90], [0, 0, 0, 0], [180, 180, 180, 90], [180, 180, 180, 90], [180, 180, 180, 90]) == [0, 0, 0, 90]\n\ndef test_5():\n    assert get_robot_angles([0, 0, 0, 0], [180, 180, 180, 90], [180, 180, 180, 90], [0, 0, 0, 0], [0, 0, 0, 0], [180, 180, 180, 90]) == [180, 180, 180, 90]\n\n",
+    "fixed": "def get_robot_angles(min_human_angles, max_human_angles, min_robot_angles, max_robot_angles, human_angles, robot_angles):\n\n    # approach for index, middle and thumb: high finger human_angle should lead to small robot_angles\n    for i in range(3):\n\n        human_angle = human_angles[i]\n        max_human_angle = max_human_angles[i]\n        min_human_angle = min_human_angles[i]\n        max_robot_angle = max_robot_angles[i]\n        min_robot_angle = min_robot_angles[i]\n\n        # preventing to open hand too far\n        if human_angle >= max_human_angle:\n            robot_angles[i] = min_robot_angle\n\n        # preventing to close hand too far\n        elif human_angle <= min_human_angle:\n            robot_angles[i] = max_robot_angle\n\n        # angles in valid working range, interpolating\n        elif (human_angle < max_human_angle) and (human_angle > min_human_angle):\n            hand_range = max_human_angle - min_human_angle\n            robot_range = max_robot_angle - min_robot_angle\n            robot_angles[i] = (max_human_angle - human_angle) * robot_range / hand_range\n\n        else:\n            robot_angles = min_robot_angles[:]\n            break\n\n    # approach for spread: high finger human_angle should lead to high robot_angles human_angle\n    human_spread = human_angles[3]\n    max_human_spread = max_human_angles[3]\n    min_human_spread = min_human_angles[3]\n    max_robot_spread = max_robot_angles[3]\n    min_robot_spread = min_robot_angles[3]\n\n    if human_spread >= max_human_spread:\n        robot_angles[3] = max_robot_spread\n    elif human_spread <= min_human_spread:\n        robot_angles[3] = min_robot_spread\n    elif (human_spread < max_human_spread) and (human_spread > min_human_spread):\n        hand_range_spread = max_human_spread - min_human_spread\n        robot_range_spread = max_robot_spread - min_robot_spread\n        robot_angles[3] = (human_spread - min_human_spread) * robot_range_spread / hand_range_spread\n    else:\n        robot_angles = min_robot_angles[:]\n\n    return robot_angles",
+    "suggested_function": "get_robot_angles",
+    "is_cross_file": false
+  }
+}

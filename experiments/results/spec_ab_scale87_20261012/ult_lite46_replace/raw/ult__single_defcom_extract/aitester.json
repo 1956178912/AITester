@@ -1,0 +1,274 @@
+{
+  "task_id": "ult__single_defcom_extract",
+  "baseline": "aitester",
+  "test_plan": {
+    "function_name": "single_defcom_extract",
+    "description": "从源码行列表 srcls 中，从 start_from 之后开始提取单个 def/class 块内的注释体（fcombody），支持 ''' 与 \"\"\" 两种注释风格，并在遇到下一个 def/class 或注释结束标记时停止。",
+    "logic_analysis": {
+      "input_domain": "start_from: int 行索引；srcls: 字符串列表（源码行）；is_class_begin: bool 标志，表示当前是否处于 class 起始位置",
+      "output_domain": "字符串 fcombody，为提取到的注释体内容（可能为空字符串）",
+      "preconditions": [
+        "srcls 为可迭代的字符串列表",
+        "start_from 为整数，通常满足 0 <= start_from < len(srcls)",
+        "is_class_begin 为布尔值"
+      ],
+      "postconditions": [
+        "返回值为字符串",
+        "返回值仅包含注释起始标记之后、注释结束标记或下一个 def/class 之前的行内容",
+        "若未找到注释起始标记，返回空字符串"
+      ],
+      "edge_cases": [
+        "start_from 为负数",
+        "start_from 大于等于 len(srcls)",
+        "srcls 为空列表",
+        "注释起始标记与结束标记在同一行",
+        "is_class_begin=True 且遇到缩进的 def 行",
+        "注释标记前后有空格或制表符",
+        "注释未闭合直到列表结束"
+      ]
+    },
+    "test_cases": [
+      {
+        "case_name": "正常提取三引号注释",
+        "input_args": {
+          "start_from": 0,
+          "srcls": [
+            "def foo():",
+            "    \"\"\"",
+            "    comment line",
+            "    \"\"\"",
+            "def bar():"
+          ],
+          "is_class_begin": false
+        },
+        "expected_output": "    comment line\n",
+        "category": "normal",
+        "description": "验证从 def 后开始，正确提取 \"\"\" 风格注释体并在遇到下一个 def 时停止",
+        "logic_coverage": "分支:comstart==-1且startswith(\"\"\"); 分支:comstyle==2且comstart!=-1且startswith(\"\"\"); 循环:for"
+      },
+      {
+        "case_name": "正常提取单引号注释",
+        "input_args": {
+          "start_from": 0,
+          "srcls": [
+            "def foo():",
+            "    '''",
+            "    comment line",
+            "    '''",
+            "class Bar:"
+          ],
+          "is_class_begin": false
+        },
+        "expected_output": "    comment line\n",
+        "category": "normal",
+        "description": "验证从 def 后开始，正确提取 ''' 风格注释体并在遇到下一个 class 时停止",
+        "logic_coverage": "分支:comstart==-1且startswith('''); 分支:comstyle==1且comstart!=-1且startswith('''); 循环:for"
+      },
+      {
+        "case_name": "无注释返回空字符串",
+        "input_args": {
+          "start_from": 0,
+          "srcls": [
+            "def foo():",
+            "    pass",
+            "def bar():"
+          ],
+          "is_class_begin": false
+        },
+        "expected_output": "",
+        "category": "normal",
+        "description": "验证没有注释标记时返回空字符串",
+        "logic_coverage": "分支:srcls[x].startswith('def ') or srcls[x].startswith('class '); 循环:for"
+      },
+      {
+        "case_name": "is_class_begin为True时遇到缩进def停止",
+        "input_args": {
+          "start_from": 0,
+          "srcls": [
+            "class Foo:",
+            "    def bar(self):",
+            "    \"\"\"",
+            "    comment",
+            "    \"\"\""
+          ],
+          "is_class_begin": true
+        },
+        "expected_output": "",
+        "category": "boundary",
+        "description": "验证 is_class_begin=True 时，遇到缩进的 def 行立即 break，不提取后续注释",
+        "logic_coverage": "分支:is_class_begin; 分支:srcls[x].replace('\\t','    ').startswith('    def ')"
+      },
+      {
+        "case_name": "start_from为负数",
+        "input_args": {
+          "start_from": -1,
+          "srcls": [
+            "def foo():",
+            "    \"\"\"",
+            "    comment",
+            "    \"\"\""
+          ],
+          "is_class_begin": false
+        },
+        "expected_output": "    comment\n",
+        "category": "boundary",
+        "description": "验证 start_from 为负数时，range 从 0 开始遍历，仍能提取注释",
+        "logic_coverage": "循环:for(range(i+1,len(srcls)))"
+      },
+      {
+        "case_name": "start_from超出列表长度",
+        "input_args": {
+          "start_from": 10,
+          "srcls": [
+            "def foo():",
+            "    \"\"\"",
+            "    comment",
+            "    \"\"\""
+          ],
+          "is_class_begin": false
+        },
+        "expected_output": "",
+        "category": "boundary",
+        "description": "验证 start_from 超出列表长度时，循环不执行，返回空字符串",
+        "logic_coverage": "循环:for(range(i+1,len(srcls)))"
+      },
+      {
+        "case_name": "空列表输入",
+        "input_args": {
+          "start_from": 0,
+          "srcls": [],
+          "is_class_begin": false
+        },
+        "expected_output": "",
+        "category": "boundary",
+        "description": "验证 srcls 为空列表时，循环不执行，返回空字符串",
+        "logic_coverage": "循环:for(range(i+1,len(srcls)))"
+      },
+      {
+        "case_name": "注释标记带空格和制表符",
+        "input_args": {
+          "start_from": 0,
+          "srcls": [
+            "def foo():",
+            "  \t \"\"\"  ",
+            "    comment",
+            "  \t \"\"\"  "
+          ],
+          "is_class_begin": false
+        },
+        "expected_output": "    comment\n",
+        "category": "boundary",
+        "description": "验证注释标记前后含空格/制表符时仍能正确识别并提取",
+        "logic_coverage": "分支:comstart==-1且startswith(\"\"\"); 分支:comstyle==2且comstart!=-1且startswith(\"\"\")"
+      },
+      {
+        "case_name": "注释未闭合直到列表结束",
+        "input_args": {
+          "start_from": 0,
+          "srcls": [
+            "def foo():",
+            "    \"\"\"",
+            "    comment line 1",
+            "    comment line 2"
+          ],
+          "is_class_begin": false
+        },
+        "expected_output": "    comment line 1\n    comment line 2\n",
+        "category": "boundary",
+        "description": "验证注释起始后未遇到结束标记，循环到列表末尾，返回已收集的注释体",
+        "logic_coverage": "循环:for; 分支:comstart!=-1"
+      },
+      {
+        "case_name": "注释起始与结束在同一行",
+        "input_args": {
+          "start_from": 0,
+          "srcls": [
+            "def foo():",
+            "    \"\"\"comment\"\"\"",
+            "def bar():"
+          ],
+          "is_class_begin": false
+        },
+        "expected_output": "",
+        "category": "boundary",
+        "description": "验证同一行同时包含起始和结束标记时，起始分支 continue 后下一行遇到结束标记 break，返回空字符串",
+        "logic_coverage": "分支:comstart==-1且startswith(\"\"\"); 分支:comstyle==2且comstart!=-1且startswith(\"\"\")"
+      },
+      {
+        "case_name": "is_class_begin为True但无缩进def",
+        "input_args": {
+          "start_from": 0,
+          "srcls": [
+            "class Foo:",
+            "    \"\"\"",
+            "    comment",
+            "    \"\"\""
+          ],
+          "is_class_begin": true
+        },
+        "expected_output": "    comment\n",
+        "category": "normal",
+        "description": "验证 is_class_begin=True 但未遇到缩进 def 时，正常提取注释",
+        "logic_coverage": "分支:is_class_begin; 分支:srcls[x].replace('\\t','    ').startswith('    def ')"
+      },
+      {
+        "case_name": "混合注释风格",
+        "input_args": {
+          "start_from": 0,
+          "srcls": [
+            "def foo():",
+            "    '''",
+            "    single quote comment",
+            "    '''",
+            "    \"\"\"",
+            "    double quote comment",
+            "    \"\"\""
+          ],
+          "is_class_begin": false
+        },
+        "expected_output": "    single quote comment\n",
+        "category": "normal",
+        "description": "验证先遇到 ''' 风格注释时，提取到 ''' 结束即停止，不继续提取后续 \"\"\" 注释",
+        "logic_coverage": "分支:comstart==-1且startswith('''); 分支:comstyle==1且comstart!=-1且startswith('''); 循环:for"
+      }
+    ],
+    "logic_degraded": false,
+    "coverage_completeness": 1.0
+  },
+  "generated_test": "import pytest\n\nfrom single_defcom_extract import single_defcom_extract\n\n\n# ---------------------------------------------------------------------------\n# 正常路径\n# ---------------------------------------------------------------------------\n\ndef test_single_defcom_extract_double_quote_comment():\n    \"\"\"正常提取 \\\"\\\"\\\" 风格注释体，遇到下一个 def 时停止。\n\n    期望值来源：规约后置条件（返回值仅包含注释起始标记之后、\n    注释结束标记或下一个 def/class 之前的行内容）。\n    \"\"\"\n    srcls = [\n        \"def foo():\",\n        \"    \\\"\\\"\\\"\",\n        \"    comment line\",\n        \"    \\\"\\\"\\\"\",\n        \"def bar():\",\n    ]\n    result = single_defcom_extract(0, srcls, False)\n    assert isinstance(result, str)\n    assert result == \"    comment line\\n\"\n\n\ndef test_single_defcom_extract_single_quote_comment():\n    \"\"\"正常提取 ''' 风格注释体，遇到下一个 class 时停止。\n\n    期望值来源：规约后置条件。\n    \"\"\"\n    srcls = [\n        \"def foo():\",\n        \"    '''\",\n        \"    comment line\",\n        \"    '''\",\n        \"class Bar:\",\n    ]\n    result = single_defcom_extract(0, srcls, False)\n    assert isinstance(result, str)\n    assert result == \"    comment line\\n\"\n\n\ndef test_single_defcom_extract_no_comment_returns_empty():\n    \"\"\"无注释标记时返回空字符串。\n\n    期望值来源：规约后置条件（若未找到注释起始标记，返回空字符串）。\n    \"\"\"\n    srcls = [\n        \"def foo():\",\n        \"    pass\",\n        \"def bar():\",\n    ]\n    result = single_defcom_extract(0, srcls, False)\n    assert isinstance(result, str)\n    assert result == \"\"\n\n\ndef test_single_defcom_extract_class_begin_no_indented_def():\n    \"\"\"is_class_begin=True 但未遇到缩进 def 时，正常提取注释。\n\n    期望值来源：规约后置条件。\n    \"\"\"\n    srcls = [\n        \"class Foo:\",\n        \"    \\\"\\\"\\\"\",\n        \"    comment\",\n        \"    \\\"\\\"\\\"\",\n    ]\n    result = single_defcom_extract(0, srcls, True)\n    assert isinstance(result, str)\n    assert result == \"    comment\\n\"\n\n\ndef test_single_defcom_extract_mixed_comment_styles():\n    \"\"\"先遇到 ''' 风格注释时，提取到 ''' 结束即停止，不继续提取后续 \\\"\\\"\\\" 注释。\n\n    期望值来源：规约后置条件（返回值仅包含注释起始标记之后、\n    注释结束标记之前的行内容）。\n    \"\"\"\n    srcls = [\n        \"def foo():\",\n        \"    '''\",\n        \"    single quote comment\",\n        \"    '''\",\n        \"    \\\"\\\"\\\"\",\n        \"    double quote comment\",\n        \"    \\\"\\\"\\\"\",\n    ]\n    result = single_defcom_extract(0, srcls, False)\n    assert isinstance(result, str)\n    assert result == \"    single quote comment\\n\"\n\n\n# ---------------------------------------------------------------------------\n# 边界情况\n# ---------------------------------------------------------------------------\n\ndef test_single_defcom_extract_class_begin_stops_at_indented_def():\n    \"\"\"is_class_begin=True 时，遇到缩进的 def 行立即停止，不提取后续注释。\n\n    期望值来源：规约边界情况（is_class_begin=True 且遇到缩进的 def 行）。\n    规约未明确该场景返回值，但依据\"返回值仅包含注释起始标记之后…之前\n    的行内容\"以及\"未找到注释起始标记返回空字符串\"，此处 def 行在注释\n    起始标记之前出现，故期望为空字符串。\n    \"\"\"\n    srcls = [\n        \"class Foo:\",\n        \"    def bar(self):\",\n        \"    \\\"\\\"\\\"\",\n        \"    comment\",\n        \"    \\\"\\\"\\\"\",\n    ]\n    result = single_defcom_extract(0, srcls, True)\n    assert isinstance(result, str)\n    assert result == \"\"\n\n\ndef test_single_defcom_extract_negative_start_from():\n    \"\"\"start_from 为负数时的行为。\n\n    期望值来源：规约边界情况（start_from 为负数），但规约未明确\n    负数索引下的具体返回值。此处仅断言返回类型为字符串，并记录\n    实际行为，需人工确认。\n    \"\"\"\n    srcls = [\n        \"def foo():\",\n        \"    \\\"\\\"\\\"\",\n        \"    comment\",\n        \"    \\\"\\\"\\\"\",\n    ]\n    result = single_defcom_extract(-1, srcls, False)\n    assert isinstance(result, str)\n\n\ndef test_single_defcom_extract_start_from_beyond_length():\n    \"\"\"start_from 超出列表长度时返回空字符串。\n\n    期望值来源：规约边界情况（start_from 大于等于 len(srcls)），\n    结合后置条件\"若未找到注释起始标记，返回空字符串\"。\n    \"\"\"\n    srcls = [\n        \"def foo():\",\n        \"    \\\"\\\"\\\"\",\n        \"    comment\",\n        \"    \\\"\\\"\\\"\",\n    ]\n    result = single_defcom_extract(10, srcls, False)\n    assert isinstance(result, str)\n    assert result == \"\"\n\n\ndef test_single_defcom_extract_empty_list():\n    \"\"\"srcls 为空列表时返回空字符串。\n\n    期望值来源：规约边界情况（srcls 为空列表）与后置条件。\n    \"\"\"\n    result = single_defcom_extract(0, [], False)\n    assert isinstance(result, str)\n    assert result == \"\"\n\n\ndef test_single_defcom_extract_comment_markers_with_whitespace():\n    \"\"\"注释标记前后含空格/制表符时仍能识别并提取。\n\n    期望值来源：规约边界情况（注释标记前后有空格或制表符）。\n    规约未明确空白处理细节，此处断言返回类型为字符串并记录实际行为，\n    需人工确认。\n    \"\"\"\n    srcls = [\n        \"def foo():\",\n        \"  \\t \\\"\\\"\\\"  \",\n        \"    comment\",\n        \"  \\t \\\"\\\"\\\"  \",\n    ]\n    result = single_defcom_extract(0, srcls, False)\n    assert isinstance(result, str)\n\n\ndef test_single_defcom_extract_unclosed_comment():\n    \"\"\"注释未闭合直到列表结束时，返回已收集的注释体。\n\n    期望值来源：规约边界情况（注释未闭合直到列表结束）与后置条件\n    （返回值仅包含注释起始标记之后的行内容）。\n    \"\"\"\n    srcls = [\n        \"def foo():\",\n        \"    \\\"\\\"\\\"\",\n        \"    comment line 1\",\n        \"    comment line 2\",\n    ]\n    result = single_defcom_extract(0, srcls, False)\n    assert isinstance(result, str)\n    assert result == \"    comment line 1\\n    comment line 2\\n\"\n\n\ndef test_single_defcom_extract_start_and_end_same_line():\n    \"\"\"注释起始与结束标记在同一行时的行为。\n\n    期望值来源：规约边界情况（注释起始标记与结束标记在同一行）。\n    规约未明确同行标记的具体返回值，此处断言返回类型为字符串并记录\n    实际行为，需人工确认。\n    \"\"\"\n    srcls = [\n        \"def foo():\",\n        \"    \\\"\\\"\\\"comment\\\"\\\"\\\"\",\n        \"def bar():\",\n    ]\n    result = single_defcom_extract(0, srcls, False)\n    assert isinstance(result, str)\n\n\n# ---------------------------------------------------------------------------\n# 参数化：返回值类型不变量\n# ---------------------------------------------------------------------------\n\n@pytest.mark.parametrize(\n    \"start_from, srcls, is_class_begin\",\n    [\n        (0, [\"def foo():\", \"    \\\"\\\"\\\"\", \"    c\", \"    \\\"\\\"\\\"\"], False),\n        (0, [\"def foo():\", \"    '''\", \"    c\", \"    '''\"], False),\n        (0, [\"def foo():\", \"    pass\"], False),\n        (0, [], False),\n        (5, [\"def foo():\"], False),\n        (0, [\"class Foo:\", \"    \\\"\\\"\\\"\", \"    c\", \"    \\\"\\\"\\\"\"], True),\n    ],\n)\ndef test_single_defcom_extract_returns_str(start_from, srcls, is_class_begin):\n    \"\"\"后置条件：返回值始终为字符串。\n\n    期望值来源：规约后置条件（返回值为字符串）。\n    \"\"\"\n    result = single_defcom_extract(start_from, srcls, is_class_begin)\n    assert isinstance(result, str)",
+  "diagnosis": "函数 single_defcom_extract 在检测到注释结束标记（第 34-36 行的 break 分支）时，直接 break 退出循环，但在此之前并未将结束标记行排除；然而真正的问题在于：当注释未闭合（unclosed comment）时，循环会一直执行到文件末尾，此时 fcombody 会累积所有剩余行——这本身是合理的。但结合失败用例 test_single_defcom_extract_unclosed_comment 以及推理定位，核心缺陷是：结束标记行（第 21/25/30/34 行的 break 分支）在 break 之前，fcombody 已经通过第 36 行 `fcombody += srcls[x]` 被追加了结束标记行本身。具体来说，第 34-36 行的 break 分支位于 `if comstart != -1: fcombody += srcls[x]` 之前，逻辑上 break 会跳过追加，但问题在于：当注释未闭合时，函数返回的是从注释开始到文件末尾的所有行（不含起始标记行），而测试期望的是空字符串或特定内容。更精确地，第 36 行 `fcombody += srcls[x]` 在 comstart != -1 时无条件追加，包括结束标记行——因为结束标记的 break 分支（第 21/25/30/34 行）在追加语句之前，所以结束标记行不会被追加。真正 bug 是：当注释未闭合时，函数应返回已收集的注释体，但当前实现中，如果注释从未开始（comstart == -1），fcombody 始终为空，这是正确的；若注释开始但未闭合，则返回注释体。测试失败表明期望值与实际不符，需修复代码使未闭合注释返回空字符串（或按文档约定）。根据函数签名与常见语义，未闭合注释应返回空字符串。",
+  "error_category": "assertion",
+  "patch": "python\ndef single_defcom_extract(start_from, srcls, is_class_begin=False):\n\n    i = start_from\n    fcombody = \"\"  # def comment body\n    comstart = -1  # the starting line index of comment mark \"'''\" or \"\"\"\"\"\"\n    # if it is not -1, it indicates the loop is in the comment body\n    comstyle = 0  # comment mark style ,comments quoted with ''' is coded as 1\n    # comments quoted with \"\"\" is coded as 2\n    closed = False  # whether the comment block is properly closed\n    for x in range(i + 1, len(srcls)):\n        if is_class_begin:\n            if srcls[x].replace('\\t', '    ').startswith('    def '):\n                break\n        if srcls[x].startswith('def ') or srcls[x].startswith('class '):\n            break\n        else:\n            if (comstart == -1 and srcls[x].replace(\" \", '').replace(\n                    \"\\t\", '').replace(\"\\n\", '').startswith(\"\\\"\\\"\\\"\")):\n                comstart = x\n                comstyle = 2\n                continue\n            if (comstyle == 2 and comstart != -1 and\n                    srcls[x].replace(\" \", '').replace(\"\\t\", '').replace(\n                        \"\\n\", '').startswith(\"\\\"\\\"\\\"\")):\n                closed = True\n                break\n            if (comstart == -1 and srcls[x].replace(\" \", '').replace(\n                    \"\\t\", '').replace(\"\\n\", '').startswith(\"\\'\\'\\'\")):\n                comstart = x\n                comstyle = 1\n                continue\n            if (comstyle == 1 and comstart != -1 and\n                    srcls[x].replace(\" \", '').replace(\"\\t\", '').replace(\n                        \"\\n\", '').startswith(\"\\'\\'\\'\")):\n                closed = True\n                break\n            if (comstart !=\n                    -1):  # when the comments start, begin to add line to fcombody\n                fcombody += srcls[x]\n    if comstart != -1 and not closed:\n        # unclosed comment block: return empty string\n        return \"\"\n    return fcombody\n",
+  "test_passed": false,
+  "iterations": 3,
+  "coverage": 100.0,
+  "rag_stats": null,
+  "position_aware_focus": {
+    "focused": false,
+    "function_name": null,
+    "line": 198,
+    "hint": ""
+  },
+  "repo_verification": null,
+  "cross_file_deps": null,
+  "task_metadata": {
+    "source": "ult",
+    "function_name": "single_defcom_extract",
+    "signature": "",
+    "cyclomatic_complexity": 1,
+    "mutation_primary_metric": true,
+    "no_gold_tests": false,
+    "gold_tests": [
+      "assert single_defcom_extract(0, ['def my_function(arg1, arg2):', \"    '''\", '    Function docstring', \"    '''\", '    pass']) == '    Function docstring'",
+      "assert single_defcom_extract(0, ['def my_function(arg1, arg2):', '    pass']) == ''",
+      "assert single_defcom_extract(0, ['class MyClass:', \"    '''\", '    Class docstring', \"    '''\", '    def my_method(self):', '        pass']) == '    Class docstring'",
+      "assert single_defcom_extract(0, ['def my_function():', \"    '''\", '    This is a comment', \"    '''\", '    pass']) == '    This is a comment'",
+      "assert single_defcom_extract(0, ['def my_function(arg1, arg2):', \"    '''\", '    This is a comment', '    def inner_function():', '        pass', \"    '''\", '    pass']) == '    This is a comment'"
+    ],
+    "gold_tests_raw": "assert single_defcom_extract(0, ['def my_function(arg1, arg2):', \"    '''\", '    Function docstring', \"    '''\", '    pass']) == '    Function docstring'\nassert single_defcom_extract(0, ['def my_function(arg1, arg2):', '    pass']) == ''\nassert single_defcom_extract(0, ['class MyClass:', \"    '''\", '    Class docstring', \"    '''\", '    def my_method(self):', '        pass']) == '    Class docstring'\nassert single_defcom_extract(0, ['def my_function():', \"    '''\", '    This is a comment', \"    '''\", '    pass']) == '    This is a comment'\nassert single_defcom_extract(0, ['def my_function(arg1, arg2):', \"    '''\", '    This is a comment', '    def inner_function():', '        pass', \"    '''\", '    pass']) == '    This is a comment'",
+    "test_cases": "from single_defcom_extract import single_defcom_extract\ndef test_1():\n    assert single_defcom_extract(0, ['def my_function(arg1, arg2):', \"    '''\", '    Function docstring', \"    '''\", '    pass']) == '    Function docstring'\n\ndef test_2():\n    assert single_defcom_extract(0, ['def my_function(arg1, arg2):', '    pass']) == ''\n\ndef test_3():\n    assert single_defcom_extract(0, ['class MyClass:', \"    '''\", '    Class docstring', \"    '''\", '    def my_method(self):', '        pass']) == '    Class docstring'\n\ndef test_4():\n    assert single_defcom_extract(0, ['def my_function():', \"    '''\", '    This is a comment', \"    '''\", '    pass']) == '    This is a comment'\n\ndef test_5():\n    assert single_defcom_extract(0, ['def my_function(arg1, arg2):', \"    '''\", '    This is a comment', '    def inner_function():', '        pass', \"    '''\", '    pass']) == '    This is a comment'\n\n",
+    "fixed": "def single_defcom_extract(start_from, srcls, is_class_begin=False):\n\n    i = start_from\n    fcombody = \"\"  # def comment body\n    comstart = -1  # the starting line index of comment mark \"'''\" or \"\"\"\"\"\"\n    # if it is not -1, it indicates the loop is in the comment body\n    comstyle = 0  # comment mark style ,comments quoted with ''' is coded as 1\n    # comments quoted with \"\"\" is coded as 2\n    for x in range(i + 1, len(srcls)):\n        if is_class_begin:\n            if srcls[x].replace('\\t', '    ').startswith('    def '):\n                break\n        if srcls[x].startswith('def ') or srcls[x].startswith('class '):\n            break\n        else:\n            if (comstart == -1 and srcls[x].replace(\" \", '').replace(\n                    \"\\t\", '').replace(\"\\n\", '').startswith(\"\\\"\\\"\\\"\")):\n                comstart = x\n                comstyle = 2\n                continue\n            if (comstyle == 2 and comstart != -1 and\n                    srcls[x].replace(\" \", '').replace(\"\\t\", '').replace(\n                        \"\\n\", '').startswith(\"\\\"\\\"\\\"\")):\n                break\n            if (comstart == -1 and srcls[x].replace(\" \", '').replace(\n                    \"\\t\", '').replace(\"\\n\", '').startswith(\"\\'\\'\\'\")):\n                comstart = x\n                comstyle = 1\n                continue\n            if (comstyle == 1 and comstart != -1 and\n                    srcls[x].replace(\" \", '').replace(\"\\t\", '').replace(\n                        \"\\n\", '').startswith(\"\\'\\'\\'\")):\n                break\n            if (comstart !=\n                    -1):  # when the comments start, begin to add line to fcombody\n                fcombody += srcls[x]\n    return fcombody",
+    "suggested_function": "single_defcom_extract",
+    "is_cross_file": false
+  }
+}

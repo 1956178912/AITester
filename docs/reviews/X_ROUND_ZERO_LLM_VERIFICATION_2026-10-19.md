@@ -54,18 +54,48 @@
 **口径说明**：`smt_witness_batch.py` 经验证**已在库**（`962c77e`，此前 bash grep 编码
 问题误报）；论文 Data Availability 仅剩 Zenodo DOI 待归档后回填（T-4，需用户操作）。
 
-## 3. 记录未修：T 轮 README 重写隐患（移交 X 轮评审）
+## 3. X 轮（二）系统评审：同类缺口普查与修复（2026-10-19 续）
 
-`analyze_t1_b2_main_batch.py --write` 会**从零重生成** README.md；归档版第 105–136 行
-的"0.6 T 轮发现（可辩护表述，写死防事后改写）"是**手工追加**节，脚本不重生成——
-任何重跑 `--write` 都会静默丢失该节（本轮复算即在目录副本上实证：diff 显示 32 行缺失）。
-归档工件本身未受影响（本轮复算只在 /tmp 副本上进行）。建议修法：生成-保留标记
-（`<!-- MANUAL:BEGIN/END -->`）或把该节移入手写文件。列入 X 轮评审候选。
+在第一阶段修复后，对"引用-入库"一致性做了全形态普查（不限于 .py）：
+
+| 检查 | 范围 | 结果 |
+|---|---|---|
+| 文档引用的 experiments 脚本 | 70 个被引脚本（docs/ + README + REPLICATION + CONTRIBUTING） | 3 个不在库，均为**非 live 引用**（api_reference 版本史的历史快照 1 + ult_bridge_plan 明确标注"设计，不实现" 2）——live 引用全部闭合 |
+| 工件 README 的复现命令引用 | 全部 `experiments/results/**/README.md` | **0 个**不在库 |
+| 被跟踪文件引用的全部路径 | 106 条（data/docs/experiments 全形态） | 绝大多数为既有约定（测试夹具 / 历史快照 / 本地工件 / 本地预注册件）；发现 **2 个真实输入缺口**（G5，见下） |
+| README 重写隐患（手工节丢失） | 10 个写 README 的脚本 × 各自归档工件 | T 轮实例已修；其余 9 个无手工节，无同类风险 |
+| 新入库 6 脚本危险模式 | 硬编码绝对路径 / eval·exec / shell=True / sk- 样式 / os.system / 字符串命令 | **全部 CLEAN** |
+
+**输入缺口修复（G5）**：两个零 LLM 脚本的**默认输入批次**不在工件包内（脚本在库、
+输入不在——复算链仍断）：
+- `emse_quixbugs_mutk_full.py`（论文 Table 5 QuixBugs mutation）的 `_INPUT_JSON`
+  → 入库 `emse_spec_ir_quixbugs_20261013/`（52 文件，985,875 字节，含 traces）；
+- `emse_ult_gold_diagnosis.py`（Table 5 题注"gold fails on fixed 71/71"）的
+  `_LITE46_JSON` → 入库 `spec_ab_scale87_20261012/ult_lite46_replace/`（94 文件，
+  2,178,508 字节，含 raw + traces）。
+均按 r4_batches 先例整目录入库（批次 JSON + 逐任务轨迹 + provenance README +
+SHA256SUMS；`.gitattributes` 已设 `-text` 保证字节一致）。
+
+**T 轮 README 重写隐患修复（第一阶段记录项的闭环）**：
+`analyze_t1_b2_main_batch.py` 增设 `<!-- MANUAL:BEGIN/END -->` 标记块的
+生成-保留机制（`_preserve_manual_sections`：成对闭合块在 `--write` 时原样
+保留到生成内容末尾；未闭合标记不保留；多块按原序保留）；归档 README 的
+"0.6 T 轮发现"节已包标记。**端到端实证**：/tmp 副本重跑 `--write` 后手工节
+完整存活（此前必丢 32 行）。回归锁
+`tests/test_analyze_t1_b2_manual_sections.py`（5 例，hermetic——用归档报告
+直接渲染，不重跑批次分析）。
 
 ## 4. 验证
 
-- 新测试：`pytest tests/test_emse_recompute_entrypoints.py -q` → **9 passed**（broker 禁用环境；沙箱内 tmp_path 被 broker 阻断属已知环境限制）
-- ruff check + format：全部变更文件通过
+**第一阶段**：
+- 新测试 `tests/test_emse_recompute_entrypoints.py` → **9 passed**（broker 禁用环境；沙箱内 tmp_path 被 broker 阻断属已知环境限制）
 - 清单门禁：三个受影响工件目录 `checksum_results.py --verify` 通过（3/2/3 项一致）
 - 论文编译：typst 19 页；附录 A/B 逐页 SVG→Chrome 截图目检通过
-- 全量测试：见提交记录（本变更新增 9 例）
+
+**第二阶段**：
+- 新测试 `tests/test_analyze_t1_b2_manual_sections.py` → **5 passed**（0.08s，hermetic）
+- 端到端实证：/tmp 副本重跑 `analyze_t1_b2_main_batch.py --write`，手工节存活（修复前丢失）
+- 输入批次清单：`emse_spec_ir_quixbugs_20261013` 52 项、`ult_lite46_replace` 94 项、`t_round_b2` 804 项全部 verify 通过
+- 新入库 6 脚本危险模式扫描全部 CLEAN
+- 全量测试（两阶段合计 +14 例）：正常环境口径 **9153 passed / 5 skipped / 0 failed**（collected 9158）；本机沙箱 9138 passed / 19 skipped / 1 failed（唯一失败 = 基线守卫，刷新 BASELINE 后转绿）
+- 门禁：ruff（828 文件）+ mypy（134 源文件 0 错）+ 双语文档 strict + 链接 strict + 基线/基线数字 + 状态契约 + env 预算/快照 + 模型指纹 + JSON 契约 + 零断言（390 文件）+ 引用 + 审计脱敏 + 凭证剔除 + 锁同步 + 工件对账 + prompt 哈希锁（7 artifact）+ 分支覆盖 + 棘轮（92.70% ≥ 92.50%）+ 工件入库（179/179）+ main_batch 清单 2029 项——全部通过

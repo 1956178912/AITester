@@ -1,0 +1,395 @@
+{
+  "task_id": "ult__get_allen_relation",
+  "baseline": "aitester",
+  "test_plan": {
+    "function_name": "get_allen_relation",
+    "description": "根据两个时间区间（duration1、duration2，各为(start,end)二元组）计算并返回Allen区间关系字符串，如meets/metby/equal/before/after/overlaps等",
+    "logic_analysis": {
+      "input_domain": "两个二元组 duration1=(is1,ie1)、duration2=(is2,ie2)，元素为可比较的数值（整数/浮点），表示区间起点与终点",
+      "output_domain": "字符串，取值集合：meets, metby, equal, before, after, overlaps, overlapped_by, during, contains, starts, started_by, finishes, finished_by",
+      "preconditions": [
+        "duration1 与 duration2 均为可解包为两个元素的序列",
+        "元素支持减法、比较运算（数值型）"
+      ],
+      "postconditions": [
+        "返回值为上述13种关系字符串之一",
+        "当 is2-1==ie1 时返回 'meets'（优先于其他判断）",
+        "当 is1-1==ie2 时返回 'metby'"
+      ],
+      "edge_cases": [
+        "相邻区间（is2-1==ie1 或 is1-1==ie2）",
+        "完全相同区间",
+        "区间端点相等但长度不同（starts/started_by/finishes/finished_by）",
+        "区间包含/被包含",
+        "区间部分重叠",
+        "区间完全分离（before/after）",
+        "duration 元素为0或负数",
+        "duration 元素为浮点数"
+      ]
+    },
+    "test_cases": [
+      {
+        "case_name": "meets_相邻区间",
+        "input_args": {
+          "duration1": [
+            1,
+            3
+          ],
+          "duration2": [
+            4,
+            6
+          ]
+        },
+        "expected_output": "meets",
+        "category": "normal",
+        "description": "is2-1==ie1，验证meets分支",
+        "logic_coverage": "is2-1==ie1"
+      },
+      {
+        "case_name": "metby_相邻区间",
+        "input_args": {
+          "duration1": [
+            4,
+            6
+          ],
+          "duration2": [
+            1,
+            3
+          ]
+        },
+        "expected_output": "metby",
+        "category": "normal",
+        "description": "is1-1==ie2，验证metby分支",
+        "logic_coverage": "is1-1==ie2"
+      },
+      {
+        "case_name": "equal_完全相同",
+        "input_args": {
+          "duration1": [
+            1,
+            3
+          ],
+          "duration2": [
+            1,
+            3
+          ]
+        },
+        "expected_output": "equal",
+        "category": "normal",
+        "description": "起点终点均相等，验证equal分支",
+        "logic_coverage": "is1==is2 and ie1==ie2"
+      },
+      {
+        "case_name": "before_完全在前",
+        "input_args": {
+          "duration1": [
+            1,
+            2
+          ],
+          "duration2": [
+            5,
+            6
+          ]
+        },
+        "expected_output": "before",
+        "category": "normal",
+        "description": "is2>ie1，验证before分支",
+        "logic_coverage": "is2>ie1"
+      },
+      {
+        "case_name": "after_完全在后",
+        "input_args": {
+          "duration1": [
+            5,
+            6
+          ],
+          "duration2": [
+            1,
+            2
+          ]
+        },
+        "expected_output": "after",
+        "category": "normal",
+        "description": "is1>ie2，验证after分支",
+        "logic_coverage": "is1>ie2"
+      },
+      {
+        "case_name": "overlaps_部分重叠",
+        "input_args": {
+          "duration1": [
+            1,
+            4
+          ],
+          "duration2": [
+            3,
+            6
+          ]
+        },
+        "expected_output": "overlaps",
+        "category": "normal",
+        "description": "ie1在is2与ie2之间且is1<=is2，验证overlaps分支",
+        "logic_coverage": "ie1>=is2 and ie1<=ie2 and is1<=is2"
+      },
+      {
+        "case_name": "overlapped_by_被部分重叠",
+        "input_args": {
+          "duration1": [
+            3,
+            6
+          ],
+          "duration2": [
+            1,
+            4
+          ]
+        },
+        "expected_output": "overlapped_by",
+        "category": "normal",
+        "description": "ie2在is1与ie1之间且is2<=is1，验证overlapped_by分支",
+        "logic_coverage": "ie2>=is1 and ie2<=ie1 and is2<=is1"
+      },
+      {
+        "case_name": "during_被包含",
+        "input_args": {
+          "duration1": [
+            3,
+            4
+          ],
+          "duration2": [
+            1,
+            6
+          ]
+        },
+        "expected_output": "during",
+        "category": "normal",
+        "description": "duration1完全在duration2内，验证during分支",
+        "logic_coverage": "is1>=is2 and ie1<=ie2"
+      },
+      {
+        "case_name": "contains_包含",
+        "input_args": {
+          "duration1": [
+            1,
+            6
+          ],
+          "duration2": [
+            3,
+            4
+          ]
+        },
+        "expected_output": "contains",
+        "category": "normal",
+        "description": "duration1完全包含duration2，验证contains分支",
+        "logic_coverage": "is1<=is2 and ie1>=ie2"
+      },
+      {
+        "case_name": "starts_同起点较短",
+        "input_args": {
+          "duration1": [
+            1,
+            3
+          ],
+          "duration2": [
+            1,
+            5
+          ]
+        },
+        "expected_output": "starts",
+        "category": "normal",
+        "description": "同起点且duration1更短，验证starts分支",
+        "logic_coverage": "is1==is2 and ie1<ie2"
+      },
+      {
+        "case_name": "started_by_同起点较长",
+        "input_args": {
+          "duration1": [
+            1,
+            5
+          ],
+          "duration2": [
+            1,
+            3
+          ]
+        },
+        "expected_output": "started_by",
+        "category": "normal",
+        "description": "同起点且duration1更长，验证started_by分支",
+        "logic_coverage": "is1==is2 and ie1>ie2"
+      },
+      {
+        "case_name": "finishes_同终点较长",
+        "input_args": {
+          "duration1": [
+            1,
+            5
+          ],
+          "duration2": [
+            3,
+            5
+          ]
+        },
+        "expected_output": "finishes",
+        "category": "normal",
+        "description": "同终点且duration1更长，验证finishes分支",
+        "logic_coverage": "ie1==ie2 and is2<is1"
+      },
+      {
+        "case_name": "finished_by_同终点较短",
+        "input_args": {
+          "duration1": [
+            3,
+            5
+          ],
+          "duration2": [
+            1,
+            5
+          ]
+        },
+        "expected_output": "finished_by",
+        "category": "normal",
+        "description": "同终点且duration1更短，验证finished_by分支",
+        "logic_coverage": "ie1==ie2 and is2>is1"
+      },
+      {
+        "case_name": "零值区间_meets",
+        "input_args": {
+          "duration1": [
+            0,
+            0
+          ],
+          "duration2": [
+            1,
+            1
+          ]
+        },
+        "expected_output": "meets",
+        "category": "boundary",
+        "description": "区间端点为0，is2-1==ie1成立，验证零值边界",
+        "logic_coverage": "is2-1==ie1"
+      },
+      {
+        "case_name": "负值区间_before",
+        "input_args": {
+          "duration1": [
+            -5,
+            -3
+          ],
+          "duration2": [
+            -1,
+            0
+          ]
+        },
+        "expected_output": "before",
+        "category": "boundary",
+        "description": "负值区间，is2>ie1，验证负数边界",
+        "logic_coverage": "is2>ie1"
+      },
+      {
+        "case_name": "浮点区间_overlaps",
+        "input_args": {
+          "duration1": [
+            1.0,
+            3.5
+          ],
+          "duration2": [
+            3.0,
+            5.0
+          ]
+        },
+        "expected_output": "overlaps",
+        "category": "boundary",
+        "description": "浮点端点，验证浮点比较",
+        "logic_coverage": "ie1>=is2 and ie1<=ie2 and is1<=is2"
+      },
+      {
+        "case_name": "单点区间_equal",
+        "input_args": {
+          "duration1": [
+            2,
+            2
+          ],
+          "duration2": [
+            2,
+            2
+          ]
+        },
+        "expected_output": "equal",
+        "category": "boundary",
+        "description": "零长度单点区间相等",
+        "logic_coverage": "is1==is2 and ie1==ie2"
+      },
+      {
+        "case_name": "非法输入_非二元组",
+        "input_args": {
+          "duration1": [
+            1,
+            2,
+            3
+          ],
+          "duration2": [
+            4,
+            5
+          ]
+        },
+        "expected_output": null,
+        "category": "error",
+        "description": "duration1含3个元素，解包会抛ValueError，期望值未知（代码未定义异常处理）",
+        "logic_coverage": "解包异常路径"
+      },
+      {
+        "case_name": "非法输入_不可比较类型",
+        "input_args": {
+          "duration1": [
+            "a",
+            "b"
+          ],
+          "duration2": [
+            1,
+            2
+          ]
+        },
+        "expected_output": null,
+        "category": "error",
+        "description": "字符串与整数比较会抛TypeError，期望值未知（代码未定义异常处理）",
+        "logic_coverage": "比较异常路径"
+      }
+    ],
+    "logic_degraded": false,
+    "coverage_completeness": 1.0
+  },
+  "generated_test": "import pytest\n\nfrom get_allen_relation import get_allen_relation\n\n\n# ---------------------------------------------------------------------------\n# 正常关系分支\n# ---------------------------------------------------------------------------\n\ndef test_get_allen_relation_meets_adjacent():\n    \"\"\"is2-1==ie1 时应返回 'meets'（规约后置条件）。\"\"\"\n    assert get_allen_relation((1, 3), (4, 6)) == \"meets\"\n\n\ndef test_get_allen_relation_metby_adjacent():\n    \"\"\"is1-1==ie2 时应返回 'metby'（规约后置条件）。\"\"\"\n    assert get_allen_relation((4, 6), (1, 3)) == \"metby\"\n\n\ndef test_get_allen_relation_equal_identical():\n    \"\"\"起点终点均相等时应返回 'equal'。\"\"\"\n    assert get_allen_relation((1, 3), (1, 3)) == \"equal\"\n\n\ndef test_get_allen_relation_before_separated():\n    \"\"\"duration1 完全在 duration2 之前（is2>ie1）应返回 'before'。\"\"\"\n    assert get_allen_relation((1, 2), (5, 6)) == \"before\"\n\n\ndef test_get_allen_relation_after_separated():\n    \"\"\"duration1 完全在 duration2 之后（is1>ie2）应返回 'after'。\"\"\"\n    assert get_allen_relation((5, 6), (1, 2)) == \"after\"\n\n\ndef test_get_allen_relation_overlaps_partial():\n    \"\"\"duration1 起点在前且与 duration2 部分重叠应返回 'overlaps'。\"\"\"\n    assert get_allen_relation((1, 4), (3, 6)) == \"overlaps\"\n\n\ndef test_get_allen_relation_overlapped_by_partial():\n    \"\"\"duration2 起点在前且与 duration1 部分重叠应返回 'overlapped_by'。\"\"\"\n    assert get_allen_relation((3, 6), (1, 4)) == \"overlapped_by\"\n\n\ndef test_get_allen_relation_during_contained():\n    \"\"\"duration1 完全被 duration2 包含应返回 'during'。\"\"\"\n    assert get_allen_relation((3, 4), (1, 6)) == \"during\"\n\n\ndef test_get_allen_relation_contains_container():\n    \"\"\"duration1 完全包含 duration2 应返回 'contains'。\"\"\"\n    assert get_allen_relation((1, 6), (3, 4)) == \"contains\"\n\n\ndef test_get_allen_relation_starts_same_start_shorter():\n    \"\"\"同起点且 duration1 更短应返回 'starts'。\"\"\"\n    assert get_allen_relation((1, 3), (1, 5)) == \"starts\"\n\n\ndef test_get_allen_relation_started_by_same_start_longer():\n    \"\"\"同起点且 duration1 更长应返回 'started_by'。\"\"\"\n    assert get_allen_relation((1, 5), (1, 3)) == \"started_by\"\n\n\ndef test_get_allen_relation_finishes_same_end_longer():\n    \"\"\"同终点且 duration1 更长应返回 'finishes'。\"\"\"\n    assert get_allen_relation((1, 5), (3, 5)) == \"finishes\"\n\n\ndef test_get_allen_relation_finished_by_same_end_shorter():\n    \"\"\"同终点且 duration1 更短应返回 'finished_by'。\"\"\"\n    assert get_allen_relation((3, 5), (1, 5)) == \"finished_by\"\n\n\n# ---------------------------------------------------------------------------\n# 边界情况\n# ---------------------------------------------------------------------------\n\ndef test_get_allen_relation_zero_valued_meets():\n    \"\"\"零值区间：is2-1==ie1 成立时应返回 'meets'。\"\"\"\n    assert get_allen_relation((0, 0), (1, 1)) == \"meets\"\n\n\ndef test_get_allen_relation_negative_valued_before():\n    \"\"\"负值区间：is2>ie1 时应返回 'before'。\"\"\"\n    assert get_allen_relation((-5, -3), (-1, 0)) == \"before\"\n\n\ndef test_get_allen_relation_float_overlaps():\n    \"\"\"浮点端点部分重叠应返回 'overlaps'。\"\"\"\n    assert get_allen_relation((1.0, 3.5), (3.0, 5.0)) == \"overlaps\"\n\n\ndef test_get_allen_relation_single_point_equal():\n    \"\"\"零长度单点区间相等应返回 'equal'。\"\"\"\n    assert get_allen_relation((2, 2), (2, 2)) == \"equal\"\n\n\n# ---------------------------------------------------------------------------\n# 返回值域不变量\n# ---------------------------------------------------------------------------\n\nVALID_RELATIONS = {\n    \"meets\",\n    \"metby\",\n    \"equal\",\n    \"before\",\n    \"after\",\n    \"overlaps\",\n    \"overlapped_by\",\n    \"during\",\n    \"contains\",\n    \"starts\",\n    \"started_by\",\n    \"finishes\",\n    \"finished_by\",\n}\n\n\n@pytest.mark.parametrize(\n    \"duration1,duration2\",\n    [\n        ((1, 3), (4, 6)),\n        ((4, 6), (1, 3)),\n        ((1, 3), (1, 3)),\n        ((1, 2), (5, 6)),\n        ((5, 6), (1, 2)),\n        ((1, 4), (3, 6)),\n        ((3, 6), (1, 4)),\n        ((3, 4), (1, 6)),\n        ((1, 6), (3, 4)),\n        ((1, 3), (1, 5)),\n        ((1, 5), (1, 3)),\n        ((1, 5), (3, 5)),\n        ((3, 5), (1, 5)),\n    ],\n)\ndef test_get_allen_relation_returns_valid_relation(duration1, duration2):\n    \"\"\"返回值必须属于规约定义的 13 种关系字符串集合。\"\"\"\n    result = get_allen_relation(duration1, duration2)\n    assert result in VALID_RELATIONS\n\n\n# ---------------------------------------------------------------------------\n# 非法输入（不满足前置条件）\n# ---------------------------------------------------------------------------\n\ndef test_get_allen_relation_invalid_duration1_length_raises():\n    \"\"\"duration1 含 3 个元素，无法解包为二元组，应抛出异常。\n\n    期望值来源：规约前置条件要求可解包为两个元素；具体异常类型未在\n    规约中明确，需人工确认（此处接受 ValueError 或 TypeError）。\n    \"\"\"\n    with pytest.raises((ValueError, TypeError)):\n        get_allen_relation((1, 2, 3), (4, 5))\n\n\ndef test_get_allen_relation_incomparable_types_raises():\n    \"\"\"字符串与整数不可比较，应抛出异常。\n\n    期望值来源：规约前置条件要求元素支持减法与比较运算；具体异常类型\n    未在规约中明确，需人工确认（此处接受 TypeError）。\n    \"\"\"\n    with pytest.raises(TypeError):\n        get_allen_relation((\"a\", \"b\"), (1, 2))",
+  "diagnosis": null,
+  "error_category": null,
+  "patch": "python\ndef get_allen_relation(duration1, duration2):\n\n    is1, ie1 = duration1\n    is2, ie2 = duration2\n\n    if is2 - 1 == ie1:\n        return 'meets'\n    elif is1 - 1 == ie2:\n        return 'metby'\n\n    elif is1 == is2 and ie1 == ie2:\n        return 'equal'\n\n    elif is2 > ie1:\n        return 'before'\n    elif is1 > ie2:\n        return 'after'\n\n    elif is1 == is2 and ie1 < ie2:\n        return 'starts'\n    elif is1 == is2 and ie1 > ie2:\n        return 'started_by'\n\n    elif ie1 == ie2 and is1 > is2:\n        return 'finishes'\n    elif ie1 == ie2 and is1 < is2:\n        return 'finished_by'\n\n    elif is1 > is2 and ie1 < ie2:\n        return 'during'\n    elif is1 < is2 and ie1 > ie2:\n        return 'contains'\n\n    elif is1 < is2 < ie1 < ie2:\n        return 'overlaps'\n    elif is2 < is1 < ie2 < ie1:\n        return 'overlapped_by'\n",
+  "test_passed": false,
+  "iterations": 3,
+  "coverage": 90.0,
+  "rag_stats": null,
+  "position_aware_focus": {
+    "focused": false,
+    "function_name": null,
+    "line": 75,
+    "hint": ""
+  },
+  "repo_verification": null,
+  "cross_file_deps": null,
+  "task_metadata": {
+    "source": "ult",
+    "function_name": "get_allen_relation",
+    "signature": "",
+    "cyclomatic_complexity": 1,
+    "mutation_primary_metric": true,
+    "no_gold_tests": false,
+    "gold_tests": [
+      "assert get_allen_relation((1, 5), (2, 3)) == 'meets'",
+      "assert get_allen_relation((1, 5), (5, 8)) == 'during'",
+      "assert get_allen_relation((1, 5), (3, 4)) == 'overlaps'",
+      "assert get_allen_relation((2, 5), (1, 3)) == 'overlapped_by'",
+      "assert get_allen_relation((1, 5), (6, 8)) == 'before'"
+    ],
+    "gold_tests_raw": "assert get_allen_relation((1, 5), (2, 3)) == 'meets'\nassert get_allen_relation((1, 5), (5, 8)) == 'during'\nassert get_allen_relation((1, 5), (3, 4)) == 'overlaps'\nassert get_allen_relation((2, 5), (1, 3)) == 'overlapped_by'\nassert get_allen_relation((1, 5), (6, 8)) == 'before'",
+    "test_cases": "from get_allen_relation import get_allen_relation\ndef test_1():\n    assert get_allen_relation((1, 5), (2, 3)) == 'meets'\n\ndef test_2():\n    assert get_allen_relation((1, 5), (5, 8)) == 'during'\n\ndef test_3():\n    assert get_allen_relation((1, 5), (3, 4)) == 'overlaps'\n\ndef test_4():\n    assert get_allen_relation((2, 5), (1, 3)) == 'overlapped_by'\n\ndef test_5():\n    assert get_allen_relation((1, 5), (6, 8)) == 'before'\n\n",
+    "fixed": "def get_allen_relation(duration1, duration2):\n\n    is1, ie1 = duration1\n    is2, ie2 = duration2\n\n    if is2-1 == ie1:\n        return 'meets'\n    elif is1-1 == ie2:\n        return 'metby'\n\n    elif is1 == is2 and ie1 == ie2:\n        return 'equal'\n\n    elif is2 > ie1:\n        return 'before'\n    elif is1 > ie2:\n        return 'after'\n\n    elif ie1 >= is2 and ie1 <= ie2 and is1 <= is2:\n        return 'overlaps'\n    elif ie2 >= is1 and ie2 <= ie1 and is2 <= is1:\n        return 'overlapped_by'\n    elif is1 >= is2 and ie1 <= ie2:\n        return 'during'\n    elif is1 <= is2 and ie1 >= ie2:\n        return 'contains'\n    elif is1 == is2 and ie1 < ie2:\n        return 'starts'\n    elif is1 == is2 and ie1 > ie2:\n        return 'started_by'\n    elif ie1 == ie2 and is2 < is1:\n        return 'finishes'\n    elif ie1 == ie2 and is2 > is1:\n        return 'finished_by'",
+    "suggested_function": "get_allen_relation",
+    "is_cross_file": false
+  }
+}

@@ -1,0 +1,634 @@
+{
+  "task_id": "ult__getNewCoordsAlongDirection",
+  "baseline": "aitester",
+  "test_plan": {
+    "function_name": "getNewCoordsAlongDirection",
+    "description": "根据方向(direction)、倾角(angleInclination)、起点坐标(position)和步长(n)，计算沿指定方向移动后的新坐标(x2,y2)。仅当direction与angleInclination组合落入已定义分支时返回整数坐标，否则返回(None,None)。",
+    "logic_analysis": {
+      "input_domain": "direction: 字符串，取值'L'/'R'/'T'/'B'（其他值无分支处理）；angleInclination: 数值，单位为度，代码按区间[0,90]、[270,360)、[90,180]、[180,270]、[270,360]、[0,90]、[90,180]等判断；position: 二元组(x1,y1)，数值；n: 数值，步长",
+      "output_domain": "二元组(x2,y2)，x2、y2为int（经math.floor取整）；当direction或angleInclination不匹配任何分支时返回(None,None)",
+      "preconditions": [
+        "direction为字符串且为'L'/'R'/'T'/'B'之一时可能进入对应分支",
+        "angleInclination为可被math.radians转换的数值",
+        "position为可解包为两个数值的二元组",
+        "n为数值"
+      ],
+      "postconditions": [
+        "返回二元组，元素为int或None",
+        "当direction与angleInclination组合未命中任何if/elif时返回(None,None)",
+        "x2/y2由math.floor向下取整得到"
+      ],
+      "edge_cases": [
+        "direction为'L'且angleInclination=0（命中0<=angle<=90）",
+        "direction为'L'且angleInclination=90（命中0<=angle<=90边界）",
+        "direction为'L'且angleInclination=270（命中270<=angle<360下界）",
+        "direction为'L'且angleInclination=360（不命中任何分支，返回None,None）",
+        "direction为'R'且angleInclination=90（命中90<=angle<=180下界）",
+        "direction为'R'且angleInclination=180（命中90<=angle<=180上界）",
+        "direction为'R'且angleInclination=270（命中180<angle<=270上界）",
+        "direction为'T'且angleInclination=180（不命中180<angle<=270，返回None,None）",
+        "direction为'T'且angleInclination=270（命中180<angle<=270上界）",
+        "direction为'T'且angleInclination=360（命中270<angle<=360上界）",
+        "direction为'B'且angleInclination=0（不命中0<angle<=90，返回None,None）",
+        "direction为'B'且angleInclination=90（命中0<angle<=90上界）",
+        "direction为'B'且angleInclination=180（命中90<angle<=180上界）",
+        "direction为未知值如'X'（返回None,None）",
+        "n=0（坐标不变，仍为x1,y1的floor）",
+        "n为负数（坐标反向移动）",
+        "position含负数坐标",
+        "angleInclination为负数（不命中任何分支，返回None,None）"
+      ]
+    },
+    "test_cases": [
+      {
+        "case_name": "L方向0度",
+        "input_args": {
+          "direction": "L",
+          "angleInclination": 0,
+          "position": [
+            10,
+            10
+          ],
+          "n": 5
+        },
+        "expected_output": [
+          5,
+          10
+        ],
+        "category": "normal",
+        "description": "验证L方向0度时x2=x1-n*cos0=x1-n，y2=y1-n*sin0=y1",
+        "logic_coverage": "direction=='L' && 0<=angleInclination<=90"
+      },
+      {
+        "case_name": "L方向45度",
+        "input_args": {
+          "direction": "L",
+          "angleInclination": 45,
+          "position": [
+            10,
+            10
+          ],
+          "n": 10
+        },
+        "expected_output": [
+          3,
+          3
+        ],
+        "category": "normal",
+        "description": "验证L方向45度时x2=floor(10-10*cos45)=floor(2.93)=2? 实际cos45≈0.7071，10-7.071=2.929，floor=2；y2=floor(10-7.071)=2。期望值按公式计算为[2,2]",
+        "logic_coverage": "direction=='L' && 0<=angleInclination<=90"
+      },
+      {
+        "case_name": "L方向90度边界",
+        "input_args": {
+          "direction": "L",
+          "angleInclination": 90,
+          "position": [
+            10,
+            10
+          ],
+          "n": 5
+        },
+        "expected_output": [
+          10,
+          5
+        ],
+        "category": "boundary",
+        "description": "验证L方向90度时x2=floor(10-5*cos90)=10，y2=floor(10-5*sin90)=5",
+        "logic_coverage": "direction=='L' && 0<=angleInclination<=90"
+      },
+      {
+        "case_name": "L方向270度下界",
+        "input_args": {
+          "direction": "L",
+          "angleInclination": 270,
+          "position": [
+            10,
+            10
+          ],
+          "n": 5
+        },
+        "expected_output": [
+          10,
+          15
+        ],
+        "category": "boundary",
+        "description": "验证L方向270度时x2=floor(10-5*cos270)=10，y2=floor(10+5*sin270)=5? sin270=-1，10+5*(-1)=5。期望值按公式为[10,5]",
+        "logic_coverage": "direction=='L' && 270<=angleInclination<360"
+      },
+      {
+        "case_name": "L方向315度",
+        "input_args": {
+          "direction": "L",
+          "angleInclination": 315,
+          "position": [
+            10,
+            10
+          ],
+          "n": 10
+        },
+        "expected_output": [
+          3,
+          3
+        ],
+        "category": "normal",
+        "description": "验证L方向315度时x2=floor(10-10*cos315)=floor(10-7.071)=2，y2=floor(10+10*sin315)=floor(10-7.071)=2",
+        "logic_coverage": "direction=='L' && 270<=angleInclination<360"
+      },
+      {
+        "case_name": "L方向360度不命中",
+        "input_args": {
+          "direction": "L",
+          "angleInclination": 360,
+          "position": [
+            10,
+            10
+          ],
+          "n": 5
+        },
+        "expected_output": [
+          null,
+          null
+        ],
+        "category": "boundary",
+        "description": "360不满足270<=angle<360，也不满足0<=angle<=90，返回(None,None)",
+        "logic_coverage": "direction=='L' 无匹配角度分支"
+      },
+      {
+        "case_name": "L方向180度不命中",
+        "input_args": {
+          "direction": "L",
+          "angleInclination": 180,
+          "position": [
+            10,
+            10
+          ],
+          "n": 5
+        },
+        "expected_output": [
+          null,
+          null
+        ],
+        "category": "boundary",
+        "description": "180不满足L的任何角度区间，返回(None,None)",
+        "logic_coverage": "direction=='L' 无匹配角度分支"
+      },
+      {
+        "case_name": "R方向90度下界",
+        "input_args": {
+          "direction": "R",
+          "angleInclination": 90,
+          "position": [
+            10,
+            10
+          ],
+          "n": 5
+        },
+        "expected_output": [
+          10,
+          15
+        ],
+        "category": "boundary",
+        "description": "验证R方向90度时x2=floor(10-5*cos90)=10，y2=floor(10+5*sin90)=15",
+        "logic_coverage": "direction=='R' && 90<=angleInclination<=180"
+      },
+      {
+        "case_name": "R方向135度",
+        "input_args": {
+          "direction": "R",
+          "angleInclination": 135,
+          "position": [
+            10,
+            10
+          ],
+          "n": 10
+        },
+        "expected_output": [
+          17,
+          17
+        ],
+        "category": "normal",
+        "description": "验证R方向135度时x2=floor(10-10*cos135)=floor(10+7.071)=17，y2=floor(10+10*sin135)=floor(17.071)=17",
+        "logic_coverage": "direction=='R' && 90<=angleInclination<=180"
+      },
+      {
+        "case_name": "R方向180度上界",
+        "input_args": {
+          "direction": "R",
+          "angleInclination": 180,
+          "position": [
+            10,
+            10
+          ],
+          "n": 5
+        },
+        "expected_output": [
+          15,
+          10
+        ],
+        "category": "boundary",
+        "description": "验证R方向180度时x2=floor(10-5*cos180)=15，y2=floor(10+5*sin180)=10",
+        "logic_coverage": "direction=='R' && 90<=angleInclination<=180"
+      },
+      {
+        "case_name": "R方向270度上界",
+        "input_args": {
+          "direction": "R",
+          "angleInclination": 270,
+          "position": [
+            10,
+            10
+          ],
+          "n": 5
+        },
+        "expected_output": [
+          10,
+          5
+        ],
+        "category": "boundary",
+        "description": "验证R方向270度时x2=floor(10-5*cos270)=10，y2=floor(10+5*sin270)=5",
+        "logic_coverage": "direction=='R' && 180<angleInclination<=270"
+      },
+      {
+        "case_name": "R方向225度",
+        "input_args": {
+          "direction": "R",
+          "angleInclination": 225,
+          "position": [
+            10,
+            10
+          ],
+          "n": 10
+        },
+        "expected_output": [
+          17,
+          3
+        ],
+        "category": "normal",
+        "description": "验证R方向225度时x2=floor(10-10*cos225)=floor(10+7.071)=17，y2=floor(10+10*sin225)=floor(10-7.071)=2? sin225=-0.7071，10-7.071=2.929，floor=2。期望值按公式为[17,2]",
+        "logic_coverage": "direction=='R' && 180<angleInclination<=270"
+      },
+      {
+        "case_name": "R方向0度不命中",
+        "input_args": {
+          "direction": "R",
+          "angleInclination": 0,
+          "position": [
+            10,
+            10
+          ],
+          "n": 5
+        },
+        "expected_output": [
+          null,
+          null
+        ],
+        "category": "boundary",
+        "description": "0不满足R的任何角度区间，返回(None,None)",
+        "logic_coverage": "direction=='R' 无匹配角度分支"
+      },
+      {
+        "case_name": "T方向270度上界",
+        "input_args": {
+          "direction": "T",
+          "angleInclination": 270,
+          "position": [
+            10,
+            10
+          ],
+          "n": 5
+        },
+        "expected_output": [
+          10,
+          5
+        ],
+        "category": "boundary",
+        "description": "验证T方向270度时x2=floor(10-5*cos270)=10，y2=floor(10+5*sin270)=5",
+        "logic_coverage": "direction=='T' && 180<angleInclination<=270"
+      },
+      {
+        "case_name": "T方向225度",
+        "input_args": {
+          "direction": "T",
+          "angleInclination": 225,
+          "position": [
+            10,
+            10
+          ],
+          "n": 10
+        },
+        "expected_output": [
+          17,
+          3
+        ],
+        "category": "normal",
+        "description": "验证T方向225度时x2=floor(10-10*cos225)=17，y2=floor(10+10*sin225)=2",
+        "logic_coverage": "direction=='T' && 180<angleInclination<=270"
+      },
+      {
+        "case_name": "T方向360度上界",
+        "input_args": {
+          "direction": "T",
+          "angleInclination": 360,
+          "position": [
+            10,
+            10
+          ],
+          "n": 5
+        },
+        "expected_output": [
+          15,
+          10
+        ],
+        "category": "boundary",
+        "description": "验证T方向360度时x2=floor(10+5*cos360)=15，y2=floor(10+5*sin360)=10",
+        "logic_coverage": "direction=='T' && 270<angleInclination<=360"
+      },
+      {
+        "case_name": "T方向315度",
+        "input_args": {
+          "direction": "T",
+          "angleInclination": 315,
+          "position": [
+            10,
+            10
+          ],
+          "n": 10
+        },
+        "expected_output": [
+          17,
+          3
+        ],
+        "category": "normal",
+        "description": "验证T方向315度时x2=floor(10+10*cos315)=floor(17.071)=17，y2=floor(10+10*sin315)=floor(2.929)=2",
+        "logic_coverage": "direction=='T' && 270<angleInclination<=360"
+      },
+      {
+        "case_name": "T方向180度不命中",
+        "input_args": {
+          "direction": "T",
+          "angleInclination": 180,
+          "position": [
+            10,
+            10
+          ],
+          "n": 5
+        },
+        "expected_output": [
+          null,
+          null
+        ],
+        "category": "boundary",
+        "description": "180不满足180<angle<=270（严格大于），返回(None,None)",
+        "logic_coverage": "direction=='T' 无匹配角度分支"
+      },
+      {
+        "case_name": "B方向90度上界",
+        "input_args": {
+          "direction": "B",
+          "angleInclination": 90,
+          "position": [
+            10,
+            10
+          ],
+          "n": 5
+        },
+        "expected_output": [
+          10,
+          15
+        ],
+        "category": "boundary",
+        "description": "验证B方向90度时x2=floor(10-5*cos90)=10，y2=floor(10+5*sin90)=15",
+        "logic_coverage": "direction=='B' && 0<angleInclination<=90"
+      },
+      {
+        "case_name": "B方向45度",
+        "input_args": {
+          "direction": "B",
+          "angleInclination": 45,
+          "position": [
+            10,
+            10
+          ],
+          "n": 10
+        },
+        "expected_output": [
+          3,
+          17
+        ],
+        "category": "normal",
+        "description": "验证B方向45度时x2=floor(10-10*cos45)=2，y2=floor(10+10*sin45)=17",
+        "logic_coverage": "direction=='B' && 0<angleInclination<=90"
+      },
+      {
+        "case_name": "B方向180度上界",
+        "input_args": {
+          "direction": "B",
+          "angleInclination": 180,
+          "position": [
+            10,
+            10
+          ],
+          "n": 5
+        },
+        "expected_output": [
+          15,
+          10
+        ],
+        "category": "boundary",
+        "description": "验证B方向180度时x2=floor(10+5*cos180)=5? cos180=-1，10+5*(-1)=5。期望值按公式为[5,10]",
+        "logic_coverage": "direction=='B' && 90<angleInclination<=180"
+      },
+      {
+        "case_name": "B方向135度",
+        "input_args": {
+          "direction": "B",
+          "angleInclination": 135,
+          "position": [
+            10,
+            10
+          ],
+          "n": 10
+        },
+        "expected_output": [
+          3,
+          17
+        ],
+        "category": "normal",
+        "description": "验证B方向135度时x2=floor(10+10*cos135)=floor(10-7.071)=2，y2=floor(10+10*sin135)=17",
+        "logic_coverage": "direction=='B' && 90<angleInclination<=180"
+      },
+      {
+        "case_name": "B方向0度不命中",
+        "input_args": {
+          "direction": "B",
+          "angleInclination": 0,
+          "position": [
+            10,
+            10
+          ],
+          "n": 5
+        },
+        "expected_output": [
+          null,
+          null
+        ],
+        "category": "boundary",
+        "description": "0不满足0<angle<=90（严格大于），返回(None,None)",
+        "logic_coverage": "direction=='B' 无匹配角度分支"
+      },
+      {
+        "case_name": "未知方向X",
+        "input_args": {
+          "direction": "X",
+          "angleInclination": 45,
+          "position": [
+            10,
+            10
+          ],
+          "n": 5
+        },
+        "expected_output": [
+          null,
+          null
+        ],
+        "category": "error",
+        "description": "direction为未知值，不进入任何分支，返回(None,None)",
+        "logic_coverage": "direction不匹配'L'/'R'/'T'/'B'"
+      },
+      {
+        "case_name": "角度为负数",
+        "input_args": {
+          "direction": "L",
+          "angleInclination": -10,
+          "position": [
+            10,
+            10
+          ],
+          "n": 5
+        },
+        "expected_output": [
+          null,
+          null
+        ],
+        "category": "error",
+        "description": "负角度不满足任何区间，返回(None,None)",
+        "logic_coverage": "direction=='L' 无匹配角度分支"
+      },
+      {
+        "case_name": "步长n为0",
+        "input_args": {
+          "direction": "L",
+          "angleInclination": 0,
+          "position": [
+            10,
+            10
+          ],
+          "n": 0
+        },
+        "expected_output": [
+          10,
+          10
+        ],
+        "category": "boundary",
+        "description": "n=0时坐标不变，x2=floor(10-0)=10，y2=floor(10-0)=10",
+        "logic_coverage": "direction=='L' && 0<=angleInclination<=90"
+      },
+      {
+        "case_name": "步长n为负数",
+        "input_args": {
+          "direction": "L",
+          "angleInclination": 0,
+          "position": [
+            10,
+            10
+          ],
+          "n": -5
+        },
+        "expected_output": [
+          15,
+          10
+        ],
+        "category": "boundary",
+        "description": "n=-5时x2=floor(10-(-5)*cos0)=15，y2=floor(10-(-5)*sin0)=10",
+        "logic_coverage": "direction=='L' && 0<=angleInclination<=90"
+      },
+      {
+        "case_name": "负坐标位置",
+        "input_args": {
+          "direction": "R",
+          "angleInclination": 180,
+          "position": [
+            -10,
+            -10
+          ],
+          "n": 5
+        },
+        "expected_output": [
+          -5,
+          -10
+        ],
+        "category": "boundary",
+        "description": "验证负坐标下R方向180度：x2=floor(-10-5*cos180)=floor(-5)=-5，y2=floor(-10+5*sin180)=-10",
+        "logic_coverage": "direction=='R' && 90<=angleInclination<=180"
+      },
+      {
+        "case_name": "大数值溢出边界",
+        "input_args": {
+          "direction": "L",
+          "angleInclination": 0,
+          "position": [
+            1000000,
+            1000000
+          ],
+          "n": 1000000
+        },
+        "expected_output": [
+          0,
+          1000000
+        ],
+        "category": "boundary",
+        "description": "验证大数值下x2=floor(1000000-1000000*cos0)=0，y2=1000000",
+        "logic_coverage": "direction=='L' && 0<=angleInclination<=90"
+      }
+    ],
+    "logic_degraded": false,
+    "coverage_completeness": 1.0
+  },
+  "generated_test": "import math\nimport pytest\n\nfrom getNewCoordsAlongDirection import getNewCoordsAlongDirection\n\n\ndef _floor(v):\n    return math.floor(v)\n\n\n# ---------------------------------------------------------------------------\n# 正常分支用例（期望值由规约中的方向/角度区间与 floor 语义推导）\n# ---------------------------------------------------------------------------\n\ndef test_getNewCoordsAlongDirection_L_0deg():\n    \"\"\"L 方向 0 度：命中 0<=angle<=90，x2=floor(x1-n*cos0)=x1-n，y2=floor(y1-n*sin0)=y1。\"\"\"\n    result = getNewCoordsAlongDirection(\"L\", 0, (10, 10), 5)\n    assert result == (5, 10)\n\n\ndef test_getNewCoordsAlongDirection_L_45deg():\n    \"\"\"L 方向 45 度：命中 0<=angle<=90，x2=floor(10-10*cos45)=2，y2=floor(10-10*sin45)=2。\"\"\"\n    result = getNewCoordsAlongDirection(\"L\", 45, (10, 10), 10)\n    assert result == (2, 2)\n\n\ndef test_getNewCoordsAlongDirection_L_90deg_boundary():\n    \"\"\"L 方向 90 度：命中 0<=angle<=90 上界，x2=floor(10-5*cos90)=10，y2=floor(10-5*sin90)=5。\"\"\"\n    result = getNewCoordsAlongDirection(\"L\", 90, (10, 10), 5)\n    assert result == (10, 5)\n\n\ndef test_getNewCoordsAlongDirection_L_270deg_lower_bound():\n    \"\"\"L 方向 270 度：命中 270<=angle<360 下界，x2=floor(10-5*cos270)=10，y2=floor(10+5*sin270)=5。\"\"\"\n    result = getNewCoordsAlongDirection(\"L\", 270, (10, 10), 5)\n    assert result == (10, 5)\n\n\ndef test_getNewCoordsAlongDirection_L_315deg():\n    \"\"\"L 方向 315 度：命中 270<=angle<360，x2=floor(10-10*cos315)=2，y2=floor(10+10*sin315)=2。\"\"\"\n    result = getNewCoordsAlongDirection(\"L\", 315, (10, 10), 10)\n    assert result == (2, 2)\n\n\ndef test_getNewCoordsAlongDirection_R_90deg_lower_bound():\n    \"\"\"R 方向 90 度：命中 90<=angle<=180 下界，x2=floor(10-5*cos90)=10，y2=floor(10+5*sin90)=15。\"\"\"\n    result = getNewCoordsAlongDirection(\"R\", 90, (10, 10), 5)\n    assert result == (10, 15)\n\n\ndef test_getNewCoordsAlongDirection_R_135deg():\n    \"\"\"R 方向 135 度：命中 90<=angle<=180，x2=floor(10-10*cos135)=17，y2=floor(10+10*sin135)=17。\"\"\"\n    result = getNewCoordsAlongDirection(\"R\", 135, (10, 10), 10)\n    assert result == (17, 17)\n\n\ndef test_getNewCoordsAlongDirection_R_180deg_upper_bound():\n    \"\"\"R 方向 180 度：命中 90<=angle<=180 上界，x2=floor(10-5*cos180)=15，y2=floor(10+5*sin180)=10。\"\"\"\n    result = getNewCoordsAlongDirection(\"R\", 180, (10, 10), 5)\n    assert result == (15, 10)\n\n\ndef test_getNewCoordsAlongDirection_R_270deg_upper_bound():\n    \"\"\"R 方向 270 度：命中 180<angle<=270 上界，x2=floor(10-5*cos270)=10，y2=floor(10+5*sin270)=5。\"\"\"\n    result = getNewCoordsAlongDirection(\"R\", 270, (10, 10), 5)\n    assert result == (10, 5)\n\n\ndef test_getNewCoordsAlongDirection_R_225deg():\n    \"\"\"R 方向 225 度：命中 180<angle<=270，x2=floor(10-10*cos225)=17，y2=floor(10+10*sin225)=2。\"\"\"\n    result = getNewCoordsAlongDirection(\"R\", 225, (10, 10), 10)\n    assert result == (17, 2)\n\n\ndef test_getNewCoordsAlongDirection_T_270deg_upper_bound():\n    \"\"\"T 方向 270 度：命中 180<angle<=270 上界，x2=floor(10-5*cos270)=10，y2=floor(10+5*sin270)=5。\"\"\"\n    result = getNewCoordsAlongDirection(\"T\", 270, (10, 10), 5)\n    assert result == (10, 5)\n\n\ndef test_getNewCoordsAlongDirection_T_225deg():\n    \"\"\"T 方向 225 度：命中 180<angle<=270，x2=floor(10-10*cos225)=17，y2=floor(10+10*sin225)=2。\"\"\"\n    result = getNewCoordsAlongDirection(\"T\", 225, (10, 10), 10)\n    assert result == (17, 2)\n\n\ndef test_getNewCoordsAlongDirection_T_360deg_upper_bound():\n    \"\"\"T 方向 360 度：命中 270<angle<=360 上界，x2=floor(10+5*cos360)=15，y2=floor(10+5*sin360)=10。\"\"\"\n    result = getNewCoordsAlongDirection(\"T\", 360, (10, 10), 5)\n    assert result == (15, 10)\n\n\ndef test_getNewCoordsAlongDirection_T_315deg():\n    \"\"\"T 方向 315 度：命中 270<angle<=360，x2=floor(10+10*cos315)=17，y2=floor(10+10*sin315)=2。\"\"\"\n    result = getNewCoordsAlongDirection(\"T\", 315, (10, 10), 10)\n    assert result == (17, 2)\n\n\ndef test_getNewCoordsAlongDirection_B_90deg_upper_bound():\n    \"\"\"B 方向 90 度：命中 0<angle<=90 上界，x2=floor(10-5*cos90)=10，y2=floor(10+5*sin90)=15。\"\"\"\n    result = getNewCoordsAlongDirection(\"B\", 90, (10, 10), 5)\n    assert result == (10, 15)\n\n\ndef test_getNewCoordsAlongDirection_B_45deg():\n    \"\"\"B 方向 45 度：命中 0<angle<=90，x2=floor(10-10*cos45)=2，y2=floor(10+10*sin45)=17。\"\"\"\n    result = getNewCoordsAlongDirection(\"B\", 45, (10, 10), 10)\n    assert result == (2, 17)\n\n\ndef test_getNewCoordsAlongDirection_B_180deg_upper_bound():\n    \"\"\"B 方向 180 度：命中 90<angle<=180 上界，x2=floor(10+5*cos180)=5，y2=floor(10+5*sin180)=10。\"\"\"\n    result = getNewCoordsAlongDirection(\"B\", 180, (10, 10), 5)\n    assert result == (5, 10)\n\n\ndef test_getNewCoordsAlongDirection_B_135deg():\n    \"\"\"B 方向 135 度：命中 90<angle<=180，x2=floor(10+10*cos135)=2，y2=floor(10+10*sin135)=17。\"\"\"\n    result = getNewCoordsAlongDirection(\"B\", 135, (10, 10), 10)\n    assert result == (2, 17)\n\n\n# ---------------------------------------------------------------------------\n# 未命中分支：返回 (None, None)\n# ---------------------------------------------------------------------------\n\ndef test_getNewCoordsAlongDirection_L_360deg_no_match():\n    \"\"\"L 方向 360 度：不满足 270<=angle<360 也不满足 0<=angle<=90，返回 (None, None)。\"\"\"\n    result = getNewCoordsAlongDirection(\"L\", 360, (10, 10), 5)\n    assert result == (None, None)\n\n\ndef test_getNewCoordsAlongDirection_L_180deg_no_match():\n    \"\"\"L 方向 180 度：不满足 L 的任何角度区间，返回 (None, None)。\"\"\"\n    result = getNewCoordsAlongDirection(\"L\", 180, (10, 10), 5)\n    assert result == (None, None)\n\n\ndef test_getNewCoordsAlongDirection_R_0deg_no_match():\n    \"\"\"R 方向 0 度：不满足 R 的任何角度区间，返回 (None, None)。\"\"\"\n    result = getNewCoordsAlongDirection(\"R\", 0, (10, 10), 5)\n    assert result == (None, None)\n\n\ndef test_getNewCoordsAlongDirection_T_180deg_no_match():\n    \"\"\"T 方向 180 度：不满足 180<angle<=270（严格大于），返回 (None, None)。\"\"\"\n    result = getNewCoordsAlongDirection(\"T\", 180, (10, 10), 5)\n    assert result == (None, None)\n\n\ndef test_getNewCoordsAlongDirection_B_0deg_no_match():\n    \"\"\"B 方向 0 度：不满足 0<angle<=90（严格大于），返回 (None, None)。\"\"\"\n    result = getNewCoordsAlongDirection(\"B\", 0, (10, 10), 5)\n    assert result == (None, None)\n\n\ndef test_getNewCoordsAlongDirection_unknown_direction_X():\n    \"\"\"未知方向 'X'：不匹配 'L'/'R'/'T'/'B'，返回 (None, None)。\"\"\"\n    result = getNewCoordsAlongDirection(\"X\", 45, (10, 10), 5)\n    assert result == (None, None)\n\n\ndef test_getNewCoordsAlongDirection_negative_angle_no_match():\n    \"\"\"负角度 -10：不满足任何区间，返回 (None, None)。\"\"\"\n    result = getNewCoordsAlongDirection(\"L\", -10, (10, 10), 5)\n    assert result == (None, None)\n\n\n# ---------------------------------------------------------------------------\n# 边界：n=0、n 为负数、负坐标、大数值\n# ---------------------------------------------------------------------------\n\ndef test_getNewCoordsAlongDirection_n_zero():\n    \"\"\"n=0：坐标不变，x2=floor(10-0)=10，y2=floor(10-0)=10。\"\"\"\n    result = getNewCoordsAlongDirection(\"L\", 0, (10, 10), 0)\n    assert result == (10, 10)\n\n\ndef test_getNewCoordsAlongDirection_n_negative():\n    \"\"\"n=-5：坐标反向移动，x2=floor(10-(-5)*cos0)=15，y2=floor(10-(-5)*sin0)=10。\"\"\"\n    result = getNewCoordsAlongDirection(\"L\", 0, (10, 10), -5)\n    assert result == (15, 10)\n\n\ndef test_getNewCoordsAlongDirection_negative_position():\n    \"\"\"负坐标：R 方向 180 度，x2=floor(-10-5*cos180)=-5，y2=floor(-10+5*sin180)=-10。\"\"\"\n    result = getNewCoordsAlongDirection(\"R\", 180, (-10, -10), 5)\n    assert result == (-5, -10)\n\n\ndef test_getNewCoordsAlongDirection_large_values():\n    \"\"\"大数值：L 方向 0 度，x2=floor(1000000-1000000*cos0)=0，y2=floor(1000000-1000000*sin0)=1000000。\"\"\"\n    result = getNewCoordsAlongDirection(\"L\", 0, (1000000, 1000000), 1000000)\n    assert result == (0, 1000000)\n\n\n# ---------------------------------------------------------------------------\n# 后置条件：返回类型为二元组，元素为 int 或 None\n# ---------------------------------------------------------------------------\n\n@pytest.mark.parametrize(\n    \"direction,angle,position,n\",\n    [\n        (\"L\", 0, (10, 10), 5),\n        (\"R\", 135, (10, 10), 10),\n        (\"T\", 315, (10, 10), 10),\n        (\"B\", 45, (10, 10), 10),\n        (\"L\", 360, (10, 10), 5),\n        (\"X\", 45, (10, 10), 5),\n    ],\n)\ndef test_getNewCoordsAlongDirection_return_type(direction, angle, position, n):\n    \"\"\"后置条件：返回二元组，元素为 int 或 None。\"\"\"\n    result = getNewCoordsAlongDirection(direction, angle, position, n)\n    assert isinstance(result, tuple)\n    assert len(result) == 2\n    for item in result:\n        assert item is None or isinstance(item, int)",
+  "diagnosis": null,
+  "error_category": null,
+  "patch": "python\nimport math\n\n\ndef getNewCoordsAlongDirection(direction, angleInclination, position, n):\n    x1, y1 = position\n    x2, y2 = None, None\n    if direction == 'L':\n        # Sign X (correct) Y (may change)\n        if 0 <= angleInclination <= 90:\n            x2 = int(math.floor(x1 - n * math.cos(math.radians(angleInclination))))\n            y2 = int(math.floor(y1 - n * math.sin(math.radians(angleInclination))))\n        elif 270 <= angleInclination < 360:\n            x2 = int(math.floor(x1 - n * math.cos(math.radians(angleInclination))))\n            y2 = int(math.floor(y1 + n * math.sin(math.radians(angleInclination))))\n    elif direction == 'R':\n        # Sign X (correct) Y (may change)\n        if 90 <= angleInclination <= 180:\n            x2 = int(math.floor(x1 - n * math.cos(math.radians(angleInclination))))\n            y2 = int(math.floor(y1 + n * math.sin(math.radians(angleInclination))))\n        elif 180 < angleInclination <= 270:\n            x2 = int(math.floor(x1 - n * math.cos(math.radians(angleInclination))))\n            y2 = int(math.floor(y1 + n * math.sin(math.radians(angleInclination))))\n    elif direction == 'T':\n        # Sign Y (correct) X (may change)\n        if 180 < angleInclination <= 270:\n            x2 = int(math.floor(x1 - n * math.cos(math.radians(angleInclination))))\n            y2 = int(math.floor(y1 + n * math.sin(math.radians(angleInclination))))\n        elif 270 < angleInclination <= 360:\n            x2 = int(math.floor(x1 + n * math.cos(math.radians(angleInclination))))\n            y2 = int(math.floor(y1 + n * math.sin(math.radians(angleInclination))))\n    elif direction == 'B':\n        # Sign Y (correct) X (may change)\n        if 0 < angleInclination <= 90:\n            x2 = int(math.floor(x1 - n * math.cos(math.radians(angleInclination))))\n            y2 = int(math.floor(y1 + n * math.sin(math.radians(angleInclination))))\n        elif 90 < angleInclination <= 180:\n            x2 = int(math.floor(x1 + n * math.cos(math.radians(angleInclination))))\n            y2 = int(math.floor(y1 + n * math.sin(math.radians(angleInclination))))\n    return x2, y2\n",
+  "test_passed": false,
+  "iterations": 3,
+  "coverage": 77.0,
+  "rag_stats": null,
+  "position_aware_focus": {
+    "focused": false,
+    "function_name": null,
+    "line": 151,
+    "hint": ""
+  },
+  "repo_verification": null,
+  "cross_file_deps": null,
+  "task_metadata": {
+    "source": "ult",
+    "function_name": "getNewCoordsAlongDirection",
+    "signature": "",
+    "cyclomatic_complexity": 1,
+    "mutation_primary_metric": true,
+    "no_gold_tests": false,
+    "gold_tests": [
+      "assert getNewCoordsAlongDirection('T', 90, (0, 0), 1) == (0, 1)",
+      "assert getNewCoordsAlongDirection('T', 270, (0, 0), 1) == (1, -1)",
+      "assert getNewCoordsAlongDirection('L', 180, (0, 0), 1) == (-1, 0)",
+      "assert getNewCoordsAlongDirection('B', 0, (0, 0), 1) == (1, 0)",
+      "assert getNewCoordsAlongDirection('R', 90, (0, 0), 1) == (-1, 1)"
+    ],
+    "gold_tests_raw": "assert getNewCoordsAlongDirection('T', 90, (0, 0), 1) == (0, 1)\nassert getNewCoordsAlongDirection('T', 270, (0, 0), 1) == (1, -1)\nassert getNewCoordsAlongDirection('L', 180, (0, 0), 1) == (-1, 0)\nassert getNewCoordsAlongDirection('B', 0, (0, 0), 1) == (1, 0)\nassert getNewCoordsAlongDirection('R', 90, (0, 0), 1) == (-1, 1)",
+    "test_cases": "from getNewCoordsAlongDirection import getNewCoordsAlongDirection\ndef test_1():\n    assert getNewCoordsAlongDirection('T', 90, (0, 0), 1) == (0, 1)\n\ndef test_2():\n    assert getNewCoordsAlongDirection('T', 270, (0, 0), 1) == (1, -1)\n\ndef test_3():\n    assert getNewCoordsAlongDirection('L', 180, (0, 0), 1) == (-1, 0)\n\ndef test_4():\n    assert getNewCoordsAlongDirection('B', 0, (0, 0), 1) == (1, 0)\n\ndef test_5():\n    assert getNewCoordsAlongDirection('R', 90, (0, 0), 1) == (-1, 1)\n\n",
+    "fixed": "def getNewCoordsAlongDirection(direction, angleInclination, position, n):\r\n    x1, y1 = position\r\n    x2, y2 = None, None\r\n    if direction == 'L':\r\n        # Sign X (correct) Y (may change)\r\n        if 0 <= angleInclination <= 90:\r\n            x2 = int(math.floor(x1 - n * math.cos(math.radians(angleInclination))))\r\n            y2 = int(math.floor(y1 - n * math.sin(math.radians(angleInclination))))\r\n        elif  270 <= angleInclination < 360:\r\n            x2 = int(math.floor(x1 - n * math.cos(math.radians(angleInclination))))\r\n            y2 = int(math.floor(y1 + n * math.sin(math.radians(angleInclination))))\r\n    elif direction == 'R':\r\n        # Sign X (correct) Y (may change)\r\n        if 90 <= angleInclination <= 180:\r\n            x2 = int(math.floor(x1 - n * math.cos(math.radians(angleInclination))))\r\n            y2 = int(math.floor(y1 + n * math.sin(math.radians(angleInclination))))\r\n        elif  180 < angleInclination <= 270:\r\n            x2 = int(math.floor(x1 - n * math.cos(math.radians(angleInclination))))\r\n            y2 = int(math.floor(y1 + n * math.sin(math.radians(angleInclination))))\r\n    elif direction == 'T':\r\n        # Sign Y (correct) X (may change)\r\n        if  180 < angleInclination <= 270:\r\n            x2 = int(math.floor(x1 - n * math.cos(math.radians(angleInclination))))\r\n            y2 = int(math.floor(y1 + n * math.sin(math.radians(angleInclination))))\r\n        elif  270 < angleInclination <= 360:\r\n            x2 = int(math.floor(x1 + n * math.cos(math.radians(angleInclination))))\r\n            y2 = int(math.floor(y1 + n * math.sin(math.radians(angleInclination))))\r\n    elif direction == 'B':\r\n        # Sign Y (correct) X (may change)\r\n        if  0 < angleInclination <= 90:\r\n            x2 = int(math.floor(x1 - n * math.cos(math.radians(angleInclination))))\r\n            y2 = int(math.floor(y1 + n * math.sin(math.radians(angleInclination))))\r\n        elif  90 < angleInclination <= 180:\r\n            x2 = int(math.floor(x1 + n * math.cos(math.radians(angleInclination))))\r\n            y2 = int(math.floor(y1 + n * math.sin(math.radians(angleInclination))))\r\n    return x2, y2",
+    "suggested_function": "getNewCoordsAlongDirection",
+    "is_cross_file": false
+  }
+}

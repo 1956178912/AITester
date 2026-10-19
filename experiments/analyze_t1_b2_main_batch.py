@@ -9,7 +9,11 @@
 
 产出（--write 时）：
     <out>/ANALYSIS_REPORT.json   判定（§1.2 pre-registered）+ 逐 seed/合并表 + 与原批并排 + provenance 漂移
-    <out>/README.md              中文报告（含 §1.1 硬门槛、判定、三指标、成本、口径与局限）
+    <out>/README.md              中文报告（含 §1.1 硬门槛、判定、三指标、成本、口径与局限）。
+                                  生成内容之外的**手工维护节**用 `<!-- MANUAL:BEGIN/END -->`
+                                  标记包裹，--write 时原样保留在文末（防重跑丢失手写
+                                  解读；X 轮 2026-10-19 增设，回归锁见
+                                  tests/test_analyze_t1_b2_manual_sections.py）。
 
 口径：
 - detection 计数 = 行 `detection_rate` 值 >= 1.0（None 不进分母）；同时并列 `llm_suite_detection_rate`
@@ -706,6 +710,49 @@ def render_readme(report: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+_MANUAL_BEGIN = "<!-- MANUAL:BEGIN -->"
+_MANUAL_END = "<!-- MANUAL:END -->"
+
+
+def _preserve_manual_sections(generated: str, existing_path: Path) -> str:
+    """把既有 README 中 MANUAL 标记块原样保留到生成内容末尾。
+
+    背景（X 轮 2026-10-19）：归档 README 曾含手工追加的"0.6 T 轮发现（可辩护
+    表述，写死防事后改写）"节，而 `render_readme` 从零生成——重跑 `--write` 会
+    **静默丢失**该节（复算实证：/tmp 副本重跑后 diff 缺 32 行）。标记块内的
+    内容为手写解读（引用数字须人工与 report 核对后更新），生成器不重写、不
+    校验其内容，只保证不丢。
+
+    规则：
+    - 仅保留 `MANUAL:BEGIN` 与 `MANUAL:END` 成对闭合的块（未闭合标记整体
+      不保留——防截断内容被当作完整块）；
+    - 多个块按原相对顺序追加到生成内容末尾；
+    - 既有文件不存在（首次生成）时原样返回。
+    """
+    if not existing_path.is_file():
+        return generated
+    existing = existing_path.read_text(encoding="utf-8")
+    blocks: list[str] = []
+    rest = existing
+    while True:
+        begin = rest.find(_MANUAL_BEGIN)
+        if begin < 0:
+            break
+        end = rest.find(_MANUAL_END, begin)
+        if end < 0:
+            break
+        blocks.append(rest[begin : end + len(_MANUAL_END)].strip("\n"))
+        rest = rest[end + len(_MANUAL_END) :]
+    if not blocks:
+        return generated
+    header = (
+        "\n\n---\n\n"
+        "<!-- 以下为手工维护节（MANUAL 标记块）：生成器 --write 时原样保留，\n"
+        "     不重写亦不校验其内容；块内引用数字更新须人工核对后编辑。 -->\n"
+    )
+    return generated.rstrip("\n") + "\n" + header + "\n\n" + "\n\n".join(blocks) + "\n"
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="T1（B2）主批次锁指纹复现批分析（零 LLM）")
     parser.add_argument("--out", required=True, help="T1 结果目录")
@@ -721,7 +768,8 @@ def main(argv: list[str] | None = None) -> int:
         (out_dir / "ANALYSIS_REPORT.json").write_text(
             json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
         )
-        (out_dir / "README.md").write_text(render_readme(report), encoding="utf-8")
+        readme_path = out_dir / "README.md"
+        readme_path.write_text(_preserve_manual_sections(render_readme(report), readme_path), encoding="utf-8")
         (out_dir / "BASELINE_FRAGMENT.yaml").write_text(render_baseline_fragment(report), encoding="utf-8")
         print(f"已写出：{out_dir / 'ANALYSIS_REPORT.json'}")
         print(f"已写出：{out_dir / 'README.md'}")
