@@ -1,10 +1,61 @@
 > **语言 / Language**：[English](CHANGELOG.en.md) | 简体中文（本文）
 >
-> Last updated: 2026-10-19（Y 轮：**修复覆盖率缺口审计**——以 coverage.xml 行集合为权威，审计 ff15a2f→HEAD 的 src/ 修复新增代码，552 行中 37 行（6.70%）从未被测试执行；补齐 A11 跨模型预算复查 / A11 zai 预算透传 / A15 同端点后缀 / A09 旧键材料 共 5 例回归锁，逐项经变异验证；审计工具入库。此前 X 轮：论文复现性闭环与系统评审（12 项零 LLM 复算全吻合 + 五个复现性缺口修复 + 14 例回归锁）；W 轮：第二轮第三方复核残留补修（A07/A09/A10）；V 轮：第三方独立评审 23 项修复；U/T/S/R/Q/P/O/N/M/L/K 轮同日登记）
+> Last updated: 2026-10-19（Y2 轮：**审计收口与 experiments 侧首次审计**——补齐 A20 三级降级链 3 例、A06 生产入口元数据接线 2 例、A16 flaky 证据消费 3 例，全部经变异验证；experiments/ 核心库模块已充分锁定，未覆盖集中于 CLI 薄壳；记录 2 个死函数与 6 行错误处理缺口。此前 Y 轮：修复覆盖率缺口审计（552 行中 37 行零覆盖 + 5 例回归锁 + 审计工具入库）；X 轮：论文复现性闭环与系统评审；W 轮：第二轮第三方复核残留补修（A07/A09/A10）；V 轮：第三方独立评审 23 项修复；U/T/S/R/Q/P/O/N/M/L/K 轮同日登记）
 
 # Changelog
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
+
+## [Unreleased] — 2026-10-19 Y2 轮：审计收口与 experiments 侧首次审计（零 LLM，$0）
+
+> Y 轮审计的收口：补齐 `src/` 剩余的 A20 守卫缺口，并把同一方法首次应用到
+> `experiments/`（Y 轮明确披露未覆盖的领域）。真实 LLM 花费：**$0**。
+> 详细报告：`docs/reviews/FIX_COVERAGE_AUDIT_ROUND2_2026-10-19.md`。
+
+### Fixed — A20 三级降级链补口（`trace.py`，3 例）
+
+- A20 的契约是"宁可少一条观测记录，也不写坏行污染整份轨迹"，由三级降级实现：
+  ① `_redact_record` 结构脱敏抛异常 → 原样返回；② `_append` 的 `json.loads`
+  结构守卫 → 丢弃该行；③ `dump_recent_to` 序列化失败（`__str__` 抛异常）→ 跳过该行。
+- **既有测试名不副实**：`test_dump_with_unserializable_object_does_not_emit_bad_line`
+  的 `_Weird.__str__` 正常返回字符串，走的是"成功序列化"路径，从未触发丢弃分支。
+- 变异验证：三级逐项单独注入后，每次仅目标用例变红、其余 17 例全绿。
+
+### Fixed — A06 生产入口的元数据接线（`statistical_analysis.py:2749-2750`，2 例）
+
+- A06 层 1（归档 `task_metadata.pattern_name` 优先于 task_id 查表）逻辑本身有
+  8 个 `build_cluster_map` 用例，但**没有任何用例经过生产入口 `cluster_robust_analysis`**
+  ——入口里"从行内收集 metadata"的分支零执行。
+- **后果**：若收集被破坏，层 1 永不触发，簇统计静默退回 task_id 查表——正是 A06
+  修掉的跨 seed 错映射（223/261 行、26 簇、p≈6.6e-05 夸大的显著性），而既有测试全绿。
+- 变异验证：把收集条件改恒假后，**仅新增 2 例变红，46 个既有用例（含 8 个层 1 逻辑
+  测试）全绿**。
+
+### Fixed — A16 flaky 证据消费（`run_benchmark.py:281-287`，3 例）
+
+- `_apply_execution_flaky_evidence` 在 `flaky_fail_then_pass=True` 时保守记
+  `test_passed=False` 并写真实 pass/total 计数；既有测试只覆盖了非 flaky 的快速
+  返回路径，该分支零执行。
+- **后果**：single_agent 基线会把"同测试首败次过"记成成功，把执行不稳定抹成成功
+  证据——A16 要消除的判分偏差原样复活。
+
+### Audit — experiments/ 侧首次审计
+
+- 992 行修复新增代码、550 行未执行（55.44%），但**这不是缺陷信号**：其中 531 行
+  属于 X 轮入库的 6 个零 LLM 复算入口脚本的 `argparse` + `main()` 薄壳（由
+  `test_emse_recompute_entrypoints.py` 以函数级调用验证）。
+- 核心库模块全部干净：`_m1_metrics` 19/0、`_row_pairing` 20/0、`bayesian_paired`
+  3/0、`spec_examples_generator` 4/0、两个 A08 调用点 1/0。
+- 审计工具新增 `--pathspec`，可对 `src/` 与 `experiments/` 分别重跑。
+
+### Recorded — 死代码与剩余缺口（未改生产代码）
+
+- **死代码**：`_strip_seed_prefix`（`statistical_analysis.py:2290`）与
+  `_rebuilt_task_fingerprints`（`2327`）全仓（含测试）无任何调用点，推断为 A06
+  重构遗留；删除安全，本轮按最小改动原则未删，建议下轮清理。
+- **剩余**：`statistical_analysis.py:2747`（重复/空 task_id 的 `continue`）、
+  `run_benchmark.py` 的 provenance 读取失败/格式不符/git 异常共 6 行（错误处理，
+  建议下轮补）。
 
 ## [Unreleased] — 2026-10-19 Y 轮：修复覆盖率缺口审计（零 LLM，$0）
 

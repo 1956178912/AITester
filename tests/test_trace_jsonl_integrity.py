@@ -213,3 +213,86 @@ class TestRedactRecordHelper:
         redacted = trace_mod._redact_record({"obj": _Weird()})
         assert isinstance(redacted["obj"], str)
         assert "abcdefgh123456" not in redacted["obj"]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  2026-10-19 Y 轮审计补口：三处降级守卫此前零执行
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# 审计来源：`ff15a2f`→HEAD 的逐行覆盖率审计显示，A20 的三处"坏行不落盘"
+# 守卫（`trace.py:147-149` / `260-262` / `469-471`）虽然存在且被注释详述，
+# 却**从未被任何测试执行**。既有 `test_dump_with_unserializable_object_*`
+# 名不副实：它的 `_Weird.__str__` 正常返回字符串，走的是"成功序列化"路径，
+# 并没有触发丢弃分支；真正的触发条件是 `__str__` 自己抛异常。
+
+
+class TestA20DegradationGuards:
+    """A20 三级降级链：结构脱敏失败 → 原样序列化 → 序列化失败 → 丢弃该行。
+
+    这条链的设计目标是"宁可少一条观测记录，也不写坏行污染整份轨迹"。
+    任何一环被回退，坏行都可能落盘，而既有测试仍全绿。
+    """
+
+    def test_redact_record_degrades_to_raw_when_masking_raises(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """第 1 级：`_redact_json_value` 抛异常 → 原样返回入参（不阻断写入）。"""
+
+        def _boom(value, mask):
+            raise RuntimeError("脱敏原语故障")
+
+        monkeypatch.setattr(trace_mod, "_redact_json_value", _boom)
+        record = {"event": "node", "text": "key=abcdefgh123456"}
+        assert trace_mod._redact_record(record) is record, "脱敏失败须原样返回同一对象（不复制、不改写）"
+
+    def test_append_drops_line_failing_structure_guard(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """第 2 级：`json.dumps` 成功但 `json.loads` 失败 → 丢弃该行，文件不落盘。
+
+        正常情况下 dumps 的产物必然可 loads，故这是"序列化链路被上游破坏"的
+        兜底断言；用替身 json 强制它失败，锁定"不合法即丢弃、绝不写坏行"。
+        """
+
+        class _FakeJson:
+            dumps = staticmethod(json.dumps)
+
+            @staticmethod
+            def loads(text: str):
+                raise ValueError("模拟结构损坏")
+
+        monkeypatch.setattr(trace_mod, "json", _FakeJson)
+        TraceSession("guard-task", trace_directory=str(tmp_path))
+
+        path = tmp_path / "guard-task.trace.jsonl"
+        assert not path.exists(), "结构守卫未拦住：坏行已落盘"
+
+    def test_dump_skips_record_whose_str_raises(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """第 3 级：`json.dumps(default=str)` 因 `__str__` 抛异常而失败 → 跳过该行。
+
+        `_redact_record` 在此被替身为恒等函数，使坏对象**直达**序列化步骤，
+        从而精确验证 `dump_recent_to` 自身的丢弃分支（而非上游降级兜住）。
+        """
+
+        class _Unstringable:
+            def __str__(self) -> str:
+                raise RuntimeError("无法字符串化")
+
+        monkeypatch.setattr(trace_mod, "_redact_record", lambda record: record)
+        reset_memory_buffer()
+        memory_buffer_snapshot(
+            "t-good",
+            [{"event": "node", "payload": "正常记录"}],
+        )
+        memory_buffer_snapshot(
+            "t-bad",
+            [{"event": "node", "payload": _Unstringable()}],
+        )
+
+        path = dump_recent_to(str(tmp_path))
+        assert path is not None
+        records = _assert_every_line_is_json_object(path)
+        payloads = [r.get("payload") for r in records if r.get("event") == "node"]
+        assert payloads == ["正常记录"], "坏行必须被丢弃，好行必须保留"

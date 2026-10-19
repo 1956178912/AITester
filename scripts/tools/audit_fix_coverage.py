@@ -85,10 +85,11 @@ def added_lines_by_file(base: str, root: Path, pathspec: str = "src/") -> dict[s
     return dict(result)
 
 
-def coverage_lines(xml_path: Path) -> dict[str, dict[int, int]]:
+def coverage_lines(xml_path: Path, prefix: str = "src/") -> dict[str, dict[int, int]]:
     """解析 coverage.xml，返回 ``{仓内路径: {行号: hits}}``。
 
-    coverage 的 ``filename`` 相对 ``source``（本项目为 ``src``），故补 `src/` 前缀。
+    coverage 的 ``filename`` 相对 ``source``（``--cov=src`` 时为 ``src``，
+    ``--cov=experiments`` 时为 ``experiments``），故按 ``prefix`` 补前缀。
     """
     tree = ET.parse(xml_path)
     result: dict[str, dict[int, int]] = {}
@@ -96,7 +97,7 @@ def coverage_lines(xml_path: Path) -> dict[str, dict[int, int]]:
         fname = cls.get("filename") or ""
         if not fname.endswith(".py"):
             continue
-        bucket = result.setdefault("src/" + fname, {})
+        bucket = result.setdefault(prefix + fname, {})
         for ln in cls.iter("line"):
             number = ln.get("number")
             if number is None:
@@ -105,10 +106,18 @@ def coverage_lines(xml_path: Path) -> dict[str, dict[int, int]]:
     return result
 
 
-def audit(base: str, xml_path: Path, root: Path) -> dict[str, Any]:
-    """执行审计，返回结构化结果（供 CLI 与测试共用）。"""
-    added = added_lines_by_file(base, root)
-    cov = coverage_lines(xml_path)
+def audit(base: str, xml_path: Path, root: Path, pathspec: str = "src/") -> dict[str, Any]:
+    """执行审计，返回结构化结果（供 CLI 与测试共用）。
+
+    Args:
+        base: 修复起点提交。
+        xml_path: 与该 HEAD 对齐的 coverage.xml。
+        root: 仓库根。
+        pathspec: 审计范围前缀（``src/`` 或 ``experiments/``），同时用于
+            还原 coverage.xml 的相对路径前缀。
+    """
+    added = added_lines_by_file(base, root, pathspec)
+    cov = coverage_lines(xml_path, pathspec)
 
     files: list[dict[str, Any]] = []
     total_added = total_uncovered = 0
@@ -129,6 +138,7 @@ def audit(base: str, xml_path: Path, root: Path) -> dict[str, Any]:
 
     return {
         "base": base,
+        "pathspec": pathspec,
         "coverage_xml": str(xml_path),
         "total_added": total_added,
         "total_uncovered": total_uncovered,
@@ -139,7 +149,7 @@ def audit(base: str, xml_path: Path, root: Path) -> dict[str, Any]:
 
 def render(result: dict[str, Any]) -> str:
     lines = [
-        f"基线 {result['base']} → HEAD；src/ 修复新增且被 coverage 测量的行 "
+        f"基线 {result['base']} → HEAD；{result['pathspec']} 修复新增且被 coverage 测量的行 "
         f"{result['total_added']}，其中未执行 {result['total_uncovered']}"
         f"（{result['ratio']:.2%}）",
         "",
@@ -156,6 +166,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--base", default=DEFAULT_BASE, help=f"修复起点提交（默认 {DEFAULT_BASE}）")
     parser.add_argument(
+        "--pathspec",
+        default="src/",
+        help="审计范围前缀，须与 --coverage-xml 的 --cov 目标一致（src/ 或 experiments/）",
+    )
+    parser.add_argument(
         "--coverage-xml", default=str(DEFAULT_COVERAGE_XML), help="coverage.xml 路径（须与 HEAD 对齐）"
     )
     parser.add_argument("--json", default="-", help="JSON 输出路径（默认 - = 不输出）")
@@ -166,7 +181,7 @@ def main() -> int:
         print(f"错误：找不到 {xml_path}——先跑 `make test-cov` 产出与 HEAD 对齐的覆盖率", file=sys.stderr)
         return 2
 
-    result = audit(args.base, xml_path, PROJECT_ROOT)
+    result = audit(args.base, xml_path, PROJECT_ROOT, args.pathspec)
     print(render(result))
 
     if args.json != "-":
