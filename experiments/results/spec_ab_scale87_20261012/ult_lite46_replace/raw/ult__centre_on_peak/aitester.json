@@ -1,0 +1,278 @@
+{
+  "task_id": "ult__centre_on_peak",
+  "baseline": "aitester",
+  "test_plan": {
+    "function_name": "centre_on_peak",
+    "description": "将列表中的最大值（峰值）通过循环左移旋转到列表中心位置，返回旋转后的列表；空输入或None返回空列表。",
+    "logic_analysis": {
+      "input_domain": "任意可索引、可修改的序列（如list），元素支持>=比较；None或空序列",
+      "output_domain": "旋转后的列表（原地修改并返回同一对象）；输入为None或空时返回新空列表[]",
+      "preconditions": [
+        "data为None或len(data)==0时直接返回[]",
+        "data为可变序列且元素可比较大小",
+        "data元素类型一致，支持>=运算符"
+      ],
+      "postconditions": [
+        "返回列表长度与输入非空时相同",
+        "最大值位于中心索引：偶数长度时midpoint=(items-1)//2，奇数长度时midpoint=items//2",
+        "当index_of_max_value==midpoint时原样返回data",
+        "当index_of_max_value<midpoint时左移(midpoint+index_of_max_value+1)次",
+        "当index_of_max_value>midpoint时左移(index_of_max_value-midpoint)次"
+      ],
+      "edge_cases": [
+        "data为None",
+        "data为空列表[]",
+        "单元素列表[5]",
+        "所有元素相等（如[3,3,3]）",
+        "最大值在首位",
+        "最大值在末位",
+        "最大值恰好在midpoint",
+        "偶数长度列表",
+        "奇数长度列表",
+        "含负数或0的列表",
+        "含sys.float_info.min附近极小值的列表"
+      ]
+    },
+    "test_cases": [
+      {
+        "case_name": "None输入返回空列表",
+        "input_args": {
+          "data": null
+        },
+        "expected_output": "[]",
+        "category": "error",
+        "description": "验证data为None时返回空列表，覆盖第3行分支",
+        "logic_coverage": "data is None or len(data) == 0"
+      },
+      {
+        "case_name": "空列表返回空列表",
+        "input_args": {
+          "data": []
+        },
+        "expected_output": "[]",
+        "category": "boundary",
+        "description": "验证空列表时返回空列表，覆盖第3行分支",
+        "logic_coverage": "data is None or len(data) == 0"
+      },
+      {
+        "case_name": "单元素列表",
+        "input_args": {
+          "data": [
+            5
+          ]
+        },
+        "expected_output": "[5]",
+        "category": "boundary",
+        "description": "单元素列表items=1为奇数，midpoint=0，index_of_max_value=0等于midpoint，直接返回原列表",
+        "logic_coverage": "items % 2 == 0; index_of_max_value == midpoint"
+      },
+      {
+        "case_name": "奇数长度最大值在中心",
+        "input_args": {
+          "data": [
+            1,
+            9,
+            2
+          ]
+        },
+        "expected_output": "[1,9,2]",
+        "category": "normal",
+        "description": "items=3奇数，midpoint=1，最大值9在索引1等于midpoint，无需移位直接返回",
+        "logic_coverage": "items % 2 == 0; index_of_max_value == midpoint"
+      },
+      {
+        "case_name": "奇数长度最大值在首位",
+        "input_args": {
+          "data": [
+            9,
+            1,
+            2
+          ]
+        },
+        "expected_output": "[2,9,1]",
+        "category": "normal",
+        "description": "items=3奇数，midpoint=1，index_of_max_value=0<midpoint，shift=(1+0)+1=2，左移2次",
+        "logic_coverage": "items % 2 == 0; index_of_max_value < midpoint; for(range(shift)); for(range(items - 1))"
+      },
+      {
+        "case_name": "奇数长度最大值在末位",
+        "input_args": {
+          "data": [
+            1,
+            2,
+            9
+          ]
+        },
+        "expected_output": "[9,1,2]",
+        "category": "normal",
+        "description": "items=3奇数，midpoint=1，index_of_max_value=2>midpoint，shift=2-1=1，左移1次",
+        "logic_coverage": "items % 2 == 0; index_of_max_value < midpoint; for(range(shift)); for(range(items - 1))"
+      },
+      {
+        "case_name": "偶数长度最大值在中心",
+        "input_args": {
+          "data": [
+            1,
+            9,
+            2,
+            3
+          ]
+        },
+        "expected_output": "[1,9,2,3]",
+        "category": "normal",
+        "description": "items=4偶数，midpoint=(4-1)//2=1，最大值9在索引1等于midpoint，无需移位",
+        "logic_coverage": "items % 2 == 0; index_of_max_value == midpoint"
+      },
+      {
+        "case_name": "偶数长度最大值在首位",
+        "input_args": {
+          "data": [
+            9,
+            1,
+            2,
+            3
+          ]
+        },
+        "expected_output": "[2,3,9,1]",
+        "category": "normal",
+        "description": "items=4偶数，midpoint=1，index_of_max_value=0<midpoint，shift=(1+0)+1=2，左移2次",
+        "logic_coverage": "items % 2 == 0; index_of_max_value < midpoint; for(range(shift)); for(range(items - 1))"
+      },
+      {
+        "case_name": "偶数长度最大值在末位",
+        "input_args": {
+          "data": [
+            1,
+            2,
+            3,
+            9
+          ]
+        },
+        "expected_output": "[9,1,2,3]",
+        "category": "normal",
+        "description": "items=4偶数，midpoint=1，index_of_max_value=3>midpoint，shift=3-1=2，左移2次",
+        "logic_coverage": "items % 2 == 0; index_of_max_value < midpoint; for(range(shift)); for(range(items - 1))"
+      },
+      {
+        "case_name": "所有元素相等",
+        "input_args": {
+          "data": [
+            3,
+            3,
+            3
+          ]
+        },
+        "expected_output": "[3,3,3]",
+        "category": "boundary",
+        "description": "所有元素相等时，循环中>=条件持续更新index_of_max_value为最后一个索引2，items=3奇数midpoint=1，index>midpoint，shift=1，左移后仍全为3",
+        "logic_coverage": "data[i] >= max_value_found; items % 2 == 0; index_of_max_value < midpoint; for(range(shift)); for(range(items - 1))"
+      },
+      {
+        "case_name": "含负数列表",
+        "input_args": {
+          "data": [
+            -5,
+            -1,
+            -3
+          ]
+        },
+        "expected_output": "[-3,-5,-1]",
+        "category": "normal",
+        "description": "items=3奇数midpoint=1，最大值-1在索引1等于midpoint，无需移位直接返回",
+        "logic_coverage": "items % 2 == 0; index_of_max_value == midpoint"
+      },
+      {
+        "case_name": "含0的列表",
+        "input_args": {
+          "data": [
+            0,
+            -1,
+            -2
+          ]
+        },
+        "expected_output": "[-2,0,-1]",
+        "category": "normal",
+        "description": "items=3奇数midpoint=1，最大值0在索引0<midpoint，shift=(1+0)+1=2，左移2次",
+        "logic_coverage": "items % 2 == 0; index_of_max_value < midpoint; for(range(shift)); for(range(items - 1))"
+      },
+      {
+        "case_name": "极小值列表",
+        "input_args": {
+          "data": [
+            1e-300,
+            2e-300,
+            1e-300
+          ]
+        },
+        "expected_output": "[1e-300,2e-300,1e-300]",
+        "category": "boundary",
+        "description": "items=3奇数midpoint=1，最大值2e-300在索引1等于midpoint，无需移位；验证极小正数比较",
+        "logic_coverage": "items % 2 == 0; index_of_max_value == midpoint"
+      },
+      {
+        "case_name": "两元素最大值在首位",
+        "input_args": {
+          "data": [
+            9,
+            1
+          ]
+        },
+        "expected_output": "[1,9]",
+        "category": "boundary",
+        "description": "items=2偶数midpoint=(2-1)//2=0，index_of_max_value=0等于midpoint，无需移位直接返回",
+        "logic_coverage": "items % 2 == 0; index_of_max_value == midpoint"
+      },
+      {
+        "case_name": "两元素最大值在末位",
+        "input_args": {
+          "data": [
+            1,
+            9
+          ]
+        },
+        "expected_output": "[9,1]",
+        "category": "boundary",
+        "description": "items=2偶数midpoint=0，index_of_max_value=1>midpoint，shift=1-0=1，左移1次",
+        "logic_coverage": "items % 2 == 0; index_of_max_value < midpoint; for(range(shift)); for(range(items - 1))"
+      }
+    ],
+    "logic_degraded": false,
+    "coverage_completeness": 1.0
+  },
+  "generated_test": "import sys\nimport pytest\n\nfrom centre_on_peak import centre_on_peak\n\n\ndef _midpoint(items):\n    \"\"\"根据规约计算中心索引：偶数长度 (items-1)//2，奇数长度 items//2。\"\"\"\n    if items % 2 == 0:\n        return (items - 1) // 2\n    return items // 2\n\n\ndef _left_rotate(data, shift):\n    \"\"\"按规约描述的循环左移语义构造期望结果（仅用于非空输入）。\"\"\"\n    result = list(data)\n    n = len(result)\n    if n == 0:\n        return result\n    shift = shift % n\n    return result[shift:] + result[:shift]\n\n\ndef _expected_by_spec(data):\n    \"\"\"依据规约从输入推导期望输出。\"\"\"\n    if data is None or len(data) == 0:\n        return []\n    items = len(data)\n    midpoint = _midpoint(items)\n    index_of_max_value = 0\n    max_value_found = data[0]\n    for i in range(items):\n        if data[i] >= max_value_found:\n            max_value_found = data[i]\n            index_of_max_value = i\n    if index_of_max_value == midpoint:\n        return list(data)\n    if index_of_max_value < midpoint:\n        shift = midpoint + index_of_max_value + 1\n    else:\n        shift = index_of_max_value - midpoint\n    return _left_rotate(data, shift)\n\n\ndef test_centre_on_peak_none_returns_empty_list():\n    \"\"\"data 为 None 时返回空列表（规约：data is None 直接返回 []）。\"\"\"\n    result = centre_on_peak(None)\n    assert result == []\n\n\ndef test_centre_on_peak_empty_list_returns_empty_list():\n    \"\"\"data 为空列表时返回空列表（规约：len(data)==0 直接返回 []）。\"\"\"\n    result = centre_on_peak([])\n    assert result == []\n\n\ndef test_centre_on_peak_single_element():\n    \"\"\"单元素列表 [5]：items=1 奇数，midpoint=0，最大值在索引 0，原样返回。\"\"\"\n    data = [5]\n    result = centre_on_peak(data)\n    assert result == [5]\n\n\ndef test_centre_on_peak_odd_length_max_at_centre():\n    \"\"\"奇数长度最大值恰在中心：[1,9,2]，midpoint=1，原样返回。\"\"\"\n    data = [1, 9, 2]\n    result = centre_on_peak(data)\n    assert result == [1, 9, 2]\n\n\ndef test_centre_on_peak_odd_length_max_at_first():\n    \"\"\"奇数长度最大值在首位：[9,1,2]，midpoint=1，左移 2 次。\"\"\"\n    data = [9, 1, 2]\n    result = centre_on_peak(data)\n    assert result == [2, 9, 1]\n\n\ndef test_centre_on_peak_odd_length_max_at_last():\n    \"\"\"奇数长度最大值在末位：[1,2,9]，midpoint=1，左移 1 次。\"\"\"\n    data = [1, 2, 9]\n    result = centre_on_peak(data)\n    assert result == [9, 1, 2]\n\n\ndef test_centre_on_peak_even_length_max_at_centre():\n    \"\"\"偶数长度最大值恰在中心：[1,9,2,3]，midpoint=1，原样返回。\"\"\"\n    data = [1, 9, 2, 3]\n    result = centre_on_peak(data)\n    assert result == [1, 9, 2, 3]\n\n\ndef test_centre_on_peak_even_length_max_at_first():\n    \"\"\"偶数长度最大值在首位：[9,1,2,3]，midpoint=1，左移 2 次。\"\"\"\n    data = [9, 1, 2, 3]\n    result = centre_on_peak(data)\n    assert result == [2, 3, 9, 1]\n\n\ndef test_centre_on_peak_even_length_max_at_last():\n    \"\"\"偶数长度最大值在末位：[1,2,3,9]，midpoint=1，左移 2 次。\"\"\"\n    data = [1, 2, 3, 9]\n    result = centre_on_peak(data)\n    assert result == [9, 1, 2, 3]\n\n\ndef test_centre_on_peak_all_elements_equal():\n    \"\"\"所有元素相等 [3,3,3]：>= 持续更新索引到末位，左移后仍全为 3。\"\"\"\n    data = [3, 3, 3]\n    result = centre_on_peak(data)\n    assert result == [3, 3, 3]\n\n\ndef test_centre_on_peak_negative_values():\n    \"\"\"含负数列表 [-5,-1,-3]：midpoint=1，最大值 -1 在索引 1，原样返回。\"\"\"\n    data = [-5, -1, -3]\n    result = centre_on_peak(data)\n    assert result == [-3, -5, -1]\n\n\ndef test_centre_on_peak_with_zero():\n    \"\"\"含 0 的列表 [0,-1,-2]：midpoint=1，最大值 0 在索引 0，左移 2 次。\"\"\"\n    data = [0, -1, -2]\n    result = centre_on_peak(data)\n    assert result == [-2, 0, -1]\n\n\ndef test_centre_on_peak_tiny_float_values():\n    \"\"\"极小正数列表 [1e-300,2e-300,1e-300]：midpoint=1，最大值在索引 1，原样返回。\"\"\"\n    data = [1e-300, 2e-300, 1e-300]\n    result = centre_on_peak(data)\n    assert result == [1e-300, 2e-300, 1e-300]\n\n\ndef test_centre_on_peak_two_elements_max_at_first():\n    \"\"\"两元素 [9,1]：items=2 偶数，midpoint=0，最大值在索引 0，原样返回。\"\"\"\n    data = [9, 1]\n    result = centre_on_peak(data)\n    assert result == [1, 9]\n\n\ndef test_centre_on_peak_two_elements_max_at_last():\n    \"\"\"两元素 [1,9]：items=2 偶数，midpoint=0，最大值在索引 1，左移 1 次。\"\"\"\n    data = [1, 9]\n    result = centre_on_peak(data)\n    assert result == [9, 1]\n\n\ndef test_centre_on_peak_returns_same_length():\n    \"\"\"后置条件：非空输入返回列表长度与输入相同。\"\"\"\n    data = [4, 1, 7, 2, 9, 3]\n    result = centre_on_peak(data)\n    assert len(result) == len(data)\n\n\ndef test_centre_on_peak_max_value_at_midpoint_after_rotation():\n    \"\"\"后置条件：旋转后最大值位于中心索引 midpoint。\"\"\"\n    data = [4, 1, 7, 2, 9, 3]\n    result = centre_on_peak(data)\n    items = len(result)\n    midpoint = _midpoint(items)\n    assert result[midpoint] == max(data)\n\n\ndef test_centre_on_peak_multiset_preserved():\n    \"\"\"后置条件：旋转不改变元素多重集合。\"\"\"\n    data = [4, 1, 7, 2, 9, 3]\n    result = centre_on_peak(data)\n    assert sorted(result) == sorted(data)\n\n\n@pytest.mark.parametrize(\n    \"data\",\n    [\n        [5],\n        [1, 9, 2],\n        [9, 1, 2],\n        [1, 2, 9],\n        [1, 9, 2, 3],\n        [9, 1, 2, 3],\n        [1, 2, 3, 9],\n        [3, 3, 3],\n        [-5, -1, -3],\n        [0, -1, -2],\n        [1e-300, 2e-300, 1e-300],\n        [9, 1],\n        [1, 9],\n        [4, 1, 7, 2, 9, 3],\n    ],\n)\ndef test_centre_on_peak_matches_spec_derived_expectation(data):\n    \"\"\"参数化：依据规约推导的期望输出与实际结果一致。\"\"\"\n    expected = _expected_by_spec(data)\n    result = centre_on_peak(list(data))\n    assert result == expected\n\n\n@pytest.mark.parametrize(\n    \"data\",\n    [\n        [5],\n        [1, 9, 2],\n        [9, 1, 2],\n        [1, 2, 9],\n        [1, 9, 2, 3],\n        [9, 1, 2, 3],\n        [1, 2, 3, 9],\n        [3, 3, 3],\n        [-5, -1, -3],\n        [0, -1, -2],\n        [9, 1],\n        [1, 9],\n    ],\n)\ndef test_centre_on_peak_returns_list_type(data):\n    \"\"\"后置条件：非空输入返回列表类型。\"\"\"\n    result = centre_on_peak(list(data))\n    assert isinstance(result, list)",
+  "diagnosis": "函数 centre_on_peak 存在多处逻辑缺陷：\n1) 第7行 `max_value_found = sys.float_info.min` 作为初始最大值，当输入全为负数时（如 [-5,-3,-1]），所有元素都小于 sys.float_info.min，导致 index_of_max_value 始终为 -1，无法找到真正的峰值，后续 shift 计算错误（test_centre_on_peak_negative_values 失败）。\n2) 第31行 `shift = (midpoint+index_of_max_value) + 1` 方向与幅度均错误。当峰值在 midpoint 左侧时，需要将数据向右旋转（等价于向左旋转 items-shift 次），正确公式应为 `shift = items - (midpoint - index_of_max_value)`，即 `shift = items - midpoint + index_of_max_value`。原公式在 index_of_max_value=0、midpoint=1 时给出 shift=2，而正确应为 items-1（如 items=3 时 shift=2 恰好巧合，但 items=2 时 midpoint=0，index=0 走 elif 分支返回原数据，导致 test_centre_on_peak_two_elements_max_at_first 失败）。\n3) 偶数长度时 midpoint 计算 `int((items-1)/2)` 与奇数时 `int(items/2)` 不一致，导致偶数长度峰值定位偏移（test_centre_on_peak_even_length_max_at_last 失败）。\n4) 峰值在末尾时（index_of_max_value = items-1），shift = index - midpoint，向左旋转后峰值应到 midpoint 位置，但偶数长度 midpoint 定义错误导致偏差。",
+  "error_category": "assertion",
+  "patch": "python\nimport sys\n\n\ndef centre_on_peak(data):\n    # Error handling\n    if data is None or len(data) == 0:\n        return []\n\n    # First we need a minimum value to compare against.\n    # Use the first element as the initial max so negative-only inputs work.\n    max_value_found = data[0]\n    # index to find the location of the peak, and items for the size of the list\n    index_of_max_value = 0\n    items = int(len(data))\n    \"\"\"Update the index and the max value variables if the next value in the \n       array is larger, or equal to the max value found\"\"\"\n    for i in range(0, items):\n        if data[i] >= max_value_found:\n            max_value_found = data[i]\n            index_of_max_value = i\n\n    \"\"\"finding shifts needed to get the highest value in the centre\"\"\"\n\n    # Midpoint is the target index for the peak.\n    # For odd length it is the exact centre; for even length it is the right\n    # of the two central positions (consistent with items // 2).\n    midpoint = items // 2\n\n    # Counting the left shifts needed to centre the data.\n    shift = 0\n    # Updating the numbers of shifts based on the index of the max value.\n    if index_of_max_value == midpoint:\n        return data  # No need to shift, max value already in the middle.\n    elif index_of_max_value < midpoint:\n        # Peak is left of midpoint: rotate left by items - (midpoint - index)\n        shift = items - (midpoint - index_of_max_value)\n    else:\n        # Peak is right of midpoint: rotate left by index - midpoint\n        shift = index_of_max_value - midpoint\n\n    \"\"\"shifting the data\"\"\"\n    for i in range(shift):\n        # temporarily store the data on first position\n        temp = data[0]\n        # do the shift, every item will move one to the left\n        for j in range(items - 1):\n            data[j] = data[j + 1]\n        # item on the first position gets stored now on the last position\n        data[items - 1] = temp\n    # Plotting data to test if it is getting properly centered, (commented out)\n    # plt.plot(data)\n    # plt.show()\n    return data\n",
+  "test_passed": false,
+  "iterations": 3,
+  "coverage": 99.0,
+  "rag_stats": null,
+  "position_aware_focus": {
+    "focused": false,
+    "function_name": null,
+    "line": 141,
+    "hint": ""
+  },
+  "repo_verification": null,
+  "cross_file_deps": null,
+  "task_metadata": {
+    "source": "ult",
+    "function_name": "centre_on_peak",
+    "signature": "",
+    "cyclomatic_complexity": 1,
+    "mutation_primary_metric": true,
+    "no_gold_tests": false,
+    "gold_tests": [
+      "assert centre_on_peak([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]) == [17, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]",
+      "assert centre_on_peak([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]) == [19, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]",
+      "assert centre_on_peak([1, 2, 3, 4, 5]) == [5, 1, 2, 3, 4]",
+      "assert centre_on_peak([5, 1, 2, 3, 4]) == [5, 1, 2, 3, 4]",
+      "assert centre_on_peak([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]) == [15, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]"
+    ],
+    "gold_tests_raw": "assert centre_on_peak([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]) == [17, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]\nassert centre_on_peak([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]) == [19, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]\nassert centre_on_peak([1, 2, 3, 4, 5]) == [5, 1, 2, 3, 4]\nassert centre_on_peak([5, 1, 2, 3, 4]) == [5, 1, 2, 3, 4]\nassert centre_on_peak([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]) == [15, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]",
+    "test_cases": "from centre_on_peak import centre_on_peak\ndef test_1():\n    assert centre_on_peak([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]) == [17, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]\n\ndef test_2():\n    assert centre_on_peak([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]) == [19, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]\n\ndef test_3():\n    assert centre_on_peak([1, 2, 3, 4, 5]) == [5, 1, 2, 3, 4]\n\ndef test_4():\n    assert centre_on_peak([5, 1, 2, 3, 4]) == [5, 1, 2, 3, 4]\n\ndef test_5():\n    assert centre_on_peak([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]) == [15, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]\n\n",
+    "fixed": "def centre_on_peak(data):\r\n    # Error handling\r\n    if data is None or len(data) == 0:\r\n        return []\r\n\r\n    # First we need a minimum value to compare against.\r\n    max_value_found = sys.float_info.min\r\n    #index to find the location of the peak, and items for the size of the list\r\n    index_of_max_value = -1\r\n    items = int(len(data))\r\n    \"\"\"Update the index and the max value variables if the next value in the \r\n       array is larger, or equal to the max value found\"\"\"\r\n    for i in range(0,items):\r\n        if data[i]>= max_value_found:\r\n            max_value_found = data[i]\r\n            index_of_max_value = i\r\n            \r\n    \"\"\"finding shifts needed to get the highest value in the centre\"\"\"\r\n     \r\n     # Check if the data is even\r\n    if  items  % 2 == 0:\r\n        #items is a float number, must be turned to integer first\r\n        midpoint = int((items - 1) / 2) \r\n    else:\r\n        midpoint = int(items / 2)\r\n        \r\n    #Counting the left shifts needed to centre the data.\r\n    shift = 0\r\n    # Updating the numbers of shifts based on the index of the max value.\r\n    if index_of_max_value < midpoint:\r\n        shift = (midpoint+index_of_max_value) + 1\r\n    elif index_of_max_value == midpoint:\r\n        return data # No need to shift, max value already in the middle.\r\n    else:\r\n        shift = index_of_max_value - midpoint\r\n          \r\n    \"\"\"shifting the data\"\"\"\r\n    for i in range(shift):\r\n        #temporarily store the data on first position\r\n        temp = data[0]\r\n        #do the shift, every item will move one to the left\r\n        for i in range(items-1):\r\n            data[i] = data[i + 1] \r\n        #item on the first position gets stored now on the last position\r\n        data[items-1] = temp\r\n    #Plotting data to test if it is getting properly centered, (commented out)    \r\n    #plt.plot(data)\r\n    #plt.show()\r\n    return data",
+    "suggested_function": "centre_on_peak",
+    "is_cross_file": false
+  }
+}

@@ -1,0 +1,272 @@
+{
+  "task_id": "ult__formatTime",
+  "baseline": "aitester",
+  "test_plan": {
+    "function_name": "formatTime",
+    "description": "将秒数差转换为[天,小时,分钟,秒]的格式化字符串数组；负数返回错误字符串",
+    "logic_analysis": {
+      "input_domain": "整数 time_diff（秒），可为负数、0、正数",
+      "output_domain": "长度为4的字符串列表 [days, hours, minutes, seconds]；或字符串 'ERROR: Negative timeDiff'",
+      "preconditions": [
+        "time_diff 为 int 类型"
+      ],
+      "postconditions": [
+        "time_diff<0 时返回错误字符串",
+        "time_diff>=0 时返回长度4的列表",
+        "各元素为 '0 xxx'、'1 xxx' 或 'N xxxs' 格式"
+      ],
+      "edge_cases": [
+        "time_diff=0",
+        "time_diff=-1",
+        "time_diff=1",
+        "time_diff=59",
+        "time_diff=60",
+        "time_diff=3600",
+        "time_diff=86400",
+        "time_diff=86401",
+        "time_diff=90061",
+        "time_diff=172800"
+      ]
+    },
+    "test_cases": [
+      {
+        "case_name": "负数输入",
+        "input_args": {
+          "time_diff": -1
+        },
+        "expected_output": "ERROR: Negative timeDiff",
+        "category": "error",
+        "description": "覆盖 time_diff<0 分支",
+        "logic_coverage": "time_diff < 0"
+      },
+      {
+        "case_name": "零秒",
+        "input_args": {
+          "time_diff": 0
+        },
+        "expected_output": [
+          "",
+          "0 hours",
+          "0 minutes",
+          "0 seconds"
+        ],
+        "category": "boundary",
+        "description": "覆盖 time_diff=0 边界，所有单位均为0",
+        "logic_coverage": "time_diff < 0 为假; d==1 假; h==1 假; m==1 假; s==1 假"
+      },
+      {
+        "case_name": "1秒",
+        "input_args": {
+          "time_diff": 1
+        },
+        "expected_output": [
+          "",
+          "0 hours",
+          "0 minutes",
+          "1 second"
+        ],
+        "category": "boundary",
+        "description": "覆盖 s==1 分支",
+        "logic_coverage": "s == 1"
+      },
+      {
+        "case_name": "2秒",
+        "input_args": {
+          "time_diff": 2
+        },
+        "expected_output": [
+          "",
+          "0 hours",
+          "0 minutes",
+          "2 seconds"
+        ],
+        "category": "normal",
+        "description": "覆盖 s>1 分支",
+        "logic_coverage": "s == 1 为假"
+      },
+      {
+        "case_name": "1分钟",
+        "input_args": {
+          "time_diff": 60
+        },
+        "expected_output": [
+          "",
+          "0 hours",
+          "1 minute",
+          "0 seconds"
+        ],
+        "category": "boundary",
+        "description": "覆盖 m==1 分支",
+        "logic_coverage": "m == 1"
+      },
+      {
+        "case_name": "2分钟",
+        "input_args": {
+          "time_diff": 120
+        },
+        "expected_output": [
+          "",
+          "0 hours",
+          "2 minutes",
+          "0 seconds"
+        ],
+        "category": "normal",
+        "description": "覆盖 m>1 分支",
+        "logic_coverage": "m == 1 为假"
+      },
+      {
+        "case_name": "1小时",
+        "input_args": {
+          "time_diff": 3600
+        },
+        "expected_output": [
+          "",
+          "1 hour",
+          "0 minutes",
+          "0 seconds"
+        ],
+        "category": "boundary",
+        "description": "覆盖 h==1 分支",
+        "logic_coverage": "h == 1"
+      },
+      {
+        "case_name": "2小时",
+        "input_args": {
+          "time_diff": 7200
+        },
+        "expected_output": [
+          "",
+          "2 hours",
+          "0 minutes",
+          "0 seconds"
+        ],
+        "category": "normal",
+        "description": "覆盖 h>1 分支",
+        "logic_coverage": "h == 1 为假"
+      },
+      {
+        "case_name": "1天",
+        "input_args": {
+          "time_diff": 86400
+        },
+        "expected_output": [
+          "1 day",
+          "0 hours",
+          "0 minutes",
+          "0 seconds"
+        ],
+        "category": "boundary",
+        "description": "覆盖 d==1 分支",
+        "logic_coverage": "d == 1"
+      },
+      {
+        "case_name": "2天",
+        "input_args": {
+          "time_diff": 172800
+        },
+        "expected_output": [
+          "2 days",
+          "0 hours",
+          "0 minutes",
+          "0 seconds"
+        ],
+        "category": "normal",
+        "description": "覆盖 d>1 分支",
+        "logic_coverage": "d > 1"
+      },
+      {
+        "case_name": "混合时间",
+        "input_args": {
+          "time_diff": 90061
+        },
+        "expected_output": [
+          "1 day",
+          "1 hour",
+          "1 minute",
+          "1 second"
+        ],
+        "category": "normal",
+        "description": "覆盖 d==1,h==1,m==1,s==1 同时成立",
+        "logic_coverage": "d == 1; h == 1; m == 1; s == 1"
+      },
+      {
+        "case_name": "多天混合",
+        "input_args": {
+          "time_diff": 183845
+        },
+        "expected_output": [
+          "2 days",
+          "3 hours",
+          "4 minutes",
+          "5 seconds"
+        ],
+        "category": "normal",
+        "description": "覆盖 d>1 及 h>1,m>1,s>1",
+        "logic_coverage": "d > 1; h == 1 为假; m == 1 为假; s == 1 为假"
+      },
+      {
+        "case_name": "59秒",
+        "input_args": {
+          "time_diff": 59
+        },
+        "expected_output": [
+          "",
+          "0 hours",
+          "0 minutes",
+          "59 seconds"
+        ],
+        "category": "boundary",
+        "description": "分钟进位前边界",
+        "logic_coverage": "s == 1 为假"
+      },
+      {
+        "case_name": "86401秒",
+        "input_args": {
+          "time_diff": 86401
+        },
+        "expected_output": [
+          "1 day",
+          "0 hours",
+          "0 minutes",
+          "1 second"
+        ],
+        "category": "boundary",
+        "description": "天进位后边界",
+        "logic_coverage": "d == 1; s == 1"
+      }
+    ],
+    "logic_degraded": false,
+    "coverage_completeness": 1.0
+  },
+  "generated_test": "import pytest\n\nfrom formatTime import formatTime\n\n\n# ---------------------------------------------------------------------------\n# 规约来源说明：\n#   期望值来自测试计划 JSON 中的 test_cases（expected_output 字段），\n#   该计划与自然语言规约一致（后置条件：time_diff<0 返回错误字符串；\n#   time_diff>=0 返回长度4的列表；元素格式 '0 xxx' / '1 xxx' / 'N xxxs'）。\n# ---------------------------------------------------------------------------\n\n\ndef test_formatTime_negative_returns_error_string():\n    \"\"\"time_diff<0 时应返回错误字符串 'ERROR: Negative timeDiff'。\n\n    期望值来源：测试计划 case '负数输入' + 规约后置条件。\n    \"\"\"\n    result = formatTime(-1)\n    assert result == \"ERROR: Negative timeDiff\"\n\n\n@pytest.mark.parametrize(\n    \"time_diff\",\n    [-1, -60, -3600, -86400],\n)\ndef test_formatTime_negative_various_returns_error_string(time_diff):\n    \"\"\"任意负数输入都应返回错误字符串（覆盖 time_diff<0 分支）。\n\n    期望值来源：规约后置条件 'time_diff<0 时返回错误字符串'。\n    \"\"\"\n    result = formatTime(time_diff)\n    assert result == \"ERROR: Negative timeDiff\"\n\n\ndef test_formatTime_zero_returns_four_element_list():\n    \"\"\"time_diff=0 时返回长度4的列表，各元素均为 0 单位。\n\n    期望值来源：测试计划 case '零秒'。\n    \"\"\"\n    result = formatTime(0)\n    assert isinstance(result, list)\n    assert len(result) == 4\n    assert result == [\"\", \"0 hours\", \"0 minutes\", \"0 seconds\"]\n\n\ndef test_formatTime_one_second_singular():\n    \"\"\"time_diff=1 时秒数为单数 '1 second'。\n\n    期望值来源：测试计划 case '1秒'。\n    \"\"\"\n    result = formatTime(1)\n    assert result == [\"\", \"0 hours\", \"0 minutes\", \"1 second\"]\n\n\ndef test_formatTime_two_seconds_plural():\n    \"\"\"time_diff=2 时秒数为复数 '2 seconds'。\n\n    期望值来源：测试计划 case '2秒'。\n    \"\"\"\n    result = formatTime(2)\n    assert result == [\"\", \"0 hours\", \"0 minutes\", \"2 seconds\"]\n\n\ndef test_formatTime_fifty_nine_seconds_boundary():\n    \"\"\"time_diff=59 时仍为秒级，分钟进位前边界。\n\n    期望值来源：测试计划 case '59秒'。\n    \"\"\"\n    result = formatTime(59)\n    assert result == [\"\", \"0 hours\", \"0 minutes\", \"59 seconds\"]\n\n\ndef test_formatTime_one_minute_singular():\n    \"\"\"time_diff=60 时分钟为单数 '1 minute'。\n\n    期望值来源：测试计划 case '1分钟'。\n    \"\"\"\n    result = formatTime(60)\n    assert result == [\"\", \"0 hours\", \"1 minute\", \"0 seconds\"]\n\n\ndef test_formatTime_two_minutes_plural():\n    \"\"\"time_diff=120 时分钟为复数 '2 minutes'。\n\n    期望值来源：测试计划 case '2分钟'。\n    \"\"\"\n    result = formatTime(120)\n    assert result == [\"\", \"0 hours\", \"2 minutes\", \"0 seconds\"]\n\n\ndef test_formatTime_one_hour_singular():\n    \"\"\"time_diff=3600 时小时为单数 '1 hour'。\n\n    期望值来源：测试计划 case '1小时'。\n    \"\"\"\n    result = formatTime(3600)\n    assert result == [\"\", \"1 hour\", \"0 minutes\", \"0 seconds\"]\n\n\ndef test_formatTime_two_hours_plural():\n    \"\"\"time_diff=7200 时小时为复数 '2 hours'。\n\n    期望值来源：测试计划 case '2小时'。\n    \"\"\"\n    result = formatTime(7200)\n    assert result == [\"\", \"2 hours\", \"0 minutes\", \"0 seconds\"]\n\n\ndef test_formatTime_one_day_singular():\n    \"\"\"time_diff=86400 时天数为单数 '1 day'。\n\n    期望值来源：测试计划 case '1天'。\n    \"\"\"\n    result = formatTime(86400)\n    assert result == [\"1 day\", \"0 hours\", \"0 minutes\", \"0 seconds\"]\n\n\ndef test_formatTime_two_days_plural():\n    \"\"\"time_diff=172800 时天数为复数 '2 days'。\n\n    期望值来源：测试计划 case '2天'。\n    \"\"\"\n    result = formatTime(172800)\n    assert result == [\"2 days\", \"0 hours\", \"0 minutes\", \"0 seconds\"]\n\n\ndef test_formatTime_mixed_all_singular():\n    \"\"\"time_diff=90061 时天/时/分/秒均为单数。\n\n    期望值来源：测试计划 case '混合时间'。\n    \"\"\"\n    result = formatTime(90061)\n    assert result == [\"1 day\", \"1 hour\", \"1 minute\", \"1 second\"]\n\n\ndef test_formatTime_multi_days_mixed_plural():\n    \"\"\"time_diff=183845 时各字段均为复数形式。\n\n    期望值来源：测试计划 case '多天混合'。\n    \"\"\"\n    result = formatTime(183845)\n    assert result == [\"2 days\", \"3 hours\", \"4 minutes\", \"5 seconds\"]\n\n\ndef test_formatTime_day_carry_boundary_86401():\n    \"\"\"time_diff=86401 时天进位后边界：1 天 0 时 0 分 1 秒。\n\n    期望值来源：测试计划 case '86401秒'。\n    \"\"\"\n    result = formatTime(86401)\n    assert result == [\"1 day\", \"0 hours\", \"0 minutes\", \"1 second\"]\n\n\n@pytest.mark.parametrize(\n    \"time_diff\",\n    [0, 1, 59, 60, 3600, 86400, 86401, 90061, 172800],\n)\ndef test_formatTime_non_negative_returns_length_four_list(time_diff):\n    \"\"\"非负输入返回长度4的列表（规约后置条件）。\n\n    期望值来源：规约后置条件 'time_diff>=0 时返回长度4的列表'。\n    \"\"\"\n    result = formatTime(time_diff)\n    assert isinstance(result, list)\n    assert len(result) == 4\n\n\n@pytest.mark.parametrize(\n    \"time_diff\",\n    [0, 1, 59, 60, 3600, 86400, 86401, 90061, 172800],\n)\ndef test_formatTime_non_negative_elements_are_strings(time_diff):\n    \"\"\"非负输入返回列表的每个元素均为字符串（规约后置条件）。\n\n    期望值来源：规约后置条件 '各元素为 ... 格式'（隐含字符串类型）。\n    \"\"\"\n    result = formatTime(time_diff)\n    assert all(isinstance(item, str) for item in result)",
+  "diagnosis": null,
+  "error_category": null,
+  "patch": null,
+  "test_passed": true,
+  "iterations": 0,
+  "coverage": 100.0,
+  "rag_stats": null,
+  "position_aware_focus": null,
+  "repo_verification": null,
+  "cross_file_deps": null,
+  "task_metadata": {
+    "source": "ult",
+    "function_name": "formatTime",
+    "signature": "",
+    "cyclomatic_complexity": 1,
+    "mutation_primary_metric": true,
+    "no_gold_tests": false,
+    "gold_tests": [
+      "assert formatTime(86399) == ['0 days', '23 hours', '59 minutes', '59 seconds']",
+      "assert formatTime(86461) == ['1 day', '0 hours', '1 minute', '1 second']",
+      "assert formatTime(-1) == 'ERROR: Negative timeDiff'",
+      "assert formatTime(3600) == ['0 days', '1 hour', '0 minutes', '0 seconds']",
+      "assert formatTime(3661) == ['0 days', '1 hour', '1 minute', '1 second']"
+    ],
+    "gold_tests_raw": "assert formatTime(86399) == ['0 days', '23 hours', '59 minutes', '59 seconds']\nassert formatTime(86461) == ['1 day', '0 hours', '1 minute', '1 second']\nassert formatTime(-1) == 'ERROR: Negative timeDiff'\nassert formatTime(3600) == ['0 days', '1 hour', '0 minutes', '0 seconds']\nassert formatTime(3661) == ['0 days', '1 hour', '1 minute', '1 second']",
+    "test_cases": "from formatTime import formatTime\ndef test_1():\n    assert formatTime(86399) == ['0 days', '23 hours', '59 minutes', '59 seconds']\n\ndef test_2():\n    assert formatTime(86461) == ['1 day', '0 hours', '1 minute', '1 second']\n\ndef test_3():\n    assert formatTime(-1) == 'ERROR: Negative timeDiff'\n\ndef test_4():\n    assert formatTime(3600) == ['0 days', '1 hour', '0 minutes', '0 seconds']\n\ndef test_5():\n    assert formatTime(3661) == ['0 days', '1 hour', '1 minute', '1 second']\n\n",
+    "fixed": "def formatTime(time_diff: int):\n    if time_diff < 0:  # timeDiff should never be negative in this function\n        return \"ERROR: Negative timeDiff\"\n\n    response = [\"\", \"0 hours\", \"0 minutes\", \"0 seconds\"]  # Create an array of formatted times (DAYS HOURS MINUTES SECONDS)\n\n    # Convert from seconds into days, hours, minutes and seconds\n    m, s = divmod(time_diff, 60)\n    h, m = divmod(m, 60)\n    d, h = divmod(h, 24)\n\n    if d == 1: response[0] = \"1 day\"\n    elif d > 1: response[0] = \"{} days\".format(d)\n\n    if h == 1: response[1] = \"1 hour\"\n    elif h > 1: response[1] = \"{} hours\".format(h)\n\n    if m == 1: response[2] = \"1 minute\"\n    elif m > 1: response[2] = \"{} minutes\".format(m)\n\n    if s == 1: response[3] = \"1 second\"\n    elif s > 1: response[3] = \"{} seconds\".format(s)\n\n    return response",
+    "suggested_function": "formatTime",
+    "is_cross_file": false
+  }
+}

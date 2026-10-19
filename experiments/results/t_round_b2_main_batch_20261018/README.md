@@ -103,6 +103,8 @@ logic 档开关数 13 → 18；新增 **5**、删除 0、改值 0。
     --orig-dir experiments/results/main_batch --write
 ```
 
+<!-- MANUAL:BEGIN -->（手工维护节：生成器 --write 时原样保留在文末；块内引用数字更新须人工与 ANALYSIS_REPORT.json 核对。）
+
 ## 0.6 T 轮发现（可辩护表述，写死防事后改写）
 
 1. **核心负面稳健、次级排序不稳健**：新批 `aitester` vs `plain_llm_df` 配对差 **δ=−25.29pp**
@@ -134,3 +136,5 @@ logic 档开关数 13 → 18；新增 **5**、删除 0、改值 0。
      与新批（`not_reproduced`）混池；本批可作为**当前协议的新基线**供后续批内比较；
    - `plain_llm` 跨批波动属 Q5 已知问题（历史 1.5%→19.2%），本批 11.88% 再次佐证
      "跨批不可比、同批对照才可辩护"。
+
+<!-- MANUAL:END -->

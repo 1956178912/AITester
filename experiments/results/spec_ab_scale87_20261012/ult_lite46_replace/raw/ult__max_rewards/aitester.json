@@ -1,0 +1,501 @@
+{
+  "task_id": "ult__max_rewards",
+  "baseline": "aitester",
+  "test_plan": {
+    "function_name": "max_rewards",
+    "description": "根据动作列表 actions 中依次包含的 Minecraft 动作，逐级返回递增的奖励值；每级条件不满足时提前返回当前 max_reward。",
+    "logic_analysis": {
+      "input_domain": "可迭代对象（列表/集合/元组等），元素为字符串动作名，如 'attack'、'craft: planks'、'craft: stick'、'craft: crafting_table'、'place: crafting_table'、'nearbyCraft: wooden_pickaxe'、'equip: wooden_pickaxe'、'nearbyCraft: stone_pickaxe'、'nearbyCraft: furnace'、'equip: stone_pickaxe'、'place: furnace'、'nearbySmelt: iron_ingot'、'nearbyCraft: iron_pickaxe'、'equip: iron_pickaxe'",
+      "output_domain": "整数奖励值，可能取值：0,1,3,7,11,19,35,67,99,131,163,291,547,1571",
+      "preconditions": [
+        "actions 支持 in 成员测试（可迭代）",
+        "actions 中元素为字符串"
+      ],
+      "postconditions": [
+        "返回值等于按顺序满足的最高级条件对应的奖励值",
+        "若某级条件不满足则立即返回当前 max_reward"
+      ],
+      "edge_cases": [
+        "空列表 []",
+        "缺少 'attack'",
+        "有 'attack' 但缺少 'craft: planks'",
+        "有 'craft: stick' 无 'craft: crafting_table'（或反之）",
+        "同时有 'craft: stick' 和 'craft: crafting_table'",
+        "有 'place: crafting_table' 和 'nearbyCraft: wooden_pickaxe' 但无 'equip: wooden_pickaxe'",
+        "有 'equip: wooden_pickaxe'",
+        "有 'nearbyCraft: furnace' 无 'equip: stone_pickaxe'",
+        "有 'equip: stone_pickaxe' 无 'nearbyCraft: furnace'",
+        "同时有 'nearbyCraft: furnace' 和 'equip: stone_pickaxe'",
+        "缺少 'place: furnace' 或 'nearbySmelt: iron_ingot'",
+        "缺少 'nearbyCraft: iron_pickaxe'",
+        "缺少 'equip: iron_pickaxe'",
+        "全部条件满足"
+      ]
+    },
+    "test_cases": [
+      {
+        "case_name": "空列表",
+        "input_args": {
+          "actions": []
+        },
+        "expected_output": 0,
+        "category": "boundary",
+        "description": "空输入，无 'attack'，应返回初始值 0",
+        "logic_coverage": "'attack' in actions 为假"
+      },
+      {
+        "case_name": "仅attack",
+        "input_args": {
+          "actions": [
+            "attack"
+          ]
+        },
+        "expected_output": 1,
+        "category": "normal",
+        "description": "有 'attack' 但无 'craft: planks'，返回 1",
+        "logic_coverage": "'attack' in actions 为真；'craft: planks' in actions 为假"
+      },
+      {
+        "case_name": "attack加planks",
+        "input_args": {
+          "actions": [
+            "attack",
+            "craft: planks"
+          ]
+        },
+        "expected_output": 3,
+        "category": "normal",
+        "description": "有 'attack' 和 'craft: planks'，但无 stick/table，返回 3",
+        "logic_coverage": "'craft: planks' in actions 为真；stick/table 条件为假"
+      },
+      {
+        "case_name": "仅stick无table",
+        "input_args": {
+          "actions": [
+            "attack",
+            "craft: planks",
+            "craft: stick"
+          ]
+        },
+        "expected_output": 7,
+        "category": "boundary",
+        "description": "有 stick 无 table，进入 elif 分支返回 7",
+        "logic_coverage": "stick and table 为假；stick or table 为真"
+      },
+      {
+        "case_name": "仅table无stick",
+        "input_args": {
+          "actions": [
+            "attack",
+            "craft: planks",
+            "craft: crafting_table"
+          ]
+        },
+        "expected_output": 7,
+        "category": "boundary",
+        "description": "有 table 无 stick，进入 elif 分支返回 7",
+        "logic_coverage": "stick and table 为假；stick or table 为真"
+      },
+      {
+        "case_name": "stick和table都有",
+        "input_args": {
+          "actions": [
+            "attack",
+            "craft: planks",
+            "craft: stick",
+            "craft: crafting_table"
+          ]
+        },
+        "expected_output": 11,
+        "category": "normal",
+        "description": "同时有 stick 和 table，返回 11",
+        "logic_coverage": "stick and table 为真"
+      },
+      {
+        "case_name": "有place_table和wooden_pickaxe无equip",
+        "input_args": {
+          "actions": [
+            "attack",
+            "craft: planks",
+            "craft: stick",
+            "craft: crafting_table",
+            "place: crafting_table",
+            "nearbyCraft: wooden_pickaxe"
+          ]
+        },
+        "expected_output": 19,
+        "category": "normal",
+        "description": "有 place: crafting_table 和 nearbyCraft: wooden_pickaxe 但无 equip: wooden_pickaxe，返回 19",
+        "logic_coverage": "place: crafting_table and nearbyCraft: wooden_pickaxe 为真；equip: wooden_pickaxe 为假"
+      },
+      {
+        "case_name": "有equip_wooden_pickaxe",
+        "input_args": {
+          "actions": [
+            "attack",
+            "craft: planks",
+            "craft: stick",
+            "craft: crafting_table",
+            "place: crafting_table",
+            "nearbyCraft: wooden_pickaxe",
+            "equip: wooden_pickaxe"
+          ]
+        },
+        "expected_output": 35,
+        "category": "normal",
+        "description": "有 equip: wooden_pickaxe，返回 35",
+        "logic_coverage": "equip: wooden_pickaxe 为真"
+      },
+      {
+        "case_name": "缺少place_table或wooden_pickaxe",
+        "input_args": {
+          "actions": [
+            "attack",
+            "craft: planks",
+            "craft: stick",
+            "craft: crafting_table"
+          ]
+        },
+        "expected_output": 11,
+        "category": "boundary",
+        "description": "不满足 place: crafting_table 和 nearbyCraft: wooden_pickaxe 条件，返回上一级 11",
+        "logic_coverage": "place: crafting_table and nearbyCraft: wooden_pickaxe 为假"
+      },
+      {
+        "case_name": "有stone_pickaxe",
+        "input_args": {
+          "actions": [
+            "attack",
+            "craft: planks",
+            "craft: stick",
+            "craft: crafting_table",
+            "place: crafting_table",
+            "nearbyCraft: wooden_pickaxe",
+            "equip: wooden_pickaxe",
+            "nearbyCraft: stone_pickaxe"
+          ]
+        },
+        "expected_output": 67,
+        "category": "normal",
+        "description": "有 nearbyCraft: stone_pickaxe，返回 67",
+        "logic_coverage": "'nearbyCraft: stone_pickaxe' in actions 为真"
+      },
+      {
+        "case_name": "无stone_pickaxe",
+        "input_args": {
+          "actions": [
+            "attack",
+            "craft: planks",
+            "craft: stick",
+            "craft: crafting_table",
+            "place: crafting_table",
+            "nearbyCraft: wooden_pickaxe",
+            "equip: wooden_pickaxe"
+          ]
+        },
+        "expected_output": 35,
+        "category": "boundary",
+        "description": "无 nearbyCraft: stone_pickaxe，返回上一级 35",
+        "logic_coverage": "'nearbyCraft: stone_pickaxe' in actions 为假"
+      },
+      {
+        "case_name": "furnace和equip_stone都有",
+        "input_args": {
+          "actions": [
+            "attack",
+            "craft: planks",
+            "craft: stick",
+            "craft: crafting_table",
+            "place: crafting_table",
+            "nearbyCraft: wooden_pickaxe",
+            "equip: wooden_pickaxe",
+            "nearbyCraft: stone_pickaxe",
+            "nearbyCraft: furnace",
+            "equip: stone_pickaxe"
+          ]
+        },
+        "expected_output": 163,
+        "category": "normal",
+        "description": "同时有 nearbyCraft: furnace 和 equip: stone_pickaxe，返回 163",
+        "logic_coverage": "furnace and equip: stone_pickaxe 为真"
+      },
+      {
+        "case_name": "furnace无equip_stone",
+        "input_args": {
+          "actions": [
+            "attack",
+            "craft: planks",
+            "craft: stick",
+            "craft: crafting_table",
+            "place: crafting_table",
+            "nearbyCraft: wooden_pickaxe",
+            "equip: wooden_pickaxe",
+            "nearbyCraft: stone_pickaxe",
+            "nearbyCraft: furnace"
+          ]
+        },
+        "expected_output": 99,
+        "category": "normal",
+        "description": "有 nearbyCraft: furnace 无 equip: stone_pickaxe，返回 99",
+        "logic_coverage": "furnace and equip: stone_pickaxe 为假；furnace and not equip 为真"
+      },
+      {
+        "case_name": "equip_stone无furnace",
+        "input_args": {
+          "actions": [
+            "attack",
+            "craft: planks",
+            "craft: stick",
+            "craft: crafting_table",
+            "place: crafting_table",
+            "nearbyCraft: wooden_pickaxe",
+            "equip: wooden_pickaxe",
+            "nearbyCraft: stone_pickaxe",
+            "equip: stone_pickaxe"
+          ]
+        },
+        "expected_output": 131,
+        "category": "normal",
+        "description": "有 equip: stone_pickaxe 无 nearbyCraft: furnace，返回 131",
+        "logic_coverage": "furnace and equip 为假；furnace and not equip 为假；equip and not furnace 为真"
+      },
+      {
+        "case_name": "两者都无",
+        "input_args": {
+          "actions": [
+            "attack",
+            "craft: planks",
+            "craft: stick",
+            "craft: crafting_table",
+            "place: crafting_table",
+            "nearbyCraft: wooden_pickaxe",
+            "equip: wooden_pickaxe",
+            "nearbyCraft: stone_pickaxe"
+          ]
+        },
+        "expected_output": 67,
+        "category": "boundary",
+        "description": "既无 furnace 也无 equip: stone_pickaxe，返回上一级 67",
+        "logic_coverage": "furnace and equip 为假；furnace and not equip 为假；equip and not furnace 为假"
+      },
+      {
+        "case_name": "place_furnace和smelt",
+        "input_args": {
+          "actions": [
+            "attack",
+            "craft: planks",
+            "craft: stick",
+            "craft: crafting_table",
+            "place: crafting_table",
+            "nearbyCraft: wooden_pickaxe",
+            "equip: wooden_pickaxe",
+            "nearbyCraft: stone_pickaxe",
+            "nearbyCraft: furnace",
+            "equip: stone_pickaxe",
+            "place: furnace",
+            "nearbySmelt: iron_ingot"
+          ]
+        },
+        "expected_output": 291,
+        "category": "normal",
+        "description": "有 place: furnace 和 nearbySmelt: iron_ingot，返回 291",
+        "logic_coverage": "place: furnace and nearbySmelt: iron_ingot 为真"
+      },
+      {
+        "case_name": "缺少place_furnace或smelt",
+        "input_args": {
+          "actions": [
+            "attack",
+            "craft: planks",
+            "craft: stick",
+            "craft: crafting_table",
+            "place: crafting_table",
+            "nearbyCraft: wooden_pickaxe",
+            "equip: wooden_pickaxe",
+            "nearbyCraft: stone_pickaxe",
+            "nearbyCraft: furnace",
+            "equip: stone_pickaxe"
+          ]
+        },
+        "expected_output": 163,
+        "category": "boundary",
+        "description": "不满足 place: furnace 和 nearbySmelt: iron_ingot，返回上一级 163",
+        "logic_coverage": "place: furnace and nearbySmelt: iron_ingot 为假"
+      },
+      {
+        "case_name": "有iron_pickaxe",
+        "input_args": {
+          "actions": [
+            "attack",
+            "craft: planks",
+            "craft: stick",
+            "craft: crafting_table",
+            "place: crafting_table",
+            "nearbyCraft: wooden_pickaxe",
+            "equip: wooden_pickaxe",
+            "nearbyCraft: stone_pickaxe",
+            "nearbyCraft: furnace",
+            "equip: stone_pickaxe",
+            "place: furnace",
+            "nearbySmelt: iron_ingot",
+            "nearbyCraft: iron_pickaxe"
+          ]
+        },
+        "expected_output": 547,
+        "category": "normal",
+        "description": "有 nearbyCraft: iron_pickaxe，返回 547",
+        "logic_coverage": "'nearbyCraft: iron_pickaxe' in actions 为真"
+      },
+      {
+        "case_name": "无iron_pickaxe",
+        "input_args": {
+          "actions": [
+            "attack",
+            "craft: planks",
+            "craft: stick",
+            "craft: crafting_table",
+            "place: crafting_table",
+            "nearbyCraft: wooden_pickaxe",
+            "equip: wooden_pickaxe",
+            "nearbyCraft: stone_pickaxe",
+            "nearbyCraft: furnace",
+            "equip: stone_pickaxe",
+            "place: furnace",
+            "nearbySmelt: iron_ingot"
+          ]
+        },
+        "expected_output": 291,
+        "category": "boundary",
+        "description": "无 nearbyCraft: iron_pickaxe，返回上一级 291",
+        "logic_coverage": "'nearbyCraft: iron_pickaxe' in actions 为假"
+      },
+      {
+        "case_name": "有equip_iron_pickaxe",
+        "input_args": {
+          "actions": [
+            "attack",
+            "craft: planks",
+            "craft: stick",
+            "craft: crafting_table",
+            "place: crafting_table",
+            "nearbyCraft: wooden_pickaxe",
+            "equip: wooden_pickaxe",
+            "nearbyCraft: stone_pickaxe",
+            "nearbyCraft: furnace",
+            "equip: stone_pickaxe",
+            "place: furnace",
+            "nearbySmelt: iron_ingot",
+            "nearbyCraft: iron_pickaxe",
+            "equip: iron_pickaxe"
+          ]
+        },
+        "expected_output": 1571,
+        "category": "normal",
+        "description": "有 equip: iron_pickaxe，返回 1571",
+        "logic_coverage": "'equip: iron_pickaxe' in actions 为真"
+      },
+      {
+        "case_name": "无equip_iron_pickaxe",
+        "input_args": {
+          "actions": [
+            "attack",
+            "craft: planks",
+            "craft: stick",
+            "craft: crafting_table",
+            "place: crafting_table",
+            "nearbyCraft: wooden_pickaxe",
+            "equip: wooden_pickaxe",
+            "nearbyCraft: stone_pickaxe",
+            "nearbyCraft: furnace",
+            "equip: stone_pickaxe",
+            "place: furnace",
+            "nearbySmelt: iron_ingot",
+            "nearbyCraft: iron_pickaxe"
+          ]
+        },
+        "expected_output": 547,
+        "category": "boundary",
+        "description": "无 equip: iron_pickaxe，返回上一级 547",
+        "logic_coverage": "'equip: iron_pickaxe' in actions 为假"
+      },
+      {
+        "case_name": "全条件满足",
+        "input_args": {
+          "actions": [
+            "attack",
+            "craft: planks",
+            "craft: stick",
+            "craft: crafting_table",
+            "place: crafting_table",
+            "nearbyCraft: wooden_pickaxe",
+            "equip: wooden_pickaxe",
+            "nearbyCraft: stone_pickaxe",
+            "nearbyCraft: furnace",
+            "equip: stone_pickaxe",
+            "place: furnace",
+            "nearbySmelt: iron_ingot",
+            "nearbyCraft: iron_pickaxe",
+            "equip: iron_pickaxe"
+          ]
+        },
+        "expected_output": 1571,
+        "category": "normal",
+        "description": "所有条件均满足，最终返回 1571",
+        "logic_coverage": "所有分支条件为真"
+      },
+      {
+        "case_name": "非可迭代输入",
+        "input_args": {
+          "actions": 123
+        },
+        "expected_output": null,
+        "category": "error",
+        "description": "期望值未知：代码未定义非可迭代输入行为，'in' 操作会抛出 TypeError",
+        "logic_coverage": "'attack' in actions 触发 TypeError"
+      },
+      {
+        "case_name": "None输入",
+        "input_args": {
+          "actions": null
+        },
+        "expected_output": null,
+        "category": "error",
+        "description": "期望值未知：代码未定义 None 输入行为，'in' 操作会抛出 TypeError",
+        "logic_coverage": "'attack' in actions 触发 TypeError"
+      }
+    ],
+    "logic_degraded": false,
+    "coverage_completeness": 1.0
+  },
+  "generated_test": "import pytest\n\nfrom max_rewards import max_rewards\n\n\n# ---------------------------------------------------------------------------\n# 正常 / 边界用例：期望值来自规约中给出的奖励等级序列\n# 0, 1, 3, 7, 11, 19, 35, 67, 99, 131, 163, 291, 547, 1571\n# ---------------------------------------------------------------------------\n\nREWARD_CASES = [\n    # (actions, expected_reward, case_id)\n    ([], 0, \"empty_list\"),\n    ([\"attack\"], 1, \"attack_only\"),\n    ([\"attack\", \"craft: planks\"], 3, \"attack_and_planks\"),\n    (\n        [\"attack\", \"craft: planks\", \"craft: stick\"],\n        7,\n        \"stick_without_table\",\n    ),\n    (\n        [\"attack\", \"craft: planks\", \"craft: crafting_table\"],\n        7,\n        \"table_without_stick\",\n    ),\n    (\n        [\"attack\", \"craft: planks\", \"craft: stick\", \"craft: crafting_table\"],\n        11,\n        \"stick_and_table\",\n    ),\n    (\n        [\n            \"attack\",\n            \"craft: planks\",\n            \"craft: stick\",\n            \"craft: crafting_table\",\n            \"place: crafting_table\",\n            \"nearbyCraft: wooden_pickaxe\",\n        ],\n        19,\n        \"place_table_and_wooden_pickaxe_without_equip\",\n    ),\n    (\n        [\n            \"attack\",\n            \"craft: planks\",\n            \"craft: stick\",\n            \"craft: crafting_table\",\n            \"place: crafting_table\",\n            \"nearbyCraft: wooden_pickaxe\",\n            \"equip: wooden_pickaxe\",\n        ],\n        35,\n        \"equip_wooden_pickaxe\",\n    ),\n    (\n        [\"attack\", \"craft: planks\", \"craft: stick\", \"craft: crafting_table\"],\n        11,\n        \"missing_place_table_or_wooden_pickaxe\",\n    ),\n    (\n        [\n            \"attack\",\n            \"craft: planks\",\n            \"craft: stick\",\n            \"craft: crafting_table\",\n            \"place: crafting_table\",\n            \"nearbyCraft: wooden_pickaxe\",\n            \"equip: wooden_pickaxe\",\n            \"nearbyCraft: stone_pickaxe\",\n        ],\n        67,\n        \"nearby_craft_stone_pickaxe\",\n    ),\n    (\n        [\n            \"attack\",\n            \"craft: planks\",\n            \"craft: stick\",\n            \"craft: crafting_table\",\n            \"place: crafting_table\",\n            \"nearbyCraft: wooden_pickaxe\",\n            \"equip: wooden_pickaxe\",\n        ],\n        35,\n        \"missing_stone_pickaxe\",\n    ),\n    (\n        [\n            \"attack\",\n            \"craft: planks\",\n            \"craft: stick\",\n            \"craft: crafting_table\",\n            \"place: crafting_table\",\n            \"nearbyCraft: wooden_pickaxe\",\n            \"equip: wooden_pickaxe\",\n            \"nearbyCraft: stone_pickaxe\",\n            \"nearbyCraft: furnace\",\n            \"equip: stone_pickaxe\",\n        ],\n        163,\n        \"furnace_and_equip_stone\",\n    ),\n    (\n        [\n            \"attack\",\n            \"craft: planks\",\n            \"craft: stick\",\n            \"craft: crafting_table\",\n            \"place: crafting_table\",\n            \"nearbyCraft: wooden_pickaxe\",\n            \"equip: wooden_pickaxe\",\n            \"nearbyCraft: stone_pickaxe\",\n            \"nearbyCraft: furnace\",\n        ],\n        99,\n        \"furnace_without_equip_stone\",\n    ),\n    (\n        [\n            \"attack\",\n            \"craft: planks\",\n            \"craft: stick\",\n            \"craft: crafting_table\",\n            \"place: crafting_table\",\n            \"nearbyCraft: wooden_pickaxe\",\n            \"equip: wooden_pickaxe\",\n            \"nearbyCraft: stone_pickaxe\",\n            \"equip: stone_pickaxe\",\n        ],\n        131,\n        \"equip_stone_without_furnace\",\n    ),\n    (\n        [\n            \"attack\",\n            \"craft: planks\",\n            \"craft: stick\",\n            \"craft: crafting_table\",\n            \"place: crafting_table\",\n            \"nearbyCraft: wooden_pickaxe\",\n            \"equip: wooden_pickaxe\",\n            \"nearbyCraft: stone_pickaxe\",\n        ],\n        67,\n        \"neither_furnace_nor_equip_stone\",\n    ),\n    (\n        [\n            \"attack\",\n            \"craft: planks\",\n            \"craft: stick\",\n            \"craft: crafting_table\",\n            \"place: crafting_table\",\n            \"nearbyCraft: wooden_pickaxe\",\n            \"equip: wooden_pickaxe\",\n            \"nearbyCraft: stone_pickaxe\",\n            \"nearbyCraft: furnace\",\n            \"equip: stone_pickaxe\",\n            \"place: furnace\",\n            \"nearbySmelt: iron_ingot\",\n        ],\n        291,\n        \"place_furnace_and_smelt\",\n    ),\n    (\n        [\n            \"attack\",\n            \"craft: planks\",\n            \"craft: stick\",\n            \"craft: crafting_table\",\n            \"place: crafting_table\",\n            \"nearbyCraft: wooden_pickaxe\",\n            \"equip: wooden_pickaxe\",\n            \"nearbyCraft: stone_pickaxe\",\n            \"nearbyCraft: furnace\",\n            \"equip: stone_pickaxe\",\n        ],\n        163,\n        \"missing_place_furnace_or_smelt\",\n    ),\n    (\n        [\n            \"attack\",\n            \"craft: planks\",\n            \"craft: stick\",\n            \"craft: crafting_table\",\n            \"place: crafting_table\",\n            \"nearbyCraft: wooden_pickaxe\",\n            \"equip: wooden_pickaxe\",\n            \"nearbyCraft: stone_pickaxe\",\n            \"nearbyCraft: furnace\",\n            \"equip: stone_pickaxe\",\n            \"place: furnace\",\n            \"nearbySmelt: iron_ingot\",\n            \"nearbyCraft: iron_pickaxe\",\n        ],\n        547,\n        \"nearby_craft_iron_pickaxe\",\n    ),\n    (\n        [\n            \"attack\",\n            \"craft: planks\",\n            \"craft: stick\",\n            \"craft: crafting_table\",\n            \"place: crafting_table\",\n            \"nearbyCraft: wooden_pickaxe\",\n            \"equip: wooden_pickaxe\",\n            \"nearbyCraft: stone_pickaxe\",\n            \"nearbyCraft: furnace\",\n            \"equip: stone_pickaxe\",\n            \"place: furnace\",\n            \"nearbySmelt: iron_ingot\",\n        ],\n        291,\n        \"missing_iron_pickaxe\",\n    ),\n    (\n        [\n            \"attack\",\n            \"craft: planks\",\n            \"craft: stick\",\n            \"craft: crafting_table\",\n            \"place: crafting_table\",\n            \"nearbyCraft: wooden_pickaxe\",\n            \"equip: wooden_pickaxe\",\n            \"nearbyCraft: stone_pickaxe\",\n            \"nearbyCraft: furnace\",\n            \"equip: stone_pickaxe\",\n            \"place: furnace\",\n            \"nearbySmelt: iron_ingot\",\n            \"nearbyCraft: iron_pickaxe\",\n            \"equip: iron_pickaxe\",\n        ],\n        1571,\n        \"equip_iron_pickaxe\",\n    ),\n    (\n        [\n            \"attack\",\n            \"craft: planks\",\n            \"craft: stick\",\n            \"craft: crafting_table\",\n            \"place: crafting_table\",\n            \"nearbyCraft: wooden_pickaxe\",\n            \"equip: wooden_pickaxe\",\n            \"nearbyCraft: stone_pickaxe\",\n            \"nearbyCraft: furnace\",\n            \"equip: stone_pickaxe\",\n            \"place: furnace\",\n            \"nearbySmelt: iron_ingot\",\n            \"nearbyCraft: iron_pickaxe\",\n        ],\n        547,\n        \"missing_equip_iron_pickaxe\",\n    ),\n    (\n        [\n            \"attack\",\n            \"craft: planks\",\n            \"craft: stick\",\n            \"craft: crafting_table\",\n            \"place: crafting_table\",\n            \"nearbyCraft: wooden_pickaxe\",\n            \"equip: wooden_pickaxe\",\n            \"nearbyCraft: stone_pickaxe\",\n            \"nearbyCraft: furnace\",\n            \"equip: stone_pickaxe\",\n            \"place: furnace\",\n            \"nearbySmelt: iron_ingot\",\n            \"nearbyCraft: iron_pickaxe\",\n            \"equip: iron_pickaxe\",\n        ],\n        1571,\n        \"all_conditions_satisfied\",\n    ),\n]\n\n\n@pytest.mark.parametrize(\n    \"actions, expected_reward\",\n    [(actions, expected) for actions, expected, _ in REWARD_CASES],\n    ids=[case_id for _, _, case_id in REWARD_CASES],\n)\ndef test_max_rewards_returns_expected_reward(actions, expected_reward):\n    \"\"\"规约后置条件：返回值等于按顺序满足的最高级条件对应的奖励值。\n\n    期望值来源：规约给出的奖励等级序列与各边界情况描述。\n    \"\"\"\n    assert max_rewards(actions) == expected_reward\n\n\ndef test_max_rewards_empty_list_returns_zero():\n    \"\"\"边界：空列表 []，无 'attack'，应返回初始奖励 0。\"\"\"\n    assert max_rewards([]) == 0\n\n\ndef test_max_rewards_missing_attack_returns_zero():\n    \"\"\"边界：缺少 'attack'，应返回初始奖励 0。\"\"\"\n    assert max_rewards([\"craft: planks\", \"craft: stick\"]) == 0\n\n\ndef test_max_rewards_attack_without_planks_returns_one():\n    \"\"\"边界：有 'attack' 但缺少 'craft: planks'，返回 1。\"\"\"\n    assert max_rewards([\"attack\"]) == 1\n\n\ndef test_max_rewards_stick_without_table_returns_seven():\n    \"\"\"边界：有 'craft: stick' 无 'craft: crafting_table'，返回 7。\"\"\"\n    assert max_rewards([\"attack\", \"craft: planks\", \"craft: stick\"]) == 7\n\n\ndef test_max_rewards_table_without_stick_returns_seven():\n    \"\"\"边界：有 'craft: crafting_table' 无 'craft: stick'，返回 7。\"\"\"\n    assert (\n        max_rewards([\"attack\", \"craft: planks\", \"craft: crafting_table\"]) == 7\n    )\n\n\ndef test_max_rewards_stick_and_table_returns_eleven():\n    \"\"\"边界：同时有 'craft: stick' 和 'craft: crafting_table'，返回 11。\"\"\"\n    assert (\n        max_rewards(\n            [\n                \"attack\",\n                \"craft: planks\",\n                \"craft: stick\",\n                \"craft: crafting_table\",\n            ]\n        )\n        == 11\n    )\n\n\ndef test_max_rewards_place_table_and_wooden_pickaxe_without_equip_returns_nineteen():\n    \"\"\"边界：有 place: crafting_table 和 nearbyCraft: wooden_pickaxe 但无 equip: wooden_pickaxe，返回 19。\"\"\"\n    assert (\n        max_rewards(\n            [\n                \"attack\",\n                \"craft: planks\",\n                \"craft: stick\",\n                \"craft: crafting_table\",\n                \"place: crafting_table\",\n                \"nearbyCraft: wooden_pickaxe\",\n            ]\n        )\n        == 19\n    )\n\n\ndef test_max_rewards_equip_wooden_pickaxe_returns_thirty_five():\n    \"\"\"边界：有 'equip: wooden_pickaxe'，返回 35。\"\"\"\n    assert (\n        max_rewards(\n            [\n                \"attack\",\n                \"craft: planks\",\n                \"craft: stick\",\n                \"craft: crafting_table\",\n                \"place: crafting_table\",\n                \"nearbyCraft: wooden_pickaxe\",\n                \"equip: wooden_pickaxe\",\n            ]\n        )\n        == 35\n    )\n\n\ndef test_max_rewards_furnace_without_equip_stone_returns_ninety_nine():\n    \"\"\"边界：有 'nearbyCraft: furnace' 无 'equip: stone_pickaxe'，返回 99。\"\"\"\n    assert (\n        max_rewards(\n            [\n                \"attack\",\n                \"craft: planks\",\n                \"craft: stick\",\n                \"craft: crafting_table\",\n                \"place: crafting_table\",\n                \"nearbyCraft: wooden_pickaxe\",\n                \"equip: wooden_pickaxe\",\n                \"nearbyCraft: stone_pickaxe\",\n                \"nearbyCraft: furnace\",\n            ]\n        )\n        == 99\n    )\n\n\ndef test_max_rewards_equip_stone_without_furnace_returns_one_hundred_thirty_one():\n    \"\"\"边界：有 'equip: stone_pickaxe' 无 'nearbyCraft: furnace'，返回 131。\"\"\"\n    assert (\n        max_rewards(\n            [\n                \"attack\",\n                \"craft: planks\",\n                \"craft: stick\",\n                \"craft: crafting_table\",\n                \"place: crafting_table\",\n                \"nearbyCraft: wooden_pickaxe\",\n                \"equip: wooden_pickaxe\",\n                \"nearbyCraft: stone_pickaxe\",\n                \"equip: stone_pickaxe\",\n            ]\n        )\n        == 131\n    )\n\n\ndef test_max_rewards_furnace_and_equip_stone_returns_one_hundred_sixty_three():\n    \"\"\"边界：同时有 'nearbyCraft: furnace' 和 'equip: stone_pickaxe'，返回 163。\"\"\"\n    assert (\n        max_rewards(\n            [\n                \"attack\",\n                \"craft: planks\",\n                \"craft: stick\",\n                \"craft: crafting_table\",\n                \"place: crafting_table\",\n                \"nearbyCraft: wooden_pickaxe\",\n                \"equip: wooden_pickaxe\",\n                \"nearbyCraft: stone_pickaxe\",\n                \"nearbyCraft: furnace\",\n                \"equip: stone_pickaxe\",\n            ]\n        )\n        == 163\n    )\n\n\ndef test_max_rewards_missing_place_furnace_or_smelt_returns_one_hundred_sixty_three():\n    \"\"\"边界：缺少 'place: furnace' 或 'nearbySmelt: iron_ingot'，返回上一级 163。\"\"\"\n    assert (\n        max_rewards(\n            [\n                \"attack\",\n                \"craft: planks\",\n                \"craft: stick\",\n                \"craft: crafting_table\",\n                \"place: crafting_table\",\n                \"nearbyCraft: wooden_pickaxe\",\n                \"equip: wooden_pickaxe\",\n                \"nearbyCraft: stone_pickaxe\",\n                \"nearbyCraft: furnace\",\n                \"equip: stone_pickaxe\",\n            ]\n        )\n        == 163\n    )\n\n\ndef test_max_rewards_missing_iron_pickaxe_returns_two_hundred_ninety_one():\n    \"\"\"边界：缺少 'nearbyCraft: iron_pickaxe'，返回上一级 291。\"\"\"\n    assert (\n        max_rewards(\n            [\n                \"attack\",\n                \"craft: planks\",\n                \"craft: stick\",\n                \"craft: crafting_table\",\n                \"place: crafting_table\",\n                \"nearbyCraft: wooden_pickaxe\",\n                \"equip: wooden_pickaxe\",\n                \"nearbyCraft: stone_pickaxe\",\n                \"nearbyCraft: furnace\",\n                \"equip: stone_pickaxe\",\n                \"place: furnace\",\n                \"nearbySmelt: iron_ingot\",\n            ]\n        )\n        == 291\n    )\n\n\ndef test_max_rewards_missing_equip_iron_pickaxe_returns_five_hundred_forty_seven():\n    \"\"\"边界：缺少 'equip: iron_pickaxe'，返回上一级 547。\"\"\"\n    assert (\n        max_rewards(\n            [\n                \"attack\",\n                \"craft: planks\",\n                \"craft: stick\",\n                \"craft: crafting_table\",\n                \"place: crafting_table\",\n                \"nearbyCraft: wooden_pickaxe\",\n                \"equip: wooden_pickaxe\",\n                \"nearbyCraft: stone_pickaxe\",\n                \"nearbyCraft: furnace\",\n                \"equip: stone_pickaxe\",\n                \"place: furnace\",\n                \"nearbySmelt: iron_ingot\",\n                \"nearbyCraft: iron_pickaxe\",\n            ]\n        )\n        == 547\n    )\n\n\ndef test_max_rewards_all_conditions_satisfied_returns_one_thousand_five_hundred_seventy_one():\n    \"\"\"边界：全部条件满足，返回最高奖励 1571。\"\"\"\n    assert (\n        max_rewards(\n            [\n                \"attack\",\n                \"craft: planks\",\n                \"craft: stick\",\n                \"craft: crafting_table\",\n                \"place: crafting_table\",\n                \"nearbyCraft: wooden_pickaxe\",\n                \"equip: wooden_pickaxe\",\n                \"nearbyCraft: stone_pickaxe\",\n                \"nearbyCraft: furnace\",\n                \"equip: stone_pickaxe\",\n                \"place: furnace\",\n                \"nearbySmelt: iron_ingot\",\n                \"nearbyCraft: iron_pickaxe\",\n                \"equip: iron_pickaxe\",\n            ]\n        )\n        == 1571\n    )\n\n\n# ---------------------------------------------------------------------------\n# 前置条件不满足的输入：规约声明 actions 必须支持 in 成员测试。\n# 期望值来源不明（规约未定义非可迭代输入行为），仅断言会抛出异常，\n# 不臆造具体异常类型以外的行为。\n# ---------------------------------------------------------------------------\n\n\ndef test_max_rewards_non_iterable_input_raises():\n    \"\"\"前置条件不满足：actions 为非可迭代对象（int），'in' 操作应抛出 TypeError。\n\n    期望值来源不明，需人工确认：规约未定义非可迭代输入的具体行为，\n    此处仅断言会抛出异常。\n    \"\"\"\n    with pytest.raises(Exception):\n        max_rewards(123)\n\n\ndef test_max_rewards_none_input_raises():\n    \"\"\"前置条件不满足：actions 为 None，'in' 操作应抛出 TypeError。\n\n    期望值来源不明，需人工确认：规约未定义 None 输入的具体行为，\n    此处仅断言会抛出异常。\n    \"\"\"\n    with pytest.raises(Exception):\n        max_rewards(None)",
+  "diagnosis": null,
+  "error_category": null,
+  "patch": null,
+  "test_passed": true,
+  "iterations": 0,
+  "coverage": 100.0,
+  "rag_stats": null,
+  "position_aware_focus": null,
+  "repo_verification": null,
+  "cross_file_deps": null,
+  "task_metadata": {
+    "source": "ult",
+    "function_name": "max_rewards",
+    "signature": "",
+    "cyclomatic_complexity": 1,
+    "mutation_primary_metric": true,
+    "no_gold_tests": false,
+    "gold_tests": [
+      "assert max_rewards(['craft: planks', 'craft: stick', 'craft: crafting_table']) == 11",
+      "assert max_rewards(['nearbyCraft: stone_pickaxe', 'equip: stone_pickaxe', 'nearbyCraft: furnace']) == 163",
+      "assert max_rewards(['craft: planks', 'craft: stick', 'craft: crafting_table', 'place: crafting_table', 'nearbyCraft: wooden_pickaxe', 'equip: wooden_pickaxe']) == 35",
+      "assert max_rewards(['place: furnace', 'nearbySmelt: iron_ingot', 'nearbyCraft: iron_pickaxe', 'equip: iron_pickaxe']) == 1571",
+      "assert max_rewards(['place: crafting_table', 'nearbyCraft: wooden_pickaxe', 'equip: wooden_pickaxe']) == 35"
+    ],
+    "gold_tests_raw": "assert max_rewards(['craft: planks', 'craft: stick', 'craft: crafting_table']) == 11\nassert max_rewards(['nearbyCraft: stone_pickaxe', 'equip: stone_pickaxe', 'nearbyCraft: furnace']) == 163\nassert max_rewards(['craft: planks', 'craft: stick', 'craft: crafting_table', 'place: crafting_table', 'nearbyCraft: wooden_pickaxe', 'equip: wooden_pickaxe']) == 35\nassert max_rewards(['place: furnace', 'nearbySmelt: iron_ingot', 'nearbyCraft: iron_pickaxe', 'equip: iron_pickaxe']) == 1571\nassert max_rewards(['place: crafting_table', 'nearbyCraft: wooden_pickaxe', 'equip: wooden_pickaxe']) == 35",
+    "test_cases": "from max_rewards import max_rewards\ndef test_1():\n    assert max_rewards(['craft: planks', 'craft: stick', 'craft: crafting_table']) == 11\n\ndef test_2():\n    assert max_rewards(['nearbyCraft: stone_pickaxe', 'equip: stone_pickaxe', 'nearbyCraft: furnace']) == 163\n\ndef test_3():\n    assert max_rewards(['craft: planks', 'craft: stick', 'craft: crafting_table', 'place: crafting_table', 'nearbyCraft: wooden_pickaxe', 'equip: wooden_pickaxe']) == 35\n\ndef test_4():\n    assert max_rewards(['place: furnace', 'nearbySmelt: iron_ingot', 'nearbyCraft: iron_pickaxe', 'equip: iron_pickaxe']) == 1571\n\ndef test_5():\n    assert max_rewards(['place: crafting_table', 'nearbyCraft: wooden_pickaxe', 'equip: wooden_pickaxe']) == 35\n\n",
+    "fixed": "def max_rewards(actions):\r\n    max_reward = 0\r\n    if 'attack' in actions:\r\n        max_reward = 1\r\n    else:\r\n        return max_reward\r\n    if 'craft: planks' in actions:\r\n        max_reward = 3\r\n    else:\r\n        return max_reward\r\n    if 'craft: stick' in actions and 'craft: crafting_table' in actions:\r\n        max_reward = 11\r\n    elif 'craft: stick' in actions or 'craft: crafting_table' in actions:\r\n        max_reward = 7\r\n        return max_reward\r\n    else:\r\n        return max_reward\r\n    if 'place: crafting_table' in actions and 'nearbyCraft: wooden_pickaxe' in actions:\r\n        max_reward = 19\r\n        if 'equip: wooden_pickaxe' in actions:\r\n            max_reward = 35\r\n        else:\r\n            return max_reward\r\n    else:\r\n        return max_reward\r\n    if 'nearbyCraft: stone_pickaxe' in actions:\r\n        max_reward = 67\r\n    else:\r\n        return max_reward\r\n    if 'nearbyCraft: furnace' in actions and 'equip: stone_pickaxe' in actions:\r\n        max_reward = 163\r\n    elif 'nearbyCraft: furnace' in actions and 'equip: stone_pickaxe' not in actions:\r\n        max_reward = 99\r\n        return max_reward\r\n    elif 'equip: stone_pickaxe' in actions and 'nearbyCraft: furnace' not in actions:\r\n        max_reward = 131\r\n        return max_reward\r\n    else:\r\n        return max_reward\r\n    if 'place: furnace' in actions and 'nearbySmelt: iron_ingot' in actions:\r\n        max_reward = 291\r\n    else:\r\n        return max_reward\r\n    if 'nearbyCraft: iron_pickaxe' in actions:\r\n        max_reward = 547\r\n    else:\r\n        return max_reward\r\n    if 'equip: iron_pickaxe' in actions:\r\n        max_reward = 1571\r\n    else:\r\n        return max_reward\r\n    return max_reward",
+    "suggested_function": "max_rewards",
+    "is_cross_file": false
+  }
+}

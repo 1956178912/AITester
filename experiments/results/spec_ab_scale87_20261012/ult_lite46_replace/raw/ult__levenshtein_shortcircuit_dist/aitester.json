@@ -1,0 +1,243 @@
+{
+  "task_id": "ult__levenshtein_shortcircuit_dist",
+  "baseline": "aitester",
+  "test_plan": {
+    "function_name": "levenshtein_shortcircuit_dist",
+    "description": "计算字符串 s 与 t 的 Levenshtein 编辑距离，并在距离超过阈值 max_dist 时提前短路返回 (False, 100000)；若长度差超过 max_dist 则直接返回 (False, 10000)；否则当最终距离小于 max_dist 时返回 (True, 距离)，否则返回 (False, 100000)。",
+    "logic_analysis": {
+      "input_domain": "s: 字符串（可空）；t: 字符串（可空）；max_dist: 数值阈值（默认 3），用于长度差剪枝与距离判定",
+      "output_domain": "元组 (bool, int)：长度差剪枝返回 (False, 10000)；距离小于 max_dist 返回 (True, dist)；距离大于等于 max_dist 返回 (False, 100000)",
+      "preconditions": [
+        "s 与 t 为可迭代字符序列（字符串）",
+        "max_dist 为可比较的数值",
+        "rows = len(s)+1, cols = len(t)+1 均 >= 1"
+      ],
+      "postconditions": [
+        "返回值恒为二元组 (bool, int)",
+        "当 abs(rows-cols) > max_dist 时立即返回 (False, 10000)",
+        "当最终 dist[row][col] < max_dist 时返回 (True, dist[row][col])",
+        "否则返回 (False, 100000)"
+      ],
+      "edge_cases": [
+        "s 与 t 均为空字符串（rows=cols=1，长度差 0）",
+        "s 为空、t 非空（rows=1，cols>1）",
+        "t 为空、s 非空（cols=1，rows>1）",
+        "长度差恰好等于 max_dist（不触发剪枝）",
+        "长度差恰好大于 max_dist（触发剪枝返回 10000）",
+        "编辑距离恰好等于 max_dist（返回 False, 100000）",
+        "编辑距离恰好等于 max_dist-1（返回 True, dist）",
+        "max_dist 为 0 或负数",
+        "max_dist 极大（无剪枝）",
+        "s 与 t 完全相同（距离 0）"
+      ]
+    },
+    "test_cases": [
+      {
+        "case_name": "完全相同字符串",
+        "input_args": {
+          "s": "abc",
+          "t": "abc",
+          "max_dist": 3
+        },
+        "expected_output": "[true, 0]",
+        "category": "normal",
+        "description": "验证相同字符串编辑距离为 0 且小于 max_dist，返回 True",
+        "logic_coverage": "分支 dist[row][col] < max_dist；循环 for@11,15,18,20；分支 s[row-1]==t[col-1] 为真"
+      },
+      {
+        "case_name": "单字符替换",
+        "input_args": {
+          "s": "abc",
+          "t": "abd",
+          "max_dist": 3
+        },
+        "expected_output": "[true, 1]",
+        "category": "normal",
+        "description": "验证单字符替换距离为 1，小于 max_dist 返回 True",
+        "logic_coverage": "分支 s[row-1]==t[col-1] 为假；分支 dist[row][col] < max_dist"
+      },
+      {
+        "case_name": "长度差超过阈值触发剪枝",
+        "input_args": {
+          "s": "a",
+          "t": "abcdef",
+          "max_dist": 3
+        },
+        "expected_output": "[false, 10000]",
+        "category": "boundary",
+        "description": "rows=2, cols=7, abs(rows-cols)=5>3，触发长度差剪枝返回 (False,10000)",
+        "logic_coverage": "分支 abs(rows - cols) > max_dist 为真"
+      },
+      {
+        "case_name": "长度差恰好等于阈值不剪枝",
+        "input_args": {
+          "s": "a",
+          "t": "abcd",
+          "max_dist": 3
+        },
+        "expected_output": null,
+        "category": "boundary",
+        "description": "rows=2, cols=5, abs(rows-cols)=3 不大于 max_dist，不触发剪枝；期望值未知（取决于后续距离计算与短路逻辑）",
+        "logic_coverage": "分支 abs(rows - cols) > max_dist 为假"
+      },
+      {
+        "case_name": "编辑距离等于阈值返回 False",
+        "input_args": {
+          "s": "abc",
+          "t": "xyz",
+          "max_dist": 3
+        },
+        "expected_output": "[false, 100000]",
+        "category": "boundary",
+        "description": "距离为 3 等于 max_dist，不满足 < max_dist，返回 (False,100000)",
+        "logic_coverage": "分支 dist[row][col] < max_dist 为假；分支 max_num >= max_dist"
+      },
+      {
+        "case_name": "编辑距离小于阈值返回 True",
+        "input_args": {
+          "s": "abc",
+          "t": "ab",
+          "max_dist": 3
+        },
+        "expected_output": "[true, 1]",
+        "category": "normal",
+        "description": "删除一个字符距离为 1，小于 max_dist 返回 True",
+        "logic_coverage": "分支 dist[row][col] < max_dist 为真"
+      },
+      {
+        "case_name": "两空字符串",
+        "input_args": {
+          "s": "",
+          "t": "",
+          "max_dist": 3
+        },
+        "expected_output": "[true, 0]",
+        "category": "boundary",
+        "description": "rows=cols=1，长度差 0，距离 0 小于 max_dist 返回 True",
+        "logic_coverage": "循环 for@11,15,18,20 不执行；分支 dist[row][col] < max_dist 为真"
+      },
+      {
+        "case_name": "s 空 t 非空",
+        "input_args": {
+          "s": "",
+          "t": "abc",
+          "max_dist": 3
+        },
+        "expected_output": "[false, 100000]",
+        "category": "boundary",
+        "description": "rows=1, cols=4，长度差 3 不剪枝；距离为 3 等于 max_dist，返回 (False,100000)",
+        "logic_coverage": "分支 abs(rows - cols) > max_dist 为假；分支 dist[row][col] < max_dist 为假"
+      },
+      {
+        "case_name": "t 空 s 非空",
+        "input_args": {
+          "s": "abc",
+          "t": "",
+          "max_dist": 3
+        },
+        "expected_output": "[false, 100000]",
+        "category": "boundary",
+        "description": "rows=4, cols=1，长度差 3 不剪枝；距离为 3 等于 max_dist，返回 (False,100000)",
+        "logic_coverage": "分支 abs(rows - cols) > max_dist 为假；分支 dist[row][col] < max_dist 为假"
+      },
+      {
+        "case_name": "max_dist 为 0",
+        "input_args": {
+          "s": "a",
+          "t": "b",
+          "max_dist": 0
+        },
+        "expected_output": "[false, 10000]",
+        "category": "boundary",
+        "description": "rows=cols=2，长度差 0 不大于 0 不剪枝；距离 1 不小于 0，返回 (False,100000)；期望值未知（需确认 max_dist=0 时短路行为）",
+        "logic_coverage": "分支 abs(rows - cols) > max_dist 为假；分支 dist[row][col] < max_dist 为假"
+      },
+      {
+        "case_name": "max_dist 为负数",
+        "input_args": {
+          "s": "a",
+          "t": "b",
+          "max_dist": -1
+        },
+        "expected_output": null,
+        "category": "error",
+        "description": "max_dist 为负数，长度差 0 > -1 触发剪枝返回 (False,10000)；期望值未知（负数阈值语义未定义）",
+        "logic_coverage": "分支 abs(rows - cols) > max_dist 为真"
+      },
+      {
+        "case_name": "max_dist 极大无剪枝",
+        "input_args": {
+          "s": "abc",
+          "t": "xyz",
+          "max_dist": 100
+        },
+        "expected_output": "[true, 3]",
+        "category": "normal",
+        "description": "max_dist 极大，距离 3 小于 100 返回 True",
+        "logic_coverage": "分支 abs(rows - cols) > max_dist 为假；分支 dist[row][col] < max_dist 为真"
+      },
+      {
+        "case_name": "提前短路 max_num 触发",
+        "input_args": {
+          "s": "abcdef",
+          "t": "uvwxyz",
+          "max_dist": 3
+        },
+        "expected_output": "[false, 100000]",
+        "category": "boundary",
+        "description": "长度差 0 不剪枝；列循环中 max_num 达到 max_dist 触发提前返回 (False,100000)",
+        "logic_coverage": "分支 max_num >= max_dist 为真"
+      },
+      {
+        "case_name": "分支 dist[row][col] < max_num 为假",
+        "input_args": {
+          "s": "ab",
+          "t": "ba",
+          "max_dist": 3
+        },
+        "expected_output": "[true, 2]",
+        "category": "normal",
+        "description": "验证 dist[row][col] 不小于当前 max_num 时 max_num 不更新，最终距离 2 小于 max_dist 返回 True",
+        "logic_coverage": "分支 dist[row][col] < max_num 为假"
+      }
+    ],
+    "logic_degraded": false,
+    "coverage_completeness": 1.0
+  },
+  "generated_test": "import pytest\n\nfrom levenshtein_shortcircuit_dist import levenshtein_shortcircuit_dist\n\n\n# ---------------------------------------------------------------------------\n# 规约要点（期望值唯一来源）：\n#   rows = len(s) + 1, cols = len(t) + 1\n#   - abs(rows - cols) > max_dist  -> (False, 10000)\n#   - 最终 dist < max_dist         -> (True, dist)\n#   - 否则                          -> (False, 100000)\n#   返回值恒为二元组 (bool, int)\n# ---------------------------------------------------------------------------\n\n\ndef test_levenshtein_shortcircuit_dist_identical_strings():\n    \"\"\"相同字符串：距离 0 < max_dist，应返回 (True, 0)。\"\"\"\n    result = levenshtein_shortcircuit_dist(\"abc\", \"abc\", 3)\n    assert result == (True, 0)\n\n\ndef test_levenshtein_shortcircuit_dist_single_substitution():\n    \"\"\"单字符替换：距离 1 < max_dist，应返回 (True, 1)。\"\"\"\n    result = levenshtein_shortcircuit_dist(\"abc\", \"abd\", 3)\n    assert result == (True, 1)\n\n\ndef test_levenshtein_shortcircuit_dist_length_diff_exceeds_threshold():\n    \"\"\"长度差超过阈值：rows=2, cols=7, abs=5 > 3，应返回 (False, 10000)。\"\"\"\n    result = levenshtein_shortcircuit_dist(\"a\", \"abcdef\", 3)\n    assert result == (False, 10000)\n\n\ndef test_levenshtein_shortcircuit_dist_length_diff_equals_threshold_no_prune():\n    \"\"\"长度差恰好等于阈值：rows=2, cols=5, abs=3 不大于 3，不触发剪枝。\n\n    期望值来源不明（取决于后续距离计算与短路逻辑），\n    仅断言返回值结构符合规约（二元组 (bool, int)），需人工确认具体值。\n    \"\"\"\n    result = levenshtein_shortcircuit_dist(\"a\", \"abcd\", 3)\n    assert isinstance(result, tuple)\n    assert len(result) == 2\n    assert isinstance(result[0], bool)\n    assert isinstance(result[1], int)\n\n\ndef test_levenshtein_shortcircuit_dist_distance_equals_threshold_returns_false():\n    \"\"\"编辑距离恰好等于 max_dist：不满足 < max_dist，应返回 (False, 100000)。\"\"\"\n    result = levenshtein_shortcircuit_dist(\"abc\", \"xyz\", 3)\n    assert result == (False, 100000)\n\n\ndef test_levenshtein_shortcircuit_dist_distance_less_than_threshold_returns_true():\n    \"\"\"删除一个字符距离为 1 < max_dist，应返回 (True, 1)。\"\"\"\n    result = levenshtein_shortcircuit_dist(\"abc\", \"ab\", 3)\n    assert result == (True, 1)\n\n\ndef test_levenshtein_shortcircuit_dist_both_empty_strings():\n    \"\"\"两空字符串：rows=cols=1，长度差 0，距离 0 < max_dist，应返回 (True, 0)。\"\"\"\n    result = levenshtein_shortcircuit_dist(\"\", \"\", 3)\n    assert result == (True, 0)\n\n\ndef test_levenshtein_shortcircuit_dist_empty_s_nonempty_t():\n    \"\"\"s 空 t 非空：rows=1, cols=4，长度差 3 不剪枝；距离 3 等于 max_dist，应返回 (False, 100000)。\"\"\"\n    result = levenshtein_shortcircuit_dist(\"\", \"abc\", 3)\n    assert result == (False, 100000)\n\n\ndef test_levenshtein_shortcircuit_dist_nonempty_s_empty_t():\n    \"\"\"t 空 s 非空：rows=4, cols=1，长度差 3 不剪枝；距离 3 等于 max_dist，应返回 (False, 100000)。\"\"\"\n    result = levenshtein_shortcircuit_dist(\"abc\", \"\", 3)\n    assert result == (False, 100000)\n\n\ndef test_levenshtein_shortcircuit_dist_max_dist_zero():\n    \"\"\"max_dist 为 0：rows=cols=2，长度差 0 不大于 0 不剪枝；距离 1 不小于 0。\n\n    规约规定：距离不小于 max_dist 时返回 (False, 100000)。\n    期望值来源不明（需确认 max_dist=0 时短路行为），\n    此处按规约\"否则返回 (False, 100000)\"断言，需人工确认。\n    \"\"\"\n    result = levenshtein_shortcircuit_dist(\"a\", \"b\", 0)\n    assert result == (False, 100000)\n\n\ndef test_levenshtein_shortcircuit_dist_max_dist_negative():\n    \"\"\"max_dist 为负数：rows=cols=2，长度差 0 > -1 触发剪枝，应返回 (False, 10000)。\n\n    期望值来源不明（负数阈值语义未定义），\n    按规约 abs(rows-cols) > max_dist 分支断言，需人工确认。\n    \"\"\"\n    result = levenshtein_shortcircuit_dist(\"a\", \"b\", -1)\n    assert result == (False, 10000)\n\n\ndef test_levenshtein_shortcircuit_dist_max_dist_large_no_prune():\n    \"\"\"max_dist 极大：距离 3 < 100，应返回 (True, 3)。\"\"\"\n    result = levenshtein_shortcircuit_dist(\"abc\", \"xyz\", 100)\n    assert result == (True, 3)\n\n\ndef test_levenshtein_shortcircuit_dist_shortcircuit_triggered():\n    \"\"\"提前短路：长度差 0 不剪枝；距离达到 max_dist 触发短路，应返回 (False, 100000)。\"\"\"\n    result = levenshtein_shortcircuit_dist(\"abcdef\", \"uvwxyz\", 3)\n    assert result == (False, 100000)\n\n\ndef test_levenshtein_shortcircuit_dist_swap_distance_two():\n    \"\"\"交换两字符：距离 2 < max_dist，应返回 (True, 2)。\"\"\"\n    result = levenshtein_shortcircuit_dist(\"ab\", \"ba\", 3)\n    assert result == (True, 2)\n\n\n@pytest.mark.parametrize(\n    \"s, t, max_dist\",\n    [\n        (\"abc\", \"abc\", 3),\n        (\"abc\", \"abd\", 3),\n        (\"a\", \"abcdef\", 3),\n        (\"\", \"\", 3),\n        (\"\", \"abc\", 3),\n        (\"abc\", \"\", 3),\n        (\"abc\", \"xyz\", 100),\n    ],\n)\ndef test_levenshtein_shortcircuit_dist_return_type_invariant(s, t, max_dist):\n    \"\"\"不变量：返回值恒为二元组 (bool, int)。\"\"\"\n    result = levenshtein_shortcircuit_dist(s, t, max_dist)\n    assert isinstance(result, tuple)\n    assert len(result) == 2\n    assert isinstance(result[0], bool)\n    assert isinstance(result[1], int)\n\n\ndef test_levenshtein_shortcircuit_dist_default_max_dist():\n    \"\"\"默认 max_dist=3：相同字符串距离 0 < 3，应返回 (True, 0)。\"\"\"\n    result = levenshtein_shortcircuit_dist(\"abc\", \"abc\")\n    assert result == (True, 0)",
+  "diagnosis": "函数在 s 或 t 为空串时，主循环 `for col in range(1, cols)` 不执行，导致变量 `row` 和 `col` 从未被赋值；第 33 行 `if dist[row][col] < max_dist` 引用未定义变量，抛出 NameError（测试报告为失败/超时）。此外第 8 行 `abs(rows-cols) > max_dist` 在 max_dist 为负数（如测试用例 `[abc--3]` 传入 max_dist=-3）时逻辑异常：rows-cols 的绝对值恒 >= 0 > -3，会直接返回 `(False, 10000)`，虽然返回类型正确但短路阈值语义错误。核心缺陷是空串边界未处理导致 row/col 未定义。",
+  "error_category": "timeout",
+  "patch": "python\ndef levenshtein_shortcircuit_dist(s, t, max_dist=3):\n    #as seen from https://www.python-course.eu/levenshtein_distance.php\n    rows = len(s)+1\n    cols = len(t)+1\n\n    # 边界处理：任一为空串时，编辑距离即为另一串长度，\n    # 避免主循环不执行导致 row/col 未定义（NameError）。\n    if rows == 1 or cols == 1:\n        d = rows - 1 + cols - 1\n        if d < max_dist:\n            return True, d\n        return False, 100000\n\n    if abs(rows-cols)> max_dist:\n        return False, 10000\n\n    dist = [[0 for x in range(cols)] for x in range(rows)]\n    # source prefixes can be transformed into empty strings \n    # by deletions:\n    for i in range(1, rows):\n        dist[i][0] = i\n    # target prefixes can be created from an empty source string\n    # by inserting the characters\n    for i in range(1, cols):\n        dist[0][i] = i\n        \n    for col in range(1, cols):\n        max_num = 1000000\n        for row in range(1, rows):\n            if s[row-1] == t[col-1]:\n                cost = 0\n            else:\n                cost = 1\n            dist[row][col] = min(dist[row-1][col] + 1,      # deletion\n                                 dist[row][col-1] + 1,      # insertion\n                                 dist[row-1][col-1] + cost) # substitution\n            if dist[row][col] < max_num:\n                max_num = dist[row][col]\n        if max_num >= max_dist:\n            return False, 100000\n    #print dist[row][col]\n    if dist[row][col] < max_dist:\n        return True, dist[row][col]\n    return False, 100000\n    #return dist[row][col]\n",
+  "test_passed": true,
+  "iterations": 2,
+  "coverage": 99.0,
+  "rag_stats": null,
+  "position_aware_focus": {
+    "focused": true,
+    "function_name": "levenshtein_shortcircuit_dist",
+    "line": 33,
+    "hint": "位置感知修复指引（3.3）：异常定位在 `levenshtein_shortcircuit_dist()`（第 33 行）。请优先检查并修复该函数内的逻辑，避免改动无关代码。"
+  },
+  "repo_verification": null,
+  "cross_file_deps": null,
+  "task_metadata": {
+    "source": "ult",
+    "function_name": "levenshtein_shortcircuit_dist",
+    "signature": "",
+    "cyclomatic_complexity": 1,
+    "mutation_primary_metric": true,
+    "no_gold_tests": false,
+    "gold_tests": [
+      "assert levenshtein_shortcircuit_dist('computer', 'computers', 3) == (True, 3)",
+      "assert levenshtein_shortcircuit_dist('algorithm', 'altruistic', 3) == (True, 5)",
+      "assert levenshtein_shortcircuit_dist('kitten', 'sitting', 3) == (True, 3)",
+      "assert levenshtein_shortcircuit_dist('intention', 'execution', 3) == (True, 5)",
+      "assert levenshtein_shortcircuit_dist('flaw', 'lawn', 3) == (True, 2)"
+    ],
+    "gold_tests_raw": "assert levenshtein_shortcircuit_dist('computer', 'computers', 3) == (True, 3)\nassert levenshtein_shortcircuit_dist('algorithm', 'altruistic', 3) == (True, 5)\nassert levenshtein_shortcircuit_dist('kitten', 'sitting', 3) == (True, 3)\nassert levenshtein_shortcircuit_dist('intention', 'execution', 3) == (True, 5)\nassert levenshtein_shortcircuit_dist('flaw', 'lawn', 3) == (True, 2)",
+    "test_cases": "from levenshtein_shortcircuit_dist import levenshtein_shortcircuit_dist\ndef test_1():\n    assert levenshtein_shortcircuit_dist('computer', 'computers', 3) == (True, 3)\n\ndef test_2():\n    assert levenshtein_shortcircuit_dist('algorithm', 'altruistic', 3) == (True, 5)\n\ndef test_3():\n    assert levenshtein_shortcircuit_dist('kitten', 'sitting', 3) == (True, 3)\n\ndef test_4():\n    assert levenshtein_shortcircuit_dist('intention', 'execution', 3) == (True, 5)\n\ndef test_5():\n    assert levenshtein_shortcircuit_dist('flaw', 'lawn', 3) == (True, 2)\n\n",
+    "fixed": "def levenshtein_shortcircuit_dist(s, t, max_dist=3):\r\n    #as seen from https://www.python-course.eu/levenshtein_distance.php\r\n    rows = len(s)+1\r\n    cols = len(t)+1\r\n    if abs(rows-cols)> max_dist:\r\n        return False, 10000\r\n\r\n    dist = [[0 for x in range(cols)] for x in range(rows)]\r\n    # source prefixes can be transformed into empty strings \r\n    # by deletions:\r\n    for i in range(1, rows):\r\n        dist[i][0] = i\r\n    # target prefixes can be created from an empty source string\r\n    # by inserting the characters\r\n    for i in range(1, cols):\r\n        dist[0][i] = i\r\n        \r\n    for col in range(1, cols):\r\n        max_num = 1000000\r\n        for row in range(1, rows):\r\n            if s[row-1] == t[col-1]:\r\n                cost = 0\r\n            else:\r\n                cost = 1\r\n            dist[row][col] = min(dist[row-1][col] + 1,      # deletion\r\n                                 dist[row][col-1] + 1,      # insertion\r\n                                 dist[row-1][col-1] + cost) # substitution\r\n            if dist[row][col] < max_num:\r\n                max_num = dist[row][col]\r\n        if max_num >= max_dist:\r\n            return False, 100000\r\n    #print dist[row][col]\r\n    if dist[row][col] < max_dist:\r\n        return True, dist[row][col]\r\n    return False, 100000\r\n    #return dist[row][col]\r",
+    "suggested_function": "levenshtein_shortcircuit_dist",
+    "is_cross_file": false
+  }
+}

@@ -1,4 +1,4 @@
-> Last updated: 2026-10-19 (round X (part 1): **paper reproducibility closure** — zero-LLM recomputation cross-check of 12 claims all reproduce; four reproducibility gaps fixed (six zero-LLM recompute entry scripts committed + the 607-clause corpus archived + a corpus-replay path + Appendix A extended with 5 artifact-map rows); 9 regression locks. Previously round W: second-round third-party review residuals closed (A07/A09/A10); round V: 23-item third-party review remediation; rounds U/T/S/R/Q/P/O/N/M/L/K registered the same day)
+> Last updated: 2026-10-19 (round X: **paper reproducibility closure and systematic review** — zero-LLM recomputation cross-check of 12 claims all reproduce; five reproducibility gaps fixed (six zero-LLM recompute entry scripts + two input batches + the 607-clause corpus archived + a corpus-replay path + Appendix A extended with 5 artifact-map rows); T-round README manual-section rewrite hazard closed (MANUAL-marker preservation); 14 regression locks. Previously round W: second-round third-party review residuals closed (A07/A09/A10); round V: 23-item third-party review remediation; rounds U/T/S/R/Q/P/O/N/M/L/K registered the same day)
 
 > **Language**: [简体中文](CHANGELOG.md) | English (this file)
 
@@ -6,7 +6,7 @@
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-## [Unreleased] — 2026-10-19 Round X (part 1): paper reproducibility closure (zero-LLM recomputation cross-check + four gap fixes)
+## [Unreleased] — 2026-10-19 Round X: paper reproducibility closure and systematic review (zero LLM, $0)
 
 > Preparatory audit for paper finalization: every core number cited in the paper was
 > recomputed with zero LLM calls (12/12 reproduce), and the recompute entry points
@@ -39,6 +39,13 @@ All notable changes to this project will be documented in this file. Format foll
 ### Recorded — T-round README rewrite hazard (unfixed; handed to the X-round review)
 
 - `analyze_t1_b2_main_batch.py --write` regenerates the README from scratch; the manually appended "0.6 T-round findings" section (32 lines) in the archived copy would be silently dropped (demonstrated on a /tmp copy during this round's recomputation). Proposed fix: generation-preservation markers or moving the section to a handwritten file.
+
+### Fixed — round X (part 2) systematic review: same-class gap sweep + input batches committed + README rewrite hazard closed
+
+- **Sweep (all path forms, not just .py)**: of 70 experiments scripts referenced by docs, 3 are not in-repo — all non-live references (1 version-history snapshot + 2 design-plan entries explicitly marked "designed, not implemented"); artifact-README recompute references: 0 gaps; of 106 paths referenced by tracked files, 2 are real input gaps; of 10 README-generating scripts only the T-round instance had a manual-section loss risk; dangerous-pattern scan of the 6 newly committed scripts: all CLEAN.
+- **Input gap G5**: the default input batches of two zero-LLM scripts were not in the artifact package (script in, input out — recompute chain still broken) — `emse_quixbugs_mutk_full.py`'s `_INPUT_JSON` (Table 5 QuixBugs mutation) committed as `emse_spec_ir_quixbugs_20261013/` (52 files); `emse_ult_gold_diagnosis.py`'s `_LITE46_JSON` (Table 5's gold 71/71 note) committed as `spec_ab_scale87_20261012/ult_lite46_replace/` (94 files). Both follow the r4_batches precedent (batch + traces + provenance README + SHA256SUMS).
+- **T-round README rewrite hazard closed**: `analyze_t1_b2_main_batch.py` gained a `<!-- MANUAL:BEGIN/END -->` generation-preservation mechanism (`_preserve_manual_sections`: paired blocks preserved verbatim on `--write`; unclosed markers not preserved; multiple blocks kept in order); the archived "0.6 T-round findings" section is now wrapped; end-to-end proof on a /tmp copy shows the manual section survives (it was previously always lost, 32 lines).
+- **Regression locks**: `tests/test_analyze_t1_b2_manual_sections.py` (5 cases, hermetic — renders from the archived report; unclosed markers not preserved / no markers no append / multi-block ordering / key phrasings survive).
 
 ## [Unreleased] — 2026-10-19 Round W (second-round third-party review residuals: A07/A09/A10 P1 fixes)
 

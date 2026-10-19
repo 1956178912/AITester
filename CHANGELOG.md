@@ -1,12 +1,12 @@
 > **语言 / Language**：[English](CHANGELOG.en.md) | 简体中文（本文）
 >
-> Last updated: 2026-10-19（X 轮（一）：**论文复现性闭环**——零 LLM 复算核对 12 项全吻合；修复四个复现性缺口（6 个复算入口脚本入库 + 607 子句语料归档 + 语料重放路径 + 附录 A 补 5 行量化映射）；9 例回归锁。此前 W 轮：第二轮第三方复核残留补修（A07/A09/A10）；V 轮：第三方独立评审 23 项修复；U/T/S/R/Q/P/O/N/M/L/K 轮同日登记）
+> Last updated: 2026-10-19（X 轮：**论文复现性闭环与系统评审**——零 LLM 复算核对 12 项全吻合；修复五个复现性缺口（6 个复算入口脚本 + 2 个输入批次 + 607 子句语料归档 + 语料重放路径 + 附录 A 补 5 行量化映射）；T 轮 README 手工节重写隐患修复（MANUAL 标记保留机制）；14 例回归锁。此前 W 轮：第二轮第三方复核残留补修（A07/A09/A10）；V 轮：第三方独立评审 23 项修复；U/T/S/R/Q/P/O/N/M/L/K 轮同日登记）
 
 # Changelog
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
-## [Unreleased] — 2026-10-19 X 轮（一）：论文复现性闭环（零 LLM 复算核对 + 四缺口修复）
+## [Unreleased] — 2026-10-19 X 轮：论文复现性闭环与系统评审（零 LLM，$0）
 
 > 论文定稿核对的前置工作：对论文引用的核心数字逐一零 LLM 复算（12 项全吻合），
 > 并审计附录 A 引用的复算入口。真实 LLM 花费：**$0**。详细报告：
@@ -38,6 +38,13 @@
 ### Recorded — T 轮 README 重写隐患（未修，列入 X 轮评审）
 
 - `analyze_t1_b2_main_batch.py --write` 从零重生成 README，归档版手工追加的"0.6 T 轮发现"节（32 行）会被静默丢失（本轮复算在 /tmp 副本上实证）。建议生成-保留标记或移入手写文件。
+
+### Fixed — X 轮（二）系统评审：同类缺口普查 + 输入批次入库 + README 重写隐患修复
+
+- **普查（全形态，不限于 .py）**：文档引用的 70 个 experiments 脚本中 3 个不在库，均为非 live 引用（版本史历史快照 1 + 设计计划明确标注"不实现" 2）；工件 README 复现命令引用 0 缺口；被跟踪文件引用的 106 条路径中 2 条为真实输入缺口；10 个 README 生成脚本中仅 T 轮一例有手工节丢失风险；新入库 6 脚本危险模式扫描全部 CLEAN。
+- **输入缺口 G5**：两个零 LLM 脚本的默认输入批次不在工件包（脚本在库、输入不在——复算链仍断）——`emse_quixbugs_mutk_full.py`（Table 5 QuixBugs mutation）的 `_INPUT_JSON` 入库 `emse_spec_ir_quixbugs_20261013/`（52 文件）；`emse_ult_gold_diagnosis.py`（Table 5 题注 gold 71/71 结论）的 `_LITE46_JSON` 入库 `spec_ab_scale87_20261012/ult_lite46_replace/`（94 文件）。均按 r4_batches 先例整目录入库（批次 + traces + provenance README + SHA256SUMS）。
+- **T 轮 README 重写隐患闭环**：`analyze_t1_b2_main_batch.py` 增设 `<!-- MANUAL:BEGIN/END -->` 生成-保留机制（`_preserve_manual_sections`：成对闭合块 --write 时原样保留；未闭合不保留；多块按原序）；归档"0.6 T 轮发现"节已包标记；/tmp 副本端到端实证手工节存活（此前必丢 32 行）。
+- **回归锁**：`tests/test_analyze_t1_b2_manual_sections.py` 5 例（hermetic：归档报告直接渲染，含未闭合标记不保留 / 无标记不追加 / 多块保序 / 关键表述存活）。
 
 ## [Unreleased] — 2026-10-19 W 轮（第二轮第三方复核：A07/A09/A10 三项 P1 残留补修）
 

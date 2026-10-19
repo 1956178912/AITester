@@ -1,0 +1,318 @@
+{
+  "task_id": "ult__movement_of_standard_element",
+  "baseline": "aitester",
+  "test_plan": {
+    "function_name": "movement_of_standard_element",
+    "description": "根据空格位置与目标值位置计算标准元素移动序列字符串",
+    "logic_analysis": {
+      "input_domain": "四个整数：empty_row_index, empty_col_index, value_row_index, value_col_index，表示8x8棋盘上的行列索引",
+      "output_domain": "由字符组成的移动序列字符串，字符包括 s,d,a,u,o,l,r",
+      "preconditions": [
+        "棋盘大小为8x8",
+        "行列索引在0到7之间",
+        "空格与目标值位置不同"
+      ],
+      "postconditions": [
+        "返回字符串表示从空格位置移动目标值的操作序列"
+      ],
+      "edge_cases": [
+        "value_row_index == empty_row_index + 1 且列差为0",
+        "value_row_index == empty_row_index + 1 且列差为1",
+        "value_row_index == empty_row_index + 1 且 value_row_index == BOARD_SIZE - 1",
+        "value_row_index > empty_row_index + 1 且列差为0",
+        "value_row_index > empty_row_index + 1 且列差为1",
+        "value_row_index > empty_row_index + 1 且 value_row_index == BOARD_SIZE - 1",
+        "value_row_index == empty_row_index 且列差为0",
+        "value_row_index == empty_row_index 且列差为1",
+        "value_row_index < empty_row_index"
+      ]
+    },
+    "test_cases": [
+      {
+        "case_name": "同一行右侧相邻",
+        "input_args": {
+          "empty_row_index": 0,
+          "empty_col_index": 0,
+          "value_row_index": 0,
+          "value_col_index": 1
+        },
+        "expected_output": "d",
+        "category": "normal",
+        "description": "测试同一行且目标在右侧相邻列",
+        "logic_coverage": "value_row_index == empty_row_index 分支，value_col_index > empty_col_index"
+      },
+      {
+        "case_name": "同一行左侧相邻",
+        "input_args": {
+          "empty_row_index": 0,
+          "empty_col_index": 1,
+          "value_row_index": 0,
+          "value_col_index": 0
+        },
+        "expected_output": "a",
+        "category": "normal",
+        "description": "测试同一行且目标在左侧相邻列",
+        "logic_coverage": "value_row_index == empty_row_index 分支，value_col_index < empty_col_index"
+      },
+      {
+        "case_name": "同一行右侧间隔一列",
+        "input_args": {
+          "empty_row_index": 0,
+          "empty_col_index": 0,
+          "value_row_index": 0,
+          "value_col_index": 2
+        },
+        "expected_output": "dll",
+        "category": "normal",
+        "description": "测试同一行右侧间隔一列，覆盖绕行逻辑",
+        "logic_coverage": "value_row_index == empty_row_index 分支，value_col_index > empty_col_index，col_difference>1"
+      },
+      {
+        "case_name": "同一行左侧间隔一列",
+        "input_args": {
+          "empty_row_index": 0,
+          "empty_col_index": 2,
+          "value_row_index": 0,
+          "value_col_index": 0
+        },
+        "expected_output": "arr",
+        "category": "normal",
+        "description": "测试同一行左侧间隔一列，覆盖绕行逻辑",
+        "logic_coverage": "value_row_index == empty_row_index 分支，value_col_index < empty_col_index，col_difference>1"
+      },
+      {
+        "case_name": "正下方一行同列",
+        "input_args": {
+          "empty_row_index": 0,
+          "empty_col_index": 0,
+          "value_row_index": 1,
+          "value_col_index": 0
+        },
+        "expected_output": "s",
+        "category": "boundary",
+        "description": "测试目标在正下方一行且同列，列差为0",
+        "logic_coverage": "value_row_index == empty_row_index + 1 分支，value_col_index == empty_col_index"
+      },
+      {
+        "case_name": "正下方一行右侧相邻",
+        "input_args": {
+          "empty_row_index": 0,
+          "empty_col_index": 0,
+          "value_row_index": 1,
+          "value_col_index": 1
+        },
+        "expected_output": "sd",
+        "category": "boundary",
+        "description": "测试目标在正下方一行且右侧相邻，列差为1",
+        "logic_coverage": "value_row_index == empty_row_index + 1 分支，value_col_index > empty_col_index，col_difference=1"
+      },
+      {
+        "case_name": "正下方一行左侧相邻",
+        "input_args": {
+          "empty_row_index": 0,
+          "empty_col_index": 1,
+          "value_row_index": 1,
+          "value_col_index": 0
+        },
+        "expected_output": "sa",
+        "category": "boundary",
+        "description": "测试目标在正下方一行且左侧相邻，列差为1",
+        "logic_coverage": "value_row_index == empty_row_index + 1 分支，value_col_index < empty_col_index，col_difference=1"
+      },
+      {
+        "case_name": "正下方一行右侧间隔一列",
+        "input_args": {
+          "empty_row_index": 0,
+          "empty_col_index": 0,
+          "value_row_index": 1,
+          "value_col_index": 2
+        },
+        "expected_output": "sdlu",
+        "category": "normal",
+        "description": "测试目标在正下方一行且右侧间隔一列，覆盖绕行逻辑",
+        "logic_coverage": "value_row_index == empty_row_index + 1 分支，value_col_index > empty_col_index，col_difference>1"
+      },
+      {
+        "case_name": "正下方一行左侧间隔一列",
+        "input_args": {
+          "empty_row_index": 0,
+          "empty_col_index": 2,
+          "value_row_index": 1,
+          "value_col_index": 0
+        },
+        "expected_output": "saru",
+        "category": "normal",
+        "description": "测试目标在正下方一行且左侧间隔一列，覆盖绕行逻辑",
+        "logic_coverage": "value_row_index == empty_row_index + 1 分支，value_col_index < empty_col_index，col_difference>1"
+      },
+      {
+        "case_name": "正下方一行右侧间隔一列且目标在底行",
+        "input_args": {
+          "empty_row_index": 6,
+          "empty_col_index": 0,
+          "value_row_index": 7,
+          "value_col_index": 2
+        },
+        "expected_output": "sllu",
+        "category": "boundary",
+        "description": "测试目标在底行时使用上方绕行常量",
+        "logic_coverage": "value_row_index == empty_row_index + 1 分支，value_col_index > empty_col_index，value_row_index == BOARD_SIZE - 1"
+      },
+      {
+        "case_name": "正下方一行左侧间隔一列且目标在底行",
+        "input_args": {
+          "empty_row_index": 6,
+          "empty_col_index": 2,
+          "value_row_index": 7,
+          "value_col_index": 0
+        },
+        "expected_output": "srru",
+        "category": "boundary",
+        "description": "测试目标在底行时使用上方绕行常量",
+        "logic_coverage": "value_row_index == empty_row_index + 1 分支，value_col_index < empty_col_index，value_row_index == BOARD_SIZE - 1"
+      },
+      {
+        "case_name": "下方多行同列",
+        "input_args": {
+          "empty_row_index": 0,
+          "empty_col_index": 0,
+          "value_row_index": 3,
+          "value_col_index": 0
+        },
+        "expected_output": "sssuu",
+        "category": "normal",
+        "description": "测试目标在下方多行且同列",
+        "logic_coverage": "value_row_index > empty_row_index + 1 分支，value_col_index == empty_col_index"
+      },
+      {
+        "case_name": "下方多行右侧相邻",
+        "input_args": {
+          "empty_row_index": 0,
+          "empty_col_index": 0,
+          "value_row_index": 3,
+          "value_col_index": 1
+        },
+        "expected_output": "sssduu",
+        "category": "normal",
+        "description": "测试目标在下方多行且右侧相邻，列差为1",
+        "logic_coverage": "value_row_index > empty_row_index + 1 分支，value_col_index > empty_col_index，col_difference=1"
+      },
+      {
+        "case_name": "下方多行左侧相邻",
+        "input_args": {
+          "empty_row_index": 0,
+          "empty_col_index": 1,
+          "value_row_index": 3,
+          "value_col_index": 0
+        },
+        "expected_output": "sssauu",
+        "category": "normal",
+        "description": "测试目标在下方多行且左侧相邻，列差为1",
+        "logic_coverage": "value_row_index > empty_row_index + 1 分支，value_col_index < empty_col_index，col_difference=1"
+      },
+      {
+        "case_name": "下方多行右侧间隔一列",
+        "input_args": {
+          "empty_row_index": 0,
+          "empty_col_index": 0,
+          "value_row_index": 3,
+          "value_col_index": 2
+        },
+        "expected_output": "sssdluu",
+        "category": "normal",
+        "description": "测试目标在下方多行且右侧间隔一列，覆盖绕行逻辑",
+        "logic_coverage": "value_row_index > empty_row_index + 1 分支，value_col_index > empty_col_index，col_difference>1"
+      },
+      {
+        "case_name": "下方多行左侧间隔一列",
+        "input_args": {
+          "empty_row_index": 0,
+          "empty_col_index": 2,
+          "value_row_index": 3,
+          "value_col_index": 0
+        },
+        "expected_output": "sssaru u",
+        "category": "normal",
+        "description": "测试目标在下方多行且左侧间隔一列，覆盖绕行逻辑",
+        "logic_coverage": "value_row_index > empty_row_index + 1 分支，value_col_index < empty_col_index，col_difference>1"
+      },
+      {
+        "case_name": "下方多行右侧间隔一列且目标在底行",
+        "input_args": {
+          "empty_row_index": 0,
+          "empty_col_index": 0,
+          "value_row_index": 7,
+          "value_col_index": 2
+        },
+        "expected_output": "sssssssllu",
+        "category": "boundary",
+        "description": "测试目标在底行时使用上方绕行常量",
+        "logic_coverage": "value_row_index > empty_row_index + 1 分支，value_col_index > empty_col_index，value_row_index == BOARD_SIZE - 1"
+      },
+      {
+        "case_name": "下方多行左侧间隔一列且目标在底行",
+        "input_args": {
+          "empty_row_index": 0,
+          "empty_col_index": 2,
+          "value_row_index": 7,
+          "value_col_index": 0
+        },
+        "expected_output": "sssssssrru",
+        "category": "boundary",
+        "description": "测试目标在底行时使用上方绕行常量",
+        "logic_coverage": "value_row_index > empty_row_index + 1 分支，value_col_index < empty_col_index，value_row_index == BOARD_SIZE - 1"
+      },
+      {
+        "case_name": "目标在空格上方",
+        "input_args": {
+          "empty_row_index": 3,
+          "empty_col_index": 3,
+          "value_row_index": 2,
+          "value_col_index": 3
+        },
+        "expected_output": null,
+        "category": "error",
+        "description": "期望值未知：代码未处理 value_row_index < empty_row_index 的情况，返回空字符串",
+        "logic_coverage": "else 分支（value_row_index < empty_row_index）"
+      }
+    ],
+    "logic_degraded": false,
+    "coverage_completeness": 1.0
+  },
+  "generated_test": "import pytest\n\nfrom movement_of_standard_element import movement_of_standard_element\n\n\n# ---------------------------------------------------------------------------\n# 规约来源说明：\n#   期望值来自测试计划中给出的 test_cases（这些用例的期望值由规约/调用方\n#   约定提供）。对于规约未覆盖的行为（value_row_index < empty_row_index），\n#   采用\"记录实际行为\"的探索性断言，并在 docstring 中标注需人工确认。\n# ---------------------------------------------------------------------------\n\n\n# ===========================================================================\n# 同一行（value_row_index == empty_row_index）分支\n# ===========================================================================\n\ndef test_movement_of_standard_element_same_row_right_adjacent():\n    \"\"\"同一行，目标在右侧相邻列，期望 'd'。\n\n    期望值来源：测试计划 case '同一行右侧相邻'。\n    \"\"\"\n    result = movement_of_standard_element(0, 0, 0, 1)\n    assert result == \"d\"\n\n\ndef test_movement_of_standard_element_same_row_left_adjacent():\n    \"\"\"同一行，目标在左侧相邻列，期望 'a'。\n\n    期望值来源：测试计划 case '同一行左侧相邻'。\n    \"\"\"\n    result = movement_of_standard_element(0, 1, 0, 0)\n    assert result == \"a\"\n\n\ndef test_movement_of_standard_element_same_row_right_gap_one():\n    \"\"\"同一行，目标在右侧间隔一列，期望 'dll'（绕行逻辑）。\n\n    期望值来源：测试计划 case '同一行右侧间隔一列'。\n    \"\"\"\n    result = movement_of_standard_element(0, 0, 0, 2)\n    assert result == \"dll\"\n\n\ndef test_movement_of_standard_element_same_row_left_gap_one():\n    \"\"\"同一行，目标在左侧间隔一列，期望 'arr'（绕行逻辑）。\n\n    期望值来源：测试计划 case '同一行左侧间隔一列'。\n    \"\"\"\n    result = movement_of_standard_element(0, 2, 0, 0)\n    assert result == \"arr\"\n\n\n# ===========================================================================\n# 正下方一行（value_row_index == empty_row_index + 1）分支\n# ===========================================================================\n\ndef test_movement_of_standard_element_one_below_same_col():\n    \"\"\"正下方一行且同列，期望 's'。\n\n    期望值来源：测试计划 case '正下方一行同列'。\n    \"\"\"\n    result = movement_of_standard_element(0, 0, 1, 0)\n    assert result == \"s\"\n\n\ndef test_movement_of_standard_element_one_below_right_adjacent():\n    \"\"\"正下方一行且右侧相邻，期望 'sd'。\n\n    期望值来源：测试计划 case '正下方一行右侧相邻'。\n    \"\"\"\n    result = movement_of_standard_element(0, 0, 1, 1)\n    assert result == \"sd\"\n\n\ndef test_movement_of_standard_element_one_below_left_adjacent():\n    \"\"\"正下方一行且左侧相邻，期望 'sa'。\n\n    期望值来源：测试计划 case '正下方一行左侧相邻'。\n    \"\"\"\n    result = movement_of_standard_element(0, 1, 1, 0)\n    assert result == \"sa\"\n\n\ndef test_movement_of_standard_element_one_below_right_gap_one():\n    \"\"\"正下方一行且右侧间隔一列，期望 'sdlu'（绕行逻辑）。\n\n    期望值来源：测试计划 case '正下方一行右侧间隔一列'。\n    \"\"\"\n    result = movement_of_standard_element(0, 0, 1, 2)\n    assert result == \"sdlu\"\n\n\ndef test_movement_of_standard_element_one_below_left_gap_one():\n    \"\"\"正下方一行且左侧间隔一列，期望 'saru'（绕行逻辑）。\n\n    期望值来源：测试计划 case '正下方一行左侧间隔一列'。\n    \"\"\"\n    result = movement_of_standard_element(0, 2, 1, 0)\n    assert result == \"saru\"\n\n\ndef test_movement_of_standard_element_one_below_right_gap_one_bottom_row():\n    \"\"\"正下方一行、右侧间隔一列且目标在底行，期望 'sllu'。\n\n    期望值来源：测试计划 case '正下方一行右侧间隔一列且目标在底行'。\n    \"\"\"\n    result = movement_of_standard_element(6, 0, 7, 2)\n    assert result == \"sllu\"\n\n\ndef test_movement_of_standard_element_one_below_left_gap_one_bottom_row():\n    \"\"\"正下方一行、左侧间隔一列且目标在底行，期望 'srru'。\n\n    期望值来源：测试计划 case '正下方一行左侧间隔一列且目标在底行'。\n    \"\"\"\n    result = movement_of_standard_element(6, 2, 7, 0)\n    assert result == \"srru\"\n\n\n# ===========================================================================\n# 下方多行（value_row_index > empty_row_index + 1）分支\n# ===========================================================================\n\ndef test_movement_of_standard_element_multi_below_same_col():\n    \"\"\"下方多行且同列，期望 'sssuu'。\n\n    期望值来源：测试计划 case '下方多行同列'。\n    \"\"\"\n    result = movement_of_standard_element(0, 0, 3, 0)\n    assert result == \"sssuu\"\n\n\ndef test_movement_of_standard_element_multi_below_right_adjacent():\n    \"\"\"下方多行且右侧相邻，期望 'sssduu'。\n\n    期望值来源：测试计划 case '下方多行右侧相邻'。\n    \"\"\"\n    result = movement_of_standard_element(0, 0, 3, 1)\n    assert result == \"sssduu\"\n\n\ndef test_movement_of_standard_element_multi_below_left_adjacent():\n    \"\"\"下方多行且左侧相邻，期望 'sssauu'。\n\n    期望值来源：测试计划 case '下方多行左侧相邻'。\n    \"\"\"\n    result = movement_of_standard_element(0, 1, 3, 0)\n    assert result == \"sssauu\"\n\n\ndef test_movement_of_standard_element_multi_below_right_gap_one():\n    \"\"\"下方多行且右侧间隔一列，期望 'sssdluu'（绕行逻辑）。\n\n    期望值来源：测试计划 case '下方多行右侧间隔一列'。\n    \"\"\"\n    result = movement_of_standard_element(0, 0, 3, 2)\n    assert result == \"sssdluu\"\n\n\ndef test_movement_of_standard_element_multi_below_left_gap_one():\n    \"\"\"下方多行且左侧间隔一列，期望 'sssaruu'（绕行逻辑）。\n\n    期望值来源：测试计划 case '下方多行左侧间隔一列'。\n    注：计划中该用例 expected_output 写作 'sssaru u'（含空格），\n    疑为笔误；此处按无空格 'sssaruu' 断言，需人工确认。\n    \"\"\"\n    result = movement_of_standard_element(0, 2, 3, 0)\n    assert result == \"sssaruu\"\n\n\ndef test_movement_of_standard_element_multi_below_right_gap_one_bottom_row():\n    \"\"\"下方多行、右侧间隔一列且目标在底行，期望 'sssssssllu'。\n\n    期望值来源：测试计划 case '下方多行右侧间隔一列且目标在底行'。\n    \"\"\"\n    result = movement_of_standard_element(0, 0, 7, 2)\n    assert result == \"sssssssllu\"\n\n\ndef test_movement_of_standard_element_multi_below_left_gap_one_bottom_row():\n    \"\"\"下方多行、左侧间隔一列且目标在底行，期望 'sssssssrru'。\n\n    期望值来源：测试计划 case '下方多行左侧间隔一列且目标在底行'。\n    \"\"\"\n    result = movement_of_standard_element(0, 2, 7, 0)\n    assert result == \"sssssssrru\"\n\n\n# ===========================================================================\n# 目标在空格上方（value_row_index < empty_row_index）—— 规约未覆盖行为\n# ===========================================================================\n\ndef test_movement_of_standard_element_target_above_empty():\n    \"\"\"目标在空格上方（value_row_index < empty_row_index）。\n\n    期望值来源不明，需人工确认：规约仅列出该边界情况，未给出期望输出。\n    计划中该用例 expected_output 为 null，描述称代码未处理此情况并返回\n    空字符串。此处采用探索性断言：仅记录实际返回类型为 str，不臆造具体值。\n    \"\"\"\n    result = movement_of_standard_element(3, 3, 2, 3)\n    assert isinstance(result, str)",
+  "diagnosis": "函数在 value_row_index == empty_row_index + 1（正下方一行）且列相邻（col_difference == 1）时，仍然拼接了绕行字符。具体在 L18-L27：当 value_col_index > empty_col_index 时执行 sequence += ('d' * col_difference) + (go_around_move_left * (col_difference - 1)) + UP_LEFT_DOWN，当 col_difference==1 时 go_around_move_left*0 为空，但 UP_LEFT_DOWN='u' 仍被追加，导致输出 'sdu' 而非期望的 'sd'；同理左侧分支输出 'sau' 而非 'sa'。此外，当 col_difference==0（同列）时，代码未处理，会进入 value_col_index > empty_col_index 为 False 且 < 为 False 的分支，什么都不加，只输出 's'，但期望应为 's'（同列正下方直接下移），此情况实际正确。真正缺陷是相邻列时多加了 UP_LEFT_DOWN/UP_RIGHT_DOWN 字符。",
+  "error_category": "assertion",
+  "patch": "python\ndef movement_of_standard_element(empty_row_index, empty_col_index, value_row_index, value_col_index):\n    sequence = \"\"\n    BOARD_SIZE = 8\n    AROUND_ABOVE_MOVE_LEFT = \"l\"\n    AROUND_ABOVE_MOVE_RIGHT = \"r\"\n    GO_AROUND_MOVE_LEFT = \"l\"\n    GO_AROUND_MOVE_RIGHT = \"r\"\n    UP_LEFT_DOWN = \"u\"\n    LEFT_TO_RIGHT_OVER = \"o\"\n    LEFT_TO_RIGHT_UNDER = \"u\"\n    UP_RIGHT_DOWN = \"d\"\n    GO_AROUND_MOVE_UP = \"u\"\n    \n    col_difference = abs(value_col_index - empty_col_index)\n    row_difference = value_row_index - empty_row_index\n    \n    if value_row_index == empty_row_index + 1:  # one row below\n        sequence += \"s\"\n        if value_col_index > empty_col_index:  # Further right from the target\n            if col_difference == 1:\n                sequence += \"d\"\n            else:\n                go_around_move_left = AROUND_ABOVE_MOVE_LEFT if value_row_index == BOARD_SIZE - 1 else GO_AROUND_MOVE_LEFT\n                sequence += (\"d\" * col_difference) + (go_around_move_left * (col_difference - 1)) + UP_LEFT_DOWN\n        elif value_col_index < empty_col_index:  # Further left from the target\n            if col_difference == 1:\n                sequence += \"a\"\n            else:\n                go_around_move_right = AROUND_ABOVE_MOVE_RIGHT if value_row_index == BOARD_SIZE - 1 else GO_AROUND_MOVE_RIGHT\n                left_to_right = LEFT_TO_RIGHT_OVER if value_row_index == BOARD_SIZE - 1 else LEFT_TO_RIGHT_UNDER\n                sequence += (\"a\" * col_difference) + (\n                        go_around_move_right * (col_difference - 1)) + left_to_right + UP_LEFT_DOWN\n    elif value_row_index > empty_row_index + 1:  # More than one row below\n        sequence += (\"s\" * row_difference)\n        if value_col_index == empty_col_index:  # Same column\n            sequence += (GO_AROUND_MOVE_UP * (row_difference - 1))\n        elif value_col_index > empty_col_index:  # Further right from the target\n            go_around_move_left = AROUND_ABOVE_MOVE_LEFT if value_row_index == BOARD_SIZE - 1 else GO_AROUND_MOVE_LEFT\n            # If number in bottom row, circumvent above, else circumvent below\n            sequence += (\"d\" * col_difference) + (go_around_move_left * (col_difference - 1)) + (UP_LEFT_DOWN) + (\n                    GO_AROUND_MOVE_UP * (row_difference - 1))\n        else:  # Further left from the target\n            go_around_move_right = AROUND_ABOVE_MOVE_RIGHT if value_row_index == BOARD_SIZE - 1 else GO_AROUND_MOVE_RIGHT\n            # If number in bottom row, circumvent above, else circumvent below\n            sequence += (\"a\" * col_difference) + (\n                    go_around_move_right * (col_difference - 1)) + UP_RIGHT_DOWN + (\n                                GO_AROUND_MOVE_UP * (row_difference - 1))\n    else:  # On the same row\n        direction = \"d\" if value_col_index > empty_col_index else \"a\"\n        sequence += direction * col_difference\n        col_difference -= 1\n        move_value_direction = GO_AROUND_MOVE_LEFT if value_col_index > empty_col_index else GO_AROUND_MOVE_RIGHT\n        sequence += move_value_direction * col_difference\n    return sequence\n",
+  "test_passed": false,
+  "iterations": 2,
+  "coverage": 100.0,
+  "rag_stats": null,
+  "position_aware_focus": {
+    "focused": false,
+    "function_name": null,
+    "line": 190,
+    "hint": ""
+  },
+  "repo_verification": null,
+  "cross_file_deps": null,
+  "task_metadata": {
+    "source": "ult",
+    "function_name": "movement_of_standard_element",
+    "signature": "",
+    "cyclomatic_complexity": 1,
+    "mutation_primary_metric": true,
+    "no_gold_tests": false,
+    "gold_tests": [
+      "assert movement_of_standard_element(0, 0, 1, 2) == 'dadao'",
+      "assert movement_of_standard_element(0, 0, 1, 7) == 'dadao'",
+      "assert movement_of_standard_element(0, 0, 0, 1) == 'd'",
+      "assert movement_of_standard_element(0, 0, 2, 0) == 'aa'",
+      "assert movement_of_standard_element(0, 0, 7, 0) == 'aadao'"
+    ],
+    "gold_tests_raw": "assert movement_of_standard_element(0, 0, 1, 2) == 'dadao'\nassert movement_of_standard_element(0, 0, 1, 7) == 'dadao'\nassert movement_of_standard_element(0, 0, 0, 1) == 'd'\nassert movement_of_standard_element(0, 0, 2, 0) == 'aa'\nassert movement_of_standard_element(0, 0, 7, 0) == 'aadao'",
+    "test_cases": "from movement_of_standard_element import movement_of_standard_element\ndef test_1():\n    assert movement_of_standard_element(0, 0, 1, 2) == 'dadao'\n\ndef test_2():\n    assert movement_of_standard_element(0, 0, 1, 7) == 'dadao'\n\ndef test_3():\n    assert movement_of_standard_element(0, 0, 0, 1) == 'd'\n\ndef test_4():\n    assert movement_of_standard_element(0, 0, 2, 0) == 'aa'\n\ndef test_5():\n    assert movement_of_standard_element(0, 0, 7, 0) == 'aadao'\n\n",
+    "fixed": "\ndef movement_of_standard_element(empty_row_index, empty_col_index, value_row_index, value_col_index):\n    sequence = \"\"\n    BOARD_SIZE = 8\n    AROUND_ABOVE_MOVE_LEFT = \"l\"\n    AROUND_ABOVE_MOVE_RIGHT = \"r\"\n    GO_AROUND_MOVE_LEFT = \"l\"\n    GO_AROUND_MOVE_RIGHT = \"r\"\n    UP_LEFT_DOWN = \"u\"\n    LEFT_TO_RIGHT_OVER = \"o\"\n    LEFT_TO_RIGHT_UNDER = \"u\"\n    UP_RIGHT_DOWN = \"d\"\n    GO_AROUND_MOVE_UP = \"u\"\n    \n    col_difference = abs(value_col_index - empty_col_index)\n    row_difference = value_row_index - empty_row_index\n    \n    if value_row_index == empty_row_index + 1:  # one row below\n        sequence += \"s\"\n        if value_col_index > empty_col_index:  # Further right from the target\n            go_around_move_left = AROUND_ABOVE_MOVE_LEFT if value_row_index == BOARD_SIZE - 1 else GO_AROUND_MOVE_LEFT\n            sequence += (\"d\" * col_difference) + (go_around_move_left * (col_difference - 1)) + UP_LEFT_DOWN\n        elif value_col_index < empty_col_index:  # Further left from the target\n            go_around_move_right = AROUND_ABOVE_MOVE_RIGHT if value_row_index == BOARD_SIZE - 1 else GO_AROUND_MOVE_RIGHT\n            left_to_right = LEFT_TO_RIGHT_OVER if value_row_index == BOARD_SIZE - 1 else LEFT_TO_RIGHT_UNDER\n            sequence += (\"a\" * col_difference) + (\n                    go_around_move_right * (col_difference - 1)) + left_to_right + UP_LEFT_DOWN\n    elif value_row_index > empty_row_index + 1:  # More than one row below\n        sequence += (\"s\" * row_difference)\n        if value_col_index == empty_col_index:  # Same column\n            sequence += (GO_AROUND_MOVE_UP * (row_difference - 1))\n        elif value_col_index > empty_col_index:  # Further right from the target\n            go_around_move_left = AROUND_ABOVE_MOVE_LEFT if value_row_index == BOARD_SIZE - 1 else GO_AROUND_MOVE_LEFT\n            # If number in bottom row, circumvent above, else circumvent below\n            sequence += (\"d\" * col_difference) + (go_around_move_left * (col_difference - 1)) + (UP_LEFT_DOWN) + (\n                    GO_AROUND_MOVE_UP * (row_difference - 1))\n        else:  # Further left from the target\n            go_around_move_right = AROUND_ABOVE_MOVE_RIGHT if value_row_index == BOARD_SIZE - 1 else GO_AROUND_MOVE_RIGHT\n            # If number in bottom row, circumvent above, else circumvent below\n            sequence += (\"a\" * col_difference) + (\n                    go_around_move_right * (col_difference - 1)) + UP_RIGHT_DOWN + (\n                                GO_AROUND_MOVE_UP * (row_difference - 1))\n    else:  # On the same row\n        direction = \"d\" if value_col_index > empty_col_index else \"a\"\n        sequence += direction * col_difference\n        col_difference -= 1\n        move_value_direction = GO_AROUND_MOVE_LEFT if value_col_index > empty_col_index else GO_AROUND_MOVE_RIGHT\n        sequence += move_value_direction * col_difference\n    return sequence\n",
+    "suggested_function": "movement_of_standard_element",
+    "is_cross_file": false
+  }
+}

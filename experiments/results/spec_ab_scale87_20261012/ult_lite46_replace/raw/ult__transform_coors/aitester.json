@@ -1,0 +1,324 @@
+{
+  "task_id": "ult__transform_coors",
+  "baseline": "aitester",
+  "test_plan": {
+    "function_name": "transform_coors",
+    "description": "将坐标框(coor)按步长(xstride,ystride)映射到网格单元(i,j)内的局部坐标，仅当框有效且映射后面积不小于原面积40%时返回新坐标，否则返回None。",
+    "logic_analysis": {
+      "input_domain": "coor: 四元组(x1,y1,x2,y2)数值；i,j: 整数网格索引；xstride,ystride: 正整数步长",
+      "output_domain": "返回四元组(x1_prime,y1_prime,x2_prime,y2_prime)或None",
+      "preconditions": [
+        "coor可解包为4个数值",
+        "xstride与ystride非零（否则取模/整除报错）",
+        "i,j为整数"
+      ],
+      "postconditions": [
+        "返回时x2>x1且y2>y1且A_prime>0.4*A",
+        "返回坐标在[0,xstride]×[0,ystride]范围内",
+        "不满足条件时返回None"
+      ],
+      "edge_cases": [
+        "x1或y1恰为stride整数倍",
+        "x2或y2恰为stride整数倍",
+        "A_prime恰等于0.4*A",
+        "x2==x1或y2==y1（面积为0）",
+        "x2<x1或y2<y1",
+        "四个点均不在frame内",
+        "xstride或ystride为0"
+      ]
+    },
+    "test_cases": [
+      {
+        "case_name": "正常框完全落在单元内",
+        "input_args": {
+          "coor": [
+            1,
+            1,
+            5,
+            5
+          ],
+          "i": 0,
+          "j": 0,
+          "xstride": 10,
+          "ystride": 10
+        },
+        "expected_output": [
+          1,
+          1,
+          5,
+          5
+        ],
+        "category": "normal",
+        "description": "x1,y1,x2,y2均在frame内，面积满足条件",
+        "logic_coverage": "inframe(x1)&&inframe(y1)||inframe(x2)&&inframe(y2); A_prime>0.4*A"
+      },
+      {
+        "case_name": "仅左上角在frame内",
+        "input_args": {
+          "coor": [
+            1,
+            1,
+            15,
+            15
+          ],
+          "i": 0,
+          "j": 0,
+          "xstride": 10,
+          "ystride": 10
+        },
+        "expected_output": [
+          1,
+          1,
+          10,
+          10
+        ],
+        "category": "normal",
+        "description": "x2,y2不在frame内，取stride作为上界",
+        "logic_coverage": "inframe(x1)&&inframe(y1)为真; x2_prime=xstride; y2_prime=ystride"
+      },
+      {
+        "case_name": "仅右下角在frame内",
+        "input_args": {
+          "coor": [
+            -5,
+            -5,
+            5,
+            5
+          ],
+          "i": 0,
+          "j": 0,
+          "xstride": 10,
+          "ystride": 10
+        },
+        "expected_output": [
+          0,
+          0,
+          5,
+          5
+        ],
+        "category": "normal",
+        "description": "x1,y1不在frame内取0，x2,y2在frame内取模",
+        "logic_coverage": "inframe(x2)&&inframe(y2)为真; x1_prime=0; y1_prime=0"
+      },
+      {
+        "case_name": "坐标恰为stride整数倍",
+        "input_args": {
+          "coor": [
+            10,
+            10,
+            20,
+            20
+          ],
+          "i": 1,
+          "j": 1,
+          "xstride": 10,
+          "ystride": 10
+        },
+        "expected_output": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "category": "boundary",
+        "description": "x1=10时inframe(10,10,1)为真，new_e=0；但A_prime=0不满足面积条件，返回None",
+        "logic_coverage": "inframe边界; A_prime>0.4*A为假"
+      },
+      {
+        "case_name": "面积恰为原面积40%",
+        "input_args": {
+          "coor": [
+            0,
+            0,
+            10,
+            10
+          ],
+          "i": 0,
+          "j": 0,
+          "xstride": 10,
+          "ystride": 10
+        },
+        "expected_output": null,
+        "category": "boundary",
+        "description": "A=100，A_prime=100，A_prime>40为真，返回[0,0,10,10]；若构造A_prime=0.4*A则因严格大于返回None，期望值依赖具体构造",
+        "logic_coverage": "A_prime>0.4*A边界"
+      },
+      {
+        "case_name": "框宽度为0",
+        "input_args": {
+          "coor": [
+            5,
+            5,
+            5,
+            10
+          ],
+          "i": 0,
+          "j": 0,
+          "xstride": 10,
+          "ystride": 10
+        },
+        "expected_output": null,
+        "category": "boundary",
+        "description": "x2==x1，条件x2>x1为假，返回None",
+        "logic_coverage": "x2>x1为假"
+      },
+      {
+        "case_name": "框高度为0",
+        "input_args": {
+          "coor": [
+            5,
+            5,
+            10,
+            5
+          ],
+          "i": 0,
+          "j": 0,
+          "xstride": 10,
+          "ystride": 10
+        },
+        "expected_output": null,
+        "category": "boundary",
+        "description": "y2==y1，条件y2>y1为假，返回None",
+        "logic_coverage": "y2>y1为假"
+      },
+      {
+        "case_name": "坐标反转x2<x1",
+        "input_args": {
+          "coor": [
+            10,
+            10,
+            5,
+            5
+          ],
+          "i": 0,
+          "j": 0,
+          "xstride": 10,
+          "ystride": 10
+        },
+        "expected_output": null,
+        "category": "error",
+        "description": "x2<x1导致x2>x1为假，返回None",
+        "logic_coverage": "x2>x1为假"
+      },
+      {
+        "case_name": "四点均不在frame内",
+        "input_args": {
+          "coor": [
+            15,
+            15,
+            25,
+            25
+          ],
+          "i": 0,
+          "j": 0,
+          "xstride": 10,
+          "ystride": 10
+        },
+        "expected_output": null,
+        "category": "error",
+        "description": "inframe条件全为假，直接返回None",
+        "logic_coverage": "inframe(x1)&&inframe(y1)||inframe(x2)&&inframe(y2)为假"
+      },
+      {
+        "case_name": "xstride为0",
+        "input_args": {
+          "coor": [
+            1,
+            1,
+            5,
+            5
+          ],
+          "i": 0,
+          "j": 0,
+          "xstride": 0,
+          "ystride": 10
+        },
+        "expected_output": null,
+        "category": "error",
+        "description": "整除/取模除数为0会抛ZeroDivisionError，期望值未知",
+        "logic_coverage": "xstride非零前置条件"
+      },
+      {
+        "case_name": "ystride为0",
+        "input_args": {
+          "coor": [
+            1,
+            1,
+            5,
+            5
+          ],
+          "i": 0,
+          "j": 0,
+          "xstride": 10,
+          "ystride": 0
+        },
+        "expected_output": null,
+        "category": "error",
+        "description": "整除/取模除数为0会抛ZeroDivisionError，期望值未知",
+        "logic_coverage": "ystride非零前置条件"
+      },
+      {
+        "case_name": "负坐标",
+        "input_args": {
+          "coor": [
+            -15,
+            -15,
+            -5,
+            -5
+          ],
+          "i": -2,
+          "j": -2,
+          "xstride": 10,
+          "ystride": 10
+        },
+        "expected_output": [
+          -5,
+          -5,
+          -5,
+          -5
+        ],
+        "category": "boundary",
+        "description": "负坐标下整除取模行为依赖Python语义，A_prime=0不满足面积条件，返回None",
+        "logic_coverage": "负值整除/取模; A_prime>0.4*A"
+      }
+    ],
+    "logic_degraded": false,
+    "coverage_completeness": 1.0
+  },
+  "generated_test": "import pytest\n\nfrom transform_coors import transform_coors\n\n\n# ---------------------------------------------------------------------------\n# 辅助函数：仅依据规约可判定的性质进行断言\n# ---------------------------------------------------------------------------\n\ndef _assert_valid_result(result, xstride, ystride):\n    \"\"\"断言返回值满足规约中的后置条件（返回坐标在 [0,xstride]x[0,ystride] 内）。\"\"\"\n    assert result is not None\n    x1, y1, x2, y2 = result\n    assert 0 <= x1 <= xstride\n    assert 0 <= y1 <= ystride\n    assert 0 <= x2 <= xstride\n    assert 0 <= y2 <= ystride\n    assert x2 > x1\n    assert y2 > y1\n\n\n# ---------------------------------------------------------------------------\n# 正常用例\n# ---------------------------------------------------------------------------\n\ndef test_transform_coors_box_fully_inside_cell():\n    \"\"\"正常框完全落在单元内：规约要求返回坐标在 [0,xstride]x[0,ystride] 内且 x2>x1,y2>y1。\n\n    期望值来源：规约后置条件（返回坐标范围 + 面积条件）。\n    计划给出的具体期望 [1,1,5,5] 依赖实现细节，此处仅断言规约可判定性质。\n    \"\"\"\n    result = transform_coors([1, 1, 5, 5], 0, 0, 10, 10)\n    _assert_valid_result(result, 10, 10)\n\n\ndef test_transform_coors_only_topleft_inside_frame():\n    \"\"\"仅左上角在 frame 内：规约要求返回坐标在 [0,xstride]x[0,ystride] 内。\n\n    期望值来源：规约后置条件。具体裁剪值依赖实现，仅断言范围与顺序性质。\n    \"\"\"\n    result = transform_coors([1, 1, 15, 15], 0, 0, 10, 10)\n    _assert_valid_result(result, 10, 10)\n\n\ndef test_transform_coors_only_bottomright_inside_frame():\n    \"\"\"仅右下角在 frame 内：规约要求返回坐标在 [0,xstride]x[0,ystride] 内。\n\n    期望值来源：规约后置条件。具体裁剪值依赖实现，仅断言范围与顺序性质。\n    \"\"\"\n    result = transform_coors([-5, -5, 5, 5], 0, 0, 10, 10)\n    _assert_valid_result(result, 10, 10)\n\n\n# ---------------------------------------------------------------------------\n# 边界用例\n# ---------------------------------------------------------------------------\n\ndef test_transform_coors_coords_exact_stride_multiple():\n    \"\"\"坐标恰为 stride 整数倍：规约边界情况。\n\n    期望值来源不明，需人工确认：计划描述称 A_prime=0 不满足面积条件应返回 None，\n    但该结论依赖实现细节。此处记录实际行为并断言与规约一致性：\n    若返回非 None，则必须满足后置条件；若返回 None，则符合\"不满足条件返回 None\"。\n    \"\"\"\n    result = transform_coors([10, 10, 20, 20], 1, 1, 10, 10)\n    if result is not None:\n        _assert_valid_result(result, 10, 10)\n\n\ndef test_transform_coors_area_exactly_40_percent():\n    \"\"\"面积恰为原面积 40% 的边界：规约要求 A_prime > 0.4*A 为严格大于。\n\n    期望值来源不明，需人工确认：计划中该用例的期望值描述自相矛盾\n    （既说返回 [0,0,10,10] 又说构造 0.4*A 时返回 None）。\n    此处记录实际行为：若返回非 None 则必须满足后置条件。\n    \"\"\"\n    result = transform_coors([0, 0, 10, 10], 0, 0, 10, 10)\n    if result is not None:\n        _assert_valid_result(result, 10, 10)\n\n\ndef test_transform_coors_zero_width_box():\n    \"\"\"框宽度为 0（x2==x1）：规约要求 x2>x1，否则返回 None。\"\"\"\n    result = transform_coors([5, 5, 5, 10], 0, 0, 10, 10)\n    assert result is None\n\n\ndef test_transform_coors_zero_height_box():\n    \"\"\"框高度为 0（y2==y1）：规约要求 y2>y1，否则返回 None。\"\"\"\n    result = transform_coors([5, 5, 10, 5], 0, 0, 10, 10)\n    assert result is None\n\n\ndef test_transform_coors_reversed_x_coords():\n    \"\"\"坐标反转 x2<x1：规约要求 x2>x1，否则返回 None。\"\"\"\n    result = transform_coors([10, 10, 5, 5], 0, 0, 10, 10)\n    assert result is None\n\n\ndef test_transform_coors_reversed_y_coords():\n    \"\"\"坐标反转 y2<y1：规约要求 y2>y1，否则返回 None。\"\"\"\n    result = transform_coors([5, 10, 10, 5], 0, 0, 10, 10)\n    assert result is None\n\n\ndef test_transform_coors_all_points_outside_frame():\n    \"\"\"四个点均不在 frame 内：规约要求不满足条件时返回 None。\"\"\"\n    result = transform_coors([15, 15, 25, 25], 0, 0, 10, 10)\n    assert result is None\n\n\ndef test_transform_coors_negative_coords():\n    \"\"\"负坐标：规约边界情况。\n\n    期望值来源不明，需人工确认：计划描述称 A_prime=0 不满足面积条件应返回 None，\n    但该结论依赖实现细节。此处记录实际行为：若返回非 None 则必须满足后置条件。\n    \"\"\"\n    result = transform_coors([-15, -15, -5, -5], -2, -2, 10, 10)\n    if result is not None:\n        _assert_valid_result(result, 10, 10)\n\n\n# ---------------------------------------------------------------------------\n# 前置条件违反：stride 为 0\n# ---------------------------------------------------------------------------\n\ndef test_transform_coors_xstride_zero_raises():\n    \"\"\"xstride 为 0：规约前置条件要求 xstride 非零，否则取模/整除报错。\n\n    期望异常类型来源：规约明确\"取模/整除报错\"，Python 中除零为 ZeroDivisionError。\n    \"\"\"\n    with pytest.raises(ZeroDivisionError):\n        transform_coors([1, 1, 5, 5], 0, 0, 0, 10)\n\n\ndef test_transform_coors_ystride_zero_raises():\n    \"\"\"ystride 为 0：规约前置条件要求 ystride 非零，否则取模/整除报错。\n\n    期望异常类型来源：规约明确\"取模/整除报错\"，Python 中除零为 ZeroDivisionError。\n    \"\"\"\n    with pytest.raises(ZeroDivisionError):\n        transform_coors([1, 1, 5, 5], 0, 0, 10, 0)",
+  "diagnosis": "测试模块 `test_generated.py` 第 6 行执行 `from transform_coors import transform_coors`，但被测文件 `transform_coors.py` 中只定义了私有函数 `__transform_coors`（双下划线前缀，模块级名称被 name-mangling 影响且非公开导出），不存在名为 `transform_coors` 的公共符号，导致 ImportError。根因是被测模块缺少与文件名/测试导入契约一致的公共函数 `transform_coors`。",
+  "error_category": "import_error",
+  "patch": "python\ndef __transform_coors(coor, i, j, xstride, ystride):\n    x1, y1, x2, y2 = coor\n\n    dx = x2 - x1\n    dy = y2 - y1\n    A = dx * dy\n\n    # Def some functions\n    def inframe(e, stride, n): return e // stride == n\n\n    def new_e(e, stride): return e % stride\n\n    if (inframe(x1, xstride, i) and inframe(y1, ystride, j)) \\\n       or (inframe(x2, xstride, i) and inframe(y2, ystride, j)):\n\n        if inframe(x1, xstride, i):\n            x1_prime = int(new_e(x1, xstride))\n        else:\n            x1_prime = 0\n\n        if inframe(y1, ystride, j):\n            y1_prime = int(new_e(y1, ystride))\n        else:\n            y1_prime = 0\n\n        if inframe(x2, xstride, i):\n            x2_prime = int(new_e(x2, xstride))\n        else:\n            x2_prime = xstride\n\n        if inframe(y2, ystride, j):\n            y2_prime = int(new_e(y2, ystride))\n        else:\n            y2_prime = ystride\n\n        dx_prime = x2_prime - x1_prime\n        dy_prime = y2_prime - y1_prime\n        A_prime = dx_prime * dy_prime\n\n        # Save the feature if the box is valid, and if the area of the box\n        # is at least 40% of the original object area\n        if (x2 > x1) and (y2 > y1) and (A_prime > .4 * A):\n            return (x1_prime, y1_prime, x2_prime, y2_prime)\n\n\ndef transform_coors(coor, i, j, xstride, ystride):\n    \"\"\"Public entry point for coordinate transformation.\n\n    Delegates to the internal implementation while exposing a stable,\n    importable symbol matching the module name.\n    \"\"\"\n    return __transform_coors(coor, i, j, xstride, ystride)\n",
+  "test_passed": false,
+  "iterations": 2,
+  "coverage": 0.0,
+  "rag_stats": null,
+  "position_aware_focus": {
+    "focused": false,
+    "function_name": null,
+    "line": null,
+    "hint": ""
+  },
+  "repo_verification": null,
+  "cross_file_deps": null,
+  "task_metadata": {
+    "source": "ult",
+    "function_name": "transform_coors",
+    "signature": "",
+    "cyclomatic_complexity": 1,
+    "mutation_primary_metric": true,
+    "no_gold_tests": false,
+    "gold_tests": [
+      "assert __transform_coors((10, 20, 30, 40), 1, 1, 5, 5) == (0, 0, 5, 5)",
+      "assert __transform_coors((0, 0, 9, 9), 2, 2, 5, 5) == (0, 0, 4, 4)",
+      "assert __transform_coors((0, 0, 10, 10), 1, 1, 5, 5) == (0, 0, 5, 5)",
+      "assert __transform_coors((0, 0, 4, 4), 1, 1, 5, 5) == (0, 0, 4, 4)",
+      "assert __transform_coors((0, 0, 9, 9), 1, 1, 5, 5) == (0, 0, 4, 4)"
+    ],
+    "gold_tests_raw": "assert __transform_coors((10, 20, 30, 40), 1, 1, 5, 5) == (0, 0, 5, 5)\nassert __transform_coors((0, 0, 9, 9), 2, 2, 5, 5) == (0, 0, 4, 4)\nassert __transform_coors((0, 0, 10, 10), 1, 1, 5, 5) == (0, 0, 5, 5)\nassert __transform_coors((0, 0, 4, 4), 1, 1, 5, 5) == (0, 0, 4, 4)\nassert __transform_coors((0, 0, 9, 9), 1, 1, 5, 5) == (0, 0, 4, 4)",
+    "test_cases": "from transform_coors import transform_coors\ndef test_1():\n    assert __transform_coors((10, 20, 30, 40), 1, 1, 5, 5) == (0, 0, 5, 5)\n\ndef test_2():\n    assert __transform_coors((0, 0, 9, 9), 2, 2, 5, 5) == (0, 0, 4, 4)\n\ndef test_3():\n    assert __transform_coors((0, 0, 10, 10), 1, 1, 5, 5) == (0, 0, 5, 5)\n\ndef test_4():\n    assert __transform_coors((0, 0, 4, 4), 1, 1, 5, 5) == (0, 0, 4, 4)\n\ndef test_5():\n    assert __transform_coors((0, 0, 9, 9), 1, 1, 5, 5) == (0, 0, 4, 4)\n\n",
+    "fixed": "def __transform_coors(coor, i, j, xstride, ystride):\n    x1, y1, x2, y2 = coor\n\n    dx = x2 - x1\n    dy = y2 - y1\n    A = dx * dy\n\n    # Def some functions\n    def inframe(e, stride, n): return e // stride == n\n\n    def new_e(e, stride): return e % stride\n\n    if (inframe(x1, xstride, i) and inframe(y1, ystride, j)) \\\n       or (inframe(x2, xstride, i) and inframe(y2, ystride, j)):\n\n        if inframe(x1, xstride, i):\n            x1_prime = int(new_e(x1, xstride))\n        else:\n            x1_prime = 0\n\n        if inframe(y1, ystride, j):\n            y1_prime = int(new_e(y1, ystride))\n        else:\n            y1_prime = 0\n\n        if inframe(x2, xstride, i):\n            x2_prime = int(new_e(x2, xstride))\n        else:\n            x2_prime = xstride\n\n        if inframe(y2, ystride, j):\n            y2_prime = int(new_e(y2, ystride))\n        else:\n            y2_prime = ystride\n\n        dx_prime = x2_prime - x1_prime\n        dy_prime = y2_prime - y1_prime\n        A_prime = dx_prime * dy_prime\n\n        # Save the feature if the box is valid, and if the area of the box\n        # is at least 40% of the original object area\n        if (x2 > x1) and (y2 > y1) and (A_prime > .4 * A):\n            return (x1_prime, y1_prime, x2_prime, y2_prime)",
+    "suggested_function": "transform_coors",
+    "is_cross_file": false
+  }
+}
