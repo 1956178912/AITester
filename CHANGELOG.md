@@ -1,10 +1,48 @@
 > **语言 / Language**：[English](CHANGELOG.en.md) | 简体中文（本文）
 >
-> Last updated: 2026-10-18（V 轮：**第三方独立评审 23 项修复**——P0 A08 不可信执行环境凭证隔离；P1 A01–A07、A09–A17（统计身份/缓存请求身份/API 路由/消耗记账/节点身份/Windows 回收/复现入口/来源追踪/跨平台校验/执行依赖/发行缺包/fail→pass 证据）；P2 A18–A23（校验清单/损坏工件/CSV/检索计数/LRU 边界）；`BASELINE.yaml` 刷新 collected 9130 / passed 9125；评审 M1–M9 验收脚本复跑；零 LLM 花费。此前 U 轮：第三轮独立评审收口（A-05/A-06/A-08/A-09 + A-03/A-17 论文化 + P3 checklist + D3b Step A）；T/S/R/Q/P/O/N/M/L/K 轮同日登记）
+> Last updated: 2026-10-19（W 轮：**第二轮第三方复核残留补修**——A07 统计"最新记录"选择三处入口统一、A09 语义缓存分区加入 system 身份、A10 显式任务分配优先于全局顺序与复杂度路由；连带修复两处全局状态泄漏（示例生成器 env 注入不恢复、run_single_task 线程局部分配不清理）；14 例回归锁（12 反例 + 2 泄漏锁），反例在修复前提交上 10 failed；零 LLM。此前 V 轮：第三方独立评审 23 项修复；U/T/S/R/Q/P/O/N/M/L/K 轮同日登记）
 
 # Changelog
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
+
+## [Unreleased] — 2026-10-19 W 轮（第二轮第三方复核：A07/A09/A10 三项 P1 残留补修）
+
+> 第二轮第三方复核（Windows 只读静态审查，提交 `73481bb`）结论：P0=0、P1=3、P2=0、P3=0。三项均为 V 轮修复的**未覆盖子场景**，不是新缺陷；本轮回溯最小反例逐项补修，并把反例固化为回归锁。
+> 真实 LLM 花费：**$0**（零网络、零模型调用）。
+
+### Fixed — A07（P1）：统计入口的"最新记录"选择收敛为单一原语
+
+- **根因**：`template_cluster_sensitivity._binary` 仍"先跳过 None 再字典赋值"——最新 None 被旧 0 顶替并入分母、最新可测值被旧值覆盖；模板元数据用后写覆盖字典，旧行可取代最新行。
+- **修复**：新增 `experiments/_row_pairing.py`（`latest_rows_by_task` + `latest_binary_by_task`）：首见=最新记录先占位（不看字段值），None 在去重**之后**排除；`_pair_by_task`、`template_cluster_sensitivity`、`bayesian_paired.paired_contingency` 三处共用，消除口径分叉。
+- **回归锁**：报告 §M3 反例 → `discordant 2:1`（修复前 1:2）；最新 None 不回退；模板元数据取最新行（k=2 而非 3）；贝叶斯与模板同口径。
+
+### Fixed — A09（P1）：语义缓存分区材料加入 system 提示词身份
+
+- **根因**：精确缓存文件名含完整 system 文本，但语义索引分区键来自 `_effective_request_identity`，其中**没有 system**——同 user prompt、不同 system（Planner/Generator 等角色）可相似度 1.0 直接命中并复用响应。
+- **修复**：身份字典新增 `system`（sha256 前 16 位摘要），版本 `v` 2→3；生产调用点传 `self.system_prompt`；语义索引重建从缓存 payload 派生身份（与写入同源）。取摘要而非全文，避免身份材料写入每个缓存 payload 时体积随提示词增长。
+- **边界**：`v` 升版使旧精确缓存自然失效（重新生成）；旧格式只读回退仍受默认包络约束，且旧键公式含 system 文本、读侧校验 system 等值，不跨 system 命中。
+- **回归锁**：报告 §M2 反例 → 跨 system 语义未命中、同 system 仍命中；两个不同 system 的 `BaseAgent` 对同一 user prompt 各调用一次（调用级回归）。
+
+### Fixed — A10（P1）：显式任务分配在所有形状下居首
+
+- **根因**：`_get_all_api_configs` 在 `override in global_configs` 时直接 `return global_configs`——正常轮询（全局 `[A, B]`、任务分配 `B`）下分配被静默丢弃，首请求仍是 A。
+- **修复**：统一为 `[override, *其余全局配置（去重、原序）]`；新增 `_pin_thread_api_group` 在复杂度路由重排后**二次钉住**分配组，明确产品契约：**显式分配 > 复杂度路由 > 全局顺序**。
+- **回归锁**：报告 §M1 反例 → `[B, A]`（修复前 `[A, B]`）；同 base_url 不同 model 组内重排；真实调用链首个客户端 = B；`complex` 档不夺走显式分配；钉住函数纯逻辑（组首/组内首/原字典不变）。
+
+### Fixed — 连带修复（W 轮验证过程中发现）：两处全局状态泄漏 + 一处测试卫生
+
+- **① 示例生成器 env 泄漏（生产级）**：`experiments/spec_examples_generator.py::generate_spec_examples` 为控制小 max_tokens 注入 `os.environ["LLM_MAX_OUTPUT_TOKENS"] = "512"`，但 finally 只恢复了 namespace——**注入值永久留在进程环境**，改变同进程后续所有 LLM 调用的请求体与缓存身份（`_effective_request_identity` 读该 env），一次示例生成即可污染整批任务的 provenance 口径。修复：注入值快照-恢复（与 namespace 同款；显式配置优先、异常路径同样恢复）。
+- **② 任务级线程局部分配泄漏（生产级）**：`experiments/run_benchmark.py::run_single_task` 经 `_set_thread_api` 把任务分配（真实 env 凭证）写入当前线程后从不清理——并行跑批下每任务重新分配、行为不变，但进程内单线程调用方（CLI/库/测试）会把最后一次分配**永久留在主线程**，污染后续 `_get_llm_config`/`_get_all_api_configs` 与缓存身份。修复：函数 finally 中快照-恢复线程局部三元组（含"未设置"状态）。
+- **③ 测试卫生**：`oracle_examples_replay.main` 的 `os.environ.setdefault` 属 CLI 生命周期口径（不改）；`test_oracle_examples.py` 把 CLI 当库调用处补测试内快照恢复。
+- **影响**：这两处泄漏即 W 轮全量跑中 `test_closeout_k_base_agent`（默认包络旧缓存回退）与 `test_base_agent::TestGetLlmConfig`（配置获取）随 xdist 文件配对顺序**随机转红**的根因——回归锁此前不可靠。
+- **回归锁**：`test_generate_restores_max_output_tokens_env`（未配置→移除 / 显式→原样 / LLM 失败→恢复）；`test_thread_local_api_assignment_restored_after_task`（无分配→不残留 / 已有分配→恢复原值）。
+
+### Verify — W 轮验证
+
+- 反例测试：`tests/test_review_73481bb_residuals.py`（12 例）。同一文件在修复前提交 `73481bb` 的干净检出上实测 **10 failed / 2 passed**，修复后 **12 passed**。
+- 受影响模块既有回归（13 文件，含连带修复触及的 `test_examples_multisample.py`/`test_oracle_examples.py`/`test_run_benchmark.py`）：**442 例全部通过**（含两种文件顺序各跑一遍的污染复查）。
+- 逐项收口与边界说明：`docs/reviews/THIRD_PARTY_REVIEW_2026-10-18_FIX_CLOSURE.md` §5。
 
 ## [Unreleased] — 2026-10-18 V 轮（第三方独立评审 23 项修复：A08 P0 凭证隔离 + A01–A07/A09–A17 P1 + A18–A23 P2）
 

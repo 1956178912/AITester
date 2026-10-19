@@ -343,6 +343,12 @@ def generate_spec_examples(
         "cache_namespace": cache_namespace,
     }
     previous_namespace = os.environ.get(_ENV_CACHE_NAMESPACE)
+    # W 轮（2026-10-19 复核残留连带修复）：max_output_tokens 注入同样必须恢复。
+    # 此前只恢复 namespace——本函数首次调用后 `LLM_MAX_OUTPUT_TOKENS=512` 永久
+    # 留在进程环境里，改变同进程后续**所有** LLM 调用的请求体与缓存身份
+    # （base_agent._effective_request_identity 读该 env），一次示例生成即可
+    # 污染整批任务的 provenance 口径。快照-恢复与 namespace 同款。
+    previous_max_output_tokens = os.environ.get(_ENV_MAX_OUTPUT_TOKENS)
     t0 = time.time()
     before = _usage_snapshot()
     try:
@@ -372,6 +378,11 @@ def generate_spec_examples(
                 os.environ.pop(_ENV_CACHE_NAMESPACE, None)
             else:
                 os.environ[_ENV_CACHE_NAMESPACE] = previous_namespace
+        # 恢复 max_output_tokens（未显式配置时移除注入值，不留进程级残留）
+        if previous_max_output_tokens is None:
+            os.environ.pop(_ENV_MAX_OUTPUT_TOKENS, None)
+        else:
+            os.environ[_ENV_MAX_OUTPUT_TOKENS] = previous_max_output_tokens
     return result
 
 

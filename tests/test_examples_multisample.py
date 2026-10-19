@@ -286,6 +286,41 @@ def test_single_sample_api_unchanged(monkeypatch: pytest.MonkeyPatch) -> None:
     assert set(record) >= {"status", "examples", "reason", "prompt_sha256", "usage", "wall_s", "task_id"}
 
 
+def test_generate_restores_max_output_tokens_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """W 轮连带修复：max_output_tokens 注入必须随调用结束恢复，不留进程级残留。
+
+    修复前缺陷：`generate_spec_examples` 首次调用后
+    `LLM_MAX_OUTPUT_TOKENS=512` 永久留在进程环境，改变同进程后续所有
+    LLM 调用的请求体与缓存身份（`_effective_request_identity` 读该 env），
+    一次示例生成即可污染整批任务的 provenance 口径——xtest 全量跑中该
+    泄漏曾使下游"默认包络旧缓存回退"测试按文件配对顺序随机转红。
+    """
+    # 未显式配置 → 注入值在调用后被移除
+    monkeypatch.delenv("LLM_MAX_OUTPUT_TOKENS", raising=False)
+    _mock_sequence(monkeypatch, [_resp([{"input": [1], "expected": 2}])])
+    record = gen.generate_spec_examples({"function_name": "f"})
+    assert record["status"] == "ok"
+    assert record["max_output_tokens"] == str(gen.DEFAULT_MAX_OUTPUT_TOKENS), "本次调用内注入值应生效并被记录"
+    assert os.environ.get("LLM_MAX_OUTPUT_TOKENS") is None, "调用结束后不得残留注入值（进程级污染）"
+
+    # 显式配置 → 用户设置优先且原样保留
+    monkeypatch.setenv("LLM_MAX_OUTPUT_TOKENS", "999")
+    _mock_sequence(monkeypatch, [_resp([{"input": [1], "expected": 2}])])
+    gen.generate_spec_examples({"function_name": "f"})
+    assert os.environ.get("LLM_MAX_OUTPUT_TOKENS") == "999", "显式配置不得被覆盖或改动"
+
+    # LLM 失败路径同样恢复（finally 分支）
+    monkeypatch.delenv("LLM_MAX_OUTPUT_TOKENS", raising=False)
+
+    def _boom(prompt: str, temperature: float = 0.0) -> str:
+        raise RuntimeError("network down")
+
+    monkeypatch.setattr(gen, "_call_examples_llm", _boom)
+    record = gen.generate_spec_examples({"function_name": "f"})
+    assert record["status"] == "error"
+    assert os.environ.get("LLM_MAX_OUTPUT_TOKENS") is None, "异常路径也不得残留注入值"
+
+
 # ═══ 5. T3：K=3 多数一致 + canonical input 约束 ═════════════════════════════
 def _ex(inp: Any, exp: Any) -> dict[str, Any]:
     return {"input": inp, "expected": exp}

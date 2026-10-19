@@ -40,6 +40,7 @@ from src.agents.llm_client import (
     _record_response_usage,
     _redact_log_text,
     _retry_with_exponential_backoff,
+    _thread_local_api_override,
     cache_creator_ok,
     clear_last_request_config,
     get_last_request_config,
@@ -230,10 +231,30 @@ def _budget_exceeded_error() -> Exception:
 
 
 # ─── A09：有效请求身份（精确缓存键 / 语义索引分区）─────────────────────────
+def _system_prompt_digest(system_prompt: str | None) -> str | None:
+    """系统提示词的稳定摘要（A09 语义分区材料）。
+
+    2026-10-19 第三方复核残留补修：历史身份材料只覆盖模型/参数/端点，
+    精确缓存文件名虽另含完整 system 文本，但传给语义索引的分区键是
+    `request_identity_fingerprint(identity)`——同一 user prompt、不同
+    system（Planner vs Generator 等角色）指纹相同，语义路径可直接复用
+    另一角色的响应。把 system 的 sha256 前 16 位纳入身份材料后，精确键与
+    语义分区共享同一来源，跨 system 必然分区隔离。
+
+    取摘要而非全文：身份 dict 会写入每个缓存 payload 并参与指纹计算，
+    全文会让同目录条目体积与哈希成本随提示词线性增长；sha256 截断 16 位
+    （64 bit）对缓存分区足够，碰撞概率可忽略。
+    """
+    if not system_prompt:
+        return None
+    return hashlib.sha256(system_prompt.encode("utf-8")).hexdigest()[:16]
+
+
 def _effective_request_identity(
     temperature: float | None,
     json_mode: bool,
     complexity_class: str | None = None,
+    system_prompt: str | None = None,
 ) -> dict[str, Any]:
     """构造规范化的"有效请求身份"（A09，2026-10-18 第三方审查 P1）。
 
@@ -250,11 +271,16 @@ def _effective_request_identity(
     `request_identity_material()` 稳定哈希与缓存 payload 记录；语义缓存用
     `request_identity_fingerprint()` 同一材料做分区）。字段：
 
-    - ``v``：身份版本号（材料语义升级时递增，旧键自然失效）；
+    - ``v``：身份版本号（材料语义升级时递增，旧键自然失效）。当前 **3**
+      （2026-10-19：加入 ``system`` 摘要；v2 → v3 使旧精确缓存文件自然失效，
+      旧格式只读回退仍按 `_legacy_cache_identity_compatible` 的包络规则处理）；
     - ``model`` / ``endpoint``：**真实请求链首个配置**的模型与端点
       （`_get_all_api_configs()` 已按 A10 改为线程局部配置优先；端点经
       脱敏，凭证不进入键材料）。`AITESTER_CACHE_ISOLATE_MODEL=0` 显式
       退回"跨模型复用"历史口径时两者记 ``None``（用户显式选择不隔离）；
+    - ``system``：system_prompt 的 sha256 前 16 位（A09 2026-10-19 补修：
+      不同角色/指令的系统提示词必须分区隔离；None = 无 system 材料）。
+      取摘要而非全文，避免身份 dict 写入每个缓存 payload 时体积随提示词增长；
     - ``temperature``：实际生效采样温度 = 显式覆盖值，否则 config.TEMPERATURE；
     - ``json_object``：JSON 输出**实际生效值** = json_mode 且
       LLM_JSON_MODE≠off；
@@ -268,6 +294,8 @@ def _effective_request_identity(
         temperature: 调用方显式温度覆盖（None = 使用默认温度）。
         json_mode: 调用点是否请求结构化 JSON 输出。
         complexity_class: 复杂度路由档位（"simple"/"medium"/"complex"/None）。
+        system_prompt: 本次请求的系统提示词（None = 无 system 材料）。
+            生产调用点必须传 `self.system_prompt`——语义索引分区依赖该维度。
 
     Returns:
         可 JSON 序列化的身份 dict（同一请求设置必产出逐字节相同材料）。
@@ -279,9 +307,10 @@ def _effective_request_identity(
     isolate = env_flag_opt_out("AITESTER_CACHE_ISOLATE_MODEL")
     extra = _openai_extra_body()
     return {
-        "v": 2,
+        "v": 3,
         "model": (primary[2] if primary else None) if isolate else None,
         "endpoint": (mask_sensitive_info(primary[1]) if primary else None) if isolate else None,
+        "system": _system_prompt_digest(system_prompt),
         "temperature": round(float(temperature if temperature is not None else TEMPERATURE), 6),
         "json_object": bool(json_mode and json_output_mode_enabled()),
         "thinking": extra.get("thinking"),
@@ -363,6 +392,10 @@ def _legacy_cache_identity_compatible(identity: dict[str, Any]) -> bool:
     代价；正式实验应显式 `AITESTER_LLM_CACHE=0`（仓库既有约定）或清理
     缓存目录。反之，任何"身份充足"的配置（thinking/reasoning/max_tokens/
     JSON/namespace 改变）都不会回退旧文件——旧缓存不误命中。
+
+    system 维度不受旧键公式遗漏影响：`_legacy_cache_file` 的键材料显式含
+    system 文本，读侧还要求 `cached_data["system"] == self.system_prompt`，
+    因此回退路径不会跨 system 命中（A09 2026-10-19 补修说明）。
     """
     if identity.get("json_object"):
         return False
@@ -435,6 +468,46 @@ def _reorder_api_groups_by_complexity(
     return reordered
 
 
+def _pin_thread_api_group(
+    api_groups: dict[str, list[tuple[str, str]]],
+    override: tuple[str, str, str] | None,
+) -> dict[str, list[tuple[str, str]]]:
+    """把线程局部显式分配的端点组钉到请求链首位（A10 优先级契约）。
+
+    优先级契约（2026-10-19 复核残留补修后明确）：
+
+        **显式任务分配 > 复杂度路由 > 全局配置顺序**
+
+    背景：`_reorder_api_groups_by_complexity` 按 cost_weight 重排 base_url 组，
+    可能把另一端点排到显式分配之前——`_get_all_api_configs()` 里"override
+    居首"的保证会被随后的重排覆盖。本函数在重排之后重新钉住 override 所在
+    组，并在组内把 override 的三元组提到首位（同 base_url 多模型的形状）。
+
+    Args:
+        api_groups: `{base_url: [(api_key, model_name), ...]}`（可能已被
+            复杂度路由重排）。
+        override: 线程局部三元组（api_key, base_url, model_name）；None 或
+            半截配置时不改动顺序（与 `_get_all_api_configs` 同口径）。
+
+    Returns:
+        新的有序字典；override 存在且其 base_url 组在场时该组居首，
+        组内 override 条目居首。原字典不被修改。
+    """
+    if not override or not all(override):
+        return api_groups
+    api_key, base_url, model_name = override
+    group = api_groups.get(base_url)
+    if group is None:
+        # 防御：override 完整但其 base_url 组不在链中（理论不可达——
+        # _get_all_api_configs 已把它放在 all_configs 首位）→ 保持原序。
+        return api_groups
+    pinned_models = [(k, m) for k, m in group if (k, m) == (api_key, model_name)]
+    pinned_models.extend((k, m) for k, m in group if (k, m) != (api_key, model_name))
+    pinned: dict[str, list[tuple[str, str]]] = {base_url: pinned_models}
+    pinned.update({k: v for k, v in api_groups.items() if k != base_url})
+    return pinned
+
+
 class BaseAgent:
     """
     所有智能体的公共基类。
@@ -504,11 +577,12 @@ class BaseAgent:
                 与历史非 JSON 口径的响应严格隔离（同 prompt 不同模式
                 不共享缓存条目）。False 时全路径与历史逐字节一致。
 
-        缓存身份（A09，2026-10-18 第三方审查 P1）：
+        缓存身份（A09，2026-10-18 第三方审查 P1；2026-10-19 复核残留补修）：
         精确缓存键由**规范化的有效请求身份**派生（`_effective_request_identity`：
         实际生效温度、thinking/reasoning_effort/max_tokens、JSON 输出实际绑定值、
-        真实请求链首选的模型与端点、实验 namespace、复杂度路由档位），语义
-        缓存按同一身份的指纹分区。不同请求设置（含隐式默认值）不再共用缓存条目。
+        真实请求链首选的模型与端点、实验 namespace、复杂度路由档位、**system
+        提示词摘要**），语义缓存按同一身份的指纹分区。不同请求设置（含隐式
+        默认值）与不同 system（角色/指令）不再共用缓存条目。
 
         旧缓存兼容策略（显式声明，勿删）：A09 之前的旧缓存文件没有身份字段、
         无法自证写入配置；本方法仅在当前身份处于**历史默认包络**（未绑定 JSON、
@@ -566,7 +640,7 @@ class BaseAgent:
         # 旧文件无身份字段、无法自证，故仅在"当前身份处于历史默认包络"
         # 时做只读回退；身份充足（thinking/reasoning/max_output/JSON/namespace
         # 任一非默认、或显式 JSON 模式）时只用新键，旧文件不误命中。
-        identity = _effective_request_identity(temperature, json_mode, complexity_class)
+        identity = _effective_request_identity(temperature, json_mode, complexity_class, self.system_prompt)
         identity_fp = request_identity_fingerprint(identity)
         cache_file = _exact_cache_file(identity, user_message, self.system_prompt)
         cache_key = f"{user_message}\x00{self.system_prompt}\x00id{identity_fp}"
@@ -918,6 +992,11 @@ class BaseAgent:
         # 单实例时排序无效果（历史行为不变）。
         if complexity_class is not None and len(all_configs) > 1:
             api_groups = _reorder_api_groups_by_complexity(api_groups, all_configs, complexity_class)
+
+        # A10 优先级契约（2026-10-19 复核残留补修）：显式任务分配 > 复杂度路由 >
+        # 全局顺序。复杂度重排按 cost_weight 排序可能把另一 base_url 组提到
+        # 显式分配之前，因此在重排之后重新钉住分配组；无 override 时零行为变化。
+        api_groups = _pin_thread_api_group(api_groups, _thread_local_api_override())
 
         # 依次尝试每个 API 组（自动故障转移：主 API 失败 → 备用 API）
         # 同一 API 内也尝试不同模型（额度用完时自动切换）

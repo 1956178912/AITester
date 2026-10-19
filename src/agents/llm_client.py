@@ -682,6 +682,11 @@ def _get_all_api_configs() -> list[tuple[str, str, str]]:
     4. 无线程局部覆盖 / 覆盖不完整（缺 api_key/base_url/model）→ 返回全局
        链（历史口径，绝不注入半截配置遮蔽可用全局端点）。
 
+    2026-10-19 复核残留补修（A10）：历史实现当 override **恰为全局列表已有
+    项**时直接 `return global_configs`，正常轮询（全局 [A, B]、任务分配 B）
+    下分配被静默丢弃。现统一为"override 居首 + 全局其余原序去重"——两条
+    分支同一语义，正常轮询形状与"override 在全局之外"形状不再分叉。
+
     Returns:
         列表，每项为 (api_key, base_url, model_name)，仅包含已配置的项。
         若 LLM_CONFIGS 为空且无线程局部覆盖则返回空列表。
@@ -691,9 +696,9 @@ def _get_all_api_configs() -> list[tuple[str, str, str]]:
     # 仅完整三元组才进入请求链（半截配置请求必然失败，不应排在可用全局端点前）
     if override is None or not all(override):
         return global_configs
-    if override in global_configs:
-        return global_configs
-    return [override, *global_configs]
+    # 首请求 = 显式分配；全局其余配置按原序跟随（故障转移行为不倒退），
+    # 完全相同的三元组只保留一次。
+    return [override, *(cfg for cfg in global_configs if cfg != override)]
 
 
 # ─── A10：实际请求身份记录（provenance / 缓存标签）────────────────────────────

@@ -22,7 +22,9 @@ McNemar / t 检验表保持不变，本模块只新增"贝叶斯配对分析"章
 （task_id 最新批次优先去重〔调用方保证最新批次在前〕→ **再去重结果上**
 排除 field 值 None〔A07：最新记录不可测 = 该任务整体不可测，不回退旧值〕，
 真值 → 1 / 假值 → 0），由 tests/test_z_batch.py 的等价性用例锁定，
-不依赖 import（避免 statistical_analysis ↔ 本模块循环依赖）。
+不依赖 `statistical_analysis` 的 import（避免 `statistical_analysis ↔ 本模块`
+循环依赖）；"最新记录选择"原语改由中立的 `experiments._row_pairing` 提供，
+两模块共用同一实现（A07 2026-10-19 复核残留补修）。
 
 零 LLM / 零网络 / 零子进程。
 """
@@ -38,6 +40,8 @@ from typing import Any
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
+
+from experiments._row_pairing import latest_binary_by_task  # noqa: E402
 
 # 与 bootstrap CI 同口径的默认 seed / 抽样规模（报告可复现声明依赖二者）
 _BAYES_SEED = 42
@@ -63,22 +67,13 @@ def paired_contingency(
     """
 
     def _dedup(rows: list[dict]) -> dict[str, int]:
-        """最新批次优先去重（不看 field 值占位）→ 再排除 None（A07）。"""
-        latest: dict[str, dict] = {}
-        for r in rows:
-            tid = r.get("task_id")
-            if not tid or tid in latest:
-                continue
-            # 首见 = 最新批次（调用方排序保证）；即使该行不可测也占位，
-            # 防止旧批次的可测值顶替最新 None。
-            latest[tid] = r
-        seen: dict[str, int] = {}
-        for tid, r in latest.items():
-            val = r.get(field)
-            if val is None:
-                continue
-            seen[tid] = 1 if val else 0
-        return seen
+        """最新批次优先去重（不看 field 值占位）→ 再排除 None（A07）。
+
+        与 `statistical_analysis._pair_by_task` / `template_cluster_sensitivity`
+        共用 `experiments._row_pairing.latest_binary_by_task`（单点实现）。
+        """
+        binary, _latest = latest_binary_by_task(rows, field=field)
+        return binary
 
     map_a = _dedup(results_a)
     map_b = _dedup(results_b)

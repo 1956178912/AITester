@@ -1,10 +1,48 @@
-> Last updated: 2026-10-18 (round V: **third-party independent review — 23-item remediation** — P0 A08 untrusted-execution credential isolation; P1 A01–A07 and A09–A17 (statistics identity / cache request identity / API routing / usage accounting / node identity / Windows process reaping / reproduction entry / provenance / cross-platform checksums / execution dependencies / wheel missing imports / fail→pass evidence); P2 A18–A23 (checksum manifests / corrupted artifact / CSV / retrieval count / LRU bound); `BASELINE.yaml` refreshed to collected 9130 / passed 9125; review M1–M9 acceptance scripts re-run; zero LLM spend. Previously round U: third-round independent review close-out (A-05/A-06/A-08/A-09 + A-03/A-17 write-up + P3 checklist + D3b Step A); rounds T/S/R/Q/P/O/N/M/L/K registered the same day)
+> Last updated: 2026-10-19 (round W: **second-round third-party review residuals closed** — A07 unified "latest record" selection across all statistics entry points; A09 semantic-cache partition now includes the system-prompt identity; A10 explicit task assignment outranks the global chain and complexity routing; two global-state leaks fixed as follow-ups (examples-generator env injection never restored, run_single_task thread-local assignment never cleared); 14 regression locks (12 counterexamples + 2 leak locks), counterexamples fail on the pre-fix commit; zero LLM spend. Previously round V: 23-item third-party review remediation; rounds U/T/S/R/Q/P/O/N/M/L/K registered the same day)
 
 > **Language**: [简体中文](CHANGELOG.md) | English (this file)
 
 # Changelog
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+## [Unreleased] — 2026-10-19 Round W (second-round third-party review residuals: A07/A09/A10 P1 fixes)
+
+> The second-round third-party review (read-only static audit on Windows, commit `73481bb`) reports P0=0, P1=3, P2=0, P3=0. All three are **uncovered sub-scenarios** of the round-V fixes, not new defects; this round reproduces each minimal counterexample, fixes it, and freezes the counterexample as a regression lock.
+> Real LLM spend: **$0** (no network, no model calls).
+
+### Fixed — A07 (P1): one shared primitive for "latest record" selection
+
+- **Root cause**: `template_cluster_sensitivity._binary` still skipped `None` first and then assigned into a dict — a latest `None` was replaced by an older `0` (entering the denominator), and a latest measurable value was overwritten by an older one; template metadata used a last-write-wins dict, so an older row could supply the cluster label.
+- **Fix**: new `experiments/_row_pairing.py` (`latest_rows_by_task` + `latest_binary_by_task`): first-seen = latest record occupies the slot regardless of field value, and `None` is excluded **after** deduplication. `_pair_by_task`, `template_cluster_sensitivity`, and `bayesian_paired.paired_contingency` now share it.
+- **Regression locks**: report §M3 counterexample → `discordant 2:1` (1:2 before the fix); latest `None` never falls back; template metadata comes from the latest row (k=2, not 3); Bayesian and template paths agree.
+
+### Fixed — A09 (P1): semantic-cache partition includes the system prompt
+
+- **Root cause**: the exact cache filename contains the full system text, but the semantic partition key came from `_effective_request_identity`, which had **no system** — the same user prompt with a different system (e.g. Planner vs Generator) could hit at similarity 1.0 and reuse the other role's response.
+- **Fix**: the identity dict now carries `system` (first 16 hex chars of sha256), version `v` 2→3; production call sites pass `self.system_prompt`; index rebuild derives the identity from the cache payload (same source as writes). A digest rather than the full text keeps per-payload identity size constant.
+- **Boundary**: the `v` bump invalidates old exact cache files (they are regenerated on the next miss); the legacy read-only fallback still follows the default-envelope rule, and its key formula contains the system text with a read-side equality check, so it cannot cross systems.
+- **Regression locks**: report §M2 counterexample → cross-system semantic miss while same-system still hits; two `BaseAgent`s with different systems each call the model once for the same user prompt (call-level regression).
+
+### Fixed — A10 (P1): explicit task assignment is first in every shape
+
+- **Root cause**: `_get_all_api_configs` returned `global_configs` immediately when `override in global_configs` — under normal round-robin (global `[A, B]`, task assigned `B`) the assignment was silently dropped and the first request still went to A.
+- **Fix**: unified to `[override, *remaining global configs (deduplicated, original order)]`; new `_pin_thread_api_group` re-pins the assigned group after complexity routing, making the contract explicit: **explicit assignment > complexity routing > global order**.
+- **Regression locks**: report §M1 counterexample → `[B, A]` (`[A, B]` before); same base URL with different models reordered inside the group; the first client created on the real call path is B; the `complex` tier cannot take the assignment away; pin-helper purity (group first / entry first / input dict unchanged).
+
+### Fixed — Follow-up (found during round-W verification): two global-state leaks + one test-hygiene gap
+
+- **① Examples-generator env leak (production)**: `experiments/spec_examples_generator.py::generate_spec_examples` injects `os.environ["LLM_MAX_OUTPUT_TOKENS"] = "512"` to cap output tokens but its `finally` restored only the namespace — the injected value **stayed in the process environment permanently**, changing the request body and cache identity of every subsequent LLM call in the same process (`_effective_request_identity` reads that env); a single examples generation could pollute the provenance of an entire batch. Fix: snapshot-restore (same pattern as the namespace; explicit config wins, exception paths restore too).
+- **② Task-level thread-local leak (production)**: `experiments/run_benchmark.py::run_single_task` writes the task assignment (real env credentials) into the current thread via `_set_thread_api` and never cleans it up — under parallel batching each task reassigns so behavior is unchanged, but an in-process single-threaded caller (CLI/library/tests) kept the last assignment **on the main thread forever**, polluting subsequent `_get_llm_config`/`_get_all_api_configs` calls and cache identities. Fix: snapshot-restore of the thread-local triple in the function's `finally` (including the "unset" state).
+- **③ Test hygiene**: `oracle_examples_replay.main`'s `os.environ.setdefault` is CLI-lifetime semantics (kept); `test_oracle_examples.py` now snapshots/restores around the in-process CLI call.
+- **Impact**: these two leaks are the root cause of the xdist file-pairing-order **flaky reds** in `test_closeout_k_base_agent` (legacy fallback in the default envelope) and `test_base_agent::TestGetLlmConfig` (config lookup) observed during round-W full runs — the regression locks were unreliable.
+- **Regression locks**: `test_generate_restores_max_output_tokens_env` (unset → removed / explicit → preserved / LLM failure → restored); `test_thread_local_api_assignment_restored_after_task` (no assignment → nothing left / existing assignment → restored).
+
+### Verify — Round W verification
+
+- Counterexample suite: `tests/test_review_73481bb_residuals.py` (12 cases). On a clean checkout of the pre-fix commit `73481bb` the same file produced **10 failed / 2 passed**; after the fix **12 passed**.
+- Existing regressions in affected modules (13 files, including the follow-up-touched `test_examples_multisample.py`/`test_oracle_examples.py`/`test_run_benchmark.py`): **442 cases all pass** (pollution rechecked in both file orders).
+- Per-item closure and boundaries: `docs/reviews/THIRD_PARTY_REVIEW_2026-10-18_FIX_CLOSURE.md` §5.
 
 ## [Unreleased] — 2026-10-18 Round V (third-party independent review — 23-item remediation: A08 P0 credential isolation + A01–A07/A09–A17 P1 + A18–A23 P2)
 
