@@ -835,6 +835,14 @@ def _fmt_stat_num(value: float, fmt: str = "{:.4f}") -> str:
     R2 抽为模块级函数（此前在报告生成循环内逐次定义，McNemar / bootstrap
     / Cliff's delta 等新章节复用同一渲染口径）。2026-09-26 round9：inf
     渲染为 "+inf"/"-inf"（此前 p=0 被格式化为 "0.0000 (***)" 误显显著）。
+
+    AD-1（2026-10-20）：**非零小量级改科学计数法**——`{:.4f}` 把
+    |v| < 5e-5 的非零值一律印成 "0.0000"，量级信息被静默销毁。AC-1 的
+    教训正是如此：p=5.890715e-26（χ²=111.01 的精确值）与下溢的 p=0.0 在
+    报告里同形（都显示 "0.0000 (***)"），读者无法从账面区分"精确算出的
+    极小值"与"精度丢失"。现值域 |v| < 1e-4 且 v != 0 → `{:.2e}`
+    （如 5.890715e-26 → "5.89e-26"、1.811017e-07 → "1.81e-07"）；
+    精确 0.0 仍渲染 "0.0000"（零是合法统计值，如 χ²=0 / 无不一致对）。
     """
     import math
 
@@ -842,6 +850,8 @@ def _fmt_stat_num(value: float, fmt: str = "{:.4f}") -> str:
         return "n/a"
     if math.isinf(value):
         return "+inf" if value > 0 else "-inf"
+    if value != 0.0 and abs(value) < 1e-4:
+        return f"{value:.2e}"
     return fmt.format(value)
 
 

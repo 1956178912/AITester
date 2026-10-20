@@ -6,6 +6,35 @@
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [Unreleased] — 2026-10-20 AD round: statistical-quantity rendering preserves magnitude + the normal-tail complement pattern eliminated + a repo-wide census of silent precision-loss patterns (zero LLM, $0)
+
+> This round adds no capability: a repo-wide census along the AC-1 defect class, disposing the two items registered in round AC, with every remaining same-family site judged individually.
+
+### Fixed — `_fmt_stat_num` printed every nonzero small magnitude as "0.0000" (AD-1, display precision)
+
+- `{:.4f}` silently printed every nonzero |v| < 5e-5 as "0.0000" — the magnitude information was destroyed. This was exactly the AC-1 visibility gap: p=5.890715e-26 (the exact value at χ²=111.01) and the pre-fix underflowed p=0.0 looked identical in reports (both displayed "0.0000 (***)"), so a reader could not tell "an exactly computed tiny value" from "lost precision" on the face of the ledger.
+- Fix: nonzero and |v| < 1e-4 → `{:.2e}` scientific notation (5.890715e-26 → "5.89e-26", 1.811017e-07 → "1.81e-07"); exact 0.0 still renders "0.0000" (zero is a legitimate statistic, e.g. χ²=0 / no discordant pairs); -0.0 keeps its sign (pre-existing `{:.4f}` behavior); nan/inf and normal-magnitude rendering unchanged. The main batch's plain-df report cell is locked end to end as "5.89e-26".
+- Historical artifacts are not rewritten: existing reports such as the canonical `statistical_report.md` keep their original rendering (dated-errata discipline); the improvement applies to future regenerations.
+
+### Fixed — the normal-tail complement pattern in `emse_testlevel_detection` (AD-2)
+
+- `1.0 - _normal_cdf(z)` is the same shape as AC-1's `1 - chi2.cdf`: for z ≳ 8.2, `1.0 - cdf` silently becomes 0.0 through floating-point precision. Switched to the erfc survival function `0.5·erfc(z/√2)` (exact for z < ~27). The field is round-displayed, so readings in the displayable range are digit-identical — what changed is the pattern itself.
+
+### Verified — repo-wide census of silent precision-loss patterns (four classes, each site judged)
+
+| Pattern | Sites | Verdict |
+|---|---|---|
+| Complement `1 − cdf` | `statistical_analysis.mcnemar_test` (fixed in AC-1), `emse_testlevel_detection` (fixed in AD-2) | Both disposed |
+| Complement `1 − prod` | `statistical_analysis._pass_at_k_value` | Benign: on underflow the true value is 1.0 to machine precision, and k>n−c already has a constant-1.0 branch |
+| Product `p·(1−p)` | Wilson CI (`emse_stats_report` / `pass_matched_sensitivity`) | Benign: a product, not a complement; at p=1 the factor is exactly 0 |
+| Division `(po−pe)/(1−pe)` | Cohen's κ (`e7_adjudication`) | Benign: pe≥1 already guarded, returning None |
+| `exp(log diff)` | BF10 (`emse_quixbugs_specir_expand` / `emse_optimization`) | Benign: underflow to 0.0 is the intended "evidence for H0" semantics |
+| `inv_cdf(1−α/2)` | `emse_stats_report` z critical value | Benign: α is the constant 0.05, never near 1 |
+| Float equality `== 1.0` | Protocol 0/1 value consumers (`four_channel_recompute` / `pass_matched_sensitivity` / `emse_quixbugs_specir_expand`) | Consistent idiom: the producer `_compute_detection_rate` only writes literals 1.0/0.0/None; no equality on computed values |
+| Catastrophic cancellation | `rag_ab_experiment._var` / `stvr_statistical_analysis` (stdlib) | Benign: two-pass `sum((x−m)²)` is numerically stable |
+
+Regression locks: `tests/test_ad_round_stat_display.py`, **11 cases** (7 AD-1 rendering + 3 AD-2 tail + 1 end to end); mutation-verified: reverting each fix turns 7 targeted cases red, all green after restore.
+
 ## [Unreleased] — 2026-10-20 AC round: fix for the McNemar p `1−cdf` floating-point underflow + E7 toolchain dry run + AB-17 wiring audit (zero LLM, $0)
 
 > This round adds no capability: an independent recompute audit found one numerical defect in the statistics layer and fixed it, plus a dry run of the E7 adjudication toolchain and a wiring audit of the AB-17 close-out (both pass, no new defects).
