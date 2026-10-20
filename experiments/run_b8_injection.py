@@ -66,13 +66,15 @@ from pathlib import Path
 from typing import Any
 
 # AB-17（2026-10-20）：价目表表级准入的唯一事实源在 `src.budget.pricing.load_table_models`。
+# AE（2026-10-20）：价目**条目级**准入的唯一事实源在 `src.budget.pricing.entry_block_reason`
+# （形状 / 空条目 / 币种 / 数字域一处写一遍），本脚本不再自持数字门。
 # 本文件可被测试/驱动按包导入，也可直接以脚本方式运行（`python experiments/run_b8_injection.py`），
 # 故与 `experiments/analyze_t1_b2_main_batch.py` 同口径做路径引导后再导入。
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from src.budget.pricing import load_table_models  # noqa: E402
+from src.budget.pricing import entry_block_reason, load_table_models  # noqa: E402
 
 # 常量（INJECT 口径；聚合模式无需依赖 worktree 也能读）
 INJECT_ENV = "AITESTER_B8_INJECTION_ENABLE"
@@ -663,6 +665,19 @@ def run_arm(args: argparse.Namespace) -> int:
     return 0 if exit_code == 0 else exit_code
 
 
+def _price_entry_reason(table: dict[str, Any], model: str) -> str | None:
+    """聚合侧价目**条目级**准入（AE 轮，2026-10-20）：可用 → None，否则机制码。
+
+    "没登记"与"登记了但读不出"是两种事实（AB-11 判据），不得共用码：键缺席由本函数
+    点名 `model_unregistered`；条目形状 / 空条目 / 币种不可判定或非 USD / 数字域坏值
+    （含 `bool`、字符串、`nan` / `inf`、负价）一律交 `src.budget.pricing.entry_block_reason`
+    回答——本脚本不再自持一套 `isinstance(..., (int, float))` 数字门。
+    """
+    if model not in table:
+        return "model_unregistered"
+    return entry_block_reason(table[model])
+
+
 def aggregate(args: argparse.Namespace) -> int:
     out_root = Path(args.out).resolve()
     prereg_path = out_root / "PREREG.md"
@@ -683,21 +698,22 @@ def aggregate(args: argparse.Namespace) -> int:
             # AB-17：改前这里是 `price_path.is_file()` 前置守卫——显式给了一个坏路径
             # （缺失 / 语法错 / 形状不符）会静默退回内置价，报告里读起来与"根本没给价目表"
             # 同形；而"文件在、内容坏"三种机制又会各自崩在不同的 `.get` / `json.loads` 上。
-            # 现在点名机制并保留键（只在真发生时写入；内置价照旧兜底，②自持数字门不在本轮改）。
+            # 现在点名机制并保留键（只在真发生时写入；内置价照旧兜底）。
             logger.warning("价目表不可用（%s：%s）：改用内置 deepseek-flash 标准价", price_path, table_reason)
             price_meta["table_reason"] = table_reason
         else:
             model = (loaded["on"]["data"].get("provenance") or {}).get("model_name") or "deepseek-flash"
-            row = table.get(model)
-            # ②自持数字门（AB-16 登记不修）：只认真数；条目形状/币种不进判定，币种只抄进 meta。
-            # AB-17 只加 `isinstance(row, dict)`：models 层不再过滤后，非对象条目改前会崩在
-            # `row.get` 上，现在按"这行读不出价"处理（与"没这个模型"同一条既有降级）。
-            if (
-                isinstance(row, dict)
-                and isinstance(row.get("input_per_mtok"), (int, float))
-                and isinstance(row.get("output_per_mtok"), (int, float))
-            ):
+            # AE（2026-10-20）：改前这里自持 `isinstance(row.get(...), (int, float))` 数字门——
+            # `bool`（`int` 子类）/ `nan` / `inf` / 负价都被收下计价（nan/inf 还会写进
+            # REPORT.json 成为非 RFC-8259 的裸 `NaN`/`Infinity`），`currency=CNY` 被当 USD
+            # 记进 `cost_usd_standard_price`，而"没登记 / 字符串价"则静默退回内置价、无任何披露。
+            # 现条目级准入交共享谓词（`_price_entry_reason`）：拒绝一律内置价兜底 + 点名披露。
+            reason = _price_entry_reason(table, model)
+            if reason is None:
+                row = table[model]
                 price_in, price_out = float(row["input_per_mtok"]), float(row["output_per_mtok"])
+                # 接受路径：键集与改前**逐字节相同**（真表读数必须与受保护 REPORT.json 的
+                # `price` 逐字段相等）；不得加任何披露键。
                 price_meta = {
                     "source": row.get("source"),
                     "currency": row.get("currency"),
@@ -706,6 +722,13 @@ def aggregate(args: argparse.Namespace) -> int:
                     "input_per_mtok": price_in,
                     "output_per_mtok": price_out,
                 }
+            else:
+                # 拒绝路径（AE）：不再静默——点名 model 与机制码，成本按内置 deepseek-flash
+                # 标准价上界估算；**不写** input/output 数字键（拒绝的价不得进入工件，
+                # 也保证 nan/inf 不进 REPORT.json）。
+                logger.warning("价目条目不可用（model=%s：%s）：改用内置 deepseek-flash 标准价", model, reason)
+                price_meta["model"] = model
+                price_meta["entry_reason"] = reason
     summaries = {arm: _arm_summary(loaded[arm], price_in, price_out) for arm in ("on", "off")}
     on, off = summaries["on"], summaries["off"]
 
@@ -945,6 +968,17 @@ def _write_readme(out_root: Path, report: dict[str, Any]) -> None:
         )
         or "| （无冒烟工件） | — | — | — | — | — |"
     )
+    # AE（2026-10-20）：价目不可用（表级 `table_reason` 或条目级 `entry_reason`）时在 §4
+    # 成本合计段后追加一行披露——改前拒绝静默、README 里读起来与"真表读数"同形。
+    # 真表/合法条目路径下本串为空 ⇒ 既有真工件 README 逐字节不变（不重写、不加行）。
+    price = report.get("price") or {}
+    price_code = price.get("entry_reason") or price.get("table_reason")
+    price_note = (
+        f"\n\n> **价目不可用**（`{price_code}`）：成本列按内置 deepseek-flash 标准价上界估算，"
+        "不是该模型/价目表登记价；token 与判定读数不受影响。"
+        if price_code
+        else ""
+    )
     readme = f"""# S-2 / B8 / A-19：覆盖率停滞检测开/关消融（**确定性失败注入 harness**，2026-10-18）
 
 > **性质**：机制验证性消融（harness-based ablation）——用**实验层确定性失败注入**保证
@@ -1023,7 +1057,7 @@ def _write_readme(out_root: Path, report: dict[str, Any]) -> None:
 | provenance git_sha/dirty | {on["provenance"]["git_sha"]}/{on["provenance"]["git_dirty"]} | {off["provenance"]["git_sha"]}/{off["provenance"]["git_dirty"]} |
 | env_snapshot.COVERAGE_STALL_DETECT_ENABLE | {on["provenance"]["coverage_stall_env"]} | {off["provenance"]["coverage_stall_env"]} |
 
-成本合计 ≈ **${v["cost_total_usd"]}**（预算 ≤$0.3）；两臂并发墙钟合计 {v["wall_total_seconds"]}s。
+成本合计 ≈ **${v["cost_total_usd"]}**（预算 ≤$0.3）；两臂并发墙钟合计 {v["wall_total_seconds"]}s。{price_note}
 
 ## 5. 配对（共同任务；Δ iterations = off − on）
 
