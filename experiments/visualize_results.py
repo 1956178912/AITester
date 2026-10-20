@@ -13,20 +13,36 @@ B6（2026-10-16）呈现口径：基口径 = detection_rate（M1 诚实口径，
 
 from __future__ import annotations
 
+import argparse
 import json
 import math
 import os
 import sys
 from typing import Any
 
-import matplotlib
+# F06（2026-10-19 审查执行前提）：以 `python experiments/visualize_results.py`
+# 直接运行（reproduce.sh Step 6 口径）时 sys.path[0] 是 experiments/ 目录、仓库
+# 根不在其中，`from experiments.statistical_analysis import ...` 会
+# ModuleNotFoundError——Step 6 出图此前从未能按脚本内命令直接跑通。此处显式
+# 注入仓库根（与 analyze_results.py / run_benchmark.py 同口径），保证
+# reproduce.sh Step 6 调用真实可用。
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
+import matplotlib  # noqa: E402
 
 matplotlib.use("Agg")  # 无 GUI 环境下的后端
-import matplotlib.pyplot as plt
-import pandas as pd
-from scipy import stats as scipy_stats
+import matplotlib.pyplot as plt  # noqa: E402
+import pandas as pd  # noqa: E402
+from scipy import stats as scipy_stats  # noqa: E402
 
-from experiments.statistical_analysis import _pair_by_task, cohens_d, interpret_d, interpret_p
+from experiments.statistical_analysis import (  # noqa: E402
+    _pair_by_task,
+    cohens_d,
+    interpret_d,
+    interpret_p,
+)
 
 # 中文字体支持
 plt.rcParams["font.sans-serif"] = ["Arial Unicode MS", "PingFang SC", "SimHei", "DejaVu Sans"]
@@ -42,22 +58,59 @@ CHARTS_DIR = os.path.join(RESULTS_DIR, "charts")
 _charts_dir = CHARTS_DIR  # 由 main() 动态设置
 
 
-def load_latest_result(results_dir: str = RESULTS_DIR) -> str:
-    """找到最新的 benchmark JSON 结果文件。
+def load_latest_result(
+    results_dir: str = RESULTS_DIR,
+    dataset: str | None = None,
+    result_path: str | None = None,
+) -> str:
+    """定位要可视化的 benchmark 结果文件（F06：显式来源，不静默猜测）。
 
-    仅识别 benchmark 运行产物（benchmark_* 前缀，与 run_benchmark 的
-    benchmark_YYYYMMDD_HHMMSS.json 命名口径一致）；results 目录下还混有
-    汇总/基线/性能类 JSON（如 swebench_20_summary.json、performance_benchmark.json、
-    synthetic_plain_llm_*.json），纯文件名倒序会误选这些文件（'s'/'p' 均排在 'b' 之后），
-    导致出图基于非 benchmark 数据。无匹配时回退全量倒序并提示。
+    仅识别 benchmark 运行产物（``benchmark_<dataset>_<YYYYMMDD_HHMMSS>.json``，
+    与 run_benchmark 的命名口径一致）；results 目录下还混有汇总/基线/性能类
+    JSON（如 swebench_20_summary.json、performance_benchmark.json、
+    synthetic_plain_llm_*.json），纯文件名倒序会误选这些文件。
+
+    F06（2026-10-19 第三方全量静态审查，P1）：旧实现只按**完整文件名**倒序
+    取第一项——同目录混存多数据集产物时字典序会压过时间戳（例如旧的
+    ``benchmark_ult_*`` 压过较新的 ``benchmark_synthetic_*``），导致出图基于
+    错误数据集。现按以下优先级确定来源，且无匹配时**显式报错**：
+
+    1. ``result_path`` 显式给定：直接使用（存在性 fail-closed 校验）；
+    2. ``dataset`` 显式给定：只匹配 ``benchmark_{dataset}_`` 前缀，取最新；
+    3. 两者都未给：仅在 ``benchmark_*`` 中取最新（**不**回退到全量 JSON）。
+
+    Args:
+        results_dir: 结果目录（默认 ``experiments/results``）。
+        dataset: 数据集名（``synthetic`` / ``swe_bench`` / ``examples`` 等），
+            用于前缀过滤；None 表示不过滤数据集。
+        result_path: 显式结果 JSON 路径，优先级最高。
+
+    Returns:
+        选中结果 JSON 的路径。
+
+    Raises:
+        FileNotFoundError: 显式路径不存在，或目录下没有匹配的 benchmark 结果
+            （不静默回退，避免把汇总/基线文件当成本次产物出图）。
     """
+    if result_path:
+        if not os.path.isfile(result_path):
+            raise FileNotFoundError(f"显式指定的结果文件不存在: {result_path}")
+        return result_path
+
     all_json = [f for f in os.listdir(results_dir) if f.endswith(".json")]
     benchmark_files = [f for f in all_json if f.startswith("benchmark_")]
+    if dataset:
+        prefix = f"benchmark_{dataset}_"
+        benchmark_files = [f for f in benchmark_files if f.startswith(prefix)]
+        if not benchmark_files:
+            raise FileNotFoundError(
+                f"结果目录 {results_dir} 下没有数据集 '{dataset}' 的 benchmark 结果"
+                f"（期望前缀 {prefix}*.json）；请检查 --dataset 或显式指定 --result"
+            )
     if not benchmark_files:
-        print(f"⚠️  结果目录 {results_dir} 下无 benchmark_* 前缀文件，回退到全部 JSON（可能选中汇总/基线文件）")
-        benchmark_files = all_json
-    if not benchmark_files:
-        raise FileNotFoundError(f"结果目录 {results_dir} 下没有找到 JSON 文件")
+        raise FileNotFoundError(
+            f"结果目录 {results_dir} 下没有 benchmark_* 结果文件（不回退为全量 JSON 猜测；请用 --result 显式指定）"
+        )
     return os.path.join(results_dir, sorted(benchmark_files, reverse=True)[0])
 
 
@@ -435,16 +488,30 @@ def write_summary_md(summary: dict[str, Any], sig_result: dict[str, Any]) -> Non
 
 
 def main() -> None:
-    """主入口：加载最新结果并生成所有可视化输出。"""
-    results_dir = RESULTS_DIR
-    if len(sys.argv) > 1 and sys.argv[1] in ("--results-dir", "-r"):
-        results_dir = sys.argv[2] if len(sys.argv) > 2 else RESULTS_DIR
+    """主入口：加载指定/最新结果并生成所有可视化输出。
+
+    F06（2026-10-19 第三方审查，P1）：新增 ``--result``（显式产物路径，最高
+    优先级）与 ``--dataset``（只认 ``benchmark_{dataset}_`` 前缀）——复现脚本
+    Step6 传 ``--dataset "$DATASET"``，保证出图来源 = 本次运行的数据集，不再
+    依赖目录内文件名倒序猜测（旧行为会让 benchmark_ult_* 压过 synthetic）。
+    """
+    parser = argparse.ArgumentParser(description="AITester 实验结果可视化（F06 显式来源）")
+    parser.add_argument("--results-dir", "-r", default=RESULTS_DIR, help="结果目录（默认 experiments/results）")
+    parser.add_argument("--result", default=None, help="显式指定 benchmark 结果 JSON 路径（优先于 --dataset）")
+    parser.add_argument(
+        "--dataset", default=None, help="只使用 benchmark_<dataset>_ 前缀的结果（如 synthetic / swe_bench）"
+    )
+    args = parser.parse_args()
+
+    results_dir = args.results_dir
     global _charts_dir
     _charts_dir = os.path.join(results_dir, "charts")
     os.makedirs(_charts_dir, exist_ok=True)
 
-    result_file = load_latest_result(results_dir)
+    result_file = load_latest_result(results_dir, dataset=args.dataset, result_path=args.result)
     print(f"加载结果: {result_file}")
+    if args.dataset:
+        print(f"数据集过滤: --dataset {args.dataset}（仅 benchmark_{args.dataset}_ 前缀）")
 
     with open(result_file, encoding="utf-8") as f:
         summary = json.load(f)

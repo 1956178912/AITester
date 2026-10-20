@@ -133,17 +133,37 @@ def _pytest_timeout_plugin_available() -> bool:
 
 
 def _looks_like_test_execution_error(returncode: int, output: str) -> bool:
-    """判定一次 pytest 运行是否属于"测试执行错误"（根本没跑起来）。
+    """判定一次 pytest 运行是否属于"测试执行错误"（根本没跑起来/异常终止）。
 
-    双通道判据（任一命中即为执行错误）：
-    1. rc >= 2：pytest 约定 rc=1 = 有测试失败（断言级）、rc=0 = 全过；
+    三通道判据（任一命中即为执行错误）：
+    1. **负退出码 = 进程被信号终止**（F14，2026-10-19 第三方审查 P1）：
+       POSIX 下 subprocess 以 `-N` 表示"被信号 N 杀死"（如 -15=SIGTERM、
+       -9=SIGKILL）。此时 pytest 没有给出正常结果，既不能当断言失败、更
+       不能当"测试检出"——按执行错误 / 异常终止单列（detection 侧因此
+       记 0.0 而非误判阳性，test_error_rate 记 1.0，门/预算侧判不可用）。
+       历史缺陷：只排除 `rc>=2`，`buggy_rc=-15 ∧ fixed_rc=0` 会穿过所有
+       守卫落到 `return 1.0`，把"异常进程终止"计成有效检出（报告 §M4）。
+    2. rc >= 2：pytest 约定 rc=1 = 有测试失败（断言级）、rc=0 = 全过；
        rc>=2 表示收集/编译阶段中断（import 失败、语法错误、配置错误
        等），此时没有任何断言被执行，不构成有效 F2P 信号（N1 防线）；
-    2. 输出含显式执行错误标记（"errors during collection" /
+       rc==5（no tests collected）是 pytest 的独立约定，同样归此；
+    3. 输出含显式执行错误标记（"errors during collection" /
        "no tests were run" / "SyntaxError" / "error in 0.<s>" 的收集
        阶段中断摘要，如 "1 error in 0.05s"）——兜底 rc 不可得或
        非标准执行器的场景。
+
+    消费方一致性（同口径）：`_compute_detection_rate`（检出不得为阳性）、
+    `_compute_test_error_rate`（计入执行错误率 1.0）、`_suite_run_verdict`
+    （oracle 判 unavailable）、`src/tools/detection_gates`（门判
+    unavailable 而非 over_red）、`experiments/mutation_detection.py`、
+    `experiments/misguided_metrics.py` 均委托本函数——负 rc 在所有入口
+    都被视为异常终止。
     """
+    if returncode < 0:
+        # F14：信号终止（-SIGTERM / -SIGKILL / ...）→ 异常退出，不是断言失败，
+        # 也不得进入正常检出路径。负 rc 是 POSIX subprocess 的固定语义
+        # （Windows 无信号退出，不会出现负值）。
+        return True
     if returncode >= 2:
         # R16（2026-10-08 第三起测量伪影配套）：rc>=2 覆盖 pytest 的 rc==2
         # （收集/编译中断）与 rc==5（no tests collected，收集到 0 个用例）。

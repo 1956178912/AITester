@@ -19,7 +19,6 @@ import hashlib
 import json
 import os
 import subprocess
-import threading
 from pathlib import Path
 from typing import Any
 
@@ -317,63 +316,206 @@ class TestConftestScanFailClosed:
 
 @pytest.mark.unit
 class TestOfficialSwebenchHarness:
-    """M3 官方 harness 的四条降级 / 成功腿（返回值须与自建口径同构）。"""
+    """M3 官方 harness：官方真实接口契约（命名参数 / predictions / 报告 schema）。
+
+    F11（2026-10-19 Z 轮审查 P1）重写：历史用例自行 mock 出本项目假想的
+    ``_report.json`` 形状（``{"resolved": ..., "fail_to_pass_pass": ...}``）并
+    传位置参数，等于只验证了"自己假设的接口"，真实官方包下不可达。现全部按
+    官方真实形状构造：CLI 命名参数、predictions 列表
+    ``[{instance_id, model_name_or_path, model_patch}]``、报告按 run/model/
+    instance 组织（per-instance JSON 或 instance_id 聚合 dict）。
+    """
+
+    _INSTANCE_ID = "django__django-12345"
 
     def _executor(self) -> RepoExecutor:
         return RepoExecutor(timeout=5, setup_timeout=5)
 
+    @staticmethod
+    def _arg(cmd: list[str], flag: str) -> str:
+        return cmd[cmd.index(flag) + 1]
+
+    @staticmethod
+    def _official_report(
+        *, resolved: bool = True, f2p_success: list[str] | None = None, p2p_success: list[str] | None = None
+    ) -> dict[str, Any]:
+        """官方 per-instance report 真实形状（resolved + tests_status 两组）。"""
+        return {
+            "resolved": resolved,
+            "patch_successfully_applied": True,
+            "tests_status": {
+                "FAIL_TO_PASS": {"success": list(f2p_success or []), "failure": []},
+                "PASS_TO_PASS": {"success": list(p2p_success or []), "failure": []},
+            },
+        }
+
+    def _runner_writing_report(self, *, instance_id: str, report_obj: dict[str, Any], layout: str = "per_instance"):
+        """返回 runner 替身：按官方目录布局落报告（从 CLI 命名参数取 report_dir/run_id）。"""
+
+        def _runner(cmd: list[str], _cwd: str, _timeout: int) -> subprocess.CompletedProcess[str]:
+            report_dir = Path(self._arg(cmd, "--report_dir"))
+            run_id = self._arg(cmd, "--run_id")
+            if layout == "per_instance":
+                # 官方 run 目录：<report_dir>/<run_id>/<model>/<instance>/report.json
+                target = report_dir / run_id / "aitester" / instance_id
+                target.mkdir(parents=True, exist_ok=True)
+                (target / "report.json").write_text(
+                    json.dumps({"instance_id": instance_id, **report_obj}), encoding="utf-8"
+                )
+            else:
+                # 官方聚合报告：{instance_id: per-instance report}
+                (report_dir / f"{run_id}.aitester.json").write_text(
+                    json.dumps({instance_id: report_obj}), encoding="utf-8"
+                )
+            return _proc(0)
+
+        return _runner
+
     def test_nonzero_returncode_degrades_to_none(self, recorder: dict[str, Any], tmp_path: Path, monkeypatch):
         recorder["results"] = [_proc(1, "", "No module named swebench")]
         monkeypatch.setattr("tempfile.gettempdir", lambda: str(tmp_path))
-        assert self._executor()._run_official_swebench_harness(_REPO_URL, _COMMIT, "", "", ["a"], []) is None
+        assert (
+            self._executor()._run_official_swebench_harness(
+                _REPO_URL, _COMMIT, "", "", ["a"], [], instance_id=self._INSTANCE_ID
+            )
+            is None
+        )
+        assert list(tmp_path.iterdir()) == [], "降级后临时目录（predictions/report）必须清理"
 
     def test_missing_report_degrades_to_none(self, recorder: dict[str, Any], tmp_path: Path, monkeypatch):
         recorder["results"] = [_proc(0)]
         monkeypatch.setattr("tempfile.gettempdir", lambda: str(tmp_path))
-        assert self._executor()._run_official_swebench_harness(_REPO_URL, _COMMIT, "", "", ["a"], []) is None
-        assert list(tmp_path.iterdir()) == [], "降级后临时输入文件必须清理"
+        assert (
+            self._executor()._run_official_swebench_harness(
+                _REPO_URL, _COMMIT, "", "", ["a"], [], instance_id=self._INSTANCE_ID
+            )
+            is None
+        )
+        assert list(tmp_path.iterdir()) == [], "缺报告降级后临时目录必须清理"
 
-    def test_report_resolved_maps_to_self_built_shape(self, recorder: dict[str, Any], tmp_path: Path, monkeypatch):
+    def test_per_instance_report_nested_layout_parsed(self, recorder: dict[str, Any], tmp_path: Path, monkeypatch):
+        monkeypatch.setattr("tempfile.gettempdir", lambda: str(tmp_path))
+        report = self._official_report(f2p_success=["a", "b"], p2p_success=["c", "d", "e"])
+        recorder["results"] = [
+            self._runner_writing_report(instance_id=self._INSTANCE_ID, report_obj=report, layout="per_instance")
+        ]
+        out = self._executor()._run_official_swebench_harness(
+            _REPO_URL, _COMMIT, "tp", "lp", ["a", "b"], ["c", "d", "e"], instance_id=self._INSTANCE_ID
+        )
+        assert out is not None
+        assert out["passed"] is True
+        assert out["fail_to_pass"] == {"expected": 2, "passed": 2}
+        assert out["pass_to_pass"] == {"expected": 3, "passed": 3}
+        assert out["harness_invalid"] is False
+        assert "resolved=True" in out["output"] and self._INSTANCE_ID in out["output"]
+        assert list(tmp_path.iterdir()) == [], "成功路径同样要清理临时目录"
+
+    def test_aggregate_report_layout_parsed(self, recorder: dict[str, Any], tmp_path: Path, monkeypatch):
+        monkeypatch.setattr("tempfile.gettempdir", lambda: str(tmp_path))
+        report = self._official_report(resolved=False, f2p_success=["a"], p2p_success=["c"])
+        recorder["results"] = [
+            self._runner_writing_report(instance_id=self._INSTANCE_ID, report_obj=report, layout="aggregate")
+        ]
+        out = self._executor()._run_official_swebench_harness(
+            _REPO_URL, _COMMIT, "", "", ["a", "b"], ["c"], instance_id=self._INSTANCE_ID
+        )
+        assert out is not None and out["passed"] is False
+        assert out["fail_to_pass"] == {"expected": 2, "passed": 1}
+        assert out["pass_to_pass"] == {"expected": 1, "passed": 1}
+
+    @pytest.mark.parametrize(
+        "report",
+        [
+            {"resolved": True},  # 缺 tests_status
+            {"resolved": "yes", "tests_status": {}},  # resolved 非 bool
+            {"resolved": True, "tests_status": {"FAIL_TO_PASS": {"success": "a"}}},  # success 非 list
+        ],
+        ids=["missing-tests-status", "resolved-not-bool", "success-not-list"],
+    )
+    def test_bad_report_schema_degrades_to_none(
+        self, recorder: dict[str, Any], tmp_path: Path, monkeypatch, report: dict[str, Any]
+    ):
+        monkeypatch.setattr("tempfile.gettempdir", lambda: str(tmp_path))
+        recorder["results"] = [
+            self._runner_writing_report(instance_id=self._INSTANCE_ID, report_obj=report, layout="per_instance")
+        ]
+        assert (
+            self._executor()._run_official_swebench_harness(
+                _REPO_URL, _COMMIT, "", "", ["a"], [], instance_id=self._INSTANCE_ID
+            )
+            is None
+        ), "坏 schema 必须降级，绝不假过"
+
+    def test_resolved_true_with_insufficient_success_degrades(self, recorder, tmp_path, monkeypatch):
+        # resolved=True 但 FAIL_TO_PASS success 数不足 expected → 报告与任务错配
+        monkeypatch.setattr("tempfile.gettempdir", lambda: str(tmp_path))
+        report = self._official_report(f2p_success=["a"], p2p_success=[])
+        recorder["results"] = [
+            self._runner_writing_report(instance_id=self._INSTANCE_ID, report_obj=report, layout="per_instance")
+        ]
+        assert (
+            self._executor()._run_official_swebench_harness(
+                _REPO_URL, _COMMIT, "", "", ["a", "b"], [], instance_id=self._INSTANCE_ID
+            )
+            is None
+        )
+
+    def test_subprocess_exception_degrades_to_none(self, recorder: dict[str, Any], tmp_path: Path, monkeypatch):
+        monkeypatch.setattr("tempfile.gettempdir", lambda: str(tmp_path))
+        recorder["raise_on"] = OSError("exec fail")
+        assert (
+            self._executor()._run_official_swebench_harness(
+                _REPO_URL, _COMMIT, "", "", ["a"], [], instance_id=self._INSTANCE_ID
+            )
+            is None
+        )
+        assert list(tmp_path.iterdir()) == []
+
+    def test_corrupt_report_file_is_skipped(self, recorder: dict[str, Any], tmp_path: Path, monkeypatch):
+        # report_dir 里混入坏 JSON 时逐文件跳过，不得中断对有效报告的定位。
         monkeypatch.setattr("tempfile.gettempdir", lambda: str(tmp_path))
 
-        def _runner(_cmd, _cwd, _timeout):
-            # 模拟官方 runner 的副作用：与 pred_file 同目录落 report.json
-            pred = next(tmp_path.glob("aitester_swebench_pred_*.json"))
-            pred.with_name(pred.stem + "_report.json").write_text(
-                json.dumps({"resolved": True, "fail_to_pass_pass": 2, "pass_to_pass_pass": 3}), encoding="utf-8"
+        def _runner(cmd: list[str], _cwd: str, _timeout: int) -> subprocess.CompletedProcess[str]:
+            report_dir = Path(self._arg(cmd, "--report_dir"))
+            (report_dir / "corrupt.json").write_text("{not json", encoding="utf-8")
+            report = self._official_report(f2p_success=["a"], p2p_success=[])
+            (report_dir / "good.json").write_text(
+                json.dumps({"instance_id": self._INSTANCE_ID, **report}), encoding="utf-8"
             )
             return _proc(0)
 
         recorder["results"] = [_runner]
         out = self._executor()._run_official_swebench_harness(
-            _REPO_URL, _COMMIT, "tp", "lp", ["a", "b"], ["c", "d", "e"]
+            _REPO_URL, _COMMIT, "", "", ["a"], [], instance_id=self._INSTANCE_ID
         )
-        assert out == {
-            "passed": True,
-            "fail_to_pass": {"expected": 2, "passed": 2},
-            "pass_to_pass": {"expected": 3, "passed": 3},
-            "harness_invalid": False,
-            "output": "[M3 官方 swebench harness] resolved=True",
-        }
-        assert list(tmp_path.iterdir()) == [], "成功路径同样要清理 pred/report 两个临时文件"
+        assert out is not None and out["passed"] is True
 
-    def test_subprocess_exception_degrades_to_none(self, recorder: dict[str, Any], tmp_path: Path, monkeypatch):
+    def test_non_json_files_in_report_dir_are_ignored(self, recorder: dict[str, Any], tmp_path: Path, monkeypatch):
+        # report_dir 可能混有官方 runner 的日志等非 JSON 文件：跳过而非中断。
         monkeypatch.setattr("tempfile.gettempdir", lambda: str(tmp_path))
-        recorder["raise_on"] = OSError("exec fail")
-        assert self._executor()._run_official_swebench_harness(_REPO_URL, _COMMIT, "", "", ["a"], []) is None
-        assert list(tmp_path.iterdir()) == []
 
-    def test_report_dir_unreadable_degrades_and_swallows_cleanup_error(
+        def _runner(cmd: list[str], _cwd: str, _timeout: int) -> subprocess.CompletedProcess[str]:
+            report_dir = Path(self._arg(cmd, "--report_dir"))
+            (report_dir / "0_runner.log").write_text("docker build ...", encoding="utf-8")
+            report = self._official_report(f2p_success=["a"], p2p_success=[])
+            (report_dir / "good.json").write_text(
+                json.dumps({"instance_id": self._INSTANCE_ID, **report}), encoding="utf-8"
+            )
+            return _proc(0)
+
+        recorder["results"] = [_runner]
+        out = self._executor()._run_official_swebench_harness(
+            _REPO_URL, _COMMIT, "", "", ["a"], [], instance_id=self._INSTANCE_ID
+        )
+        assert out is not None and out["passed"] is True
+
+    def test_missing_instance_id_degrades_without_invoking_runner(
         self, recorder: dict[str, Any], tmp_path: Path, monkeypatch
     ):
-        # finally 里 os.remove 失败（report 路径被占用为目录）只吞异常、不得把降级
-        # 路径炸成抛出——官方 harness 是"尽力而为"支路，清理失败不构成新故障。
+        # F11：没有真实 instance_id 时不得伪造 predictions，直接降级且不启动 runner。
         monkeypatch.setattr("tempfile.gettempdir", lambda: str(tmp_path))
-        pred = tmp_path / f"aitester_swebench_pred_{os.getpid()}_{threading.get_ident()}.json"
-        pred.with_name(pred.stem + "_report.json").mkdir()
-        recorder["results"] = [_proc(0)]
         assert self._executor()._run_official_swebench_harness(_REPO_URL, _COMMIT, "", "", ["a"], []) is None
-        assert pred.with_name(pred.stem + "_report.json").is_dir(), "清理失败被吞（不抛出）"
+        assert recorder["calls"] == [], "缺 instance_id 时不应调用官方 runner"
 
 
 @pytest.mark.unit

@@ -231,6 +231,15 @@ E5（模型梯度）为**探索性**，不受本文档约束，结果呈现时�
   与判定勾选栏；整文件替换口径下 patch 正文即补丁应用后完整文件，与
   gold fixed 逐行对照即可分类。复核结论仍以人工判定为准，工作表仅
   备料不裁决。
+- **执行面与三路径备料（AA 轮 2026-10-19，零 LLM，未取数）**：判定载体从勾选式
+  Markdown 换为 CSV 录入表，由 `experiments/e7_adjudication.py` 提供 `template` /
+  `validate` / `merge` 三段可机器校验动作（量表越界、缺行、候选集不一致、"不可判"进分母
+  等静默失效改为报错）；Cohen's κ 口径与本文一致（未加权、主口径两名独立裁决人、
+  bootstrap 百分位 CI 10000 次 seed=42，等值关系由回归锁守护）。三路径候选清单与工作表
+  （n=8 / n=41 / n=72）与 6 份空白录入表均已入 `SHA256SUMS`。
+  **执行记录表 E7 行仍保持"待人工复核"且四列为空**：路径选择（§2.1 A/B/C′）与裁决人
+  名单属取数前登记项，须由裁决人在 `docs/HUMAN_ADJUDICATION_PROTOCOL.md` §7 步骤 0
+  填入后方可开工；本条不构成任何 E7 结果。
 
 ## E8：T 轮漂移归因 2×2 消融（{thinking on/off} × {legacy/current profile}）
 
@@ -315,7 +324,7 @@ E5（模型梯度）为**探索性**，不受本文档约束，结果呈现时�
 | E2+E3 | 已执行（首跑 + 迭代重跑各双种子 42/44 × 3 臂；迭代批逐位复现首跑主指标——temp 0.0 缓存命中确定性重放，本迭代为恰好一次，后续不再迭代） | 迭代批 `main_batch/benchmark_synthetic_20261007_181638.json` + `..._185941.json` + `statistical_report_e2_iter.md`；首跑 `..._161053.json` + `..._170147.json` + `statistical_report_e2.md` | 迭代终判：过红 88→31（降幅 64.8%）、抹红 28→2（降幅 92.9%）；aitester vs df δ=−0.3673 [−0.4552,−0.2785]（bayes_neg，与首跑逐位一致）；pooled detection：aitester 12.7% / plain_llm 1.7% / df 52.3%；repair 全线 0.0%；spec_compile_rate=0.212（灰区）；**FL@1 首度可测 19/53=35.8%**（gold diff 修复后）；mutation 可测 31/174 均值 0.767（保守口径）；触顶 16/174（56 上界下 df 臂失控回环仍在，如实披露） | H2a/H2b **不成立**（未归零；降幅均 ≥50% 但"恰好一次"迭代已用尽 → 按停止规则接受结果：门削减过红约 2/3、抹红约 93%）；H2c **"编排容器在检出口径下结构性劣后"结论最终确立**（ADR-0016 预写，可发表）；次要终点 repair 未破零；E3 非空率：fl 30% 可测（修复后）/mutation 18%（设计口径）/spec 91% | 2026-10-07 |
 | R4 A/B + QuixBugs 单臂（**预注册外调试豁免**，非 E4） | 已执行（R4 通道原型验证的副产品；synthetic 两臂系 **dirty 树跑批**、QuixBugs 两臂系干净树跑批） | `experiments/results/r4_batches/{r4_ab_arm_a,r4_ab_arm_b,r4_synth_arm_b2,r4_qb_arm_a,r4_qb_arm_b,loc_test_quix}`（2026-10-08 R2 入库，含 SHA256SUMS/README） | synthetic repair 8/50；QuixBugs A/B repair M1 可测口径 **37/41、36/41**（all-task 37/50、36/50） | R4 局部化约束**阴性**（A/B 无增益）；QuixBugs 单臂仅验证管道，**不构成 E4 正式执行** | 2026-10-08 |
 | E4 | **已执行（2026-10-09，双臂完整结算：`aitester` + `plain_llm_df`）** | `experiments/results/e6_a1_batches/e4_quixbugs_aitester/`（`benchmark_quixbugs_20261009_215514.json`） + `e4_quixbugs_plain_llm_df/`（`benchmark_quixbugs_20261009_223101.json`），各含 50 traces 与日志 | **41 缺陷程序口径：两臂 detection 均 0/41 = 0.0%**；aitester repair 35/40 = 87.5%、false_fix 2.5%、token/task 17,156、red_seen 40/41；df repair 0（无修复通道）、token/task 2,370、red_seen 41/41。**配对 McNemar（detection）：不一致对 = 0、p = 1.0000**（41/41 逐位一致）；贝叶斯 δ=+0.0000、95% CI [−0.0659, +0.0672]、P(\|δ\|≤ROPE)=0.8943 | **主终点失败**（双臂 `detection > 0` 均不成立）。**机制定案**：红测试普遍存在（red_seen 40–41/41）但**不特异**——F2P 三段判定第 2 段（fixed 上绿）不通过，故「0% 检出」的准确含义是**「红得不特异」**（断言错/过苛，或 30s 执行超时），与合成集 over-red 通道同源。**「修复依赖非 F2P 信号」假说被否证**：repair 由 gold 测试独立裁决，与生成测试通道不相交。**真实基准上编排 vs 纯提示 detection 无差异**（p=1.0）而编排贵 7.2× token。限定：两臂各自标准预算，非等预算对照 | 2026-10-09 |
-| E6 | **已执行（2026-10-09，两阶段：冷缓存 standard + matched）** | `experiments/results/e6_a1_batches/e6_phase1_standard_coldcache/`（standard 三臂）+ `e6_phase2_matched_coldcache/`（matched 两臂），含 SHA256SUMS/README | 四臂 detection：aitester standard 6.9%（6/87, 8,857 tok）· aitester matched 2.3%（2/87, 87/87 触顶）· df standard 31.0%（27/87, 2,586 tok）· df matched 26.4%（23/87, 2,602 tok） | **预算混杂被证否**：df(matched) vs aitester(standard) χ²=13.474 p=0.0002（BH q=0.0002）显著；df 抬预算后**不消费增量**（2,586→2,602）且检出无显著变化（p=0.2888）→ **−28pp 归因编排结构，ADR-0016 结论加固**。限定：aitester(matched) 的 cap 低于其单任务需求（84/87 行触顶提前终止），该臂测的是「预算不足时编排的表现」，非严格等能量对比 | 2026-10-09 |
+| E6 | **已执行（2026-10-09，两阶段：冷缓存 standard + matched）** | `experiments/results/e6_a1_batches/e6_phase1_standard_coldcache/`（standard 三臂）+ `e6_phase2_matched_coldcache/`（matched 两臂），含 SHA256SUMS/README | 四臂 detection：aitester standard 6.9%（6/87, 8,857 tok）· aitester matched 2.3%（2/87, 87/87 触顶）· df standard 31.0%（27/87, 2,586 tok）· df matched 26.4%（23/87, 2,602 tok） | **预算混杂被证否**：df(matched) vs aitester(standard) χ²=13.474 p=0.0002（BH q=0.0005；2026-10-19 F01 勘误：标准 BH、m=2 同族 p=[0.0002, 0.4795]→q=[0.0005, 0.4795]，旧非标准实现给 0.0002/1.0）显著；df 抬预算后**不消费增量**（2,586→2,602）且检出无显著变化（p=0.2888）→ **−28pp 归因编排结构，ADR-0016 结论加固**。限定：aitester(matched) 的 cap 低于其单任务需求（84/87 行触顶提前终止），该臂测的是「预算不足时编排的表现」，非严格等能量对比 | 2026-10-09 |
 | E7 | 待人工复核（候选清单已生成，AO 批） | — | — | — | — |
 | E8 | 待预算授权（预注册已冻结，2026-10-18；预估 $6–9；ADR-0034 纪律：授权前不得开跑） | — | — | — | — |
 | **A1 消融（预注册外，2026-10-09 审查报告 §5 路径 A1）** | **执行中（2026-10-09，见下方 A1 设计声明）** | 待落盘 | — | **先声明后取数** | — |
@@ -384,10 +393,16 @@ E2 协议同参（logic 档 / 双门 / temp 0.0 / thinking disabled /
 |---|---|
 | detection（standard） | **8/87 = 9.2%** |
 | detection（strip） | **8/87 = 9.2%** |
-| 配对 McNemar | 不一致对 **2**，χ²=0.500，p=0.4795，**BH-FDR q=1.0000** |
+| 配对 McNemar | 不一致对 **2**，χ²=0.500，p=0.4795，**BH-FDR q=0.4795** |
 | 贝叶斯配对 | δ=**+0.0000**，95% CI **[−0.0451, +0.0445]**，P(\|δ\|≤ROPE)=**0.9691** |
 | 模板簇校正 | k=29，ICC=0.671，DEFF=4.356，n_eff=39.9/174；符号检验 1:1，p=1.0000 |
 | **判定** | **H-A1 不成立**。95% CI **完全落在 ROPE ±5pp 内** → 按 equivalence 口径为**实际等价**（强于"不显著"）；本路径撤回 |
+
+**2026-10-19 勘误（Z 轮第三方审查 F01）**：上表 BH-FDR q 原由非标准实现生成
+（旧值 **1.0000**），现按标准 BH（q_(i)=min(1, min_{j≥i} m·p_(j)/j)）对
+**同一 m=3 比较族**（A1 + E6 两条对比：p=[0.4795, 3.814e-5, 0.0133]）重算为
+**q=0.4795**（同族另两条 q = 1.144e-4 / 1.999e-2）；拒绝集合不变（A1 不拒绝），
+判定与贝叶斯效应量均未改动。
 
 **效力限定（必须并列）**：干预在 **34/87（39%）任务上结构性空转**——Planner 输出
 结构不完整回退默认计划时 `test_cases = []`，**无 `expected_output` 可剥**

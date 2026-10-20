@@ -43,6 +43,31 @@
 `1-α` 下至少捕获 1 个，需 `n ≥ ln(α) / ln(1-p)`。取 `α=0.05`：
 `p=10% → n≥29`，`p=5% → n≥59`。低于 29 即视为**指标饱和风险**。
 
+**2026-10-19 第三方审查修复（F12 / F13，均 P1）**
+
+- **F12：断言失败 ≠ rc==1（指标构念错误）**。历史实现把 `elif rc == 1` 一律
+  标 `assertion_failed=True`——"测试无断言 + 变异体抛 ValueError"（pytest
+  rc=1）也会得到 MDR（报告 §G 最小反例）。现 `_run_tests_on_code` 在 tmp
+  目录落一个零依赖 `conftest.py`（`pytest_exception_interact` 钩子，未引入
+  新插件依赖），把 call 阶段失败异常的**类型**写入 JSON；`compute_mdo`
+  仅当"该次运行的全部 call 阶段失败均为断言型（`AssertionError` / `pytest.fail`
+  的 `Failed`，含 DID NOT RAISE）"才记 `assertion_failed`；纯运行异常
+  （ValueError / TypeError / ...）记 `crashed`（异常类别，MDR 不增）。
+  JSON 记录缺失时回退解析 pytest `-rf` 失败摘要 / traceback 异常类型，
+  且遵循保守原则：**不能证明"只有断言失败"就不计判别**（宁可不记 MDR，
+  不把运行异常误记为断言判别）。
+- **F13：探针不可测不得折叠为 0**。历史行为探针硬依赖
+  `signal.SIGALRM` / `setitimer` / `ITIMER_REAL`；Windows 上这些 API 不存在，
+  探针捕获后打印 `{"probe_error": ...}` 正常退出，父进程把该诊断当"行为
+  摘要"比较 → base / mutant 摘要相同 → `divergent=False` → 池达 29 时仍
+  `measured` 且 MTR/MDR=0（伪零值）。现两层修复：(a) 探针源码自带能力
+  守卫，无 POSIX 定时器时打印 `{"probe_unsupported": ...}` 并退出；
+  (b) `_run_probe` 校验探针 schema（必须含 `calls: list`），拒绝
+  `probe_error` / `import_error` / `probe_unsupported` / 非 JSON → 返回
+  None（日志区分原因）。`compute_mdo`：base 探针无效 → `not_measurable`
+  （reason=`probe_unavailable`）；单个变异体探针无效 → `probe_invalid`
+  排除出分母；全部无效 → 不可测，不得输出 `measured` 零值。
+
 **开关**：本模块为纯函数 + 子进程执行，无 LLM 调用、无默认行为变化；由调用方
 显式使用（不接入主链路，先作为测量层）。
 """
@@ -51,6 +76,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import math
 import os
@@ -58,7 +84,7 @@ import shutil
 import sys
 import tempfile
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, NamedTuple
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +105,57 @@ _COLLECTION_ERROR_MARKERS = (
     "error in 0.",
 )
 
+# ─── F12/F13（2026-10-19 第三方审查 P1）常量 ────────────────────────────────
+# 逐测试结果 JSON 文件名（由 tmp 目录内的 conftest.py 在 pytest_sessionfinish
+# 写出，父进程读取；固定文件名避免额外环境变量进入不可信子进程）。
+_TEST_OUTCOME_REPORT = "_mdo_test_outcomes.json"
+# 失败摘要行前缀（pytest -rf）："FAILED test_t.py::test_f - TypeError: ..."
+_FAILED_SUMMARY_PREFIX = "FAILED "
+# 无结构化记录时的断言型失败回退标记（-rf 摘要 / traceback 异常类型）
+_ASSERTION_OUTPUT_MARKERS = (
+    "AssertionError",
+    "Failed: ",
+    "DID NOT RAISE",
+)
+# 探针诊断键：出现即代表"探针本身无效"，绝不能被当作行为摘要比较（F13）
+_PROBE_REJECT_MARKERS = ("probe_error", "import_error", "probe_unsupported")
+
+
+@dataclass(frozen=True)
+class ProbeOutcome:
+    """一次行为探针的判定结果（F13，2026-10-19 第三方审查 P1）。
+
+    ``behavior`` 为**校验通过后**的规范化行为摘要（可直接跨进程比较）；
+    为 None 时 ``invalid_reason`` 说明拒绝原因（probe_timeout / probe_error /
+    import_error / probe_unsupported / invalid_json / missing_calls / ...）。
+    ``timed_out`` 单独保留：探针超时在 MDO 语义里是"变异体自身不可终止"，
+    与"探针基础设施无效"不同（前者历史上排除出分母，后者新增口径同样排除）。
+    """
+
+    behavior: str | None = None
+    invalid_reason: str = ""
+    timed_out: bool = False
+
+
+class TestRunResult(NamedTuple):
+    """一次 pytest 执行的退出码 + 输出 + 失败类型分类（F12）。
+
+    作为 tuple 子类保留历史 ``(rc, output)`` 的下标访问（``result[0]`` /
+    ``result[1]``，既有调用点零改动）；同时用命名属性承载 tmp 目录内
+    conftest.py 落盘的逐测试失败类型计数：
+
+    - ``assertion_failures``：call 阶段失败且异常为 ``AssertionError`` /
+      ``Failed``（pytest.fail / DID NOT RAISE）的测试数；
+    - ``runtime_errors``：call 阶段失败但异常为其他类型（ValueError 等）的测试数；
+    - ``report_available``：是否读到结构化 JSON（False 时分类回退输出解析）。
+    """
+
+    rc: int
+    output: str
+    assertion_failures: int = 0
+    runtime_errors: int = 0
+    report_available: bool = False
+
 
 @dataclass
 class MutantOutcome:
@@ -87,13 +164,18 @@ class MutantOutcome:
     mutant_type: str
     description: str
     line_no: int = 0
-    # 行为是否与基准实现不同（返回值 / 异常类型 / 全局状态摘要）
+    # 行为是否与基准实现不同（返回值 / 异常类型 / 全局状态摘要）。
+    # 探针无效（probe_invalid / non_terminating）时无从比较，保持 False。
     divergent: bool = False
-    # 测试在该变异体上是否以**断言失败**结束（rc==1）——真正的判别信号
+    # 测试在该变异体上是否以**断言失败**结束——真正的判别信号。
+    # F12（2026-10-19 第三方审查 P1）修正：不再等价于 rc==1，而要求该次
+    # 运行的全部 call 阶段失败均为断言型（AssertionError / pytest 的 Failed）。
     assertion_failed: bool = False
-    # 测试在该变异体上崩溃/收集错误（rc>=2 或 5）——不得计入判别
+    # 测试在该变异体上崩溃 / 异常类别，不得计入判别：
+    # - rc>=2 / 5 / 负 rc：收集/编译中断、无测试、被信号终止；
+    # - F12：rc==1 但失败为**纯运行异常**（ValueError / TypeError / ...）。
     crashed: bool = False
-    # 套件在该变异体上能否成功运行（rc in {0,1}）
+    # 套件在该变异体上能否成功运行（rc in {0,1}；F12 后含运行异常 rc==1）
     ran: bool = False
     # **行为探针不可终止**（变异体自身挂死）→ 无判别信息，须出 MDR 分母。
     # 2026-10-11 修正：此前"探针超时"被折叠为 divergent=False，导致
@@ -101,6 +183,11 @@ class MutantOutcome:
     # 双向污染 MDR。实测触发场景：QuixBugs `bitcount` 在 Python 负数上
     # 永不终止（`n &= n-1`），其 `cond_negate` 变异体即挂死。
     non_terminating: bool = False
+    # F13（2026-10-19 第三方审查 P1）：行为探针**无效**（probe_error /
+    # import_error / probe_unsupported / 非 JSON / schema 不符）→ 行为不可比，
+    # 排除出 MTR/MDR 分母。与 non_terminating 区分：后者是"探针正常但变异体
+    # 挂死"，本字段是"探针本身没产出有效行为摘要"（如 Windows 无 SIGALRM）。
+    probe_invalid: bool = False
     baseline_behavior: str = ""
     mutant_behavior: str = ""
 
@@ -145,7 +232,10 @@ class MDOResult:
             "crash_rate": self.crash_rate,
             "mdo_status": self.status,
             "mdo_non_terminating": sum(1 for o in self.outcomes if o.non_terminating),
-            "mdo_evaluable": sum(1 for o in self.outcomes if not o.non_terminating),
+            # F13：探针无效（如 Windows 无 SIGALRM）单列披露——这些变异体
+            # 不进入 MTR/MDR 分母，也不得被当作"行为相同"。
+            "mdo_probe_invalid": sum(1 for o in self.outcomes if o.probe_invalid),
+            "mdo_evaluable": sum(1 for o in self.outcomes if not o.non_terminating and not o.probe_invalid),
         }
         if self.available and not self.pool_floor_ok:
             # 池不足 → 规范键一律 None（数字出口关闭），原始值移入审计字段
@@ -193,9 +283,35 @@ def _behavior_probe_source(module_name: str) -> str:
     3. **逐调用软超时**：`signal.setitimer` 限每调用 1s（POSIX），超时即记
        `"timeout"`——**不终止**变异体（`signal.alarm` 语义；不引入外部依赖），
        且超时本身是行为差异的合法信号（不终止 vs 终止）。
+
+    **平台能力守卫（F13，2026-10-19 第三方审查 P1，重要）**
+    ----------------------------------------------------
+    逐调用软超时依赖 POSIX 的 `SIGALRM` / `setitimer` / `ITIMER_REAL`，
+    Windows 三者均不存在。历史探针在 Windows 上捕获异常后打印
+    `{"probe_error": ...}` **正常退出**，父进程把该诊断当行为摘要比较
+    → base / mutant 摘要相同 → 伪零值。现在探针**先**做能力探测：缺任一
+    API 即打印 `{"probe_unsupported": ...}` 并退出，父进程显式拒绝该输出
+    （不进入行为比较），并落不可测状态。
     """
     return f'''
-import json, sys, hashlib, inspect, signal
+import json, sys, hashlib, inspect
+
+try:
+    import signal
+except Exception:
+    print(json.dumps({{"probe_unsupported": "no_signal_module"}}))
+    sys.exit(0)
+
+# F13：Windows 无 SIGALRM / setitimer / ITIMER_REAL——不做能力探测就进入
+# 逐调用超时逻辑只会得到 probe_error 诊断（历史"相同诊断 = 相同行为"的
+# 伪零值来源）。
+if not (
+    hasattr(signal, "SIGALRM")
+    and hasattr(signal, "setitimer")
+    and hasattr(signal, "ITIMER_REAL")
+):
+    print(json.dumps({{"probe_unsupported": "no_posix_alarm"}}))
+    sys.exit(0)
 
 INT_INPUTS = (-2, -1, 0, 1, 2, 3, 5)
 SEQ_INPUTS = ([], [0], [1, 2], [3, 1, 2], "", "a", "ab", "abc", {{}}, {{"a": 1}})
@@ -285,8 +401,79 @@ except Exception as exc:
 '''
 
 
-def _run_probe(code: str, module_name: str, timeout_seconds: int) -> str | None:
-    """在隔离 tmp 目录执行行为探针，返回其 stdout（失败返回 None）。"""
+def _normalize_probe_output(raw: str | None) -> tuple[str | None, str]:
+    """校验探针 stdout 并返回 ``(规范化行为摘要, 拒绝原因)``（F13）。
+
+    父进程**不得**把探针诊断当行为摘要比较：Windows 上历史探针会打印
+    ``{"probe_error": ...}`` 并正常退出，base / mutant 都得到同一段诊断文本
+    → 被判"行为相同" → 池达下限时输出 measured 且 MTR/MDR=0 的伪零值。
+
+    接受条件（全部满足）：
+    1. 合法 JSON object（非 JSON / 空输出 → 拒绝）；
+    2. 不含 ``probe_error`` / ``import_error`` / ``probe_unsupported`` 诊断键；
+    3. 含 ``calls: list``（行为探针 schema；缺失说明输出不是探针产物）。
+
+    返回的规范化摘要用 ``sort_keys`` 重排后重新序列化——同一行为必产出
+    逐字节相同摘要，跨子进程比较稳定；对已是规范化 JSON 的输入幂等。
+
+    Args:
+        raw: 探针子进程 stdout（可为 None = 进程未产出）。
+
+    Returns:
+        (behavior, "") 有效；否则 (None, 拒绝原因)。
+    """
+    if raw is None:
+        return None, "probe_not_run"
+    text = str(raw).strip()
+    if not text:
+        return None, "empty_output"
+    try:
+        payload = json.loads(text)
+    except (TypeError, ValueError):
+        return None, "invalid_json"
+    if not isinstance(payload, dict):
+        return None, "non_object_payload"
+    for marker in _PROBE_REJECT_MARKERS:
+        if marker in payload:
+            return None, marker
+    calls = payload.get("calls")
+    if not isinstance(calls, list):
+        return None, "missing_calls"
+    try:
+        # `not_serializable` 实测不可达：payload 出自上方 json.loads，其值域天然可
+        # 再序列化。保留作纵深防御——不要为凑覆盖伪造非 JSON 入参（ROUND4 审计）。
+        normalized = json.dumps({"calls": calls, "state": payload.get("state")}, sort_keys=True)
+    except (TypeError, ValueError):
+        return None, "not_serializable"
+    return normalized, ""
+
+
+def _run_probe(
+    code: str,
+    module_name: str,
+    timeout_seconds: int,
+    *,
+    outcome_sink: list[ProbeOutcome] | None = None,
+) -> str | None:
+    """在隔离 tmp 目录执行行为探针，返回**校验通过**的行为摘要（F13）。
+
+    历史契约"失败返回 None"保留；F13（2026-10-19 第三方审查 P1）起 None
+    还覆盖"stdout 是探针诊断（probe_error / import_error / probe_unsupported）/
+    非 JSON / schema 不符"——父进程拒绝把诊断当行为摘要（历史 Windows 上
+    base/mutant 都得到相同 probe_error → 伪零值）。
+
+    Args:
+        code: 被测模块源码（基准或变异体）。
+        module_name: 模块名（探针 import 用）。
+        timeout_seconds: 探针子进程墙钟超时。
+        outcome_sink: 可选；传入 list 时把**详细判定**（ProbeOutcome：超时 /
+            无效原因）追加进去，供 `compute_mdo` 区分 `non_terminating`
+            与 `probe_invalid`。默认 None 时行为与历史完全一致。
+
+    Returns:
+        规范化行为摘要（合法 JSON 字符串）；无效/超时/进程异常 → None。
+    """
+    outcome = ProbeOutcome(invalid_reason="probe_not_run")
     tmpdir = tempfile.mkdtemp(prefix="aitester_mdo_")
     try:
         with open(os.path.join(tmpdir, f"{module_name}.py"), "w", encoding="utf-8") as f:
@@ -309,22 +496,181 @@ def _run_probe(code: str, module_name: str, timeout_seconds: int) -> str | None:
         # 行为探针执行被测代码派生的子进程（探针体内 _call），孙进程持管道
         # 写端时裸 subprocess.run(timeout=) 的 communicate 可能永久阻塞
         # （2026-10-09 批后挂死事故同构风险面）。文件后端 + 进程组 kill 保证
-        # 本函数必然返回；超时 → returncode=-9 + timed_out → 走失败分支
-        # （与历史 TimeoutExpired → None 同口径）。
+        # 本函数必然返回；超时 → returncode=-9 + timed_out → 走失败分支。
         res = run_with_timeout(
             [sys.executable, probe_path],
             timeout=timeout_seconds,
             cwd=tmpdir,
             env=env,
         )
-        if res.timed_out or res.returncode != 0:
-            return None
-        return (res.stdout or "").strip()
+        if res.timed_out:
+            # 探针不可终止：变异体自身挂死（历史 non_terminating 语义）。
+            logger.debug("MDO 行为探针超时（%ss）", timeout_seconds)
+            outcome = ProbeOutcome(invalid_reason="probe_timeout", timed_out=True)
+        elif res.returncode != 0:
+            logger.debug("MDO 行为探针进程异常退出 rc=%s", res.returncode)
+            outcome = ProbeOutcome(invalid_reason=f"probe_rc_{res.returncode}")
+        else:
+            behavior, reason = _normalize_probe_output(res.stdout)
+            if behavior is None:
+                # 父进程侧显式拒绝诊断输出：区分 probe_error / import_error /
+                # probe_unsupported / invalid_json（日志可审计），绝不比较它们。
+                logger.debug("MDO 行为探针输出无效（reason=%s，raw=%.200s）", reason, res.stdout)
+                outcome = ProbeOutcome(invalid_reason=reason)
+            else:
+                outcome = ProbeOutcome(behavior=behavior)
     except Exception:
         logger.debug("MDO 探针执行失败", exc_info=True)
-        return None
+        outcome = ProbeOutcome(invalid_reason="probe_exception")
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
+    if outcome_sink is not None:
+        outcome_sink.append(outcome)
+    return outcome.behavior
+
+
+def _run_probe_detailed(code: str, module_name: str, timeout_seconds: int) -> ProbeOutcome:
+    """``_run_probe`` 的详细判定包装（F13）：区分探针超时与探针无效。
+
+    compute_mdo 需要区分"探针超时（变异体挂死 → non_terminating）"与"探针
+    输出无效（probe_invalid → 排除分母）"，而 ``_run_probe`` 的公开契约
+    只返回行为摘要/None；本函数通过 outcome_sink 拿详细状态。
+
+    若 ``_run_probe`` 被替换/包裹（例如报告 §M6 反例直接把原始 probe_error
+    文本传回），sink 不会被填充——此时对返回值再做一次 schema 校验，
+    保证诊断输出绝不会被当行为摘要。
+    """
+    sink: list[ProbeOutcome] = []
+    raw = _run_probe(code, module_name, timeout_seconds, outcome_sink=sink)
+    if sink:
+        return sink[0]
+    behavior, reason = _normalize_probe_output(raw)
+    if behavior is None:
+        return ProbeOutcome(invalid_reason=reason)
+    return ProbeOutcome(behavior=behavior)
+
+
+def _test_outcome_conftest_source() -> str:
+    """生成 tmp 目录内 conftest.py 源码：把逐测试失败异常**类型**落 JSON（F12）。
+
+    设计要点（零新依赖，只用 pytest 稳定钩子）：
+    - ``pytest_exception_interact(node, call, report)`` 在测试抛异常时被调用，
+      ``call.excinfo`` 直接给出异常对象——不需要解析 traceback 文本；
+    - 只记录 ``when == "call"`` 的阶段（setup/teardown 异常不属于"断言判别"，
+      仅以 rc 体现为运行异常/执行错误）；
+    - 断言型失败 = ``AssertionError``（assert 语句）或 ``Failed``
+      （``pytest.fail(...)`` / ``pytest.raises`` 的 DID NOT RAISE）；
+    - ``pytest_sessionfinish`` 写固定文件名（不用环境变量传路径——不可信
+      子进程环境是最小白名单，自定义键不会保留）；写失败静默忽略，
+      父进程以"无结构化记录"回退输出解析。
+    """
+    return f'''
+import json
+import os
+
+import pytest
+
+_REPORT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), {_TEST_OUTCOME_REPORT!r})
+_RECORDS = []
+
+
+def pytest_exception_interact(node, call, report):
+    """记录 call 阶段失败异常的类名与断言型判定（F12 核心证据）。"""
+    try:
+        excinfo = getattr(call, "excinfo", None)
+        if excinfo is None:
+            return
+        exc = excinfo.value
+        _RECORDS.append(
+            {{
+                "nodeid": getattr(report, "nodeid", ""),
+                "when": getattr(call, "when", ""),
+                "outcome": getattr(report, "outcome", ""),
+                "exception_type": type(exc).__name__,
+                "is_assertion": isinstance(exc, AssertionError) or type(exc).__name__ == "Failed",
+            }}
+        )
+    except Exception:
+        pass
+
+
+def pytest_sessionfinish(session, exitstatus):
+    try:
+        with open(_REPORT_PATH, "w", encoding="utf-8") as f:
+            json.dump(_RECORDS, f)
+    except Exception:
+        pass
+'''
+
+
+def _load_test_outcome_report(path: str) -> list[dict[str, Any]] | None:
+    """读取 conftest 落盘的逐测试结果 JSON；文件缺失/损坏 → None（回退解析）。"""
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return None
+    if not isinstance(data, list):
+        return None
+    return [item for item in data if isinstance(item, dict)]
+
+
+def _is_assertion_failure_text(message: str) -> bool:
+    """失败摘要/异常类型文本是否为断言型失败（F12 回退判据）。"""
+    text = (message or "").strip()
+    return text.startswith(("assert ", "AssertionError", "Failed:")) or "DID NOT RAISE" in text
+
+
+def _failed_summary_messages(output: str) -> list[str]:
+    """从 pytest ``-rf`` 失败摘要行提取每条失败的原因文本。
+
+    形如 ``FAILED test_t.py::test_f - TypeError: can only concatenate ...``；
+    无法解析出原因的行返回空串（调用方按"非断言"保守处理）。
+    """
+    messages: list[str] = []
+    for line in (output or "").splitlines():
+        stripped = line.strip()
+        if not stripped.startswith(_FAILED_SUMMARY_PREFIX):
+            continue
+        body = stripped[len(_FAILED_SUMMARY_PREFIX) :]
+        detail = body.split(" - ", 1)[1].strip() if " - " in body else ""
+        messages.append(detail)
+    return messages
+
+
+def _classify_rc1_failure(run: Any) -> str:
+    """判定 rc==1 的失败性质：``"assertion"`` / ``"runtime"`` / ``"unknown"``（F12）。
+
+    优先级：
+    1. **结构化证据**（conftest JSON，report_available=True）：仅当存在
+       断言型失败且**没有**运行异常失败时返回 ``"assertion"``；混合失败
+       或纯运行异常返回 ``"runtime"``（保守：不能证明"只有断言失败"就不
+       计判别，宁可不记 MDR，不把运行异常误记为断言判别）。
+    2. **回退输出解析**（无 JSON：conftest 加载失败 / 测试进程异常退出 /
+       既有 mock 调用点）：解析 ``-rf`` 失败摘要；全部原因均为断言型才返回
+       ``"assertion"``；无摘要行时扫 traceback 断言标记（``AssertionError`` /
+       ``Failed: `` / ``DID NOT RAISE``）。
+
+    Args:
+        run: ``TestRunResult`` 或历史 ``(rc, output)`` 二元组（兼容 mock）。
+
+    Returns:
+        "assertion" 才允许记 ``assertion_failed``；"runtime"/"unknown" 记
+        ``crashed``（异常类别，MDR 不增）。
+    """
+    assertion = getattr(run, "assertion_failures", None)
+    runtime = getattr(run, "runtime_errors", None)
+    if bool(getattr(run, "report_available", False)) and isinstance(assertion, int) and isinstance(runtime, int):
+        if assertion > 0 and runtime == 0:
+            return "assertion"
+        return "runtime" if (assertion + runtime) > 0 else "unknown"
+    output = str(run[1]) if isinstance(run, (tuple, list)) and len(run) > 1 else ""
+    messages = _failed_summary_messages(output)
+    if messages:
+        return "assertion" if all(_is_assertion_failure_text(m) for m in messages) else "runtime"
+    if any(marker in output for marker in _ASSERTION_OUTPUT_MARKERS):
+        return "assertion"
+    return "unknown"
 
 
 def _run_tests_on_code(
@@ -332,8 +678,17 @@ def _run_tests_on_code(
     code: str,
     module_name: str,
     timeout_seconds: int,
-) -> tuple[int, str] | None:
-    """在 code 上跑测试套件，返回 (rc, output)；不可判定返回 None。"""
+) -> TestRunResult | None:
+    """在 code 上跑测试套件，返回退出码 + 输出 + 失败类型分类；不可判定返回 None。
+
+    F12（2026-10-19 第三方审查 P1）：tmp 目录额外落一个零依赖 ``conftest.py``，
+    用 pytest 钩子记录 call 阶段失败异常类型（断言型 vs 运行异常）——
+    历史实现只拿 ``(rc, output)`` 且把 rc==1 一律当断言失败，无断言测试
+    遇到 ValueError 也会产生 MDR（报告最小反例）。
+
+    返回 ``TestRunResult``（tuple 子类，``result[0]``/``result[1]`` 与历史
+    ``(rc, output)`` 兼容）；超时 / IO 异常 → None（fail-closed）。
+    """
     tmpdir = tempfile.mkdtemp(prefix="aitester_mdo_t_")
     try:
         with open(os.path.join(tmpdir, f"{module_name}.py"), "w", encoding="utf-8") as f:
@@ -341,6 +696,10 @@ def _run_tests_on_code(
         test_path = os.path.join(tmpdir, f"test_{module_name}.py")
         with open(test_path, "w", encoding="utf-8") as f:
             f.write(test_code)
+        # F12：失败类型记录 conftest（无第三方依赖；--tb=short/-rf 同时给
+        # 无结构化记录场景提供可解析的失败摘要）。
+        with open(os.path.join(tmpdir, "conftest.py"), "w", encoding="utf-8") as f:
+            f.write(_test_outcome_conftest_source())
         # 2026-10-11 全面优化批次：run_with_timeout 接线——此处执行的是**LLM
         # 生成的测试套件**（pytest 可派生子进程：插件 / multiprocessing /
         # 测试内 subprocess），孙进程持管道写端时裸 subprocess.run 超时后
@@ -360,6 +719,10 @@ def _run_tests_on_code(
                 "--no-header",
                 "-p",
                 "no:cacheprovider",
+                # F12：失败摘要（-rf）与短 traceback（--tb=short）供
+                # "conftest JSON 缺失"时的保守回退解析。
+                "--tb=short",
+                "-rf",
                 test_path,
             ],
             timeout=timeout_seconds,
@@ -376,7 +739,24 @@ def _run_tests_on_code(
         )
         if res.timed_out:
             return None
-        return res.returncode, f"{res.stdout or ''}\n{res.stderr or ''}"
+        report = _load_test_outcome_report(os.path.join(tmpdir, _TEST_OUTCOME_REPORT))
+        assertion_failures = 0
+        runtime_errors = 0
+        if report is not None:
+            for record in report:
+                if record.get("when") != "call" or record.get("outcome") != "failed":
+                    continue
+                if record.get("is_assertion"):
+                    assertion_failures += 1
+                else:
+                    runtime_errors += 1
+        return TestRunResult(
+            rc=res.returncode,
+            output=f"{res.stdout or ''}\n{res.stderr or ''}",
+            assertion_failures=assertion_failures,
+            runtime_errors=runtime_errors,
+            report_available=report is not None,
+        )
     except Exception:
         return None
     finally:
@@ -384,7 +764,15 @@ def _run_tests_on_code(
 
 
 def _is_execution_error(rc: int, output: str) -> bool:
-    """是否为"根本没跑起来"（收集/语法错误，rc>=2 或 5）。与 M1 同判据。"""
+    """是否为"根本没跑起来"（收集/语法错误、无测试、异常终止）。
+
+    与 M1（``experiments._m1_metrics._looks_like_test_execution_error``）同判据：
+    - 负 rc = 进程被信号终止（POSIX；F14 同口径）→ 异常终止，不得当断言失败；
+    - rc>=2 / 5 = 收集/编译中断、无测试收集；
+    - 输出含收集错误标记（兜底非标准执行器）。
+    """
+    if rc < 0:
+        return True
     if rc in (_RC_COLLECTION_ERROR, _RC_NO_TESTS) or rc >= 2:
         return True
     low = (output or "").lower()
@@ -415,6 +803,12 @@ def compute_mdo(
         池规模未达下限（`pool_floor_ok=False`）时 `status="provisional_pool"`，
         且 `as_dict()` 的 `mtr`/`mdr`/`crash_rate` 输出 `None`（T6 出口拦截）
         ——属性层仍保留计算值供审计与既有计算正确性测试使用。
+
+    F12（2026-10-19 第三方审查 P1）：rc==1 不再无差别记断言判别——只有该次
+    运行的失败**全部**为断言型（AssertionError / pytest.fail）才记
+    `assertion_failed`；纯运行异常（ValueError 等）记 `crashed`，MDR 不增。
+    F13：base 行为探针无效 → `not_measurable(reason="probe_unavailable")`；
+    单个变异体探针无效 → 排除出 MTR/MDR 分母；全部无效 → 不可测。
     """
     if not (test_code or "").strip():
         return MDOResult(not_available_reason="no_test_code", status="not_measurable")
@@ -427,7 +821,9 @@ def compute_mdo(
     baseline_run = _run_tests_on_code(test_code, base_code, module_name, timeout_seconds)
     if baseline_run is None:
         return MDOResult(not_available_reason="baseline_timeout", status="not_measurable")
-    base_rc, base_out = baseline_run
+    # 下标访问：兼容历史 (rc, output) 二元组 mock 与 TestRunResult（tuple 子类）
+    base_rc = baseline_run[0]
+    base_out = baseline_run[1]
     if _is_execution_error(base_rc, base_out):
         return MDOResult(not_available_reason="baseline_execution_error", status="not_measurable")
     if base_rc != _RC_ALL_PASSED:
@@ -436,7 +832,18 @@ def compute_mdo(
             status="not_measurable",
         )
 
-    base_behavior = _run_probe(base_code, module_name, timeout_seconds)
+    # F13（2026-10-19 第三方审查 P1）：base 行为探针必须**有效**。历史实现把
+    # 探针诊断（Windows 上 {"probe_error": ...}）当行为摘要，base / mutant
+    # 得到相同诊断 → divergent=False → 池达下限时 measured 且 MTR/MDR=0。
+    # 现 base 探针无效即整体不可测，不输出 measured 零值。
+    base_probe = _run_probe_detailed(base_code, module_name, timeout_seconds)
+    if base_probe.behavior is None:
+        logger.warning(
+            "MDO base 行为探针无效（reason=%s）→ 不可测（不输出伪零值 MTR/MDR）",
+            base_probe.invalid_reason,
+        )
+        return MDOResult(not_available_reason="probe_unavailable", status="not_measurable")
+    base_behavior = base_probe.behavior
 
     outcomes: list[MutantOutcome] = []
     for m in mutants:
@@ -450,43 +857,74 @@ def compute_mdo(
             outcomes.append(outcome)
             continue
 
-        mut_behavior = _run_probe(mutant_code, module_name, timeout_seconds)
-        outcome.baseline_behavior = (base_behavior or "")[:200]
+        mut_probe = _run_probe_detailed(mutant_code, module_name, timeout_seconds)
+        mut_behavior = mut_probe.behavior
+        outcome.baseline_behavior = base_behavior[:200]
         outcome.mutant_behavior = (mut_behavior or "")[:200]
-        # 探针不可终止 = 变异体自身挂死 → 无判别信息，排除出 MDR 分母
-        outcome.non_terminating = mut_behavior is None and base_behavior is not None
-        outcome.divergent = bool(
-            base_behavior is not None and mut_behavior is not None and base_behavior != mut_behavior
-        )
+        if mut_behavior is None:
+            # F13：变异体探针无效 → 行为不可比，排除出 MTR/MDR 分母；
+            # 超时（探针被 kill = 变异体自身挂死）沿用历史 non_terminating 语义。
+            outcome.probe_invalid = True
+            outcome.non_terminating = bool(mut_probe.timed_out)
+        else:
+            outcome.divergent = base_behavior != mut_behavior
 
         run = _run_tests_on_code(test_code, mutant_code, module_name, timeout_seconds)
         if run is None:
             # 执行不可判定 → 保守：不计判别、不计崩溃，ran=False
             outcomes.append(outcome)
             continue
-        rc, out = run
-        if _is_execution_error(rc, out):
+        rc = run[0]
+        out = run[1]
+        if rc == _RC_ALL_PASSED:
+            outcome.ran = True
+        elif _is_execution_error(rc, out):
+            # 收集/语法错误、无测试、信号终止 → CRASH，不计判别
             outcome.crashed = True
         elif rc == _RC_ASSERTION_FAILURE:
             outcome.ran = True
-            outcome.assertion_failed = True
-        elif rc == _RC_ALL_PASSED:
-            outcome.ran = True
+            # F12：rc==1 不等于断言失败——只有"全部 call 阶段失败均为断言型"
+            # 才记判别；纯运行异常（ValueError 等）记 crashed（异常类别，
+            # MDR 不增）。混合失败保守归运行异常。
+            if _classify_rc1_failure(run) == "assertion":
+                outcome.assertion_failed = True
+            else:
+                outcome.crashed = True
+        else:
+            # AA-5 核实（ROUND4 审计）：此 else **恒不触发**——rc<0 与 rc>=2 已被上面
+            # ``_is_execution_error`` 收下（含 rc==3 internal / rc==4 usage / rc==5 无测试），
+            # rc==0 与 rc==1 各有分支，值域无剩余。旧注释把它写成"其他非 0 退出"的处理
+            # 分支是误导。保留作执行器替身返回异常 rc 时的纵深防御。
+            outcome.crashed = True
         outcomes.append(outcome)
 
     n = len(outcomes)
     if n == 0:
+        # 恒不触发：上方已对空变异体池提前返回，且循环每轮必 append 一次。
+        # 保留作除零护栏（MTR/MDR 分母）。
         return MDOResult(not_available_reason="no_outcome", status="not_measurable")
-    # MTR/MDR 的分母统一为 **可评估** 变异体（探针成功终止者）。
-    # 依据：探针不可终止意味着"该变异体自身挂死"——它既不能给测试记功
-    # （不是测试触发的），也不能记过（测试无从判别）。计入分母会双向污染
-    # （实测：QuixBugs `cond_negate` 变异体在负数输入上永不终止，会让
+    # MTR/MDR 的分母统一为 **可评估** 变异体：
+    # - 排除 non_terminating（探针正常但变异体自身挂死，历史口径）；
+    # - 排除 probe_invalid（F13：探针没产出有效行为摘要，行为不可比）。
+    # 依据：非终止/探针无效意味着"该变异体没有有效行为证据"——它既不能
+    # 给测试记功（不是测试触发的），也不能记过（测试无从判别）。计入分母
+    # 会双向污染（实测：QuixBugs `cond_negate` 在负数输入上永不终止，会让
     # 强断言测试的 MDR 反低于弱断言测试）。
-    # MDR：分母 = **可评估**变异体（排除探针不可终止者）。否则"挂死"会被
-    # 算成"测试未判别"，把变异体的缺陷记到测试头上。
-    denom = [o for o in outcomes if not o.non_terminating]
+    denom = [o for o in outcomes if not o.non_terminating and not o.probe_invalid]
+    probe_invalid_count = sum(1 for o in outcomes if o.probe_invalid)
+    if not denom and probe_invalid_count > 0:
+        # F13：全部变异体探针无效（如 Windows 无 SIGALRM 场景）→ 不可测，
+        # 不得返回 measured 且 MTR/MDR=0 的伪零值。
+        logger.warning("MDO 全部变异体行为探针无效（%d/%d）→ 不可测", probe_invalid_count, n)
+        return MDOResult(
+            not_available_reason="probe_unavailable",
+            status="not_measurable",
+            pool_size=n,
+            outcomes=outcomes,
+        )
     mtr = sum(1 for o in denom if o.divergent) / len(denom) if denom else None
-    mdr = sum(1 for o in outcomes if o.divergent and o.assertion_failed) / len(denom) if denom else None
+    mdr = sum(1 for o in denom if o.divergent and o.assertion_failed) / len(denom) if denom else None
+    # CRASH 率分母保持全池 n：测试执行的崩溃证据独立于"行为探针是否有效"
     crash = sum(1 for o in outcomes if o.crashed) / n
     floor = pool_floor(pool_floor_p)
     pool_ok = n >= floor

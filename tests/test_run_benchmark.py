@@ -877,9 +877,7 @@ def test_non_flaky_path_writes_only_test_passed() -> None:
 # 异常就能让整批实验在启动阶段崩溃，而既有测试全绿。
 
 
-def test_marker_read_error_is_recorded_not_raised(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Any
-) -> None:
+def test_marker_read_error_is_recorded_not_raised(monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> None:
     """marker 存在但读不出（权限/编码）→ 记录 error，不抛异常。"""
     (tmp_path / ".repro_provenance").write_text("GIT_SHA=deadbeefcafe", encoding="utf-8")
 

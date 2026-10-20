@@ -110,13 +110,16 @@ def _collect(results_dir: str | Path) -> dict[str, Any]:
     totals = Counter()
     detection: dict[str, dict[str, tuple[int, int]]] = {}
     all_values: dict[str, list[float]] = {key: [] for key, _ in _METRICS}
+    skipped: dict[str, list[str]] = {"unreadable": [], "non_object": []}
 
     for path in _iter_batch_files(results_dir):
         try:
             batch = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
+            skipped["unreadable"].append(path.name)
             continue
         if not isinstance(batch, dict):
+            skipped["non_object"].append(f"{path.name}（顶层 {type(batch).__name__}）")
             continue
         name = path.name
         per_batch[name] = {}
@@ -155,6 +158,7 @@ def _collect(results_dir: str | Path) -> dict[str, Any]:
         "detection": detection,
         "totals": totals,
         "all_values": all_values,
+        "skipped": skipped,
     }
 
 
@@ -176,6 +180,26 @@ def _render(data: dict[str, Any], results_dir: str) -> str:
         "固化为可引用数字，供 BASELINE.yaml 登记与对外对标。"
     )
     lines.append("")
+
+    # ── 读取完整性（仅在有跳过时出现；无跳过时报告与本节不存在时逐字节一致）────
+    skipped = data["skipped"]
+    if skipped["unreadable"] or skipped["non_object"]:
+        lines.append("## 读取完整性（被跳过的批次）")
+        lines.append("")
+        lines.append(
+            "> 本节存在即表示：**下列批次未进入上表与池化区间**（`totals` / `all_values` / "
+            "逐批次表均按剩余批次计算）。引用本报告任何数字时必须同时引用本节。"
+        )
+        lines.append("")
+        lines.append(
+            f"- 不可解析（读失败或 JSON 语法错误）：**{len(skipped['unreadable'])}** 份"
+            + ("：" + "、".join(f"`{n}`" for n in skipped["unreadable"]) if skipped["unreadable"] else "")
+        )
+        lines.append(
+            f"- 顶层不是 JSON 对象（`json.loads` 的其余五种合法返回）：**{len(skipped['non_object'])}** 份"
+            + ("：" + "、".join(f"`{n}`" for n in skipped["non_object"]) if skipped["non_object"] else "")
+        )
+        lines.append("")
 
     # ── 逐批次表 ───────────────────────────────────────────────────────────
     for key, label in _METRICS:
@@ -257,6 +281,15 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     data = _collect(args.results_dir)
+    skipped = data["skipped"]
+    n_skipped = len(skipped["unreadable"]) + len(skipped["non_object"])
+    if n_skipped:
+        print(
+            f"[WARN] {args.results_dir} 下 {n_skipped} 份批次被跳过"
+            f"（不可解析 {len(skipped['unreadable'])} / 顶层非对象 {len(skipped['non_object'])}）："
+            "这些批次不进入逐批次表与池化区间，报告已新增「读取完整性」一节披露清单",
+            file=sys.stderr,
+        )
     if not data["per_batch"]:
         print(f"[FAIL] {args.results_dir} 下未找到可解析的批次 JSON", file=sys.stderr)
         return 1

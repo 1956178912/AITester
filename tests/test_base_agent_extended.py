@@ -97,6 +97,39 @@ class TestCallZai:
         assert call_kwargs.kwargs["base_wait"] == 5
         assert call_kwargs.kwargs["max_retries"] == 2
 
+    def test_call_zai_forwards_temperature_to_sdk(self, monkeypatch):
+        """F09（2026-10-19 第三方审查 P1）：temperature 必须实际到达 SDK create。
+
+        历史缺陷：_call_zai 无 temperature 参数，zai 请求从不下发采样温度，
+        而缓存身份（_effective_request_identity）仍记录"实际生效温度"——
+        请求身份与真实请求分叉。本用例走真实重试器 + fake SDK 客户端，
+        锁定调用级参数（报告 §M11 验收口径）。
+        """
+        from src.agents import llm_client
+
+        message = MagicMock()
+        message.content = "zai ok"
+        message.reasoning_content = None
+        response = MagicMock()
+        response.choices = [MagicMock(message=message)]
+        response.usage = None
+        create = MagicMock(return_value=response)
+        client = MagicMock()
+        client.chat.completions.create = create
+        monkeypatch.setattr(llm_client, "_get_or_create_zai_client", lambda *a, **k: client)
+
+        result = _call_zai(
+            api_key="k",
+            base_url="https://open.bigmodel.cn/api",
+            model_name="glm-4.7-flash",
+            system_prompt="s",
+            user_message="u",
+            max_retries=0,
+            temperature=0.41,
+        )
+        assert result == "zai ok"
+        assert create.call_args.kwargs["temperature"] == 0.41, "zai SDK 必须收到调用方 temperature"
+
     @patch("src.agents.llm_client._get_or_create_zai_client")
     def test_zai_empty_response_not_retried(self, mock_client_factory):
         """P1-3 回归：zai 空响应走 non_retryable_exceptions，不做指数退避。
@@ -663,7 +696,7 @@ class TestCallLlm:
     @patch("src.agents.base_agent._call_zai")
     @patch("src.agents.base_agent._get_all_api_configs")
     def test_zai_path_called_for_zai_url(self, mock_get_configs, mock_call_zai, mock_is_zai):
-        """zai 兼容 URL 走 _call_zai 路径。"""
+        """zai 兼容 URL 走 _call_zai 路径，并透传 eff_temperature（F09）。"""
         mock_get_configs.return_value = [("zai_key", "https://open.bigmodel.cn/api", "glm-4")]
         mock_is_zai.return_value = True
         mock_call_zai.return_value = "zai reply"
@@ -671,6 +704,10 @@ class TestCallLlm:
         result = agent._call_llm("hello")
         assert result == "zai reply"
         mock_call_zai.assert_called_once()
+        # F09（2026-10-19 第三方审查 P1）：未显式覆盖时发送 config.TEMPERATURE
+        from src.agents.base_agent import TEMPERATURE as _BASELINE_TEMPERATURE
+
+        assert mock_call_zai.call_args.kwargs["temperature"] == pytest.approx(_BASELINE_TEMPERATURE)
 
     @patch("src.agents.base_agent._is_zai_compatible")
     @patch("src.agents.llm_client.ChatOpenAI")

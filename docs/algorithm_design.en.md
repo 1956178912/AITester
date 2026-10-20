@@ -1,8 +1,8 @@
-> Last updated: 2026-10-05 (R1a/R1b/R1c spec-oracle compilation fixes, signature-aware binding, and side-by-side spec-oracle execution wiring)
+> Last updated: 2026-10-19 (Z-round third-party review F15/F16: the red_not_repaired detection semantics is corrected to "protocol-layer mechanism state that does not by itself constitute a valid detection"; title and opening repositioned per ADR-0016 as a detection-first protocol plus ablatable orchestration container)
 
 > **Language**: [中文版](algorithm_design.md) | English (this document)
 
-# Multi-Agent Collaborative Test Generation and Self-Repair Protocol (Algorithm Design Document)
+# Detection-First Test Generation and Repair-Attribution Evaluation Protocol (Algorithm Design Document)
 
 > This document describes the core algorithm design and theoretical framework of AITester, for technical review and code review reference.
 > The appendix provides a precise mapping table from algorithms to source code, to help locate implementation details quickly.
@@ -40,7 +40,7 @@
 
 ## 1. System Overview
 
-AITester is a Python automated test generation and self-repair system based on multi-agent collaboration.
+AITester is a Python test-generation and self-repair system / evaluation protocol built around the detection-first protocol, with multi-agent orchestration positioned as an ablatable container (`docs/adr/0016-orchestration-container-repositioning.md`).
 
 The system consists of five core agents, with responsibilities as follows:
 
@@ -192,7 +192,7 @@ Output: repaired code S'; whether detected (detection); whether repaired (repair
 **Success calibers ("passed" alone is not success)**:
 
 - **Detection — two-sided criterion**: F2P = the generated test is red on the original buggy code **∧** green on the gold-fixed (or repaired) code **∧** no collection/syntax/execution errors on either side; red on the buggy side alone (one-sided) is only a mechanism signal and is not counted as detection.
-- **Repair — two-sided criterion**: the protocol loop requires "a red witness exists (the defect was detected) **∧** the patched code is all green"; the evaluation layer's `repair_rate` is adjudicated independently against **gold material** — a repair counts only when the gold tests are all green on the **final code with the patch actually written** (no patch written → 0.0; unmeasurable → None). `all_green_unverified` (never red, yet all green = weak-test false success) **must not be counted as detection/repair success by the evaluation layer**; `red_not_repaired` (detected but not repaired) counts as detection, not repair.
+- **Repair — two-sided criterion**: the protocol loop requires "a red witness exists (the defect was detected) **∧** the patched code is all green"; the evaluation layer's `repair_rate` is adjudicated independently against **gold material** — a repair counts only when the gold tests are all green on the **final code with the patch actually written** (no patch written → 0.0; unmeasurable → None). `all_green_unverified` (never red, yet all green = weak-test false success) **must not be counted as detection/repair success by the evaluation layer**; `red_not_repaired` (red was observed and the defect was not repaired) is only a **protocol-layer mechanism state** (`detection=red_seen` in the pseudocode is likewise a protocol-layer signal) and **does not by itself constitute a valid detection** — valid detection is always adjudicated by the evaluation layer's independent three-part F2P criterion (red on buggy **∧** green on fixed **∧** no execution errors); the 88 main-batch `red_not_repaired` rows whose buggy/fixed sides are both red (over-red, failing F2P) are the counter-example (`detection=0`) and must not be re-counted as detections to fit the text.
 - **Test locking / no green by swapping tests**: inside the repair loop the test `T` is locked; regeneration is allowed only through three dedicated routes bounded by `R` (all-green first round, specificity gate `over_red`, diagnosis-reported test defect). The red-regression gate detects "previously red + test regenerated + source unpatched", restores the red-witness test and hands control back to the repair-the-source channel — the mechanism guarantee for ADR-0016 decision 4 ("the repair loop must not reach green by swapping tests").
 - **Switches and defaults**: `DETECTION_FIRST_ENABLE` / `DETECTION_SPECIFICITY_GATE_ENABLE` / `RED_REGRESSION_GATE_ENABLE` are all off by default (ADR-0003); the logic profile and explicit experiment batches enable them. With them off, the historical caliber is byte-identical.
 
@@ -204,7 +204,7 @@ Output: repaired code S'; whether detected (detection); whether repaired (repair
 
 ---
 
-## 4. Multi-Agent Collaboration Protocol
+## 4. Multi-Agent Orchestration Protocol (ablatable container, ADR-0016)
 
 ### 4.1 State Transition Diagram
 

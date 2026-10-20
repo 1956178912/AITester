@@ -974,7 +974,7 @@ print(MODEL_NAME)  # 默认模型（LLM_1）名称
 | `MODEL_NAME` / `OPENAI_API_KEY` / `OPENAI_BASE_URL` | str | - | 仅派生值（取自 LLM_1，向后兼容），**不是配置输入** |
 | `EXECUTOR_USE_DOCKER` | bool | false | 4.3 Docker 隔离执行（经 docker CLI 在容器内跑 pytest；需本机安装 docker 且镜像已构建，不可用时返回 `docker_unavailable` 诊断不降级本地） |
 | `EXECUTOR_DOCKER_IMAGE` | str | `aitester:latest` | 4.3 Docker 执行使用的镜像名（对应仓库根 Dockerfile） |
-| `EXECUTOR_USE_VENV` | bool | false | venv 沙箱隔离执行（按依赖组合磁盘缓存，不污染系统环境） |
+| `EXECUTOR_USE_VENV` | bool | true | venv 沙箱隔离执行（按依赖组合磁盘缓存，不污染系统环境；**R10 起默认 true**，设 false 回退宿主环境直跑，仅调试用） |
 | `EXECUTOR_AUTO_INSTALL_DEPS` | bool | false | venv 内自动 pip install 缺失依赖 |
 | `AITESTER_VENV_CACHE_DIR` | str | `~/.cache/aitester/venvs` | 4.4 venv 缓存目录覆盖（容器/CI 隔离场景指向挂载卷；配合 `clean-venv-cache` 子命令清理） |
 | `AITESTER_LLM_CACHE_DIR` | str | `~/.cache/aitester/llm` | LLM 文件缓存目录覆盖（2026-10-05 起默认用户缓存目录，`XDG_CACHE_HOME` 优先解析；此前默认 `src/cache/`；`src/graph/rag.py` 兜底检索路径同口径收敛为引用同一常量，消除路径双写） |

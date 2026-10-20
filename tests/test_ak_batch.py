@@ -8,13 +8,15 @@
 - AK1 修复上限归因：repair_ceiling_report.md 落盘且含漏斗/双界章节，
   pooled 报告含 AK 勘误节且不再含已被更正的 git_dirty=False 表述；
 - build_funnel / sensitivity_bounds 的结构不变式（hypothesis 属性）：
-  漏斗层单调不增、桶计数守恒；双界 best ≥ worst 恒成立。
+  漏斗层单调不增、桶计数守恒；双界 best ≥ worst 恒成立，且 base 行
+  分子/分母取自同一共同配对总体（2026-10-19 Z 轮 F02 修复后的口径）。
 """
 
 from __future__ import annotations
 
 import importlib.util
 import json
+import math
 import re
 from pathlib import Path
 
@@ -202,12 +204,37 @@ def _funnel_field_lists(
 def test_sensitivity_bounds_ordering_property(
     flag_lists: tuple[list[int | None], list[int]],
 ) -> None:
-    """属性：None 填充双界恒有序 worst ≤ base ≤ best（按阳性计数口径）。"""
+    """属性：双界有序 worst ≤ base ≤ best（配对口径），且分子与分母同源。
+
+    2026-10-19 Z 轮 F02：base 行分子改为 `_pair_by_task` 配对列表求和
+    （旧实现用整臂阳性数 ÷ 配对 n，B 臂在被 A None 排除任务上的阳性会
+    污染分子）。本属性锁定：
+    - base 的 sum_a/sum_b 恰等于共同可测任务的配对阳性数；
+    - 任意情形 risk_diff == (sum_a − sum_b)/n_common（同源）；
+    - worst ≤ base ≤ best（按阳性计数与风险差两口径）。
+    注：base 不是"None 填充后的全量"——其 n_common 可能小于 worst/best
+    的 n_common（后者填充后全量配对），故 sum_a 上界按各自 n_common 校。
+    """
     flags_a, flags_b = flag_lists
     bounds = sensitivity_bounds(_rows_from_flags(flags_a, flags_b))
+    # 独立复算共同可测任务（B 臂在 fixture 中无 None）
+    common = [i for i, v in enumerate(flags_a) if v is not None]
+    expected_base_sum_a = sum(1 for i in common if flags_a[i] == 1)
+    expected_base_sum_b = sum(1 for i in common if flags_b[i] == 1)
     for entry in bounds:
         rows = {r["scenario"]: r for r in entry["rows"]}
-        assert rows["worst(None→0)"]["sum_a"] <= rows["base"]["sum_a"] <= rows["best(None→1)"]["sum_a"]
+        base = rows["base"]
+        assert base["n_common"] == len(common)
+        assert (base["sum_a"], base["sum_b"]) == (expected_base_sum_a, expected_base_sum_b)
+        for label, row in rows.items():
+            assert 0 <= row["sum_a"] <= row["n_common"], label
+            assert 0 <= row["sum_b"] <= row["n_common"], label
+            if row["n_common"] == 0:
+                assert math.isnan(row["risk_diff"]), label
+                continue
+            expected_diff = (row["sum_a"] - row["sum_b"]) / row["n_common"]
+            assert row["risk_diff"] == pytest.approx(expected_diff), label
+        assert rows["worst(None→0)"]["sum_a"] <= base["sum_a"] <= rows["best(None→1)"]["sum_a"]
         assert rows["worst(None→0)"]["risk_diff"] <= rows["best(None→1)"]["risk_diff"]
 
 

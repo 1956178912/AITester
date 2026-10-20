@@ -53,6 +53,25 @@ _DEFAULT_BATCHES = (
 _REVIEW_RUBRIC = "equivalent / plausible_overfit / wrong_location / test_only / incomplete"
 
 
+def gold_reference_code(task_metadata: dict[str, Any] | None) -> str:
+    """E7 人工复核的 gold 参照正文（**对照口径**，非执行口径）。
+
+    跨文件任务（``is_cross_file=True``）的 gold 在 ``fixed_module_code``
+    （被调方修复后的完整模块源码），其 ``fixed`` 字段为空——只读 ``fixed``
+    会把"工具取错字段"渲染成"上游素材缺失"，审阅者据此无法裁决
+    （2026-10-19 在 n41/n72 工作表候选 32/44 实测踩过该坑）。
+
+    单文件任务返回 ``fixed`` 原文，**不做** ``_target_code_after_patch``
+    的应用变换：本路径的用途是"patch 正文 vs gold 逐行对照"，整文件替换
+    口径下 patch 正文即补丁应用后的完整文件。执行口径（M1 指标判定）
+    仍以 ``_m1_metrics._gold_fixed_code`` 为准，两者分工不同、不得互替。
+    """
+    md = task_metadata or {}
+    if md.get("is_cross_file"):
+        return str(md.get("fixed_module_code") or "")
+    return str(md.get("fixed") or "")
+
+
 def build_sampling_frame(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """E7 抽样框：修复循环进入（red 两桶）且 patch_plausible==1 的行。"""
     return [

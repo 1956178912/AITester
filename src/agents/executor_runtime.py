@@ -72,13 +72,23 @@ _IS_DARWIN = platform.system() == "Darwin"
 
 
 def _make_resource_preexec_fn() -> Any | None:
-    """返回 preexec_fn 闭包（在子进程 exec 前设 resource.setrlimit）。"""
+    """返回 preexec_fn 闭包（在子进程 exec 前设 resource.setrlimit）。
+
+    契约（F04／2026-10-19 Z 轮审查修复）：每项 ``EXECUTOR_RLIMIT_*`` 的
+    取值 ``> 0`` 时设置该 rlimit；取值 ``= 0`` 表示**禁用该项**（不调用
+    ``setrlimit``，而不是把额度设成 0）。历史实现无条件
+    ``setrlimit(..., (0, 0))``：注释承诺"0 禁用"但实际把 AS/CPU 等额度压到
+    0——Linux 上 AS=0 会让子进程 exec/内存分配直接失败，与"禁用限制"语义
+    相反。坏值 / 负值仍由 ``env_int(..., lo=0)`` 回退默认值（负值不会进入
+    ``> 0`` 分支）。
+    """
     if not _RLIMIT_AVAILABLE or (platform.system() not in ("Linux", "Darwin")):
         return None
     # J-1d（2026-10-17）：此前为裸 int(os.getenv(...))。坏值（如 EXECUTOR_RLIMIT_CPU=30s）
     # 抛的 ValueError 会被调用点的 `except Exception` 吞成 ("UNAVAILABLE", …)——即**整批**
     # 执行判分静默归零，日志里只有一行"第 N 次执行失败"；负值则让 setrlimit 在
-    # preexec_fn 内抛错、伪装成 SubprocessError。lo=0 保留"设 0 即禁用该项"的既有口径。
+    # preexec_fn 内抛错、伪装成 SubprocessError。lo=0 保留"设 0 即禁用该项"的既有口径
+    # （F04 起该口径在 _preexec_fn 内真正落地：0 = 跳过对应 setrlimit）。
     _cpu_limit = env_int("EXECUTOR_RLIMIT_CPU", 300, lo=0)
     _as_limit_mb = env_int("EXECUTOR_RLIMIT_AS_MB", 512, lo=0)
     _nproc_limit = env_int("EXECUTOR_RLIMIT_NPROC", 512, lo=0)
@@ -94,20 +104,25 @@ def _make_resource_preexec_fn() -> Any | None:
     _enable_as = _as_force or not _IS_DARWIN
 
     def _preexec_fn() -> None:
-        # CPU 时间（软限 = 300s，到时后 SIGXCPU 终止子进程）
-        resource.setrlimit(resource.RLIMIT_CPU, (_cpu_limit, _cpu_limit))
+        # F04：逐项 ``> 0`` 守卫——0 = 该项禁用（跳过 setrlimit），见函数 docstring。
+        # CPU 时间（默认 300s，到时后 SIGXCPU 终止子进程）
+        if _cpu_limit > 0:
+            resource.setrlimit(resource.RLIMIT_CPU, (_cpu_limit, _cpu_limit))
         # 虚拟地址空间（Linux 全量；Darwin 默认跳过——见模块顶注：
         # setrlimit(AS) 在 macOS 上整体不支持，强设会 SubprocessError）
-        if _enable_as:
+        if _enable_as and _as_limit_mb > 0:
             _as_bytes = _as_limit_mb * 1024 * 1024
             resource.setrlimit(resource.RLIMIT_AS, (_as_bytes, _as_bytes))
         # 最大子进程数（fork 炸弹防线；非 root 时硬限生效）
-        resource.setrlimit(resource.RLIMIT_NPROC, (_nproc_limit, _nproc_limit))
+        if _nproc_limit > 0:
+            resource.setrlimit(resource.RLIMIT_NPROC, (_nproc_limit, _nproc_limit))
         # 文件大小（防 LLM 代码写满磁盘）
-        _FSIZE_bytes = _FSIZE_limit_mb * 1024 * 1024
-        resource.setrlimit(resource.RLIMIT_FSIZE, (_FSIZE_bytes, _FSIZE_bytes))
+        if _FSIZE_limit_mb > 0:
+            _FSIZE_bytes = _FSIZE_limit_mb * 1024 * 1024
+            resource.setrlimit(resource.RLIMIT_FSIZE, (_FSIZE_bytes, _FSIZE_bytes))
         # 文件描述符上限（防无界 open）
-        resource.setrlimit(resource.RLIMIT_NOFILE, (_nofile_limit, _nofile_limit))
+        if _nofile_limit > 0:
+            resource.setrlimit(resource.RLIMIT_NOFILE, (_nofile_limit, _nofile_limit))
 
     return _preexec_fn
 

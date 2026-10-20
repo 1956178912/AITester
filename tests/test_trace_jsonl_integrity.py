@@ -233,9 +233,7 @@ class TestA20DegradationGuards:
     任何一环被回退，坏行都可能落盘，而既有测试仍全绿。
     """
 
-    def test_redact_record_degrades_to_raw_when_masking_raises(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_redact_record_degrades_to_raw_when_masking_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """第 1 级：`_redact_json_value` 抛异常 → 原样返回入参（不阻断写入）。"""
 
         def _boom(value, mask):
@@ -245,9 +243,7 @@ class TestA20DegradationGuards:
         record = {"event": "node", "text": "key=abcdefgh123456"}
         assert trace_mod._redact_record(record) is record, "脱敏失败须原样返回同一对象（不复制、不改写）"
 
-    def test_append_drops_line_failing_structure_guard(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
+    def test_append_drops_line_failing_structure_guard(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         """第 2 级：`json.dumps` 成功但 `json.loads` 失败 → 丢弃该行，文件不落盘。
 
         正常情况下 dumps 的产物必然可 loads，故这是"序列化链路被上游破坏"的
@@ -267,9 +263,7 @@ class TestA20DegradationGuards:
         path = tmp_path / "guard-task.trace.jsonl"
         assert not path.exists(), "结构守卫未拦住：坏行已落盘"
 
-    def test_dump_skips_record_whose_str_raises(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
+    def test_dump_skips_record_whose_str_raises(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         """第 3 级：`json.dumps(default=str)` 因 `__str__` 抛异常而失败 → 跳过该行。
 
         `_redact_record` 在此被替身为恒等函数，使坏对象**直达**序列化步骤，
@@ -296,3 +290,58 @@ class TestA20DegradationGuards:
         records = _assert_every_line_is_json_object(path)
         payloads = [r.get("payload") for r in records if r.get("event") == "node"]
         assert payloads == ["正常记录"], "坏行必须被丢弃，好行必须保留"
+
+
+class TestTraceIoFailurePaths:
+    """AA-5（2026-10-19）：追踪层的两类 I/O/序列化失败必须"少记不误记"。
+
+    锁定 `trace.py` 中 round2/round3 审计点名的防御分支：
+
+    - 记录序列化失败（自定义对象 `__str__` 抛异常）→ 丢弃该条并告警，
+      **不得**让异常逃出旁路观测层改变被测系统行为（`:251-254`）；
+    - 追踪文件不可写（目标是目录 / 权限失败）→ 忽略并告警（`:267-269`）；
+    - `dump_recent_to(limit=...)` 只导出最近 N 个快照（`:445-446`），
+      快照落盘失败返回 None 而非抛出（`:481-483`）。
+    """
+
+    def test_unserializable_record_dropped_without_raising(self, tmp_path):
+        class _Unstringable:
+            def __str__(self) -> str:
+                raise RuntimeError("无法字符串化")
+
+        session = TraceSession("t_unserializable", trace_directory=str(tmp_path))
+        path = tmp_path / "t_unserializable.trace.jsonl"
+        before = _read_lines(path)
+
+        session._append({"event": "node", "payload": _Unstringable()})
+
+        assert _read_lines(path) == before, "无法序列化的记录必须整条丢弃，不得写坏行"
+        # 旁路观测层：内存视角仍保留该记录（写盘失败不改变已记录的观测事实）
+        assert session.records[-1]["event"] == "node"
+
+    def test_unwritable_trace_path_ignored(self, tmp_path, monkeypatch: pytest.MonkeyPatch):
+        session = TraceSession("t_unwritable", trace_directory=str(tmp_path))
+        # 把落盘目标换成一个目录：open(..., "a") 必然 OSError（IsADirectoryError）
+        blocker = tmp_path / "blocked.jsonl"
+        blocker.mkdir()
+        monkeypatch.setattr(session, "_file_path", str(blocker))
+
+        session._append({"event": "node", "payload": "不该落盘"})  # 不抛出即通过
+        assert not any(blocker.iterdir()), "写盘失败不得在目标路径留下半成品"
+
+    def test_dump_recent_to_limit_slices_newest_snapshots(self, tmp_path):
+        for i in range(3):
+            memory_buffer_snapshot(f"t{i}", [{"event": "node", "task": f"t{i}"}])
+
+        path = dump_recent_to(str(tmp_path), limit=2)
+        assert path is not None
+        tasks = [r["task"] for r in _assert_every_line_is_json_object(path) if r["event"] == "snapshot_task"]
+        assert tasks == ["t1", "t2"], "limit 取最近 N 个快照（倒序切片）"
+
+    def test_dump_recent_to_write_failure_returns_none(self, tmp_path, monkeypatch: pytest.MonkeyPatch):
+        memory_buffer_snapshot("t0", [{"event": "node", "task": "t0"}])
+        # 冻结时间戳并把目标文件名占为目录 → open(path, "w") 必然 OSError
+        monkeypatch.setattr("time.time", lambda: 1700000000.0)
+        (tmp_path / "1700000000_failed_trace.jsonl").mkdir()
+
+        assert dump_recent_to(str(tmp_path)) is None, "快照写盘失败必须返回 None 而非抛出"

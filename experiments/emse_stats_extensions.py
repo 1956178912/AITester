@@ -39,6 +39,9 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
+# AB-15a（2026-10-20）：币种判定与机制名的唯一事实源在 `src.budget.pricing`。
+from src.budget.pricing import entry_block_reason, models_layer, table_read_reason  # noqa: E402
+
 # ─── 输入工件（R-P0-2 当前口径三种子 + E6 对照 + E4 修正结算）──────────────
 MAIN_BATCH_FILES = [
     "experiments/results/main_batch/benchmark_synthetic_20261006_140906.json",  # seed 42
@@ -206,14 +209,52 @@ def _arm_totals(files: list[str], arm: str) -> tuple[int, int]:
     return ones, total
 
 
-def _cost_per_task(files: list[str], arm: str) -> tuple[float, float, str]:
+def _load_price_models() -> tuple[dict[str, Any] | None, str | None]:
+    """价目表 `models` 层：`(models, None)` 或 `(None, 机制名)`（AB-17）。
+
+    改前本文件写的是 `_load(PRICE_TABLE)["models"]`——同一份坏表在这里的结局是**直接崩**：
+    缺文件抛 `FileNotFoundError`、语法错抛 `JSONDecodeError`、缺 `models` 键抛 `KeyError`、
+    顶层非对象抛 `TypeError` 或 `AttributeError`，七处读点里唯一一处连空表降级都没有。
+    现走共享事实源：读取失败 → `table_read_reason`，形状 → `models_layer`，不崩也无痕。
+    """
+    try:
+        data = _load(PRICE_TABLE)
+    except (OSError, ValueError) as exc:
+        return None, table_read_reason(exc)
+    models, reason = models_layer(data)
+    if reason is not None:
+        return None, reason
+    return models, None
+
+
+def _cost_per_task(files: list[str], arm: str) -> tuple[float, float | None, str]:
     """每任务 token 与 $/task 点估计。
 
     $ 换算假设（显式披露）：按该臂聚合 input:output 比例 × deepseek-flash
     峰时全价（价目表登记口径）；多模型臂按各模型 token 占比加权（价目缺失
     的模型不计入 $，只计 token）。返回 (tokens_per_task, usd_per_task, note)。
+
+    AB-15a（2026-10-20）：改前这里读 `input_per_mtok` / `output_per_mtok` 却**从不看币种**
+    ——把批次实际用到的模型在价目表里改标 `CNY`，`usd_per_task` 逐位不变
+    （实测 0.025884977011494247），即 AB-13c/AB-14c 同型缺陷在本仓的**第六处**、AB-14 漏接的
+    一处。现接共享谓词与共享机制名（`src.budget.pricing`），被拒的份额按机制点名后跳过——
+    与本函数既有的"价目缺失的模型不计入 $，只计 token + 在换算假设列点名"同一套约定；但币种/
+    形状/`bool` 这一类**拒绝**不留部分和：只要有份额被拒，`usd_per_task` 就是 None（与站点 g
+    的 `analyze_t1_b2_main_batch` 同一条规则）——"这个数少算了哪些模型"与"这个数的单位根本
+    不成立"是两件事。真表三条目里批次实际用到的只有 `deepseek-flash`（USD）⇒ 读数与受保护
+    报告字节一字不变。
+
+    AB-16（2026-10-20）：条目级准入收口到 `entry_block_reason`——空条目与 `null` 价从
+    "未计价"（0.0 部分和）改归"拒绝"（登记了却用不了，不等于"没登记"）；非对象条目改名为
+    形状事实 `entry_not_object:<T>`（与 report 一致）；`"1.0"`/`[1.0]`/`{}` 不再抛
+    TypeError，负价/`nan`/`inf` 不再照乘。真表读数一字不变。
+
+    AB-17（2026-10-20）：表级读取收口到 `_load_price_models` 的共享判定——改前
+    `_load(PRICE_TABLE)["models"]` 对同一份坏表直接崩（六种异常），现在坏表落
+    `(tpt, None, "价目表不可用（<机制名>）…")`：不崩、不静默用内置价、$/task 无金额；
+    条目检索从 `prices.get(m)` 的 `is None` 改 `not in`——"值 null"不再被读成"未登记"。
     """
-    prices = _load(PRICE_TABLE)["models"]
+    prices, table_reason = _load_price_models()
     tok = inp = out = 0
     n_tasks = 0
     for rel in files:
@@ -227,6 +268,9 @@ def _cost_per_task(files: list[str], arm: str) -> tuple[float, float, str]:
     if n_tasks == 0:
         return (0.0, 0.0, "无任务")
     tpt = tok / n_tasks
+    if prices is None:
+        # AB-17：坏表不许崩、也不许静默——token 读数照常，$/task 无金额并点名机制。
+        return (tpt, None, f"价目表不可用（{table_reason}）⇒ $/task 无金额（不是 0）")
     # 价目加权（按 by_model token 占比；未登记价目模型跳过并披露）
     model_tok: dict[str, int] = {}
     for rel in files:
@@ -236,17 +280,34 @@ def _cost_per_task(files: list[str], arm: str) -> tuple[float, float, str]:
                 model_tok[m] = model_tok.get(m, 0) + (t or 0)
     usd = 0.0
     unpriced = []
+    blocked: dict[str, list[str]] = {}
     for m, t in model_tok.items():
-        pr = prices.get(m) or {}
-        pi, po = pr.get("input_per_mtok"), pr.get("output_per_mtok")
-        if pi is None or po is None:
+        if m not in prices:
+            # 改前口径不变："价目表没登记这个模型"记为未计价（诚实降级），不算币种事件。
+            # AB-17：改前这里 `prices.get(m)` 的 `is None` 把"值为 null"也读进这个桶；
+            # 现在值 null 交条目谓词读 `entry_not_object:NoneType`（AB-11 判据）。
             unpriced.append(m)
             continue
+        pr = prices[m]
+        # AB-15a 币种 + AB-16 条目准入（形状 → 空 → 币种 → 数字）都取自共享事实源。
+        # 改前这里：非对象条目在 `pr.get` 上抛 AttributeError、`"1.0"`/`[1.0]` 抛 TypeError、
+        # 负价/`nan`/`inf` 照乘进 `usd`、空条目与 `null` 价折成"未计价"（0.0 部分和）。
+        # 现在只留一条诚实降级（"没登记"），其余一律按机制点名并放弃部分和。
+        reason = entry_block_reason(pr)
+        if reason is not None:
+            blocked.setdefault(reason, []).append(m)
+            continue
+        pi, po = pr["input_per_mtok"], pr["output_per_mtok"]
         share = t / max(tok, 1)
         # 价目为每百万 token 单价 → /1e6 换算为每 token；in/out 比例用该臂聚合口径
         usd += share * tpt * (pi * (inp / max(tok, 1)) + po * (out / max(tok, 1))) / 1_000_000
     note = f"价目加权（in:out={inp}:{out}）；未计价模型：{unpriced or '无'}"
-    return (tpt, usd, note)
+    if blocked:
+        note += "；计价被拒：" + "；".join(
+            f"{code}←{'、'.join(sorted(models))}" for code, models in sorted(blocked.items())
+        )
+    # 任一份额被拒 ⇒ $/task 没有金额（部分和不得冒充全额），机制名留在 note 里。
+    return (tpt, None if blocked else usd, note)
 
 
 def _bootstrap_cost_ci(
@@ -429,9 +490,11 @@ def render_markdown(rep: dict[str, Any]) -> str:
     for name, blk in rep["arms"].items():
         if "tokens_per_task" in blk:
             lo, hi = blk["tokens_per_task_bootstrap95"]
+            # AB-15a：被拒的金额不得挂 `$`（改前这里对 None 直接 `:.4f` 崩，而只要聚合出
+            # 数字就照原样印成全额）。机制名在同行"换算假设"列里点名。
+            usd_cell = f"${blk['usd_per_task']:.4f}" if blk["usd_per_task"] is not None else "—（无金额）"
             lines.append(
-                f"| {name} | {blk['tokens_per_task']:.0f} | [{lo:.0f}, {hi:.0f}] | "
-                f"${blk['usd_per_task']:.4f} | {blk['usd_note']} |"
+                f"| {name} | {blk['tokens_per_task']:.0f} | [{lo:.0f}, {hi:.0f}] | {usd_cell} | {blk['usd_note']} |"
             )
     lines += [
         "",

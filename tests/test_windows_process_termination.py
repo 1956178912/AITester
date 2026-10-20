@@ -97,6 +97,63 @@ class TestPlatformDispatch:
         assert all(call.args[0] == 456 for call in killpg.call_args_list)
 
 
+# ───────────── AB-12a：POSIX 第二段 killpg 失败的兜底（确定性覆盖） ─────────────
+
+
+@pytest.mark.unit
+class TestPosixSigkillFallback:
+    """``killpg(SIGKILL)`` 抛错 → ``proc.kill()`` 兜底必须是**确定性执行**的分支。
+
+    AB-11 轮实测：这一支（``process_utils.py:638-642``）过去只被"真实进程恰好消亡"
+    的竞态命中，全量跑里偶发漏读，导致同一条 ``src/`` 树三次读数 18371 → 18369 → 18371
+    行 / 6606 → 6605 → 6606 弧（见 ``docs/MEASUREMENT_INTEGRITY.md`` §14）。邻近的
+    613 / 616 / 626 都写了 ``# pragma: no cover``，唯独这条没有——**处置口径是补确定性锁，
+    不是补 pragma**（用注释把会说真话的分支藏掉是本项目明令禁止的做法）。
+    """
+
+    @pytest.mark.parametrize("exc", [ProcessLookupError, PermissionError, OSError])
+    def test_sigkill_failure_falls_back_to_kill_while_child_alive(self, exc: type[OSError]) -> None:
+        """SIGTERM 成功、SIGKILL 打不出去且组长仍存活 → 必须回退 ``kill()`` 直接子进程。"""
+        process = Mock(pid=7001)
+        process.poll.return_value = None
+        with (
+            patch.object(process_utils, "_is_windows", return_value=False),
+            patch.object(process_utils.os, "getpgid", return_value=7001),
+            patch.object(process_utils.os, "killpg", side_effect=[None, exc("组已消亡/无权限")]) as killpg,
+        ):
+            _terminate_process_group(process, label="ab12", grace_seconds=0)
+        assert [c.args[1] for c in killpg.call_args_list] == [
+            process_utils.signal.SIGTERM,
+            process_utils.signal.SIGKILL,
+        ]
+        assert process.kill.call_count == 1
+
+    def test_sigkill_failure_after_child_already_exited_does_not_kill_again(self) -> None:
+        """组长已退出（``poll()`` 非 None）时不得再补 ``kill()``——同一 ``if`` 的反向弧。"""
+        process = Mock(pid=7002)
+        process.poll.return_value = 0
+        with (
+            patch.object(process_utils, "_is_windows", return_value=False),
+            patch.object(process_utils.os, "getpgid", return_value=7002),
+            patch.object(process_utils.os, "killpg", side_effect=[None, ProcessLookupError("组已消亡")]),
+        ):
+            _terminate_process_group(process, label="ab12", grace_seconds=0)
+        assert process.kill.called is False
+
+    def test_sigkill_fallback_kill_error_is_swallowed(self) -> None:
+        """兜底 ``kill()`` 自己抛 OSError（进程刚消亡）时不得把异常漏给调用方。"""
+        process = Mock(pid=7003)
+        process.poll.return_value = None
+        process.kill.side_effect = OSError("no such process")
+        with (
+            patch.object(process_utils, "_is_windows", return_value=False),
+            patch.object(process_utils.os, "getpgid", return_value=7003),
+            patch.object(process_utils.os, "killpg", side_effect=[None, ProcessLookupError("组已消亡")]),
+        ):
+            _terminate_process_group(process, label="ab12", grace_seconds=0)
+        assert process.kill.call_count == 1
+
+
 # ───────────────────────── 2) Windows 回收分支细节 ─────────────────────────
 
 

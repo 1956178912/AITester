@@ -51,6 +51,17 @@ def load_arm_rows(path: Path, arm_key: str | None = None) -> dict[str, dict[str,
 
     arm_key=None 时自动选择**唯一**含非空 details 的臂；多臂且未显式
     指定时报错（防错配——预注册要求显式声明臂名）。
+
+    行集折叠口径（AB-12d）：``out[tid] = ...`` 让**后出现的同 task_id 行覆盖前一行**，
+    返回字典因此可以比 ``details`` 行数少，而下游的 41 缺陷程序口径、可判定子集与配对
+    检验都按这个字典算——分母就这样静默缩掉。本轮把折叠改成一条命名 WARN：点名文件、
+    臂、``details 行数 / 行摘要数 / 被覆盖行数``与被覆盖的 task_id，并把"无主键行"按
+    形态分开计（键缺席 / 值为 null / 空串 / 非字符串 / 不可哈希；五桶互斥，一行只进一桶，
+    否则披露自身的计数就会虚增）。真批次实测 0 实例——覆盖面按桶记账：glob 命中 246 份
+    ``benchmark_*.json``，其中 242 份（320 个臂、10659 个 dict 行）真正提供了证据，另
+    4 份是 2 份空 ``details`` 例与 2 份 ``.mdo.json`` 非臂形状，只点名承认、不计入分子也
+    不计入"干净"（见 ``tests/test_experiments_arm_row_collapse_ab12.py`` 的分桶等式）。
+    故入库读数一字不变；有实例时也不得再被读成"该臂只有 N 个任务"。
     """
     if not path.exists():
         raise MissingArtifactError(f"工件缺失: {path}")
@@ -70,14 +81,52 @@ def load_arm_rows(path: Path, arm_key: str | None = None) -> dict[str, dict[str,
     if not isinstance(arm, dict) or not isinstance(arm.get("details"), list):
         raise MissingArtifactError(f"臂 {arm_key!r} 缺失或 details 非 list: {path}")
     out: dict[str, dict[str, Any]] = {}
-    for row in arm["details"]:
+    details = arm["details"]
+    overwritten: list[Any] = []
+    keyless = {"key_absent": 0, "value_null": 0, "empty_string": 0, "not_string": 0, "unhashable": 0}
+    non_object_detail_rows = 0
+    for row in details:
+        if not isinstance(row, dict):
+            non_object_detail_rows += 1
+            continue
         tid = row.get("task_id", "")
+        if "task_id" not in row:
+            keyless["key_absent"] += 1
+        elif tid is None:
+            keyless["value_null"] += 1
+        elif isinstance(tid, str) and not tid.strip():
+            keyless["empty_string"] += 1
+        elif not isinstance(tid, str):
+            try:
+                hash(tid)
+            except TypeError:
+                keyless["unhashable"] += 1
+                continue
+            keyless["not_string"] += 1
+        if tid in out:
+            overwritten.append(tid)
         out[tid] = {
             "detection_rate": row.get("detection_rate"),
             "spec_replace_applied": row.get("spec_replace_applied"),
             "specificity_gate_verdict": row.get("specificity_gate_verdict"),
             "red_regression_violation": row.get("red_regression_violation"),
         }
+    segments: list[str] = []
+    if overwritten:
+        shown = "、".join(repr(t) for t in overwritten[:10])
+        more = f"（只点名前 {min(10, len(overwritten))} 个）" if len(overwritten) > 10 else ""
+        segments.append(f"被覆盖 task_id {len(overwritten)} 个：{shown}{more}")
+    if any(keyless.values()):
+        segments.append("无主键行 " + "、".join(f"{k} {v}" for k, v in keyless.items() if v))
+    if non_object_detail_rows:
+        segments.append(f"非对象详情行 {non_object_detail_rows}")
+    if segments:
+        print(
+            f"[WARN] {path.name}：臂 {arm_key!r} 行集折叠 details 行 {len(details)} → 行摘要 {len(out)}"
+            f"（{'；'.join(segments)}）——后出现的同 id 行会覆盖前一行，"
+            "41 缺陷程序口径与配对检验的分母随之缩水，不得读成'该臂只有 N 个任务'",
+            file=sys.stderr,
+        )
     return out
 
 

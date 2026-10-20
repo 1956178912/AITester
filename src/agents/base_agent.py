@@ -282,6 +282,9 @@ def _effective_request_identity(
       不同角色/指令的系统提示词必须分区隔离；None = 无 system 材料）。
       取摘要而非全文，避免身份 dict 写入每个缓存 payload 时体积随提示词增长；
     - ``temperature``：实际生效采样温度 = 显式覆盖值，否则 config.TEMPERATURE；
+      F09（2026-10-19 第三方审查 P1）：该字段现在对 OpenAI 兼容路径与 zai SDK
+      路径都描述**实际发出的请求**（zai 路径经 create(temperature=...) 透传），
+      身份材料与实际请求保持同一口径；
     - ``json_object``：JSON 输出**实际生效值** = json_mode 且
       LLM_JSON_MODE≠off；
     - ``thinking`` / ``reasoning_effort`` / ``max_tokens``：请求体实际注入值
@@ -927,8 +930,11 @@ class BaseAgent:
             user_message: 用户消息内容。
             max_retries: 单次 API 的最大重试次数，默认 3 次。
             temperature: 采样温度覆盖（3.3 动态策略接线用）；None 时使用
-                config.TEMPERATURE。注意 zai SDK 路径当前不支持温度参数，
-                该覆盖仅对 OpenAI 兼容路径生效（保守口径）。
+                config.TEMPERATURE。F09（2026-10-19 第三方审查 P1）起
+                OpenAI 兼容路径与 zai SDK 路径**都实际发送**该有效温度
+                （zai 经 create(temperature=...)，历史实现静默丢弃），
+                与 `_effective_request_identity` 记录的"实际生效采样温度"
+                一致——缓存身份不再与实际请求分叉。
             complexity_class: P0 1.2 复杂度档位（"simple"/"medium"/"complex"）。
                 提供时传递给 APIManager 按档位选择 LLM 实例（同模型多 provider
                 端点场景下路由到对应复杂度档位）；None 走历史策略。
@@ -1024,7 +1030,18 @@ class BaseAgent:
                 try:
                     if is_zai:
                         # BigModel 等非 OpenAI 兼容接口：使用 zai SDK 专属调用
-                        text = _call_zai(api_key, base_url, model_name, self.system_prompt, user_message, max_retries)
+                        # F09：显式透传有效温度——与下方 OpenAI 路径的
+                        # `_get_or_create_chat_client(..., eff_temperature, ...)` 同口径，
+                        # 保证"_effective_request_identity 记录的温度 = 实际请求温度"。
+                        text = _call_zai(
+                            api_key,
+                            base_url,
+                            model_name,
+                            self.system_prompt,
+                            user_message,
+                            max_retries,
+                            temperature=eff_temperature,
+                        )
                         # A10：zai 路径成功返回后记录真实请求配置（provenance 消费）
                         _record_actual_request_config(api_key, base_url, model_name)
                     else:

@@ -289,6 +289,14 @@ Planner（LLM：输入域/输出域/前置/后置/边界 + SpecExpr 受限表达
 - **时间戳**：2026-10-17T04:1x UTC（`recompute_outputs.json` `meta.generated_at`）。
 - **诚实边界**：C5（false_fix 修正口径）、C7（meta_coverage）、C10/C11（spec_compile_rate/expr_coverage）、C9（Mut@k）的复算由子代理从工件完成，本人未逐位重放其脚本；这些项的工件路径与 SHA256 已在 §3.1 标注，读者可按同标准自行重放。
 
+> **2026-10-19 Z 轮日期化勘误（历史原文保留，不重写）**：后续轮次修改了 `review_recompute/` 两件工件——
+> ① **F19（第三方全量审查 P2）**：`recompute_outputs.json` 原含非标准裸 `Infinity` token（C3 行 `odds_ratio`），
+> 现已改为 `odds_ratio: null` + `odds_ratio_note`（`allow_nan=False` 落盘）；本页 §3.7 C3 行的 **OR=∞ 仍成立为
+> 数学语义**（c=0，0.5 校正 CI），只是 JSON 序列化不再承载非标准 token。
+> ② 因脚本修改，现行 SHA256 前 16 位为：`recompute_core_claims.py` = `884c6c464d562d56`、
+> `recompute_outputs.json` = `815a061ee896921b`（表内旧哈希为 2026-10-17 快照，保留可审计）。
+> 详见 `docs/reviews/THIRD_PARTY_REVIEW_2026-10-19_FIX_CLOSURE.md` §1（F19）与 §5。
+
 ### 3.7 统计报告模板（统一口径，回应"模板不统一/缺 CI"）
 
 本报告所有比例与配对比较按以下模板报告。凡正文只有点估计处，以本表补齐。

@@ -62,9 +62,12 @@ M5 标记"再生成后通过 = 假通过"，是**观测层**；本协议是**行
      残留为终值，与 red_seen=True 矛盾（plain_llm_df 真实冒烟发现，trace:
      PASS→regenerate→FAIL→done）。现按 (passed, red_seen) 三值推导
      （`_derive_detection_first_status`）：red_then_green /
-     all_green_unverified / **red_not_repaired**（检出成功但未修复——
-     plain_llm_df 正常终态，评估层 detection 口径应计数，不得因
-     passed=False 丢弃）。
+     all_green_unverified / **red_not_repaired**（协议层机制状态：曾观测
+     红且未修复，plain_llm_df 的常见终态；**不构成有效检出的充分条件**，
+     评估层 detection 始终由独立 F2P 三段判据（buggy 红 ∧ fixed 绿 ∧
+     无执行错误）裁决——不得因 passed=False 直接丢弃，也不得仅凭该状态
+     计检出；主批 88 行 buggy/fixed 皆红的 red_not_repaired 行
+     detection=0 即反例）。
   3. **regeneration_count 透出**（Y1）：结果行新增 `regeneration_count`
      键，量化协议的 +1 LLM call 成本（协议关时恒 None，键集合同构）。
   4. **首份真实运行证据**：2026-10-05 examples/calculator_divide 冒烟

@@ -4,7 +4,7 @@ R14（2026-09-30 独立审查 P0）：统计协议改造测试。
 覆盖：
 - mcnemar_test 二值配对检验（不一致对 / 全一致 / 样本不足）
 - two_proportion_binomtest 二项检验
-- bh_fdr_correct 多重比较校正（BH 保守口径）
+- bh_fdr_correct 多重比较校正（标准 BH 口径，2026-10-19 修复）
 
 Arcuri & Briand（ICSE 2011）：二值配对数据应用 McNemar 而非 t 检验；
 多组对比须做 FDR 校正。本测试锁死统计口径，防"二值数据用 t 检验"的
@@ -16,6 +16,8 @@ from __future__ import annotations
 import math
 import sys
 from pathlib import Path
+
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -103,15 +105,22 @@ class TestBinomTest:
 
 class TestBH_FDR:
     def test_fdr_rejects_significant(self):
-        """p=[0.01, 0.5, 0.5] → 第一组拒绝（q≤0.05），其余不拒绝。"""
+        """p=[0.01, 0.5, 0.5] → 第一组拒绝（q≤0.05），其余不拒绝。
+
+        2026-10-19 F01：标准 BH q=[0.03, 0.5, 0.5]（m=3 逆序累积最小）；
+        旧非标准实现给 [0.01, 1.0, 1.0]，本断言会在旧实现上转红。
+        """
         q_values, rejected = bh_fdr_correct([0.01, 0.5, 0.5])
         assert rejected == [True, False, False]
         assert q_values[0] <= 0.05
+        assert q_values == pytest.approx([0.03, 0.5, 0.5], rel=1e-12)
 
     def test_fdr_no_rejection(self):
-        """全部 p 不显著 → 无拒绝，q 保守。"""
-        _, rejected = bh_fdr_correct([0.3, 0.4, 0.5])
+        """全部 p 不显著 → 无拒绝，q 仍按标准 BH 放大（非退回原 p）。"""
+        q_values, rejected = bh_fdr_correct([0.3, 0.4, 0.5])
         assert all(r is False for r in rejected)
+        # 标准 BH：q = [0.5, 0.5, 0.5]（旧实现无拒绝时 q=原 p）
+        assert q_values == pytest.approx([0.5, 0.5, 0.5], rel=1e-12)
 
     def test_fdr_all_nan(self):
         """全 nan → q 全 nan，rejected 全 False。"""

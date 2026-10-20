@@ -13,7 +13,7 @@
 #             bash reproduce.sh --dataset synthetic --full
 #        （--dataset synthetic --full = 主批任务规模参数：87 任务 /
 #          --max-pattern-repeat 2 / seed 42 / 主批三臂；单 seed，三种子协议
-#          见 experiments/run_main_batch.py）
+#          见 experiments/run_main_batch.py）；空目录启动须设 REPRODUCE_SKIP_TESTS=1（见文末 F05 注）
 #
 # 口径说明（与 Dockerfile / ci.yml 矩阵下限对齐）：
 # - python:3.12-slim 为发行基准，与 Dockerfile 一致（pyproject
@@ -55,3 +55,16 @@ RUN echo "GIT_SHA=${GIT_SHA}" > /workspace/.repro_provenance
 # 无 API key 时各基线产出占位结果、统计为 nan，故"零成本"仅指不跑 LLM 的
 # 环境检查/单测路径，与 REPLICATION_PACKAGE.md §3 L2「需 LLM 配额」口径一致）
 CMD ["bash", "reproduce.sh"]
+
+# ── F05（2026-10-19 第三方全量静态审查，P2）：挂载目录的双重角色 ───────────────
+# 上面 -v $(pwd)/experiments/results:/workspace/experiments/results 的挂载目录
+# **同时是历史输入和输出**（镜像重建/换机复现时必须理解这一点）：
+#   - 历史输入：reproduce.sh Step3 跑全量 pytest，tests/ 中多组用例读取
+#     experiments/results 下的历史归档工件作为夹具（归档结果 = 复现前置条件）；
+#   - 输出：Step5 基准结果 JSON 与 Step6 图表写回同一目录。
+# 本镜像通过 .dockerignore 排除 experiments/results（镜像保持轻量、历史归档
+# 不随镜像分发），因此**镜像自身不含**该目录：
+#   - 挂载含归档结果的**完整目录** → Step3 测试门可正常执行（推荐）；
+#   - 空目录启动 → 必须显式设置 REPRODUCE_SKIP_TESTS=1 跳过 Step3，否则测试门
+#     会因缺夹具失败（fail-closed）；跳过时脚本打印醒目 WARN
+#     "本次复现缺少测试门，复现结论不含测试验证"，结论不得声称经过测试验证。

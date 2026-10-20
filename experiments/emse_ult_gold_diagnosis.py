@@ -553,8 +553,50 @@ def _bucketize_run(run: dict[str, Any], code: str, fut_names: set[str]) -> None:
 # 数据装配
 # ---------------------------------------------------------------------------
 def _load_json_array(path: Path) -> list[dict[str, Any]]:
+    """读上游数组工件：顶层必须是列表，非对象行计入披露而不静默消失。"""
     data = json.loads(path.read_text(encoding="utf-8"))
-    return [r for r in data if isinstance(r, dict)]
+    if not isinstance(data, list):
+        raise TypeError(f"上游数组工件顶层不是列表：{path}（实测类型 {type(data).__name__}）")
+    rows = [r for r in data if isinstance(r, dict)]
+    dropped = len(data) - len(rows)
+    if dropped:
+        print(
+            f"[WARN] {path.name}：{dropped} 行不是对象已跳过，仅使用余下 {len(rows)} 行",
+            file=sys.stderr,
+            flush=True,
+        )
+    return rows
+
+
+def _load_upstream_array(path: Path) -> list[dict[str, Any]]:
+    """上游数组工件缺失或一行对象都没有 ⇒ 无法核验，不得退化成「零命中」或自比。"""
+    if not path.is_file():
+        raise FileNotFoundError(f"上游数组工件缺失：{path}（缺席不等于上游无该行）")
+    rows = _load_json_array(path)
+    if not rows:
+        raise ValueError(f"上游数组工件无任何对象行：{path}（属读不动，不是零命中）")
+    return rows
+
+
+def _load_supplement(path: Path) -> dict[str, Any] | None:
+    """读补充测量工件：点名给了路径却读不出记录，不让 README 4d 节静默消失。
+
+    给了 `--supplement` 而文件不存在 ⇒ 抛错（缺席不是"没有补充测量"）；文件在但
+    顶层不是对象或没有记录 ⇒ 向 stderr 披露原因后按"无补充测量"继续（退出码不变）。
+    """
+    if not path.is_file():
+        raise FileNotFoundError(f"补充测量工件缺失：{path}（显式给了 --supplement，缺席不得当作未要求）")
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise TypeError(f"补充测量工件顶层不是对象：{path}（实测类型 {type(data).__name__}）")
+    if not (data.get("records") or []):
+        print(
+            f"[WARN] 补充测量工件无 records：{path}（README 4d 节按'无补充测量'省略，非静默丢弃）",
+            file=sys.stderr,
+            flush=True,
+        )
+        return None
+    return data
 
 
 def _load_project_tasks(repo: Path) -> list[dict[str, Any]]:
@@ -588,6 +630,26 @@ def _normalize_test_body(test: str) -> str:
     lines = [ln.strip() for ln in test.splitlines() if ln.strip()]
     body = [ln for ln in lines if not ln.startswith("def ")]
     return "\n".join(body)
+
+
+def _official_tests_for(gold: list[str], up_full: dict[str, Any] | None) -> tuple[list[str], str, bool | None]:
+    """官方口径断言体来源与一致性判定（纯函数，供 main 与回归锁共用）。
+
+    `up_full` 带 `tests` 列表 ⇒ 真与上游比对，返回布尔一致性；否则只能包装本地归档
+    gold——那是自己和自己比、恒真而无证据价值，故返回 `None`（"无法核验"）：
+    既不报成 True（一致），也不报成 False（不一致）。
+    """
+    from_upstream = bool(up_full and isinstance(up_full.get("tests"), list))
+    if not from_upstream:
+        wrapped = [
+            f"def test_{j}():\n" + "\n".join(f"    {ln.strip()}" for ln in t.splitlines() if ln.strip())
+            for j, t in enumerate(gold)
+        ]
+        return wrapped, "ULT_Lite.jsonl:test_list(wrapped)", None
+    official_tests = [str(t) for t in up_full["tests"]]
+    body_full = sorted(_normalize_test_body(t) for t in official_tests)
+    body_lite = sorted(_normalize_test_body(t) for t in gold)
+    return official_tests, "ULT.jsonl:tests", bool(body_full) and body_full == body_lite
 
 
 def _upstream_citation(up_full: dict[str, Any] | None, up_lite: dict[str, Any] | None) -> dict[str, Any]:
@@ -693,8 +755,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.supplement:
         sup_path = Path(args.supplement)
         sup_path = sup_path if sup_path.is_absolute() else (repo / sup_path)
-        if sup_path.is_file():
-            supplement = json.loads(sup_path.read_text(encoding="utf-8"))
+        supplement = _load_supplement(sup_path)
 
     if args.from_json:
         src = Path(args.from_json)
@@ -715,8 +776,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[ult_gold_diag] 离线重算 README → {out_dir}/README.md", flush=True)
         return 0
 
-    lite = _load_json_array(ULT_LITE_JSONL) if ULT_LITE_JSONL.is_file() else []
-    full = _load_json_array(ULT_FULL_JSONL) if ULT_FULL_JSONL.is_file() else []
+    lite = _load_upstream_array(ULT_LITE_JSONL)
+    full = _load_upstream_array(ULT_FULL_JSONL)
     full_by_code = {r.get("code", ""): r for r in full}
     lite_by_code = {r.get("code", ""): r for r in lite}
 
@@ -737,21 +798,9 @@ def main(argv: list[str] | None = None) -> int:
         up_full = full_by_code.get(code)
         up_lite = lite_by_code.get(code)
 
-        # 上游 tests：优先 ULT.jsonl 原文；缺失则用 ULT_Lite test_list 包装
-        if up_full and isinstance(up_full.get("tests"), list):
-            official_tests = [str(t) for t in up_full["tests"]]
-            official_source = "ULT.jsonl:tests"
-        else:
-            official_tests = [
-                f"def test_{j}():\n" + "\n".join(f"    {ln.strip()}" for ln in t.splitlines() if ln.strip())
-                for j, t in enumerate(gold)
-            ]
-            official_source = "ULT_Lite.jsonl:test_list(wrapped)"
-
-        # 上游断言体一致性核验（ULT.jsonl tests vs ULT_Lite test_list）
-        body_full = sorted(_normalize_test_body(t) for t in official_tests)
-        body_lite = sorted(_normalize_test_body(t) for t in gold)
-        upstream_bodies_equal = bool(body_full) and body_full == body_lite
+        # 上游 tests：优先 ULT.jsonl 原文；该行缺失时用**本地归档 gold** 包装
+        # （标签里的 ULT_Lite 是这批 gold 的来源，不是本轮读到的工件）
+        official_tests, official_source, upstream_bodies_equal = _official_tests_for(gold, up_full)
 
         fut_names = {fname, fname.strip("_"), f"_{fname}", f"__{fname}"}
         fut_names |= set(_top_level_names(code))
@@ -993,6 +1042,73 @@ def _write_sums(out_dir: Path) -> None:
     (out_dir / "SHA256SUMS.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def _render_section_4c(mutk_path: Path) -> list[str]:
+    """§4c：fix_labels 入组后的 Mut@k 重基。
+
+    工件缺席时**点名披露**"本节未渲染 = 工件缺席"，而不是静默省节——读者从 README
+    本身要能区分"没做这个测量"与"做了但工件不在这儿"。
+    """
+    if not mutk_path.is_file():
+        return [
+            "",
+            "> 4c 节省略：`SUPPLEMENT_GENERATED_MUTK.json` 不在输出目录——本节未渲染 = 工件缺席，不等于该测量没有做过。",
+            "",
+        ]
+    m = json.loads(mutk_path.read_text(encoding="utf-8"))
+    rb = m["rebasing"]
+    pub, cor = rb["published_specir"], rb["corrected_specir_if_fix_labels_admitted"]
+    return [
+        "",
+        "## 4c. 补充测量：fix_labels 进入健全子集后的 specir Mut@k 重基",
+        "",
+        f"- fix_labels 生成套件（**官方前置块模块**）全变异体 Mut@k = "
+        f"**{m['measured']['official_prelude_module']['mutation_score']}**"
+        f"（{m['measured']['official_prelude_module']['mutants_killed']}/{m['measured']['official_prelude_module']['mutants_total']}，"
+        f"cosmic-ray {m['cosmic_ray_version']}，实测；项目物化下同值但含恒红平凡击杀）。",
+        f"- 已发布 specir：{pub['killed']}/{pub['total']} = **{pub['score']}**（n={pub['n_tasks']}）。",
+        f"- 修正后（fix_labels 入组）：{cor['killed']}/{cor['total']} = **{cor['score']}**（n={cor['n_tasks']}），"
+        f"δ = {rb['delta_score']:+.4f}（{rb['caliber']}）。",
+        "",
+    ]
+
+
+def _render_section_4d(supplement: dict[str, Any] | None) -> list[str]:
+    """§4d：C+ 补充测量。有记录却没有 C+ 变体时点名条数，不静默省节。"""
+    if not supplement:
+        return []
+    sup_recs = supplement.get("records") or []
+    cp = [(r["task_id"], (r["runs"].get("C+") or {})) for r in sup_recs if "C+" in (r.get("runs") or {})]
+    if not cp:
+        return [
+            "",
+            f"> 4d 节省略：补充测量工件读到 {len(sup_recs)} 条记录，但其中没有 C+ 变体"
+            "——本节未渲染 = 这批记录不含该测量，不等于读取失败。",
+        ]
+    lines = [
+        "",
+        "## 4d. 补充测量：C+ = 纠正 harness + 官方前置块**外**的缺失模块",
+        "",
+        "> 官方 `code_import` 不含 `sys`/`logging`/`itertools` 等；`code` 依赖这些模块时",
+        "> 官方 harness 亦失败。C+ 把缺失模块补进前置块后再判定，用来区分",
+        "> 「断言内容与 code 一致但缺依赖」与「断言内容本身不一致」。**非官方口径**，仅作上界参照。",
+        "",
+        "| 任务 | C（官方前置块） | C+（补缺失模块） | 补的符号 |",
+        "|---|---|---|---|",
+    ]
+    for tid, run in cp:
+        lines.append(
+            f"| `{tid}` | {run.get('status')}（{run.get('n_passed')}p/{run.get('n_failed')}f） | "
+            f"{run.get('status')}（{run.get('n_passed')}p/{run.get('n_failed')}f） | "
+            f"{', '.join(run.get('extra_symbols') or [])} |"
+        )
+    n_cp_pass = sum(1 for _, r in cp if r.get("status") == "pass")
+    lines += [
+        "",
+        f"C+ 全过任务数：**{n_cp_pass}/{len(cp)}**（补充测量，仅覆盖 C 上因缺模块报错的任务）。",
+    ]
+    return lines
+
+
 def _write_readme(
     out_dir: Path,
     report: dict[str, Any],
@@ -1137,53 +1253,9 @@ def _write_readme(
     lines.append("`code_not_self_contained` = 官方前置块也没有该模块 ⇒ 上游自足性缺口（官方 harness 同样失败）。")
     lines.append("")
 
-    # ---- §4c 补充测量：fix_labels 生成测试 Mut@k 重基（若存在工件）----
-    mutk_path = out_dir / "SUPPLEMENT_GENERATED_MUTK.json"
-    if mutk_path.is_file():
-        m = json.loads(mutk_path.read_text(encoding="utf-8"))
-        rb = m["rebasing"]
-        pub, cor = rb["published_specir"], rb["corrected_specir_if_fix_labels_admitted"]
-        lines += [
-            "",
-            "## 4c. 补充测量：fix_labels 进入健全子集后的 specir Mut@k 重基",
-            "",
-            f"- fix_labels 生成套件（**官方前置块模块**）全变异体 Mut@k = "
-            f"**{m['measured']['official_prelude_module']['mutation_score']}**"
-            f"（{m['measured']['official_prelude_module']['mutants_killed']}/{m['measured']['official_prelude_module']['mutants_total']}，"
-            f"cosmic-ray {m['cosmic_ray_version']}，实测；项目物化下同值但含恒红平凡击杀）。",
-            f"- 已发布 specir：{pub['killed']}/{pub['total']} = **{pub['score']}**（n={pub['n_tasks']}）。",
-            f"- 修正后（fix_labels 入组）：{cor['killed']}/{cor['total']} = **{cor['score']}**（n={cor['n_tasks']}），"
-            f"δ = {rb['delta_score']:+.4f}（{rb['caliber']}）。",
-            "",
-        ]
-
-    # ---- §4d 补充测量：C+（纠正 harness + 前置块外缺失模块）----
-    if supplement:
-        sup_recs = supplement.get("records") or []
-        cp = [(r["task_id"], (r["runs"].get("C+") or {})) for r in sup_recs if "C+" in (r.get("runs") or {})]
-        if cp:
-            lines += [
-                "",
-                "## 4d. 补充测量：C+ = 纠正 harness + 官方前置块**外**的缺失模块",
-                "",
-                "> 官方 `code_import` 不含 `sys`/`logging`/`itertools` 等；`code` 依赖这些模块时",
-                "> 官方 harness 亦失败。C+ 把缺失模块补进前置块后再判定，用来区分",
-                "> 「断言内容与 code 一致但缺依赖」与「断言内容本身不一致」。**非官方口径**，仅作上界参照。",
-                "",
-                "| 任务 | C（官方前置块） | C+（补缺失模块） | 补的符号 |",
-                "|---|---|---|---|",
-            ]
-            for tid, run in cp:
-                lines.append(
-                    f"| `{tid}` | {run.get('status')}（{run.get('n_passed')}p/{run.get('n_failed')}f） | "
-                    f"{run.get('status')}（{run.get('n_passed')}p/{run.get('n_failed')}f） | "
-                    f"{', '.join(run.get('extra_symbols') or [])} |"
-                )
-            n_cp_pass = sum(1 for _, r in cp if r.get("status") == "pass")
-            lines += [
-                "",
-                f"C+ 全过任务数：**{n_cp_pass}/{len(cp)}**（补充测量，仅覆盖 C 上因缺模块报错的任务）。",
-            ]
+    # ---- §4c / §4d 补充测量（渲染函数自带"本节未渲染"的点名披露）----
+    lines += _render_section_4c(out_dir / "SUPPLEMENT_GENERATED_MUTK.json")
+    lines += _render_section_4d(supplement)
 
     # ---- §5 断言级（test 函数粒度）P vs C 归因拆分 ----
     split = _assertion_level_split(report, repo)
@@ -1264,7 +1336,7 @@ def _assertion_level_split(report: dict[str, Any], repo: Path) -> dict[str, Any]
     `records[].assertion_level`。
     """
     tasks = {t["task_id"]: t for t in _load_project_tasks(repo)}
-    full_by_code = {r.get("code", ""): r for r in _load_json_array(ULT_FULL_JSONL)}
+    full_by_code = {r.get("code", ""): r for r in _load_upstream_array(ULT_FULL_JSONL)}
     n_total = n_pass_P = n_fail_P = n_pass_C = n_fail_C = 0
     both_fail = p_only = p_pass_c_fail = 0
     for rec in report["records"]:
@@ -1315,8 +1387,8 @@ def _assertion_level_split(report: dict[str, Any], repo: Path) -> dict[str, Any]
 
 def _pick_examples(report: dict[str, Any], bucket: str, k: int = 3) -> list[dict[str, Any]]:
     """按桶挑 2-3 条最小例证（优先 P → O → C），并补上游数组下标定位。"""
-    lite = _load_json_array(ULT_LITE_JSONL) if ULT_LITE_JSONL.is_file() else []
-    full = _load_json_array(ULT_FULL_JSONL) if ULT_FULL_JSONL.is_file() else []
+    lite = _load_upstream_array(ULT_LITE_JSONL)
+    full = _load_upstream_array(ULT_FULL_JSONL)
     lite_idx = {r.get("task_id"): i for i, r in enumerate(lite)}
     full_idx = {r.get("task_id"): i for i, r in enumerate(full)}
     out: list[dict[str, Any]] = []

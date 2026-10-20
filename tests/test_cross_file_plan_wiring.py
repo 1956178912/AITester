@@ -1,6 +1,7 @@
 """D3b Step A 跨文件修复计划接线回归锁（2026-10-18 第三轮独立评审落地；零 LLM）。
 
-锁四类行为（设计依据 docs/design/cross_file_plan_wiring_prereg.md §3 Step A）：
+锁五类行为（设计依据 docs/design/cross_file_plan_wiring_prereg.md §3 Step A、
+§3.5 Step B 前置件核查）：
 1. **双开关默认关**：BUILD/CONSUME 读取器默认 false（OFF/OFF = 历史行为）；
 2. **构建侧**：BUILD 开 + 跨文件任务 → `_debugger_node` 调
    `build_cross_file_repair_plan_cached` 且 update 写 `cross_file_plan`；
@@ -9,7 +10,9 @@
    `target_modules[0]`；CONSUME 关 → 即使 plan 在场也走依赖边末元素
    （历史口径），实现"构建不消费"的 A1 臂语义；
 4. **单文件零变化**：无 cross_file_deps 时任何开关组合下 target_module
-   恒为 state["module_name"]。
+   恒为 state["module_name"]；
+5. **Step B 未接线（反面锁定）**：apply 入参与写盘面只含入口模块，
+   `per_module_patches` 零消费者（详见 `TestStepBNotWired` 文档串）。
 """
 
 from __future__ import annotations
@@ -110,6 +113,102 @@ class TestResolveTargetModuleGating:
             monkeypatch.setenv("CROSS_FILE_PLAN_BUILD_ENABLE", build)
             monkeypatch.setenv("CROSS_FILE_PLAN_CONSUME_ENABLE", consume)
             assert _resolve_target_module(state) == "synthetic__task__test"
+
+
+@pytest.mark.unit
+class TestStepBNotWired:
+    """Step B（多模块协同修复）**未接线**的反面锁定（AA 轮 2026-10-19，零 LLM）。
+
+    这三条锁的是**现状能力边界**而非期望行为：analyzer 的 `source_files` 与
+    patch_applier 的 `original_files`/`patches` 都只含入口模块，即使同目录伴生
+    模块已在磁盘上（benchmark 层 `_write_cross_file_modules` 会物化）、即使
+    plan 携带多模块 `per_module_patches` 且 CONSUME 开。因此今天不存在
+    "多文件写盘"能力，`apply_multi_file_patch` 的多模块拓扑序只是单元素退化。
+
+    Step B 实装时本组用例必红——那是**预期信号**：必须同步改写
+    `docs/design/cross_file_plan_wiring_prereg.md` §3.5 与登记册 §4 的
+    "Step B 未接线"披露行，不得只把断言改成新行为放行。
+    """
+
+    _ENTRY_SRC = "from module_c import helper\n\n\ndef f():\n    return helper()\n"
+    _SIBLING_SRC = "def helper():\n    return 42\n"
+
+    @staticmethod
+    def _workspace(tmp_path: Any) -> tuple[Any, Any]:
+        """入口模块 + 同目录伴生模块（真实跨文件工作区，与 benchmark 层物化同形）。"""
+        sibling = tmp_path / "module_c.py"
+        sibling.write_text(TestStepBNotWired._SIBLING_SRC, encoding="utf-8")
+        entry = tmp_path / "module_a.py"
+        entry.write_text(TestStepBNotWired._ENTRY_SRC, encoding="utf-8")
+        return entry, sibling
+
+    def test_analyzer_source_files_excludes_sibling_module_on_disk(self, tmp_path: Any) -> None:
+        """前置件 (a)：伴生模块源码从未载入 —— `source_files` 恒为 entry 单键。"""
+        from src.graph import nodes
+
+        entry, sibling = self._workspace(tmp_path)
+        spy = MagicMock(return_value=[])
+        state = _state(target_file=str(entry), module_name="module_a", target_code=self._ENTRY_SRC)
+        with (
+            patch.object(nodes, "_trace_node"),
+            patch.object(nodes, "analyze_multi_entry_deps", spy),
+        ):
+            nodes._cross_file_analyzer_node(state)  # type: ignore[arg-type]
+        entry_modules, source_files = spy.call_args.args
+        assert entry_modules == ["module_a"]
+        assert set(source_files) == {"module_a"}
+        assert sibling.exists()  # 源码在磁盘上可得，但节点不读（一期口径）
+
+    def test_patch_applier_builds_entry_only_original_files_and_patches(
+        self, tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """前置件 (b)：plan 的 `per_module_patches` 无消费者——apply 入参恒为 entry 单键。"""
+        from src.graph import nodes
+        from src.tools import cross_file as cf
+
+        monkeypatch.setenv("CROSS_FILE_ENABLE", "true")
+        monkeypatch.setenv("CROSS_FILE_PLAN_CONSUME_ENABLE", "true")
+        monkeypatch.setenv("PATCH_EVIDENCE_GATE_ENABLE", "false")
+        entry, sibling = self._workspace(tmp_path)
+        patched = "from module_c import helper\n\n\ndef f():\n    return helper() + 1\n"
+        recorder = MagicMock(return_value=({entry.stem: patched}, True))
+        monkeypatch.setattr(cf, "apply_multi_file_patch", recorder)
+        state = _state(
+            target_file=str(entry),
+            module_name="module_a",
+            target_code=self._ENTRY_SRC,
+            patch=patched,
+            repair_history=[],
+            iteration=0,
+            cross_file_plan={
+                "target_modules": ["module_a", "module_c"],
+                "per_module_patches": {"module_a": patched, "module_c": self._SIBLING_SRC},
+            },
+        )
+        with patch.object(nodes, "_trace_node"):
+            update = nodes._patch_applier_node(state)  # type: ignore[arg-type]
+
+        original_files, patches = recorder.call_args.args[:2]
+        assert set(original_files) == {"module_a"}  # 非 entry 模块原文不进 apply
+        assert set(patches) == {"module_a"}  # per_module_patches 未被消费
+        assert update["target_code"] == patched
+        assert update["repair_history"][-1]["patch_applied"] is True
+        # 非入口模块在磁盘上原封不动：写盘面只有 state["target_file"]
+        assert sibling.read_text(encoding="utf-8") == self._SIBLING_SRC
+
+    def test_state_has_no_multi_module_write_back_channel(self) -> None:
+        """前置件 (c)：state 里没有承载"其他模块新代码 + 每模块快照"的通道键。
+
+        多文件写盘/整体回滚要落地，必须先有跨模块新代码与逐模块快照的落态位置；
+        现仅 `cross_file_contexts`（聚焦摘录，非整模块原文）与单文件
+        `_last_patch_snapshot`。此锁防止把"摘录字段"误当成源码通道接进 Step B。
+        """
+        from src.graph.state import AITesterState
+
+        declared = set(AITesterState.__annotations__)
+        assert "cross_file_contexts" in declared and "_last_patch_snapshot" in declared
+        for absent in ("cross_file_source_files", "cross_file_new_files", "cross_file_snapshots"):
+            assert absent not in declared
 
 
 @pytest.mark.unit

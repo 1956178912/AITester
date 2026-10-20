@@ -521,8 +521,13 @@ class TestExecutorRollbackRestoresStateTargetCode:
     def test_executor_wiring_present(self):
         import inspect
 
-        from src.graph.nodes import _executor_node
+        from src.graph import nodes
 
-        src = inspect.getsource(_executor_node)
+        # 2026-10-19 工程质量轮：M6 回滚分支自 _executor_node 提取为
+        # _apply_executor_patch_rollback（行为等价重构）。断言目标随之
+        # 收敛到提取后的函数，并额外锁定主节点的调用接线——否则
+        # "辅助函数在但没接线"会让本测试静默失去防护意义。
+        src = inspect.getsource(nodes._apply_executor_patch_rollback)
         assert 'update["target_code"] = _restored["content"]' in src
         assert "_rollback_last_patch(state, restored_out=_restored)" in src
+        assert "_apply_executor_patch_rollback(update, state, _passed)" in inspect.getsource(nodes._executor_node)

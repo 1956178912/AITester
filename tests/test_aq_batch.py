@@ -121,7 +121,11 @@ class TestArtifactsManifestE7:
         # A-19 默认门复验 / 文档审计 / B1 三格复现链 / 工件入库门禁扩面登记）。
         # T 轮收尾追加：审计/复核报告 SHA + e2e 探针矩阵 README/SHA（163 → 168），
         # 再追加 B2 复现批 7 件（168 → 175）与 T 轮收尾检查 4 件（→ 179）。
-        assert len(module.MANIFEST) == 179
+        # Z→AB 批（2026-10-20）：179 → 185——AA 轮 E7 执行面 6 份空白录入表
+        # （协议 §7.1 备料工件、已进 main_batch SHA256SUMS）此前被 .gitignore
+        # 通配排除压掉且本清单漏登记，"被忽略 = 永远不可能入库"型双静默缺口；
+        # 本批 .gitignore narrow 放行 + 此处登记一并收口。
+        assert len(module.MANIFEST) == 185
 
 
 class TestSurveyPackagingErrata:

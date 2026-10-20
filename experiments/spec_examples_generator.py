@@ -47,6 +47,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from src.budget.pricing import entry_block_reason, load_table_json, models_layer
 from src.specs.spec_ir import _DEFAULT_EXAMPLES_MAX, parse_examples
 from src.utils.env_utils import env_flag
 
@@ -272,26 +273,123 @@ def _usage_delta(before: dict[str, Any], after: dict[str, Any]) -> dict[str, int
 
 
 def load_price_table(path: Path = _PRICE_TABLE_PATH) -> dict[str, Any]:
-    """读取项目价目表（缺失/非法 → 空 dict；成本不编造）。"""
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+    """读取项目价目表（缺失 / 读不动 / 顶层非对象 → 空表并留痕；成本不编造）。
+
+    AB-12e 返回域与文档一致：本函数原先只拦 `OSError` / `JSONDecodeError`，五种合法非对象顶层
+    （list / str / int / float / bool / `null`）**原样返回**，崩溃落在调用方
+    `estimate_cost_usd` 的 `table.get("models")` —— 而 `oracle_examples_replay.py:1030` 把这条
+    读取放在**整轮付费 LLM 重放之后**：钱花完了才炸，报告一行没有。现按仓内先例
+    （`statistical_analysis.load_price_table:859`、`src/budget/pricing.load_price_table:71`
+    的 `isinstance(data, dict) else None` + 警告）改为空表加一条 `logger.warning`，
+    成本读数为 `None`（"无法估算"），不是 `0`（"没有花钱"）。盘上真表顶层是 dict
+    （3 个模型），故既有读数一字不变。
+
+    AB-17（2026-10-20）：文件级判定收口到共享事实源——`load_table_json` 的机制码
+    （`price_table_file_missing` / `price_table_json_invalid:<T>` /
+    `price_table_file_unreadable:<T>`）与顶层形状码 `price_table_not_object:<T>` 替代本文件
+    自写的"读不动 / 顶层是 X"两套短语；`models` 层的形状**不在本函数判定**（谁做的判定谁
+    点名：`_price_admission` 用 `models_layer` 的点名进 `price_block_reason_for` 的返回
+    通道，日志与返回不会各说一套）。
+    """
+    data, reason = load_table_json(path)
+    if reason is None and not isinstance(data, dict):
+        reason = f"price_table_not_object:{type(data).__name__}"
+    if reason is not None:
+        logger.warning("价目表 %s 不可用（%s）⇒ 按空表处理，成本估算为 None（不是 0）", path, reason)
         return {}
+    return data
 
 
-def estimate_cost_usd(model: str, usage: dict[str, Any], price_table: dict[str, Any] | None = None) -> float | None:
-    """按项目 `price_table.json` 估算美元成本（价目缺失/币种非 USD → None，不编造）。"""
-    table = price_table if price_table is not None else load_price_table()
-    entry = ((table.get("models") or {}).get(model)) or {}
-    if str(entry.get("currency") or "").upper() != "USD":
-        return None
-    inp = entry.get("input_per_mtok")
-    out = entry.get("output_per_mtok")
-    if inp is None or out is None:
+class _UnsetPriceTable:
+    """`price_table` 形参的"未提供"哨兵，与调用方显式传下的 `None` 分开（AB-12e）。"""
+
+    def __repr__(self) -> str:
+        return "<unset>"
+
+
+_UNSET = _UnsetPriceTable()
+
+
+def _price_admission(model: str, price_table: Any) -> tuple[dict[str, Any], str | None]:
+    """计价准入判定（AB-15d）：返回 `(价目条目, 阻断机制名)`；机制名为 None ⇒ 可按 USD 计价。
+
+    `estimate_cost_usd` 与 `price_block_reason` 共用这一处判定：「算不算得出钱」与
+    「为什么算不出钱」必须同源，否则同一笔拒绝在两份报告里点名不同（AB-11 判据）。
+    形状域与哨兵语义与改前逐条保持——显式 `None` 与非对象价目仍留痕并按不可计价处理。
+
+    AB-16（2026-10-20）：条目级判定（形状 → 空 → 币种 → 价格数字）收口到共享事实源
+    `entry_block_reason`，本函数只保留 spec 特有的哨兵与容器处理。两条改前崩溃通道收成点名：
+    `{"models": <真值非对象>}`（str/int/list…，改前在 `models.get` 上抛 `AttributeError`）
+    现在落 `models_not_object:<T>`；非对象**条目**从 `currency_unreachable:<T>` 改名为
+    形状事实 `entry_not_object:<T>`（与 report 既有读数一致）。
+
+    AB-17（2026-10-20）：表级判定收口到 `models_layer`——假值非对象容器（`[]` / `null`）
+    从 AB-16 登记的"仍按未登记口径"改为点名 `models_not_object:<T>`（真假一律）；条目检索
+    从 `models.get(model)` 的 `is None` 改 `not in`，"键缺席"（→ `model_unregistered`）与
+    "值为 `null`"（→ `entry_not_object:NoneType`）不再共用一个码（AB-11 判据）；`{}` / 缺键
+    且空对象保持静默"真的没登记"（`models_layer` 的已注册口径）。
+    """
+    if isinstance(price_table, _UnsetPriceTable):
+        table: dict[str, Any] = load_price_table()
+    elif price_table is None:
+        logger.warning(
+            "estimate_cost_usd 收到显式 price_table=None（无价目表）⇒ 成本 None，不回头读盘；"
+            "若这个 None 来自 cfg.get('price_table')，则'键缺失'与'值为 null'已在调用方混同"
+        )
+        return {}, "price_table_null"
+    elif not isinstance(price_table, dict):
+        logger.warning(
+            "estimate_cost_usd 收到非对象价目表（%s）⇒ 成本 None，不崩在 table.get 上", type(price_table).__name__
+        )
+        return {}, f"price_table_not_object:{type(price_table).__name__}"
+    else:
+        table = price_table
+    models, models_reason = models_layer(table)
+    if models_reason is not None:
+        return {}, models_reason
+    if model not in models:
+        return {}, "model_unregistered"
+    raw = models[model]
+    # AB-14 判定（`currency_status`）+ AB-15d 机制名（`currency_block_reason`）+ AB-16 数字域
+    # （`price_block_reason`）都取自共享事实源。改前这里是 `str(entry.get("currency") or "").upper()
+    # != "USD"`（不 strip，` USD ` 会被剔掉）+ `float()` 直收（`True` 当 1、`"1.0"` 收下、
+    # `-1.0` 编出负数金额、`[1.0]` 抛 TypeError、`nan`/`inf` 乘成非有限金额）。
+    # AB-17：改前 `models.get(model)` 把"键缺席"与"值为 null"共读成 `model_unregistered`；
+    # 现在值 null 交 `entry_block_reason` 读 `entry_not_object:NoneType`。
+    return raw, entry_block_reason(raw)
+
+
+def price_block_reason_for(model: str, price_table: Any = _UNSET) -> str | None:
+    """这笔估算**为什么**没有金额；可计价 → None（AB-15d，与判定同源）。
+
+    调用方只有在 `estimate_cost_usd` 返回 None 时才该来取机制名——两者由同一个
+    `_price_admission` 决定，不可能分叉。
+    """
+    return _price_admission(model, price_table)[1]
+
+
+def estimate_cost_usd(
+    model: str,
+    usage: dict[str, Any],
+    price_table: dict[str, Any] | _UnsetPriceTable | None = _UNSET,
+) -> float | None:
+    """按项目 `price_table.json` 估算美元成本（价目缺失/币种不可判定/币种非 USD/价目数字不可用 → None，不编造）。
+
+    AB-12e 哨兵分离：原先 `price_table=None` 兼作"未提供"哨兵，而 `None` 恰是 `json.loads` 的
+    合法返回——实测显式传 `None`（例如调用方从工件里取到 `"price_table": null`）会**回头重读
+    盘上的真表**并给出金额（`0.0027`），把"这里没有价目表"读成"按另一份文件的价目计费"。
+    现在只有**省略**该形参才读盘；显式 `None` 与非对象价目一律 `None` + 留痕，不再崩也不再编。
+    """
+    entry, reason = _price_admission(model, price_table)
+    if reason is not None:
         return None
     input_tokens = float(usage.get("input_tokens", 0) or 0)
     output_tokens = float(usage.get("output_tokens", 0) or 0)
-    return round(input_tokens / 1_000_000 * float(inp) + output_tokens / 1_000_000 * float(out), 6)
+    return round(
+        input_tokens / 1_000_000 * float(entry["input_per_mtok"])
+        + output_tokens / 1_000_000 * float(entry["output_per_mtok"]),
+        6,
+    )
 
 
 def generate_spec_examples(

@@ -3,6 +3,8 @@
 覆盖：
 - visualize_results.load_latest_result 仅识别 benchmark_* 前缀
   （此前纯文件名倒序会误选 swebench_20_summary.json / performance_benchmark.json 等非 benchmark 文件）
+- F06（2026-10-19）：load_latest_result 支持 dataset 前缀过滤 / 显式 result_path，
+  且无匹配时显式报错——不再回退全量倒序静默猜测（本文件对应用例同步改断言）
 - run_standardized_experiments.run_experiment 三个返回分支均带 description 键
   （此前 main() 写汇总报告时无条件读 r['description']，每次运行必 KeyError）
 - run_benchmark 并行度经 config.BENCHMARK_PARALLELISM 容错解析
@@ -53,13 +55,13 @@ class TestVisualizeLoadLatestResult:
         picked = module.load_latest_result(str(tmp_path))
         assert picked.endswith("benchmark_examples_20260814_100000.json")
 
-    def test_fallback_when_no_benchmark_files(self, module, tmp_path):
-        """无 benchmark_* 文件时回退全量倒序（保持旧行为兜底，不崩溃）"""
+    def test_no_fallback_when_no_benchmark_files(self, module, tmp_path):
+        """F06（2026-10-19）：无 benchmark_* 文件时不得回退全量倒序（禁止静默猜测），直接报错。"""
         (tmp_path / "swebench_20_summary.json").write_text(json.dumps({}), encoding="utf-8")
         (tmp_path / "other.json").write_text(json.dumps({}), encoding="utf-8")
 
-        picked = module.load_latest_result(str(tmp_path))
-        assert picked.endswith("swebench_20_summary.json")
+        with pytest.raises(FileNotFoundError):
+            module.load_latest_result(str(tmp_path))
 
     def test_empty_dir_raises(self, module, tmp_path):
         with pytest.raises(FileNotFoundError):
@@ -424,6 +426,29 @@ class TestAnalyzeResultsScript:
         (tmp_path / "benchmark_b_20260901.json").write_text("{}", encoding="utf-8")
         picked = module.load_latest_benchmark(str(tmp_path))
         assert picked.endswith("benchmark_b_20260901.json")
+
+    def test_load_latest_benchmark_no_fallback_to_summary_json(self, module, tmp_path):
+        """AA-2（2026-10-19）：无 benchmark_* 文件时不得回退全量 JSON。
+
+        旧实现在此会选中 performance_benchmark.json（非 benchmark 运行产物），
+        把性能汇总当成分析输入、静默读错分母。
+        """
+        (tmp_path / "performance_benchmark.json").write_text("{}", encoding="utf-8")
+        (tmp_path / "swebench_20_summary.json").write_text("{}", encoding="utf-8")
+
+        with pytest.raises(FileNotFoundError):
+            module.load_latest_benchmark(str(tmp_path))
+
+    def test_load_latest_benchmark_empty_dir_raises(self, module, tmp_path):
+        with pytest.raises(FileNotFoundError):
+            module.load_latest_benchmark(str(tmp_path))
+
+    def test_load_latest_benchmark_error_names_input_flag(self, module, tmp_path):
+        """报错须指向显式入口（--input），而不是让使用者猜目录里有什么"""
+        (tmp_path / "notes.json").write_text("{}", encoding="utf-8")
+
+        with pytest.raises(FileNotFoundError, match="--input"):
+            module.load_latest_benchmark(str(tmp_path))
 
     def test_repair_convergence_metrics_first_attempt_success(self, module):
         """1.2 修复收敛效率：首次尝试成功率、成功任务迭代/耗时统计可从 details 复算"""

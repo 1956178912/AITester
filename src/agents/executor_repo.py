@@ -78,6 +78,31 @@ def _repo_envs_root() -> str:
     return os.getenv("SWE_REPO_ENVS_DIR") or _DEFAULT_REPO_ENVS_DIR
 
 
+# F10（2026-10-19 Z 轮审查 P1）：共享 venv 的 editable 源码绑定标记文件名。
+# 共享 venv（use_venv=True + venv_reuse_by_repo=True）跨 commit 复用同一个
+# venv，而 `pip install -e` 把"最近一次安装时 repo_dir"的绝对路径写进
+# site-packages（.pth / __editable__ finder）——per-commit 缓存命中直接
+# return 会让 venv 继续指向上一个 commit 的源码目录（A→B→A 回 A 时
+# `import <repo_pkg>` 解析到 B，测试在错误源码上裁决）。故在 venv 目录下
+# 用该 marker 记录"当前 editable 绑定的 commit"，缓存命中时校验并在仓库级
+# 锁内按需重指向。只对共享 venv 生效（per-commit venv / 全局模式零变化）。
+_VENV_EDITABLE_COMMIT_MARKER = ".venv_editable_commit"
+
+# F11（2026-10-19 Z 轮审查 P1）：官方 SWE-bench harness 接口假设。
+# 官方 `swebench.harness.run_evaluation` CLI 使用命名参数，不接受历史实现
+# 的位置参数；predictions schema 为 {instance_id, model_name_or_path,
+# model_patch}。本仓**未锁定**官方包版本、真实包验收仍未执行（见
+# `_run_official_swebench_harness` docstring）——以下常量按官方 main 分支
+# 接口静态核对，可由调用方经函数参数或覆写模块常量调整；刻意不新增环境
+# 变量（ADR-0003 env 预算门禁，experiments/ 侧也不登记）。
+_OFFICIAL_HARNESS_DATASET = "SWE-bench/SWE-bench_Lite"
+_OFFICIAL_HARNESS_SPLIT = "test"
+#: 单 instance 求值无需并发；固定 1 避免官方 runner 起多 worker 抢 Docker 资源。
+_OFFICIAL_HARNESS_MAX_WORKERS = 1
+#: 官方 runner（含 Docker 构建）远慢于单次 pytest，超时下限 300s。
+_OFFICIAL_HARNESS_TIMEOUT_FLOOR = 300
+
+
 def _run(cmd: list[str], cwd: str, timeout: int, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
     """统一子进程执行：超时/异常不抛出，由调用方按 returncode 判断。
 
@@ -241,81 +266,12 @@ class RepoExecutor:
 
                     if self.use_venv:
                         if self.venv_reuse_by_repo:
-                            # P0 4.3：按仓库复用 venv（依赖指纹键），跨 commit 共享
-                            venv_dir = self._repo_venv_dir(repo_url, repo_dir)
-                            env_error = self._create_venv(venv_dir)
-                            if env_error:
-                                logger.warning("venv 创建失败，退回全局 python: %s", env_error)
-                                env_error = self._pip_install_editable(repo_dir)
-                                if env_error:
-                                    logger.warning("仓库 pip install -e 失败（记录但不阻断验证）: %s", env_error)
-                                else:
-                                    # 2026-09-26 全面审查（P1 缓存一致性）：venv 创建失败
-                                    # 回退到全局 pip install 后，缓存检查标记须与 use_venv
-                                    # 模式对齐——use_venv=True 时 setup() 入口读
-                                    # .venv_pip_installed（L148），此处若写 .pip_installed
-                                    # 则下次 setup() 永远缓存 miss，每次重新 git clone +
-                                    # pip install（SWE-bench 批量任务 10-20 个 commit 的
-                                    # 同一仓库重复 clone）。现按 use_venv 写对应标记。
-                                    _marker = ".venv_pip_installed" if self.use_venv else ".pip_installed"
-                                    with open(os.path.join(env_dir, _marker), "w", encoding="utf-8") as f:
-                                        f.write(base_commit)
-                            else:
-                                # 检测依赖指纹：同一指纹复用已有 venv（不重新 pip install -e）
-                                dep_fingerprint = self._dep_fingerprint(repo_dir)
-                                marker = os.path.join(venv_dir, ".venv_dep_fingerprint")
-                                need_install = True
-                                if os.path.isfile(marker):
-                                    with open(marker, encoding="utf-8") as f:
-                                        existing_fp = f.read().strip()
-                                    if existing_fp == dep_fingerprint:
-                                        # 依赖未变 → 复用 venv，不重新 pip install。
-                                        # 但必须刷新 editable 源码指向：pip install -e
-                                        # 写入的是绝对路径（.pth / __editable__ finder），
-                                        # 跨 commit 时旧 venv 的 editable 安装仍指向上一个
-                                        # commit 的 repo 目录——与本 commit 不一致时会让
-                                        # `import <repo_pkg>` 解析到错误版本（正是 4.3 要
-                                        # 消除的跨 commit 污染）。因此指纹命中时重跑一次
-                                        # 轻量 `pip install -e .`（依赖已装、仅重指向
-                                        # 源码，秒级），不装依赖本身。
-                                        logger.info(
-                                            "P0 4.3 venv 复用命中（依赖指纹未变，仅重指向 editable 源码）: %s（commit %s）",
-                                            venv_dir,
-                                            base_commit[:12],
-                                        )
-                                        _repoint_err = self._venv_pip_install(repo_dir, venv_dir)
-                                        if _repoint_err:
-                                            # 重指向失败（pip 网络异常等）：editable 仍指旧
-                                            # commit 源码，测试会在旧版本上裁决——保留诊断
-                                            # 但不清除环境标记（venv 本身可用，走保守路径），
-                                            # 由 verify 阶段的 base_not_failing 等信号兜底。
-                                            logger.warning(
-                                                "P0 4.3 editable 重指向失败（venv 仍指旧 commit 源码）: %s",
-                                                _repoint_err,
-                                            )
-                                        # O35（P2 性能）：指纹命中分支已做过一次
-                                        # `pip install -e .`（上方 repoint），此前
-                                        # need_install 保持初值 True，下方会**再跑一次
-                                        # 同样的 pip install**——每次 venv 复用命中都
-                                        # 白付一遍 pip 启动/解析开销（秒级 × 每任务）。
-                                        # repoint 本身就是这次 install，故置 False 收口。
-                                        need_install = False
-                                else:
-                                    # 指纹不同（依赖变了）→ 必须重装。
-                                    # need_install 已在上方初始化为 True，本分支
-                                    # 无需再赋值（O35：原 `else: need_install = True`
-                                    # 是对初值的无操作死代码，已删）。
-                                    pass
-                                if need_install:
-                                    env_error = self._venv_pip_install(repo_dir, venv_dir)
-                                    if env_error:
-                                        logger.warning("venv pip install -e 失败（记录但不阻断验证）: %s", env_error)
-                                    else:
-                                        with open(marker, "w", encoding="utf-8") as f:
-                                            f.write(dep_fingerprint)
-                                # 写环境标记（venv 模式下，即使复用也标记该 commit 已就绪）
-                                with open(os.path.join(env_dir, ".venv_pip_installed"), "w", encoding="utf-8") as f:
-                                    f.write(base_commit)
+                            # P0 4.3：按仓库复用 venv（依赖指纹键），跨 commit 共享。
+                            # F10（2026-10-19 Z 轮审查 P1）：创建/复用/editable 重指向
+                            # 全部收进 _setup_shared_venv——内部持**仓库级 venv 锁**
+                            # （键 = 共享 venv 目录），与缓存命中分支的"检查+重指向"
+                            # 共用同一锁域，避免 A/B commit 并发交错后 venv 指错源码。
+                            env_error = self._setup_shared_venv(repo_url, repo_dir, base_commit)
                         else:
                             # 传统模式：每个 (repo, commit) 独立 venv
                             # venv 隔离：建独立 venv，pip install -e 装入 venv
@@ -343,6 +299,22 @@ class RepoExecutor:
                             with open(os.path.join(env_dir, ".pip_installed"), "w", encoding="utf-8") as f:
                                 f.write(base_commit)
 
+        # F10（2026-10-19 Z 轮审查 P1）：共享 venv 下缓存命中 ≠ 源码绑定正确。
+        # per-commit 缓存只证明"该 commit 的 repo 目录 + 环境标记在"，而 venv 的
+        # editable 安装是**跨 commit 共享的可变状态**（可能仍指向上一个 commit）。
+        # 命中时读 venv 绑定 marker 与目标 base_commit 比较：不一致 → 在仓库级
+        # venv 锁内重跑 pip install -e 重指向并更新 marker；一致 → 跳过（性能不变）。
+        # 非共享 venv / 全局模式：_ensure_shared_venv_editable_binding 立即返回 None，
+        # 行为零变化。
+        if cached:
+            _bind_err = self._ensure_shared_venv_editable_binding(repo_url, repo_dir, base_commit)
+            if _bind_err is not None:
+                logger.warning(
+                    "共享 venv editable 绑定校验失败（venv 可能仍指旧 commit 源码）: %s",
+                    _bind_err,
+                )
+                env_error = _bind_err
+
         return {"workdir": repo_dir, "cached": cached, "error": env_error}
 
     def _create_venv(self, env_dir: str) -> str | None:
@@ -366,11 +338,17 @@ class RepoExecutor:
 
         目录布局：<env_root>/<repo_name>/_shared_venv/
         与 per-commit 的 <env_root>/<repo>/<commit>/venv/ 区分：
-        - 共享 venv 只装依赖（pip install -e 指向最新 checkout 的 repo_dir）；
-        - 源码指向随每次 checkout 刷新（editable install 的 .pth 文件
-          指向 repo_dir，commit 切换时自动跟随）；
-        - 依赖指纹（requirements/pyproject/setup 的 hash）决定是否需要
-          重新 pip install，源码切换不触发依赖重装。
+
+        - 共享 venv **只装依赖**（依赖指纹 requirements/pyproject/setup 的
+          SHA256 只决定是否需要重装依赖）；
+        - editable 绑定的源码目录是**跨 commit 共享的可变状态**：``pip install
+          -e`` 写入的是「最近一次安装时的 repo_dir」绝对路径（.pth /
+          __editable__ finder），**不会**随 checkout 自动跟随（F10／2026-10-19
+          Z 轮审查前的"自动跟随"表述是错误前提，A→B→A 会导入 B 的源码）；
+        - 现行口径：venv 目录下的 ``.venv_editable_commit`` marker 记录当前绑定
+          commit；setup 缓存命中 / verify 时在**仓库级 venv 锁内**校验，仅当
+          marker ≠ 目标 base_commit 才重跑一次 ``pip install -e .`` 重指向并
+          刷新 marker；同 commit 命中零额外安装（性能不变）。
 
         Args:
             repo_url: 仓库 URL（取 repo 名做键）。
@@ -382,6 +360,168 @@ class RepoExecutor:
         repo_name = repo_url.rstrip("/").split("/")[-1]
         repo_name = repo_name.removesuffix(".git")
         return os.path.join(self.env_root, repo_name, "_shared_venv")
+
+    # ── F10（2026-10-19 Z 轮审查）：共享 venv 的 editable 源码绑定 ─────────────
+
+    def _shared_venv_reuse_enabled(self) -> bool:
+        """是否启用"按仓库共享 venv"模式（use_venv 与 venv_reuse_by_repo 同时开）。"""
+        return self.use_venv and self.venv_reuse_by_repo
+
+    @staticmethod
+    def _venv_editable_marker(venv_dir: str) -> str:
+        """共享 venv 的 editable 绑定 marker 路径（<venv_dir>/.venv_editable_commit）。"""
+        return os.path.join(venv_dir, _VENV_EDITABLE_COMMIT_MARKER)
+
+    def _read_venv_editable_commit(self, venv_dir: str) -> str | None:
+        """读取共享 venv 当前 editable 绑定的 commit（读不到 → None）。
+
+        None 表示"绑定未知"（旧版缓存无 marker / 读取失败），按保守方向
+        处理：视为需要重指向，而不是假定已绑定目标 commit。
+        """
+        try:
+            with open(self._venv_editable_marker(venv_dir), encoding="utf-8") as f:
+                return f.read().strip() or None
+        except OSError:
+            return None
+
+    def _write_venv_editable_commit(self, venv_dir: str, base_commit: str) -> None:
+        """记录共享 venv 当前 editable 绑定的 commit（写失败仅告警，不阻断）。
+
+        写失败的方向是安全的：marker 缺失/过期只意味着下次缓存命中会多跑
+        一次重指向（幂等），不会把"未验证的绑定"冒充为"已验证"。
+        """
+        try:
+            with open(self._venv_editable_marker(venv_dir), "w", encoding="utf-8") as f:
+                f.write(base_commit)
+        except OSError as e:
+            logger.warning("共享 venv editable 绑定标记写入失败（下次命中将重新校验）: %s", e)
+
+    def _repoint_shared_venv_locked(self, venv_dir: str, repo_dir: str, base_commit: str) -> str | None:
+        """**已持 venv 锁**时校验并刷新 editable 源码绑定（幂等）。
+
+        Returns:
+            None = 绑定已正确（本次无需重指向）或重指向成功；
+            错误文本 = 重指向失败（调用方按 fail-closed 处理，不得在错误
+            源码上裁决）。
+        """
+        bound = self._read_venv_editable_commit(venv_dir)
+        if bound == base_commit:
+            # 常见路径：同 commit 缓存命中 → 零额外安装开销（不跑 pip）。
+            logger.debug("共享 venv editable 已绑定目标 commit，跳过重指向: %s", venv_dir)
+            return None
+        logger.info(
+            "共享 venv editable 绑定与目标 commit 不一致（%s → %s），重指向源码: %s",
+            (bound or "<未记录>")[:12],
+            base_commit[:12],
+            venv_dir,
+        )
+        # venv 目录缺失（如历史 venv 创建失败后回退全局 editable，但本 commit
+        # 已在缓存）时不能调用 pip（子进程 python 不存在）；按绑定失败返回。
+        vpy = os.path.join(venv_dir, "venv", "bin", "python")
+        if not os.path.isfile(vpy):
+            return f"共享 venv 不可用（缺少 python: {vpy}），无法重指向 editable 源码"
+        try:
+            err = self._venv_pip_install(repo_dir, venv_dir)
+        except OSError as e:  # pragma: no cover - 防御子进程启动失败（如 python 不可执行）
+            return f"共享 venv editable 重指向异常: {e}"
+        if err:
+            logger.warning("共享 venv editable 重指向失败（venv 仍指旧 commit 源码）: %s", err)
+            return err
+        self._write_venv_editable_commit(venv_dir, base_commit)
+        return None
+
+    def _ensure_shared_venv_editable_binding(self, repo_url: str, repo_dir: str, base_commit: str) -> str | None:
+        """共享 venv 缓存命中路径：在仓库级 venv 锁内校验+（按需）重指向。
+
+        锁键 = 共享 venv 目录（`_get_repo_setup_lock`），确保"读 marker → 比较
+        → 重指向 → 写 marker"整段不与其它 commit 的同类操作交错。非共享
+        venv / 全局模式直接返回 None（既有行为零变化）。
+        """
+        if not self._shared_venv_reuse_enabled():
+            return None
+        venv_dir = self._repo_venv_dir(repo_url, repo_dir)
+        with _get_repo_setup_lock(venv_dir):
+            return self._repoint_shared_venv_locked(venv_dir, repo_dir, base_commit)
+
+    def _setup_shared_venv(self, repo_url: str, repo_dir: str, base_commit: str) -> str | None:
+        """P0 4.3 共享 venv 分支：创建/复用 venv、按需安装、绑定 editable 源码。
+
+        F10（2026-10-19 Z 轮审查）：整段包在仓库级 venv 锁内——共享 venv 是
+        跨 commit 的可变状态，"创建/依赖安装/editable 重指向/绑定 marker 写入"
+        的检查+变更必须在同一锁域内，否则两个 commit 并发 setup 时可能交错成
+        "A 检查后 B 重指向、A 又不刷新"的错误绑定。
+        """
+        venv_dir = self._repo_venv_dir(repo_url, repo_dir)
+        with _get_repo_setup_lock(venv_dir):
+            return self._setup_shared_venv_locked(repo_dir, base_commit, venv_dir)
+
+    def _setup_shared_venv_locked(self, repo_dir: str, base_commit: str, venv_dir: str) -> str | None:
+        """`_setup_shared_venv` 的持锁主体（调用方必须已持 venv 锁）。"""
+        env_dir = os.path.dirname(repo_dir)  # repo_dir = <env_dir>/repo
+        env_error: str | None = self._create_venv(venv_dir)
+        if env_error:
+            logger.warning("venv 创建失败，退回全局 python: %s", env_error)
+            env_error = self._pip_install_editable(repo_dir)
+            if env_error:
+                logger.warning("仓库 pip install -e 失败（记录但不阻断验证）: %s", env_error)
+            else:
+                # 2026-09-26 全面审查（P1 缓存一致性）：venv 创建失败回退到全局
+                # pip install 后，缓存检查标记须与 use_venv 模式对齐——use_venv=True
+                # 时 setup() 入口读 .venv_pip_installed，此处若写 .pip_installed 则
+                # 下次 setup() 永远缓存 miss，每次重新 git clone + pip install。
+                _marker = ".venv_pip_installed" if self.use_venv else ".pip_installed"
+                with open(os.path.join(env_dir, _marker), "w", encoding="utf-8") as f:
+                    f.write(base_commit)
+            return env_error
+
+        # 检测依赖指纹：同一指纹复用已有 venv（不重新装依赖）
+        dep_fingerprint = self._dep_fingerprint(repo_dir)
+        marker = os.path.join(venv_dir, ".venv_dep_fingerprint")
+        need_install = True
+        if os.path.isfile(marker):
+            with open(marker, encoding="utf-8") as f:
+                existing_fp = f.read().strip()
+            if existing_fp == dep_fingerprint:
+                # 依赖未变 → 复用 venv，不重新装依赖。
+                # 但必须刷新 editable 源码指向：pip install -e 写入的是绝对路径
+                # （.pth / __editable__ finder），跨 commit 时旧 venv 的 editable
+                # 安装仍指向上一个 commit 的 repo 目录——与本 commit 不一致时会让
+                # `import <repo_pkg>` 解析到错误版本（正是 4.3 要消除的跨 commit
+                # 污染）。因此指纹命中时重跑一次轻量 `pip install -e .`（依赖已装、
+                # 仅重指向源码，秒级），不装依赖本身。
+                logger.info(
+                    "P0 4.3 venv 复用命中（依赖指纹未变，仅重指向 editable 源码）: %s（commit %s）",
+                    venv_dir,
+                    base_commit[:12],
+                )
+                _repoint_err = self._venv_pip_install(repo_dir, venv_dir)
+                if _repoint_err:
+                    # 重指向失败（pip 网络异常等）：editable 仍指旧 commit 源码，
+                    # 测试会在旧版本上裁决——保留诊断但不清除环境标记（venv 本身
+                    # 可用，走保守路径），由 verify 阶段绑定复检 fail-closed 兜底。
+                    logger.warning(
+                        "P0 4.3 editable 重指向失败（venv 仍指旧 commit 源码）: %s",
+                        _repoint_err,
+                    )
+                else:
+                    # F10：安装成功才更新绑定 marker（失败时保留旧值以反映真实绑定）
+                    self._write_venv_editable_commit(venv_dir, base_commit)
+                # O35（P2 性能）：指纹命中分支已做过一次 `pip install -e .`
+                # （上方 repoint），need_install 置 False 避免再跑一次同样的安装。
+                need_install = False
+        if need_install:
+            env_error = self._venv_pip_install(repo_dir, venv_dir)
+            if env_error:
+                logger.warning("venv pip install -e 失败（记录但不阻断验证）: %s", env_error)
+            else:
+                with open(marker, "w", encoding="utf-8") as f:
+                    f.write(dep_fingerprint)
+                # F10：首次（或依赖变更后）安装成功 → 记录 editable 绑定
+                self._write_venv_editable_commit(venv_dir, base_commit)
+        # 写环境标记（venv 模式下，即使复用也标记该 commit 已就绪）
+        with open(os.path.join(env_dir, ".venv_pip_installed"), "w", encoding="utf-8") as f:
+            f.write(base_commit)
+        return env_error
 
     def _dep_fingerprint(self, repo_dir: str) -> str:
         """计算仓库依赖指纹（P0 4.3：依赖列表变更检测）。
@@ -490,6 +630,7 @@ class RepoExecutor:
         llm_patch: str,
         fail_to_pass: list[str],
         pass_to_pass: list[str] | None = None,
+        instance_id: str | None = None,
     ) -> dict[str, Any]:
         """SWE-bench 官方口径验证：test_patch 前后对比 + LLM 补丁修复判定。
 
@@ -510,6 +651,9 @@ class RepoExecutor:
             llm_patch: LLM 生成的修复（完整文件代码或 unified diff）。
             fail_to_pass: FAIL_TO_PASS 测试节点列表（如 "test_foo.py::test_bar"）。
             pass_to_pass: PASS_TO_PASS 测试节点列表（可为空）。
+            instance_id: 官方数据集真实 instance_id（F11／2026-10-19 Z 轮：
+                官方 swebench harness 的 predictions 必须携带真实 instance_id；
+                缺失时官方路径降级自建口径——绝不伪造）。
 
         Returns:
             与 ExecutorAgent.execute 同构 + repo_env / fail_to_pass / pass_to_pass 字段。
@@ -542,8 +686,34 @@ class RepoExecutor:
         _repo_name = repo_url.rstrip("/").split("/")[-1].removesuffix(".git")
         _verify_env_dir = os.path.join(self.env_root, _repo_name, base_commit[:12])
         _verify_lock = _get_repo_setup_lock(_verify_env_dir)
+        # F10（2026-10-19 Z 轮审查 P1）：共享 venv 模式下，venv 的 editable 绑定是
+        # **跨 commit 共享的可变状态**——只在 setup 缓存命中时校验还不够：setup
+        # 返回到本函数真正跑测试之间，另一 commit 的 setup/verify 可能把 venv
+        # 重指向别处。故在 per-env 锁之外再持**仓库级 venv 锁**直到验证结束
+        # （锁序 env→venv，与 setup 内部一致，无死锁），并在锁内复检绑定：
+        # 无法绑定目标 commit 时 fail-closed（不产出错源裁决）。
+        _shared_venv_dir: str | None = None
+        _verify_venv_lock: threading.Lock | None = None
+        if self._shared_venv_reuse_enabled():
+            _shared_venv_dir = self._repo_venv_dir(repo_url, repo_dir)
+            _verify_venv_lock = _get_repo_setup_lock(_shared_venv_dir)
         _verify_lock.acquire()
+        if _verify_venv_lock is not None:
+            _verify_venv_lock.acquire()
         try:
+            if _shared_venv_dir is not None:
+                _bind_err = self._repoint_shared_venv_locked(_shared_venv_dir, repo_dir, base_commit)
+                if _bind_err is not None:
+                    logger.warning(
+                        "F10 共享 venv 绑定复核失败，拒绝在未知/错误源码上裁决: %s",
+                        _bind_err,
+                    )
+                    base_result["error_info"] = {
+                        "type": "repo_venv_rebind_failed",
+                        "message": (f"共享 venv editable 无法绑定目标 commit {base_commit[:12]}: {_bind_err}"),
+                    }
+                    base_result["repo_env"] = env
+                    return base_result
             # M3（2026-09-29 审查 P0）：官方 swebench 包路径（SWE_USE_OFFICIAL_HARNESS=true
             # 时启用，默认 false 保持历史自建 harness 口径）。启用时先尝试
             # `python -m swebench.harness.run_evaluation`，成功则以官方结果为准；
@@ -575,6 +745,7 @@ class RepoExecutor:
                     llm_patch=llm_patch,
                     fail_to_pass=fail_to_pass,
                     pass_to_pass=pass_to_pass,
+                    instance_id=instance_id,
                 )
                 if _official_result is not None:
                     base_result.update(_official_result)
@@ -726,6 +897,9 @@ class RepoExecutor:
         finally:
             # O35：与 acquire() 配对（覆盖官方 harness 提前 return / 临时文件
             # 写盘失败 / 正常收尾 / 任意异常——非重入 Lock，单点释放）
+            # F10：共享 venv 锁按逆序单点释放（先 venv 后 env）。
+            if _verify_venv_lock is not None:
+                _verify_venv_lock.release()
             _verify_lock.release()
 
     def _run_fail_to_pass(self, repo_dir: str, fail_to_pass: list[str], repo_url: str = "") -> dict[str, Any]:
@@ -929,6 +1103,111 @@ class RepoExecutor:
     def _official_harness_enabled() -> bool:
         return env_flag("SWE_USE_OFFICIAL_HARNESS")
 
+    @staticmethod
+    def _official_run_id(base_commit: str) -> str:
+        """官方 runner 的 run_id：安全字符集 + pid/线程唯一（并发互不覆盖报告）。"""
+        commit_part = re.sub(r"[^A-Za-z0-9_.-]", "", base_commit)[:8] or "unknown"
+        return f"aitester-{commit_part}-{os.getpid()}-{threading.get_ident()}"
+
+    @staticmethod
+    def _official_report_candidate(payload: Any, instance_id: str, depth: int = 0) -> dict[str, Any] | None:
+        """在官方报告 JSON 中定位 instance_id 对应的 per-instance 报告。
+
+        官方报告形状随版本略有差异，兼容两种已核对形态：
+        - 聚合报告 dict：``{instance_id: {"resolved": bool, "tests_status": {...}}}``；
+        - per-instance 报告：``{"instance_id": ..., "resolved": ..., "tests_status": ...}``
+          （官方 run 目录按 run/model/instance 分层，文件内自带 instance_id）。
+        递归（限深）扫描嵌套 dict，命中即返回；找不到返回 None。
+        """
+        if depth > 6 or not isinstance(payload, dict):
+            return None
+        # 形态 1：聚合报告以 instance_id 为键
+        candidate = payload.get(instance_id)
+        if isinstance(candidate, dict) and ("resolved" in candidate or "tests_status" in candidate):
+            return candidate
+        # 形态 2：per-instance 报告带 instance_id 字段
+        if payload.get("instance_id") == instance_id and ("resolved" in payload or "tests_status" in payload):
+            return payload
+        # 形态 3：嵌套容器（run/model 目录层、{"results": {...}} 等）→ 递归
+        for value in payload.values():
+            found = RepoExecutor._official_report_candidate(value, instance_id, depth + 1)
+            if found is not None:
+                return found
+        return None
+
+    @classmethod
+    def _find_official_instance_report(cls, report_dir: str, instance_id: str) -> dict[str, Any] | None:
+        """递归扫描 report_dir 下 *.json，返回 instance_id 匹配的 per-instance 报告。"""
+        for root, _dirs, files in os.walk(report_dir):
+            for fname in sorted(files):
+                if not fname.endswith(".json"):
+                    continue
+                path = os.path.join(root, fname)
+                try:
+                    with open(path, encoding="utf-8") as f:
+                        payload = json.load(f)
+                except (OSError, json.JSONDecodeError) as e:
+                    logger.info("M3 官方 swebench 报告文件跳过（%s）: %s", path, e)
+                    continue
+                found = cls._official_report_candidate(payload, instance_id)
+                if found is not None:
+                    return found
+        return None
+
+    @staticmethod
+    def _official_report_to_result(
+        report: dict[str, Any], fail_to_pass: list[str], pass_to_pass: list[str]
+    ) -> dict[str, Any] | None:
+        """校验官方 per-instance report schema 并换算为自建口径同构结果。
+
+        官方 schema（已静态核对官方接口）::
+
+            {"resolved": bool,
+             "tests_status": {"FAIL_TO_PASS": {"success": [...], "failure": [...]},
+                              "PASS_TO_PASS": {"success": [...], "failure": [...]}}}
+
+        口径：passed = resolved；passed 计数分别取两组 success 列表长度。
+        schema 不符 / resolved=True 但 success 数不足 expected（报告与任务
+        错配）→ 返回 None，调用方降级自建 harness——**绝不假过**。
+        """
+        resolved = report.get("resolved")
+        if not isinstance(resolved, bool):
+            logger.info("M3 官方 swebench 报告 schema 不符（resolved=%r 非 bool），降级自建口径", resolved)
+            return None
+        tests_status = report.get("tests_status")
+        if not isinstance(tests_status, dict):
+            logger.info("M3 官方 swebench 报告 schema 不符（tests_status 缺失/非 dict），降级自建口径")
+            return None
+        groups: dict[str, list[Any]] = {}
+        for key in ("FAIL_TO_PASS", "PASS_TO_PASS"):
+            group = tests_status.get(key)
+            # 官方每组为 {"success": [...], "failure": [...]}；success 必须是列表
+            if not isinstance(group, dict) or not isinstance(group.get("success"), list):
+                logger.info(
+                    "M3 官方 swebench 报告 schema 不符（tests_status.%s.success 缺失/非 list），降级自建口径",
+                    key,
+                )
+                return None
+            groups[key] = group["success"]
+        f2p_passed = len(groups["FAIL_TO_PASS"])
+        p2p_passed = len(groups["PASS_TO_PASS"])
+        # 一致性：resolved=True 但 success 数不足 expected → schema/报告错配，降级
+        if resolved and (f2p_passed < len(fail_to_pass) or p2p_passed < len(pass_to_pass)):
+            logger.info(
+                "M3 官方 swebench 报告与任务不匹配（resolved=True 但 success f2p=%d/%d p2p=%d/%d），降级自建口径",
+                f2p_passed,
+                len(fail_to_pass),
+                p2p_passed,
+                len(pass_to_pass),
+            )
+            return None
+        return {
+            "passed": resolved,
+            "fail_to_pass": {"expected": len(fail_to_pass), "passed": f2p_passed},
+            "pass_to_pass": {"expected": len(pass_to_pass), "passed": p2p_passed},
+            "harness_invalid": False,
+        }
+
     def _run_official_swebench_harness(
         self,
         repo_url: str,
@@ -937,107 +1216,140 @@ class RepoExecutor:
         llm_patch: str,
         fail_to_pass: list[str],
         pass_to_pass: list[str],
+        instance_id: str | None = None,
+        dataset_name: str | None = None,
     ) -> dict[str, Any] | None:
-        """M3（2026-09-29 审查 P0）：官方 swebench 包验证路径。
+        """M3：官方 swebench 包验证路径（官方 CLI + 官方报告 schema）。
 
-        调用 `python -m swebench.harness.run_evaluation`（官方 harness），
-        把 LLM 补丁与 gold test_patch 喂给官方 runner，读取其产出的
-        `predictions.json` / `report.json` 提取 F2P/P2P 结果。
+        2026-10-19 Z 轮审查（F11）重写：历史实现把位置参数喂给官方 CLI、用
+        ``patch`` 字段、伪造 ``instance_id`` 并读取旁置 ``_report.json``——与
+        官方接口全链不符，真实包下必然参数错误或解析不到。现行口径：
 
-        降级口径（保守）：
-        - swebench 包未安装（ModuleNotFoundError / 命令不存在）→ 返回
-          None，verify() 继续自建 harness 口径（历史行为零变化）；
-        - 官方 runner 执行异常 / 输出文件缺失 → 返回 None + 日志；
-        - 仅当官方 runner 成功产出 report 且 F2P/P2P 判定与自建口径
-          同构时才返回 dict（passed / fail_to_pass / pass_to_pass /
-          harness_invalid 字段），否则降级。
+        1. 预测 JSON 为官方 predictions 列表：``[{instance_id, model_name_or_path,
+           model_patch}]``；**只传 LLM 补丁**（test_patch 是评测侧 gold 测试，
+           官方 harness 会按数据集自行应用，故不作为 model_patch）。
+        2. 命名参数调用官方 CLI：``--dataset_name`` / ``--split`` /
+           ``--predictions_path`` / ``--max_workers`` / ``--run_id`` /
+           ``--report_dir``；run_id 形如 ``aitester-<sha8>-<pid>-<thread>``，
+           report_dir 为临时目录（读取后随 TemporaryDirectory 清理）。
+        3. 报告解析：递归扫描 report_dir 下 ``*.json``，定位 instance_id 匹配的
+           per-instance report，读 ``resolved`` 与
+           ``tests_status.FAIL_TO_PASS.success`` / ``PASS_TO_PASS.success``。
+        4. 任一环不符（无 instance_id / 无报告 / schema 不符 / rc!=0）→
+           ``logger.info`` + 返回 None 降级自建 harness——**绝不把缺失当通过**。
+
+        已知边界（如实披露）：本仓**未锁定官方 swebench 包版本**，且**真实包
+        验收仍未执行**（无网络/无 Docker 的静态审查环境）。数据集名默认假设
+        ``SWE-bench/SWE-bench_Lite``，可由调用方经 ``dataset_name`` 参数或
+        覆写模块常量 ``_OFFICIAL_HARNESS_DATASET`` 调整（刻意不新增环境变量，
+        避免 ADR-0003 env 预算门禁）。官方接口若再变更，本路径是"尽力而为的
+        降级支路"：失败即回退自建口径，不会假过。
 
         Args:
-            repo_url: 仓库 URL（定位缓存环境，与 verify 同口径）。
-            base_commit: 基础 commit（定位缓存环境）。
-            test_patch: gold test_patch（unified diff 文本）。
-            llm_patch: LLM 生成的修复（unified diff）。
-            fail_to_pass: FAIL_TO_PASS 测试节点列表。
-            pass_to_pass: PASS_TO_PASS 测试节点列表。
+            repo_url: 仓库 URL（仅用于日志/接口兼容；官方 runner 从数据集读取
+                仓库信息）。
+            base_commit: 基础 commit（用于生成 run_id；官方 runner 从数据集读取
+                base commit）。
+            test_patch: gold test_patch（**不传给官方 runner**——由官方 harness
+                按数据集自行应用；保留参数仅为调用点接口稳定）。
+            llm_patch: LLM 生成的修复（unified diff），作为 predictions 的
+                ``model_patch``。
+            fail_to_pass: FAIL_TO_PASS 测试节点列表（用于 expected 计数）。
+            pass_to_pass: PASS_TO_PASS 测试节点列表（用于 expected 计数）。
+            instance_id: 官方数据集中的真实 instance_id（如
+                ``django__django-12345``）。缺失/空 → 日志后返回 None（无法
+                构造合法 predictions，降级自建口径）。
+            dataset_name: 官方数据集名；``None``（默认）= 取模块常量
+                :data:`_OFFICIAL_HARNESS_DATASET`（运行期读取，测试/调用方可经
+                monkeypatch 覆写常量，或直接传参覆盖）。
 
         Returns:
             与 verify() 自建口径同构的结果 dict（passed / fail_to_pass /
-            pass_to_pass / harness_invalid / error_info），或 None（降级
-            到自建口径）。
+            pass_to_pass / harness_invalid / output），或 None（降级自建口径）。
         """
-        import subprocess
-        import tempfile as _tempfile
-
-        # 准备官方 runner 输入：predictions.json（LLM 补丁 + 元数据）
-        pred = {
-            "model_name_or_path": "aitester",
-            "instance_id": f"{repo_url}@{base_commit[:8]}",
-            "repo": repo_url,
-            "base_commit": base_commit,
-            "patch": llm_patch or "",
-            "test_patch": test_patch or "",
-            "fail_to_pass": fail_to_pass,
-            "pass_to_pass": pass_to_pass or [],
-        }
-        pred_file = os.path.join(
-            _tempfile.gettempdir(),
-            f"aitester_swebench_pred_{os.getpid()}_{threading.get_ident()}.json",
-        )
-        with open(pred_file, "w", encoding="utf-8") as f:
-            json.dump([pred], f, ensure_ascii=False, indent=2)
-
-        try:
-            # 官方 runner（pip install swebench）：python -m
-            # swebench.harness.run_evaluation <pred_file>
-            # 输出：日志 + 同目录 report.json（F2P/P2P 判定）
-            # 2026-10-11 全面优化批次：经 _run 收敛点走 run_with_timeout
-            # （孤儿风险消除；超时归一为 returncode=124 哨兵，下方
-            # res.returncode != 0 分支按历史口径降级自建）。
-            res = _run(
-                [sys.executable, "-m", "swebench.harness.run_evaluation", pred_file],
-                os.path.dirname(os.path.abspath(__file__)) or ".",
-                max(self.timeout, 300),
+        if not instance_id:
+            logger.info(
+                "M3 官方 swebench harness 缺少真实 instance_id（repo=%s commit=%s），降级自建口径",
+                repo_url,
+                base_commit[:12],
             )
-            if res.returncode != 0:
-                logger.info(
-                    "M3 官方 swebench runner 退出码 %d（降级自建口径）: %s",
-                    res.returncode,
-                    (res.stderr or res.stdout).strip()[:300],
-                )
-                return None
+            return None
+        # 运行期解析默认值（而非函数默认参数在 def 期绑定）——docstring 承诺的
+        # "覆写模块常量"才真正生效。
+        resolved_dataset = dataset_name or _OFFICIAL_HARNESS_DATASET
 
-            # 读取官方 report（与 pred_file 同目录的 report.json）
-            report_file = pred_file.replace(".json", "_report.json")
-            if not os.path.exists(report_file):
-                # 官方 runner 可能把 report 写到 cwd 或 stdout（JSON 块）
-                logger.info("M3 官方 swebench report 文件缺失（%s），降级自建口径", report_file)
-                return None
-            with open(report_file, encoding="utf-8") as f:
-                report = json.load(f)
-            # 官方 report 同构提取（字段名与 SWE-bench 官方口径一致）
-            return {
-                "passed": bool(report.get("resolved", False)),
-                "fail_to_pass": {
-                    "expected": len(fail_to_pass),
-                    "passed": int(report.get("fail_to_pass_pass", 0) or 0),
-                },
-                "pass_to_pass": {
-                    "expected": len(pass_to_pass),
-                    "passed": int(report.get("pass_to_pass_pass", 0) or 0),
-                },
-                "harness_invalid": False,
-                "output": f"[M3 官方 swebench harness] resolved={report.get('resolved')}",
-            }
-        except (OSError, json.JSONDecodeError, subprocess.SubprocessError, ModuleNotFoundError) as e:
+        run_id = self._official_run_id(base_commit)
+        try:
+            with tempfile.TemporaryDirectory(prefix="aitester_swebench_") as work_dir:
+                pred_file = os.path.join(work_dir, "predictions.json")
+                report_dir = os.path.join(work_dir, "report")
+                os.makedirs(report_dir, exist_ok=True)
+                predictions = [
+                    {
+                        "instance_id": instance_id,
+                        "model_name_or_path": "aitester",
+                        "model_patch": llm_patch or "",
+                    }
+                ]
+                with open(pred_file, "w", encoding="utf-8") as f:
+                    json.dump(predictions, f, ensure_ascii=False, indent=2)
+
+                # 2026-10-11 全面优化批次：经 _run 收敛点走 run_with_timeout
+                # （孤儿风险消除；超时归一为 returncode=124 哨兵 → 下方按
+                # rc!=0 降级自建口径）。
+                res = _run(
+                    [
+                        sys.executable,
+                        "-m",
+                        "swebench.harness.run_evaluation",
+                        "--dataset_name",
+                        resolved_dataset,
+                        "--split",
+                        _OFFICIAL_HARNESS_SPLIT,
+                        "--predictions_path",
+                        pred_file,
+                        "--max_workers",
+                        str(_OFFICIAL_HARNESS_MAX_WORKERS),
+                        "--run_id",
+                        run_id,
+                        "--report_dir",
+                        report_dir,
+                    ],
+                    work_dir,
+                    max(self.timeout, _OFFICIAL_HARNESS_TIMEOUT_FLOOR),
+                )
+                if res.returncode != 0:
+                    logger.info(
+                        "M3 官方 swebench runner 退出码 %d（降级自建口径）: %s",
+                        res.returncode,
+                        (res.stderr or res.stdout).strip()[:300],
+                    )
+                    return None
+
+                report = self._find_official_instance_report(report_dir, instance_id)
+        except (OSError, json.JSONDecodeError, subprocess.SubprocessError) as e:
+            # OSError 覆盖 swebench 包未安装（python -m 找不到模块时由解释器
+            # 以 rc!=0 返回，本分支兜底子进程启动级异常）；JSON 解析异常 →
+            # 降级。TemporaryDirectory 退出时自动清理 predictions/report。
             logger.info("M3 官方 swebench 路径异常（降级自建口径）: %s", e)
             return None
-        finally:
-            for p in (pred_file, pred_file.replace(".json", "_report.json")):
-                try:
-                    if os.path.exists(p):
-                        os.remove(p)
-                except OSError:
-                    pass
+
+        if report is None:
+            logger.info(
+                "M3 官方 swebench 报告缺失或无法定位 instance %s（report_dir 已扫描，降级自建口径）",
+                instance_id,
+            )
+            return None
+        result = self._official_report_to_result(report, fail_to_pass, pass_to_pass)
+        if result is None:
+            return None
+        result["output"] = (
+            f"[M3 官方 swebench harness] resolved={result['passed']} "
+            f"f2p={result['fail_to_pass']['passed']}/{result['fail_to_pass']['expected']} "
+            f"p2p={result['pass_to_pass']['passed']}/{result['pass_to_pass']['expected']} "
+            f"instance={instance_id} run_id={run_id}"
+        )
+        return result
 
     @classmethod
     def _split_diff_hunks(cls, patch_text: str) -> list[tuple[list[str], list[str], list[str]]]:

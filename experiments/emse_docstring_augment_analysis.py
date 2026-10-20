@@ -90,26 +90,58 @@ def _file_sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def load_augment_rows(path: Path, arm_key: str) -> dict[str, dict[str, Any]]:
-    """加载臂行摘要并补 ``spec_augment_applied`` 字段（复用 anchor 分析加载器）。
+AUDIT_KEY_ABSENT = "key_absent"
+AUDIT_UNREADABLE = "audit_unreadable"
 
-    复用 ``emse_docstring_anchor_analysis.load_arm_rows`` 的臂解析 / fail-closed
+
+def load_augment_rows(path: Path, arm_key: str) -> dict[str, dict[str, Any]]:
+    """加载臂行摘要并补 ``spec_augment_applied`` 字段（复用共享 loader）。
+
+    复用 ``emse_df_spec_analysis.load_arm_rows``（定义处；anchor 与 augment 都只 import 它，
+    AB-11/AB-12c 的登记曾把定义处误写成 anchor）的臂解析 / fail-closed
     口径（缺失 / 损坏 / 臂键错配 → ``MissingArtifactError``）；该 loader 的行
     摘要不含本轮的增广审计字段，故二次读取原始 JSON 补齐（只增字段，不改
     既有行摘要语义）。
+
+    值域三态（AB-11）：判定只用 detection，审计面用本字段，故读不动时**不**
+    抛错、而是落到不会与产物值混淆的桶——生产者写下的 ``null`` 仍是 ``None``
+    （``domain_stats`` 的 ``none`` 桶 = 真的没触发）；详情行根本没有这个键 →
+    ``key_absent``；第二遍原始读取失败或 task_id 对不上行集 → ``audit_unreadable``
+    并向 stderr 报一条命名 WARN。三者都不参与判定，但后两者不得再被读成
+    "增广零命中"（缺席 / 读不动 ≠ 零命中）。
     """
     rows = load_arm_rows(path, arm_key)
     for summary in rows.values():
-        summary.setdefault("spec_augment_applied", None)
+        summary["spec_augment_applied"] = AUDIT_UNREADABLE
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
         details = raw["results"][arm_key]["details"]
-    except (OSError, KeyError, TypeError, json.JSONDecodeError):  # pragma: no cover - load_arm_rows 已先行校验
+    except (OSError, KeyError, TypeError, json.JSONDecodeError) as e:
+        print(
+            f"[WARN] {path.name}：臂 {arm_key!r} 审计字段第二遍读取失败（{type(e).__name__}: {e}）——"
+            f"{len(rows)} 行全部按 {AUDIT_UNREADABLE!r} 记账，不得读成'增广零命中'",
+            file=sys.stderr,
+        )
         return rows
+    matched = 0
     for row in details:
         tid = str(row.get("task_id", ""))
         if tid in rows:
-            rows[tid]["spec_augment_applied"] = row.get("spec_augment_applied")
+            matched += 1
+            rows[tid]["spec_augment_applied"] = row.get("spec_augment_applied", AUDIT_KEY_ABSENT)
+    if matched != len(rows) or len(details) != len(rows):
+        gap = len(rows) - matched
+        tail = (
+            f"其中 {gap} 行未回填，按 {AUDIT_UNREADABLE!r} 记账"
+            if gap > 0
+            else "行集本身已缩，且后出现的同 id 行会覆盖先出现的审计值"
+        )
+        print(
+            f"[WARN] {path.name}：臂 {arm_key!r} 审计字段回填与行集对不上"
+            f"（details 行 {len(details)} / 回填 {matched} / 行摘要 {len(rows)}）——"
+            f"重复或类型不符的 task_id 会静默缩分母，{tail}，不得读成'增广零命中'",
+            file=sys.stderr,
+        )
     return rows
 
 

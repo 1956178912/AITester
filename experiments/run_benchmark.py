@@ -2760,6 +2760,13 @@ def run_single_task(
                         timeout=EXECUTION_TIMEOUT,
                         setup_timeout=SWE_REPO_SETUP_TIMEOUT,
                         use_venv=getattr(_cfg, "SWE_REPO_VENV_ISOLATION", False),
+                        # F10（2026-10-19 Z 轮审查 P1）：README 承诺的共享 venv
+                        # 开关 SWE_REPO_VENV_REUSE_BY_REPO 此前全仓无消费点 →
+                        # 文档承诺的"按仓库复用 venv"实际不可达（F10 的 A→B→A
+                        # 场景无法经 CLI 触发）。与 use_venv 同口径接线；该变量
+                        # 只在 experiments/ 消费，不在 ADR-0003 env 扫描面，故无
+                        # 需登记（docstring 已由 README 承诺该开关存在）。
+                        venv_reuse_by_repo=os.environ.get("SWE_REPO_VENV_REUSE_BY_REPO", "false").lower() == "true",
                     )
                     # gold patch 首个非测试源文件路径（git diff 的 a/b 头）
                     gold_target_rel = _extract_gold_target_relpath(task.metadata.get("golden_patch") or "")
@@ -2786,6 +2793,11 @@ def run_single_task(
                         llm_patch=llm_patch_text,
                         fail_to_pass=list(task.metadata["fail_to_pass"]),
                         pass_to_pass=list(task.metadata.get("pass_to_pass") or []),
+                        # F11（2026-10-19 Z 轮审查 P1）：官方 swebench harness 的
+                        # predictions / 报告解析都需要**真实** instance_id（如
+                        # "django__django-12345"），历史实现伪造 repo@commit。
+                        # 缺失时 verify 的官方路径降级自建口径（不伪造、不假过）。
+                        instance_id=task.metadata.get("instance_id"),
                     )
                     # 仓库级验证结果覆盖 LLM 生成测试的判定（官方口径优先）
                     final_state["test_passed"] = repo_result["passed"]

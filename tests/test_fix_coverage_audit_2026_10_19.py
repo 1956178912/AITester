@@ -58,9 +58,7 @@ class TestA11BudgetRecheckBeforeFailover:
     仅本类用例变红——说明第一层的测试无法保护第二层。
     """
 
-    def test_budget_rechecked_before_cross_model_failover(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_budget_rechecked_before_cross_model_failover(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """第一个模型失败后预算耗尽 → 抛 BudgetExceededError，不得切换下一个模型。"""
         configs = [
             ("key-1", "https://api.example.com/v1", "model-1"),
@@ -82,9 +80,7 @@ class TestA11BudgetRecheckBeforeFailover:
             lambda model_name, *a, **k: _make_client(model_name),
         )
         # 第一个模型被尝试过之后即视为预算超限（模拟其 usage 已记账并耗尽预算）
-        monkeypatch.setattr(
-            "src.budget.cost_budget.is_budget_exceeded", lambda: len(invoked_models) >= 1
-        )
+        monkeypatch.setattr("src.budget.cost_budget.is_budget_exceeded", lambda: len(invoked_models) >= 1)
         monkeypatch.setattr(
             "src.budget.cost_budget.get_budget_stats",
             lambda: {"consumed_tokens": 5000, "token_limit": 1000, "unit": "tokens"},
@@ -122,9 +118,7 @@ class TestA11BudgetRecheckBeforeFailover:
         monkeypatch.setattr("time.sleep", lambda s: None)
 
         with pytest.raises(BudgetExceededError):
-            llm_client._call_zai(
-                "key", "https://open.bigmodel.cn/api/paas/v4", "glm-4", "系统", "问题", max_retries=1
-            )
+            llm_client._call_zai("key", "https://open.bigmodel.cn/api/paas/v4", "glm-4", "系统", "问题", max_retries=1)
         assert calls["create"] == 1, "预算超限后不得在同模型内继续重试"
 
 

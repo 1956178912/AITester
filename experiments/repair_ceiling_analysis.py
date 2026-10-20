@@ -42,6 +42,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from experiments.statistical_analysis import (  # noqa: E402
+    _pair_by_task,
     load_experiment_results_with_sources,
     mcnemar_test,
 )
@@ -120,8 +121,17 @@ def sensitivity_bounds(results: dict[str, list[dict[str, Any]]]) -> list[dict[st
     """R12：aitester None 行双界敏感性（vs plain_llm / plain_llm_df）。
 
     对每个对比输出四行口径：原口径（None 跳过 = mcnemar_test 语义）、
-    None→0（最坏）、None→1（最好）；差异率 = (Σaitester − Σ基线)/n_common，
-    基线臂无 None 行（生死实验实测），n_common 即填充后的全量任务数。
+    None→0（最坏）、None→1（最好）；差异率 = (Σ_A − Σ_B)/n_common。
+
+    2026-10-19 勘误（Z 轮第三方审查 F02）：旧实现三种情形都用**整臂**
+    阳性数（A/B 两臂各自全量求和）除以**配对**共同任务数 n_common——分子
+    与分母不同源，把被排除任务（B 臂可测、A 臂 None）的阳性计入分子。
+    现三种情形统一经 `_pair_by_task` 同源配对原语取配对列表：分子
+    Σ_A / Σ_B 与分母 n_common 都来自同一共同（去重后、非 None）任务总体；
+    worst/best 情形先对 None 行填充再配对（填充后共同任务数 = 全量配对
+    总体）。实测 aitester vs plain_llm_df：base 共同 n=240、A/B 阳性
+    38/106、经验差 −68/240 = −0.283333（旧整臂口径 −0.329167，误差
+    4.5833pp——df 臂有 11 个阳性位于被排除的 21 个任务中）。
     """
     out: list[dict[str, Any]] = []
     for arm_a, arm_b in _COMPARISONS:
@@ -136,8 +146,11 @@ def sensitivity_bounds(results: dict[str, list[dict[str, Any]]]) -> list[dict[st
         entry: dict[str, Any] = {"comparison": f"{arm_a} vs {arm_b}", "n_none": n_none, "rows": []}
         for label, filled in scenarios:
             chi2, p, _, n_common = mcnemar_test(filled, rows_b, field="detection_rate")
-            sum_a = sum(1 for r in filled if r.get("detection_rate") == 1)
-            sum_b = sum(1 for r in rows_b if r.get("detection_rate") == 1)
+            # 分子与分母同源：配对列表直接来自 _pair_by_task（去重 + None
+            # 过滤后的共同任务 0/1 值），不再对整臂求和（F02 修复）。
+            paired_a, paired_b, _common = _pair_by_task(filled, rows_b, field="detection_rate")
+            sum_a = sum(paired_a)
+            sum_b = sum(paired_b)
             diff = (sum_a - sum_b) / n_common if n_common else float("nan")
             entry["rows"].append(
                 {
@@ -176,6 +189,20 @@ def render_markdown(
     ]
     lines += [f"- {src}" for src in source_files]
     lines += [
+        "",
+        "## 2026-10-19 勘误（Z 轮第三方审查 F02：base 行分子改为配对口径）",
+        "",
+        "本报告 §3 的 `base` 行在 2026-10-06 版中把 A/B 两臂**整臂**阳性数",
+        "当作分子、再除以**配对**共同任务数（aitester vs plain_llm_df：n=240，",
+        "旧配对差 −0.329167）。分子与分母不同源：df 臂有 11 个阳性位于 A 臂",
+        "None 被排除的 21 个任务中，被错误计入分子，导致效应差偏移 4.5833pp。",
+        "2026-10-19 起 base 行的分子改用与 McNemar 检验同源的 `_pair_by_task`",
+        "配对列表（共同任务内 A 阳性 38、B 阳性 106），正确经验差 =",
+        "−68/240 = **−0.283333**。",
+        "",
+        "填充情形（None→0 / None→1）的配对总体本来就是全量 261 任务，数值与",
+        "2026-10-06 版一致；双界不变式（风险差口径 worst ≤ base ≤ best）保持。",
+        "本勘误只修正统计派生量；原始三批 JSON、漏斗计数及其它历史数字均未改动。",
         "",
         "## 1. 修复通道漏斗（aitester 臂，多种子拼接）",
         "",

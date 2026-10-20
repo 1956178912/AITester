@@ -242,6 +242,13 @@ class BugsInPyDataset(BaseDatasetLoader):
                     logger.warning("BugsInPy manifest 第 %d 行解析失败（跳过）: %s", line_no, e)
                     skipped += 1
                     continue
+                if not isinstance(row, dict):
+                    # 与上一分支同口径计入 skipped：JSONDecodeError 只覆盖语法损坏，
+                    # [] / null / "abc" / 3 / true 都是合法 JSON 而非对象。
+                    # 此前 row.get 直接 AttributeError，一行非对象中断整批加载。
+                    logger.warning("BugsInPy manifest 第 %d 行不是 JSON 对象（跳过）", line_no)
+                    skipped += 1
+                    continue
                 buggy_code = str(row.get("buggy_code") or "")
                 fixed_code = str(row.get("fixed_code") or "")
                 if not buggy_code.strip():

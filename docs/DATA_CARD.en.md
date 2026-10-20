@@ -2,7 +2,11 @@
 
 # Data Card
 
-Last updated: 2026-10-15 (§6 adds the Data Availability Statement:
+Last updated: 2026-10-19 (Z-round third-party review F18: §1/§2 now separate the
+"historical main batch (n=50 / seed=42)" from the "current confirmatory main batch
+(R-P0-2: 87 tasks × 3 seeds {42,43,44} × 3 arms = 261 rows/arm,
+`--max-pattern-repeat 2`)"; 50 is the template-library unique-pattern count / historical
+main-batch task count, not the current main-batch task count. Previously 2026-10-15 (§6 adds the Data Availability Statement:
 included artifacts, per-source licensing citations, items not included
 (raw LLM responses), and the deposit placeholder. Previously 2026-10-14 (§1 dataset overview refreshed: new ULT row
 (real benchmark, mutation main-metric scenario; subset in use since
@@ -24,13 +28,13 @@ license [new L2 decision gate registered]; AA2: §2 registers the
 
 | Dataset | Loader name | Status | Purpose |
 |---------|-------------|--------|---------|
-| Synthetic defect template library | `synthetic` | ✅ in use for the main batch (n=50 tasks; parameterized 87/120 variants used by confirmatory/recalibration batches) | main experiments / ablations |
+| Synthetic defect template library | `synthetic` | ✅ multi-batch in use (50 unique patterns in the template library; current confirmatory main batch = 87 tasks × 3 seeds {42,43,44} × 3 arms = 261 rows/arm; n=50/seed42 is the **historical main batch**) | main experiments / ablations |
 | QuixBugs (Python subset, complete 50 programs) | `quixbugs` | ✅ multi-batch in use (D1 A/B / spec_ir pilot / recalibration n=50; positioning remains L1 — near-saturation + memorization statements in §4) | real-defect ladder L1 |
 | ULT (UnLeakedTestBench, local clone) | `ult` | ✅ subset in use (ult_lite46 / specir probe / recalibration / Mut@k subset, n=25–46; **detection-caliber fitness under review** — generated tests show zero detections 0/45, 0/24 while gold assertions demonstrably fail on the buggy code, i.e. "LLM tests produce no red") | real benchmark (mutation main metric Mut@k / cyclomatic ≥10 filter) |
 | BugsInPy | `bugsinpy` | loader ready, **never run** | real-defect ladder L2 |
 | SWE-bench Lite | `swe_bench` | historical 0/20 smoke run (**2026-10-13 erratum: an API 429 rate-limit infrastructure failure, no valid capability conclusion**) | repo-level (target mismatch, see below) |
 
-## 2. Synthetic Template Library (current main-batch benchmark)
+## 2. Synthetic Template Library (historical main batch and current confirmatory main batch)
 
 - **Origin**: entirely hand-written by the project author (8 pattern pools,
   50 unique defect patterns after dedup by name; `BASELINE.yaml
@@ -41,14 +45,24 @@ license [new L2 decision gate registered]; AA2: §2 registers the
   (`# noise_seed=<0-9999>`) and neutralizes task ids (`task_0000..`, the P1-4
   leak fix — the file name used to embed the pattern name, which equals the
   answer); gold-test imports are rewritten in sync (`_neutralize_gold_imports`);
-- **Main-batch composition**: n=50, seed=42, 3 baselines; difficulty L1–L5
-  distribution {15,10,10,8,7}; 8 cross-file tasks; bug types: assertion 30 /
+- **Historical main-batch composition (n=50 / seed=42; legacy main batch — do not
+  conflate it with the current confirmatory main batch)**: 3 baselines; difficulty
+  L1–L5 distribution {15,10,10,8,7}; 8 cross-file tasks; bug types: assertion 30 /
   runtime 20; patterns are sampled with repetition (e.g.
   `import_chain_type_contract` appears 10 times) — mitigated as of AA2
   (2026-10-06) via `SyntheticDataset(max_pattern_repeat=...)` /
-  `run_benchmark --max-pattern-repeat` (opt-in; legacy behavior and seed=42
-  reproducibility unchanged); enabling it for future main-batch reruns is
-  recommended;
+  `run_benchmark --max-pattern-repeat`;
+- **Current confirmatory main-batch composition (R-P0-2, three batches on
+  2026-10-06)**: **87 tasks × 3 seeds {42,43,44} × 3 arms (`aitester` /
+  `plain_llm` / `plain_llm_df`) = 261 rows/arm**, launched with
+  `--max-pattern-repeat 2` (cap 2, R-P0-4); the seed semantics = task-sampling
+  draws × independent cache namespaces (not three model replications over a fixed
+  task set — see `docs/VALIDITY.md` §4). **50 is the template-library unique-pattern
+  count / historical main-batch task count, not the current confirmatory main-batch
+  task count**; the single source of truth for numbers = the `benchmark` section of
+  `BASELINE.yaml`, and the batch artifacts plus pooled statistics live in
+  `experiments/results/main_batch/statistical_report_3seed_pooled.md`
+  (`benchmark_synthetic_20261006_{140906,151907,164357}.json`);
 - **Gold-material schema**: `metadata["test_cases"]` (gold tests),
   `metadata["fixed"]` (single-file gold patch), `fixed_module_code`
   (cross-file), `pass_to_pass` (P2P regression set). Gold material only enters
