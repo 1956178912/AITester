@@ -139,7 +139,7 @@ class TestVocabularyIsWrittenOnce:
         assert "from src.budget.pricing import entry_block_reason, load_table_json, models_layer" in src["report"]
         assert "from src.budget.pricing import entry_block_reason, models_layer, table_read_reason" in src["ext"]
         assert "from src.budget.pricing import entry_block_reason, load_table_json, models_layer" in src["analyze"]
-        assert "from src.budget.pricing import load_table_models" in src["run_b8"]
+        assert "from src.budget.pricing import entry_block_reason, load_table_models" in src["run_b8"]
         assert "pricing.load_table_json(" in src["statistical"]
         assert "pricing.models_layer(" in src["statistical"]
 
@@ -367,21 +367,34 @@ class TestRunB8PriceDisclosure:
         report = _aggregate(tmp_path, str(p))
         assert report["price"]["table_reason"] == "models_not_object:list"
 
-    def test_empty_object_price_table_is_silent(self, tmp_path: Path) -> None:
+    def test_empty_object_price_table_is_table_level_silent(self, tmp_path: Path) -> None:
+        """`{}` 表：表级静默（无 `table_reason`——AB-17 空对象 doctrine 不变），
+        条目级"没登记"由 AE 轮点名（改前静默退回内置价，读起来与"真表读数"同形）。"""
         p = tmp_path / "empty.json"
         p.write_text("{}", encoding="utf-8")
         report = _aggregate(tmp_path, str(p))
-        assert report["price"] == {"source": "builtin deepseek-flash standard price", "as_of": "2026-10-06"}
+        assert "table_reason" not in report["price"]
+        assert report["price"]["source"] == "builtin deepseek-flash standard price"
+        assert report["price"]["as_of"] == "2026-10-06"
+        assert report["price"]["entry_reason"] == "model_unregistered"
+        # 拒绝的价不得进入工件数字键（改前这里断言过整份 price 精确相等；AE 起条目级拒绝
+        # 会多出 model/entry_reason 两键，故按"内置价 + 无数字价"口径逐条断言，不放宽语义）
+        assert "input_per_mtok" not in report["price"] and "output_per_mtok" not in report["price"]
 
     def test_valid_entry_price_is_taken(self, tmp_path: Path) -> None:
+        # AE（2026-10-20）：条目级准入接共享谓词后，合成条目须登记币种（AB-13/AB-16 先例：
+        # 改输入而非放宽断言——"没写单位"是 `currency_absent`，不是隐含美元）。
         p = tmp_path / "custom.json"
         p.write_text(
-            json.dumps({"models": {"deepseek-flash": {"input_per_mtok": 0.5, "output_per_mtok": 2.0}}}),
+            json.dumps(
+                {"models": {"deepseek-flash": {"input_per_mtok": 0.5, "output_per_mtok": 2.0, "currency": "USD"}}}
+            ),
             encoding="utf-8",
         )
         report = _aggregate(tmp_path, str(p))
         assert report["price"]["model"] == "deepseek-flash"
         assert (report["price"]["input_per_mtok"], report["price"]["output_per_mtok"]) == (0.5, 2.0)
+        assert "entry_reason" not in report["price"]
 
 
 # ─── 6. 真表：七个读点读出同一份 models 映射 ─────────────────────────────────

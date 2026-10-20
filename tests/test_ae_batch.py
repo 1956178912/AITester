@@ -28,6 +28,7 @@ from experiments.statistical_analysis import (
     load_price_table,
     run_all_statistics,
 )
+from src.budget import pricing
 
 _ROOT = Path(__file__).resolve().parents[1]
 
@@ -109,20 +110,48 @@ def _make_row(input_tokens: int, output_tokens: int, model: str | None = "deepse
     return {"task_id": "t", "token_usage": tu}
 
 
+def _validate_price_table(models: dict) -> None:
+    """价目表 schema 校验（**生产谓词口径**，AE 轮收口测试侧第二套口径）。
+
+    改前这里是测试自持的一套更宽的域：`entry.get("currency", "USD")` 给币种**缺席**的条目
+    造了一个缺省美元（生产 `currency_status` 读 `absent`），
+    `isinstance(value, (int, float)) and value >= 0` 放行 `inf`（生产 `price_block_reason`
+    读 `price_not_finite:inf`）。现币种要求显式登记，数字域交共享谓词。
+    """
+    assert isinstance(models, dict) and len(models) >= 1
+    for name, entry in models.items():
+        assert isinstance(name, str) and isinstance(entry, dict)
+        assert "currency" in entry and isinstance(entry["currency"], str)
+        assert pricing.price_block_reason(entry.get("input_per_mtok"), entry.get("output_per_mtok")) in (
+            None,
+            "price_null",
+        )
+
+
 class TestPriceTable:
     """价目表加载与 schema（诚实条款：null = 不计价，不编造）。"""
 
     def test_repo_price_table_schema(self) -> None:
-        """入库价目表：models 为 dict，数值字段 null 或非负数，币种为字符串。"""
+        """入库价目表：models 为 dict，条目为对象、币种显式登记、数字域符合生产谓词。
+
+        真表三模型全部须过：deepseek-flash `0.3/1.2` USD、agnes-3.0-flash 两个 `null`、
+        qwen-long `0.5/2.0` CNY（币种登记非 USD 是"能不能计价"的事，不是 schema 的事）。
+        """
         table = load_price_table(_ROOT / "experiments" / "price_table.json")
-        models = table["models"]
-        assert isinstance(models, dict) and len(models) >= 1
-        for name, entry in models.items():
-            assert isinstance(name, str) and isinstance(entry, dict)
-            for key in ("input_per_mtok", "output_per_mtok"):
-                value = entry[key]
-                assert value is None or (isinstance(value, (int, float)) and not isinstance(value, bool) and value >= 0)
-            assert isinstance(entry.get("currency", "USD"), str)
+        # 零断言门禁扫描测试体（`_validate_price_table` 内的断言不算本函数的断言信号，
+        # 见 `scripts/gates/check_zero_assert_tests.py`）——此处显式断言顶层包装体形状。
+        assert isinstance(table, dict) and isinstance(table.get("models"), dict)
+        _validate_price_table(table["models"])
+
+    def test_schema_rejects_entry_without_currency(self) -> None:
+        """负控：缺 `currency` 键必须校验失败——旧断言 `entry.get("currency", "USD")` 会绿。"""
+        with pytest.raises(AssertionError):
+            _validate_price_table({"m": {"input_per_mtok": 1.0, "output_per_mtok": 2.0}})
+
+    def test_schema_rejects_non_finite_price(self) -> None:
+        """负控：`inf` 价必须校验失败——旧断言 `isinstance(...) and value >= 0` 会绿。"""
+        with pytest.raises(AssertionError):
+            _validate_price_table({"m": {"input_per_mtok": float("inf"), "output_per_mtok": 1.0, "currency": "USD"}})
 
     def test_missing_file_returns_empty(self, tmp_path: Path) -> None:
         """文件缺失 → 空表（不抛异常，成本节按未登记口径）。"""
