@@ -567,7 +567,13 @@ def mcnemar_test(
     - n01 = AITester 通过 且 基线失败 的任务数
     - n10 = AITester 失败 且 基线通过 的任务数
     McNemar chi2（连续性校正）= (|n01 - n10| - 1)^2 / (n01 + n10)（H0 双侧），
-    p = 1 - chi2.cdf(stat, df=1)。n01 + n10 == 0（两组逐任务完全一致）时
+    p = chi2.sf(stat, df=1)（**2026-10-20 AC 轮修复：旧实现 `1 - chi2.cdf`
+    在 χ²≳71 时浮点下溢为精确 0.0**——p < ~6e-17 已低于 float64 相对 1 的
+    机器精度，`1.0 - cdf` 恒等于 1.0；主批 plain_llm_df vs plain_llm
+    （χ²=111.01）实测旧路径返回 p=0.0 / BH q=0.0，而精确值 p=5.890715e-26 /
+    q=1.767215e-25（erfc(√(χ²/2)) 与 scipy sf 逐位一致）。sf 为生存函数，
+    尾部数值稳定；结论（p≪α）不变，但 p/q 量级可复算）。
+    n01 + n10 == 0（两组逐任务完全一致）时
     返回 (0.0, 1.0, 0, n_common)（p=1.0，无差异，保守）；共同任务 < 2 时
     返回 (nan, nan, n01+n10, n_common)（样本不足，与 paired_t_test 同口径）。
 
@@ -597,7 +603,9 @@ def mcnemar_test(
         return 0.0, 1.0, 0, n_common
     # 连续性校正（n01+n10 较小时更保守；H0 双侧）
     chi2 = (abs(n01 - n10) - 1) ** 2 / (n01 + n10)
-    p_value = float(1.0 - stats.chi2.cdf(chi2, df=1))
+    # AC 轮（2026-10-20）：sf 而非 1-cdf——后者在 χ²≳71 时浮点下溢为 0.0
+    # （主批 plain-df 实测），使 p/BH q 的量级不可复算（详见 docstring）。
+    p_value = float(stats.chi2.sf(chi2, df=1))
     return float(chi2), p_value, n01 + n10, n_common
 
 

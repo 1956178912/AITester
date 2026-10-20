@@ -6,6 +6,25 @@
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [Unreleased] — 2026-10-20 AC round: fix for the McNemar p `1−cdf` floating-point underflow + E7 toolchain dry run + AB-17 wiring audit (zero LLM, $0)
+
+> This round adds no capability: an independent recompute audit found one numerical defect in the statistics layer and fixed it, plus a dry run of the E7 adjudication toolchain and a wiring audit of the AB-17 close-out (both pass, no new defects).
+
+### Fixed — `mcnemar_test`'s p value underflows to exactly 0.0 in the chi-square tail (AC-1)
+
+- `experiments/statistical_analysis.mcnemar_test` computed p as `1.0 - chi2.cdf(x, df=1)`. With float64 machine epsilon ~2.2e-16 relative to 1, `1.0 - cdf` equals 1.0 whenever p ≲ 6e-17 (χ² ≳ 71), so p **silently became exactly 0.0**. The main batch's plain_llm_df vs plain_llm (χ²=111.00885) was measured on the old path as p=0.0 / BH q=0.0, while the exact values are p=5.890715e-26 / q=1.767215e-25 (`erfc(√(χ²/2))` and `chi2.sf` agree digit for digit).
+- **Impact**: the "raw p / standard BH q" quoted in the Z-round closure report and the `statistical_report_3seed_pooled.md` erratum section were previously **irreproducible from the production code path** — the Z-round regression locks (`test_review_20261019_stats.py`) used a test-local erfc helper, and the production `mcnemar_test` was never executed on the main-batch data (the same "logic tested, wiring untested" blind spot). The significance conclusions (all three ***) are unaffected.
+- Fix: `p = chi2.sf(x, df=1)` (survival function, numerically stable in the tail); the two detection comparisons with χ²≤48.79 and all repair comparisons are unaffected (1−cdf and sf agree within 1e-12 relative for p≥1e-14); the canonical `statistical_report.md` passed table's χ²=123.1419 row has the same underflow (p 0.0000 → exact ≈1.4e-28), but its rendering and conclusions are unchanged because the display format is `{:.4f}`.
+- Regression locks: `tests/test_ac_round_mcnemar_tail.py`, **6 cases** (production-path main-batch p/q truth closing the recompute chain + χ² cross-checked against the pooled report + two synthetic huge-χ² no-underflow cases + moderate-χ² values unchanged + existing boundary semantics preserved); mutation-verified: reverting to `1−cdf` turns three cases red, all green after restore.
+- Methodology lesson (a trap in the test itself): `pytest.approx`'s default `abs=1e-12` lets an underflowed 0.0 **pass** as a 1e-25-magnitude truth — AC-round assertions use `abs=0.0` (purely relative) throughout.
+- Artifacts: `statistical_report_3seed_pooled.md` gains a dated 2026-10-20 erratum section (defect / fix / impact surface), `main_batch/SHA256SUMS` refreshed accordingly (only that file's line changed; all 2040 entries verify).
+
+### Verified — E7 adjudication toolchain dry run and AB-17 seven-read-site wiring audit (zero LLM)
+
+- E7 toolchain: `validate` passes on all three blank entry sheets (n=8/41/72); out-of-scale judgments fail closed; unfilled rows are refused at `merge`; a synthetically filled pair exercises Cohen's κ + 10,000 bootstraps + the confusion matrix + the disagreement-row listing (dry-run data in `/tmp`, artifacts untouched).
+- AB-17: all seven price-table read sites are wired through the shared `src/budget/pricing.py` helpers (`pricing` itself + `spec_examples_generator` / `emse_stats_report` / `emse_stats_extensions` / `statistical_analysis` / `analyze_t1_b2_main_batch` / `run_b8_injection`), with no "declared but unconsumed" gap.
+- Baseline: collected **10294** = passed **10289** + skipped 5 + failed 0 (net +6 cases; sandbox-host measurement on this machine: 10275 passed / 19 skipped / 0 failed); `experiments/` is outside the `--cov=src` scope, and `coverage.xml` measures 18440/18963 lines = 97.24% and 6652/7090 arcs = 93.82% (each 1 off the AB-17 registration, inside the registered race-branch ±2 jitter band); ruff / mypy / all gates green.
+
 ## [Unreleased] — 2026-10-20 Z→AB close-out round: ~18 rounds of pending work committed in one go + the README bilingual rotation done late + the E7 entry sheets' "can never be committed" gap fixed (zero LLM, $0)
 
 > This round adds no capability: it commits, in one go, all the work from rounds Z / AA /
