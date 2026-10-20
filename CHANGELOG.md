@@ -6,6 +6,53 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [Unreleased] — 2026-10-20 AC 轮：McNemar p 的 `1−cdf` 浮点下溢修复 + E7 工具链干跑 + AB-17 接线核查（零 LLM，$0）
+
+> 本轮不新增能力：一次独立复算审计抓到统计层一处数值缺陷并修复，另对 E7 裁决工具链与
+> AB-17 收口质量做干跑/接线核查（均通过，无新缺陷）。
+
+### Fixed — `mcnemar_test` 的 p 值在卡方尾部浮点下溢为 0.0（AC-1）
+
+- `experiments/statistical_analysis.mcnemar_test` 以 `1.0 - chi2.cdf(x, df=1)`
+  计算 p。float64 相对 1 的机器精度约 2.2e-16，故 p ≲ 6e-17（χ² ≳ 71）时
+  `1.0 - cdf` 恒等于 1.0 → p **静默变为精确 0.0**。主批
+  plain_llm_df vs plain_llm（χ²=111.00885）实测旧路径 p=0.0 / BH q=0.0，
+  而精确值 p=5.890715e-26 / q=1.767215e-25（`erfc(√(χ²/2))` 与 `chi2.sf`
+  逐位一致）。
+- **影响**：Z 轮收口报告与 `statistical_report_3seed_pooled.md` 勘误节引用的
+  "原始 p / 标准 BH q"此前**无法从生产代码路径复算**——Z 轮回归锁
+  （`test_review_20261019_stats.py`）走的是测试内 `erfc` 助手，生产
+  `mcnemar_test` 从未在主批数据上被执行（"逻辑有测试、接线无测试"同型盲区）。
+  显著性结论（三项均 ***）不受影响。
+- 修复：`p = chi2.sf(x, df=1)`（生存函数，尾部数值稳定）；χ²≤48.79 的两行
+  detection 比较与全部 repair 比较不受影响（1−cdf 与 sf 在 p≥1e-14 区间
+  相对误差 <1e-12）；canonical `statistical_report.md` 的 passed 表
+  χ²=123.1419 行同款下溢（p 0.0000 → 精确 ≈1.4e-28），因渲染格式为
+  `{:.4f}`，报告显示与结论不变。
+- 回归锁：`tests/test_ac_round_mcnemar_tail.py` **6 例**（生产路径主批三比较
+  p/q 真值闭合复算链 + χ² 与 pooled 报告对账 + 合成大 χ² 不下溢 2 + 中等 χ²
+  值不变 + 既有边界语义保持）；变异验证：回退 `1−cdf` 三例转红，还原后全绿。
+- 方法学教训（测试自身的陷阱）：`pytest.approx` 默认 `abs=1e-12` 会让"下溢的
+  0.0"冒充 1e-25 量级真值**通过**——AC 轮断言一律 `abs=0.0` 纯相对比较。
+- 工件：`statistical_report_3seed_pooled.md` 追加 2026-10-20 日期化勘误节
+  （缺陷/修复/影响面），`main_batch/SHA256SUMS` 同步刷新（仅该文件一行变化，
+  2040 项校验通过）。
+
+### Verified — E7 裁决工具链干跑与 AB-17 七读点接线核查（零 LLM）
+
+- E7 工具链：三路径空白录入表（n=8/41/72）`validate` 全通过；越界量表值
+  fail-closed；未填行拒绝进入 `merge`；合成填表跑通 Cohen's κ + 10,000 次
+  bootstrap + 混淆矩阵 + 分歧行清单（干跑数据在 `/tmp`，未触碰工件）。
+- AB-17：七个价目表读点全部经 `src/budget/pricing.py` 共享助手接线
+  （`pricing` 自身 + `spec_examples_generator` / `emse_stats_report` /
+  `emse_stats_extensions` / `statistical_analysis` / `analyze_t1_b2_main_batch` /
+  `run_b8_injection`），无"声明未消费"缺口。
+- 基线：collected **10294** = passed **10289** + skipped 5 + failed 0
+  （净增 6 例；本机沙箱宿主实测 10275 passed / 19 skipped / 0 failed）；
+  `experiments/` 不在 `--cov=src` 口径内，`coverage.xml` 实测
+  18440/18963 行 = 97.24%、6652/7090 弧 = 93.82%（与 AB-17 各差 1，
+  落在已登记的竞态分支 ±2 抖动域）；ruff / mypy / 全部门禁绿。
+
 ## [Unreleased] — 2026-10-20 Z→AB 收口轮：约 18 轮滞留工作一次提交 + README 双语轮换补做 + E7 录入表"不可能入库"缺口修复（零 LLM，$0）
 
 > 本轮不新增能力：把 2026-10-19 傍晚起滞留工作区的 Z / AA / 工程质量 / AB-1~17 全部工作
