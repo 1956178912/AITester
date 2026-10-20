@@ -186,8 +186,16 @@ def _dist_summary(vals: list[float]) -> dict[str, Any]:
     }
 
 
-def _normal_cdf(z: float) -> float:
-    return 0.5 * (1.0 + math.erf(z / math.sqrt(2.0)))
+def _normal_sf(z: float) -> float:
+    """标准正态生存函数 P(Z > z) = 0.5·erfc(z/√2)（AD-2，2026-10-20）。
+
+    旧实现 `0.5 * (1.0 + math.erf(z / math.sqrt(2.0)))` 是 CDF，调用点再取
+    `1.0 - cdf`——与 AC-1 的 `1 - chi2.cdf` 同型：z ≳ 8.2 时 `1.0 - cdf`
+    因浮点精度静默变 0.0。erfc 直接算尾部，z < ~27 内精确（本字段
+    `round(..., 4)` 显示，可显示区间内两式逐位相同；改动消除的是模式本身，
+    不是读数）。
+    """
+    return 0.5 * math.erfc(z / math.sqrt(2.0))
 
 
 def _rank_abs(diffs: list[float]) -> list[float]:
@@ -239,7 +247,7 @@ def wilcoxon_signed_rank(diffs: list[float]) -> dict[str, Any]:
         "n_zero_diff": len(diffs) - n,
         "w_plus": round(w_plus, 2),
         "p_exact": round(p_exact, 4),
-        "p_normal_approx": round(min(2.0 * (1.0 - _normal_cdf(max(z, 0.0))), 1.0), 4),
+        "p_normal_approx": round(min(2.0 * _normal_sf(max(z, 0.0)), 1.0), 4),
     }
 
 

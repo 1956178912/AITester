@@ -6,6 +6,46 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [Unreleased] — 2026-10-20 AD 轮：统计量渲染量级保持 + 正态尾部补集模式消除 + 数值精度丢失模式全仓普查（零 LLM，$0）
+
+> 本轮不新增能力：沿 AC-1 的缺陷类做全仓普查，处置 AC 轮登记的两项，同族其余点位逐点判定。
+
+### Fixed — `_fmt_stat_num` 把非零小量级一律印成 "0.0000"（AD-1，显示精度）
+
+- `{:.4f}` 对 |v| < 5e-5 的非零值静默印 "0.0000"——量级信息被销毁。AC-1 的
+  可见性缺口正是如此：p=5.890715e-26（χ²=111.01 的精确值）与 AC 轮修复前的
+  下溢 p=0.0 在报告里同形（都显示 "0.0000 (***)"），读者无法从账面区分
+  "精确算出的极小值"与"精度丢失"。
+- 修复：非零且 |v| < 1e-4 → `{:.2e}` 科学计数法（5.890715e-26 → "5.89e-26"、
+  1.811017e-07 → "1.81e-07"）；精确 0.0 仍渲染 "0.0000"（零是合法统计值，
+  如 χ²=0 / 无不一致对）；−0.0 保留符号（既有 `{:.4f}` 行为）；nan/inf 与
+  正常量级渲染不变。主批 plain-df 的报告单元格端到端锁定为 "5.89e-26"。
+- 历史产物不改写：canonical `statistical_report.md` 等既有报告保持原渲染
+  （日期化勘误纪律）；改进对未来的重新生成生效。
+
+### Fixed — `emse_testlevel_detection` 的正态尾部补集模式（AD-2）
+
+- `1.0 - _normal_cdf(z)` 与 AC-1 的 `1 - chi2.cdf` 同型：z ≳ 8.2 时
+  `1.0 - cdf` 因浮点精度静默变 0.0。改为 erfc 生存函数
+  `0.5·erfc(z/√2)`（z < ~27 内精确）。该字段 `round(..., 4)` 显示，
+  可显示区间内读数逐位不变——改动消除的是模式本身。
+
+### Verified — 数值精度丢失模式全仓普查（四类，逐点判定）
+
+| 模式 | 点位 | 判定 |
+|---|---|---|
+| 补集 `1 − cdf` | `statistical_analysis.mcnemar_test`（AC-1 已修）、`emse_testlevel_detection`（AD-2 已修） | 两处全处置 |
+| 补集 `1 − prod` | `statistical_analysis._pass_at_k_value` | 良性：下溢时真值即 1.0 到机器精度，且 k>n−c 已有恒 1.0 分支 |
+| 乘积 `p·(1−p)` | Wilson CI（`emse_stats_report` / `pass_matched_sensitivity`） | 良性：乘积非补集，p=1 时因子为精确 0 |
+| 除法 `(po−pe)/(1−pe)` | Cohen's κ（`e7_adjudication`） | 良性：pe≥1 已有守卫返回 None |
+| `exp(log 差)` | BF10（`emse_quixbugs_specir_expand` / `emse_optimization`） | 良性：下溢到 0.0 是"支持 H0"的 intended 语义 |
+| `inv_cdf(1−α/2)` | `emse_stats_report` z 临界值 | 良性：α 为常量 0.05，不接近 1 |
+| 浮点相等 `== 1.0` | 协议 0/1 值消费者（`four_channel_recompute` / `pass_matched_sensitivity` / `emse_quixbugs_specir_expand`） | 一致习语：生产者 `_compute_detection_rate` 只写字面量 1.0/0.0/None，无计算值相等 |
+| 灾难性抵消 | `rag_ab_experiment._var` / `stvr_statistical_analysis`（stdlib） | 良性：两遍法 `sum((x−m)²)` 数值稳定 |
+
+回归锁 `tests/test_ad_round_stat_display.py` **11 例**（AD-1 渲染 7 + AD-2 尾部 3 +
+端到端 1）；变异验证：两个修复分别回退，7 例目标转红、还原全绿。
+
 ## [Unreleased] — 2026-10-20 AC 轮：McNemar p 的 `1−cdf` 浮点下溢修复 + E7 工具链干跑 + AB-17 接线核查（零 LLM，$0）
 
 > 本轮不新增能力：一次独立复算审计抓到统计层一处数值缺陷并修复，另对 E7 裁决工具链与
