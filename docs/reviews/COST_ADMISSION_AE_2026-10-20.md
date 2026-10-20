@@ -192,6 +192,14 @@ AB-16/AB-17 把"什么算一条合格价目"收进了 `src.budget.pricing.entry_
 - 本轮改动面为 2 个 `experiments/` 脚本（`run_b8_injection.py`；`tests/` 3 文件）+ 文档，
   **`src/` + `config.py` 零改动**；`experiments/` 不在 `--cov=src` 口径内，覆盖率读数
   **预期不变**（实测与抖动见收口跑）；
+- 收口确认跑：`make gates` 全链 **rc=0**（链内 pytest **10323 passed / 5 skipped / 0 failed、
+  180.35s**；该链**不带 `--cov`**，与带覆盖率口径的 187.39s 不可互换引用）。首跑曾在零断言门禁
+  抓到 `test_repo_price_table_schema` 把断言抽进助手函数后**测试体内无断言信号**（违规 1）——
+  补测试体内显式断言后复跑全链转绿，如实登记为方法学自纠；
+- 本轮 `src/` + `config.py` 零改动（佐证 = 改动面清单）；`coverage.xml` 实测
+  **18439/18963 行 = 97.2367%**、**6653/7090 弧 = 93.8364%**，与 AD 两次读数各差 1 行 / 1 弧，
+  落在 AB-11 已登记的 `process_utils.py` 竞态分支抖动域内（±2 行 / ±1 弧），
+  按 `docs/MEASUREMENT_INTEGRITY.md` §14 只作观测、不作零改动的佐证；
 - ruff / mypy / 全部门禁绿；受保护工件一份未重写（重聚合逐字节相同由锁执行）。
 
 ## 8. 不得据本册引用
