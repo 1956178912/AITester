@@ -2,7 +2,10 @@
 
 # 数据卡（DATA CARD）
 
-最后更新：2026-10-15（§6 新增数据可用性声明（Data Availability
+最后更新：2026-10-19（Z 轮第三方审查 F18：§1/§2 区分"历史主批（n=50 / seed=42）"与
+"当前确认性主批（R-P0-2：87 任务 × 3 seeds {42,43,44} × 3 臂 = 261 行/臂，
+`--max-pattern-repeat 2`）"；50 为模板库唯一 pattern 数 / 历史主批任务数，
+不是当前主批任务数。此前 2026-10-15（§6 新增数据可用性声明（Data Availability
 Statement）：入库工件范围、按数据源引用的许可结论、未入库项（原始
 LLM 响应）与归档占位。此前 2026-10-14（§1 数据集总览刷新：新增 ULT 行（真实基准·变异
 主指标场景，2026-10-13/14 子集在用 n=25–46）+ QuixBugs 状态更新为
@@ -20,13 +23,13 @@ BugsInPy 无 SPDX 许可证〔L2 决策门槛新登记〕；AA2：§2 重复采�
 
 | 数据集 | 加载名 | 状态 | 用途 |
 |--------|--------|------|------|
-| 合成缺陷模板库 | `synthetic` | ✅ 主批次在用（n=50 任务；参数化 87/120 变体用于确认性/校准批次） | 主实验 / 消融 |
+| 合成缺陷模板库 | `synthetic` | ✅ 多批次在用（模板库 50 个唯一 pattern；当前确认性主批 = 87 任务 × 3 seeds {42,43,44} × 3 臂 = 261 行/臂；n=50/seed42 为**历史主批**） | 主实验 / 消融 |
 | QuixBugs（Python 子集，完整 50 程序） | `quixbugs` | ✅ 多批次在用（D1 A/B / spec_ir pilot / 新门校准 n=50；定位仍为 L1——近饱和+记忆污染声明见 §4） | 真实缺陷阶梯 L1 |
 | ULT（UnLeakedTestBench，本地克隆） | `ult` | ✅ 子集在用（ult_lite46 / specir 探针 / 新门校准 / Mut@k 子集，n=25–46；**detection 口径适配性另议**——生成测试零检出 0/45、0/24，gold 断言实测可在缺陷码上变红，属"LLM 测试不产红"） | 真实基准（mutation 主指标 Mut@k / 周期复杂度过滤 cyclomatic ≥10） |
 | BugsInPy | `bugsinpy` | 加载器就绪，**零实跑** | 真实缺陷阶梯 L2 |
 | SWE-bench Lite | `swe_bench` | 历史 0/20 冒烟（**2026-10-13 勘误：系 API 429 限流基础设施故障，无有效能力结论**） | 仓库级（靶点错位，见下） |
 
-## 2. 合成模板库（当前主批次基准）
+## 2. 合成模板库（历史主批与当前确认性主批基准）
 
 - **来源**：全部由项目作者手写（8 个 pattern 池按 name 去重共 50 个唯一
   缺陷 pattern，`BASELINE.yaml synthetic_templates` 为单一事实来源，
@@ -35,12 +38,20 @@ BugsInPy 无 SPDX 许可证〔L2 决策门槛新登记〕；AA2：§2 重复采�
   三件套；实例化仅追加噪声注释（`# noise_seed=<0-9999>`）并做 task_id
   中性化（`task_0000..`，P1-4 泄漏修复——此前文件名内嵌 pattern 名等于
   答案），gold 测试 import 同步重写（`_neutralize_gold_imports`）；
-- **主批次构成**：n=50、seed=42、3 基线；难度 L1-L5 分布
-  {15,10,10,8,7}；8 个跨文件任务；bug_type：assertion 30 / runtime 20；
-  pattern 存在重复采样（如 `import_chain_type_contract` 出现 10 次）——
-  AA2（2026-10-06）已提供缓解机制：`SyntheticDataset(max_pattern_repeat=...)` /
-  `run_benchmark --max-pattern-repeat`（opt-in，默认口径与 seed=42 复现性
-  不变）；后续重跑主实验建议启用该参数；
+- **历史主批构成（n=50 / seed=42；旧主批，勿与当前确认性主批混称）**：
+  3 基线；难度 L1-L5 分布 {15,10,10,8,7}；8 个跨文件任务；bug_type：
+  assertion 30 / runtime 20；pattern 存在重复采样（如
+  `import_chain_type_contract` 出现 10 次）——AA2（2026-10-06）已提供缓解机制
+  `SyntheticDataset(max_pattern_repeat=...)` / `run_benchmark --max-pattern-repeat`；
+- **当前确认性主批构成（R-P0-2，2026-10-06 三批）**：**87 任务 × 3 种子
+  {42,43,44} × 3 臂（`aitester` / `plain_llm` / `plain_llm_df`）=
+  261 行/臂**，跑批启用 `--max-pattern-repeat 2`（cap 2，R-P0-4）；种子语义 =
+  任务抽样 × 独立缓存命名空间（非固定任务集上的三次模型重复，见
+  `docs/VALIDITY.md` §4）。**50 是模板库唯一 pattern 数 / 历史主批任务数，
+  不是当前确认性主批的任务数**；数字单一事实来源 = `BASELINE.yaml`
+  `benchmark` 节，批次工件与合并统计见
+  `experiments/results/main_batch/statistical_report_3seed_pooled.md`
+  （`benchmark_synthetic_20261006_{140906,151907,164357}.json`）；
 - **gold 材料 schema**：`metadata["test_cases"]`（gold 测试）、
   `metadata["fixed"]`（单文件 gold 补丁）、`fixed_module_code`（跨文件）、
   `pass_to_pass`（P2P 回归集）。gold 材料只进结果行 `task_metadata`，

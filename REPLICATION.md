@@ -225,9 +225,12 @@ valid_apis, harness}`。因此：
    `pip install -q scipy matplotlib pandas`。
 3. **Step 3/6 运行单元测试**（`reproduce.sh:236-253`）：
    `python -m pytest tests/ -v --tb=short`，输出经 `tee` 写入
-   `experiments/results/test_output.log`（第 246 行）；测试失败默认**硬失败**
+   `experiments/results/test_output.log`（第 247 行）；测试失败默认**硬失败**
    退出（第 248-253 行），仅当显式设置
-   `REPRODUCE_ALLOW_TEST_FAILURES=1` 才告警继续。
+   `REPRODUCE_ALLOW_TEST_FAILURES=1` 才告警继续。F05 逃生：显式设置
+   `REPRODUCE_SKIP_TESTS=1` 时整个测试门跳过并打印醒目 WARN
+   （"本次复现缺少测试门，复现结论不含测试验证"）；默认不设仍跑测试且保持
+   fail-closed。
 4. **Step 4/6 准备数据集**（`reproduce.sh:255-278`，A02 修复后口径）：
    `--dataset swe_bench` 时从 HuggingFace 下载（quick=mini 50 任务 /
    full=lite 500 任务，第 257-270 行）；`--dataset examples` 使用内置示例数据集
@@ -247,8 +250,9 @@ valid_apis, harness}`。因此：
    密钥来自 `.env.local` 的 `LLM_1_API_KEY`（Step 1 只做存在性检查与告警，
    不会因为缺 Key 而终止）。
 6. **Step 6/6 生成可视化**（`reproduce.sh:334-337`）：
-   `python experiments/visualize_results.py`，生成柱状图、统计检验图、CSV
-   表格与 Markdown 汇总报告。
+   `python experiments/visualize_results.py --dataset "$DATASET"`（F06：显式
+   数据集来源——只取 `benchmark_<dataset>_*` 前缀产物，不按文件名倒序猜测），
+   生成柱状图、统计检验图、CSV 表格与 Markdown 汇总报告。
 
 **A02 修复（2026-10-18）：数据集分支与主批入口对齐**。`reproduce.sh` 现显式
 支持 `--dataset synthetic`：参数解析段归一 `synth` 别名并 fail-closed 未知值
@@ -270,6 +274,17 @@ quick 模式为 3 任务）。与主批**完整协议**（3 seed 42/43/44 × 3 �
 
 Docker 化路径同样落在 Step 5（`Dockerfile.repro:10-15` 的 `docker run ... bash
 reproduce.sh --dataset synthetic --full`），故需将 `.env.local` 只读挂载进容器。
+
+**F05 修复（2026-10-19 第三方审查，P2）**：`Dockerfile.repro` 通过
+`.dockerignore` 排除 `experiments/results`（`.dockerignore:49-53` 的 F05 注释），
+即镜像**不自含**该目录（镜像保持轻量、历史归档不随镜像分发）；但 Step 3 全量
+测试中多组用例以该目录下的历史归档工件为夹具。因此
+`-v $(pwd)/experiments/results:/workspace/experiments/results` 挂载的目录
+（`Dockerfile.repro:10-16`、`Dockerfile.repro:59-70` 的 F05 注释）
+**同时是历史输入（测试夹具）和输出（本次结果）**：复现时须挂载含归档结果的
+完整目录；空目录启动须显式 `REPRODUCE_SKIP_TESTS=1` 跳过 Step 3
+（`reproduce.sh:236-253`；该次结论不含测试验证，脚本打印醒目 WARN）。默认不设
+该变量时仍跑测试并保持 fail-closed。
 
 ## 6. 预期产物与已知偏差（Expected Artifacts and Known Deviations）
 

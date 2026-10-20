@@ -5,6 +5,20 @@
 - benchmark_synthetic_20261006_151907.json
 - benchmark_synthetic_20261006_140906.json
 
+## 2026-10-19 勘误（Z 轮第三方审查 F02：base 行分子改为配对口径）
+
+本报告 §3 的 `base` 行在 2026-10-06 版中把 A/B 两臂**整臂**阳性数
+当作分子、再除以**配对**共同任务数（aitester vs plain_llm_df：n=240，
+旧配对差 −0.329167）。分子与分母不同源：df 臂有 11 个阳性位于 A 臂
+None 被排除的 21 个任务中，被错误计入分子，导致效应差偏移 4.5833pp。
+2026-10-19 起 base 行的分子改用与 McNemar 检验同源的 `_pair_by_task`
+配对列表（共同任务内 A 阳性 38、B 阳性 106），正确经验差 =
+−68/240 = **−0.283333**。
+
+填充情形（None→0 / None→1）的配对总体本来就是全量 261 任务，数值与
+2026-10-06 版一致；双界不变式（风险差口径 worst ≤ base ≤ best）保持。
+本勘误只修正统计派生量；原始三批 JSON、漏斗计数及其它历史数字均未改动。
+
 ## 1. 修复通道漏斗（aitester 臂，多种子拼接）
 
 | 漏斗层 | 行数 | 占比（分母=上行） |
@@ -34,7 +48,7 @@
 | aitester vs plain_llm（None 21 行） | base | 240 | 38 | 4 | +0.142 | 27.23 | 1.8e-07 |
 | aitester vs plain_llm（None 21 行） | worst(None→0) | 261 | 38 | 4 | +0.130 | 27.23 | 1.8e-07 |
 | aitester vs plain_llm（None 21 行） | best(None→1) | 261 | 59 | 4 | +0.211 | 47.80 | 4.7e-12 |
-| aitester vs plain_llm_df（None 21 行） | base | 240 | 38 | 117 | -0.329 | 48.79 | 2.8e-12 |
+| aitester vs plain_llm_df（None 21 行） | base | 240 | 38 | 106 | -0.283 | 48.79 | 2.8e-12 |
 | aitester vs plain_llm_df（None 21 行） | worst(None→0) | 261 | 38 | 117 | -0.303 | 59.07 | 1.5e-14 |
 | aitester vs plain_llm_df（None 21 行） | best(None→1) | 261 | 59 | 117 | -0.222 | 31.85 | 1.7e-08 |
 

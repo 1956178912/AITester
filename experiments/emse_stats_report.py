@@ -69,6 +69,7 @@ from scripts.tools.power_analysis import (  # noqa: E402
     power_paired,
     required_n_paired,
 )
+from src.budget.pricing import entry_block_reason, load_table_json, models_layer  # noqa: E402
 from src.utils.atomic_io import atomic_write_json  # noqa: E402
 
 # ─── 口径常量（默认值 = 预注册 R-P0-2 三种子合并口径） ────────────────────
@@ -447,37 +448,102 @@ _PRICE_TABLE_PATH = Path(__file__).resolve().parents[1] / "experiments" / "price
 
 
 def _load_price_table(path: Path = _PRICE_TABLE_PATH) -> dict[str, dict[str, Any]]:
-    """读取价目表（缺失/损坏 → 空表；调用方按"价目未登记"口径输出，不编造价格）。"""
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-        models = data.get("models", {})
-        return models if isinstance(models, dict) else {}
-    except (OSError, ValueError):
-        return {}
+    """读取价目表（不可用时按空表计，但**每种机制各点一名**；调用方按"价目未登记"口径输出，不编造价格）。
+
+    AB-13（2026-10-20）改前实测：本函数原声称"缺失/损坏 → 空表"，而 `json.loads` 的六种合法非对象
+    顶层（list / str / int / float / bool / null）全部在 `data.get` 上抛 `AttributeError`——静默点与
+    崩溃点分岔；同时"文件不存在 / 语法错 / `models` 键缺席 / `models` 值为非对象"四种机制一律**无痕**
+    返回 `{}`，读起来跟"表里真的一个模型都没登记"同形。现按机制逐一点名后仍返回空表：返回域不变
+    （受保护读数仍可比），只是不再无痕。
+
+    AB-17（2026-10-20）：六套中文短语换成共享机制码——文件 → `models` 层的判定收口到
+    `load_table_json` / `models_layer`（`price_table_file_missing` /
+    `price_table_json_invalid:<T>` / `price_table_file_unreadable:<T>` /
+    `price_table_not_object:<T>` / `models_key_absent` / `models_not_object:<T>`），
+    同一份坏表在七个读点读出同一个名字；`{}` / `{"models": {}}` 保持静默（空对象没有形状可说，
+    沿用 statistical AB-14 已注册口径）。
+    """
+    data, reason = load_table_json(path)
+    if reason is None:
+        models, reason = models_layer(data)
+        if reason is None:
+            return models
+    print(
+        f"[emse-stats] 价目表不可用（{reason}）⇒ 按空表计；未登记模型的成本是 None，不是 0",
+        file=sys.stderr,
+    )
+    return {}
+
+
+class _UnsetPriceTable:
+    """`price_table` 形参的"未提供"哨兵，与调用方显式传下的 `None` 分开（AB-13，同 AB-12e 口径）。"""
+
+    def __repr__(self) -> str:
+        return "<unset>"
+
+
+_UNSET_PRICE_TABLE = _UnsetPriceTable()
 
 
 def cost_effectiveness_block(
     rows: list[dict[str, Any]],
-    price_table: dict[str, dict[str, Any]] | None = None,
+    price_table: dict[str, dict[str, Any]] | _UnsetPriceTable | None = _UNSET_PRICE_TABLE,
 ) -> dict[str, Any]:
     """单臂成本-效果：总 token / 检出数 / $/detection / tokens/detection。
 
     诚实条款（与价目表 _comment 同口径）：
     - 行的计费模型 = `token_usage.by_model` 的**单一**键（多模型混合行不猜，
       记 unpriceable）；该模型价目未登记（input/output 任一为 null）→ 不编造；
+    - **只把 USD 价目计入 `total_usd`**（AB-13）：改前实测 `qwen-long`（真表登记为 CNY 0.5/2.0）
+      被原样累加进名为 `total_usd` 的字段（1M in + 1M out 读出 2.5），币种不参与判定；
+      非 USD 与币种键缺席现在各归各的 reason 并剔除。字段名是 `usd` ⇒ 这里没有币种列可以
+      交代，非 USD 一律剔除；`statistical_analysis.cost_analysis` 的成本表**带币种列**，
+      同一个条目在那边可以计价但必须标成登记币种（AB-14 起两处共用同一个判定谓词，
+      差异只剩"有没有地方把单位写出来"，不再是两套口径）；
+    - 条目形状不合（非对象 / 空对象）不与"模型未登记"混成同一条 reason；条目级判定
+      （形状 → 空 → 币种 → 数字）与数字域（AB-16）收口到共享谓词 `entry_block_reason`——
+      `bool`/字符串/负数/`nan`/`inf` 不再被 `float()` 收下计价，按机制剔除而非崩溃；
     - 单模型行的行级 input/output 拆分归因于该模型（主批次即此情形，精确）；
     - 检出数 = `detection_rate == 1.0` 且 detection_rate 非 None 的行数；
     - $/detection = 可计价成本合计 / 检出数；检出数为 0 → None（不除零）；
     - tokens/detection 为无价目伴侣指标（不依赖价目表，永可计算——检出>0 时）。
+
+    AB-13 哨兵分离：改前 `price_table=None` 兼作"未提供"哨兵，实测**显式传 None 与省略形参
+    同样回头读盘**并给出金额（1M+1M token 读出 1.5），调用方的"这次不要计价"被读成"按
+    experiments/price_table.json 计费"。现在只有省略该形参才读盘；显式 `None` 与非对象价目
+    一律按空表计并留痕。真批次只用到 USD 已登记的 `deepseek-flash`，故三臂 $/task 读数一字不变。
     """
-    if price_table is None:
-        price_table = _load_price_table()
+    table: dict[str, dict[str, Any]]
+    if isinstance(price_table, _UnsetPriceTable):
+        table = _load_price_table()
+    elif price_table is None:
+        print(
+            "[emse-stats] cost_effectiveness_block 收到显式 price_table=None ⇒ 按空表计、不回头读盘"
+            "（改前这个 None 会去读盘上的真表并给出金额）",
+            file=sys.stderr,
+        )
+        table = {}
+    elif not isinstance(price_table, dict):
+        print(
+            f"[emse-stats] cost_effectiveness_block 收到非对象价目表（{type(price_table).__name__}）⇒ 按空表计",
+            file=sys.stderr,
+        )
+        table = {}
+    else:
+        table = price_table
     total_tokens = 0.0
     total_usd = 0.0
     n_unpriceable = 0
     n_priced = 0
     n_detections = 0
     n_detect_measurable = 0
+    reasons: dict[str, int] = {}
+
+    def _unpriceable(reason: str) -> None:
+        nonlocal n_unpriceable
+        n_unpriceable += 1
+        reasons[reason] = reasons.get(reason, 0) + 1
+
     for r in rows:
         usage = r.get("token_usage")
         if not isinstance(usage, dict):
@@ -493,12 +559,24 @@ def cost_effectiveness_block(
         by_model = usage.get("by_model")
         if not isinstance(by_model, dict) or len(by_model) != 1:
             if isinstance(by_model, dict) and by_model:
-                n_unpriceable += 1
+                _unpriceable("multi_model_row")
             continue
         model = next(iter(by_model))
-        price = price_table.get(model)
-        if not price or price.get("input_per_mtok") is None or price.get("output_per_mtok") is None:
-            n_unpriceable += 1
+        # AB-17：改前 `table.get(model)` 的 `is None` 把"键缺席"与"值为 null"共读成
+        # `model_unregistered`（AB-11 判据）；现在值 null 交条目谓词读
+        # `entry_not_object:NoneType`，"未登记"只剩"真的没这个键"。
+        if model not in table:
+            _unpriceable("model_unregistered")
+            continue
+        price = table[model]
+        # AB-14 判定、AB-15d 机制名与 AB-16 数字域都取自共享事实源（`src.budget.pricing`）。
+        # 改前这里是仓内第二套归因词汇（本文件自派 `currency_absent` / `currency_not_usd:*`
+        # 的 if/elif 链）+ `float()` 直收（`True` 当 1、`"1.0"` 收下、`-1.0` 编出负数金额、
+        # `[1.0]` 抛 TypeError、`nan`/`inf` 累成非有限 `total_usd`）；替换后对可达状态逐码不变，
+        # 坏数字从"计价"改成按机制剔除。
+        reason = entry_block_reason(price)
+        if reason is not None:
+            _unpriceable(reason)
             continue
         it = usage.get("input_tokens") or 0
         ot = usage.get("output_tokens") or 0
@@ -506,7 +584,7 @@ def cost_effectiveness_block(
             float(it) * float(price["input_per_mtok"]) + float(ot) * float(price["output_per_mtok"])
         ) / 1_000_000.0
         n_priced += 1
-    return {
+    out: dict[str, Any] = {
         "total_tokens": round(total_tokens, 2),
         "n_rows_with_tokens_positive": n_priced + n_unpriceable,
         "n_priced_rows": n_priced,
@@ -517,6 +595,10 @@ def cost_effectiveness_block(
         "usd_per_detection": (round(total_usd / n_detections, 6) if n_detections else None),
         "tokens_per_detection": (round(total_tokens / n_detections, 2) if n_detections else None),
     }
+    # 披露键只在真发生剔除时写入：真批次三臂 n_unpriceable 均为 0，返回域因此逐键不变。
+    if reasons:
+        out["n_unpriceable_reasons"] = dict(sorted(reasons.items()))
+    return out
 
 
 # ─── 修正口径（可选，opt-in） ────────────────────────────────────────────
@@ -763,12 +845,20 @@ def _render_cost_section(arms_data: dict[str, dict[str, Any]]) -> list[str]:
         "计价口径（与 `experiments/price_table.json` 的诚实条款一致）：行的计费模型取 "
         "`token_usage.by_model` 的**单一**键（多模型混合行不猜，计不可计价）；"
         "该模型价目未登记（input/output 任一为 null）→ 不编造价格；"
+        "**只有币种为 USD 的价目参与 `total_usd`**（AB-13：非 USD 与币种键缺席一律计不可计价，"
+        "本表不存在把人民币价目累加进美元字段这条通道）；"
         "单模型行的行级 input/output 拆分归因于该模型（主批次即此情形，精确）。",
         "检出数 = `detection_rate == 1.0` 且非 None 的行（None 不进分母）；"
         "检出数为 0 时 $/detection 与 tokens/detection 均记 `—`（不除零、不臆造）。",
         "tokens/detection 为无价目伴侣指标（不依赖价目表），可与 $/detection 互证。",
         "",
     ]
+    for arm, data in arms_data.items():
+        eff = data.get("cost_eff") or {}
+        reasons = eff.get("n_unpriceable_reasons")
+        if reasons:
+            shown = "、".join(f"{k}×{v}" for k, v in reasons.items())
+            lines += [f"- `{arm}` 不可计价行的机制点名：{shown}（`total_usd` 只含 USD 已登记价目行）。", ""]
     return lines
 
 

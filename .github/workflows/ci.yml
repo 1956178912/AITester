@@ -468,7 +468,10 @@ jobs:
         # 只跑 3.14：登记册声明的是 3.14 档实测值（两位小数），其余矩阵档的
         # 覆盖率可能合法地相差 ±0.0x pp；文档↔工件对账支路仍在上游步骤里对
         # 全部三档生效。
-        # 口径说明：对账容差 ±0.10pp（`_REGISTER_TOLERANCE_PP`），**不是**逐位相等。
+        # 口径说明：对账容差 ±0.20pp（`_REGISTER_TOLERANCE_PP`），**不是**逐位相等。
+        # AA 轮（2026-10-19）核对：此处原写 ±0.10pp，是 U 轮校准（同一 3.14、同
+        # 一份源码 ubuntu 92.66 vs macOS 92.79，跨平台分支差 0.13pp > 0.10pp）之后
+        # 漏改的注释——代码值一直是 0.20，注释留在旧口径。下面的实测依据保留原文。
         # 依据（2026-10-16 实测，同一份源码连跑多次全量）：分支覆盖曾得
         # 5460/6236=87.56% 与 5459/6236=87.54%（单分支 = 0.016pp）；graph/nodes.py
         # 行覆盖曾得 0.7776 与 0.7862（约 6 行 → 总行覆盖 0.035pp）。即本仓库的
@@ -499,8 +502,11 @@ jobs:
       - name: Coverage ratchet gate (W2 渐进式紧箍，回退即失败)
         # W2（2026-10-05 审查落地）：静态门槛（85/77）之上的只升不降水位门禁。
         # 水位存 docs/coverage_ratchet.yaml（随提交演进）——本地跑
-        # `python scripts/gates/coverage_ratchet.py` 实测高于水位+步长(0.5pp)时自动
-        # 上调并随改动提交；CI 本步骤以 --check 模式阻断任何回退。消除
+        # `python scripts/gates/coverage_ratchet.py --allow-bump` 在实测高于水位
+        # +步长(0.5pp)时上调并随改动提交；AA-4（2026-10-19）起默认模式**只提示
+        # 满足条件、不写回**，因为权威口径是本步骤所在的 CI ubuntu 3.14 档
+        # （跨平台分支差实测 0.13pp：拿本地 macOS 的 coverage.xml 抬水位会让本
+        # 步骤必红）。CI 本步骤以 --check 模式阻断任何回退。消除
         # "贴基线设门槛 + 为门槛写测试"的动机（门禁从"不退化"变"单调提升"）。
         run: python scripts/gates/coverage_ratchet.py --check --coverage-xml coverage.xml
 

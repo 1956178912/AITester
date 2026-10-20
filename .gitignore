@@ -180,6 +180,13 @@ experiments/results/main_batch/**
 !experiments/results/main_batch/*.json
 !experiments/results/main_batch/*.md
 !experiments/results/main_batch/SHA256SUMS
+# AA 轮（2026-10-19）E7 裁决录入表放行：6 份空白表（rater{A,B}×n{8,41,72}）
+# 是 HUMAN_ADJUDICATION_PROTOCOL.md §7.1 的备料工件、已进 main_batch 的
+# SHA256SUMS（受 --verify 校验），但被上面的通配排除压掉——`git status`
+# 不显示、`check_artifacts_tracked` 的 MANIFEST 也未登记，属"被 .gitignore
+# 忽略（永远不可能入库）"型静默缺口（该门禁 docstring 点名的失效形态）。
+# 裁决人填写用副本，不得原地改写（协议 §7.1 填表位置纪律）。
+!experiments/results/main_batch/e7_entry_rater*.csv
 # U1：traces/ 任务级执行轨迹（.trace.jsonl）一并入库——落盘前已过
 # observability/trace.py 脱敏管道（task UUID 为 <REDACTED_KEY> 占位），
 # 且经密钥/本机路径扫描零命中；入库使统计报告数字可逐任务复核

@@ -1,7 +1,8 @@
 # 人工裁决操作协议（E7 修复上限分层抽样人工复核）
 
-最后更新：2026-10-15（EMSE 批次：把预注册 E7 从"设计描述"落成**可执行协议**——
-抽样框、量表、双人独立、冲突解决、信度统计量与登记流程；E7 仍**未执行**）
+最后更新：2026-10-19（AA 批次：新增 §7.1 **可机器校验的执行面**——CSV 录入表、量表校验、
+κ 合并与 bootstrap CI，外加 6 份空白录入表备料；EMSE 批次（2026-10-15）把预注册 E7 从
+"设计描述"落成可执行协议；**E7 仍未执行**）
 
 > **性质**：单语文档（中文），无英文配对——本文是**操作协议/审计记录**，按
 > `scripts/gates/check_bilingual_docs.py` 的维护约定登记豁免（见该文件
@@ -35,6 +36,12 @@
 - **本协议落盘后的口径**：该 grep 会因本文与 `docs/VALIDITY.md` 新增**说明性**命中
   （如何计算 Kappa），但**没有任何一行主张 Kappa 工件已存在**；在 E7 真正执行并登记之前，
   项目对外材料**不得**声称人工参与、人工裁决或评分者一致性。
+- **AA 轮（2026-10-19）复算同一命令**：命中数从 3 增至 **32**（其中 20 行来自本文自身：
+  §6 统计量定义 + §7.1 执行面），说明性命中增多不改变结论——**仍无任何 Kappa 工件**。
+  两点执行细节：① 该命令须按 `--include='*.md'` 加引号执行，zsh 下未加引号会被 glob
+  展开并报 `no matches found` 而**假报 0**；② 该陈述现已不只靠文档：
+  `tests/test_e7_adjudication.py::TestArtifactSurface` 机读锁定 6 份空白录入表判定列全空、
+  `experiments/results/` 下无 `E7_KAPPA.json`、以及本文 §0 标题原文仍在。
 
 ---
 
@@ -279,10 +286,12 @@ p_e = (1/N²) * Σ_i (n_i+ * n_+i)            # 期望一致率（行边际 × �
       `patch_plausible=1` 框一致；如不一致，按 §2"抽样框完整性前提"登记差异。
 - [ ] **步骤 2（备料）**：以 `experiments/results/main_batch/e7_review_worksheet.md`
       为模板生成/复用工作表；确认每节四段素材与 diff 段完整（材料缺失行记"不可判"）。
+      判定载体改用 §7.1 的 CSV 录入表（6 份空白表已备料，判定列全空）。
 - [ ] **步骤 3（独立判定）**：两名裁决人各持独立副本完成全部行；完成后各自固化
-      （建议同时记录完成时间戳与文件 sha256）。
+      （建议同时记录完成时间戳与文件 sha256），并各跑一次 §7.1 的 `validate`
+      ——**校验通过（返回码 0）才算固化**，缺行/越界/改行一律先改再进下一步。
 - [ ] **步骤 4（合并与信度）**：第三方合并 → 计算首轮 `p_o` / `p_e` / κ / bootstrap CI /
-      5×5 矩阵（脚本入库）。
+      5×5 矩阵（脚本入库；即 §7.1 的 `merge`，工件为 `E7_KAPPA.json` + `E7_KAPPA.md`）。
 - [ ] **步骤 5（冲突解决）**：按 §5 讨论 → 必要时第三裁决人 → 形成终判。
 - [ ] **步骤 6（结果登记）**：把终判回填 `experiments/results/main_batch/e7_repair_sample_candidates.md`
       的"人工判定"列（工作表表尾原文要求）；按 §1 修订后的判定规则更新
@@ -293,10 +302,53 @@ p_e = (1/N²) * Σ_i (n_i+ * n_+i)            # 期望一致率（行边际 × �
 
 ---
 
+### 7.1 执行面（AA 轮 2026-10-19 落地，零 LLM）
+
+本协议原本只规定"该怎么做"，而判定载体是**勾选式 Markdown**——它的失效方式全是静默的：
+漏勾一行、把 `plausible_overfit` 打成 `plausible`、临时新增第六类、两份副本的候选顺序
+弄反，每一种都不报错，却直接进入 κ 的分母与混淆矩阵。AA 轮把裁决面换成 CSV（一行一候选、
+判定值限定量表），由 `experiments/e7_adjudication.py` 承担三段可机器校验的动作：
+
+| 动作 | 命令 | 机器保证什么 |
+|---|---|---|
+| 生成录入表 | `.venv/bin/python experiments/e7_adjudication.py template --worksheet experiments/results/main_batch/e7_review_worksheet.md --rater A --output experiments/results/main_batch/e7_entry_raterA_n8.csv`（此即 6 份备料表的生成命令；**填写请用副本**，见下方纪律） | 工作表**只读**（§4 第 2 条"备料工件本体不得改写"由 sha256 锁守护）；一行一候选；判定列留空 |
+| 填后固化校验 | `.venv/bin/python experiments/e7_adjudication.py validate --sheet <filled.csv> --worksheet <worksheet>`（进度检查加 `--allow-incomplete`） | 缺行 / 候选号重复或非整数 / 量表越界 / `task_id` 被改写 / 候选不在抽样框 → 逐条报错并返回码 1，**不静默补默认** |
+| 第三方合并 | `.venv/bin/python experiments/e7_adjudication.py merge --sheet-a A.csv --sheet-b B.csv [--sheet-c C.csv] --output-dir experiments/results/<E7 裁决批次目录>` | 合并前强制两份各自校验；两表候选集不一致**抛错而非静默取交集**（取交集会把"某一侧漏做 3 行"洗成一次合法的 N 缩小）；"不可判"行出分母但逐行登记为材料缺口；产出 `E7_KAPPA.json` + `E7_KAPPA.md` |
+
+**口径固定**（§6 的机器形式）：主统计量 = 未加权 Cohen's κ（A vs B）；bootstrap 百分位 CI
+为 10,000 次、seed=42，且这两个常量与 `experiments/statistical_analysis.py` 的
+`_BOOTSTRAP_N_RESAMPLES` / `_BOOTSTRAP_SEED` **等值由回归锁检查**（任一处脱钩即红）。
+第三裁决人只进 `secondary_pairwise`，不得替换主口径（§6 第 5 条）。报告函数
+**零再计算**：所有数字原样取自 report，κ 的用途边界（§6 第 3 条）作为固定文本写进报告抬头。
+
+**回归锁与变异验证**：`tests/test_e7_adjudication.py`（53 例；新模块 253 条语句中仅 2 行
+未覆盖——`sys.path` bootstrap 与 `__main__` 守卫，与仓内其余实验脚本同口径）。15 项变异
+**全部被捕获**，其中两项是首轮漏网、补锁后才捕获的：把"不可判"也算作分歧行、
+报告里把计数顺手改成百分比。算术锚在手算样例上（6 行、3 行一致 → p_o=0.5、p_e=1/3、
+κ=0.25，落 Fair 带），故统计量本身不依赖任何运行时库。
+
+**"E7 仍未执行"现在是机读事实**，而不只是文档陈述：三份路径 × 两名裁决人共 6 份空白录入表
+（`e7_entry_rater{A,B}_{n8,n41,n72}.csv`，判定列与时间戳列全空）已备料；
+`experiments/results/` 下**必须不存在** `E7_KAPPA.json`；本文 §0 标题必须仍是
+"E7 尚未执行，且不存在任何 Kappa 工件"。三条各由一例测试锁定——E7 真正产出 κ 工件时
+**必须**连同 §0 的状态声明一起改写，否则测试红（预期会红的反面锁定，与 §2.1 的嵌套性锁同类）。
+
+> **填表位置纪律（AA 轮新增，与工件清单有关）**：这 6 份空白表已进
+> `experiments/results/main_batch/SHA256SUMS`（2040 项，`--verify` 为 CI 步骤），
+> 因此**它们是受清单校验的备料工件**：裁决人须把副本拷到裁决批次目录后再填写，
+> 不得原地改写 `main_batch/` 内的空白表——原地填写会让 `checksum_results --verify`
+> 直接判红（内容不符）。填完的两份表与 `merge` 工件一并落在
+> `experiments/results/<E7 裁决批次目录>/`，与该批判定表同批归档、同批入清单。
+
+---
+
 ## 8. 待补充项
 
 - **[待补充：裁决人名单与时间安排]**——需固定：两名独立裁决人姓名/角色、第三裁决人、
   合并与统计的执行人、判定开始与截止日期、冲突解决会议时间、结果登记责任人。
   该占位符须在步骤 0 登记时一并填写；填写前不得开始判定。
 - 附带待定：是否按 §2.1 路径 B 放大到 ≥40 行（决策须在取数前写入预注册执行记录）；
-  bootstrap CI 的重采样脚本落盘路径；"不可判"行的最终计数与材料缺口说明。
+  "不可判"行的最终计数与材料缺口说明。
+- ~~bootstrap CI 的重采样脚本落盘路径~~ **已定（AA 轮 2026-10-19）**：脚本
+  `experiments/e7_adjudication.py`（口径与 `experiments/statistical_analysis.py` 等值，
+  由回归锁守护），工件落盘路径由 `merge --output-dir` 指定，须与该批判定表同批归档。

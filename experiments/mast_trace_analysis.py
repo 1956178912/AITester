@@ -15,7 +15,13 @@
 - 臂归属优先取 trace 内 task_start 事件的 meta.baseline（脱敏管道
   保留该字段），缺失时回退文件名约定（*_aitester_<ts>.trace.jsonl），
   均不可得归入 unknown 桶并如实报告；
-- 损坏 / 空文件计入 damaged，不静默丢弃。
+- 损坏文件计入**所属臂**的 damaged（归臂口径同完好文件），并在报告里披露
+  "坏行前已解析却被作废的记录数"；空文件（能读、无事件）计入该臂文件数而
+  不是 damaged——两者口径不同，不得混写。
+- 可解析但不是对象的行（AB-12c）既不是坏行、也不参与判定，必须逐行计数并按类型
+  留痕；**整份都是非对象行**的文件不计入有效文件数，也不与"能读、无事件"的空文件
+  混同——后者才是真的零事件。披露行只在非对象行真的出现时才写进报告，
+  因此 0 实例时入库报告逐字节不变（由锁执行，不靠措辞承诺）。
 
 用法：
     python experiments/mast_trace_analysis.py \
@@ -55,15 +61,32 @@ def _arm_from_filename(name: str) -> str | None:
     return m.group("arm") if m else None
 
 
-def parse_trace_file(path: Path) -> dict[str, Any] | None:
-    """读取单个 trace JSONL 文件。
+def parse_trace_file(path: Path) -> dict[str, Any]:
+    """读取单个 trace JSONL 文件（读到坏行也返回结构，坏点留痕）。
 
     Returns:
-        {"arm": str | None, "task_id": str | None, "records": [...]}；
-        文件损坏 / 非法 JSON → None（调用方计入 damaged，不静默丢弃）。
+        {
+          "arm": str | None, "task_id": str | None, "records": [...],
+          "damaged": bool，                    # True = 打不开 / 读到坏行
+          "damage": str | None,                # 机制名（异常类型）；未损坏为 None
+          "records_before_damage": int,        # 坏行之前已解析出的记录数
+          "non_object_records": int,           # 可解析但不是对象的行数（AB-12c）
+          "non_object_shapes": {类型名: 行数},  # 机制留痕：整份是数组还是逐行是字符串
+          "non_object_only": bool,             # 无对象记录却有非对象行（≠ 零事件）
+        }
+
+    损坏文件的 ``records`` 仍不参与模式判定（判定分母口径不变），但"坏行前已
+    解析出 N 条"必须留痕并上报——**整份作废是一个读数，静默作废才是缺陷**。
+
+    非对象行（AB-12c）与坏行是两类通道：坏行走 ``damage``（语法层面读不出来），
+    非对象行是"读得出来但形状不合"。二者都不得无痕消失——尤其"整份都是非对象行"
+    必须与"文件真的没有任何事件"分开，否则形状不合会被读成零命中。
     """
     records: list[dict[str, Any]] = []
     meta: dict[str, Any] = {}
+    damage: str | None = None
+    non_object_records = 0
+    non_object_shapes: dict[str, int] = {}
     try:
         with open(path, encoding="utf-8") as f:
             for line in f:
@@ -75,11 +98,25 @@ def parse_trace_file(path: Path) -> dict[str, Any] | None:
                     records.append(rec)
                     if rec.get("event") == "task_start" and isinstance(rec.get("meta"), dict):
                         meta = rec["meta"]
-    except (OSError, json.JSONDecodeError):
-        return None
+                else:
+                    shape = type(rec).__name__
+                    non_object_records += 1
+                    non_object_shapes[shape] = non_object_shapes.get(shape, 0) + 1
+    except (OSError, json.JSONDecodeError) as e:
+        damage = type(e).__name__
     arm = str(meta.get("baseline") or "").strip() or None
     task_id = str(meta.get("dataset_task_id") or "").strip() or None
-    return {"arm": arm, "task_id": task_id, "records": records}
+    return {
+        "arm": arm,
+        "task_id": task_id,
+        "records": records,
+        "damaged": damage is not None,
+        "damage": damage,
+        "records_before_damage": len(records) if damage is not None else 0,
+        "non_object_records": non_object_records,
+        "non_object_shapes": non_object_shapes,
+        "non_object_only": damage is None and not records and non_object_records > 0,
+    }
 
 
 def analyze_traces(traces_dir: Path) -> dict[str, Any]:
@@ -88,32 +125,66 @@ def analyze_traces(traces_dir: Path) -> dict[str, Any]:
     Returns:
         {
           "total_files": int, "damaged_files": int,
-          "arms": {臂名: {"files": int, "damaged": int,
+          "damaged_files_with_records": int, "damaged_records_before_damage": int,
+          "non_object_only_files": int, "files_with_non_object_lines": int,
+          "non_object_lines": int, "non_object_shapes": {类型名: 行数},
+          "non_object_files": [文件名],
+          "arms": {臂名: {"files": int, "damaged": int, "non_object_only": int,
                           "pattern_files": {模式名: 命中文件数}}},
           "patterns_meta": {模式名: {"mast_class": ..., "mast_category": ...}},
         }
     """
     files = sorted(traces_dir.glob("*.trace.jsonl"))
     arms: dict[str, dict[str, Any]] = defaultdict(
-        lambda: {"files": 0, "damaged": 0, "pattern_files": defaultdict(int), "category_files": defaultdict(int)}
+        lambda: {
+            "files": 0,
+            "damaged": 0,
+            "non_object_only": 0,
+            "pattern_files": defaultdict(int),
+            "category_files": defaultdict(int),
+        }
     )
     patterns_meta: dict[str, dict[str, Any]] = {}
     total = 0
     damaged_total = 0
+    damaged_with_records = 0
+    damaged_records = 0
+    non_object_only_total = 0
+    files_with_non_object_lines = 0
+    non_object_lines = 0
+    non_object_shapes: dict[str, int] = {}
+    non_object_files: list[str] = []
     for path in files:
         total += 1
         parsed = parse_trace_file(path)
-        if parsed is None:
-            damaged_total += 1
-            arms["unknown"]["damaged"] += 1
-            continue
+        # 归臂口径与完好文件一致（meta.baseline → 文件名 → unknown）：损坏文件
+        # 不得整体落到 unknown 桶，否则报告说"计入各臂 damaged"而代码在做另一件事。
         arm = parsed["arm"] or _arm_from_filename(path.name) or "unknown"
         stats = arms[arm]
-        if not parsed["records"]:
-            # 空 trace（无事件）——计入该臂文件数但无模式命中面
-            stats["files"] += 1
+        if parsed["non_object_records"]:
+            non_object_lines += parsed["non_object_records"]
+            for shape, n in parsed["non_object_shapes"].items():
+                non_object_shapes[shape] = non_object_shapes.get(shape, 0) + n
+            non_object_files.append(path.name)
+        if parsed["damaged"]:
+            damaged_total += 1
+            stats["damaged"] += 1
+            if parsed["records_before_damage"]:
+                damaged_with_records += 1
+                damaged_records += parsed["records_before_damage"]
+            continue
+        if parsed["non_object_only"]:
+            # 一行对象记录都没有：这是"形状不合的读数"，不是"零事件的有效 trace"，
+            # 计入该臂文件数会把分母撑大、把命中率压低（AB-12c）。
+            non_object_only_total += 1
+            stats["non_object_only"] += 1
             continue
         stats["files"] += 1
+        if parsed["non_object_records"]:
+            files_with_non_object_lines += 1
+        if not parsed["records"]:
+            # 空 trace（无事件）——计入该臂文件数但无模式命中面
+            continue
         report = match_failure_patterns(parsed["records"])
         for name, info in report["patterns"].items():
             patterns_meta[name] = {"mast_class": info.get("mast_class"), "mast_category": info.get("mast_category")}
@@ -133,6 +204,13 @@ def analyze_traces(traces_dir: Path) -> dict[str, Any]:
     return {
         "total_files": total,
         "damaged_files": damaged_total,
+        "damaged_files_with_records": damaged_with_records,
+        "damaged_records_before_damage": damaged_records,
+        "non_object_only_files": non_object_only_total,
+        "files_with_non_object_lines": files_with_non_object_lines,
+        "non_object_lines": non_object_lines,
+        "non_object_shapes": non_object_shapes,
+        "non_object_files": non_object_files,
         "arms": dict(arms),
         "patterns_meta": patterns_meta,
     }
@@ -145,6 +223,23 @@ def render_markdown(result: dict[str, Any], traces_dir: Path) -> list[str]:
         "",
         f"- 数据源：`{traces_dir}`（{result['total_files']} 个 trace 文件，"
         f"损坏 {result['damaged_files']} 个——损坏计入各臂 damaged，不静默丢弃）",
+    ]
+    if result["damaged_files"]:
+        lines.append(
+            f"- 损坏留痕：{result['damaged_files_with_records']} 个损坏文件在坏行之前已解析出 "
+            f"{result['damaged_records_before_damage']} 条记录；这些记录不参与模式判定"
+            "（该文件整体按损坏计），此处只披露被作废的量，归臂口径与完好文件一致"
+        )
+    if result["non_object_only_files"] or result["non_object_lines"]:
+        shapes = "、".join(f"{k} {v} 行" for k, v in sorted(result["non_object_shapes"].items()))
+        lines.append(
+            f"- 非对象行留痕：{result['non_object_lines']} 行可解析但不是对象（{shapes}），"
+            f"分布在 {len(result['non_object_files'])} 个文件——非对象行不是坏行（坏行走损坏通道），"
+            f"但也不能当成一次有效读数；其中 {result['non_object_only_files']} 个文件一行对象记录都没有，"
+            f"**不计入下面的有效文件数**（另有 {result['files_with_non_object_lines']} 个有效文件混有非对象行，"
+            "其对象记录仍参与判定，被丢弃的行数已在上面的总数里）"
+        )
+    lines += [
         "- 判定口径：src/observability/agent_telemetry.match_failure_patterns"
         "（Y2 MAST 14 类映射；budget_early_stop / 伞形两类无对应类显式 None）",
         "- 观测单元 = 单 trace 文件（单任务×单臂×单次运行）；命中率 = 命中文件数 / 该臂有效文件数",
@@ -160,7 +255,11 @@ def render_markdown(result: dict[str, Any], traces_dir: Path) -> list[str]:
     for arm in sorted(result["arms"]):
         stats = result["arms"][arm]
         n_files = stats["files"]
-        lines += [f"## 臂：{arm}", "", f"有效文件数：{n_files}（损坏 {stats['damaged']}）", ""]
+        n_shape = stats["non_object_only"]
+        head = f"有效文件数：{n_files}（损坏 {stats['damaged']}）"
+        if n_shape:
+            head = f"有效文件数：{n_files}（损坏 {stats['damaged']}、非对象行独占 {n_shape} 份不计入分母）"
+        lines += [f"## 臂：{arm}", "", head, ""]
         if n_files == 0:
             lines += ["（无有效 trace——无分布可报）", ""]
             continue

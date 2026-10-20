@@ -505,13 +505,14 @@ def generation_summary(generations: list[dict[str, Any]], price_table: dict[str,
     output_tokens = sum(int(u.get("output_tokens", 0) or 0) for u in usages)
     llm_calls = sum(int(u.get("llm_calls", 0) or 0) for u in usages)
     cache_hits = sum(int(u.get("cache_hits", 0) or 0) for u in usages)
+    model = str(generations[0].get("model") or "unknown") if generations else "unknown"
     cost = gen.estimate_cost_usd(
-        str(generations[0].get("model") or "unknown") if generations else "unknown",
+        model,
         {"input_tokens": input_tokens, "output_tokens": output_tokens},
         price_table,
     )
     tasks_with_examples = [g for g in generations if g.get("examples")]
-    return {
+    summary = {
         "n_tasks": len(generations),
         "status_counts": dict(sorted(status_counts.items())),
         "n_tasks_with_examples": len(tasks_with_examples),
@@ -522,7 +523,7 @@ def generation_summary(generations: list[dict[str, Any]], price_table: dict[str,
         "input_tokens": input_tokens,
         "output_tokens": output_tokens,
         "estimated_cost_usd": cost,
-        "model": str(generations[0].get("model") or "unknown") if generations else "unknown",
+        "model": model,
         "per_task": [
             {
                 "task_id": g.get("task_id"),
@@ -536,6 +537,12 @@ def generation_summary(generations: list[dict[str, Any]], price_table: dict[str,
             for g in generations
         ],
     }
+    # AB-15c：算不出钱时把**机制名**随工件带走（判定与归因同源，见
+    # `spec_examples_generator.price_block_reason_for`）。披露键只在真拒绝时写入
+    # ⇒ 已入库的 P-1 工件（USD 已计价）返回域逐键不变。
+    if cost is None:
+        summary["cost_unpriced_reason"] = gen.price_block_reason_for(model, price_table)
+    return summary
 
 
 def _mean(values: list[Any]) -> float | None:
@@ -575,10 +582,18 @@ def render_readme(report: dict[str, Any]) -> str:
         f"- 任务数 {generation.get('n_tasks')}；状态分布 {generation.get('status_counts')}；"
         f"有示例任务 {generation.get('n_tasks_with_examples')}；示例总数 {generation.get('n_examples_total')}"
     )
+    est_cost = generation.get("estimated_cost_usd")
+    if est_cost is None:
+        # AB-15c：改前这里无条件给 `estimated_cost_usd` 加 `$` 前缀，实测未登记模型与
+        # `qwen-long`（CNY）都落 `**$None**`、`0.0` 落 `**$0.0**`——"无法估算"与"确实没花钱"
+        # 只差一个词，却共用同一个美元形状，且没有一行说清是哪条机制。
+        cost_txt = f"**无法估算（{generation.get('cost_unpriced_reason') or '机制未记录'}）**"
+    else:
+        cost_txt = f"**${est_cost}**"
     add(
         f"- LLM 调用 {generation.get('llm_calls')}（缓存命中 {generation.get('cache_hits')}）；"
         f"tokens in/out = {generation.get('input_tokens')}/{generation.get('output_tokens')}；"
-        f"估算成本 **${generation.get('estimated_cost_usd')}**（价目：experiments/price_table.json）"
+        f"估算成本 {cost_txt}（价目：experiments/price_table.json）"
     )
     add("")
     add("## 3. A/B 前后对照（oracle 测试级；分母 = 可分类 oracle 测试数）")

@@ -1,6 +1,8 @@
 # W2 覆盖率渐进式紧箍水位（scripts/gates/coverage_ratchet.py 读写，请勿手降）
 #
-# 规则：本地运行 ratchet（无 --check）实测高于水位+步长时自动上调并写回，
+# 规则：本地运行 ratchet（无 --check）实测高于水位+步长时**只提示满足上调条件**；
+# 写回需显式 --allow-bump（AA-4 2026-10-19：水位必须来自 CI 阻断档 ubuntu 3.14 口径，
+# 跨平台分支差实测 0.13pp，用本地 macOS 实测抬水位会让 CI 必红），
 # 由贡献者随改动提交；水位只升不降。CI 以 --check 模式阻断回退。
 # 静态硬下限（行 85 / 分支 77）仍由 check_branch_coverage.py 把守。
 line_total: 96.40

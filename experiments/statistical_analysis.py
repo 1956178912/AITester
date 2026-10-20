@@ -85,6 +85,12 @@ if str(PROJECT_ROOT) not in sys.path:
 from experiments._row_pairing import latest_binary_by_task, latest_rows_by_task  # noqa: E402
 from experiments.bayesian_paired import bayesian_paired_analysis, interpret_bayes  # noqa: E402
 
+# AB-14（2026-10-20）：币种判定的唯一事实源在 `src.budget.pricing.currency_status`。
+# 本文件此前对取到的币种再加一次美元兜底——键缺席、值为 null、值为空白三种事实一律印成
+# "USD"，且币种集合大小写敏感（`USD` 与 `usd` 并存时整臂成本静默降为 None 而
+# `missing_models` 为空，报告落一行"未计价——（缺: ）"无因可查）。
+from src.budget import pricing  # noqa: E402
+
 # 参与对比的基线（AITester 完整管线 + 两个简化基线）
 # AC4（2026-10-06 第十轮审查 T-P0-5 伴随修复）：plain_llm_df（检出优先
 # 协议归因基线，X1）升为统计加载一等基线——生死实验（n=87×3 臂×3 种子）
@@ -629,19 +635,31 @@ def bh_fdr_correct(
 
     适用于多组对比（如 AITester vs plain_llm、AITester vs single_agent、
     plain_llm vs single_agent 同时做 McNemar）——不校正时"至少一个
-    假阳性"概率膨胀（3 组 × 0.05 = 14% 假阳性）。BH 法：
+    假阳性"概率膨胀（3 组 × 0.05 = 14% 假阳性）。标准 BH 程序：
     1. 排序 p 值 p_(1) ≤ ... ≤ p_(m)；
-    2. 阈值 = i/m × alpha；
-    3. 从大往小找第一个 p_(i) ≤ 阈值，该 i 及其之前的全部拒绝；
-    4. 校正后 q 值 = 原 p 值按"拒绝位置"比例放大（保守）。
+    2. 找最大 rank 使 p_(rank) ≤ rank/m × alpha，该 rank 及之前全部拒绝
+       （step-up 拒绝集，与调整 q 的 q ≤ alpha 严格等价）；
+    3. 调整 q 值按**逆序累积最小**给出：
+       q_(rank) = min(1, min_{j ≥ rank} m × p_(j) / j)——
+       q 值只由 p 值排序位置决定，**不依赖本次 alpha 的拒绝位置**。
+
+    2026-10-19 勘误（Z 轮第三方审查 F01）：旧实现按"最大被拒绝 p"和
+    拒绝排名构造 q（无拒绝时直接返回原 p），不是标准 BH：旧 q 会依赖
+    alpha 的拒绝位置，甚至在拒绝集非空时出现"q 与 rejected 标记矛盾"
+    （例：[0.03, 0.20, 0.30] 旧 q=[0.03, 0.20, 0.30] 但 rejected 全 False，
+    首项 q<alpha；标准 q=[0.09, 0.30, 0.30]）。本实现已改为标准 BH，
+    拒绝集合语义（step-up）与 nan 处理（含 nan 的组跳过校正、q=nan）
+    保持不变。
 
     Args:
         p_values: 各组原始 p 值列表（含 nan 时该组跳过校正，记 q=nan）。
-        alpha: FDR 控制水平（默认 0.05）。
+        alpha: FDR 控制水平（默认 0.05），只决定 rejected 标记，不进入
+            q 值公式。
 
     Returns:
-        (q_values, rejected)：q_values 与输入同序（未拒绝的组 q 为"最大
-        拒绝 p 之后的保守放大值"），rejected 为与输入同序的布尔列表。
+        (q_values, rejected)：q_values 与输入同序（标准 BH 调整值，非
+        nan 项满足 q ≥ p 且不超过 1）；rejected 为与输入同序的布尔列表
+        （rejected[i] 等价于 q_values[i] ≤ alpha）。
     """
     import math
 
@@ -657,29 +675,20 @@ def bh_fdr_correct(
     # 按 p 值升序排序（稳定：相同 p 保持原序）
     order = sorted(valid_indices, key=lambda i: p_values[i])
     m = len(order)
-    # BH：找最大 i（1-based）使 p_(i) ≤ i/m × alpha
+    # BH step-up：找最大 rank（1-based）使 p_(rank) ≤ rank/m × alpha
     reject_rank = 0
     for rank in range(1, m + 1):
-        i = rank - 1  # 0-based
-        p_i = p_values[order[i]]
-        threshold = rank / m * alpha
-        if p_i <= threshold:
+        if p_values[order[rank - 1]] <= rank / m * alpha:
             reject_rank = rank
-    if reject_rank == 0:
-        # 无拒绝：全部 q = 原始 p（保守：不放大）
-        for i in valid_indices:
-            q_values[i] = p_values[i]
-        return q_values, rejected
-    # 有拒绝：排名 ≤ reject_rank 的拒绝，q 值按"该排名阈值"回填（BH 保守
-    # 口径：q_(i) = max(p_(i), (i/m) × p_max_rejected)）
-    p_max_rej = p_values[order[reject_rank - 1]]
     for rank in range(1, reject_rank + 1):
+        rejected[order[rank - 1]] = True
+    # 标准 BH 调整 q：从最大 rank 逆序累积最小 m*p_(rank)/rank（单调化），
+    # 再截断到 1——q_(rank) = min(1, min_{j≥rank} m*p_(j)/j)。
+    running_min = 1.0
+    for rank in range(m, 0, -1):
         i = order[rank - 1]
-        q_values[i] = min(1.0, max(p_values[i], p_max_rej * rank / reject_rank))
-        rejected[i] = True
-    for rank in range(reject_rank + 1, m + 1):
-        i = order[rank - 1]
-        q_values[i] = 1.0  # 未拒绝：q=1.0（保守，不夸大显著性）
+        running_min = min(running_min, m * p_values[i] / rank)
+        q_values[i] = min(1.0, running_min)
     return q_values, rejected
 
 
@@ -845,28 +854,60 @@ def load_price_table(path: str | Path | None) -> dict[str, dict[str, Any]]:
     诚实条款：模型未登记或任一价格为 null → 该模型不参与成本计算
     （不编造价格）；文件缺失/解析失败/结构不符 → 返回空表（报告成本
     节降级为"价目未登记"提示，不阻断报告生成）。
+
+    AB-17（2026-10-20）：文件级与形状判定收口到共享事实源——改前文件路径三种形状机制
+    **全程无痕**（静默塌成空表，读起来与"表里真的没登记"同形），而参数路径
+    （`_price_models_layer`）点名：同一份坏表两条路径两种读法。现两条路径共用
+    `models_layer` 与同一套机制码；`isinstance(v, dict)` 静默过滤一并移除（坏条目不再
+    无声消失，交 `cost_analysis` 按条目谓词点名）。`path=None` 是"未给价目表"的既有
+    约定，保持静默空表。
     """
     if path is None:
         return {"models": {}}
-    try:
-        with open(path, encoding="utf-8") as f:
-            data = json.load(f)
-    except (OSError, json.JSONDecodeError) as e:
-        print(f"警告：价目表 {path} 加载失败（成本节按未登记口径输出）: {e}")
+    data, reason = pricing.load_table_json(path)
+    if reason is not None:
+        print(f"[WARN] 价目表不可用（{reason}）⇒ 按空表处理（成本节按未登记口径输出）。")
         return {"models": {}}
-    models = data.get("models") if isinstance(data, dict) else None
-    if not isinstance(models, dict):
+    models, shape_reason = pricing.models_layer(data)
+    if shape_reason is not None:
+        print(f'[WARN] 价目表形状不可用（{shape_reason}）⇒ 按空表处理：这是形状问题，不是"价目未登记"。')
         return {"models": {}}
-    return {"models": {str(k): v for k, v in models.items() if isinstance(v, dict)}}
+    return {"models": models}
 
 
 def _model_is_priced(entry: Any) -> bool:
-    """AE2：模型条目是否具备完整可用价目（in/out 均为非负数值）。"""
-    if not isinstance(entry, dict):
-        return False
-    p_in = entry.get("input_per_mtok")
-    p_out = entry.get("output_per_mtok")
-    return all(isinstance(p, (int, float)) and not isinstance(p, bool) and p >= 0 for p in (p_in, p_out))
+    """AE2：模型条目是否具备完整可用价目（数字域收口到 `pricing.price_block_reason`，AB-16）。
+
+    改前自写 `isinstance + p >= 0`——`inf` 满足 `inf >= 0` 被收下（金额变 `inf`），
+    与其余消费点的域不一致；现在只改这一处读数（`nan`/负数/`bool`/非数在改前也已
+    不计价，逐位保持）。桶级词汇（`missing_models`）本轮不动，见分册 §5。
+    """
+    return (
+        isinstance(entry, dict)
+        and pricing.price_block_reason(entry.get("input_per_mtok"), entry.get("output_per_mtok")) is None
+    )
+
+
+def _price_models_layer(price_table: Any) -> dict[str, Any]:
+    """取价目表的 models 层，并把**形状错传**按机制点名到 stdout（AB-14）。
+
+    `cost_analysis` 的入参约定是 `{"models": {...}}` 包装体（与 `load_price_table`
+    产物同形）。改前三条形状通道一律静默塌成空表，下游于是把**其实已登记**的模型列进
+    `missing_models`，报告据"价目未登记"的口径让人去补一份本来就补好了的价目表——
+    归因错位（AB-11 判据）。这里只增加点名，**返回值口径一字不动**（坏形状仍是空表 ⇒
+    诚实降级为未计价）；空对象没有形状可说，故 `{}` / `{"models": {}}` 保持静默，
+    "真的没登记"与"传错了形状"仍分得开。
+
+    AB-17（2026-10-20）：形状判定收口到 `pricing.models_layer`，三套中文短语换成共享机制码
+    （`price_table_not_object:<T>` / `models_key_absent` / `models_not_object:<T>`），
+    与文件路径读出同一个名字；"顶层像是 模型名 → 条目 的映射"提示随 `models_key_absent`
+    保留。
+    """
+    models, reason = pricing.models_layer(price_table)
+    if reason is not None:
+        hint = "（顶层像是 模型名 → 条目 的映射）" if reason == "models_key_absent" else ""
+        print(f'[WARN] 价目表形状不可用{hint}（{reason}）⇒ 按空表处理：这是形状问题，不是"价目未登记"。')
+    return models
 
 
 # ───────── S11（2026-10-11 独立评审落地）：token 记账健全性检查 ─────────
@@ -957,8 +998,13 @@ def cost_analysis(results: dict[str, list[dict]], price_table: dict[str, dict]) 
         以及 S11 记账健全性三元组 {token_accounting_ok,
         token_accounting_reason, token_zero_rows}——`token_accounting_ok=False`
         时呈现层（成本表 / $/solved）一律输出 NOT_COMPUTABLE，不得输出数字。
+        AB-14 只在**真有模型币种不可判定**时追加 `unpriced_currency_models`
+        （模型名 → `currency_status` 读数）；币种可判定的行返回域逐键不变，
+        故受保护报告文本一字不动。币种可判定但登记为非 USD 的行**仍可计价**，
+        前提是表里带币种列（呈现层另加单位提醒）；这与 `emse_stats_report`
+        的 `total_usd`（单一美元列，非 USD 一律剔除）有意不同，见分册。
     """
-    models = price_table.get("models", {}) if isinstance(price_table, dict) else {}
+    models = _price_models_layer(price_table)
     cost_rows: list[dict] = []
     for baseline in sorted(results):
         rows = results[baseline] or []
@@ -981,36 +1027,45 @@ def cost_analysis(results: dict[str, list[dict]], price_table: dict[str, dict]) 
                 unattributed += tu.get("total_tokens") or 0
         used_models = [m for m, t in by_model.items() if t > 0]
         missing = sorted(m for m in used_models if not _model_is_priced(models.get(m)))
+        # AB-14：币种判定改用共享谓词。"价目不全"（`missing`）与"币种不可判定"
+        # （`currency_blocked`）是两种事实，分桶记账、不得互吞；价目表里根本没有的模型
+        # 只进 `missing`——"未登记"与"登记了但没写单位"是两件事。
+        statuses = {m: pricing.currency_status(models[m]) for m in used_models if m in models}
+        currency_blocked = {m: status for m, status in statuses.items() if pricing.currency_label(status) is None}
+        labels = sorted(
+            {pricing.currency_label(status) for status in statuses.values() if pricing.currency_label(status)}
+        )
         cost: float | None = None
         currency: str | None = None
-        if used_models and not missing:
-            price_pairs = {(models[m].get("input_per_mtok"), models[m].get("output_per_mtok")) for m in used_models}
-            currencies = {models[m].get("currency") or "USD" for m in used_models}
+        if used_models and not missing and not currency_blocked and len(labels) == 1:
+            price_pairs = {(models[m]["input_per_mtok"], models[m]["output_per_mtok"]) for m in used_models}
             # 单一价目组合（常见：单模型批次）才可按基线级 in/out 拆分计价
-            if len(price_pairs) == 1 and len(currencies) == 1:
+            if len(price_pairs) == 1:
                 p_in, p_out = price_pairs.pop()
                 cost = input_total / 1_000_000 * float(p_in) + output_total / 1_000_000 * float(p_out)
-                currency = currencies.pop()
+                currency = labels[0]
         cost_per_task = cost / len(rows) if cost is not None and rows else None
-        cost_rows.append(
-            {
-                "baseline": baseline,
-                "n_tasks": len(rows),
-                "input_tokens": input_total,
-                "output_tokens": output_total,
-                "by_model": by_model,
-                "missing_models": missing,
-                "unattributed_tokens": unattributed,
-                "cost": cost,
-                "cost_per_task": cost_per_task,
-                "currency": currency,
-                "priced": cost is not None,
-                # S11（2026-10-11 独立评审落地）：记账健全性判定随行携带
-                "token_accounting_ok": accounting["computable"],
-                "token_accounting_reason": accounting["reason"],
-                "token_zero_rows": accounting["n_without_accounting"],
-            }
-        )
+        row = {
+            "baseline": baseline,
+            "n_tasks": len(rows),
+            "input_tokens": input_total,
+            "output_tokens": output_total,
+            "by_model": by_model,
+            "missing_models": missing,
+            "unattributed_tokens": unattributed,
+            "cost": cost,
+            "cost_per_task": cost_per_task,
+            "currency": currency,
+            "priced": cost is not None,
+            # S11（2026-10-11 独立评审落地）：记账健全性判定随行携带
+            "token_accounting_ok": accounting["computable"],
+            "token_accounting_reason": accounting["reason"],
+            "token_zero_rows": accounting["n_without_accounting"],
+        }
+        # AB-14：披露键只在真发生时写入 ⇒ 币种可判定的行（含真批次）返回域逐键不变。
+        if currency_blocked:
+            row["unpriced_currency_models"] = dict(sorted(currency_blocked.items()))
+        cost_rows.append(row)
     return cost_rows
 
 
@@ -1250,6 +1305,44 @@ def _mutation_report_lines(mutation_summary: dict[str, dict]) -> list[str]:
     return lines
 
 
+def _currency_mechanism_lines(cost_rows: list[dict]) -> list[str]:
+    """币种不可判定的机制点名（AB-14）：0 机制时一行不加，有机制时不得只给"补价目"指引。
+
+    没有任何可计价行时 `_cost_report_lines` 走"价目未登记"早退分支，那里原本只教读者去填
+    `input_per_mtok` / `output_per_mtok`——而真正缺的是 `currency`。照那句提示去补，
+    补完仍然是未计价（缺的是单位不是价格）。
+    """
+    blocked = {r["baseline"]: r["unpriced_currency_models"] for r in cost_rows if r.get("unpriced_currency_models")}
+    if not blocked:
+        return []
+    lines = [
+        "",
+        "**币种不可判定**（AB-14）——下列基线用到的模型没有写出可用单位；"
+        "缺席 / null / 空白 / 非字符串一律不当成任何单位：",
+    ]
+    lines += [
+        f"- `{baseline}`：" + "、".join(f"{m}（{blocked[baseline][m]}）" for m in sorted(blocked[baseline]))
+        for baseline in sorted(blocked)
+    ]
+    lines.append("解读：补齐价目表的 `currency` 字段才可计价；只补 `input_per_mtok` 不改变本结论。")
+    return lines
+
+
+def _unpriced_row_reason(row: dict) -> str:
+    """未计价行的成因串（AB-14）。
+
+    `missing_models`（价目不全）与 `unpriced_currency_models`（币种不可判定）是两种机制，
+    必须在同一行各自点名——否则读者以为"补价目"就能救回来，而实际缺的是单位登记。
+    `（缺: ）` 的空写法是历史格式（真批次 `single_agent` 无 token 归属 ⇒ 空清单），
+    本轮**不改**：改它会动到受 `SHA256SUMS` 保护的报告文本，另轮处置。
+    """
+    label = f"{row['baseline']}（缺: {', '.join(row['missing_models'])}"
+    blocked = row.get("unpriced_currency_models") or {}
+    if blocked:
+        label += "；币种不可判定: " + ", ".join(f"{m}（{blocked[m]}）" for m in sorted(blocked))
+    return label + "）"
+
+
 def _cost_report_lines(
     cost_rows: list[dict], price_table: dict[str, dict], det_rates: dict[str, float] | None = None
 ) -> list[str]:
@@ -1297,10 +1390,14 @@ def _cost_report_lines(
         return cpt_cell, (f"{cpd_val:.4f}" if cpd_val is not None else "—")
 
     def _currency_cell(r: dict) -> str:
-        """币种单元格：记账断裂时无成本数字 → 币种一并置 —（不留 USD 误导）。"""
+        """币种单元格：记账断裂时无成本数字 → 币种一并置 —（不留 USD 误导）。
+
+        AB-14：手写行（不经 `cost_analysis`）的币种可能是非字符串，声明返回 `str`
+        就必须真的返回 `str`，不得把原始对象丢给 f-string 蒙过去。
+        """
         if not r.get("token_accounting_ok", True):
             return "—"
-        return r["currency"] or "—"
+        return str(r["currency"] or "—")
 
     def _s11_note_lines() -> list[str]:
         """S11 原因清单（有记账断裂的臂时才追加——历史报告文本零变化）。"""
@@ -1325,6 +1422,7 @@ def _cost_report_lines(
             "补齐方式：在 experiments/price_table.json 对应模型条目填入",
             "input_per_mtok / output_per_mtok / source / as_of 后重跑本脚本。",
         ]
+        lines += _currency_mechanism_lines(cost_rows)
         lines += _s11_note_lines()
         return lines
     if det_rates is None:
@@ -1355,8 +1453,17 @@ def _cost_report_lines(
     # 未计价（价目缺失/多模型异价）与"记账断裂"是两种不同的降级，不得混为一谈：
     # 记账断裂的臂已由上方的 S11 NOT_COMPUTABLE 清单单独披露
     partial = [r for r in cost_rows if not r["priced"] and r.get("token_accounting_ok", True)]
+    # AB-14：币种可判定的非 USD 行仍可计价（表里有币种列），但单位必须由文本自己说清楚
+    priced_labels = [str(r.get("currency") or "").strip().upper() for r in priced]
+    non_usd = sorted({label for label in priced_labels if label and label != "USD"})
+    if non_usd:
+        lines += [
+            "",
+            f"单位提醒：表内 {'、'.join(non_usd)} 行的金额按价目表登记币种原样呈现，未做汇率换算，",
+            "不得与 USD 行相加或直接比较（成本/任务列名本身不暗示单位）。",
+        ]
     if partial:
-        missing_desc = "；".join(f"{r['baseline']}（缺: {', '.join(r['missing_models'])}）" for r in partial)
+        missing_desc = "；".join(_unpriced_row_reason(r) for r in partial)
         lines += ["", f"注：{len(partial)} 个基线未计价——{missing_desc}。"]
     lines += _s11_note_lines()
     return lines

@@ -491,16 +491,23 @@ class SWEBenchDataset(BaseDatasetLoader):
              "test_code": "def test_f(): ..."}
         每行至少需含 instance_id；缺失的源码字段会被跳过（仅补全有值的字段）。
         文件不存在或为空时返回空映射（不影响主加载流程）。
+        缺 instance_id 的行会被跳过，并在结束时汇总一条 warning（不逐行刷屏）。
+        非 JSON 对象的行、主键是列表或字典的行同样按行跳过后各汇总一条 warning；
+        标量主键按 str() 归一（与 _build_task_from_swe_row 的查表口径同源）。
+        修复前这两类分别在 `row.get` / 写映射处抛出，中断的是**整份**补充文件的加载。
 
         Args:
             enrichment_path: 补充文件路径（环境变量 SWE_BENCH_ENRICHMENT 指定）。
 
         Returns:
-            {instance_id: 补充字段字典}。
+            {instance_id: 补充字段字典}，键域为非空字符串。
         """
         if not enrichment_path or not os.path.exists(enrichment_path):
             return {}
         enriched: dict[str, dict[str, Any]] = {}
+        missing_id_rows = 0
+        non_object_rows = 0
+        bad_key_rows = 0
         with open(enrichment_path, encoding="utf-8") as f:
             for raw_line in f:
                 line = raw_line.strip()
@@ -511,10 +518,36 @@ class SWEBenchDataset(BaseDatasetLoader):
                 except json.JSONDecodeError:
                     logger.warning("补充文件 JSON 解析失败，跳过该行: %s...", line[:80])
                     continue
+                if not isinstance(row, dict):
+                    # json.loads 的合法返回域含数组/标量/null；对齐 dataset_ult
+                    # 的 isinstance(raw_row, dict) 口径——此前 row.get 直接抛
+                    # AttributeError，一行废掉整份补充文件。
+                    non_object_rows += 1
+                    continue
                 row_id = row.get("instance_id")
                 if not row_id:
+                    missing_id_rows += 1
                     continue
-                enriched[row_id] = {k: v for k, v in row.items() if v not in (None, "")}
+                if isinstance(row_id, (list, dict)):
+                    # 列表/字典当不了标识符（也是写映射处的 TypeError 崩溃源）。
+                    bad_key_rows += 1
+                    continue
+                # 标量主键归一为 str，与查表侧同源（_build_task_from_swe_row 也做 str()）：
+                # 不归一时 int/bool 键能写进映射却永不命中——"补充文件已加载 N 条"的日志
+                # 配一份零生效的映射，比崩溃更难查。
+                enriched[str(row_id)] = {k: v for k, v in row.items() if v not in (None, "")}
+        if non_object_rows:
+            # 按行计数后汇总一条 warning：静默丢弃会让"整份补充未生效"毫无痕迹，
+            # 逐行刷屏则淹没信号——与缺 instance_id 那类同口径处理。
+            logger.warning("补充文件有 %d 行不是 JSON 对象（已跳过）: %s", non_object_rows, enrichment_path)
+        if bad_key_rows:
+            # 与主数据文件的"不是 JSON 对象"是两条不同痕迹：这里坏的是主键，
+            # 记录本身可能有源码，合并后只会少这一条，主数据文件不受影响。
+            logger.warning("补充文件有 %d 行的 instance_id 是列表或字典（已跳过）: %s", bad_key_rows, enrichment_path)
+        if missing_id_rows:
+            # 无主键行按行计数后汇总一条 warning：补充文件若用错键名（如 id），
+            # 逐行 warning 会刷屏，静默丢弃则会让"整份补充未生效"毫无痕迹。
+            logger.warning("补充文件有 %d 行缺少 instance_id（已跳过）: %s", missing_id_rows, enrichment_path)
         if enriched:
             logger.info("已加载源码补充文件：%d 条记录（%s）", len(enriched), enrichment_path)
         return enriched
@@ -563,6 +596,15 @@ class SWEBenchDataset(BaseDatasetLoader):
                         data = json.loads(line)
                     except json.JSONDecodeError as e:
                         logger.warning("JSON 解析失败（%s 第 %d 行）: %s", jsonl_path, line_num, e)
+                        continue
+                    if not isinstance(data, dict):
+                        # 与上一分支同口径（逐行留痕、含行号）：JSONDecodeError 只覆盖
+                        # 语法损坏，不覆盖形状——[] / null / "abc" 都是合法 JSON。
+                        # 此前这里直接把解析结果交给 _build_task_from_swe_row，
+                        # 一行非对象就 AttributeError 中断整批加载。
+                        logger.warning(
+                            "记录不是 JSON 对象（%s 第 %d 行，已跳过）: %s...", jsonl_path, line_num, line[:40]
+                        )
                         continue
 
                     task = self._build_task_from_swe_row(data, enrichment, fallback_task_id=f"swe_{line_num}")
@@ -641,7 +683,14 @@ class SWEBenchDataset(BaseDatasetLoader):
             构建完成的 BenchmarkTask；instance_id 已存在（重复行）时返回 None。
         """
         # 构建 BenchmarkTask
-        task_id = data.get("instance_id", fallback_task_id)
+        # 主键归一：_load_enrichment 的映射键域是 str，此处不归一则 int/float 主键
+        # 写进 _seen_task_ids 后与补充文件永不命中；null / 列表 / 字典此前会在
+        # 下方 `"__" in task_id` 抛 TypeError 崩整批，现按带行号的兜底 id 定位。
+        raw_id = data.get("instance_id", fallback_task_id)
+        if raw_id is None or isinstance(raw_id, (list, dict)):
+            task_id = fallback_task_id
+        else:
+            task_id = raw_id if isinstance(raw_id, str) else str(raw_id)
         # 合并加载多个子集文件时按 instance_id 去重（mini 是 lite 的子集）
         if task_id in self._seen_task_ids:
             return None

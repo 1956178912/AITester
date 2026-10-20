@@ -50,6 +50,16 @@ MANIFEST: tuple[str, ...] = (
     # prereg 双语 E7 节引用的复核入口，入库前本守卫本地预期红）
     "experiments/results/main_batch/e7_repair_sample_candidates.md",
     "experiments/results/main_batch/e7_review_worksheet.md",
+    # AA 轮（2026-10-19）：E7 裁决执行面 6 份空白录入表（协议 §7.1 引用的备料
+    # 工件，已进 main_batch SHA256SUMS 受 --verify 校验）。此前被 .gitignore
+    # 通配排除压掉、本清单亦未登记——"被忽略（永远不可能入库）"型静默缺口，
+    # 本批收口：.gitignore narrow 放行 e7_entry_rater*.csv + 此处登记。
+    "experiments/results/main_batch/e7_entry_raterA_n8.csv",
+    "experiments/results/main_batch/e7_entry_raterA_n41.csv",
+    "experiments/results/main_batch/e7_entry_raterA_n72.csv",
+    "experiments/results/main_batch/e7_entry_raterB_n8.csv",
+    "experiments/results/main_batch/e7_entry_raterB_n41.csv",
+    "experiments/results/main_batch/e7_entry_raterB_n72.csv",
     # 完整性锚点与成本价目（$/task 口径依赖）
     "experiments/results/main_batch/SHA256SUMS",
     "experiments/price_table.json",

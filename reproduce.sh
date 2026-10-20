@@ -235,20 +235,20 @@ pip install -q scipy matplotlib pandas
 
 # ─── 步骤 3/6：运行单元测试 ──────────────────────────────────────────────────────
 info "Step 3/6: 运行单元测试..."
-# 先确保日志目录存在（tee 重定向在管道前求值，目录缺失会直接失败）
-mkdir -p experiments/results
-# 运行所有 tests/ 下的 pytest 用例，输出到 log 文件便于排查
-# U2（2026-10-05 系统性审查落地）：测试失败默认硬失败——"复现全绿"结论
-# 不得建立在未察觉的测试失败上（审查实证：此前 warn-continue 口径会让
-# 失败被吞、后续基准数字仍被当作有效复现）。需要宽容口径时用
-# REPRODUCE_ALLOW_TEST_FAILURES=1 显式逃生（仅告警继续，并在收尾提示）。
-TEST_EXIT=0
-python -m pytest tests/ -v --tb=short 2>&1 | tee experiments/results/test_output.log || TEST_EXIT=$?
-if [[ $TEST_EXIT -ne 0 ]]; then
-    if [[ "${REPRODUCE_ALLOW_TEST_FAILURES:-0}" == "1" ]]; then
-        warn "部分单元测试失败（REPRODUCE_ALLOW_TEST_FAILURES=1，继续执行——复现结论将不可信）"
-    else
+mkdir -p experiments/results  # tee 重定向在管道前求值，目录缺失会直接失败
+# U2（2026-10-05）：测试失败默认硬失败——"复现全绿"不得建立在未察觉失败上；宽容口径用 REPRODUCE_ALLOW_TEST_FAILURES=1 显式逃生（仅告警继续）。
+# F05（2026-10-19 第三方审查，P2）：镜像按 .dockerignore 不含 experiments/results
+# 历史工件，tests/ 多组用例以该目录归档 JSON 为夹具——空目录启动必须显式
+# REPRODUCE_SKIP_TESTS=1 跳过测试门（此时复现结论不含测试验证）。
+if [[ "${REPRODUCE_SKIP_TESTS:-0}" == "1" ]]; then
+    warn "REPRODUCE_SKIP_TESTS=1：跳过 Step 3 测试门——本次复现缺少测试门，复现结论不含测试验证"
+else
+    TEST_EXIT=0
+    python -m pytest tests/ -v --tb=short 2>&1 | tee experiments/results/test_output.log || TEST_EXIT=$?
+    if [[ $TEST_EXIT -ne 0 && "${REPRODUCE_ALLOW_TEST_FAILURES:-0}" != "1" ]]; then
         error "单元测试失败（exit=${TEST_EXIT}）。复现实验前必须先让全量测试通过；如确需带失败继续，设 REPRODUCE_ALLOW_TEST_FAILURES=1"
+    elif [[ $TEST_EXIT -ne 0 ]]; then
+        warn "部分单元测试失败（REPRODUCE_ALLOW_TEST_FAILURES=1，继续执行——复现结论将不可信）"
     fi
 fi
 
@@ -333,8 +333,8 @@ fi
 
 # ─── 步骤 6/6：生成可视化图表 ────────────────────────────────────────────────────
 info "Step 6/6: 生成结果可视化..."
-# 生成柱状图、统计检验图、CSV 表格和 Markdown 汇总报告
-python experiments/visualize_results.py
+# F06（2026-10-19 审查）：显式传 --dataset，只可视化本次数据集产物（不按文件名倒序猜）；随后生成柱状图/统计检验图/CSV/Markdown 汇总报告
+python experiments/visualize_results.py --dataset "$DATASET"
 
 # ─── 完成 ────────────────────────────────────────────────────────────────────────
 echo ""
@@ -356,3 +356,10 @@ echo "  3. 主批合成数据集复现（87 任务 / max-pattern-repeat 2 / seed
 echo "     bash reproduce.sh --dataset synthetic --full"
 echo "  4. 如需完整 SWE-bench 实验，使用 --dataset swe_bench --full"
 echo ""
+
+# F05（2026-10-19 第三方审查，P2）实现说明：
+# REPRODUCE_SKIP_TESTS=1 显式跳过 Step3 全量测试门——镜像内 experiments/results
+# 历史工件被 .dockerignore 排除，空目录挂载时测试缺夹具；跳过时脚本打印醒目
+# WARN 并在本节声明"复现结论不含测试验证"。默认未设置仍跑测试且保持 fail-closed。
+# 挂载该目录时它是**历史输入（测试夹具）与输出（本次结果）双重角色**：
+# 需挂载含归档结果的完整目录，或空目录 + 本逃生开关（详见 Dockerfile.repro 末尾）。

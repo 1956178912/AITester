@@ -27,7 +27,7 @@ from typing import Any
 
 from langchain_openai import ChatOpenAI
 
-from config import LLM_CONFIGS, LLM_TIMEOUT
+from config import LLM_CONFIGS, LLM_TIMEOUT, TEMPERATURE
 from src.utils.env_utils import env_flag_opt_out
 
 logger = logging.getLogger(__name__)
@@ -495,8 +495,18 @@ def _call_zai(
     system_prompt: str,
     user_message: str,
     max_retries: int = _DEFAULT_LLM_MAX_RETRIES,
+    temperature: float = TEMPERATURE,
 ) -> str:
     """使用 zai SDK 调用 LLM（用于 BigModel 等非 OpenAI 兼容接口）。
+
+    F09（2026-10-19 第三方审查 P1）修复：zai 路径此前**不发送** temperature，
+    而缓存身份（base_agent._effective_request_identity）按"实际生效采样温度"
+    记录显式覆盖值 / config.TEMPERATURE——请求身份与真实请求不一致（同一
+    prompt 在改变温度后仍可能命中旧缓存）。现 `temperature` 参与
+    ``create(temperature=...)``，调用方（base_agent._call_llm）传入
+    ``eff_temperature``，两条调用路径（OpenAI 兼容 / zai）对温度口径一致。
+    zai SDK（zai-sdk>=0.2.0）的 ``chat.completions.create`` 支持
+    ``temperature: Optional[float]`` 命名参数（静态核对 0.2.3 签名）。
 
     实现带指数退避的重试策略：
     - 所有可重试异常统一按 base_wait=5s 指数退避：等待 5 * 2^attempt 秒（5s, 10s, 20s ...）。
@@ -514,6 +524,8 @@ def _call_zai(
         system_prompt: System Prompt，定义模型角色和行为约束。
         user_message: 用户消息内容。
         max_retries: 最大重试次数，默认 3 次。
+        temperature: 采样温度（F09：实际发送给 SDK 的 create(temperature=...)，
+            默认 config.TEMPERATURE；生产调用点传 base_agent 的 eff_temperature）。
 
     Returns:
         LLM 返回的文本内容（已 strip 空白）。
@@ -540,7 +552,12 @@ def _call_zai(
     _ZAI_RETRYABLE_EXCEPTIONS = (Exception,)
 
     def _do_zai_call() -> str:
-        """执行单次 zai API 调用（内部辅助函数）。"""
+        """执行单次 zai API 调用（内部辅助函数）。
+
+        F09：temperature 必须与 OpenAI 兼容路径同口径实际发出——缓存身份
+        （base_agent._effective_request_identity）按实际生效温度分区，若此处
+        静默丢弃温度，身份记录将与真实请求不一致。
+        """
         kwargs: dict[str, Any] = {"thinking": {"type": "disabled"}}
         response = client.chat.completions.create(
             model=model_name,
@@ -549,6 +566,7 @@ def _call_zai(
                 {"role": "user", "content": user_message},
             ],
             max_tokens=_ZAI_MAX_TOKENS,
+            temperature=temperature,
             timeout=LLM_TIMEOUT,
             **kwargs,
         )

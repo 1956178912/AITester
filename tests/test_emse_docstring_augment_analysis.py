@@ -24,7 +24,9 @@ from typing import Any
 
 import pytest
 
+from experiments.emse_df_spec_analysis import domain_stats
 from experiments.emse_docstring_augment_analysis import (
+    AUDIT_KEY_ABSENT,
     CONFIRM_P,
     CONTROL_ARM,
     FAIL_LINE,
@@ -234,8 +236,8 @@ class TestLoadAugmentRows:
         assert len(rows) == 50
         assert {row["spec_augment_applied"] for row in rows.values()} == {"attempted_augmented"}
 
-    def test_missing_field_defaults_none(self, tmp_path: Path) -> None:
-        """旧批次无该字段（或值为 null）→ 行摘要补 None，不 KeyError。"""
+    def test_absent_key_is_not_confused_with_null_value(self, tmp_path: Path) -> None:
+        """AB-11：详情行没有该键 → key_absent（旧批次不 KeyError，但也不冒充"生产者写了 null"）。"""
         path = tmp_path / "old.json"
         path.write_text(
             json.dumps(
@@ -250,7 +252,15 @@ class TestLoadAugmentRows:
             encoding="utf-8",
         )
         rows = load_augment_rows(path, PRIMARY_ARM)
-        assert rows["quixbugs__prog00"]["spec_augment_applied"] is None
+        assert rows["quixbugs__prog00"]["spec_augment_applied"] == AUDIT_KEY_ABSENT
+        assert domain_stats(rows, "spec_augment_applied") == {"key_absent": 1}
+
+    def test_explicit_null_stays_in_none_bucket(self, tmp_path: Path) -> None:
+        """值为 null（生产者确实没触发）→ 仍落 ``none`` 桶，真路径读数不变。"""
+        path = _write_batch(tmp_path / "null.json", PRIMARY_ARM, _det(_first_n(31)), spec_augment_applied=None)
+        rows = load_augment_rows(path, PRIMARY_ARM)
+        assert {row["spec_augment_applied"] for row in rows.values()} == {None}
+        assert domain_stats(rows, "spec_augment_applied") == {"none": 50}
 
 
 # ─── 机制指标声明 ───────────────────────────────────────────────────────────

@@ -365,20 +365,68 @@ class TestW2CoverageRatchet(unittest.TestCase):
             _write_cov_xml(xml, line_pct=90.0, branch_pct=40.0)
             state.write_text("line_total: 80.00\nbranch_total: 30.00\n", encoding="utf-8")
             with patch.object(
-                sys, "argv", ["ratchet", "--coverage-xml", str(xml), "--state", str(state), "--bump", "0.5"]
+                sys,
+                "argv",
+                ["ratchet", "--allow-bump", "--coverage-xml", str(xml), "--state", str(state), "--bump", "0.5"],
             ):
                 rc = mod.main()
             self.assertEqual(rc, 0)
             text = state.read_text(encoding="utf-8")
-            self.assertIn("line_total: 90.0", text, "余量 ≥ 步长时上调到实测")
+            self.assertIn("line_total: 90.0", text, "余量 ≥ 步长且显式 --allow-bump 时上调到实测")
             self.assertIn("branch_total: 40.0", text, "余量 10pp ≥ 0.5 步长时上调到实测")
             # 再次运行：水位已贴实测，无步长余量 → 不再改写（水位稳定，只升不降）
             with patch.object(
-                sys, "argv", ["ratchet", "--coverage-xml", str(xml), "--state", str(state), "--bump", "0.5"]
+                sys,
+                "argv",
+                ["ratchet", "--allow-bump", "--coverage-xml", str(xml), "--state", str(state), "--bump", "0.5"],
             ):
                 rc2 = mod.main()
             self.assertEqual(rc2, 0)
             self.assertIn("line_total: 90.0", state.read_text(encoding="utf-8"))
+
+    def test_default_mode_reports_headroom_but_does_not_write(self):
+        """AA-4（2026-10-19）：默认模式满足步长也不写水位——防跨平台误上调。
+
+        判据（变异方向）：修前默认模式会把水位抬到本地实测；若水位来自本地
+        macOS 而 CI 在 ubuntu 3.14 阻断（跨平台分支差实测 0.13pp），提交后 CI
+        必红。故上调改为显式 --allow-bump 的人工决策。
+        """
+        mod = _load_ratchet_module()
+        with tempfile.TemporaryDirectory() as td:
+            xml = Path(td) / "coverage.xml"
+            state = Path(td) / "state.yaml"
+            _write_cov_xml(xml, line_pct=90.0, branch_pct=40.0)
+            original = "line_total: 80.00\nbranch_total: 30.00\n"
+            state.write_text(original, encoding="utf-8")
+            argv = ["ratchet", "--coverage-xml", str(xml), "--state", str(state), "--bump", "0.5"]
+            with patch.object(sys, "argv", argv):
+                rc = mod.main()
+            self.assertEqual(rc, 0, "达标即返回 0（未上调不是失败）")
+            self.assertEqual(state.read_text(encoding="utf-8"), original, "默认模式不得改写水位")
+
+    def test_allow_bump_still_blocks_regression(self):
+        """AA-4：--allow-bump 不放松回退判定（实测低于水位仍 exit 1 且不写）。"""
+        mod = _load_ratchet_module()
+        with tempfile.TemporaryDirectory() as td:
+            xml = Path(td) / "coverage.xml"
+            state = Path(td) / "state.yaml"
+            _write_cov_xml(xml, line_pct=70.0, branch_pct=70.0)
+            original = "line_total: 80.00\nbranch_total: 30.00\n"
+            state.write_text(original, encoding="utf-8")
+            argv = [
+                "ratchet",
+                "--allow-bump",
+                "--coverage-xml",
+                str(xml),
+                "--state",
+                str(state),
+                "--bump",
+                "0.5",
+            ]
+            with patch.object(sys, "argv", argv):
+                rc = mod.main()
+            self.assertEqual(rc, 1, "行覆盖回退必须 exit 1")
+            self.assertEqual(state.read_text(encoding="utf-8"), original, "回退路径不得改写水位")
 
     def test_missing_state_file_fail_closed(self):
         """G 轮：状态文件缺失必须 exit 2，不得回退初始水位判绿。
@@ -405,13 +453,47 @@ class TestW2CoverageRatchet(unittest.TestCase):
             xml = Path(td) / "coverage.xml"
             state = Path(td) / "state.yaml"
             _write_cov_xml(xml, line_pct=90.0, branch_pct=85.0)
-            argv = ["ratchet", "--coverage-xml", str(xml), "--state", str(state), "--init", "--bump", "0.5"]
+            argv = [
+                "ratchet",
+                "--allow-bump",
+                "--coverage-xml",
+                str(xml),
+                "--state",
+                str(state),
+                "--init",
+                "--bump",
+                "0.5",
+            ]
             with patch.object(sys, "argv", argv):
                 rc = mod.main()
             self.assertEqual(rc, 0)
             text = state.read_text(encoding="utf-8")
             self.assertIn("line_total: 90.0", text)
             self.assertIn("branch_total: 85.0", text)
+
+    def test_init_without_allow_bump_bootstraps_floors_only(self):
+        """AA-4：--init 只负责把状态文件建出来，抬水位仍需 --allow-bump。"""
+        mod = _load_ratchet_module()
+        with tempfile.TemporaryDirectory() as td:
+            xml = Path(td) / "coverage.xml"
+            state = Path(td) / "state.yaml"
+            _write_cov_xml(xml, line_pct=95.0, branch_pct=95.0)
+            argv = [
+                "ratchet",
+                "--coverage-xml",
+                str(xml),
+                "--state",
+                str(state),
+                "--init",
+                "--bump",
+                "0.5",
+            ]
+            with patch.object(sys, "argv", argv):
+                rc = mod.main()
+            self.assertEqual(rc, 0)
+            text = state.read_text(encoding="utf-8")
+            self.assertIn(f"line_total: {mod._INIT_LINE:.2f}", text, "未确认时只落初始水位")
+            self.assertIn(f"branch_total: {mod._INIT_BRANCH:.2f}", text)
 
     def test_state_file_missing_key_fail_closed(self):
         """状态文件缺 branch_total 键 → exit 2（既有 fail-closed 口径回归锁）。"""

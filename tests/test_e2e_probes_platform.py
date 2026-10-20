@@ -134,12 +134,22 @@ class TestCacheProbes:
         assert outcome.status == "pass", outcome.detail
 
     def test_semantic_index_probe_passes_with_deterministic_embedding(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """mock 嵌入后端（确定性向量），验证同义命中/无关未命中判定逻辑。"""
+        """mock 嵌入后端（确定性向量），验证同义命中/无关未命中判定逻辑。
+
+        Z 轮连带修复（2026-10-19，验证中发现，非评审编号）：原实现用内置
+        `hash(token) % 16` 构造向量——CPython 的 `str.__hash__` 受
+        `PYTHONHASHSEED` 随机化，不同进程/不同 xdist worker 会得到不同
+        向量，个别种子下"无关 prompt"会与插入 prompt 撞到同一维度而误命中
+        （全量套件实测偶发 1/10；与探针逻辑无关）。改用 sha256 派生维度，
+        跨进程、跨 worker 逐位可复现。
+        """
+        import hashlib
 
         def _fake_embed(text: str) -> list[float]:
             vec = [0.0] * 16
             for token in text.replace("，", " ").replace("？", " ").split():
-                vec[hash(token) % 16] += 1.0
+                digest = hashlib.sha256(token.encode("utf-8")).hexdigest()
+                vec[int(digest[:8], 16) % 16] += 1.0
             return vec
 
         monkeypatch.setattr("src.utils.embedding_utils.embed_text", _fake_embed)

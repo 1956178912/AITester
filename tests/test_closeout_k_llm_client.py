@@ -15,6 +15,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -83,6 +84,53 @@ class TestRecordResponseUsageFailClosed:
         self._break_record_usage(monkeypatch)
         monkeypatch.setattr("src.budget.cost_budget._budget_enabled", lambda: False)
         assert llm_client._record_response_usage({"input_tokens": 3, "output_tokens": 4}, "model-x") is True
+
+
+@pytest.mark.unit
+class TestZaiTemperaturePassthrough:
+    """F09（2026-10-19 第三方审查 P1）：zai 请求必须实际携带 temperature。
+
+    历史缺陷：`_call_zai` 签名与 SDK create 均无 temperature，而缓存身份
+    （`base_agent._effective_request_identity`）记录"实际生效采样温度"——
+    请求身份与实际请求分叉，改温度可能命中旧缓存。本类锁定调用级参数。
+    """
+
+    @staticmethod
+    def _fake_response() -> Any:
+        message = MagicMock()
+        message.content = "ok"
+        message.reasoning_content = None
+        response = MagicMock()
+        response.choices = [MagicMock(message=message)]
+        response.usage = None
+        return response
+
+    def test_create_receives_temperature(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        create = MagicMock(return_value=self._fake_response())
+        client = MagicMock()
+        client.chat.completions.create = create
+        monkeypatch.setattr(llm_client, "_get_or_create_zai_client", lambda *a, **k: client)
+
+        out = llm_client._call_zai(
+            "k",
+            "https://open.bigmodel.cn/api/paas/v4",
+            "glm-4.7-flash",
+            "sys",
+            "hi",
+            max_retries=0,
+            temperature=0.37,
+        )
+        assert out == "ok"
+        assert create.call_args.kwargs["temperature"] == pytest.approx(0.37)
+
+    def test_temperature_param_defaults_to_config(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        create = MagicMock(return_value=self._fake_response())
+        client = MagicMock()
+        client.chat.completions.create = create
+        monkeypatch.setattr(llm_client, "_get_or_create_zai_client", lambda *a, **k: client)
+
+        llm_client._call_zai("k", "https://open.bigmodel.cn/api", "m", "s", "u", max_retries=0)
+        assert create.call_args.kwargs["temperature"] == pytest.approx(llm_client.TEMPERATURE)
 
 
 @pytest.mark.unit

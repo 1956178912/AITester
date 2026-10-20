@@ -104,16 +104,23 @@ from experiments.difficulty_stratification import render_stratification_section 
 def load_latest_benchmark(results_dir: str = "experiments/results") -> str:
     """找到结果目录下最新的 benchmark JSON 文件（文件名倒序）。
 
-    与 visualize_results.load_latest_result 同口径：仅识别 benchmark_* 前缀
-    （避免误选 swebench_20_summary.json / performance_benchmark.json 等汇总文件）。
+    与 visualize_results.load_latest_result 同口径：仅识别 benchmark_* 前缀，
+    无匹配时显式报错。
+
+    AA-2（2026-10-19，承接第四轮审查 F06 同类残留）：旧实现只在 docstring 上声称
+    同口径，实际在无 `benchmark_*` 文件时回退到目录内全部 JSON。结果目录混有
+    `performance_benchmark.json`、`swebench_20_summary.json` 等汇总/性能产物，
+    回退会把这些文件当成分析对象、静默读错分母，故改为 fail-closed。
     """
-    all_json = [f for f in os.listdir(results_dir) if f.endswith(".json")]
+    all_json = sorted(f for f in os.listdir(results_dir) if f.endswith(".json"))
     benchmark_files = [f for f in all_json if f.startswith("benchmark_")]
     if not benchmark_files:
-        benchmark_files = all_json
-    if not benchmark_files:
-        raise FileNotFoundError(f"结果目录 {results_dir} 下没有 JSON 文件")
-    return os.path.join(results_dir, sorted(benchmark_files, reverse=True)[0])
+        raise FileNotFoundError(
+            f"结果目录 {results_dir} 下没有 benchmark_*.json"
+            f"（目录内共 {len(all_json)} 个 JSON，均非 benchmark 运行产物）；"
+            "请用 --input 显式指定要分析的结果文件"
+        )
+    return os.path.join(results_dir, benchmark_files[-1])
 
 
 def build_analysis(data: dict[str, Any], golden_patches: dict[str, str] | None = None) -> dict[str, Any]:

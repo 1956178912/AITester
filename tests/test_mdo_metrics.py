@@ -130,12 +130,32 @@ class TestMDODiscrimination:
 class TestCrashNotCountedAsDiscrimination:
     """崩溃型变异体必须计入 CRASH，绝不计入 MDR。"""
 
-    def test_syntax_error_mutant_is_crash_not_discrimination(self) -> None:
+    def test_runtime_exception_mutant_is_crash_not_discrimination(self) -> None:
+        """F12（2026-10-19 第三方审查 P1）：有效 Python 但运行期抛 ValueError 的
+        变异体 → pytest rc=1 且失败非断言型 → 记 CRASH（异常类别），MDR 不增。
+
+        报告 §G 最小反例：修复前 rc==1 被无差别标 assertion_failed →
+        ValueError("boom") 也产生 MDR。现要求"全部 call 阶段失败均为断言型"
+        才算判别，纯运行异常走 crash 分类。
+        """
+        runtime = _M("def f(x):\n    raise ValueError('boom')\n", "runtime_exception")
+        r = compute_mdo(base_code=_BASE, test_code=_STRONG, module_name="t", mutants=[runtime])
+        assert r.available is True
+        assert r.crash_rate == 1.0, "运行异常变异体应记为崩溃/异常类别"
+        assert r.mutant_discrimination_rate == 0.0, "运行异常不得计入判别率"
+
+    def test_syntax_error_mutant_probe_invalid_is_not_measurable(self) -> None:
+        """F13（2026-10-19 第三方审查 P1）：语法错误变异体无法被探针 import
+        （import_error 诊断）→ 探针无效、排除出分母；全池无效 → 不可测。
+
+        修复前该诊断 JSON 被当作"行为摘要"参与比较，池满时会输出 measured
+        零值；现显式 not_measurable（不臆造 0）。
+        """
         broken = _M("def f(x)\n    return 1\n", "syntax_break")  # 语法错误
         r = compute_mdo(base_code=_BASE, test_code=_STRONG, module_name="t", mutants=[broken])
-        assert r.available is True
-        assert r.crash_rate == 1.0, "语法错误变异体应记为崩溃"
-        assert r.mutant_discrimination_rate == 0.0, "崩溃不得计入判别率"
+        assert r.available is False
+        assert r.not_available_reason == "probe_unavailable"
+        assert r.mutant_discrimination_rate is None
 
     def test_pool_floor_flag_marks_insufficient_pool(self) -> None:
         """池过小必须显式置位（防止在饱和指标上做结论）。"""

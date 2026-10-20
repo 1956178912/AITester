@@ -112,10 +112,23 @@ class TestParseTraceFile:
         assert parsed["task_id"] == "synthetic__t"
         assert len(parsed["records"]) == 2
 
-    def test_damaged_file_returns_none(self, tmp_path: Path) -> None:
+    def test_damaged_file_keeps_damage_trace(self, tmp_path: Path) -> None:
+        """AB-11：损坏不再整份静默作废——返回结构里带损坏标志与坏行前的记录数。"""
         p = tmp_path / "broken.trace.jsonl"
-        p.write_text("{not-json\n", encoding="utf-8")
-        assert parse_trace_file(p) is None
+        p.write_text('{"event": "task_start", "meta": {"baseline": "aitester"}}\n{not-json\n', encoding="utf-8")
+        parsed = parse_trace_file(p)
+        assert parsed["damaged"] is True
+        assert parsed["damage"] == "JSONDecodeError"
+        assert parsed["records_before_damage"] == 1
+        assert len(parsed["records"]) == 1  # 记录留着计数，但不进判定（调用方按损坏跳过）
+
+    def test_undamaged_file_has_no_damage_flags(self, tmp_path: Path) -> None:
+        p = tmp_path / "ok.trace.jsonl"
+        p.write_text(json.dumps({"event": "task_start", "meta": {"baseline": "aitester"}}) + "\n", encoding="utf-8")
+        parsed = parse_trace_file(p)
+        assert parsed["damaged"] is False
+        assert parsed["damage"] is None
+        assert parsed["records_before_damage"] == 0
 
 
 class TestAnalyzeTraces:

@@ -10,14 +10,25 @@
 
     - 门槛水位存于 docs/coverage_ratchet.yaml（入库，随提交演进）；
     - CI（--check 模式）：实测低于水位 → exit 1 阻断（回退即失败）；
-    - 本地（默认模式）：实测高于水位 + 步长（默认 0.5pp）→ 自动上调水位
-      写回状态文件，由贡献者随改动一并提交；水位**永不下降**。
+    - 本地（默认模式）：实测高于水位 + 步长（默认 0.5pp）→ **提示满足上调条件**，
+      但只有显式加 `--allow-bump` 才写回水位（AA-4，见下）。
+
+    AA-4（2026-10-19）为什么把上调改成显式确认：本仓库的**权威覆盖率口径 = CI
+    ubuntu 3.14**（`check_artifact_doc_consistency.py` 注释与登记册 §1 同口径），
+    而 `--check` 只在 CI 跑；默认模式在本地按当前 `coverage.xml` 写回水位。
+    U 轮实测同一份源码：分支覆盖 ubuntu 92.66 vs macOS 92.79（**跨平台差 0.13pp，
+    9 条平台专属分支**）。于是"本地 macOS 余量够步长就自动抬水位"会产出
+    CI 上必然低于水位的水位——2026-10-19 实测余量 +0.55pp/+0.98pp 已越过 0.5pp
+    步长，若照旧自动上调会写进 96.9/93.4，而 ubuntu 侧期望约 96.93/93.35，
+    **分支水位一提交 CI 就红**。上调本身是正确动作（防回退要抬水位），错的只是
+    抬的数来自哪个平台，故改为人工显式确认，并要求确认前核对口径。
 
     与静态门槛的关系：叠加而非取代——静态门槛（85/77）仍是硬下限，
     ratchet 在其上单调收紧。
 
 用法：
-    python scripts/gates/coverage_ratchet.py                    # 本地：检查 + 满足步长则上调
+    python scripts/gates/coverage_ratchet.py                    # 本地：检查（回退即失败，不写水位）
+    python scripts/gates/coverage_ratchet.py --allow-bump       # 本地：满足步长时上调并写回（需核对口径平台）
     python scripts/gates/coverage_ratchet.py --check            # CI：只检查不写（阻断回退）
     python scripts/gates/coverage_ratchet.py --coverage-xml path/to/coverage.xml
     python scripts/gates/coverage_ratchet.py --bump 0.5         # 步长（百分点，默认 0.5）
@@ -92,7 +103,9 @@ def _write_state(path: Path, state: dict[str, float]) -> None:
     header = (
         "# W2 覆盖率渐进式紧箍水位（scripts/gates/coverage_ratchet.py 读写，请勿手降）\n"
         "#\n"
-        "# 规则：本地运行 ratchet（无 --check）实测高于水位+步长时自动上调并写回，\n"
+        "# 规则：本地运行 ratchet（无 --check）实测高于水位+步长时**只提示满足上调条件**；\n"
+        "# 写回需显式 --allow-bump（AA-4 2026-10-19：水位必须来自 CI 阻断档 ubuntu 3.14 口径，\n"
+        "# 跨平台分支差实测 0.13pp，用本地 macOS 实测抬水位会让 CI 必红），\n"
         "# 由贡献者随改动提交；水位只升不降。CI 以 --check 模式阻断回退。\n"
         "# 静态硬下限（行 85 / 分支 77）仍由 check_branch_coverage.py 把守。\n"
     )
@@ -146,6 +159,12 @@ def main() -> int:
     parser.add_argument("--coverage-xml", default=str(PROJECT_ROOT / "coverage.xml"), help="coverage.xml 路径")
     parser.add_argument("--state", default=str(STATE_FILE), help="水位状态文件路径")
     parser.add_argument("--check", action="store_true", help="只检查不写（CI 模式：回退即失败）")
+    parser.add_argument(
+        "--allow-bump",
+        action="store_true",
+        help="允许把水位上调并写回（AA-4：默认只提示满足上调条件、不写；"
+        "确认本次 coverage.xml 与 CI 阻断档同口径后再加）",
+    )
     parser.add_argument("--bump", type=float, default=0.5, help="上调步长（百分点，默认 0.5）")
     parser.add_argument(
         "--init",
@@ -170,6 +189,16 @@ def main() -> int:
             continue
         headroom = actual - floor
         if not args.check and headroom >= args.bump:
+            if not args.allow_bump:
+                # AA-4：满足步长不再静默写回——抬水位的数必须来自 CI 阻断档口径。
+                print(
+                    f"[ratchet] ✅ {label}达标：实测 {actual:.2f}% ≥ 水位 {floor:.2f}%"
+                    f"（余量 {headroom:.2f}pp ≥ 步长 {args.bump:.2f}pp）\n"
+                    f"          满足上调条件，**未写回**：水位上调须显式加 --allow-bump，"
+                    "且先确认本次 coverage.xml 与 CI 阻断档（ubuntu 3.14）同口径"
+                    "（跨平台分支差实测 0.13pp，见本脚本 AA-4 说明）。"
+                )
+                continue
             # 上调至实测向下取整到 0.1pp（避免噪声抖动），永不下降。
             # floor 用 math.floor(x*10)/10（浮点 // 会出现 90.0//0.1*0.1→89.9 的精度坑）
             new_state[key] = math.floor(actual * 10) / 10

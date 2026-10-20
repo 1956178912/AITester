@@ -48,6 +48,7 @@ from experiments.repair_sample_selection import (  # noqa: E402
     _DEFAULT_BATCHES,
     _REVIEW_RUBRIC,
     build_sampling_frame,
+    gold_reference_code,
     select_stratified_sample,
     stratify,
 )
@@ -78,9 +79,13 @@ def _patch_gold_diff(row: dict[str, Any]) -> str:
     行级差异就是审阅者的核心判读对象；差异为空 → 逐行一致（大概率
     equivalent，但仍需人工确认语义）。LLM 输出格式伪影（如 patch 首行
     的语言标签）按原样参与 diff——它们本身就是证据的一部分。
+
+    gold 走 ``gold_reference_code()`` 单点解析（跨文件任务取
+    ``fixed_module_code``）：直接读 ``fixed`` 会让跨文件候选拿到空串，把
+    "取错字段"印成"素材缺失，无法生成 diff"，审阅者据此无法裁决。
     """
     patch_text = str(row.get("patch") or "")
-    gold_text = str((row.get("task_metadata") or {}).get("fixed") or "")
+    gold_text = gold_reference_code(row.get("task_metadata"))
     if not patch_text or not gold_text:
         return "（素材缺失，无法生成 diff——按上游字段缺失口径记录）"
     diff_lines = list(

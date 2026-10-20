@@ -395,6 +395,13 @@ def _repair_json_bounded(s: str, rounds: int = 4) -> str:
     return cur
 
 
+# 值位置：冒号后、由引号开头的表达式，直到遇到 , } ] 为止。
+# AA-5 提到模块级（原为 `_quote_python_expressions` 内联字面量）：该门文法是
+# `_safe_eval` 三条拒绝分支恒不可达的**唯一前提**，测试据此枚举文法内输入并逐字节
+# 钉住本模式，正则一旦放宽即先红（详见 FIX_COVERAGE_AUDIT_ROUND4_2026-10-19.md）。
+_JSON_VALUE_EXPR_PATTERN = re.compile(r':\s*("(?:[^"\\]|\\.)*"(?:\s*\*\s*\d+|\s*\+\s*"(?:[^"\\]|\\.)*")+)')
+
+
 def _quote_python_expressions(s: str, max_len: int = 4096) -> str:
     """把 JSON 值位置上的**纯字面量 Python 表达式**替换为等值 JSON 字面量。
 
@@ -427,6 +434,12 @@ def _quote_python_expressions(s: str, max_len: int = 4096) -> str:
         字符串、另一侧为小整数）、``BinOp(Add)``。其余节点一律抛错拒绝——
         不触达 Call/Attribute/Name/Subscript，故无任意代码执行面。
         ``budget`` 为字符串长度上限（防 ``"a"*10**9`` 式内存放大）。
+
+        AA-5 覆盖率核实：本函数唯一入口是下方值位置正则门，其文法只放行
+        ``引号字符串`` + ``* 整数`` / ``+ 引号字符串``，故 Mult 恒为 str×int、
+        Add 两侧恒为 str——Mult 反向分支、``unsupported operator`` 与
+        ``unsupported node`` 三条拒绝实测**恒不可达**，保留作正则门一旦放宽
+        后的双保险；不要用伪造输入凑覆盖（详见 ROUND4 审计）。
         """
         if isinstance(node, ast.Constant):
             return node.value
@@ -468,8 +481,8 @@ def _quote_python_expressions(s: str, max_len: int = 4096) -> str:
         prefix = m.group(0)[: m.start(1) - m.start(0)]
         return prefix + json.dumps(val, ensure_ascii=False)
 
-    # 值位置：冒号后、由引号开头的表达式，直到遇到 , } ] 为止
-    return re.sub(r':\s*("(?:[^"\\]|\\.)*"(?:\s*\*\s*\d+|\s*\+\s*"(?:[^"\\]|\\.)*")+)', _repl, s)
+    # 值位置：见模块级 _JSON_VALUE_EXPR_PATTERN（AA-5 提升，文法即拒绝分支前提）
+    return _JSON_VALUE_EXPR_PATTERN.sub(_repl, s)
 
 
 def _find_balanced_delimited(text: str, start: int, open_ch: str, close_ch: str) -> str | None:
@@ -656,6 +669,9 @@ def extract_json_array(text: str) -> list[Any]:
                 return _arr
 
     # 档 2：正则取最内层（最后出现）的无嵌套数组
+    # AA-5 核实（ROUND4 审计）：``_JSON_ARRAY_LEAF_PATTERN`` 保证片段以 ``[`` 开头
+    # ``]`` 结尾，故 ``json.loads`` 只会"返回 list"或"抛错"——下方 isinstance 的
+    # 非 list 分支是**可证的不可达**（保留作正则一旦放宽的双保险）。
     last_match: re.Match[str] | None = None
     for m in _JSON_ARRAY_LEAF_PATTERN.finditer(cleaned):
         last_match = m
@@ -751,6 +767,27 @@ def extract_json_object(text: str) -> dict[str, Any]:
     # D1 修复档 2：多对象背靠背拼接（实测 57/188）——取**第一个**平衡对象
     # 并做语法修复。放在叶子方案之前：叶子方案会取到"最后一个"对象，
     # 对"多个任务的计划连写"场景语义不符（应取首个，与 Planner 单任务契约一致）。
+    # AA-5 曾判本档返回分支"恒不可达"，理由是"档 1 与本档取到同一片段、候选集
+    # 相同，故档 1 已全失败"。**AB 轮（2026-10-19）用真实语料否证了这个理由**：
+    # 产品 LLM 响应缓存 7,565 条原始响应离线重放，走到本档的 692 条中 667 条取到
+    # 片段，其中 **1 条档 1 的 `_find_balanced_json` 直接返回 None**（不是"取到
+    # 不同片段"，是整块档 1 被跳过）——此时本档是**唯一**产出候选片段并做语法
+    # 修复的档，并非档 1 的重复。分歧机制已定位并可合成复现：
+    # `_find_balanced_delimited` 在**字符串外**也把 `\` 当转义符（吃掉下一个字符），
+    # 本函数在字符串外忽略 `\`，故串外裸反斜杠让两者深度/字符串态错开；
+    # 最小复现 '{"a":\\}{"b":1}' → 档 1 None / 档 2 '{"a":\\}'。
+    # 但**结论本身仍成立，且换了更硬的理由**：分歧片段必然内含"字符串外的裸
+    # 反斜杠"，而下面 5 个候选没有一个是删反斜杠的，故救不活。针对该分歧类
+    # 单独构造枚举：716 条分歧输入、**0** 条能被本档返回（AA-5 的 54,006 条
+    # 同片段枚举并未覆盖这一类）。真实语料同样 0/667。
+    # 处置：**保留**。理由从"恒不可达（全称推断）"改为"返回分支在 7,565 条真实
+    # 响应 + 716 条分歧类定向枚举 + 覆盖率三个口径下均为 0 次触发"。现有证据下
+    # 删除不改变返回值（见 TestDeletionEquivalenceProbe：4 类钉住输入上"有/无本档"
+    # 输出逐字相同），但那是三条经验证据的合致、不是证明，且删除属行为变更须单独
+    # 轮次——故保留。真正的守卫是 TestDivergentClassUnrescuable：将来若给上面的
+    # 候选加入"删反斜杠"类修复，分歧片段就会变得可救，该锁立刻转红。证据工件
+    # experiments/helpers_tier_replay.py 与
+    # docs/reviews/TIER2_REAL_CORPUS_REPLAY_2026-10-19.md。
     _first = _first_balanced_object(cleaned)
     if _first is not None:
         for cand in (

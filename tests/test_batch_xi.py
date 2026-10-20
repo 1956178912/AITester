@@ -49,11 +49,18 @@ class TestGeneratorNodeWiringContract:
         assert "oracle_context_minimal as _oracle_ctx_minimal" in self.SRC
 
     def test_all_four_sections_gated(self) -> None:
-        # 四段的构造条件均带 not _ctx_minimal 前缀
-        assert "if not _ctx_minimal and _branch_coverage_inject_enabled()" in self.SRC
-        assert "if not _ctx_minimal and _boundary_triplets_enabled()" in self.SRC
-        assert "if not _ctx_minimal and _mr_enabled() and _fn_name:" in self.SRC
-        assert "if not _ctx_minimal and _diff_enabled() and _fn_name:" in self.SRC
+        # 四段的构造条件均带 not ctx_minimal 前缀
+        # （2026-10-19 工程质量轮：段落构建提取为 _build_generator_static_sections /
+        # _build_generator_oracle_sections，消融档参数名由 _ctx_minimal 收敛为
+        # ctx_minimal；判定语义不变）
+        assert "if not ctx_minimal and _branch_coverage_inject_enabled()" in self.SRC
+        assert "if not ctx_minimal and _boundary_triplets_enabled()" in self.SRC
+        assert "if not ctx_minimal and _mr_enabled() and _fn_name:" in self.SRC
+        assert "if not ctx_minimal and _diff_enabled() and _fn_name:" in self.SRC
+
+    def test_sections_builder_wired(self) -> None:
+        # 2026-10-19 工程质量轮：防"helper 在但主节点没接线"
+        assert "_sections = _build_generator_prompt_sections(state, test_plan)" in self.SRC
 
     def test_section_variables_default_none(self) -> None:
         # 四段变量保持 None 缺省（minimal 时不注入的结构保证）

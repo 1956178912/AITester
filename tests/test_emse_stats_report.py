@@ -465,10 +465,14 @@ class TestCostEffectivenessA07:
         assert out["usd_per_detection"] is None or out["usd_per_detection"] == 0.0
 
     def test_single_model_priced_exactly(self) -> None:
-        """单模型行按 input/output 分别计价（算术精确锁定）。"""
+        """单模型行按 input/output 分别计价（算术精确锁定）。
+
+        AB-13 口径对齐：本例的合成条目原不写 `currency`，而 `total_usd` 这个字段名声明美元，
+        币种缺席按"不可核验"剔除（与 `estimate_cost_usd` 同口径），故条目须显式登记 USD 才参与计价。
+        """
         from experiments.emse_stats_report import cost_effectiveness_block
 
-        price = {"m1": {"input_per_mtok": 0.3, "output_per_mtok": 1.2}}
+        price = {"m1": {"input_per_mtok": 0.3, "output_per_mtok": 1.2, "currency": "USD"}}
         rows = [
             {
                 "detection_rate": 1.0,
@@ -498,7 +502,10 @@ class TestCostEffectivenessA07:
         assert out["tokens_per_detection"] == pytest.approx(2_000_000.0)
 
     def test_zero_detection_no_division(self) -> None:
-        """检出为 0 → $/detection 与 tokens/detection 均 None（不除零）。"""
+        """检出为 0 → $/detection 与 tokens/detection 均 None（不除零）。
+
+        AB-13：条目显式登记 USD，否则这行会变成"根本没计价"的假绿——除零守卫根本没被走到。
+        """
         from experiments.emse_stats_report import cost_effectiveness_block
 
         rows = [
@@ -513,7 +520,10 @@ class TestCostEffectivenessA07:
                 },
             }
         ]
-        out = cost_effectiveness_block(rows, price_table={"m1": {"input_per_mtok": 0.3, "output_per_mtok": 1.2}})
+        out = cost_effectiveness_block(
+            rows, price_table={"m1": {"input_per_mtok": 0.3, "output_per_mtok": 1.2, "currency": "USD"}}
+        )
+        assert out["n_priced_rows"] == 1 and out["total_usd"] > 0.0, "分子必须非零，否则除零守卫没被走到"
         assert out["n_detections"] == 0
         assert out["usd_per_detection"] is None and out["tokens_per_detection"] is None
 

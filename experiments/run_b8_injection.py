@@ -65,6 +65,15 @@ import traceback
 from pathlib import Path
 from typing import Any
 
+# AB-17（2026-10-20）：价目表表级准入的唯一事实源在 `src.budget.pricing.load_table_models`。
+# 本文件可被测试/驱动按包导入，也可直接以脚本方式运行（`python experiments/run_b8_injection.py`），
+# 故与 `experiments/analyze_t1_b2_main_batch.py` 同口径做路径引导后再导入。
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from src.budget.pricing import load_table_models  # noqa: E402
+
 # 常量（INJECT 口径；聚合模式无需依赖 worktree 也能读）
 INJECT_ENV = "AITESTER_B8_INJECTION_ENABLE"
 ARM_ENV = "AITESTER_B8_INJECTION_ARM"
@@ -668,20 +677,35 @@ def aggregate(args: argparse.Namespace) -> int:
     price_path = Path(args.price_table).resolve() if args.price_table else None
     price_in, price_out = DEFAULT_PRICE_USD_IN_PER_MTOK, DEFAULT_PRICE_USD_OUT_PER_MTOK
     price_meta: dict[str, Any] = {"source": "builtin deepseek-flash standard price", "as_of": "2026-10-06"}
-    if price_path and price_path.is_file():
-        table = json.loads(price_path.read_text(encoding="utf-8"))
-        model = (loaded["on"]["data"].get("provenance") or {}).get("model_name") or "deepseek-flash"
-        row = (table.get("models") or {}).get(model) or {}
-        if isinstance(row.get("input_per_mtok"), (int, float)) and isinstance(row.get("output_per_mtok"), (int, float)):
-            price_in, price_out = float(row["input_per_mtok"]), float(row["output_per_mtok"])
-            price_meta = {
-                "source": row.get("source"),
-                "currency": row.get("currency"),
-                "as_of": row.get("as_of"),
-                "model": model,
-                "input_per_mtok": price_in,
-                "output_per_mtok": price_out,
-            }
+    if price_path is not None:
+        table, table_reason = load_table_models(price_path)
+        if table_reason is not None:
+            # AB-17：改前这里是 `price_path.is_file()` 前置守卫——显式给了一个坏路径
+            # （缺失 / 语法错 / 形状不符）会静默退回内置价，报告里读起来与"根本没给价目表"
+            # 同形；而"文件在、内容坏"三种机制又会各自崩在不同的 `.get` / `json.loads` 上。
+            # 现在点名机制并保留键（只在真发生时写入；内置价照旧兜底，②自持数字门不在本轮改）。
+            logger.warning("价目表不可用（%s：%s）：改用内置 deepseek-flash 标准价", price_path, table_reason)
+            price_meta["table_reason"] = table_reason
+        else:
+            model = (loaded["on"]["data"].get("provenance") or {}).get("model_name") or "deepseek-flash"
+            row = table.get(model)
+            # ②自持数字门（AB-16 登记不修）：只认真数；条目形状/币种不进判定，币种只抄进 meta。
+            # AB-17 只加 `isinstance(row, dict)`：models 层不再过滤后，非对象条目改前会崩在
+            # `row.get` 上，现在按"这行读不出价"处理（与"没这个模型"同一条既有降级）。
+            if (
+                isinstance(row, dict)
+                and isinstance(row.get("input_per_mtok"), (int, float))
+                and isinstance(row.get("output_per_mtok"), (int, float))
+            ):
+                price_in, price_out = float(row["input_per_mtok"]), float(row["output_per_mtok"])
+                price_meta = {
+                    "source": row.get("source"),
+                    "currency": row.get("currency"),
+                    "as_of": row.get("as_of"),
+                    "model": model,
+                    "input_per_mtok": price_in,
+                    "output_per_mtok": price_out,
+                }
     summaries = {arm: _arm_summary(loaded[arm], price_in, price_out) for arm in ("on", "off")}
     on, off = summaries["on"], summaries["off"]
 

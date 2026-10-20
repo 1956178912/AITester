@@ -855,35 +855,19 @@ def _apply_test_suite_dedup(generated_test: str) -> tuple[str, int]:
     return deduped_code, len(dedup_removed)
 
 
-def _generator_node(state: AITesterState) -> dict[str, Any]:
-    """
-    GeneratorAgent 节点：根据测试计划生成 pytest 测试代码。
+def _retrieve_generator_rag_refs(state: AITesterState) -> tuple[list | None, dict[str, Any] | None]:
+    """Generator 节点的 RAG 检索段（自 `_generator_node` 提取，行为等价）。
 
-    本节点的核心职责：
-    1. 若 RAG 已启用，先检索相似历史测试用例作为风格参考（检索增强）
-    2. 调用 GeneratorAgent 生成完整的 pytest 测试代码字符串
-    3. 记录生成结果的长度，便于后续分析和调试
-
-    设计考虑：
-    - RAG 检索失败时静默跳过（logger.warning），不影响主流程
-    - 若 ENABLE_PLANNER=False，传入 None 作为 test_plan，Generator 将基于裸代码生成
+    仅当 ``ENABLE_RAG`` 开启且 RAG 模块可用时经 ``rag_guarded`` 降级守卫
+    检索 Top-3 相似历史测试用例；检索失败静默跳过，不影响主生成流程。
 
     Args:
-        state: 当前状态，包含 test_plan（可选）、target_code、module_name 等字段。
+        state: 当前状态（读取 ``target_code``）。
 
     Returns:
-        更新后的状态字典，包含 generated_test（测试代码字符串）和 rag_references（RAG 参考列表）。
+        ``(rag_refs, update_rag_stat)`` 二元组：前者为参考用例列表或 None，
+        后者为本轮检索质量统计（供 ``state["rag_stats"]`` 累计）。
     """
-    agent = get_or_create_agent(GeneratorAgent)
-
-    # P0-A-2（2026-10-12）：规格优先替换段可审计观测（默认 None，DETECTION_SPEC_MODE
-    # 默认 off 时历史口径零变化；replace 时 _generator_node 写
-    # attempted_replaced / attempted_fallback，见 update 与 _spec_replace_applied）。
-    _spec_replace_applied: str | None = None
-    # M-1（2026-10-17）：规格增广段可审计观测（默认 None；augment 时写
-    # attempted_augmented / attempted_fallback，见 update 与 _spec_augment_applied）。
-    _spec_augment_applied: str | None = None
-
     # 初始化 RAG 参考列表为 None（默认不使用检索增强）
     # 仅当 RAG 开关开启、模块可用时才进行检索（统一走 rag_guarded 降级守卫，P1 重构）
     # 闭包写回需要外层可变容器（list 包装：Python 闭包内无法 rebinding 外层局部名）
@@ -914,352 +898,315 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
 
     # P1：记录本次 RAG 检索的质量指标（命中数/相似度），随状态累计供实验汇总
     update_rag_stat = _build_rag_stat(rag_refs, kind="test_cases")
+    return rag_refs, update_rag_stat
 
-    # 调用 Generator 生成测试代码
-    # 参数说明：
-    #   - test_plan: 若启用 Planner 则传入结构化计划，否则为 None（Generator 将自行推断）
-    #   - target_code: 被测代码全文，Generator 需要它来理解业务逻辑和生成 import 语句
-    #   - module_name: 模块名（不含 .py），用于生成正确的 from X import Y 语句
-    #   - rag_references: RAG 检索到的历史案例，用于风格参考（可为 None）
-    #   - focus_function: 目标函数名（P0 大文件优化），超长代码时按该函数
-    #     做 AST 智能截取，保留目标函数及直接依赖，避免 LLM 看不到完整上下文
-    # Planner 缺席时 test_plan 为 None（documented behavior：Generator 基于裸代码自行推断，
-    # 见 tests/test_workflow.py::test_generator_node_missing_test_plan_key_no_keyerror 回归口径）。
-    # mypy 按 TypedDict 报 dict|None → dict，显式 cast 收窄（运行期传 None，Generator 内
-    # isinstance(test_plan, dict) 守卫已覆盖 None 路径，行为不变）
-    test_plan = cast("dict[str, Any]", state.get("test_plan"))
 
-    # 2026-09-26 全面审查（P1 降级兜底）：此前 agent.generate 无 try-except，
-    # LLM 调用失败（RuntimeError，含跨 API 故障转移耗尽）/ 缓存 OSError 会
-    # 直接让整图崩溃——与 planner/debugger 节点"降级兜底"口径不一致（二者
-    # 均有默认计划 / 空 patch 兜底），且 workflow.py 文档声称"使用 try-except
-    # 捕获 LLM 调用异常，确保工作流不因单点故障而崩溃"。现补降级：LLM 失败时
-    # 生成空测试 + 记诊断，executor 拿到空测试自然失败 → 路由到 debugger
-    # （修代码）或 done，不再崩溃整图。历史行为是崩溃，新行为是优雅降级——
-    # 对"LLM 完全不可用"场景更合理（崩溃 = 零产出，降级 = 仍有修复机会）。
-    _generator_budget_hit = False  # 5.4 预算封顶标记（O35；正常路径恒 False）
-    _empty_plan_shortcut = False  # 空计划短路标记（try 块外初始化，except 分支可达）
-    # P2 一期（观测级压缩）：压缩反馈产物与渲染段落（try 块外初始化，
-    # except 分支可达；FEEDBACK_COMPRESSION_ENABLE 默认关时恒 None，
-    # 历史口径零变化）
+def _build_generator_static_sections(state: AITesterState, ctx_minimal: bool) -> dict[str, Any]:
+    """构建 Generator 的静态分析增强段落（自 prompt 段构建器拆出，行为等价）。
+
+    覆盖分支覆盖率 / 反馈压缩 / AST 边界锚点 / 路径枚举 / 操作图五节；
+    ``ctx_minimal`` 为 True（oracle 上下文消融档）时全部保持 None 不注入。
+    全部为零 LLM 静态分析或既有观测渲染，不调用 LLM、不写 state。
+
+    Args:
+        state: 当前状态（读取 target_code / branch_coverage 等）。
+        ctx_minimal: 是否处于 oracle 上下文消融档（minimal）。
+
+    Returns:
+        六个段落键的字典（未启用时为 None）。
+    """
+    # O3（2026-09-29 审查 P1）：分支覆盖率注入——_executor_node 上一轮测量
+    # 的未覆盖分支清单渲染为 prompt 段落（BRANCH_COVERAGE_INJECT_ENABLE=true
+    # 时非空，默认关时 None，历史口径零变化）
+    _bc_section: str | None = None
+    if not ctx_minimal and _branch_coverage_inject_enabled() and state.get("branch_coverage"):
+        from src.tools.branch_coverage_inject import build_branch_coverage_prompt_section as _build_bc_section
+
+        _bc_section = _build_bc_section(state.get("branch_coverage"))
+    # P2 一期（观测级行粒度压缩）：Debugger→Generator 反馈的压缩段落。
+    # 从 state 既有观测（probe 快照最内层帧 / fl_spectral Top-k /
+    # traceback 行号 / mutation_feedback）提取「失败测试涉及的源代码行
+    # + 错误类型 + 存活变异体摘要」，渲染为有界段落（≤4000 字符）注入
+    # Generator prompt——替代朴素全量 trace 注入。零 LLM 成本（纯文本
+    # 提取）；无实质内容时 compressed_feedback=None，历史口径零变化；
+    # 与 oracle_context_minimal 消融档联动（minimal 时不注入，与 O3
+    # 同口径）。构建点选消费侧（本节点）而非 _debugger_node：_should_debug
+    # 的 over_red 再生成路由不过 debugger，消费侧构建覆盖全部再生成路径。
     _compressed_feedback: dict[str, Any] | None = None
     _fc_section: str | None = None
+    if not ctx_minimal and _feedback_compression_enabled():
+        from src.tools.feedback_compression import build_compressed_feedback as _build_fc
+        from src.tools.feedback_compression import build_feedback_compression_section as _build_fc_section
+
+        _compressed_feedback = _build_fc(state)
+        _fc_section = _build_fc_section(_compressed_feedback)
+        if _fc_section:
+            logger.info(
+                "P2 观测级压缩反馈：错误类型=%s 涉及行=%d 存活变异=%d（%d 字符）",
+                (_compressed_feedback or {}).get("error_category"),
+                len((_compressed_feedback or {}).get("target_lines") or []),
+                len((_compressed_feedback or {}).get("survived_mutants") or []),
+                len(_fc_section),
+            )
+    # M10（2026-09-29 审查 P0）：确定性边界锚点——从 target_code 的 AST
+    # 分支条件推导边界三元组（零 LLM 成本），渲染为 prompt 段落注入
+    # Generator（BOUNDARY_TRIPLETS_ENABLE=true 时非空，默认关时 None，
+    # 历史口径零变化）。与 O3 分支覆盖率注入同位（在 generate 调用前
+    # 构建，传入 generate 的新参数 boundary_triplets_section）。
+    _bt_section: str | None = None
+    if not ctx_minimal and _boundary_triplets_enabled():
+        from src.tools.logic_spec import build_boundary_triplets_section as _build_bt_section
+        from src.tools.logic_spec import derive_boundary_triplets as _derive_bt
+
+        _bt_triplets = _derive_bt(state["target_code"], state.get("target_function"))
+        if _bt_triplets:
+            _bt_section = _build_bt_section(_bt_triplets)
+    # 2026-10-10 独立审查落地（报告建议 4 结构接地·路径定向合成）：独立执行
+    # 路径枚举段落——control_flow.enumerate_paths（零 LLM 静态分析）枚举
+    # if/elif/else 分支组合 + 循环三边界，渲染为"路径定向"提示注入 Generator。
+    # PATH_ENUM_INJECT_ENABLE=true 时非空；默认关时 None，历史口径零变化。
+    _paths_section: str | None = None
+    if not ctx_minimal and _path_enum_inject_enabled():
+        from src.tools.control_flow import build_paths_prompt_section as _build_paths_section
+        from src.tools.control_flow import enumerate_paths as _enumerate_paths
+
+        _paths_result = _enumerate_paths(state["target_code"], state.get("target_function"))
+        _paths_section = _build_paths_section(_paths_result)
+    # 2026-10-10 独立审查落地（报告建议 4 结构接地·操作图）：已验证 utility
+    # helper 清单段落——operation_map.build_operation_map（零 LLM 静态分析）
+    # 收集函数签名/类/常量/导入，渲染为"已验证符号清单"注入 Generator，
+    # 避免 leap-to-code（编造不存在的 API / 错写参数签名）。
+    # OPERATION_MAP_INJECT_ENABLE=true 时非空；默认关时 None，历史口径零变化。
+    _opmap_section: str | None = None
+    if not ctx_minimal and _operation_map_inject_enabled():
+        from src.tools.operation_map import build_operation_map as _build_opmap
+        from src.tools.operation_map import build_operation_map_section as _build_opmap_section
+
+        _opmap_section = _build_opmap_section(_build_opmap(state["target_code"]))
+    return {
+        "branch_coverage_section": _bc_section,
+        "feedback_compression_section": _fc_section,
+        "compressed_feedback": _compressed_feedback,
+        "boundary_triplets_section": _bt_section,
+        "paths_section": _paths_section,
+        "operation_map_section": _opmap_section,
+    }
+
+
+def _build_generator_oracle_sections(
+    state: AITesterState, test_plan: dict[str, Any], ctx_minimal: bool
+) -> dict[str, Any]:
+    """构建 Generator 的无 oracle / 规格 / 注入防护段落（行为等价拆出）。
+
+    覆盖 N2 蜕变关系 / N4 差分测试 / 输入侧注入扫描 / 规格优先（replace）
+    / 规格增广（augment）/ 空计划短路六节；``ctx_minimal`` 为 True 时增强
+    段与规格段均不注入（空计划短路开关独立生效）。全程不调用 LLM。
+
+    Args:
+        state: 当前状态（读取外部可控文本 / 规格锚等）。
+        test_plan: Planner 计划（可为空 dict）。
+        ctx_minimal: 是否处于 oracle 上下文消融档（minimal）。
+
+    Returns:
+        九个段落与观测标记键的字典。
+    """
+    # P2-7（N2/N4 接线审计，2026-10）：无 oracle 场景增强段落。
+    # N2 蜕变关系：从函数名/签名/文档启发式匹配 MR 模板（零 LLM 成本），
+    # 命中时渲染 prompt 段落注入（METAMORPHIC_ENABLE=true 时非空，默认关
+    # 时 None，历史口径零变化）。
+    # N4 差分测试：引导 LLM 生成"参考实现 vs 被测实现"随机输入比对指令
+    # （DIFFERENTIAL_TEST_ENABLE=true 时非空，默认关时 None）。
+    # 两节均为纯观测层 prompt 增强，不改变路由 / 开关默认行为。
+    _fn_name = state.get("target_function") or ""
+    _mr_section: str | None = None
+    _diff_section: str | None = None
     try:
-        # 修复引擎批次 XI（ADR-0025）：oracle 上下文消融档——minimal 时
-        # 下方四个增强段（分支覆盖/AST 边界锚点/蜕变/差分）全部保持
-        # None 不注入（ASE 2025"额外上下文无边际收益"的消融对照臂）。
-        # 默认 full：各段按自身开关构造，历史口径零变化。
-        from src.tools.logic_spec import oracle_context_minimal as _oracle_ctx_minimal
-
-        _ctx_minimal = _oracle_ctx_minimal()
-        # O3（2026-09-29 审查 P1）：分支覆盖率注入——_executor_node 上一轮测量
-        # 的未覆盖分支清单渲染为 prompt 段落（BRANCH_COVERAGE_INJECT_ENABLE=true
-        # 时非空，默认关时 None，历史口径零变化）
-        _bc_section: str | None = None
-        if not _ctx_minimal and _branch_coverage_inject_enabled() and state.get("branch_coverage"):
-            from src.tools.branch_coverage_inject import build_branch_coverage_prompt_section as _build_bc_section
-
-            _bc_section = _build_bc_section(state.get("branch_coverage"))
-        # P2 一期（观测级行粒度压缩）：Debugger→Generator 反馈的压缩段落。
-        # 从 state 既有观测（probe 快照最内层帧 / fl_spectral Top-k /
-        # traceback 行号 / mutation_feedback）提取「失败测试涉及的源代码行
-        # + 错误类型 + 存活变异体摘要」，渲染为有界段落（≤4000 字符）注入
-        # Generator prompt——替代朴素全量 trace 注入。零 LLM 成本（纯文本
-        # 提取）；无实质内容时 compressed_feedback=None，历史口径零变化；
-        # 与 oracle_context_minimal 消融档联动（minimal 时不注入，与 O3
-        # 同口径）。构建点选消费侧（本节点）而非 _debugger_node：_should_debug
-        # 的 over_red 再生成路由不过 debugger，消费侧构建覆盖全部再生成路径。
-        if not _ctx_minimal and _feedback_compression_enabled():
-            from src.tools.feedback_compression import build_compressed_feedback as _build_fc
-            from src.tools.feedback_compression import build_feedback_compression_section as _build_fc_section
-
-            _compressed_feedback = _build_fc(state)
-            _fc_section = _build_fc_section(_compressed_feedback)
-            if _fc_section:
-                logger.info(
-                    "P2 观测级压缩反馈：错误类型=%s 涉及行=%d 存活变异=%d（%d 字符）",
-                    (_compressed_feedback or {}).get("error_category"),
-                    len((_compressed_feedback or {}).get("target_lines") or []),
-                    len((_compressed_feedback or {}).get("survived_mutants") or []),
-                    len(_fc_section),
-                )
-        # M10（2026-09-29 审查 P0）：确定性边界锚点——从 target_code 的 AST
-        # 分支条件推导边界三元组（零 LLM 成本），渲染为 prompt 段落注入
-        # Generator（BOUNDARY_TRIPLETS_ENABLE=true 时非空，默认关时 None，
-        # 历史口径零变化）。与 O3 分支覆盖率注入同位（在 generate 调用前
-        # 构建，传入 generate 的新参数 boundary_triplets_section）。
-        _bt_section: str | None = None
-        if not _ctx_minimal and _boundary_triplets_enabled():
-            from src.tools.logic_spec import build_boundary_triplets_section as _build_bt_section
-            from src.tools.logic_spec import derive_boundary_triplets as _derive_bt
-
-            _bt_triplets = _derive_bt(state["target_code"], state.get("target_function"))
-            if _bt_triplets:
-                _bt_section = _build_bt_section(_bt_triplets)
-        # 2026-10-10 独立审查落地（报告建议 4 结构接地·路径定向合成）：独立执行
-        # 路径枚举段落——control_flow.enumerate_paths（零 LLM 静态分析）枚举
-        # if/elif/else 分支组合 + 循环三边界，渲染为"路径定向"提示注入 Generator。
-        # PATH_ENUM_INJECT_ENABLE=true 时非空；默认关时 None，历史口径零变化。
-        _paths_section: str | None = None
-        if not _ctx_minimal and _path_enum_inject_enabled():
-            from src.tools.control_flow import build_paths_prompt_section as _build_paths_section
-            from src.tools.control_flow import enumerate_paths as _enumerate_paths
-
-            _paths_result = _enumerate_paths(state["target_code"], state.get("target_function"))
-            _paths_section = _build_paths_section(_paths_result)
-        # 2026-10-10 独立审查落地（报告建议 4 结构接地·操作图）：已验证 utility
-        # helper 清单段落——operation_map.build_operation_map（零 LLM 静态分析）
-        # 收集函数签名/类/常量/导入，渲染为"已验证符号清单"注入 Generator，
-        # 避免 leap-to-code（编造不存在的 API / 错写参数签名）。
-        # OPERATION_MAP_INJECT_ENABLE=true 时非空；默认关时 None，历史口径零变化。
-        _opmap_section: str | None = None
-        if not _ctx_minimal and _operation_map_inject_enabled():
-            from src.tools.operation_map import build_operation_map as _build_opmap
-            from src.tools.operation_map import build_operation_map_section as _build_opmap_section
-
-            _opmap_section = _build_opmap_section(_build_opmap(state["target_code"]))
-        # P2-7（N2/N4 接线审计，2026-10）：无 oracle 场景增强段落。
-        # N2 蜕变关系：从函数名/签名/文档启发式匹配 MR 模板（零 LLM 成本），
-        # 命中时渲染 prompt 段落注入（METAMORPHIC_ENABLE=true 时非空，默认关
-        # 时 None，历史口径零变化）。
-        # N4 差分测试：引导 LLM 生成"参考实现 vs 被测实现"随机输入比对指令
-        # （DIFFERENTIAL_TEST_ENABLE=true 时非空，默认关时 None）。
-        # 两节均为纯观测层 prompt 增强，不改变路由 / 开关默认行为。
-        _fn_name = state.get("target_function") or ""
-        _mr_section: str | None = None
-        _diff_section: str | None = None
-        try:
-            from experiments.metamorphic_oracle import (
-                build_metamorphic_prompt_section as _build_mr_section,
-            )
-            from experiments.metamorphic_oracle import (
-                metamorphic_enabled as _mr_enabled,
-            )
-            from experiments.metamorphic_oracle import (
-                suggest_metamorphic_relations as _suggest_mrs,
-            )
-
-            if not _ctx_minimal and _mr_enabled() and _fn_name:
-                _mrs = _suggest_mrs(_fn_name)
-                if _mrs:
-                    _mr_section = _build_mr_section(_mrs)
-            from experiments.differential_test import (
-                build_differential_prompt_section as _build_diff_section,
-            )
-            from experiments.differential_test import (
-                differential_enabled as _diff_enabled,
-            )
-
-            if not _ctx_minimal and _diff_enabled() and _fn_name:
-                _diff_section = _build_diff_section(_fn_name)
-        except Exception as _oracle_hook_exc:  # 观测层钩子失败不得阻断主生成
-            logger.warning("N2/N4 无 oracle 增强段落构建失败，降级跳过: %s", _oracle_hook_exc)
-        # P2（2026-10 批次·续二）：注入扫描回归基准接线——此前
-        # detect_prompt_injection 输入侧全仓无调用方（孤儿函数，威胁模型 P2
-        # 缺口"注入扫描无回归基准"）。本段在 Generator 消费外部可控文本
-        # （problem_statement / 缺陷描述 / 任务描述）前做输入侧注入特征扫描
-        # （INJECTION_GUARD_ENABLE 默认关时恒 []，历史口径零变化）；命中时
-        # 把 findings 写入 state["injection_findings"]（供 agent_telemetry
-        # 的 injection_detected 模式消费 + trace 记录）并经
-        # build_injection_warning 追加系统侧警示到本次 LLM query（OWASP ASI
-        # "检测+隔离"口径：只警示不自动阻断，阻断决策留给调用方）。
-        # 外部可控文本来源（按优先级）：
-        #   1. state["problem_statement"]（SWE-bench 任务描述 / issue 文本）
-        #   2. state["diagnosis"] / state["review_reason"]（上一轮诊断描述）
-        #   3. state["task_description"]（CLI 自定义任务描述，若存在）
-        _injection_task_text = (
-            state.get("problem_statement")
-            or state.get("diagnosis")
-            or state.get("review_reason")
-            or state.get("task_description")
-            or ""
+        from experiments.metamorphic_oracle import (
+            build_metamorphic_prompt_section as _build_mr_section,
         )
-        _injection_findings: list[str] = []
-        _injection_warning: str | None = None
-        if _injection_task_text:
-            from src.agents.injection_guard import (
-                build_injection_warning,
-                detect_prompt_injection,
-            )
-            from src.agents.injection_guard import (
-                injection_guard_enabled as _injection_guard_enabled,
-            )
+        from experiments.metamorphic_oracle import (
+            metamorphic_enabled as _mr_enabled,
+        )
+        from experiments.metamorphic_oracle import (
+            suggest_metamorphic_relations as _suggest_mrs,
+        )
 
-            _injection_text = str(_injection_task_text)
-            if _injection_guard_enabled():
-                _injection_findings = detect_prompt_injection(_injection_text)
-                if _injection_findings:
-                    _injection_warning = build_injection_warning(_injection_findings)
-                    logger.warning(
-                        "P2 注入扫描：外部文本检出注入特征 %s（追加系统侧警示，不自动阻断）", _injection_findings
-                    )
-        # P0-A-2（2026-10-12 独立评审落地）：规格优先生成（Spec-First）——
-        # DETECTION_SPEC_MODE=replace 时，把 Generator prompt 的"目标代码"块
-        # 替换为规约文档（签名 + NL 规约 + SpecExpr 子句 + 生成纪律），从源头
-        # 切断 oracle-from-implementation 锚点（misguidance effect：缺陷代码
-        # 入提示诱发"断言错误行为"的测试；项目 48.6% 全绿未检出同根因）。
-        # 默认 off / minimal 消融档 / 无规约材料 → None，prompt 与历史逐字节
-        # 一致（spec_first.build_spec_replace_section 保守返回空串）。
-        # A-10（2026-10-16）：锚材料选择——df_spec 臂预载 state["spec_anchor"]
-        # （预计算 Planner 计划子集 {function_name, logic_analysis}）时优先；
-        # 缺席/非法类型回落 test_plan（历史口径：其它臂从不写 spec_anchor，
-        # 行为逐字节不变）。
-        _spec_material: Any = state.get("spec_anchor")
-        if not isinstance(_spec_material, dict):
-            _spec_material = test_plan
-        # 模式只解析一次（minimal 消融档不解析：该档意图"无额外上下文"，
-        # 与修复前 short-circuit 口径一致）；replace / augment 二选一。
-        _spec_mode = "off" if _ctx_minimal else _detection_spec_mode()
-        _spec_replace_section: str | None = None
-        if _spec_mode == "replace":
-            from src.tools.spec_first import build_spec_replace_section as _build_spec_replace
+        if not ctx_minimal and _mr_enabled() and _fn_name:
+            _mrs = _suggest_mrs(_fn_name)
+            if _mrs:
+                _mr_section = _build_mr_section(_mrs)
+        from experiments.differential_test import (
+            build_differential_prompt_section as _build_diff_section,
+        )
+        from experiments.differential_test import (
+            differential_enabled as _diff_enabled,
+        )
 
-            _spec_replace_section = _build_spec_replace(
+        if not ctx_minimal and _diff_enabled() and _fn_name:
+            _diff_section = _build_diff_section(_fn_name)
+    except Exception as _oracle_hook_exc:  # 观测层钩子失败不得阻断主生成
+        logger.warning("N2/N4 无 oracle 增强段落构建失败，降级跳过: %s", _oracle_hook_exc)
+    # P2（2026-10 批次·续二）：注入扫描回归基准接线——此前
+    # detect_prompt_injection 输入侧全仓无调用方（孤儿函数，威胁模型 P2
+    # 缺口"注入扫描无回归基准"）。本段在 Generator 消费外部可控文本
+    # （problem_statement / 缺陷描述 / 任务描述）前做输入侧注入特征扫描
+    # （INJECTION_GUARD_ENABLE 默认关时恒 []，历史口径零变化）；命中时
+    # 把 findings 写入 state["injection_findings"]（供 agent_telemetry
+    # 的 injection_detected 模式消费 + trace 记录）并经
+    # build_injection_warning 追加系统侧警示到本次 LLM query（OWASP ASI
+    # "检测+隔离"口径：只警示不自动阻断，阻断决策留给调用方）。
+    # 外部可控文本来源（按优先级）：
+    #   1. state["problem_statement"]（SWE-bench 任务描述 / issue 文本）
+    #   2. state["diagnosis"] / state["review_reason"]（上一轮诊断描述）
+    #   3. state["task_description"]（CLI 自定义任务描述，若存在）
+    _injection_task_text = (
+        state.get("problem_statement")
+        or state.get("diagnosis")
+        or state.get("review_reason")
+        or state.get("task_description")
+        or ""
+    )
+    _injection_findings: list[str] = []
+    _injection_warning: str | None = None
+    if _injection_task_text:
+        from src.agents.injection_guard import (
+            build_injection_warning,
+            detect_prompt_injection,
+        )
+        from src.agents.injection_guard import (
+            injection_guard_enabled as _injection_guard_enabled,
+        )
+
+        _injection_text = str(_injection_task_text)
+        if _injection_guard_enabled():
+            _injection_findings = detect_prompt_injection(_injection_text)
+            if _injection_findings:
+                _injection_warning = build_injection_warning(_injection_findings)
+                logger.warning(
+                    "P2 注入扫描：外部文本检出注入特征 %s（追加系统侧警示，不自动阻断）", _injection_findings
+                )
+    # P0-A-2（2026-10-12 独立评审落地）：规格优先生成（Spec-First）——
+    # DETECTION_SPEC_MODE=replace 时，把 Generator prompt 的"目标代码"块
+    # 替换为规约文档（签名 + NL 规约 + SpecExpr 子句 + 生成纪律），从源头
+    # 切断 oracle-from-implementation 锚点（misguidance effect：缺陷代码
+    # 入提示诱发"断言错误行为"的测试；项目 48.6% 全绿未检出同根因）。
+    # 默认 off / minimal 消融档 / 无规约材料 → None，prompt 与历史逐字节
+    # 一致（spec_first.build_spec_replace_section 保守返回空串）。
+    # A-10（2026-10-16）：锚材料选择——df_spec 臂预载 state["spec_anchor"]
+    # （预计算 Planner 计划子集 {function_name, logic_analysis}）时优先；
+    # 缺席/非法类型回落 test_plan（历史口径：其它臂从不写 spec_anchor，
+    # 行为逐字节不变）。
+    _spec_material: Any = state.get("spec_anchor")
+    if not isinstance(_spec_material, dict):
+        _spec_material = test_plan
+    # 模式只解析一次（minimal 消融档不解析：该档意图"无额外上下文"，
+    # 与修复前 short-circuit 口径一致）；replace / augment 二选一。
+    _spec_mode = "off" if ctx_minimal else _detection_spec_mode()
+    _spec_replace_applied: str | None = None
+    _spec_replace_section: str | None = None
+    if _spec_mode == "replace":
+        from src.tools.spec_first import build_spec_replace_section as _build_spec_replace
+
+        _spec_replace_section = _build_spec_replace(
+            _spec_material,
+            state["target_code"],
+            module_name=state.get("module_name", ""),
+            # target_function 可缺席（state 可选字段）；spec_first 内按
+            # test_plan.function_name 回退，None 透传是显式契约
+            target_function=state.get("target_function") or "",
+        )
+        if _spec_replace_section:
+            logger.info(
+                "P0-A-2 规格优先模式：规约文档替换目标代码注入 Generator（%d 字符）", len(_spec_replace_section)
+            )
+            _spec_replace_applied = "attempted_replaced"
+        else:
+            _spec_replace_applied = "attempted_fallback"
+    # M-1（2026-10-17）：规格增广模式（承接 L 轮 replace 阴性结论）——
+    # 保留完整缺陷代码，把人类独立规格锚作为**独立 prompt 段并列追加**
+    # （generator._build_query 在 code block 之后消费）。与 replace 分支
+    # 互斥（同一 DETECTION_SPEC_MODE 只走一支，代码块不被替换）。
+    # 无非空规格材料（如 QuixBugs node.py / 表缺失）→ None + 审计
+    # attempted_fallback → prompt 即纯 df 代码口径（不产出空洞/误导段）。
+    _spec_augment_applied: str | None = None
+    _spec_augment_section: str | None = None
+    if _spec_mode == "augment":
+        from src.tools.spec_first import build_spec_augment_section as _build_spec_augment
+
+        _spec_augment_section = (
+            _build_spec_augment(
                 _spec_material,
                 state["target_code"],
                 module_name=state.get("module_name", ""),
-                # target_function 可缺席（state 可选字段）；spec_first 内按
-                # test_plan.function_name 回退，None 透传是显式契约
                 target_function=state.get("target_function") or "",
             )
-            if _spec_replace_section:
-                logger.info(
-                    "P0-A-2 规格优先模式：规约文档替换目标代码注入 Generator（%d 字符）", len(_spec_replace_section)
-                )
-                _spec_replace_applied = "attempted_replaced"
-            else:
-                _spec_replace_applied = "attempted_fallback"
-        # M-1（2026-10-17）：规格增广模式（承接 L 轮 replace 阴性结论）——
-        # 保留完整缺陷代码，把人类独立规格锚作为**独立 prompt 段并列追加**
-        # （generator._build_query 在 code block 之后消费）。与 replace 分支
-        # 互斥（同一 DETECTION_SPEC_MODE 只走一支，代码块不被替换）。
-        # 无非空规格材料（如 QuixBugs node.py / 表缺失）→ None + 审计
-        # attempted_fallback → prompt 即纯 df 代码口径（不产出空洞/误导段）。
-        _spec_augment_section: str | None = None
-        if _spec_mode == "augment":
-            from src.tools.spec_first import build_spec_augment_section as _build_spec_augment
-
-            _spec_augment_section = (
-                _build_spec_augment(
-                    _spec_material,
-                    state["target_code"],
-                    module_name=state.get("module_name", ""),
-                    target_function=state.get("target_function") or "",
-                )
-                or None
-            )
-            if _spec_augment_section:
-                logger.info("M-1 规格增广模式：人类规格锚并列追加在目标代码之后（%d 字符）", len(_spec_augment_section))
-                _spec_augment_applied = "attempted_augmented"
-            else:
-                _spec_augment_applied = "attempted_fallback"
-        # 空计划短路（EMPTY_PLAN_SHORTCUT_ENABLE，默认关，ADR-0003）：
-        # Planner 产出空计划（test_cases=[]，D1 根因：JSON 解析失败兜底
-        # _get_default_test_plan）时，Generator 无法据此生成有效测试——跳过
-        # LLM 调用直接产出空测试，省一次无用 LLM 调用（报告建议 13 置信度
-        # 短路）。默认关时零行为变化（历史口径不变）。
-        _empty_plan_shortcut = bool(
-            _empty_plan_shortcut_enabled() and isinstance(test_plan, dict) and not test_plan.get("test_cases")
+            or None
         )
-        if _empty_plan_shortcut:
-            logger.info("空计划短路：test_plan.test_cases 为空，跳过 Generator LLM 调用")
-            generated_test = ""
+        if _spec_augment_section:
+            logger.info("M-1 规格增广模式：人类规格锚并列追加在目标代码之后（%d 字符）", len(_spec_augment_section))
+            _spec_augment_applied = "attempted_augmented"
         else:
-            generated_test = agent.generate(
-                test_plan,  # Planner 节点在图中时必带 test_plan；缺席时为 None，Generator 自行推断
-                state["target_code"],
-                module_name=state.get("module_name", ""),
-                rag_references=rag_refs,
-                focus_function=state.get("target_function"),
-                # 1.2 改进（MutGen 式变异反馈闭环）：上一轮变异测试的存活变异体注入
-                # prompt，引导生成针对"当前未捕获故障"的更强断言（None 时不注入）
-                mutation_feedback=state.get("mutation_feedback"),
-                # 3.3 改进：执行反馈驱动的动态 temperature（覆盖率连降时减半，None 时不覆盖）
-                temperature=_dynamic_temperature_from_suggestion(state.get("iteration_strategy_suggestion")),
-                # O12（2026-09-29 审查 P1）：复杂度感知路由——complexity_class 非 None 时
-                # 经 _call_llm_with_cache → _call_llm → _reorder_api_groups_by_complexity
-                # 按档位重排 API 组（complex → 高成本端点在前），使
-                # MODEL_ROUTING_STRATEGY=complexity_aware（默认值）真实生效。
-                complexity_class=state.get("complexity_class"),
-                # O3（2026-09-29 审查 P1）：未覆盖分支清单提示段落（None 时不注入）
-                branch_coverage_section=_bc_section,
-                # M10（2026-09-29 审查 P0）：确定性边界锚点提示段落（None 时不注入）
-                boundary_triplets_section=_bt_section,
-                # P2-7（N2/N4）：无 oracle 场景增强段落（None 时不注入）
-                metamorphic_section=_mr_section,
-                differential_section=_diff_section,
-                # W3（2026-10-05 审查落地·检出优先协议）：检出优先再生成路径的
-                # "先红后绿"强化段落（非该路径时 None 不注入，历史口径零变化）
-                detection_first_section=_detection_first_section(state),
-                # 2026-10-10（结果二十四）：过红再生成强化段落
-                # （OVER_RED_SECTION_ENABLE 默认关 → None 不注入，历史口径零变化）
-                over_red_section=_over_red_section(state),
-                # 2026-10-10 独立审查落地（报告建议 4 结构接地·路径定向合成）：
-                # 独立执行路径枚举段落（PATH_ENUM_INJECT_ENABLE 默认关时 None 不注入）
-                paths_section=_paths_section,
-                # 2026-10-10 独立审查落地（报告建议 4 结构接地·操作图）：
-                # 已验证符号清单段落（OPERATION_MAP_INJECT_ENABLE 默认关时 None 不注入）
-                operation_map_section=_opmap_section,
-                # P2（2026-10 批次·续二）：注入扫描系统侧警示（命中注入特征时非空，
-                # INJECTION_GUARD_ENABLE 默认关时恒 None，历史口径零变化）
-                injection_warning=_injection_warning,
-                # P0-A-2（2026-10-12）：规格优先生成规约文档段（replace 模式且
-                # 有规约材料时非空；None 时 _build_query 保持历史口径注入目标代码）
-                spec_replace_section=_spec_replace_section,
-                # M-1（2026-10-17）：规格增广段（augment 模式且存在非空规格材料
-                # 时非空；None 时 _build_query 保持历史查询逐字节不变）
-                spec_augment_section=_spec_augment_section,
-                # P2 一期（观测级压缩）：失败行+错误类型+变异摘要的压缩反馈
-                # 段落（FEEDBACK_COMPRESSION_ENABLE 默认关时 None 不注入，
-                # 历史口径零变化）
-                feedback_compression_section=_fc_section,
-            )
-    except (RuntimeError, OSError, json.JSONDecodeError) as e:
-        # 5.4 预算封顶：BudgetExceededError（isinstance 判定）快速降级空测试，
-        # 后续迭代经 MAX_ITERATIONS 自然收敛（各节点前置预算守卫行为一致）
-        if isinstance(e, BudgetExceededError):
-            logger.warning("Generator LLM 调用失败（5.4 预算封顶），降级为空测试: %s", e)
-        else:
-            logger.warning("Generator LLM 调用失败，降级为空测试: %s", e)
-        generated_test = ""
-        _generator_budget_hit = isinstance(e, BudgetExceededError)
+            _spec_augment_applied = "attempted_fallback"
+    # 空计划短路（EMPTY_PLAN_SHORTCUT_ENABLE，默认关，ADR-0003）：
+    # Planner 产出空计划（test_cases=[]，D1 根因：JSON 解析失败兜底
+    # _get_default_test_plan）时，Generator 无法据此生成有效测试——跳过
+    # LLM 调用直接产出空测试，省一次无用 LLM 调用（报告建议 13 置信度
+    # 短路）。默认关时零行为变化（历史口径不变）。
+    _empty_plan_shortcut = bool(
+        _empty_plan_shortcut_enabled() and isinstance(test_plan, dict) and not test_plan.get("test_cases")
+    )
+    return {
+        "metamorphic_section": _mr_section,
+        "differential_section": _diff_section,
+        "injection_findings": _injection_findings,
+        "injection_warning": _injection_warning,
+        "spec_replace_section": _spec_replace_section,
+        "spec_augment_section": _spec_augment_section,
+        "spec_replace_applied": _spec_replace_applied,
+        "spec_augment_applied": _spec_augment_applied,
+        "empty_plan_shortcut": _empty_plan_shortcut,
+    }
 
-    # 2.3 改进：复现测试专项生成（REPRO_TEST_ENABLE=true 且已有缺陷描述时）。
-    # 缺陷描述优先取 diagnosis（上一轮 Debugger 根因分析），跨文件修复场景下
-    # 该描述含缺陷触发路径信息；生成覆盖触发路径的复现测试写入 state["repro_test"]。
-    repro_test: str | None = None
-    defect_description = state.get("diagnosis") or state.get("review_reason") or ""
-    if _repro_test_enabled() and defect_description:
-        # target_module 缺失/空串时跳过（falsy 过滤保持原语义），非空则纳入跨文件提示
-        cross_modules = [
-            str(d["target_module"]) for d in (state.get("cross_file_deps") or []) if d.get("target_module")
-        ]
-        # 2026-10-01 全面审查 P1 修复：2.3 复现测试分支此前无 try/except 兜底——
-        # 主生成路径（agent.generate，L546）有 try/except (RuntimeError, OSError,
-        # json.JSONDecodeError) 降级为空测试，但 generate_repro_test 走同一条 LLM
-        # 调用路径（_call_llm_with_cache，可抛 RuntimeError / BudgetExceededError /
-        # OSError / JSONDecodeError），异常直接传播出 _generator_node 崩整图，
-        # 与主生成路径的"降级兜底"口径不一致（workflow.py 文档承诺"工作流不因
-        # 单点故障崩溃"）。现补同口径 try/except：LLM 失败时 repro_test=None
-        # 降级（复现测试缺失不阻断主生成路径，executor 仍走 generated_test）。
-        try:
-            repro_test = agent.generate_repro_test(
-                defect_description=defect_description,
-                target_code=state["target_code"],
-                module_name=state.get("module_name", ""),
-                cross_file_modules=cross_modules or None,
-                temperature=_dynamic_temperature_from_suggestion(state.get("iteration_strategy_suggestion")),
-            )
-        except (RuntimeError, OSError, json.JSONDecodeError) as e:
-            if isinstance(e, BudgetExceededError):
-                logger.warning("复现测试（2.3）LLM 调用失败（5.4 预算封顶），降级为跳过: %s", e)
-            else:
-                logger.warning("复现测试（2.3）LLM 调用失败，降级为跳过（不阻断主生成）: %s", e)
-            repro_test = None
-        logger.info("复现测试（2.3）生成完成，长度=%d", len(repro_test or ""))
-    # 记录生成结果长度，便于评估 Generator 的输出质量
-    logger.info("Generator 完成测试代码生成，长度=%d", len(generated_test))
 
+def _build_generator_prompt_sections(state: AITesterState, test_plan: dict[str, Any]) -> dict[str, Any]:
+    """构建 Generator prompt 的全部增强段落（自 `_generator_node` 提取，行为等价）。
+
+    组合两组纯观测/prompt 增强层：静态分析段（分支覆盖 / 反馈压缩 / 边界
+    锚点 / 路径 / 操作图）与无 oracle 段（蜕变 / 差分 / 注入扫描 / 规格优先
+    / 规格增广 / 空计划短路）。各段开关默认关时返回 None（或空列表），
+    历史 prompt 逐字节不变；``oracle_context_minimal`` 消融档下增强段统一
+    不注入。本函数不调用 LLM、不写 state。
+
+    Args:
+        state: 当前状态（读取 target_code / 诊断文本等）。
+        test_plan: Planner 计划（可为空 dict）。
+
+    Returns:
+        段落与观测标记字典，键集合固定（主节点按名消费）。
+    """
+    # 消融档只解析一次，两组段落共用同一口径（避免中途环境变化造成分叉）
+    from src.tools.logic_spec import oracle_context_minimal as _oracle_ctx_minimal
+
+    _ctx_minimal = _oracle_ctx_minimal()
+    sections = _build_generator_static_sections(state, _ctx_minimal)
+    sections.update(_build_generator_oracle_sections(state, test_plan, _ctx_minimal))
+    return sections
+
+
+def _run_generator_postchecks(state: AITesterState, generated_test: str) -> dict[str, Any]:
+    """Generator 产出后的静态检查与确定性 oracle 注入（行为等价提取）。
+
+    顺序与历史实现一致：AST 断言一致性 → 确定性守卫 → 恒真断言重生成判定
+    → 测试套件断言去重 → 规约 oracle 注入。全部为纯静态分析（零 LLM），
+    开关默认关时零行为变化。
+
+    Args:
+        state: 当前状态（读取 target_code / module_name 等）。
+        generated_test: Generator 原始产出。
+
+    Returns:
+        含生成后代码、观测结果与再生成判定的字典（键集合固定）。
+    """
     # AST 级断言一致性检查（ORACLE_VALIDATE_ENABLE=true 时启用，默认关）：
     # 纯 AST 静态分析（零 LLM 成本），识别恒真断言 / 魔数断言 / 类型不一致
     # 三类疑点，写入 state["oracle_findings"] 供实验分析消费（观测层，不阻断
@@ -1324,6 +1271,177 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
     # "not_attempted")；产物空 → (原文, False, "compiled_empty")；
     # 注入成功 → (追加产物, True, "injected")（执行后由 _executor_node 升级）。
     generated_test, _spec_oracle_injected, _spec_oracle_verdict = _spec_oracle_injection_verdict(generated_test, state)
+    return {
+        "generated_test": generated_test,
+        "oracle_findings": oracle_findings,
+        "deterministic_guard_report": deterministic_guard_report,
+        "tautological_count": _tautological_count,
+        "o4_triggered": _o4_triggered,
+        "spec_oracle_injected": _spec_oracle_injected,
+        "spec_oracle_verdict": _spec_oracle_verdict,
+    }
+
+
+def _generator_node(state: AITesterState) -> dict[str, Any]:
+    """
+    GeneratorAgent 节点：根据测试计划生成 pytest 测试代码。
+
+    本节点的核心职责：
+    1. 若 RAG 已启用，先检索相似历史测试用例作为风格参考（检索增强）
+    2. 调用 GeneratorAgent 生成完整的 pytest 测试代码字符串
+    3. 记录生成结果的长度，便于后续分析和调试
+
+    设计考虑：
+    - RAG 检索失败时静默跳过（logger.warning），不影响主流程
+    - 若 ENABLE_PLANNER=False，传入 None 作为 test_plan，Generator 将基于裸代码生成
+
+    Args:
+        state: 当前状态，包含 test_plan（可选）、target_code、module_name 等字段。
+
+    Returns:
+        更新后的状态字典，包含 generated_test（测试代码字符串）和 rag_references（RAG 参考列表）。
+    """
+    agent = get_or_create_agent(GeneratorAgent)
+
+    rag_refs, update_rag_stat = _retrieve_generator_rag_refs(state)
+
+    # 调用 Generator 生成测试代码
+    # 参数说明：
+    #   - test_plan: 若启用 Planner 则传入结构化计划，否则为 None（Generator 将自行推断）
+    #   - target_code: 被测代码全文，Generator 需要它来理解业务逻辑和生成 import 语句
+    #   - module_name: 模块名（不含 .py），用于生成正确的 from X import Y 语句
+    #   - rag_references: RAG 检索到的历史案例，用于风格参考（可为 None）
+    #   - focus_function: 目标函数名（P0 大文件优化），超长代码时按该函数
+    #     做 AST 智能截取，保留目标函数及直接依赖，避免 LLM 看不到完整上下文
+    # Planner 缺席时 test_plan 为 None（documented behavior：Generator 基于裸代码自行推断，
+    # 见 tests/test_workflow.py::test_generator_node_missing_test_plan_key_no_keyerror 回归口径）。
+    # mypy 按 TypedDict 报 dict|None → dict，显式 cast 收窄（运行期传 None，Generator 内
+    # isinstance(test_plan, dict) 守卫已覆盖 None 路径，行为不变）
+    test_plan = cast("dict[str, Any]", state.get("test_plan"))
+
+    # 2026-09-26 全面审查（P1 降级兜底）：此前 agent.generate 无 try-except，
+    # LLM 调用失败（RuntimeError，含跨 API 故障转移耗尽）/ 缓存 OSError 会
+    # 直接让整图崩溃——与 planner/debugger 节点"降级兜底"口径不一致（二者
+    # 均有默认计划 / 空 patch 兜底），且 workflow.py 文档声称"使用 try-except
+    # 捕获 LLM 调用异常，确保工作流不因单点故障而崩溃"。现补降级：LLM 失败时
+    # 生成空测试 + 记诊断，executor 拿到空测试自然失败 → 路由到 debugger
+    # （修代码）或 done，不再崩溃整图。历史行为是崩溃，新行为是优雅降级——
+    # 对"LLM 完全不可用"场景更合理（崩溃 = 零产出，降级 = 仍有修复机会）。
+    _generator_budget_hit = False  # 5.4 预算封顶标记（O35；正常路径恒 False）
+    _empty_plan_shortcut = False  # 空计划短路标记（try 块外初始化，except 分支可达）
+    # prompt 增强段落容器（try 块外初始化，except 分支可达；正常路径由
+    # _build_generator_prompt_sections 填充，异常降级时各键按默认值消费）
+    _sections: dict[str, Any] = {}
+    try:
+        _sections = _build_generator_prompt_sections(state, test_plan)
+        _empty_plan_shortcut = _sections.get("empty_plan_shortcut", False)
+        if _empty_plan_shortcut:
+            logger.info("空计划短路：test_plan.test_cases 为空，跳过 Generator LLM 调用")
+            generated_test = ""
+        else:
+            generated_test = agent.generate(
+                test_plan,  # Planner 节点在图中时必带 test_plan；缺席时为 None，Generator 自行推断
+                state["target_code"],
+                module_name=state.get("module_name", ""),
+                rag_references=rag_refs,
+                focus_function=state.get("target_function"),
+                # 1.2 改进（MutGen 式变异反馈闭环）：上一轮变异测试的存活变异体注入
+                # prompt，引导生成针对"当前未捕获故障"的更强断言（None 时不注入）
+                mutation_feedback=state.get("mutation_feedback"),
+                # 3.3 改进：执行反馈驱动的动态 temperature（覆盖率连降时减半，None 时不覆盖）
+                temperature=_dynamic_temperature_from_suggestion(state.get("iteration_strategy_suggestion")),
+                # O12（2026-09-29 审查 P1）：复杂度感知路由——complexity_class 非 None 时
+                # 经 _call_llm_with_cache → _call_llm → _reorder_api_groups_by_complexity
+                # 按档位重排 API 组（complex → 高成本端点在前），使
+                # MODEL_ROUTING_STRATEGY=complexity_aware（默认值）真实生效。
+                complexity_class=state.get("complexity_class"),
+                # O3（2026-09-29 审查 P1）：未覆盖分支清单提示段落（None 时不注入）
+                branch_coverage_section=_sections.get("branch_coverage_section"),
+                # M10（2026-09-29 审查 P0）：确定性边界锚点提示段落（None 时不注入）
+                boundary_triplets_section=_sections.get("boundary_triplets_section"),
+                # P2-7（N2/N4）：无 oracle 场景增强段落（None 时不注入）
+                metamorphic_section=_sections.get("metamorphic_section"),
+                differential_section=_sections.get("differential_section"),
+                # W3（2026-10-05 审查落地·检出优先协议）：检出优先再生成路径的
+                # "先红后绿"强化段落（非该路径时 None 不注入，历史口径零变化）
+                detection_first_section=_detection_first_section(state),
+                # 2026-10-10（结果二十四）：过红再生成强化段落
+                # （OVER_RED_SECTION_ENABLE 默认关 → None 不注入，历史口径零变化）
+                over_red_section=_over_red_section(state),
+                # 2026-10-10 独立审查落地（报告建议 4 结构接地·路径定向合成）：
+                # 独立执行路径枚举段落（PATH_ENUM_INJECT_ENABLE 默认关时 None 不注入）
+                paths_section=_sections.get("paths_section"),
+                # 2026-10-10 独立审查落地（报告建议 4 结构接地·操作图）：
+                # 已验证符号清单段落（OPERATION_MAP_INJECT_ENABLE 默认关时 None 不注入）
+                operation_map_section=_sections.get("operation_map_section"),
+                # P2（2026-10 批次·续二）：注入扫描系统侧警示（命中注入特征时非空，
+                # INJECTION_GUARD_ENABLE 默认关时恒 None，历史口径零变化）
+                injection_warning=_sections.get("injection_warning"),
+                # P0-A-2（2026-10-12）：规格优先生成规约文档段（replace 模式且
+                # 有规约材料时非空；None 时 _build_query 保持历史口径注入目标代码）
+                spec_replace_section=_sections.get("spec_replace_section"),
+                # M-1（2026-10-17）：规格增广段（augment 模式且存在非空规格材料
+                # 时非空；None 时 _build_query 保持历史查询逐字节不变）
+                spec_augment_section=_sections.get("spec_augment_section"),
+                # P2 一期（观测级压缩）：失败行+错误类型+变异摘要的压缩反馈
+                # 段落（FEEDBACK_COMPRESSION_ENABLE 默认关时 None 不注入，
+                # 历史口径零变化）
+                feedback_compression_section=_sections.get("feedback_compression_section"),
+            )
+    except (RuntimeError, OSError, json.JSONDecodeError) as e:
+        # 5.4 预算封顶：BudgetExceededError（isinstance 判定）快速降级空测试，
+        # 后续迭代经 MAX_ITERATIONS 自然收敛（各节点前置预算守卫行为一致）
+        if isinstance(e, BudgetExceededError):
+            logger.warning("Generator LLM 调用失败（5.4 预算封顶），降级为空测试: %s", e)
+        else:
+            logger.warning("Generator LLM 调用失败，降级为空测试: %s", e)
+        generated_test = ""
+        _generator_budget_hit = isinstance(e, BudgetExceededError)
+
+    # 2.3 改进：复现测试专项生成（REPRO_TEST_ENABLE=true 且已有缺陷描述时）。
+    # 缺陷描述优先取 diagnosis（上一轮 Debugger 根因分析），跨文件修复场景下
+    # 该描述含缺陷触发路径信息；生成覆盖触发路径的复现测试写入 state["repro_test"]。
+    repro_test: str | None = None
+    defect_description = state.get("diagnosis") or state.get("review_reason") or ""
+    if _repro_test_enabled() and defect_description:
+        # target_module 缺失/空串时跳过（falsy 过滤保持原语义），非空则纳入跨文件提示
+        cross_modules = [
+            str(d["target_module"]) for d in (state.get("cross_file_deps") or []) if d.get("target_module")
+        ]
+        # 2026-10-01 全面审查 P1 修复：2.3 复现测试分支此前无 try/except 兜底——
+        # 主生成路径（agent.generate，L546）有 try/except (RuntimeError, OSError,
+        # json.JSONDecodeError) 降级为空测试，但 generate_repro_test 走同一条 LLM
+        # 调用路径（_call_llm_with_cache，可抛 RuntimeError / BudgetExceededError /
+        # OSError / JSONDecodeError），异常直接传播出 _generator_node 崩整图，
+        # 与主生成路径的"降级兜底"口径不一致（workflow.py 文档承诺"工作流不因
+        # 单点故障崩溃"）。现补同口径 try/except：LLM 失败时 repro_test=None
+        # 降级（复现测试缺失不阻断主生成路径，executor 仍走 generated_test）。
+        try:
+            repro_test = agent.generate_repro_test(
+                defect_description=defect_description,
+                target_code=state["target_code"],
+                module_name=state.get("module_name", ""),
+                cross_file_modules=cross_modules or None,
+                temperature=_dynamic_temperature_from_suggestion(state.get("iteration_strategy_suggestion")),
+            )
+        except (RuntimeError, OSError, json.JSONDecodeError) as e:
+            if isinstance(e, BudgetExceededError):
+                logger.warning("复现测试（2.3）LLM 调用失败（5.4 预算封顶），降级为跳过: %s", e)
+            else:
+                logger.warning("复现测试（2.3）LLM 调用失败，降级为跳过（不阻断主生成）: %s", e)
+            repro_test = None
+        logger.info("复现测试（2.3）生成完成，长度=%d", len(repro_test or ""))
+    # 记录生成结果长度，便于评估 Generator 的输出质量
+    logger.info("Generator 完成测试代码生成，长度=%d", len(generated_test))
+
+    _post = _run_generator_postchecks(state, generated_test)
+    generated_test = _post["generated_test"]
+    oracle_findings = _post["oracle_findings"]
+    deterministic_guard_report = _post["deterministic_guard_report"]
+    _tautological_count = _post["tautological_count"]
+    _o4_triggered = _post["o4_triggered"]
+    _spec_oracle_injected = _post["spec_oracle_injected"]
+    _spec_oracle_verdict = _post["spec_oracle_verdict"]
 
     _trace_node(
         "generator",
@@ -1348,11 +1466,11 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
     # P0-A-2（2026-10-12）：规格优先替换段可审计观测（state 键已声明，不会被
     # LangGraph 白名单丢弃；取值域见 _spec_replace_applied 初始化处注释，
     # 与 R1c 确定性 oracle 执行注入 spec_oracle_injected 独立）。
-    update["spec_replace_applied"] = _spec_replace_applied
+    update["spec_replace_applied"] = _sections.get("spec_replace_applied")
     # M-1（2026-10-17）：规格增广段可审计观测（state 键已声明，不会被 LangGraph
     # 白名单丢弃；取值域见 _spec_augment_applied 初始化处注释：
     # attempted_augmented / attempted_fallback / None）。
-    update["spec_augment_applied"] = _spec_augment_applied
+    update["spec_augment_applied"] = _sections.get("spec_augment_applied")
     # 5.4 预算封顶标记（O35）：Generator 捕获 BudgetExceededError 时置真
     # （planner / debugger 同口径），使 determine_stop_reason 可达 BUDGET_EXCEEDED。
     if _generator_budget_hit or state.get("budget_exceeded"):
@@ -1364,7 +1482,7 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
     # 默认关时恒 []，历史口径零变化；非空时供 agent_telemetry 的
     # injection_detected 模式消费 + trace 记录，配合 experiments/
     # injection_benchmark_samples.json 回归基准度量召回/误伤）。
-    update["injection_findings"] = _injection_findings
+    update["injection_findings"] = _sections.get("injection_findings", [])
     # AST 级断言一致性检查（ORACLE_VALIDATE_ENABLE=true 时非空，默认关时零变化）
     if oracle_findings:
         update["oracle_findings"] = oracle_findings
@@ -1372,7 +1490,7 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
     # 默认关时恒 None，键集合同构；state 键已在 AITesterState 显式声明，
     # 不会被 LangGraph 白名单丢弃——O35 教训）。供实验层统计「压缩通道
     # 到达率 / 段落体积（section_chars）」消费，纯观测不参与路由。
-    update["compressed_feedback"] = _compressed_feedback
+    update["compressed_feedback"] = _sections.get("compressed_feedback")
     # 修复引擎批次 XIV（ADR-0028 观测层）：oracle 质量历史快照——
     # Self-Repair Trap（DCAware：迭代自修复驱使断言退化）的数据面。
     # 每次生成/再生成的最终测试（去重与规约注入之后）落一份快照；
@@ -1513,6 +1631,254 @@ def _executor_attempt_evidence(result: dict[str, Any]) -> dict[str, Any]:
     summary = summarize_execution_attempts(records)
     summary["fail_then_pass"] = bool(result.get("flaky_fail_then_pass")) or bool(summary["fail_then_pass"])
     return summary
+
+
+def _apply_executor_rogue_monitor(update: dict[str, Any]) -> None:
+    """R16 流氓 agent 行为监控（自 `_executor_node` 提取，行为等价）。
+
+    ``ROGUE_MONITOR_ENABLE=true`` 时对四个核心 agent（Planner/Generator/
+    Executor/Debugger）做三类信号检测（调用频率 z-score / 动作熵 / 能力违规）；
+    非空 findings 写入 ``update["rogue_findings"]``。纯观测，不改路由——
+    隔离/升级由调用方决定，与 rogue_monitor 模块"只报警不熔断"口径一致。
+
+    Args:
+        update: 本节点待返回的状态更新字典（原地写入）。
+
+    Returns:
+        None
+    """
+    if rogue_monitor_enabled():
+        from src.agents.rogue_monitor import get_rogue_monitor as _get_rogue_monitor
+
+        _rogue_findings: list[dict[str, Any]] = []
+        _monitor = _get_rogue_monitor()
+        for _agent_cls in ("PlannerAgent", "GeneratorAgent", "ExecutorAgent", "DebuggerAgent"):
+            _rogue_findings.extend(
+                {"agent_id": f.agent_id, "kind": f.kind, "detail": f.detail, "metric": f.metric}
+                for f in _monitor.check(_agent_cls)
+            )
+        if _rogue_findings:
+            logger.warning(
+                "R16 流氓行为监控：%d 个 finding（%s）", len(_rogue_findings), [f["kind"] for f in _rogue_findings]
+            )
+            update["rogue_findings"] = _rogue_findings
+
+
+def _apply_executor_flaky_gate(
+    update: dict[str, Any],
+    state: AITesterState,
+    agent: Any,
+    result: dict[str, Any],
+    passed: bool,
+    attempt_summary: dict[str, Any],
+    fail_then_pass: bool,
+) -> None:
+    """R35/R31 + A16 flaky 门（自 `_executor_node` 提取，行为等价）。
+
+    两条证据通道：① 重试层已观察到 fail→pass（A16，证据本身即结论，
+    不再重复执行）；② ``FLAKY_CHECK_ENABLE=true`` 时对失败轮重复执行
+    ``FLAKY_REPEAT_COUNT`` 次。命中 flaky 时 ``test_passed`` 保守记 False
+    （不稳定结果不能作"修复正确"证据），并写 flaky 观测键。
+
+    Args:
+        update: 本节点待返回的状态更新字典（原地写入）。
+        state: 当前状态。
+        agent: 执行器实例（供重复执行复用）。
+        result: 本轮执行结果。
+        passed: 本轮有效通过标记（已消费 fail→pass 证据）。
+        attempt_summary: 重试层尝试摘要。
+        fail_then_pass: 重试层是否观察到 fail→pass。
+
+    Returns:
+        None
+    """
+    _attempt_flaky_handled = False
+    if fail_then_pass:
+        _attempt_flaky_handled = True
+        update["flaky_detected"] = True
+        update["flaky_pass_count"] = int(attempt_summary.get("pass_count", 0))
+        update["flaky_total_count"] = int(attempt_summary.get("attempts", 0))
+        update["flaky_unverified"] = True
+        update["test_passed"] = False
+        logger.warning(
+            "A16 观察到 fail→pass 重试证据（%d 次尝试中 %d 通过 / %d 失败），test_passed 保守记 False（flaky）",
+            int(attempt_summary.get("attempts", 0)),
+            int(attempt_summary.get("pass_count", 0)),
+            int(attempt_summary.get("fail_count", 0)),
+        )
+    if _flaky_check_enabled() and not passed and not _attempt_flaky_handled:
+        from src.agents.flaky_gate import detect_flaky as _detect_flaky
+
+        _flaky = _detect_flaky(
+            executor=agent,
+            test_code=state.get("generated_test") or "",
+            target_file=state.get("target_file") or "",
+            target_function=state.get("target_function"),
+            base_result=result,
+        )
+        update["flaky_detected"] = bool(_flaky["flaky"])
+        update["flaky_pass_count"] = _flaky["pass_count"]
+        update["flaky_total_count"] = _flaky["total"]
+        if _flaky["flaky"]:
+            logger.warning(
+                "R35 flaky 检测：同测试 %d 次执行 %d 通过 / %d 失败（不稳定），test_passed 保守记 False",
+                _flaky["total"],
+                _flaky["pass_count"],
+                _flaky["fail_count"],
+            )
+            # flaky 轮：结果不可信，保守按失败处理（不作"修复正确"证据）
+            update["test_passed"] = False
+            update["flaky_unverified"] = True
+        else:
+            # 全 fail（稳定失败）：结果可信，保留原 test_passed=False
+            update["flaky_unverified"] = False
+
+
+def _apply_executor_detection_first(update: dict[str, Any], state: AITesterState, passed: bool) -> None:
+    """W3 检出优先三值终态标注（自 `_executor_node` 提取，行为等价）。
+
+    首轮（iteration==0）执行时维护任务级粘性信号 ``detection_first_red_seen``；
+    每轮按 (passed, red_seen) 写三值终态（red_then_green /
+    all_green_unverified / red_not_repaired），最后一次写入即终态。
+
+    Args:
+        update: 本节点待返回的状态更新字典（原地写入）。
+        state: 当前状态。
+        passed: 本轮有效通过标记。
+
+    Returns:
+        None
+    """
+    if detection_first_enabled():
+        if int(state.get("iteration", 0)) == 0:
+            update["detection_first_red_seen"] = (not passed) or bool(state.get("detection_first_red_seen"))
+        _df_red_seen = update.get("detection_first_red_seen", state.get("detection_first_red_seen"))
+        _df_status = _derive_detection_first_status(bool(passed), _df_red_seen)
+        if _df_status is not None:
+            update["detection_first_status"] = _df_status
+
+
+def _apply_executor_ac2_gates(update: dict[str, Any], state: AITesterState, passed: bool) -> None:
+    """AC2 检出优先双门（自 `_executor_node` 提取，行为等价）。
+
+    ① 特异性门（``DETECTION_SPECIFICITY_GATE_ENABLE``）：首轮红时在 gold
+    fixed 代码上复测，判定 specific_red / over_red / unavailable，并写
+    ``specificity_gate_verdict`` 与红证人快照；
+    ② 红回归门（``RED_REGRESSION_GATE_ENABLE``）：曾见红 + 测试再生成后变绿
+    + 源码未修补 = 抹红假成功，恢复红证人并保守置失败。
+
+    Args:
+        update: 本节点待返回的状态更新字典（原地写入）。
+        state: 当前状态。
+        passed: 本轮有效通过标记。
+
+    Returns:
+        None
+    """
+    if not detection_first_enabled():
+        return
+    from src.tools.detection_gates import (
+        detection_specificity_gate_enabled,
+        red_regression_check,
+        specificity_verdict,
+    )
+
+    _gate_passed = passed
+    if int(state.get("iteration", 0)) == 0 and not _gate_passed:
+        _verdict: str | None = None
+        if detection_specificity_gate_enabled():
+            # P0-1（2026-10-11 全面优化批次）：透传 task_metadata——跨文件
+            # 任务的伴生模块（module_a/b/c 代码与名）由 M1 委托层据此物化；
+            # 缺失时委托层回退单文件口径（与历史逐位一致，零回归）。
+            # 构建与 M1 委托层同口径的 metadata：is_cross_file 由 cross_file_deps
+            # 非空推导；target_module 由 _resolve_target_module 口径（module_name）
+            # 填入；source 取 state 原始值（缺省 None，不注入）。
+            _has_cross_file = bool(state.get("cross_file_deps"))
+            _gate_task_metadata: dict[str, Any] | None = None
+            if _has_cross_file:
+                # P0-1 勘误：模块代码/名键不在 TypedDict state 中（由
+                # run_benchmark 写盘而非 state），委托层走单文件物化口径。
+                _gate_task_metadata = {"is_cross_file": True}
+                if state.get("module_name"):
+                    _gate_task_metadata["target_module"] = str(state["module_name"])
+            _verdict = specificity_verdict(
+                state.get("generated_test") or "",
+                state.get("gold_fixed_code"),
+                state.get("module_name"),
+                task_metadata=_gate_task_metadata,
+            )
+            update["specificity_gate_verdict"] = _verdict
+            logger.info("AC2 特异性门判定：%s", _verdict)
+        if _verdict != "over_red":
+            update["red_witness_test_code"] = state.get("generated_test")
+    elif _gate_passed:
+        _gate_upd = red_regression_check(state, state.get("generated_test") or "")
+        if _gate_upd:
+            update.update(_gate_upd)
+            # 门②恢复后同步重推三值终态（本轮 test_passed 已被门改 False）
+            _rv_status = _derive_detection_first_status(
+                False, update.get("detection_first_red_seen", state.get("detection_first_red_seen"))
+            )
+            if _rv_status is not None:
+                update["detection_first_status"] = _rv_status
+            logger.warning("AC2 红回归门：再生成测试抹掉红证人（源码未修补），恢复红证人交回修复循环")
+
+
+def _apply_executor_branch_coverage(update: dict[str, Any], state: AITesterState) -> None:
+    """O3 分支覆盖率注入层（自 `_executor_node` 提取，行为等价）。
+
+    ``BRANCH_COVERAGE_INJECT_ENABLE=true`` 且非 Docker 链路时，对
+    (target_file, generated_test) 做 branch=True 测量，写
+    ``update["branch_coverage"]``。纯观测层，测量失败时不写键。
+
+    Args:
+        update: 本节点待返回的状态更新字典（原地写入）。
+        state: 当前状态。
+
+    Returns:
+        None
+    """
+    if _branch_coverage_inject_enabled() and not EXECUTOR_USE_DOCKER:
+        from src.tools.branch_coverage_inject import measure_branch_coverage as _measure_bc
+
+        _bc_result = _measure_bc(
+            target_file=state.get("target_file") or "",
+            test_code=state.get("generated_test") or "",
+            module_name=state.get("module_name") or "",
+        )
+        if _bc_result is not None:
+            update["branch_coverage"] = _bc_result
+
+
+def _apply_executor_patch_rollback(update: dict[str, Any], state: AITesterState, passed: bool) -> None:
+    """M6 坏补丁失败回滚（自 `_executor_node` 提取，行为等价）。
+
+    本轮执行失败且 state 中存在上一轮补丁快照时，恢复原始代码并同步写回
+    磁盘（C6：状态与存储同事务）；回滚成功置 ``last_patch_rolled_back=True``
+    并经 update 清空快照键（O35）。失败轮同时丢弃上一轮暂存修复案例。
+
+    Args:
+        update: 本节点待返回的状态更新字典（原地写入）。
+        state: 当前状态。
+        passed: 本轮有效通过标记。
+
+    Returns:
+        None
+    """
+    if not passed:
+        # C6（2026-10-05 系统审查 P0）：磁盘与 state 同事务恢复——
+        # restored_out 携带快照原文，写回 state["target_code"]，否则下一轮
+        # Debugger 分析/补丁基底仍是坏补丁代码（"测原码/修补码"幻象迭代）。
+        _restored: dict[str, Any] = {}
+        _rolled_back = _rollback_last_patch(state, restored_out=_restored)
+        if _rolled_back:
+            update["last_patch_rolled_back"] = True
+            update["_last_patch_snapshot"] = None
+            update["_last_patch_iteration"] = None
+            if "content" in _restored:
+                update["target_code"] = _restored["content"]
+        # C10：本轮失败 → 上一轮补丁未通过验证，丢弃暂存（不入修复案例库）
+        update["last_applied_repair"] = None
 
 
 def _executor_node(state: AITesterState) -> dict[str, Any]:
@@ -1673,81 +2039,8 @@ def _executor_node(state: AITesterState) -> dict[str, Any]:
     # 合法通道回写，防下一轮重复入库）
     if _consume_pending_repair:
         update["last_applied_repair"] = None
-    # R16（2026-10-05 审查 P1）：流氓 agent 行为监控消费点
-    # （ROGUE_MONITOR_ENABLE=true 时启用，默认关零开销）。对四个核心
-    # agent（BaseAgent 上报侧的 agent_id = 类名）做三类信号检测
-    # （调用频率 z-score / 动作熵 / 能力违规），findings 非空写入
-    # state["rogue_findings"]（纯观测，不改路由——隔离/升级由调用方决定，
-    # 与 rogue_monitor 模块"只报警不熔断"口径一致）。
-    if rogue_monitor_enabled():
-        from src.agents.rogue_monitor import get_rogue_monitor as _get_rogue_monitor
-
-        _rogue_findings: list[dict[str, Any]] = []
-        _monitor = _get_rogue_monitor()
-        for _agent_cls in ("PlannerAgent", "GeneratorAgent", "ExecutorAgent", "DebuggerAgent"):
-            _rogue_findings.extend(
-                {"agent_id": f.agent_id, "kind": f.kind, "detail": f.detail, "metric": f.metric}
-                for f in _monitor.check(_agent_cls)
-            )
-        if _rogue_findings:
-            logger.warning(
-                "R16 流氓行为监控：%d 个 finding（%s）", len(_rogue_findings), [f["kind"] for f in _rogue_findings]
-            )
-            update["rogue_findings"] = _rogue_findings
-    # R35/R31（2026-09-30 独立审查 P0）：flaky 门禁（FLAKY_CHECK_ENABLE=true
-    # 时启用，默认关）。对**失败轮**做重复执行一致性检测：同 (target_code,
-    # generated_test) 重跑 FLAKY_REPEAT_COUNT 次（默认 3），既有 pass 又有
-    # fail → flaky（测试本身不稳定）。flaky 时 test_passed 保守记 False
-    # （失败口径：不稳定结果不能作"修复正确"证据），并写 flaky_detected /
-    # flaky_pass_count / flaky_total_count（统计层 flaky fraction 消费）。
-    # 纯 subprocess（LLM 缓存命中下零成本）；仅失败轮触发（全绿即稳定，免重测）。
-    # A16（2026-10-18 第三方评审 P1）：重试层 fail→pass 证据优先消费。
-    # 旧实现首败次过只保留最后一次成功，flaky 门（仅对 passed=False 生效）
-    # 永远看不到"同测试同代码结果不一致"。观察到 fail→pass ⇒
-    # flaky_detected=True + flaky_unverified=True，test_passed 保守记 False
-    # （不稳定结果不能作"修复正确"证据），pass/total 记真实尝试序列计数。
-    # 该分支不依赖 FLAKY_CHECK_ENABLE（新证据本身即结论），且不再重复执行
-    # detect_flaky 重测（证据已在手，省 subprocess）。
-    _attempt_flaky_handled = False
-    if _fail_then_pass:
-        _attempt_flaky_handled = True
-        update["flaky_detected"] = True
-        update["flaky_pass_count"] = int(_attempt_summary.get("pass_count", 0))
-        update["flaky_total_count"] = int(_attempt_summary.get("attempts", 0))
-        update["flaky_unverified"] = True
-        update["test_passed"] = False
-        logger.warning(
-            "A16 观察到 fail→pass 重试证据（%d 次尝试中 %d 通过 / %d 失败），test_passed 保守记 False（flaky）",
-            int(_attempt_summary.get("attempts", 0)),
-            int(_attempt_summary.get("pass_count", 0)),
-            int(_attempt_summary.get("fail_count", 0)),
-        )
-    if _flaky_check_enabled() and not _passed and not _attempt_flaky_handled:
-        from src.agents.flaky_gate import detect_flaky as _detect_flaky
-
-        _flaky = _detect_flaky(
-            executor=agent,
-            test_code=state.get("generated_test") or "",
-            target_file=state.get("target_file") or "",
-            target_function=state.get("target_function"),
-            base_result=result,
-        )
-        update["flaky_detected"] = bool(_flaky["flaky"])
-        update["flaky_pass_count"] = _flaky["pass_count"]
-        update["flaky_total_count"] = _flaky["total"]
-        if _flaky["flaky"]:
-            logger.warning(
-                "R35 flaky 检测：同测试 %d 次执行 %d 通过 / %d 失败（不稳定），test_passed 保守记 False",
-                _flaky["total"],
-                _flaky["pass_count"],
-                _flaky["fail_count"],
-            )
-            # flaky 轮：结果不可信，保守按失败处理（不作"修复正确"证据）
-            update["test_passed"] = False
-            update["flaky_unverified"] = True
-        else:
-            # 全 fail（稳定失败）：结果可信，保留原 test_passed=False
-            update["flaky_unverified"] = False
+    _apply_executor_rogue_monitor(update)
+    _apply_executor_flaky_gate(update, state, agent, result, _passed, _attempt_summary, _fail_then_pass)
     # P0 运行时探针快照（RUNTIME_PROBE_ENABLE=true 时写入；默认关时不写，
     # 历史口径不变。None 表示探针未触发 / 降级；非 None 时含 frames 列表）
     if _runtime_probe_enabled():
@@ -1761,119 +2054,10 @@ def _executor_node(state: AITesterState) -> dict[str, Any]:
     # 路由），供评估层把该类任务归入"未验证假通过"而非"修复成功"。
     if _passed and int(state.get("regeneration_count", 0)) > 0:
         update["test_regenerated_pass_unverified"] = True
-    # W3（2026-10-05 审查落地·检出优先协议，DETECTION_FIRST_ENABLE 默认关时
-    # 零行为变化）：见 config.detection_first_enabled 协议说明。
-    # - 首轮（iteration==0，被测代码未修复）执行：detection_first_red_seen 为
-    #   **任务级粘性信号**——本轮红灯（测试让缺陷代码变红）或历史任一轮
-    #   iteration==0 曾红过即为 True（再生成换一版测试不抹掉"系统曾检出"
-    #   的事实；"当前这套测试"口径由 M5 test_regenerated_pass_unverified 单独标记）。
-    # - 每轮执行后按 (passed, red_seen) 写三值终态标注（Y1 补失败终局，
-    #   纯函数 _derive_detection_first_status）：red_then_green /
-    #   all_green_unverified / red_not_repaired。最后一次写入即终态
-    #   （LangGraph 后写覆盖）。
-    if detection_first_enabled():
-        if int(state.get("iteration", 0)) == 0:
-            update["detection_first_red_seen"] = (not _passed) or bool(state.get("detection_first_red_seen"))
-        _df_red_seen = update.get("detection_first_red_seen", state.get("detection_first_red_seen"))
-        _df_status = _derive_detection_first_status(bool(_passed), _df_red_seen)
-        if _df_status is not None:
-            update["detection_first_status"] = _df_status
-    # AC2（2026-10-06 第十轮审查 T-P0-4）：检出优先协议双门——
-    # ①特异性门（DETECTION_SPECIFICITY_GATE_ENABLE，默认关）：首轮红时把
-    #   当前测试在 gold fixed 代码上执行（复用 M1 原语），specific_red =
-    #   缺陷特异红（放行修复循环）/ over_red = 过红（_should_debug 路由
-    #   regenerate）/ unavailable = 无 gold 或不可判定（保守放行）；
-    # ②红回归门（RED_REGRESSION_GATE_ENABLE，默认关）：曾见红 + 测试被
-    #   再生成后变绿 + 源码未修补 = 抹红假成功——恢复红证人测试并保守
-    #   置失败，交回修复循环走"修源码"通道（纯状态比较，零额外执行）。
-    # 红证人快照随检出优先主开关注入（iteration==0 首轮红且非过红）。
-    if detection_first_enabled():
-        from src.tools.detection_gates import (
-            detection_specificity_gate_enabled,
-            red_regression_check,
-            specificity_verdict,
-        )
-
-        _gate_passed = _passed
-        if int(state.get("iteration", 0)) == 0 and not _gate_passed:
-            _verdict: str | None = None
-            if detection_specificity_gate_enabled():
-                # P0-1（2026-10-11 全面优化批次）：透传 task_metadata——跨文件
-                # 任务的伴生模块（module_a/b/c 代码与名）由 M1 委托层据此物化；
-                # 缺失时委托层回退单文件口径（与历史逐位一致，零回归）。
-                # 构建与 M1 委托层同口径的 metadata：is_cross_file 由 cross_file_deps
-                # 非空推导；target_module 由 _resolve_target_module 口径（module_name）
-                # 填入；source 取 state 原始值（缺省 None，不注入）。
-                _has_cross_file = bool(state.get("cross_file_deps"))
-                _gate_task_metadata: dict[str, Any] | None = None
-                if _has_cross_file:
-                    # P0-1 勘误：模块代码/名键不在 TypedDict state 中（由
-                    # run_benchmark 写盘而非 state），委托层走单文件物化口径。
-                    _gate_task_metadata = {"is_cross_file": True}
-                    if state.get("module_name"):
-                        _gate_task_metadata["target_module"] = str(state["module_name"])
-                _verdict = specificity_verdict(
-                    state.get("generated_test") or "",
-                    state.get("gold_fixed_code"),
-                    state.get("module_name"),
-                    task_metadata=_gate_task_metadata,
-                )
-                update["specificity_gate_verdict"] = _verdict
-                logger.info("AC2 特异性门判定：%s", _verdict)
-            if _verdict != "over_red":
-                update["red_witness_test_code"] = state.get("generated_test")
-        elif _gate_passed:
-            _gate_upd = red_regression_check(state, state.get("generated_test") or "")
-            if _gate_upd:
-                update.update(_gate_upd)
-                # 门②恢复后同步重推三值终态（本轮 test_passed 已被门改 False）
-                _rv_status = _derive_detection_first_status(
-                    False, update.get("detection_first_red_seen", state.get("detection_first_red_seen"))
-                )
-                if _rv_status is not None:
-                    update["detection_first_status"] = _rv_status
-                logger.warning("AC2 红回归门：再生成测试抹掉红证人（源码未修补），恢复红证人交回修复循环")
-    # O3（2026-09-29 审查 P1）：分支覆盖率注入层（BRANCH_COVERAGE_INJECT_ENABLE=true
-    # 时启用，默认关）。本节点在本地 / venv 沙箱执行完成后，用 coverage 模块
-    # （subprocess 同解释器，独立临时数据文件）对 (target_file, generated_test)
-    # 做 branch=True 测量，解析 coverage.json 的 missing_branches，写入
-    # state["branch_coverage"]。纯观测层（不阻断主流程）；测量失败 / coverage
-    # 不可用 / Docker 链路时 branch_coverage=None，历史口径不变。
-    # Docker 链路（EXECUTOR_USE_DOCKER=true）暂不支持（O16 单独处理容器内
-    # JSON 报告回传），本地 / venv 口径。
-    if _branch_coverage_inject_enabled() and not EXECUTOR_USE_DOCKER:
-        from src.tools.branch_coverage_inject import measure_branch_coverage as _measure_bc
-
-        _bc_result = _measure_bc(
-            target_file=state.get("target_file") or "",
-            test_code=state.get("generated_test") or "",
-            module_name=state.get("module_name") or "",
-        )
-        if _bc_result is not None:
-            update["branch_coverage"] = _bc_result
-    # M6（2026-09-29 审查 P0）：坏补丁失败回滚。
-    # 当本轮 executor 判定失败（test_passed=False）且 state 中存在上一轮
-    # 补丁快照（_last_patch_snapshot，由 _safe_write_patch 在写盘前写入）时，
-    # 恢复原始代码，使修复质量不被坏补丁叠加污染。回滚成功后置
-    # last_patch_rolled_back=True（纯观测，不参与路由），供评估层报告
-    # "回滚成功率"。回滚失败（IO 异常）不阻断主流程。
-    # O35：回滚成功必须经 update dict 把两个快照键清空——_rollback_last_patch
-    # 内部的 state.pop 改写的是节点入参 dict，LangGraph 不回写（否则陈旧
-    # 快照路径会留在 state，下一轮失败时重复回滚到更早的版本）。
-    if not _passed:
-        # C6（2026-10-05 系统审查 P0）：磁盘与 state 同事务恢复——
-        # restored_out 携带快照原文，写回 state["target_code"]，否则下一轮
-        # Debugger 分析/补丁基底仍是坏补丁代码（"测原码/修补码"幻象迭代）。
-        _restored: dict[str, Any] = {}
-        _rolled_back = _rollback_last_patch(state, restored_out=_restored)
-        if _rolled_back:
-            update["last_patch_rolled_back"] = True
-            update["_last_patch_snapshot"] = None
-            update["_last_patch_iteration"] = None
-            if "content" in _restored:
-                update["target_code"] = _restored["content"]
-        # C10：本轮失败 → 上一轮补丁未通过验证，丢弃暂存（不入修复案例库）
-        update["last_applied_repair"] = None
+    _apply_executor_detection_first(update, state, _passed)
+    _apply_executor_ac2_gates(update, state, _passed)
+    _apply_executor_branch_coverage(update, state)
+    _apply_executor_patch_rollback(update, state, _passed)
     # P0-4（2026-10-10）：规约 oracle 行级判定升级——本轮 "injected"（_generator_node
     # 写入）在本轮测试执行后升级为 injected_and_passed / injected_and_failed，
     # 使"注入 oracle 造成的红"与"LLM 断言造成的红"在结果行里可分离（T3 审查
@@ -2010,10 +2194,13 @@ def _cross_file_analyzer_node(state: AITesterState) -> dict[str, Any]:
         if focused_contexts:
             update["cross_file_contexts"] = focused_contexts
             # L4 逻辑修复（2026-09-29 审查）：source_files 一期仅含 entry
-            # 模块（L1349-1351），被依赖模块（dep.target_module）源码未载入
-            # → L1382 对非 entry 模块恒 "" 跳过。日志须如实反映"仅 entry
-            # 模块生效"，避免高估已构建的模块数（二期扩展跨文件源码载入后
-            # 此处可改回全模块口径）。
+            # 模块（本节点上方 source_files / entry_modules 构建块），被依赖
+            # 模块（dep.target_module）源码未载入 → 上面的循环对非 entry 模块
+            # 恒取 "" 跳过。日志须如实反映"仅 entry 模块生效"，避免高估已构建
+            # 的模块数。AA 轮（2026-10-19）把该能力边界钉成反面锁定
+            # （tests/test_cross_file_plan_wiring.py::TestStepBNotWired）；
+            # 扩展跨文件源码载入后此处可改回全模块口径，届时该锁必红，
+            # 需与 docs/design/cross_file_plan_wiring_prereg.md §3.5 同步改写。
             logger.info(
                 "P0 1.1 跨文件调用链上下文：构建 %d 个模块的聚焦上下文"
                 "（depth=%d，当前仅 entry 模块 %s 生效——被依赖模块源码"
@@ -2037,183 +2224,29 @@ def _cross_file_analyzer_node(state: AITesterState) -> dict[str, Any]:
     return update
 
 
-def _patch_applier_node(state: AITesterState) -> dict[str, Any]:
-    """
-    补丁应用节点：将 Debugger 生成的补丁应用到被测代码，并写回文件。
-    应用后更新 iteration 计数器，供下次循环使用。
+def _run_patch_resample(
+    state: AITesterState,
+    original_code: str,
+    new_code: str,
+    applied: bool,
+) -> tuple[str, bool, dict[str, Any] | None]:
+    """2.2 补丁后处理重采样（自 `_patch_applier_node` 提取，行为等价）。
 
-    2.2 补丁后处理重采样（PATCH_RESAMPLE_ENABLE=true，默认关）：应用失败
-    （定位不到目标函数 / AST 解析不通过）时，把"负面反馈"回传 Debugger
-    重新生成一次（严格 prompt + 1.3 降级链档位收紧温度），最多
-    PATCH_RESAMPLE_MAX（默认 2）次；仍失败则把该轮标记为
-    patch_syntax_invalid（refine_failure_category 消费）并保留原代码。
-
-    1.3 分层压缩降级链（CONTEXT_TIER_DOWNGRADE_ENABLE=true，默认关）：
-    符号守卫（check_naming_contract）拒绝补丁时，调 advance_context_tier()
-    推进上下文档位，并把 (档位, 缺失符号) 作为 contract_reject_feedback
-    写入 state——下一轮 _debugger_node 读到该反馈后按"更高约束"的
-    上下文（补丁配方保留 / 签名+import 极简）+ 更低温度重新生成。
-    未启用时（默认）行为与历史完全一致（仅拒绝本轮、不动档位）。
-
-    状态/磁盘一致性：只有当补丁真正写入磁盘成功时，才把 target_code 更新为
-    新代码并记录 patch_applied=True；任何一道安全检查（空/过短/无函数定义/
-    路径不合法）拒绝写入时，target_code 保持原代码、patch_applied 记 False，
-    避免下游 Executor 测旧文件、Debugger 却分析新代码的"幻象迭代"。
+    补丁应用失败时把"负面反馈"回传 Debugger 重新生成一次（严格 prompt +
+    1.3 降级链档位收紧温度），最多 ``PATCH_RESAMPLE_MAX`` 次；仍失败则写
+    ``_2_2_patch_syntax_invalid`` 临时键（refine_failure_category 消费）并
+    保留原代码。未启用时（默认）零行为变化、不产生额外 LLM 调用。
 
     Args:
-        state: 当前状态。
+        state: 当前状态（读取 patch / 写重采样临时键）。
+        original_code: 应用前原文。
+        new_code: 应用后候选代码。
+        applied: 补丁是否已成功应用。
 
     Returns:
-        更新后的状态字典，包含更新后的 target_code 和修复历史。
+        ``(new_code, applied, resample_stats)``：resample_stats 为 None 表示
+        未进入重采样分支。
     """
-    original_code = state["target_code"]
-
-    # ── 3.1 多候选补丁分支（ENABLE_MULTI_CANDIDATE_PATCH=true 时启用）──
-    # 默认关闭，保持历史单补丁口径。开启时：生成 N 个候选 → 静态筛选 →
-    # （可选）执行验证 → 选最优候选作为本轮补丁。任一环节无有效候选时
-    # 回退到 state 中已有的单补丁（state["patch"]），不引入劣化。
-    # ── 3.5 跨文件修复：cross_file_deps 非空时走多文件补丁路径 ─────────────
-    # 多候选分支的额外状态更新（multi_candidate_stats，经 update dict 传递）
-    multi_candidate_update: dict[str, Any] = {}
-    new_code: str
-    applied: bool
-    cross_file_deps = state.get("cross_file_deps") or []
-    if cross_file_deps and cross_file_enabled():
-        # 3.5 跨文件修复分支：按依赖图拓扑序对多个模块应用补丁
-        from src.tools.cross_file import CrossFileDependency, apply_multi_file_patch, cross_file_fallback_single_file
-
-        # 把 state 中序列化的依赖边还原为 CrossFileDependency 对象
-        # （拓扑序补丁应用需要结构化边信息，被调用方先改、调用方后改）
-        dep_objects = [
-            CrossFileDependency(
-                source_module=d.get("source_module", ""),
-                target_module=d.get("target_module", ""),
-                symbol=d.get("symbol", ""),
-                call_line=int(d.get("call_line", 0)),
-                context=d.get("context", ""),
-            )
-            for d in cross_file_deps
-        ]
-        # 从 state 收集所有模块的原始代码（当前仅 target_code 可用；
-        # 二期扩展后从 source_files 字典读取）
-        entry_module = state.get("module_name") or os.path.basename(state.get("target_file", ""))
-        original_files = {entry_module: original_code}
-        # 多文件补丁：entry_module 用 state["patch"]（当前单补丁路径生成），
-        # 其他模块的补丁由 _debugger_node 后续生成（二期）
-        patches: dict[str, str] = {}
-        if state.get("patch"):
-            patch_val = state["patch"]
-            assert isinstance(patch_val, str)  # TypedDict 标 str | None，真值守卫后必为 str
-            patches[entry_module] = patch_val
-        # 尝试多文件应用（传依赖边 → 拓扑序）；失败时降级为单文件
-        new_files, applied = apply_multi_file_patch(original_files, patches, entry_module, deps=dep_objects)
-        new_code = new_files.get(entry_module, original_code)
-        if not applied:
-            # 多文件失败 → 降级单文件（保守口径，不引入劣化）
-            logger.info("3.5 跨文件补丁应用失败，降级单文件模式")
-            # 注意：cross_file_fallback_single_file 返回 (新文件映射, 成功)，
-            # 需再取 entry_module 的代码字符串——此前误把整个映射当 new_code，
-            # len(dict) 恒为 1，降级补丁永远卡在"过短"安全检查、永远写不进盘
-            fallback_files, applied = cross_file_fallback_single_file(original_files, patches, entry_module)
-            new_code = fallback_files.get(entry_module, original_code)
-    elif multi_candidate_available():
-        new_code, applied, multi_candidate_update = _select_multi_candidate_patch(
-            state, original_code, iteration=state.get("iteration", 0)
-        )
-    else:
-        new_code, applied = apply_patch_to_code(original_code=original_code, patch=state.get("patch") or "")
-
-    # ── 1.1 LLM 输出后处理层（P1 空壳检测 + P2/P3 卫生化，默认观测口径）──
-    # P2 导入回填 / P3 契约别名回填默认关（环境变量控制，见
-    # patch_postprocess.postprocess_enabled_flags）；P1 空壳检测默认启用，
-    # 仅产出"empty_patch"标签观测（EMPTY_LLM_PATCH 场景从不可观测变为
-    # 可识别标签，供 refine_failure_category / 实验分析消费），不改代码。
-    # P2/P3 启用时：卫生化结果替换本轮 patch 后重新应用（仅单文件分支；
-    # 多候选/跨文件分支的候选池各有独立静态筛选，不重复卫生化）。
-    postprocess_labels: list[str] = []
-    postprocess_update: dict[str, Any] = {}
-    if (not cross_file_deps or not cross_file_enabled()) and not multi_candidate_available():
-        try:
-            from src.tools.patch_postprocess import postprocess_enabled_flags, sanitize_patch
-
-            _pp_flags = postprocess_enabled_flags()
-            _sanitized, _pp_labels = sanitize_patch(original_code, state.get("patch"))
-            postprocess_labels = list(_pp_labels)
-            if (_pp_flags["import_repair"] or _pp_flags["contract_alias"]) and (
-                "imports_repaired" in _pp_labels or "contract_aliases_restored" in _pp_labels
-            ):
-                # P2/P3 生效：用卫生化后的补丁重新应用单文件路径
-                new_code, applied = apply_patch_to_code(original_code=original_code, patch=_sanitized)
-            postprocess_update["postprocess_labels"] = postprocess_labels
-        except Exception:
-            logger.debug("1.1 后处理层执行异常（保守跳过，保持历史口径）", exc_info=True)
-
-    # P0 1.3 命名契约检查：补丁应用前对比修改前后的模块级符号集合
-    # （函数/类/__all__/注册装饰器/插件入口点），缺失任何原符号则拒绝应用。
-    # 开关 PATCH_CONTRACT_CHECK（默认 true）；设 false 回退历史口径。
-    # S2 安全（2026-09-29）：dangerous_api_added 守卫——补丁新引入
-    # os.system / subprocess / eval / 网络外连 / 凭证读取时拒绝应用
-    # （开关 PATCH_DANGEROUS_API_GUARD，默认 true；与命名契约检查并列）。
-    contract_missing: list[str] = []
-    _naming_contract: tuple | None = None
-    _dangerous_added: list[str] | None = None
-    if applied and new_code != original_code:
-        from src.tools.patch_applier import check_naming_contract, dangerous_api_added
-
-        _naming_contract = check_naming_contract(original_code, new_code)
-        ok, missing = _naming_contract
-        # P0-4 性能（2026-10-01）：预计算 AST 危险差集，供下方 S2 双保险复用
-        # （同一 (original, new) 输入只算一次，避免重复 ast.parse×2）
-        _dangerous_added = dangerous_api_added(original_code, new_code)
-        if not ok:
-            logger.warning("P0 1.3 命名契约检查失败，拒绝应用补丁：缺失符号 %s", missing)
-            applied = False
-            new_code = original_code
-            contract_missing = list(missing)
-            # 1.3 分层压缩降级链：守卫拒绝时推进上下文档位（进程内状态），
-            # 并把 (档位名, 缺失符号) 经 state 透传给下一轮 _debugger_node。
-            # 开关 CONTEXT_TIER_DOWNGRADE_ENABLE（默认 false，保持历史口径；
-            # true 时降级链全链路生效）。
-            if _context_tier_downgrade_enabled():
-                from src.tools.patch_applier import _current_context_tier, advance_context_tier
-
-                advance_context_tier()
-                tier_name, _idx, _temp = _current_context_tier()
-                # 临时键：本节点函数内先写入、末尾经 state.pop 取出合并进返回
-                # dict（键本身不进入 LangGraph 通道——通道键为
-                # contract_reject_feedback，见 1.3 降级链注释）。mypy 无法
-                # 对 TypedDict 的临时动态键收窄，故对 state 做窄化 cast。
-                _state = cast("dict[str, Any]", state)
-                _state["_1_3_contract_feedback"] = {
-                    "tier": tier_name,
-                    "missing_symbols": contract_missing,
-                }
-            # mypy：同上，cast 收窄（临时键不入 TypedDict 声明）
-            cast("dict[str, Any]", state)["_1_3_contract_missing"] = contract_missing
-        if applied:
-            # S2 安全双保险（2026-09-29 审查）：危险操作拦截走正则
-            # （injection_guard.check_llm_patch_safety，默认开）+ AST 差集
-            # （patch_applier.dangerous_api_added，默认开）双通道。
-            # 正则 findings 或 AST 差集非空即拒绝（保守不引入半应用状态）。
-            from src.agents.injection_guard import check_llm_patch_safety
-
-            _regex_hits = check_llm_patch_safety(new_code)
-            # P0-4 性能（2026-10-01）：复用上方已算的 dangerous_api_added 结果，
-            # 避免对同一 (original_code, new_code) 重复做 AST 差集（两遍
-            # ast.parse×2）
-            _added = _dangerous_added if _dangerous_added is not None else dangerous_api_added(original_code, new_code)
-            _hits = list(dict.fromkeys(_regex_hits + _added))  # 去重保序
-            if _hits:
-                logger.warning("S2 危险操作拦截：补丁被拒绝（%s）", "、".join(_hits))
-                applied = False
-                new_code = original_code
-
-    # ── 2.2 改进：补丁后处理重采样（PATCH_RESAMPLE_ENABLE=true，默认关）──
-    # 应用失败（定位不到目标函数 / AST 解析不通过）时，把"负面反馈"回传
-    # Debugger 重新生成（严格 prompt + 1.3 降级链档位收紧温度），最多
-    # PATCH_RESAMPLE_MAX（默认 2）次；仍失败则把该轮标记为
-    # patch_syntax_invalid（refine_failure_category 消费）并保留原代码。
-    # 未启用时（默认）行为与历史完全一致，不产生额外 LLM 调用。
     resample_stats: dict[str, Any] | None = None
     if not applied and _patch_resample_enabled():
         from src.agents.debugger import DebuggerAgent
@@ -2297,27 +2330,120 @@ def _patch_applier_node(state: AITesterState) -> dict[str, Any]:
                     logger.warning("2.2 重采样后命名契约仍被破坏（%s），拒绝写盘", _missing2[:5])
                     applied = False
                     new_code = original_code
-                    contract_missing = list(_missing2)
+                    # 2026-10-19 工程质量轮：历史实现的 contract_missing 局部赋值
+                    # 无任何读侧（契约缺失符号经 _check_patch_safety 写 state
+                    # 临时键），拆分后由 ruff F841 暴露并删除，行为不变。
             if resample_stats.get("success") is False and resample_stats.get("resampled"):
                 # 2.2 标记：重采样耗尽仍失败 → patch_syntax_invalid
                 # （refine_failure_category 在任务收尾时消费）
                 cast("dict[str, Any]", state)["_2_2_patch_syntax_invalid"] = True
+    return new_code, applied, resample_stats
 
-    # 默认视为"未真正写盘"，任何安全检查失败都保持该值。
-    # O35（P1）：快照经出参取回（见 _safe_write_patch 的 snapshot_out 注释），
-    # 再放进本函数**返回的 update dict**——只有经 update dict 才会被 LangGraph
-    # 写回 channel，_rollback_last_patch（下一轮 executor）才读得到快照。
-    _snapshot: dict[str, Any] = {}
-    written = _safe_write_patch(original_code, new_code, applied, state, snapshot_out=_snapshot)
 
-    # P0（2026-10-05 独立审查）：源码补丁证据门**真阻断**——文档契约
-    # （patch_evidence.py / state.py：等级不足"拒绝写盘，源码保持原样"）
-    # 此前未兑现：实现为"写盘后仅标记"，无证据补丁留在盘上，若下一轮
-    # 测试恰好通过（迁就错误测试）坏补丁即固化（主批次 patch_correct=0/15
-    # 的场景）。现对齐 fail-closed 契约（与 W12 快照失败拒绝写盘同文化）：
-    # gate 启用（默认 true）+ 证据等级不足 → 恢复磁盘原文件 + written=False
-    # （与"安全检查失败保持原代码"同口径，A-03 / M6 / history / 事件总线
-    # 全部自然一致）；证据等级仍记录（消融对照不受影响）。
+def _check_patch_safety(
+    state: AITesterState,
+    original_code: str,
+    new_code: str,
+    applied: bool,
+) -> tuple[bool, str]:
+    """命名契约 + 危险 API 双保险（自 `_patch_applier_node` 提取，行为等价）。
+
+    补丁应用后、写盘前执行两道独立安全检查：
+    ① ``PATCH_CONTRACT_CHECK``（默认 true）：对比修改前后的模块级符号集合，
+       缺失任何原符号即拒绝应用，并（按 ``CONTEXT_TIER_DOWNGRADE_ENABLE``）
+       推进上下文档位、写回契约反馈临时键；
+    ② ``PATCH_DANGEROUS_API_GUARD``（默认 true）：正则 + AST 差集双通道拦截
+       新引入的危险调用，命中即拒绝（保守不引入半应用状态）。
+
+    Args:
+        state: 当前状态（写 ``_1_3_contract_missing`` /
+            ``_1_3_contract_feedback`` 两个节点内临时键，由主节点末尾 pop）。
+        original_code: 应用前原文。
+        new_code: 应用后候选代码。
+        applied: 补丁是否已成功应用。
+
+    Returns:
+        ``(applied, new_code)``：拒绝时 applied=False 且 new_code 回退原文；
+        契约缺失符号经 state 临时键 ``_1_3_contract_missing`` 透传。
+    """
+    contract_missing: list[str] = []
+    _dangerous_added: list[str] | None = None
+    if applied and new_code != original_code:
+        from src.tools.patch_applier import check_naming_contract, dangerous_api_added
+
+        ok, missing = check_naming_contract(original_code, new_code)
+        # P0-4 性能（2026-10-01）：预计算 AST 危险差集，供下方 S2 双保险复用
+        # （同一 (original, new) 输入只算一次，避免重复 ast.parse×2）
+        _dangerous_added = dangerous_api_added(original_code, new_code)
+        if not ok:
+            logger.warning("P0 1.3 命名契约检查失败，拒绝应用补丁：缺失符号 %s", missing)
+            applied = False
+            new_code = original_code
+            contract_missing = list(missing)
+            # 1.3 分层压缩降级链：守卫拒绝时推进上下文档位（进程内状态），
+            # 并把 (档位名, 缺失符号) 经 state 透传给下一轮 _debugger_node。
+            # 开关 CONTEXT_TIER_DOWNGRADE_ENABLE（默认 false，保持历史口径；
+            # true 时降级链全链路生效）。
+            if _context_tier_downgrade_enabled():
+                from src.tools.patch_applier import _current_context_tier, advance_context_tier
+
+                advance_context_tier()
+                tier_name, _idx, _temp = _current_context_tier()
+                # 临时键：本节点函数内先写入、末尾经 state.pop 取出合并进返回
+                # dict（键本身不进入 LangGraph 通道——通道键为
+                # contract_reject_feedback，见 1.3 降级链注释）。mypy 无法
+                # 对 TypedDict 的临时动态键收窄，故对 state 做窄化 cast。
+                _state = cast("dict[str, Any]", state)
+                _state["_1_3_contract_feedback"] = {
+                    "tier": tier_name,
+                    "missing_symbols": contract_missing,
+                }
+            # mypy：同上，cast 收窄（临时键不入 TypedDict 声明）
+            cast("dict[str, Any]", state)["_1_3_contract_missing"] = contract_missing
+        if applied:
+            # S2 安全双保险（2026-09-29 审查）：危险操作拦截走正则
+            # （injection_guard.check_llm_patch_safety，默认开）+ AST 差集
+            # （patch_applier.dangerous_api_added，默认开）双通道。
+            # 正则 findings 或 AST 差集非空即拒绝（保守不引入半应用状态）。
+            from src.agents.injection_guard import check_llm_patch_safety
+
+            _regex_hits = check_llm_patch_safety(new_code)
+            # P0-4 性能（2026-10-01）：复用上方已算的 dangerous_api_added 结果，
+            # 避免对同一 (original_code, new_code) 重复做 AST 差集（两遍
+            # ast.parse×2）
+            _added = _dangerous_added if _dangerous_added is not None else dangerous_api_added(original_code, new_code)
+            _hits = list(dict.fromkeys(_regex_hits + _added))  # 去重保序
+            if _hits:
+                logger.warning("S2 危险操作拦截：补丁被拒绝（%s）", "、".join(_hits))
+                applied = False
+                new_code = original_code
+    return applied, new_code
+
+
+def _apply_patch_evidence_gate(
+    state: AITesterState,
+    original_code: str,
+    new_code: str,
+    written: bool,
+    snapshot: dict[str, Any],
+) -> tuple[bool, str, dict[str, Any]]:
+    """源码补丁证据门（自 `_patch_applier_node` 提取，行为等价）。
+
+    写盘成功后评估补丁证据等级；``patch_evidence_gate_enabled()`` 且等级
+    不足（非 gold/sbfl）时恢复磁盘原文件并置 written=False（fail-closed）。
+    恢复失败时如实降级为"写盘后标记"口径（C6：磁盘与状态必须一致声明）。
+    证据等级本身始终记录（消融对照不受影响）。
+
+    Args:
+        state: 当前状态。
+        original_code: 应用前原文。
+        new_code: 应用后代码。
+        written: 补丁是否已写盘成功。
+        snapshot: 快照出参（阻断时 clear——无可回滚物）。
+
+    Returns:
+        ``(written, new_code, evidence_update)``。
+    """
     _evidence_update: dict[str, Any] = {}
     if written:
         from src.tools.patch_evidence import (
@@ -2342,7 +2468,7 @@ def _patch_applier_node(state: AITesterState) -> dict[str, Any]:
             if _disk_restored_ev:
                 written = False
                 new_code = original_code
-                _snapshot.clear()  # 与"安全检查拒绝"同构：无可回滚物，快照键不写 channel
+                snapshot.clear()  # 与"安全检查拒绝"同构：无可回滚物，快照键不写 channel
                 logger.warning(
                     "P0 源码补丁证据门：本轮补丁证据等级=%s（不足 gold/sbfl），"
                     "已恢复原文件（拒绝写盘，patch_applied=False）",
@@ -2358,6 +2484,262 @@ def _patch_applier_node(state: AITesterState) -> dict[str, Any]:
                 )
         else:
             _evidence_update["source_patched_unverified"] = False
+    return written, new_code, _evidence_update
+
+
+def _maybe_run_testless_validation(
+    state: AITesterState,
+    original_code: str,
+    effective_code: str,
+    written: bool,
+) -> dict[str, Any]:
+    """O6 testless 修复验证层（自 `_patch_applier_node` 提取，行为等价）。
+
+    ``TESTLESS_VALIDATION_ENABLE=true`` 且补丁已写盘时，对
+    (original_code, effective_code) 做四层静态验证（AST 符号守卫 / mypy /
+    命名契约 / 导入冒烟）；结果作为纯观测信号写入返回 dict，不阻断主流程。
+    未启用 / 未写盘 / 执行异常均返回空 dict（历史口径零变化）。
+
+    Args:
+        state: 当前状态（读取 module_name）。
+        original_code: 应用前原文。
+        effective_code: 实际生效代码。
+        written: 补丁是否已写盘成功。
+
+    Returns:
+        含 ``testless_validation`` 键的 update 片段，或空 dict。
+    """
+    testless_validation_result: dict[str, Any] | None = None
+    if written:
+        from src.tools.testless_validation import run_testless_validation as _run_tlv
+        from src.tools.testless_validation import testless_validation_enabled as _tlv_enabled
+
+        if _tlv_enabled():
+            try:
+                testless_validation_result = _run_tlv(
+                    original_code=original_code,
+                    patched_code=effective_code,
+                    target_module=state.get("module_name", ""),
+                )
+                if not testless_validation_result.get("passed", True):
+                    logger.info(
+                        "O6 testless 验证未通过（失败层: %s），标记为观测信号（不阻断主流程）",
+                        testless_validation_result.get("failed_layers", []),
+                    )
+            except Exception:
+                logger.debug("O6 testless 验证执行异常（保守跳过，保持历史口径）", exc_info=True)
+    if testless_validation_result is not None:
+        return {"testless_validation": testless_validation_result}
+    return {}
+
+
+def _resolve_patch_application(state: AITesterState, original_code: str) -> tuple[str, bool, dict[str, Any]]:
+    """补丁应用分支选择（自 `_patch_applier_node` 提取，行为等价）。
+
+    三路互斥：① ``cross_file_deps`` 非空且 ``CROSS_FILE_ENABLE`` 开启时按
+    依赖图拓扑序做多文件应用（失败降级单文件）；② 多候选开关开启时静态
+    筛选 + 可选执行验证选最优候选；③ 否则走历史单补丁路径。任一环节无
+    有效结果都保守回退原文，不引入劣化。
+
+    Args:
+        state: 当前状态（读取 cross_file_deps / patch / module_name 等）。
+        original_code: 应用前原文。
+
+    Returns:
+        ``(new_code, applied, multi_candidate_update)``：多候选分支的额外
+        状态更新（其它分支为空 dict）。
+    """
+    multi_candidate_update: dict[str, Any] = {}
+    cross_file_deps = state.get("cross_file_deps") or []
+    if cross_file_deps and cross_file_enabled():
+        # 3.5 跨文件修复分支：按依赖图拓扑序对多个模块应用补丁
+        from src.tools.cross_file import CrossFileDependency, apply_multi_file_patch, cross_file_fallback_single_file
+
+        # 把 state 中序列化的依赖边还原为 CrossFileDependency 对象
+        # （拓扑序补丁应用需要结构化边信息，被调用方先改、调用方后改）
+        dep_objects = [
+            CrossFileDependency(
+                source_module=d.get("source_module", ""),
+                target_module=d.get("target_module", ""),
+                symbol=d.get("symbol", ""),
+                call_line=int(d.get("call_line", 0)),
+                context=d.get("context", ""),
+            )
+            for d in cross_file_deps
+        ]
+        # 从 state 收集所有模块的原始代码（当前仅 target_code 可用；
+        # 二期扩展后从 source_files 字典读取）
+        entry_module = state.get("module_name") or os.path.basename(state.get("target_file", ""))
+        original_files = {entry_module: original_code}
+        # 多文件补丁：entry_module 用 state["patch"]（当前单补丁路径生成），
+        # 其他模块的补丁由 _debugger_node 后续生成（二期）
+        patches: dict[str, str] = {}
+        if state.get("patch"):
+            patch_val = state["patch"]
+            assert isinstance(patch_val, str)  # TypedDict 标 str | None，真值守卫后必为 str
+            patches[entry_module] = patch_val
+        # 尝试多文件应用（传依赖边 → 拓扑序）；失败时降级为单文件
+        new_files, applied = apply_multi_file_patch(original_files, patches, entry_module, deps=dep_objects)
+        new_code = new_files.get(entry_module, original_code)
+        if not applied:
+            # 多文件失败 → 降级单文件（保守口径，不引入劣化）
+            logger.info("3.5 跨文件补丁应用失败，降级单文件模式")
+            # 注意：cross_file_fallback_single_file 返回 (新文件映射, 成功)，
+            # 需再取 entry_module 的代码字符串——此前误把整个映射当 new_code，
+            # len(dict) 恒为 1，降级补丁永远卡在"过短"安全检查、永远写不进盘
+            fallback_files, applied = cross_file_fallback_single_file(original_files, patches, entry_module)
+            new_code = fallback_files.get(entry_module, original_code)
+    elif multi_candidate_available():
+        new_code, applied, multi_candidate_update = _select_multi_candidate_patch(
+            state, original_code, iteration=state.get("iteration", 0)
+        )
+    else:
+        new_code, applied = apply_patch_to_code(original_code=original_code, patch=state.get("patch") or "")
+    return new_code, applied, multi_candidate_update
+
+
+def _apply_snapshot_rollback(
+    state: AITesterState,
+    original_code: str,
+    written: bool,
+    effective_code: str,
+    resample_update: dict[str, Any],
+) -> tuple[str, bool]:
+    """A-03 快照 / P2P 回归 / 失败自动回滚协议（自 `_patch_applier_node` 提取）。
+
+    ``PATCH_SNAPSHOT_ROLLBACK_ENABLE=true`` 且已写盘时，对"应用补丁后的
+    代码"跑独立测试套件 P2P 回归：断言级失败 → 状态与磁盘同步恢复原文
+    （落盘失败如实记 rolled_back=False）；通过 → 保留补丁并标注 verified；
+    无测试材料 / 坏测试 → 保守保留补丁。观测字段纯观测、不参与路由。
+
+    Args:
+        state: 当前状态。
+        original_code: 应用前原文。
+        written: 补丁是否已写盘成功。
+        effective_code: 当前实际生效代码。
+        resample_update: 本轮 update 片段（原地写入回滚观测键）。
+
+    Returns:
+        ``(effective_code, written)``（回滚后 written=False）。
+    """
+    if snapshot_rollback_enabled() and written:
+        from src.tools.patch_rollback import PatchRollbackProtocol
+
+        _pr_result = PatchRollbackProtocol().run(
+            original_code=original_code,
+            patch=state.get("patch") or "",
+            test_code=state.get("generated_test") or "",
+            module_name=state.get("module_name") or "module_under_test",
+        )
+        _verdict = _pr_result["verdict"]
+        _rolled_back = bool(_pr_result["rolled_back"])
+        if _rolled_back and _verdict == "regression_failed":
+            # 自动回滚：target_code 恢复快照原文（written=False，patch_applied
+            # 记 False——与"安全检查失败保持原代码"同口径，避免 Executor
+            # 测回滚前代码、Debugger 分析回滚后代码的"幻象迭代"）
+            # C6（2026-10-05 系统审查 P0）：同时恢复**磁盘**——此前仅改
+            # state（effective_code/original_code）不写回 target_file，下一轮
+            # executor 读磁盘测到的仍是"已回滚"的坏补丁代码，状态与存储分叉。
+            effective_code = original_code
+            written = False
+            _disk_restored = False
+            try:
+                _write_file_atomic(os.path.abspath(state.get("target_file", "")), original_code)
+                _disk_restored = True
+            except Exception:
+                logger.exception(
+                    "A-03 回滚落盘失败：磁盘仍保留坏补丁（target_file=%s）",
+                    state.get("target_file"),
+                )
+            # 磁盘未恢复时如实报告 rolled_back=False（避免下游把
+            # "仅状态回滚"当作已恢复证据消费）
+            _rolled_back = _disk_restored
+            logger.warning(
+                "A-03 P2P 回归失败，补丁已自动回滚（verdict=%s, snapshot=%s, disk_restored=%s）",
+                _verdict,
+                _pr_result["snapshot_id"],
+                _disk_restored,
+            )
+        resample_update["patch_rollback_verdict"] = _verdict
+        resample_update["patch_rolled_back"] = _rolled_back
+    else:
+        resample_update["patch_rollback_verdict"] = "not_enabled"
+        resample_update["patch_rolled_back"] = False
+    return effective_code, written
+
+
+def _patch_applier_node(state: AITesterState) -> dict[str, Any]:
+    """
+    补丁应用节点：将 Debugger 生成的补丁应用到被测代码，并写回文件。
+    应用后更新 iteration 计数器，供下次循环使用。
+
+    2.2 补丁后处理重采样（PATCH_RESAMPLE_ENABLE=true，默认关）：应用失败
+    （定位不到目标函数 / AST 解析不通过）时，把"负面反馈"回传 Debugger
+    重新生成一次（严格 prompt + 1.3 降级链档位收紧温度），最多
+    PATCH_RESAMPLE_MAX（默认 2）次；仍失败则把该轮标记为
+    patch_syntax_invalid（refine_failure_category 消费）并保留原代码。
+
+    1.3 分层压缩降级链（CONTEXT_TIER_DOWNGRADE_ENABLE=true，默认关）：
+    符号守卫（check_naming_contract）拒绝补丁时，调 advance_context_tier()
+    推进上下文档位，并把 (档位, 缺失符号) 作为 contract_reject_feedback
+    写入 state——下一轮 _debugger_node 读到该反馈后按"更高约束"的
+    上下文（补丁配方保留 / 签名+import 极简）+ 更低温度重新生成。
+    未启用时（默认）行为与历史完全一致（仅拒绝本轮、不动档位）。
+
+    状态/磁盘一致性：只有当补丁真正写入磁盘成功时，才把 target_code 更新为
+    新代码并记录 patch_applied=True；任何一道安全检查（空/过短/无函数定义/
+    路径不合法）拒绝写入时，target_code 保持原代码、patch_applied 记 False，
+    避免下游 Executor 测旧文件、Debugger 却分析新代码的"幻象迭代"。
+
+    Args:
+        state: 当前状态。
+
+    Returns:
+        更新后的状态字典，包含更新后的 target_code 和修复历史。
+    """
+    original_code = state["target_code"]
+
+    # 后处理层需要判断是否跨文件/多候选（分支选择内部自行读取同一键）
+    cross_file_deps = state.get("cross_file_deps") or []
+    new_code, applied, multi_candidate_update = _resolve_patch_application(state, original_code)
+
+    # ── 1.1 LLM 输出后处理层（P1 空壳检测 + P2/P3 卫生化，默认观测口径）──
+    # P2 导入回填 / P3 契约别名回填默认关（环境变量控制，见
+    # patch_postprocess.postprocess_enabled_flags）；P1 空壳检测默认启用，
+    # 仅产出"empty_patch"标签观测（EMPTY_LLM_PATCH 场景从不可观测变为
+    # 可识别标签，供 refine_failure_category / 实验分析消费），不改代码。
+    # P2/P3 启用时：卫生化结果替换本轮 patch 后重新应用（仅单文件分支；
+    # 多候选/跨文件分支的候选池各有独立静态筛选，不重复卫生化）。
+    postprocess_labels: list[str] = []
+    postprocess_update: dict[str, Any] = {}
+    if (not cross_file_deps or not cross_file_enabled()) and not multi_candidate_available():
+        try:
+            from src.tools.patch_postprocess import postprocess_enabled_flags, sanitize_patch
+
+            _pp_flags = postprocess_enabled_flags()
+            _sanitized, _pp_labels = sanitize_patch(original_code, state.get("patch"))
+            postprocess_labels = list(_pp_labels)
+            if (_pp_flags["import_repair"] or _pp_flags["contract_alias"]) and (
+                "imports_repaired" in _pp_labels or "contract_aliases_restored" in _pp_labels
+            ):
+                # P2/P3 生效：用卫生化后的补丁重新应用单文件路径
+                new_code, applied = apply_patch_to_code(original_code=original_code, patch=_sanitized)
+            postprocess_update["postprocess_labels"] = postprocess_labels
+        except Exception:
+            logger.debug("1.1 后处理层执行异常（保守跳过，保持历史口径）", exc_info=True)
+
+    applied, new_code = _check_patch_safety(state, original_code, new_code, applied)
+
+    new_code, applied, resample_stats = _run_patch_resample(state, original_code, new_code, applied)
+
+    # 默认视为"未真正写盘"，任何安全检查失败都保持该值。
+    # O35（P1）：快照经出参取回（见 _safe_write_patch 的 snapshot_out 注释），
+    # 再放进本函数**返回的 update dict**——只有经 update dict 才会被 LangGraph
+    # 写回 channel，_rollback_last_patch（下一轮 executor）才读得到快照。
+    _snapshot: dict[str, Any] = {}
+    written = _safe_write_patch(original_code, new_code, applied, state, snapshot_out=_snapshot)
+
+    written, new_code, _evidence_update = _apply_patch_evidence_gate(state, original_code, new_code, written, _snapshot)
 
     # 状态/磁盘一致性：仅写盘成功才更新 target_code，否则保留原代码
     effective_code = new_code if written else original_code
@@ -2420,62 +2802,7 @@ def _patch_applier_node(state: AITesterState) -> dict[str, Any]:
         # error_category 字符串值，flag 通道恒 False（死通道），5.2 失败细化
         # 仅靠字符串路径兜底可达，与 TypedDict 契约脱节。双通道一致。
         resample_update["patch_syntax_invalid_flag"] = True
-    # A-03（2026-10-04 系统审查 P0）：快照/P2P 全量回归/失败自动回滚协议
-    # （PATCH_SNAPSHOT_ROLLBACK_ENABLE=true 时启用，默认 false 历史口径零变化）。
-    # 协议：写盘后对"应用补丁后的代码"跑独立测试套件 P2P 回归——
-    #   回归失败（rc=1 断言级）→ 自动回滚：target_code 恢复 original_code
-    #     **且磁盘同步写回原文**（C6 2026-10-05：此前仅改 state 不写盘，
-    #     状态与存储分叉；回滚落盘失败时如实记 rolled_back=False）；
-    #   回归通过（rc=0）→ 保留补丁并标注 verdict=verified（M1 可消费）；
-    #   无测试材料（no_oracle）/ 坏测试（regression_error）→ 保守保留补丁
-    #     （不臆测测试、不误杀好补丁，由 M1 repair_rate 的 None 口径兜底）。
-    # 观测字段（纯观测，不参与路由，与 spec_compile_rate 同档位）：
-    #   patch_rollback_verdict: verified / regression_failed / no_oracle /
-    #     regression_error / apply_failed / not_enabled
-    #   patch_rolled_back: bool（True = 本轮补丁已被 P2P 回归失败回滚）
-    if snapshot_rollback_enabled() and written:
-        from src.tools.patch_rollback import PatchRollbackProtocol
-
-        _pr_result = PatchRollbackProtocol().run(
-            original_code=original_code,
-            patch=state.get("patch") or "",
-            test_code=state.get("generated_test") or "",
-            module_name=state.get("module_name") or "module_under_test",
-        )
-        _verdict = _pr_result["verdict"]
-        _rolled_back = bool(_pr_result["rolled_back"])
-        if _rolled_back and _verdict == "regression_failed":
-            # 自动回滚：target_code 恢复快照原文（written=False，patch_applied
-            # 记 False——与"安全检查失败保持原代码"同口径，避免 Executor
-            # 测回滚前代码、Debugger 分析回滚后代码的"幻象迭代"）
-            # C6（2026-10-05 系统审查 P0）：同时恢复**磁盘**——此前仅改
-            # state（effective_code/original_code）不写回 target_file，下一轮
-            # executor 读磁盘测到的仍是"已回滚"的坏补丁代码，状态与存储分叉。
-            effective_code = original_code
-            written = False
-            _disk_restored = False
-            try:
-                _write_file_atomic(os.path.abspath(state.get("target_file", "")), original_code)
-                _disk_restored = True
-            except Exception:
-                logger.exception(
-                    "A-03 回滚落盘失败：磁盘仍保留坏补丁（target_file=%s）",
-                    state.get("target_file"),
-                )
-            # 磁盘未恢复时如实报告 rolled_back=False（避免下游把
-            # "仅状态回滚"当作已恢复证据消费）
-            _rolled_back = _disk_restored
-            logger.warning(
-                "A-03 P2P 回归失败，补丁已自动回滚（verdict=%s, snapshot=%s, disk_restored=%s）",
-                _verdict,
-                _pr_result["snapshot_id"],
-                _disk_restored,
-            )
-        resample_update["patch_rollback_verdict"] = _verdict
-        resample_update["patch_rolled_back"] = _rolled_back
-    else:
-        resample_update["patch_rollback_verdict"] = "not_enabled"
-        resample_update["patch_rolled_back"] = False
+    effective_code, written = _apply_snapshot_rollback(state, original_code, written, effective_code, resample_update)
     # 1.4 事件总线接线：PatchApplied（含 1.1 后处理标签，纯观测）
     # P0（2026-10-05 独立审查）：证据门判定已**前移**至写盘点之后
     # （_safe_write_patch 返回处）——阻断语义（等级不足恢复原文件、
@@ -2483,33 +2810,7 @@ def _patch_applier_node(state: AITesterState) -> dict[str, Any]:
     # 构造之前生效，否则下游基于"已写盘"的假象运行。此处仅剩
     # publish_patch_applied 消费阻断后的 written。
     publish_patch_applied(state, applied=written, new_code=effective_code)
-    # O6（2026-09-29 审查 P1）：testless 修复验证层（TESTLESS_VALIDATION_ENABLE=true 时启用，默认关）。
-    # 补丁应用成功后，经 run_testless_validation 对 (original_code, effective_code)
-    # 做四层静态验证（AST 符号守卫 / mypy / 命名契约 / 导入冒烟），
-    # 验证结果写入 state["testless_validation"]（纯观测，不阻断主流程）。
-    # 开关关闭时零行为变化，历史口径不变。
-    testless_validation_result: dict[str, Any] | None = None
-    if written:
-        from src.tools.testless_validation import run_testless_validation as _run_tlv
-        from src.tools.testless_validation import testless_validation_enabled as _tlv_enabled
-
-        if _tlv_enabled():
-            try:
-                testless_validation_result = _run_tlv(
-                    original_code=original_code,
-                    patched_code=effective_code,
-                    target_module=state.get("module_name", ""),
-                )
-                if not testless_validation_result.get("passed", True):
-                    logger.info(
-                        "O6 testless 验证未通过（失败层: %s），标记为观测信号（不阻断主流程）",
-                        testless_validation_result.get("failed_layers", []),
-                    )
-            except Exception:
-                logger.debug("O6 testless 验证执行异常（保守跳过，保持历史口径）", exc_info=True)
-    _testless_update: dict[str, Any] = {}
-    if testless_validation_result is not None:
-        _testless_update["testless_validation"] = testless_validation_result
+    _testless_update = _maybe_run_testless_validation(state, original_code, effective_code, written)
     # C10（2026-10-05 系统审查 P1）：验证门修复案例暂存——写盘成功的补丁
     # 三元组（含写盘前原文）经 state["last_applied_repair"] 交给下一轮
     # executor：验证通过才 add_repair 入库，失败/回滚（written=False）置

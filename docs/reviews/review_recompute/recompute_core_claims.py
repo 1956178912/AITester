@@ -188,7 +188,14 @@ def main() -> None:
             "mcnemar_exact_one_sided_a_greater_p": binom_pmf_one_sided_greater(b, b + c),
             "chi2_no_cc": round(mcnemar_chi2(b, c, cc=False), 2),
             "chi2_yates_cc": round(mcnemar_chi2(b, c, cc=True), 2),
-            "odds_ratio": round(b / c, 3) if c else float("inf"),
+            # F19（2026-10-19 第三方全量静态审查，P2）：c=0 时 OR=b/c 数学上无定义。
+            # 旧实现写 float("inf")，经 json.dumps 默认 allow_nan=True 落成裸
+            # Infinity token——不属于标准 JSON（RFC 8259），跨工具不可读。现改为
+            # JSON 合法值 None + 状态说明；不伪造有限数值，也不丢 b/c 原始计数。
+            "odds_ratio": round(b / c, 3) if c else None,
+            "odds_ratio_note": None
+            if c
+            else "c=0（分母为零，OR 无定义）；b/c 原始计数保留于 b_only_a/c_only_b，or_ci95 为 0.5 校正近似区间",
             "or_ci95": [round(lor_lo, 4), round(lor_hi, 4)],
         }
 
@@ -303,8 +310,10 @@ def main() -> None:
         "interpretation": "即使 10% 的 gold 三段判定有误，F2P detection 率的偏差上界约 ±10pp；C4 的 45.9% vs 83.8%（37.9pp 差距）与 C2 的 −28.3pp 均大于该上界，结论方向不翻转；但 C14 的 −25.7pp 与单批 QuixBugs 的 6pp 跨批波动处于同一量级，解读须并列披露。",
     }
 
-    OUT.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(json.dumps(report, ensure_ascii=False, indent=2))
+    # F19（2026-10-19）：写盘必须产出**标准 JSON**——allow_nan=False 让任何
+    # 非有限浮点（NaN/Infinity）立即抛 ValueError，而不是静默写出非标准 token。
+    OUT.write_text(json.dumps(report, ensure_ascii=False, indent=2, allow_nan=False), encoding="utf-8")
+    print(json.dumps(report, ensure_ascii=False, indent=2, allow_nan=False))
 
 
 if __name__ == "__main__":

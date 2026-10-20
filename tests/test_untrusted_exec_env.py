@@ -240,7 +240,10 @@ class TestExecutionSitesInterceptFinalEnv:
         _poison_host_env(monkeypatch)
         calls = _capture_run_with_timeout(monkeypatch)
         stdout = mdo._run_probe("def f(x):\n    return x + 1\n", "audit_mod", timeout_seconds=30)
-        assert stdout == ""
+        # F13（2026-10-19 第三方审查 P1）：_run_probe 现在对"非 JSON / 空输出 /
+        # probe_error 诊断"按契约返回 None（拒绝把探针诊断当行为摘要）；本用例
+        # 的 fake run_with_timeout 返回空 stdout，故这里断言 None（此前为 ""）。
+        assert stdout is None
         probe_calls = [call for call in calls if any(str(part).endswith("_mdo_probe.py") for part in call["cmd"])]
         assert len(probe_calls) == 1, f"MDO 探针站点应恰好启动一次探针子进程，实际 {len(probe_calls)}"
         call = probe_calls[0]

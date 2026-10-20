@@ -124,17 +124,13 @@ def audit(base: str, xml_path: Path, root: Path, pathspec: str = "src/") -> dict
     for rel, lines in sorted(added.items()):
         hits = cov.get(rel)
         if hits is None:
-            files.append(
-                {"file": rel, "added": 0, "uncovered": 0, "missing_lines": [], "note": "未被 coverage 测量"}
-            )
+            files.append({"file": rel, "added": 0, "uncovered": 0, "missing_lines": [], "note": "未被 coverage 测量"})
             continue
         effective = [ln for ln in lines if ln in hits]
         uncovered = [ln for ln in effective if hits[ln] == 0]
         total_added += len(effective)
         total_uncovered += len(uncovered)
-        files.append(
-            {"file": rel, "added": len(effective), "uncovered": len(uncovered), "missing_lines": uncovered}
-        )
+        files.append({"file": rel, "added": len(effective), "uncovered": len(uncovered), "missing_lines": uncovered})
 
     return {
         "base": base,
@@ -170,9 +166,7 @@ def main() -> int:
         default="src/",
         help="审计范围前缀，须与 --coverage-xml 的 --cov 目标一致（src/ 或 experiments/）",
     )
-    parser.add_argument(
-        "--coverage-xml", default=str(DEFAULT_COVERAGE_XML), help="coverage.xml 路径（须与 HEAD 对齐）"
-    )
+    parser.add_argument("--coverage-xml", default=str(DEFAULT_COVERAGE_XML), help="coverage.xml 路径（须与 HEAD 对齐）")
     parser.add_argument("--json", default="-", help="JSON 输出路径（默认 - = 不输出）")
     args = parser.parse_args()
 

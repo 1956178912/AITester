@@ -302,6 +302,40 @@ class TestA06EntryWiring:
         assert identity["n_from_rebuild"] == 0, "回退 task_id 会重现跨 seed 错映射（A06 缺陷）"
         assert result["cluster_map_summary"]["n_clusters"] == 1
 
+    def test_row_without_task_id_is_skipped_not_resolved(self) -> None:
+        """AA-5（2026-10-19）：缺 `task_id` 的畸形行必须被跳过，不进身份解析。
+
+        审计来源：`FIX_COVERAGE_AUDIT_ROUND2_2026-10-19.md` §6 点名的防御分支
+        （`statistical_analysis.py` 元数据收集循环 `if not tid ... : continue`）。
+        语义要求：这类行既不能抛错打断报告，也不能以 `""`/`"None"` 之类的
+        占位身份进入簇映射——否则会把不存在的任务算进分母。
+        """
+        good = self._row("synthetic__task_0000", 1.0, "distance_abs_missing", 4386)
+        data = {
+            "aitester": [good, {"task_id": "", "detection_rate": 1.0, "passed": 1}],
+            "plain_llm_df": [dict(good, detection_rate=0.0, passed=0)],
+        }
+        result = cluster_robust_analysis(data, task_count=87, seed=42, max_pattern_repeat=2)
+
+        identity = result["identity_resolution"]
+        assert identity["n_from_metadata"] == 1, "空 task_id 不得进入身份解析"
+        assert "" not in result["cluster_map_summary"].get("clusters", {}), "空身份不得成为簇"
+
+    def test_duplicate_task_id_keeps_first_archived_metadata(self) -> None:
+        """同 task_id 重复行按"首见即可"取元数据（跨臂元数据相同，不覆盖）。"""
+        first = self._row("synthetic__task_0001", 1.0, "distance_abs_missing", 1)
+        second = self._row("synthetic__task_0001", 0.0, "palindrome_case_sensitive", 999)
+        result = cluster_robust_analysis(
+            {"aitester": [first, second], "plain_llm_df": [first, second]},
+            task_count=87,
+            seed=42,
+            max_pattern_repeat=2,
+        )
+
+        identity = result["identity_resolution"]
+        assert identity["n_from_metadata"] == 1
+        assert result["cluster_map_summary"]["n_clusters"] == 1, "重复行不得裂成两簇"
+
 
 # ─────────────── S13：簇级配对检验（手算值 + 退化行为） ───────────────
 
