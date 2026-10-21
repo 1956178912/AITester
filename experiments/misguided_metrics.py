@@ -54,6 +54,13 @@ Zhao, Zhou & Cohen（ISSTA 2026，DOI 10.1145/3832204；引用口径取自
 6. **分母披露（强制）**：报告同时给出 总收集测试数 / 可分类测试数 /
    任务数（含结构跳过任务的原因分布），以及"每任务可分类数"的分布；
    任何比率都标注其分母。
+7. **任务级判绿 = rc==0 ∧ 有效通过**（BC，2026-10-21，F03 同型）：
+   ``replay_detection`` 的 fixed 侧、``replay_fixed_green`` 与
+   ``_verdict_agreement`` 的绿判据与 BA 轮共享谓词
+   ``_m1_metrics._suite_has_effective_pass`` 同口径——全 skip / xfail /
+   deselect 的套件 rc==0 但没有执行任何断言，不判绿（None /
+   not_applicable）。逐测试四分类早已把 skip 单列为"无 pass/fail 信号"，
+   本条目消除任务级与测试级之间的内部不一致。
 
 输出
 ----
@@ -105,6 +112,9 @@ REPO = Path(__file__).resolve().parent.parent
 if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
+# BC（2026-10-21，F03 同型）：任务级重放判绿的"有效通过"证据谓词——
+# 与 BA 轮 `_suite_has_effective_pass` 同一事实源，勿在本模块另写判据。
+from experiments._m1_metrics import _suite_has_effective_pass, pytest_summary_counts  # noqa: E402
 from src.utils.atomic_io import atomic_write_json, atomic_write_text  # noqa: E402
 from src.utils.process_utils import nested_pytest_env, run_with_timeout  # noqa: E402
 
@@ -872,6 +882,9 @@ def run_side(
     combined = stdout + "\n" + stderr
     rec["exec_timed_out"] = bool(getattr(exec_res, "timed_out", False))
     rec["exec_rc"] = None if rec["exec_timed_out"] else exec_res.returncode
+    # BC（2026-10-21，F03 同型）：保留 pytest 摘要行——仅内部判定"是否含
+    # 有效通过"用（`_side_record` 不选该键，报告 body schema 不变）。
+    rec["exec_summary_line"] = _pytest_summary_line(combined)
     # M1 同源执行错误判据（rc>=2 或显式收集/语法标记；超时按 -9 走同一判据）
     try:
         from experiments._m1_metrics import _looks_like_test_execution_error
@@ -1017,6 +1030,42 @@ def _count_ast_test_defs(code: str) -> int:
     )
 
 
+def _pytest_summary_line(output: str) -> str:
+    """取输出中最后一条 pytest 摘要行（BC：有效通过判据的证据源之一）。
+
+    用共享计数解析（``_m1_metrics.pytest_summary_counts``）逐行判定
+    "是不是摘要行"，不另写一套识别逻辑；找不到 ⇒ 空串（调用方按
+    fail-closed 处理）。
+    """
+    for line in reversed((output or "").splitlines()):
+        if pytest_summary_counts(line):
+            return line.strip()
+    return ""
+
+
+def _side_has_effective_pass(side: dict[str, Any]) -> bool:
+    """一侧 pytest 运行是否含**有效通过**证据（BC，2026-10-21，F03 同型）。
+
+    与 BA 轮共享谓词 ``_suite_has_effective_pass`` 同口径：``rc==0``
+    不等于有断言执行——全 skip / xfail / deselect 的套件同样 rc==0。
+    证据源与本模块既有解析一致：优先逐测试 ``outcomes``（junit/verbose，
+    ``run_side`` 的原生产物）：至少 1 个 ``pass`` 且无 ``fail``；
+    outcomes 缺失时回退 ``run_side`` 保留的 pytest 摘要行
+    （``exec_summary_line``，仅内部判定用、不进报告 body）。
+    两者都读不到 ⇒ False（fail-closed）。
+
+    注：本模块的四分类口径早已把 skip 单列为"无 pass/fail 信号"
+    （``UNCLASSIFIABLE_REASONS.skipped``）；任务级重放判绿此前却只看
+    rc——BC 轮消除该内部不一致。
+    """
+    outcomes = side.get("outcomes") or {}
+    if outcomes:
+        return any(status == "pass" for status in outcomes.values()) and not any(
+            status == "fail" for status in outcomes.values()
+        )
+    return _suite_has_effective_pass(side.get("exec_summary_line") or "")
+
+
 def replay_detection(
     buggy_side: dict[str, Any],
     fixed_side: dict[str, Any],
@@ -1027,6 +1076,11 @@ def replay_detection(
 
     规则与 ``_m1_metrics._compute_detection_rate`` 同口径：
     buggy rc!=0 ∧ fixed rc==0 ∧ 两侧无收集/语法错误；超时/材料缺失 → None。
+
+    BC（2026-10-21，F03 同型）：fixed 侧 rc==0 还必须含**有效通过**
+    （≥1 个真实 passed）——全 skip / xfail / deselect 的套件没有执行
+    任何断言，F2P 第二段不成立，记 None（不可测），与 BA 轮后
+    ``_compute_detection_rate`` 逐字同规则。
 
     ``strict=True`` 时若任一侧出现单测 timeout，也记 None——用于**模拟
     A-06 per-test 超时功能落地前**的历史 M1 口径（整套超时不可判），
@@ -1044,7 +1098,15 @@ def replay_detection(
         return None
     if buggy_side.get("exec_error") or fixed_side.get("exec_error"):
         return 0.0
-    return 1.0 if (b_rc != 0 and f_rc == 0) else 0.0
+    if b_rc == 0:
+        return 0.0  # buggy 侧没红 = 缺陷未被检出（与 _m1_metrics 同序：先判 buggy 侧）
+    if f_rc != 0:
+        return 0.0  # fixed 侧仍红：测试恒失败/无效（N1 核心防线）
+    if not _side_has_effective_pass(fixed_side):
+        # F03 同型：fixed 侧 rc==0 但全 skip/xfail/deselect——没有任何
+        # 断言通过，F2P 第二段不成立，记 None（不可测），不误报检出。
+        return None
+    return 1.0
 
 
 def _detection_agreement(artifact_value: float | None, replay_value: float | None) -> str:
@@ -1076,6 +1138,11 @@ def _detection_disagreement_reason(
             return "重放整文件超时 → None（归档非 None）"
         if not (buggy_side.get("collect_ok") and fixed_side.get("collect_ok")):
             return "重放收集失败 → None（归档非 None）"
+        if fixed_side.get("exec_rc") == 0 and not _side_has_effective_pass(fixed_side):
+            # BC（2026-10-21，F03 同型）：归档按旧口径把 fixed 全 skip 的
+            # rc==0 记成检出；重放按有效通过口径记 None——这是口径修正，
+            # 不是跨批次随机性。
+            return "归档按旧口径记数（fixed 侧 rc==0 但全 skip/xfail/deselect，无有效通过）；重放按 BA/BC 有效通过口径记 None"
         return "重放不可判 → None（归档非 None）"
     if tag == "artifact_none" and strict_value is not None:
         return "归档 None 但历史口径重放可判——需人工核对（可能为跨批次随机性）"
@@ -1185,7 +1252,10 @@ def analyze_task(
         # 结构跳过 ⇒ 重放不可判（replay None）；仍要与归档 detection 对账，
         # 避免把"归档有判定、重放不可判"静默吞成 both_none。
         record["detection_agreement"] = _detection_agreement(record["artifact_detection_rate"], None)
-        if record["detection_agreement"] == "replay_none":
+        # BC（2026-10-21）：迟发跳过（侧结果不可分类 / 无逐测试结果）之前，
+        # `_detection_disagreement_reason` 已按实际侧状态写下更具体的归因
+        # （口径修正 / 超时 / 收集失败）——不得被下面的通用文案覆盖。
+        if record["detection_agreement"] == "replay_none" and not record.get("detection_disagreement_reason"):
             record["detection_disagreement_reason"] = (
                 f"结构跳过（{reason}）→ 无法重放；归档 detection={record['artifact_detection_rate']}"
             )
@@ -1273,7 +1343,15 @@ def analyze_task(
     record["n_classifiable"] = sum(counts.values())
     record["replay_detection"] = replay_detection(buggy_side, fixed_side)
     record["replay_detection_strict"] = replay_detection(buggy_side, fixed_side, strict=True)
-    if fixed_side.get("collect_ok") and not fixed_side.get("exec_timed_out") and fixed_side.get("exec_rc") is not None:
+    # BC（2026-10-21，F03 同型）：rc==0 但无有效通过（全 skip/xfail/
+    # deselect）不判绿——该字段保持 None（"未演示 green"），与
+    # replay_detection 的 None 口径一致；cross_check 表已有 none 桶。
+    if (
+        fixed_side.get("collect_ok")
+        and not fixed_side.get("exec_timed_out")
+        and fixed_side.get("exec_rc") is not None
+        and _side_has_effective_pass(fixed_side)
+    ):
         record["replay_fixed_green"] = int(fixed_side["exec_rc"]) == 0
     record["detection_agreement"] = _detection_agreement(record["artifact_detection_rate"], record["replay_detection"])
     record["detection_disagreement_reason"] = _detection_disagreement_reason(
@@ -1324,6 +1402,11 @@ def _verdict_agreement(artifact_verdict: Any, fixed_side: dict[str, Any]) -> tup
     ``specific_red`` 的语义 = 生成测试在 gold fixed 上转绿 ⇒ 重放 fixed 侧
     应 rc==0；``over_red`` = gold fixed 上仍红 ⇒ 重放 fixed 侧应 rc!=0。
     不可判定（收集失败/超时/无材料）→ ``not_applicable``。
+
+    BC（2026-10-21，F03 同型）：rc==0 还必须含有效通过才算"绿"——
+    fixed 侧 rc==0 但全 skip/xfail/deselect 时，既不能确认"转绿"
+    （specific_red）也不能确认"仍红"（over_red），记 ``not_applicable``
+    （不得记 mismatch 冤枉归档）。
     """
     verdict = str(artifact_verdict or "")
     if verdict not in {"specific_red", "over_red"}:
@@ -1332,6 +1415,8 @@ def _verdict_agreement(artifact_verdict: Any, fixed_side: dict[str, Any]) -> tup
         return "not_applicable", "重放 fixed 侧不可判定"
     if fixed_side.get("exec_error"):
         return "not_applicable", "重放 fixed 侧执行错误（rc>=2/收集标记）"
+    if int(fixed_side["exec_rc"]) == 0 and not _side_has_effective_pass(fixed_side):
+        return "not_applicable", "重放 fixed 侧 rc==0 但无有效通过（全 skip/xfail/deselect）——无法确认绿/红"
     replay_green = int(fixed_side["exec_rc"]) == 0
     expected_green = verdict == "specific_red"
     if replay_green == expected_green:
@@ -1686,6 +1771,10 @@ def build_report(
             "per-test timeout 把挂死测试记为不可分类 timeout（不并入 both_fail），与 A-06 '超时记红' 的判分口径有意不同",
             "两臂对比为描述性（非预注册确认性），不做显著性推断；跨批次随机性见交叉校验表",
             "生成测试若使用未播种随机源，重复重放可能出现分类漂移（run_meta.determinism 如实披露）",
+            "BC（2026-10-21）：任务级重放判绿（replay_detection / replay_fixed_green / verdict 对账）要求 "
+            "rc==0 且含有效通过（≥1 个真实 passed，共享谓词 _suite_has_effective_pass 同口径）——"
+            "全 skip/xfail/deselect 的套件 rc==0 但无断言执行，不判绿（None / not_applicable）；"
+            "归档侧若按旧口径记 1.0，对账落 replay_none 并在 detection_disagreement_reason 说明口径修正",
         ],
     }
 
