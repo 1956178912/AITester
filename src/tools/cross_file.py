@@ -762,7 +762,7 @@ def _save_repair_plan_cache(key: str, plan: CrossFileRepairPlan) -> None:
         # pid + thread ident 双键后各写各的临时文件，replace 各自原子生效。
         tmp = f"{target}.{os.getpid()}.{threading.get_ident()}.tmp"
         with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(plan.to_dict(), f, ensure_ascii=False)
+            json.dump(plan.to_dict(), f, ensure_ascii=False, allow_nan=False)
         # 18. 安全改进：缓存文件收敛 0o600（与 LLM 文件缓存同口径）
         secure_cache_file(tmp)
         os.replace(tmp, target)

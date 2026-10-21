@@ -1292,7 +1292,7 @@ class RepoExecutor:
                     }
                 ]
                 with open(pred_file, "w", encoding="utf-8") as f:
-                    json.dump(predictions, f, ensure_ascii=False, indent=2)
+                    json.dump(predictions, f, ensure_ascii=False, indent=2, allow_nan=False)
 
                 # 2026-10-11 全面优化批次：经 _run 收敛点走 run_with_timeout
                 # （孤儿风险消除；超时归一为 returncode=124 哨兵 → 下方按

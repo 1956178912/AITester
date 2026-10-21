@@ -91,6 +91,16 @@ from experiments.bayesian_paired import bayesian_paired_analysis, interpret_baye
 # `missing_models` 为空，报告落一行"未计价——（缺: ）"无因可查）。
 from src.budget import pricing  # noqa: E402
 
+# AJ（2026-10-21）：缓存口径（命中 / 避免 token）的共享读取——与 S11 记账健全性、
+# 成本汇总、报告层共用生产者模块的同一套行级 / 臂级判定，不在本文件重写一遍。
+from src.budget.token_usage import (  # noqa: E402
+    by_model_reason,
+    cache_caliber,
+    cache_totals,
+    count_reason,
+    row_token_reading,
+)
+
 # 参与对比的基线（AITester 完整管线 + 两个简化基线）
 # AC4（2026-10-06 第十轮审查 T-P0-5 伴随修复）：plain_llm_df（检出优先
 # 协议归因基线，X1）升为统计加载一等基线——生死实验（n=87×3 臂×3 种子）
@@ -898,7 +908,9 @@ def _model_is_priced(entry: Any) -> bool:
 
     改前自写 `isinstance + p >= 0`——`inf` 满足 `inf >= 0` 被收下（金额变 `inf`），
     与其余消费点的域不一致；现在只改这一处读数（`nan`/负数/`bool`/非数在改前也已
-    不计价，逐位保持）。桶级词汇（`missing_models`）本轮不动，见分册 §5。
+    不计价，逐位保持）。本函数只回答**价格数字维**（不看币种），AB-16 锁沿用；
+    `cost_analysis` 的完整准入读数自 AG（2026-10-20）起改用
+    `pricing.model_entry_reason(..., allow_non_usd=True)`。
     """
     return (
         isinstance(entry, dict)
@@ -951,18 +963,43 @@ def _row_has_token_accounting(row: dict) -> bool:
     `token_usage` 缺失 / 非 dict / 各计数字段全为 0（或无 by_model 正向项）
     → 视为"无记账"。只看 token 数字，**不采信 `llm_calls`**：正是它整臂全为 0
     才暴露记账缺失，若以"调用次数 > 0"作正向证据，反而会把缺失行误判为已记账。
+
+    AJ（2026-10-21）：缓存命中是第三种记账状态——真实 API 消耗为 0 是正确读数，
+    "若未命中会消耗"的 token 记在 cache_avoided_tokens。合法正向的缓存证据
+    （hits > 0 或 avoided > 0）同样算"有记账"；值域坏（负数 / 字符串 / nan）
+    不算证据，由 `cache_caliber` 点名，绝不把坏值读成"零命中"。
     """
     tu = row.get("token_usage")
     if not isinstance(tu, dict):
         return False
+    # AM（2026-10-21）：正向证据必须是**计数**——`True` / `1.5` / `inf` 不是记账
+    # （改前 `isinstance(..., (int, float))` 把它们读成正向 token 并让 S11 放行）。
     for key in ("input_tokens", "output_tokens", "total_tokens"):
         value = tu.get(key)
-        if isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0:
+        if value is not None and count_reason(value, key) is None and value > 0:
             return True
+    if cache_caliber(tu)["evidence"]:
+        return True
     by_model = tu.get("by_model")
     if isinstance(by_model, dict):
-        return any(isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0 for v in by_model.values())
+        return any(
+            isinstance(model, str) and count_reason(value, f"by_model:{model}") is None and value > 0
+            for model, value in by_model.items()
+        )
     return False
+
+
+def _row_has_generated_test(row: dict) -> bool:
+    """AK：该行是否留下了产出证据（`generated_test` 非空）。
+
+    与 `_row_has_token_accounting` 配合区分两种"无记账"：有产出却零记账
+    （实测形态：35 行 generated_test 非空、token/llm_calls 全 0）不能被读成
+    "没干活所以没花钱"；无产出的空行则没有花费证据。只认 `generated_test`
+    这一个生产者字段（与 S11 原因文本同一形态），不猜 `patch` / `diagnosis`
+    等修复侧字段。
+    """
+    value = row.get("generated_test")
+    return isinstance(value, str) and bool(value.strip())
 
 
 def token_accounting_sanity(rows: list[dict]) -> dict[str, Any]:
@@ -973,29 +1010,72 @@ def token_accounting_sanity(rows: list[dict]) -> dict[str, Any]:
     `n_rows == 0`（无结果行）→ `computable=True`：无行即无成本可谈，
     历史 "—" 降级口径不变（不把"空臂"误报成"记账断裂"）。
 
+    AJ（2026-10-21）：缓存命中行不再计入"无记账"。改前 48/50 行由缓存服务的臂
+    被读成"96% 记账断裂"并整臂 NOT_COMPUTABLE——而真实 API 消耗为 0 恰恰是
+    缓存命中的正确读数。仅当行内带缓存字段时返回 `n_cache_hit_rows`（披露键
+    只在真发生时写入）：旧批次返回域与原因文本逐字不变，受保护报告一字不动。
+
+    AK（2026-10-21）：`n_without_accounting` 里混着两种事实——"有产出、无花费
+    记录"（generated_test 非空）与"无产出的空行"。前者不是免费，也不能只靠
+    50% 阈值把它挡在成本数字之外（主批 plain_llm_df 35/261 = 13.4%，仍
+    `computable=True`）。子集计数 `n_zero_output_rows` 只在 >0 时写入，供
+    成本行 / 呈现层披露"记录下界"；旧批次（无此类行）返回域逐键不变。
+
     Returns:
         {n_rows, n_without_accounting, zero_share, computable, reason}
+        （带缓存字段的臂另含 n_cache_hit_rows；有产出零记账行另含
+        n_zero_output_rows）。
     """
     rows = rows or []
     n_rows = len(rows)
     n_missing = sum(1 for r in rows if not _row_has_token_accounting(r))
     zero_share = n_missing / n_rows if n_rows else 0.0
     computable = not (n_rows > 0 and zero_share >= _TOKEN_ACCOUNTING_ZERO_SHARE_THRESHOLD)
+    n_zero_output = sum(1 for r in rows if not _row_has_token_accounting(r) and _row_has_generated_test(r))
+    n_cache_hit_rows = 0
+    cache_present = False
+    for r in rows:
+        tu = r.get("token_usage")
+        if not isinstance(tu, dict):
+            continue
+        cal = cache_caliber(tu)
+        if cal["present"]:
+            cache_present = True
+        if cal["evidence"]:
+            n_cache_hit_rows += 1
     reason = ""
     if not computable:
+        cache_clause = f"；缓存命中已为 {n_cache_hit_rows} 行提供记账" if n_cache_hit_rows else ""
         reason = (
             f"{n_missing}/{n_rows} 行（{zero_share * 100:.1f}%）的 token_usage 为 0 或缺失"
             f"（阈值 ≥{_TOKEN_ACCOUNTING_ZERO_SHARE_THRESHOLD * 100:.0f}%）"
+            f"{cache_clause}"
             "——token 记账断裂（实测形态：generated_test 非空而 llm_calls/token 全为 0），"
             "成本结论不可计算：先修记账再重跑，不得在缺失记账上出 $/task 数字"
         )
-    return {
+    out: dict[str, Any] = {
         "n_rows": n_rows,
         "n_without_accounting": n_missing,
         "zero_share": zero_share,
         "computable": computable,
         "reason": reason,
     }
+    if cache_present:
+        out["n_cache_hit_rows"] = n_cache_hit_rows
+    if n_zero_output:
+        out["n_zero_output_rows"] = n_zero_output
+    return out
+
+
+# AM 的单行读数已迁入生产者模块（AN）：成本表与写盘 token_metrics / 可信报告 /
+# 旧批次兜底共用同一份策略，本文件不再持有第二份实现。
+_row_cost_tokens = row_token_reading
+
+
+def _count_reason_codes(counts: dict[str, int], codes: Iterable[str]) -> None:
+    """机制名逐条累加进计数索引（AM：读不动 / 金额阻断共用同一形状）。"""
+    for code in codes:
+        counts[code] = counts.get(code, 0) + 1
 
 
 def cost_analysis(results: dict[str, list[dict]], price_table: dict[str, dict]) -> list[dict]:
@@ -1021,6 +1101,40 @@ def cost_analysis(results: dict[str, list[dict]], price_table: dict[str, dict]) 
         故受保护报告文本一字不动。币种可判定但登记为非 USD 的行**仍可计价**，
         前提是表里带币种列（呈现层另加单位提醒）；这与 `emse_stats_report`
         的 `total_usd`（单一美元列，非 USD 一律剔除）有意不同，见分册。
+
+        AG（2026-10-20）归因口径：`missing_models` 只收**表里没有该模型键**的模型；
+        `unpriced_model_reasons` 是完整机制索引（模型名 → 共享谓词码，含未登记与
+        币种维），`unpriced_currency_models` 是其中币种维的状态视图；条目都可用而
+        算不出成本的行写 `unpriced_row_reason`（`mixed_currencies:<L1/L2>` /
+        `mixed_price_pairs`）。披露键仍只在真发生时写入。
+
+        AJ（2026-10-21）：行内带缓存字段的臂另带缓存口径披露键（`cache_hits` /
+        `cache_avoided_tokens` / `cache_rows` / `cache_hit_rows`；读取不完整时为
+        `None` + `cache_reading_reasons`）。纯缓存臂（真实 token 全 0、无 by_model）
+        成本仍不可定价，但行级原因从无因的 `（缺: ）` 改记 `cache_hit_no_api_spend`
+        ——真实花费为 0 由缓存命中解释，而不是记账缺失。旧批次（两个缓存键都缺席）
+        返回域逐键不变。
+
+        AK（2026-10-21）：`token_zero_rows` 只报"多少行没有 token 记账"，不区分
+        这些行有没有产出。`token_zero_output_rows`（仅 >0 时写入）报其中有
+        generated_test 的行数——"有产出、无花费记录"不是免费，也不是完整记账。
+        此时且 `token_accounting_ok=True`（未达 50% 断裂阈值）而成本仍可算，
+        成本行写入 `cost_caliber="recorded_lower_bound"`：`cost` 与
+        `cost_per_task` 的分母仍是全部任务，分子只含已记录 token ⇒ 读数是真实
+        花费的**下界**，不是精确均值。全记账臂 / 旧批次不加该键，受保护读数与
+        报告文本逐字不变；≥50% 断裂的臂仍由 S11 判 NOT_COMPUTABLE，不声明下界。
+        行级数学口径（缺 token_usage 按 0 计、仍进任务分母）不变（AE2 锁定）。
+
+        AM（2026-10-21）：行级读取从 `or 0` 折零改为值域判定，两级阻断——
+        **读不动**（`token_usage` 非对象 / 字段在场却不是非负整数 / 正值 + 缺
+        字段）⇒ 该臂 `input_tokens` / `output_tokens` / `unattributed_tokens` /
+        `by_model` 与金额一律 `None`/空（不折 0、不给部分和），并写
+        `n_token_unreadable_rows` + `token_reading_reasons`；**矛盾**（行内
+        in+out≠total、by_model 求和≠总量或键/值域坏）⇒ token 总量仍可读，只废
+        金额，并写 `n_token_money_blocked_rows` + `token_money_reasons`。
+        整键缺席 / `None` 仍是 AE2 的历史 0（由 AK 下界披露覆盖）；只有
+        `total_tokens` 缺席而 in/out 双全时按两者之和读（成本只需 in/out）。
+        真批次 783 行全部可读且自洽 ⇒ 返回域逐键不变。
     """
     models = _price_models_layer(price_table)
     cost_rows: list[dict] = []
@@ -1031,46 +1145,132 @@ def cost_analysis(results: dict[str, list[dict]], price_table: dict[str, dict]) 
         output_total = 0
         unattributed = 0
         by_model: dict[str, int] = {}
+        usages: list[Any] = []
+        totals_readable = True
+        money_readable = True
+        n_unreadable = 0
+        n_money_blocked = 0
+        token_reasons: dict[str, int] = {}
+        money_reasons: dict[str, int] = {}
+
         for row in rows:
-            tu = row.get("token_usage")
-            if not isinstance(tu, dict):
+            usages.append(row.get("token_usage"))
+            reading = _row_cost_tokens(row)
+            if reading["counts"] is None:
+                # AM：在场坏值不得折 0 —— 该臂 token 总量与金额都不给部分和。
+                totals_readable = False
+                n_unreadable += 1
+                _count_reason_codes(token_reasons, reading["reasons"])
                 continue
-            input_total += tu.get("input_tokens") or 0
-            output_total += tu.get("output_tokens") or 0
-            bm = tu.get("by_model")
-            if isinstance(bm, dict) and bm:
-                for model_name, tokens in bm.items():
-                    by_model[str(model_name)] = by_model.get(str(model_name), 0) + (tokens or 0)
-            elif (tu.get("total_tokens") or 0) > 0:
-                unattributed += tu.get("total_tokens") or 0
+            total, inp, out = reading["counts"]
+            input_total += inp
+            output_total += out
+            if reading["absent"]:
+                continue
+            usage = reading["usage"]
+            if inp + out != total:
+                n_money_blocked += 1
+                money_readable = False
+                _count_reason_codes(money_reasons, ["token_split_mismatch"])
+                continue
+            basis = total
+            bm = usage.get("by_model")
+            if not isinstance(bm, dict):
+                if "by_model" in usage:
+                    n_money_blocked += 1
+                    money_readable = False
+                    _count_reason_codes(money_reasons, [f"by_model_not_object:{type(bm).__name__}"])
+                    continue
+                if basis > 0:
+                    unattributed += basis
+                continue
+            if not bm:
+                if basis > 0:
+                    unattributed += basis
+                continue
+            attribution_reason = by_model_reason(bm, basis)
+            if attribution_reason is not None:
+                # 归因矛盾即使 basis=0 也废金额：by_model 声称有 token 而行内三元组
+                # 为 0 时，照 0 计价会编出"免费"。
+                n_money_blocked += 1
+                money_readable = False
+                _count_reason_codes(money_reasons, [attribution_reason])
+                continue
+            for model_name, tokens in bm.items():
+                by_model[model_name] = by_model.get(model_name, 0) + tokens
+        cache = cache_totals(usages)
         used_models = [m for m, t in by_model.items() if t > 0]
-        missing = sorted(m for m in used_models if not _model_is_priced(models.get(m)))
-        # AB-14：币种判定改用共享谓词。"价目不全"（`missing`）与"币种不可判定"
-        # （`currency_blocked`）是两种事实，分桶记账、不得互吞；价目表里根本没有的模型
-        # 只进 `missing`——"未登记"与"登记了但没写单位"是两件事。
-        statuses = {m: pricing.currency_status(models[m]) for m in used_models if m in models}
-        currency_blocked = {m: status for m, status in statuses.items() if pricing.currency_label(status) is None}
+        # AG（2026-10-20）：未计价归因收口为**单一机制索引**，三个披露桶全部由它派生。
+        # 改前三类事实混在两个桶里：`price_null` / 域坏值与"未登记"同进 `missing_models`，
+        # 非对象条目与空条目落进名为"币种"的桶（空条目读成 `absent`）——照桶名去修，
+        # 修错地方也不会变绿（AE §5.2 候选 C）。索引码来自共享谓词；`allow_non_usd=True`
+        # 是因为成本表带币种列（`other:<NORM>` 按登记单位原样计价），币种不可判定仍阻断。
+        reasons = {m: pricing.model_entry_reason(models, m, allow_non_usd=True) for m in used_models}
+        unpriced_reasons = {m: reason for m, reason in reasons.items() if reason is not None}
+        missing = sorted(m for m, reason in unpriced_reasons.items() if reason == "model_unregistered")
+        all_statuses = {m: pricing.currency_status(models[m]) for m in used_models if m in models}
+        currency_blocked = {
+            m: all_statuses[m] for m, reason in unpriced_reasons.items() if reason.startswith("currency_")
+        }
         labels = sorted(
-            {pricing.currency_label(status) for status in statuses.values() if pricing.currency_label(status)}
+            {
+                label
+                for status in all_statuses.values()
+                for label in (pricing.currency_label(status),)
+                if label is not None
+            }
+        )
+        price_pairs = (
+            {(models[m]["input_per_mtok"], models[m]["output_per_mtok"]) for m in used_models}
+            if used_models and not unpriced_reasons
+            else set()
         )
         cost: float | None = None
         currency: str | None = None
-        if used_models and not missing and not currency_blocked and len(labels) == 1:
-            price_pairs = {(models[m]["input_per_mtok"], models[m]["output_per_mtok"]) for m in used_models}
-            # 单一价目组合（常见：单模型批次）才可按基线级 in/out 拆分计价
-            if len(price_pairs) == 1:
-                p_in, p_out = price_pairs.pop()
-                cost = input_total / 1_000_000 * float(p_in) + output_total / 1_000_000 * float(p_out)
-                currency = labels[0]
+        # 单一价目组合（常见：单模型批次）才可按基线级 in/out 拆分计价。
+        # AM：读不动的行或拆分/归因矛盾的行存在时，任何总额都是部分和 ⇒ 不计价。
+        if (
+            totals_readable
+            and money_readable
+            and used_models
+            and not unpriced_reasons
+            and len(labels) == 1
+            and len(price_pairs) == 1
+        ):
+            p_in, p_out = next(iter(price_pairs))
+            cost = input_total / 1_000_000 * float(p_in) + output_total / 1_000_000 * float(p_out)
+            currency = labels[0]
+        # 条目级都可用却仍算不出成本 ⇒ 成因在**行级**（跨币种 / 跨价目组合不得求和），
+        # 与"某个模型读不出"是两种事实，不得让读者对着 `（缺: ）` 猜。
+        row_reason: str | None = None
+        if cost is None and totals_readable and money_readable and used_models and not unpriced_reasons:
+            if len(labels) > 1:
+                row_reason = "mixed_currencies:" + "/".join(labels)
+            elif len(price_pairs) > 1:
+                row_reason = "mixed_price_pairs"
+        # AJ：纯缓存臂的零不是"没观测"，而是命中服务——不给金额键，但必须给成因。
+        if (
+            cost is None
+            and totals_readable
+            and money_readable
+            and not used_models
+            and not unpriced_reasons
+            and cache["complete"]
+            and cache["n_hit_rows"] > 0
+            and input_total == 0
+            and output_total == 0
+            and unattributed == 0
+        ):
+            row_reason = "cache_hit_no_api_spend"
         cost_per_task = cost / len(rows) if cost is not None and rows else None
         row = {
             "baseline": baseline,
             "n_tasks": len(rows),
-            "input_tokens": input_total,
-            "output_tokens": output_total,
-            "by_model": by_model,
+            "input_tokens": input_total if totals_readable else None,
+            "output_tokens": output_total if totals_readable else None,
+            "by_model": by_model if totals_readable else {},
             "missing_models": missing,
-            "unattributed_tokens": unattributed,
+            "unattributed_tokens": unattributed if totals_readable else None,
             "cost": cost,
             "cost_per_task": cost_per_task,
             "currency": currency,
@@ -1080,9 +1280,35 @@ def cost_analysis(results: dict[str, list[dict]], price_table: dict[str, dict]) 
             "token_accounting_reason": accounting["reason"],
             "token_zero_rows": accounting["n_without_accounting"],
         }
-        # AB-14：披露键只在真发生时写入 ⇒ 币种可判定的行（含真批次）返回域逐键不变。
+        # AK：有产出、无花费记录的行是 token_zero_rows 的子集；下界口径只在
+        # 少数行缺记账（<50%，否则 S11 已 NOT_COMPUTABLE）且确有成本数字时声明。
+        if accounting.get("n_zero_output_rows"):
+            row["token_zero_output_rows"] = accounting["n_zero_output_rows"]
+        if cost is not None and rows and accounting["computable"] and accounting["n_without_accounting"] > 0:
+            row["cost_caliber"] = "recorded_lower_bound"
+        # AJ：缓存披露键只在行内真带缓存字段时写入 ⇒ 旧批次返回域逐键不变。
+        if cache["present"]:
+            row["cache_hits"] = cache["hits"]
+            row["cache_avoided_tokens"] = cache["avoided"]
+            row["cache_rows"] = cache["n_rows_with_fields"]
+            row["cache_hit_rows"] = cache["n_hit_rows"]
+            if not cache["complete"]:
+                row["cache_reading_reasons"] = {**cache["missing"], **cache["reasons"]}
+        # AB-14 / AG：披露键只在真发生时写入 ⇒ 可计价行（含真批次）返回域逐键不变。
+        if unpriced_reasons:
+            row["unpriced_model_reasons"] = dict(sorted(unpriced_reasons.items()))
         if currency_blocked:
             row["unpriced_currency_models"] = dict(sorted(currency_blocked.items()))
+        if row_reason is not None:
+            row["unpriced_row_reason"] = row_reason
+        # AM：行级读取缺口只在真发生时披露（真批次 783 行全部可读、拆分与归因
+        # 一致 ⇒ 返回域逐键不变）。读不动与只废金额是两种事实，分开点名。
+        if token_reasons:
+            row["n_token_unreadable_rows"] = n_unreadable
+            row["token_reading_reasons"] = dict(sorted(token_reasons.items()))
+        if money_reasons:
+            row["n_token_money_blocked_rows"] = n_money_blocked
+            row["token_money_reasons"] = dict(sorted(money_reasons.items()))
         cost_rows.append(row)
     return cost_rows
 
@@ -1347,18 +1573,166 @@ def _currency_mechanism_lines(cost_rows: list[dict]) -> list[str]:
 
 
 def _unpriced_row_reason(row: dict) -> str:
-    """未计价行的成因串（AB-14）。
+    """未计价行的成因串（AB-14；AG 轮按机制扩展）。
 
-    `missing_models`（价目不全）与 `unpriced_currency_models`（币种不可判定）是两种机制，
-    必须在同一行各自点名——否则读者以为"补价目"就能救回来，而实际缺的是单位登记。
-    `（缺: ）` 的空写法是历史格式（真批次 `single_agent` 无 token 归属 ⇒ 空清单），
-    本轮**不改**：改它会动到受 `SHA256SUMS` 保护的报告文本，另轮处置。
+    `missing_models`（表里没登记）、`unpriced_currency_models`（币种维）与
+    `unpriced_model_reasons` 的其余机制（形状 / 空条目 / 价格域）是互斥事实，同一行
+    各自点名；`unpriced_row_reason`（`mixed_*`）是"设计上不得求和"，不是条目缺陷。
+    机制为 0 时输出仍是历史文本 `（缺: ）`——真批次 `single_agent` 无 token 归属，
+    改它会动到受 `SHA256SUMS` 保护的报告文本。
     """
     label = f"{row['baseline']}（缺: {', '.join(row['missing_models'])}"
     blocked = row.get("unpriced_currency_models") or {}
     if blocked:
         label += "；币种不可判定: " + ", ".join(f"{m}（{blocked[m]}）" for m in sorted(blocked))
+    reasons = row.get("unpriced_model_reasons") or {}
+    others = {
+        m: code for m, code in reasons.items() if code != "model_unregistered" and not code.startswith("currency_")
+    }
+    if others:
+        label += "；未计价机制: " + ", ".join(f"{m}（{others[m]}）" for m in sorted(others))
+    row_reason = row.get("unpriced_row_reason")
+    if row_reason:
+        label += f"；行级: {row_reason}"
+    cache_reasons = row.get("cache_reading_reasons") or {}
+    if cache_reasons:
+        label += "；缓存读数: " + ", ".join(f"{code}←{n} 行" for code, n in sorted(cache_reasons.items()))
     return label + "）"
+
+
+def _unpriced_mechanism_lines(cost_rows: list[dict]) -> list[str]:
+    """未计价机制点名（AG）——"没登记"三个字概括不了的成因，修复建议不得共用。
+
+    只处理 `missing_models` 与币种维之外的机制（形状 / 空条目 / 价格域）及行级混算；
+    币种维交 `_currency_mechanism_lines`，未登记维保留历史"补齐方式"。
+    三处全为空 → 返回 []（纯未登记早退文本因此逐行不变）。
+
+    AJ（2026-10-21）：`cache_hit_no_api_spend` 是"真实花费为 0 且有缓存证据"，
+    不是行级混算——单列并给缓存建议，不套用"拆分后分别报告"的混算提示。
+    """
+    per_baseline: dict[str, dict[str, str]] = {}
+    row_level: dict[str, str] = {}
+    cache_spend: dict[str, str] = {}
+    for row in cost_rows:
+        reasons = row.get("unpriced_model_reasons") or {}
+        others = {
+            m: code for m, code in reasons.items() if code != "model_unregistered" and not code.startswith("currency_")
+        }
+        if others:
+            per_baseline[row["baseline"]] = others
+        row_reason = row.get("unpriced_row_reason")
+        if row_reason == "cache_hit_no_api_spend":
+            cache_spend[row["baseline"]] = row_reason
+        elif row_reason:
+            row_level[row["baseline"]] = row_reason
+    if not per_baseline and not row_level and not cache_spend:
+        return []
+    lines = [
+        "",
+        "**未计价机制**（AG）——下列成因不是「没登记」三个字能概括的；按机制修，别补错字段：",
+    ]
+    lines.extend(
+        f"- `{baseline}`：" + "、".join(f"{m}（{per_baseline[baseline][m]}）" for m in sorted(per_baseline[baseline]))
+        for baseline in sorted(per_baseline)
+    )
+    lines.extend(f"- `{baseline}`（行级）：{row_level[baseline]}" for baseline in sorted(row_level))
+    lines.extend(f"- `{baseline}`（行级）：{cache_spend[baseline]}" for baseline in sorted(cache_spend))
+    codes = {code for reasons in per_baseline.values() for code in reasons.values()}
+    if any(code.startswith("entry_") for code in codes):
+        lines.append("- 条目形状：非对象条目改为对象；空对象补齐 `currency` 与价格字段。")
+    if any(code.startswith("price_") for code in codes):
+        lines.append(
+            "- 价格域：`price_null` 补 `input_per_mtok` / `output_per_mtok`；其余 `price_*` 修正类型 / 符号 / 有限性。"
+        )
+    if row_level:
+        lines.append("- 行级混算：跨币种 / 跨价目组合不得求和，需拆分后分别报告——这是诚实降级，不是条目缺陷。")
+    if cache_spend:
+        lines.append(
+            "- 缓存命中：该臂真实 API 消耗为 0（由缓存服务），不是记账缺失；避免的 token 见缓存口径披露"
+            "——命中记录不写 `by_model`，无法按模型价目折算金额。"
+        )
+    return lines
+
+
+def _cache_caliber_lines(cost_rows: list[dict]) -> list[str]:
+    """缓存口径披露（AJ）——命中 / 避免 token 是第三种记账状态。
+
+    只有成本行真带缓存键（`cache_hits` 存在）时才输出：旧批次的成本章节逐字不变。
+    真实 API 消耗记 0 是正确读数，但 0 ≠ 免费——避免的 token 必须与成本同读；
+    读取不完整时不给部分和，机制名逐条点名。
+    """
+    rows = [r for r in cost_rows if "cache_hits" in r]
+    if not rows:
+        return []
+    lines = ["", "**缓存口径（AJ）**——缓存命中不是记账断裂，也不是免费："]
+    for r in rows:
+        if r.get("cache_hits") is None:
+            codes = r.get("cache_reading_reasons") or {}
+            detail = "；".join(f"{code}←{n} 行" for code, n in sorted(codes.items())) or "未登记机制名"
+            lines.append(f"- `{r['baseline']}`：缓存读数不可用（{detail}）⇒ 命中/避免 token 无读数（不是 0）。")
+            continue
+        lines.append(
+            f"- `{r['baseline']}`：命中 {r['cache_hits']} 次、避免 {r['cache_avoided_tokens']} tokens"
+            f"（{r['cache_rows']}/{r['n_tasks']} 行带缓存字段，{r['cache_hit_rows']} 行命中）；"
+            "真实消耗记 0 是对的，但 0 不等于免费——避免的 token 不计入 $/task。"
+        )
+    return lines
+
+
+def _partial_accounting_note_lines(cost_rows: list[dict]) -> list[str]:
+    """部分记账的成本下界披露（AK）——只在成本行真带 `cost_caliber` 时输出。
+
+    `token_accounting_ok=True` 只表示"未达 50% 断裂阈值"，不等于记账完整。
+    主批 plain_llm_df 有 35/261 行 token 全 0 却生成了测试：金额分子只含
+    已记录 token、分母仍是全部任务 ⇒ `$` 与 `$/task` 是真实花费的**下界**，
+    既不能读成精确均值，也不能读成免费。全记账臂不输出本节，历史报告文本
+    逐字不变。
+    """
+    rows = [r for r in cost_rows if r.get("cost_caliber") == "recorded_lower_bound"]
+    if not rows:
+        return []
+    lines = [
+        "",
+        "**成本口径下界（AK）**——下列臂有少数行没有 token 记账，成本数字是已记录花费的下界：",
+    ]
+    for r in rows:
+        zero_out = r.get("token_zero_output_rows") or 0
+        detail = f"，其中 {zero_out} 行 generated_test 非空（有产出、无花费记录）" if zero_out else ""
+        lines.append(
+            f"- `{r['baseline']}`：{r['token_zero_rows']}/{r['n_tasks']} 行无 token 记账{detail}；"
+            "缺记账行按 0 计入金额、但仍计入任务数分母 ⇒ 成本/任务与成本/检出是**已记录花费的下界**，"
+            "不是精确均值，更不是免费。"
+        )
+    lines.append(
+        "解读：`token_accounting_ok=True` 只表示未达 50% 断裂阈值；下界与精确值同形，差额只能靠补齐记账后重跑消除。"
+    )
+    return lines
+
+
+def _token_reading_note_lines(cost_rows: list[dict]) -> list[str]:
+    """行级读取缺口披露（AM）——读不动不是 0，拆分/归因矛盾不得计价。
+
+    只在成本行真带 `n_token_unreadable_rows` / `n_token_money_blocked_rows` 时输出；
+    真批次 783 行全部可读且自洽，历史报告文本逐字不变。
+    """
+    unreadable = [r for r in cost_rows if r.get("n_token_unreadable_rows")]
+    blocked = [r for r in cost_rows if r.get("n_token_money_blocked_rows")]
+    if not unreadable and not blocked:
+        return []
+    lines = ["", "**token 读数缺口（AM）**——读不动不是 0，矛盾不得计价："]
+    for r in unreadable:
+        codes = "；".join(f"{code}←{n} 行" for code, n in sorted((r.get("token_reading_reasons") or {}).items()))
+        lines.append(
+            f"- `{r['baseline']}`：{r['n_token_unreadable_rows']} 行 token 三元组读不动"
+            f"（{codes}）⇒ 输入/输出 token 与金额列一律 —（不折 0、不给部分和）。"
+        )
+    for r in blocked:
+        codes = "；".join(f"{code}←{n} 行" for code, n in sorted((r.get("token_money_reasons") or {}).items()))
+        lines.append(
+            f"- `{r['baseline']}`：{r['n_token_money_blocked_rows']} 行拆分/归因矛盾"
+            f"（{codes}）⇒ token 总量仍可读，但成本/任务一律 —（只废金额）。"
+        )
+    return lines
 
 
 def _cost_report_lines(
@@ -1381,6 +1755,15 @@ def _cost_report_lines(
     token_usage 为 0/缺失）时，成本/任务与成本/检出一律渲染
     `NOT_COMPUTABLE`（**不输出数字**），并追加原因清单。手写 cost_rows
     （不含该键）按 True 处理 → 历史格式与既有测试逐位不变。
+
+    AK（2026-10-21）：`token_accounting_ok=True` 不等于记账完整。成本行带
+    `cost_caliber="recorded_lower_bound"`（少数行无记账、成本仍可算）时，
+    表格数字照常输出，另附"已记录花费下界"清单（含 generated_test 非空的
+    行数）——下界与精确值同形，不得让读者默认它是真实均值。
+
+    AM（2026-10-21）：token 单元格读不动（`None`）时渲染 `—`，不折 0；行级
+    读不动 / 矛盾阻断的臂另附"token 读数缺口"清单，且**不并入**"只差价目"
+    的未计价注（两者修补方式不同）。真批次无缺口键 ⇒ 历史文本逐字不变。
     """
     lines = [
         "成本口径：$/task = (Σ输入 token × 输入单价 + Σ输出 token × 输出单价) / 任务数；",
@@ -1406,6 +1789,10 @@ def _cost_report_lines(
             return cpt_cell, ""
         cpd_val = cost_per_detection(r["cost_per_task"], det_rates.get(r["baseline"]))
         return cpt_cell, (f"{cpd_val:.4f}" if cpd_val is not None else "—")
+
+    def _fmt_token_cell(value: int | None) -> str:
+        """AM：读不动的 token 总量不得渲染成 0/None 数字（诚实降级为 —）。"""
+        return "—" if value is None else str(value)
 
     def _currency_cell(r: dict) -> str:
         """币种单元格：记账断裂时无成本数字 → 币种一并置 —（不留 USD 误导）。
@@ -1433,15 +1820,42 @@ def _cost_report_lines(
     priced = [r for r in cost_rows if r["priced"]]
     if not priced:
         models_seen = sorted({m for r in cost_rows for m, t in r["by_model"].items() if t > 0})
-        lines += [
-            "",
-            "**价目未登记**——本报告不含 $/task 数字（诚实条款：不编造价格）。",
-            f"待计价模型：{', '.join(models_seen) if models_seen else '（无 token 观测）'}。",
-            "补齐方式：在 experiments/price_table.json 对应模型条目填入",
-            "input_per_mtok / output_per_mtok / source / as_of 后重跑本脚本。",
-        ]
-        lines += _currency_mechanism_lines(cost_rows)
+        unreadable_present = any(r.get("n_token_unreadable_rows") for r in cost_rows)
+        no_obs = "（无可用 token 观测）" if unreadable_present else "（无 token 观测）"
+        mechanism_lines = _unpriced_mechanism_lines(cost_rows)
+        currency_lines = _currency_mechanism_lines(cost_rows)
+        # AM：token 读不动 / 金额阻断不是"价目未登记"——标题不得把人引去补价目表
+        # （补完仍不可计价）。S11 断裂不在本次标题判定内：其历史文本由既有锁覆盖。
+        accounting_broken = any(
+            r.get("n_token_unreadable_rows") or r.get("n_token_money_blocked_rows") for r in cost_rows
+        )
+        # AG：旧标题只在**确实只差登记**（含无 token 观测）时成立；币种 / 形状 /
+        # 价格域 / 行级混算任一存在时沿用它会把人引去补 input/output（补完仍不可计价）。
+        if not mechanism_lines and not currency_lines and not accounting_broken:
+            lines += [
+                "",
+                "**价目未登记**——本报告不含 $/task 数字（诚实条款：不编造价格）。",
+                f"待计价模型：{', '.join(models_seen) if models_seen else no_obs}。",
+                "补齐方式：在 experiments/price_table.json 对应模型条目填入",
+                "input_per_mtok / output_per_mtok / source / as_of 后重跑本脚本。",
+            ]
+        else:
+            lines += [
+                "",
+                "**成本不可计算**——本报告不含 $/task 数字（诚实条款：不编造价格）。",
+                f"待计价模型：{', '.join(models_seen) if models_seen else no_obs}。",
+            ]
+            if any(r["missing_models"] for r in cost_rows):
+                lines += [
+                    "补齐方式（仅针对未登记模型）：在 experiments/price_table.json 对应模型条目填入",
+                    "input_per_mtok / output_per_mtok / source / as_of 后重跑本脚本。",
+                ]
+            lines += mechanism_lines
+            lines += currency_lines
         lines += _s11_note_lines()
+        lines += _partial_accounting_note_lines(cost_rows)
+        lines += _token_reading_note_lines(cost_rows)
+        lines += _cache_caliber_lines(cost_rows)
         return lines
     if det_rates is None:
         lines += [
@@ -1453,7 +1867,8 @@ def _cost_report_lines(
             cpt, _ = _cost_cells(r)
             cur = _currency_cell(r)
             lines.append(
-                f"| {r['baseline']} | {r['n_tasks']} | {r['input_tokens']} | {r['output_tokens']} | {cpt} | {cur} |"
+                f"| {r['baseline']} | {r['n_tasks']} | {_fmt_token_cell(r['input_tokens'])} "
+                f"| {_fmt_token_cell(r['output_tokens'])} | {cpt} | {cur} |"
             )
     else:
         lines += [
@@ -1465,12 +1880,21 @@ def _cost_report_lines(
             cpt, cpd = _cost_cells(r)
             cur = _currency_cell(r)
             lines.append(
-                f"| {r['baseline']} | {r['n_tasks']} | {r['input_tokens']} | {r['output_tokens']} "
+                f"| {r['baseline']} | {r['n_tasks']} | {_fmt_token_cell(r['input_tokens'])} "
+                f"| {_fmt_token_cell(r['output_tokens'])} "
                 f"| {cpt} | {cpd} | {cur} |"
             )
     # 未计价（价目缺失/多模型异价）与"记账断裂"是两种不同的降级，不得混为一谈：
-    # 记账断裂的臂已由上方的 S11 NOT_COMPUTABLE 清单单独披露
-    partial = [r for r in cost_rows if not r["priced"] and r.get("token_accounting_ok", True)]
+    # 记账断裂的臂已由上方的 S11 NOT_COMPUTABLE 清单单独披露；AM 的行级读不动 /
+    # 金额阻断臂由 token 读数缺口节披露，同样不得混进"只差价目"的清单。
+    partial = [
+        r
+        for r in cost_rows
+        if not r["priced"]
+        and r.get("token_accounting_ok", True)
+        and not r.get("n_token_unreadable_rows")
+        and not r.get("n_token_money_blocked_rows")
+    ]
     # AB-14：币种可判定的非 USD 行仍可计价（表里有币种列），但单位必须由文本自己说清楚
     priced_labels = [str(r.get("currency") or "").strip().upper() for r in priced]
     non_usd = sorted({label for label in priced_labels if label and label != "USD"})
@@ -1484,6 +1908,9 @@ def _cost_report_lines(
         missing_desc = "；".join(_unpriced_row_reason(r) for r in partial)
         lines += ["", f"注：{len(partial)} 个基线未计价——{missing_desc}。"]
     lines += _s11_note_lines()
+    lines += _partial_accounting_note_lines(cost_rows)
+    lines += _token_reading_note_lines(cost_rows)
+    lines += _cache_caliber_lines(cost_rows)
     return lines
 
 
@@ -2133,6 +2560,7 @@ def run_all_statistics(
             "",
         ]
         _solved_costs = cost_per_solved(cost_rows, data)
+        _caliber_rows = {r.get("baseline"): r for r in cost_rows}
         for _b in sorted(_solved_costs):
             _v = _solved_costs[_b]
             _cell = (
@@ -2140,6 +2568,9 @@ def run_all_statistics(
                 if _v is not None
                 else "未定义（correct=0 / 未计价 / token 记账不可用）——与 $/detection 同口径诚实降级"
             )
+            _row = _caliber_rows.get(_b) or {}
+            if _v is not None and _row.get("cost_caliber") == "recorded_lower_bound":
+                _cell += f"（记录下界：{_row['token_zero_rows']}/{_row['n_tasks']} 行无 token 记账）"
             report_lines.append("- " + _b + ": " + _cell)
         report_lines += [
             "",

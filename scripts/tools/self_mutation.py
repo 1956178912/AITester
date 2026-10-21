@@ -1079,7 +1079,7 @@ def render_markdown(report: dict[str, Any]) -> str:
 def write_reports(report: dict[str, Any], json_out: Path, md_out: Path) -> None:
     """落盘 JSON + Markdown 报告（父目录自动创建）。"""
     json_out.parent.mkdir(parents=True, exist_ok=True)
-    json_out.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    json_out.write_text(json.dumps(report, ensure_ascii=False, indent=2, allow_nan=False) + "\n", encoding="utf-8")
     md_out.parent.mkdir(parents=True, exist_ok=True)
     md_out.write_text(render_markdown(report), encoding="utf-8")
 

@@ -461,13 +461,13 @@ def main() -> int:
     report = merge_sheets(args.sheet_a, args.sheet_b, args.sheet_c, n_resamples=args.n_resamples, seed=args.seed)
     md = render_report_md(report)
     if args.output_dir == "-":
-        sys.stdout.write(json.dumps(report, ensure_ascii=False, sort_keys=True) + "\n")
+        sys.stdout.write(json.dumps(report, ensure_ascii=False, sort_keys=True, allow_nan=False) + "\n")
         sys.stdout.write(md)
     else:
         out_dir = Path(args.output_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
         (out_dir / "E7_KAPPA.json").write_text(
-            json.dumps(report, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8"
+            json.dumps(report, ensure_ascii=False, sort_keys=True, allow_nan=False) + "\n", encoding="utf-8"
         )
         (out_dir / "E7_KAPPA.md").write_text(md, encoding="utf-8")
         print(f"已写入 {out_dir}/E7_KAPPA.{{json,md}}")

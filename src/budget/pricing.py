@@ -40,6 +40,7 @@ import logging
 import math
 import os
 import threading
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -224,7 +225,7 @@ def price_block_reason(price_in: Any, price_out: Any) -> str | None:
     return None
 
 
-def entry_block_reason(entry: Any) -> str | None:
+def entry_block_reason(entry: Any, *, allow_non_usd: bool = False) -> str | None:
     """条目级准入判定（AB-16）：形状 → 空条目 → 币种 → 价格数字，一处写一遍；可用 → None。
 
     改前"一张条目能不能进美元金额"在四个消费点各写一套，同一张条目读出四种结论：
@@ -233,10 +234,18 @@ def entry_block_reason(entry: Any) -> str | None:
     `currency_unreachable:<T>`、在 report 是 `entry_not_object:<T>`。判定顺序与既有
     站点逐条保持（形状 → 空 → 币种 → 数字），站点只负责计数与格式化。
 
+    Args:
+        allow_non_usd: AG（2026-10-20）——按价目表登记币种**原样计价**的站点
+            （`statistical_analysis.cost_analysis` 的成本表带币种列）置 True：
+            `other:<NORM>` 可用（不是"进美元金额"，而是"进它自己单位的金额"）。
+            币种**不可判定**（absent/null/blank/not_string）仍阻断——没有单位就
+            无法说这笔钱是什么。默认 False = 只收明确 USD 的条目。
+
     Returns:
         - 条目不是对象 → `entry_not_object:<T>`；
         - 空条目 → `entry_empty`（"什么都没有"比"没写单位"更准确）；
-        - 币种不可判定 / 非 USD → `currency_block_reason(currency_status(...))` 的码；
+        - 币种不可判定 / 非 USD（`allow_non_usd` 时非 USD 放行）→
+          `currency_block_reason(currency_status(...))` 的码；
         - 价格数字不可用 → `price_block_reason(...)` 的码；
         - 可用 → None。
     """
@@ -244,10 +253,24 @@ def entry_block_reason(entry: Any) -> str | None:
         return f"entry_not_object:{type(entry).__name__}"
     if not entry:
         return "entry_empty"
-    reason = currency_block_reason(currency_status(entry))
-    if reason is not None:
+    status = currency_status(entry)
+    reason = currency_block_reason(status)
+    if reason is not None and not (allow_non_usd and status.startswith("other:")):
         return reason
     return price_block_reason(entry.get("input_per_mtok"), entry.get("output_per_mtok"))
+
+
+def model_entry_reason(models: Mapping[str, Any], model: str, *, allow_non_usd: bool = False) -> str | None:
+    """模型在**表内**的准入读数：键缺席 → `model_unregistered`，其余交 `entry_block_reason`。
+
+    "模型没登记"是表级事实，条目谓词看不见；AG（2026-10-20）前这个缺席分支在
+    `run_b8_injection` 与 `cost_analysis` 各写一次。名字只在这里写一遍，两个站点
+    得到同一个读数（`model_unregistered` 只留给**真的键缺席**，值 null 仍是
+    `entry_not_object:NoneType`——AB-17 判据）。
+    """
+    if model not in models:
+        return "model_unregistered"
+    return entry_block_reason(models[model], allow_non_usd=allow_non_usd)
 
 
 # ─── AB-17（2026-10-20）：表级读侧准入，一处写一遍 ────────────────────────────
@@ -421,6 +444,7 @@ __all__ = [
     "load_price_table",
     "load_table_json",
     "load_table_models",
+    "model_entry_reason",
     "models_layer",
     "price_block_reason",
     "reset_price_table_cache",

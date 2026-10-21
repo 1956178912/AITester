@@ -255,6 +255,13 @@ jobs:
         # 的 AST 与 5 份文档的声明，任一侧漂移即失败。纯 stdlib、零网络秒级。
         run: python scripts/gates/check_json_contract_sites.py
 
+      - name: "Check strict JSON (AF: 工件拒绝裸 NaN/Infinity + 写入点 allow_nan=False)"
+        # AF（2026-10-20）：Python json 默认 allow_nan=True 会把非有限浮点写成
+        # 裸 NaN/Infinity（非 RFC 8259；Python 能读回、jq/Go/Rust/JS 严格解析器读不动）。
+        # 本步骤严格解析全部受控 .json/.jsonl（2 份 A20 历史截断行逐路径豁免），
+        # 并要求 src/experiments/scripts 的 JSON 文件写入点显式 allow_nan=False。
+        run: python scripts/gates/check_json_strict.py
+
       - name: Check instruction-artifact hash lock (EMSE prompt 复现纪律)
         # EMSE / PROMPT-SE 复现底座：instruction artifact 全部活在源码里
         # （templates.py 四个系统提示 + nodes.py 两个内联强化段 + 动态文法段），

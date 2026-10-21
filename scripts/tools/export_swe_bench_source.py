@@ -250,7 +250,12 @@ def write_enrichment_jsonl(results: list[InstanceSource], output_path: str | Pat
             if not r.ok:
                 continue
             f.write(
-                json.dumps({"instance_id": r.instance_id, "instance_code": r.source_code}, ensure_ascii=False) + "\n"
+                json.dumps(
+                    {"instance_id": r.instance_id, "instance_code": r.source_code},
+                    ensure_ascii=False,
+                    allow_nan=False,
+                )
+                + "\n"
             )
             written += 1
     return written

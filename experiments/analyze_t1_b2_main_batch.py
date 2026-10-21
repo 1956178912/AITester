@@ -53,6 +53,7 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from src.budget.pricing import entry_block_reason, load_table_json, models_layer  # noqa: E402
+from src.budget.token_usage import sum_token_metric_values, token_metric_reading  # noqa: E402
 
 SEEDS = (42, 43, 44)
 ARMS = ("aitester", "plain_llm", "plain_llm_df")
@@ -211,6 +212,15 @@ def arm_stats(batch: dict[str, Any], arm: str) -> dict[str, Any]:
 
     调用方须先用 `arm_absence_reason` 确认该臂可读：本函数内部的 `(x or {})` 只兜
     "可读但字段缺省"，**不**负责把缺席臂报成缺席（那正是站点 a ① 的历史缺陷）。
+
+    AW（2026-10-21）：`token_metrics` 原地保留、`calls` 交共享计数判定。改前对
+    `token_metrics` 做 `or {}` 兜底——真值非对象（`"abc"` / `True`）留给 `.get`
+    抛 AttributeError 中止整批分析，又把假值非对象（`[]` / `""` / `0`）静默改写
+    成 `{}`——"载荷坏了"冒充"没有 metrics"；`calls` 直接取原值，bool / 数字
+    字符串 / 小数 / 负数与池化列（走 `sum_token_metric_values` 会拒绝同一份值）
+    在同一报告里给出互斥事实。现整份 `token_metrics` 原样交给下游 `add_cost` 与
+    池化读取器判定；`calls` 缺席 / null metrics 按 AE2 历史 0，字段在场却读不动
+    ⇒ `None` + `calls_reason`（事件计数与 token 金额互不连坐）。
     """
     res = (batch.get("results") or {}).get(arm) or {}
     rows = res.get("details") or []
@@ -220,8 +230,9 @@ def arm_stats(batch: dict[str, Any], arm: str) -> dict[str, Any]:
     ff = [v for r in rows if (v := _metric_hit(r.get("false_fix_rate"))) is not None]
     covs = [float(r["coverage"]) for r in rows if isinstance(r.get("coverage"), (int, float))]
     iters = [float(r["iterations"]) for r in rows if isinstance(r.get("iterations"), (int, float))]
-    tm = res.get("token_metrics") or {}
-    return {
+    tm = res.get("token_metrics")
+    calls = token_metric_reading(tm, "total_llm_calls")
+    stats = {
         "rows": len(rows),
         "detection_measurable": len(det),
         "detected": sum(det),
@@ -243,8 +254,11 @@ def arm_stats(batch: dict[str, Any], arm: str) -> dict[str, Any]:
         "rollback_field_present": sum(1 for r in rows if "patch_rolled_back" in r),
         "token_metrics": tm,
         "cost_usd": None,  # 由 price 计算后填充
-        "calls": tm.get("total_llm_calls"),
+        "calls": calls["value"],
     }
+    if calls["value"] is None:
+        stats["calls_reason"] = "|".join(dict.fromkeys(calls["reasons"]))
+    return stats
 
 
 def _format_reason_counts(reasons: dict[str, Any]) -> str:
@@ -278,6 +292,16 @@ def _usd_text(value: Any, reasons: dict[str, Any] | None = None, prefix: str = "
         shown = _format_reason_counts(reasons or {})
         return f"—（无法估算：{shown or '机制未记录'}）"
     return f"{prefix}{value}"
+
+
+def _tokens_text(value: Any) -> str:
+    """token 总量的呈现（AP）：`None` 是上游拒绝，不得印成 `None` 或 0。"""
+    return "不可读" if value is None else str(value)
+
+
+def _yaml_scalar(value: Any) -> str:
+    """金额的 YAML 落字（AV）：`None` 是 `null`（未知），不是字符串 `None`。"""
+    return "null" if value is None else str(value)
 
 
 def _load_price_entry(path: str | Path) -> tuple[Any, str | None]:
@@ -321,6 +345,12 @@ def add_cost(stats: dict[str, Any], price: dict[str, Any], price_reason: str | N
     AB-17（2026-10-20）：`price_reason` 是**表级**失败（文件读不动 / 形状不符 / 模型未登记）
     的机制名，由 `_load_price_entry` 判定后原样交进来；为 None 时才按 `entry_block_reason`
     读条目本身——"价目表坏了"与"这一条用不了"是两种事实，不得共用一个码（AB-11 判据）。
+
+    AV（2026-10-21）：金额所需的两个 token 字段改走共享 :func:`token_metric_reading`——
+    改前 `tm.get(...) or 0` 把上游 `token_metrics` 的 None（AN 的拒绝）折成 0，单侧
+    未知变成部分和；True 当 1、负数编出负金额、nan/inf 进报告、字符串让整次分析抛
+    TypeError。任一字段不可读 ⇒ 不给金额，机制名按字段顺序去重后以 `|` 连接写入
+    `cost_unpriced_reason`；整份 metrics 缺席 / null 仍按 AE2 历史 0（旧 schema 口径）。
     """
     reason = price_reason if price_reason is not None else entry_block_reason(price)
     if reason is not None:
@@ -328,9 +358,16 @@ def add_cost(stats: dict[str, Any], price: dict[str, Any], price_reason: str | N
         return
     p_in = price["input_per_mtok"]
     p_out = price["output_per_mtok"]
-    tm = stats.get("token_metrics") or {}
-    tin = tm.get("total_input_tokens") or 0
-    tout = tm.get("total_output_tokens") or 0
+    readings = {
+        key: token_metric_reading(stats.get("token_metrics"), key)
+        for key in ("total_input_tokens", "total_output_tokens")
+    }
+    token_reasons = [code for reading in readings.values() if reading["value"] is None for code in reading["reasons"]]
+    if token_reasons:
+        stats["cost_unpriced_reason"] = "|".join(dict.fromkeys(token_reasons))
+        return
+    tin = readings["total_input_tokens"]["value"]
+    tout = readings["total_output_tokens"]["value"]
     stats["cost_usd"] = round((tin * p_in + tout * p_out) / 1e6, 6)
 
 
@@ -615,7 +652,7 @@ def build_report(
         cost = 0.0
         n_seeds_unpriced = 0
         unpriced_reasons: dict[str, int] = {}
-        tokens = {"in": 0, "out": 0, "total": 0, "calls": 0}
+        token_metric_sources: list[Any] = []
         for seed in SEEDS:
             st = report["per_seed"][str(seed)]["new"].get(arm)
             if st:
@@ -635,11 +672,21 @@ def build_report(
                     unpriced_reasons[key] = unpriced_reasons.get(key, 0) + 1
                 else:
                     cost += st["cost_usd"]
-                tm = st["token_metrics"] or {}
-                tokens["in"] += tm.get("total_input_tokens") or 0
-                tokens["out"] += tm.get("total_output_tokens") or 0
-                tokens["total"] += tm.get("total_tokens") or 0
-                tokens["calls"] += tm.get("total_llm_calls") or 0
+                token_metric_sources.append(st.get("token_metrics"))
+        # AP（2026-10-21）：token 池化不再是 `sum(... or 0)`——逐 seed 的聚合
+        # `token_metrics` 里 None 是上游拒绝，`"100"` / True / 负数不是计数。
+        # 任一 seed 不可读 ⇒ 该字段整列为 None（不给部分和），机制名随载荷披露。
+        token_readings = {
+            "in": sum_token_metric_values(token_metric_sources, "total_input_tokens"),
+            "out": sum_token_metric_values(token_metric_sources, "total_output_tokens"),
+            "total": sum_token_metric_values(token_metric_sources, "total_tokens"),
+            "calls": sum_token_metric_values(token_metric_sources, "total_llm_calls"),
+        }
+        tokens: dict[str, Any] = {name: reading["value"] for name, reading in token_readings.items()}
+        token_reasons: dict[str, int] = {}
+        for reading in token_readings.values():
+            for code, count in reading["reasons"].items():
+                token_reasons[code] = token_reasons.get(code, 0) + count
         pooled[arm] = {
             "detected": det,
             "measurable": meas,
@@ -658,6 +705,8 @@ def build_report(
         if n_seeds_unpriced:
             pooled[arm]["n_seeds_unpriced"] = n_seeds_unpriced
             pooled[arm]["unpriced_reasons"] = dict(sorted(unpriced_reasons.items()))
+        if token_reasons:
+            pooled[arm]["token_reading_reasons"] = dict(sorted(token_reasons.items()))
         # 旧批同口径池化
         odet = omeas = 0
         for seed in SEEDS:
@@ -828,7 +877,11 @@ def build_report(
     # 与 `or 0.0` 抹平拒绝是同一条缺陷的两级），并把这些臂的机制名随载荷带出去。
     unpriced_arms = {arm: blk["unpriced_reasons"] for arm, blk in pooled.items() if blk.get("unpriced_reasons")}
     total_cost = round(sum(v["cost_usd"] for v in pooled.values() if v["cost_usd"] is not None), 6)
-    total_tokens = sum(v["tokens"]["total"] for v in pooled.values())
+    token_totals = [v["tokens"]["total"] for v in pooled.values()]
+    total_tokens = None if any(total is None for total in token_totals) else sum(token_totals)
+    token_unreadable_arms = {
+        arm: blk["token_reading_reasons"] for arm, blk in pooled.items() if blk.get("token_reading_reasons")
+    }
     report["cost"] = {
         "actual_est_usd": None if unpriced_arms else total_cost,
         "total_tokens": total_tokens,
@@ -839,6 +892,8 @@ def build_report(
     }
     if unpriced_arms:
         report["cost"]["unpriced_arms"] = unpriced_arms
+    if token_unreadable_arms:
+        report["cost"]["token_unreadable_arms"] = token_unreadable_arms
     return report
 
 
@@ -872,8 +927,9 @@ def render_baseline_fragment(report: dict[str, Any]) -> str:
             f"      {arm}: {{detected: {p.get('detected')}, measurable: {p.get('measurable')}, "
             f"detection_rate: {p.get('detection_rate')}, repaired: {p.get('repaired')}, "
             f"repair_measurable: {p.get('repair_measurable')}, false_fixed: {p.get('false_fixed')}, "
-            f"false_fix_measurable: {p.get('false_fix_measurable')}, tokens: {(p.get('tokens') or {}).get('total')}, "
-            f"cost_usd: {p.get('cost_usd')}, original_detected: {o.get('detected')}, "
+            f"false_fix_measurable: {p.get('false_fix_measurable')}, "
+            f"tokens: {_tokens_text((p.get('tokens') or {}).get('total'))}, "
+            f"cost_usd: {_yaml_scalar(p.get('cost_usd'))}, original_detected: {o.get('detected')}, "
             f"original_measurable: {o.get('measurable')}, original_rate: {o.get('detection_rate')}}}"
         )
     lines.append("    verdict:")
@@ -897,9 +953,11 @@ def render_baseline_fragment(report: dict[str, Any]) -> str:
     )
     c = report.get("cost") or {}
     lines.append(
-        f"    cost: {{actual_est_usd: {c.get('actual_est_usd')}, total_tokens: {c.get('total_tokens')}, "
-        f"preflight_estimate_usd: {c.get('preflight_estimate_usd')}, "
-        f"amended_estimate_usd: {c.get('amended_estimate_usd')}, budget_usd: {c.get('budget_usd')}}}"
+        f"    cost: {{actual_est_usd: {_yaml_scalar(c.get('actual_est_usd'))}, "
+        f"total_tokens: {_tokens_text(c.get('total_tokens'))}, "
+        f"preflight_estimate_usd: {_yaml_scalar(c.get('preflight_estimate_usd'))}, "
+        f"amended_estimate_usd: {_yaml_scalar(c.get('amended_estimate_usd'))}, "
+        f"budget_usd: {_yaml_scalar(c.get('budget_usd'))}}}"
     )
     lines.append(
         '    caliber_note: "harness 漂移（logic 档自 R-P0-2 新增 5 开关、输出 token 份额差异）逐项披露；'
@@ -1035,7 +1093,8 @@ def render_readme(report: dict[str, Any]) -> str:
             f"| `{arm}`（新批） | {p.get('detected')}/{p.get('measurable')} | {p.get('detection_rate')} | "
             f"{(p.get('repaired') or 0)}/{p.get('repair_measurable')} | "
             f"{(p.get('false_fixed') or 0)}/{p.get('false_fix_measurable')} | "
-            f"{(p.get('tokens') or {}).get('total')} | {_usd_text(p.get('cost_usd'), p.get('unpriced_reasons'), prefix='')} |"
+            f"{_tokens_text((p.get('tokens') or {}).get('total'))} | "
+            f"{_usd_text(p.get('cost_usd'), p.get('unpriced_reasons'), prefix='')} |"
         )
         lines.append(
             f"| `{arm}`（R-P0-2 旧批） | {o.get('detected')}/{o.get('measurable')} | {o.get('detection_rate')} | — | — | — | — |"
@@ -1075,7 +1134,7 @@ def render_readme(report: dict[str, Any]) -> str:
     lines.append("")
     c = report["cost"]
     lines.append(
-        f"- tokens={c['total_tokens']}；实测估算成本=**{_usd_text(c['actual_est_usd'], c.get('unpriced_arms'))}**；"
+        f"- tokens={_tokens_text(c['total_tokens'])}；实测估算成本=**{_usd_text(c['actual_est_usd'], c.get('unpriced_arms'))}**；"
         f"跑前估算={_usd_text(c['preflight_estimate_usd'])}"
         f"（口径已修正为 {_usd_text(c['amended_estimate_usd'])}，见 amendment）；"
         f"预算参考={_usd_text(c['budget_usd'])}"
@@ -1193,7 +1252,7 @@ def main(argv: list[str] | None = None) -> int:
     report = build_report(out_dir, Path(args.orig_dir), price, price_reason)
     if args.write:
         (out_dir / "ANALYSIS_REPORT.json").write_text(
-            json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
+            json.dumps(report, ensure_ascii=False, indent=2, allow_nan=False), encoding="utf-8"
         )
         readme_path = out_dir / "README.md"
         readme_path.write_text(_preserve_manual_sections(render_readme(report), readme_path), encoding="utf-8")

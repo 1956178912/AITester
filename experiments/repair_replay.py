@@ -67,8 +67,11 @@ def replay_row(row: dict[str, Any], timeout: int = 60) -> dict[str, Any]:
         {"status": "correct" | "wrong_patch" | "not_replayable_diff" |
                    "unverifiable" | "skipped_no_material",
          "rc": int | None, "old_patch_correct": int | None}
+
+    F03（2026-10-21 第三方审查 P1）：gold 套件全 skip/xfail 时 rc==0 但没有
+    断言执行 → status="unverifiable"（不得给 correct）。
     """
-    from experiments._m1_metrics import _run_pytest_in_tmp
+    from experiments._m1_metrics import _run_pytest_in_tmp, _suite_has_effective_pass
 
     old_correct = row.get("patch_correct")
     patch = str(row.get("patch") or "")
@@ -91,7 +94,11 @@ def replay_row(row: dict[str, Any], timeout: int = 60) -> dict[str, Any]:
     rc = _run_pytest_in_tmp(test_cases, new_code, module_name, timeout=timeout, task_metadata=meta)
     if rc is None:
         return {"status": "unverifiable", "rc": None, "old_patch_correct": old_correct}
-    rc_val, _out, _err = rc
+    rc_val, out, err = rc
+    if rc_val == 0 and not _suite_has_effective_pass(f"{out}\n{err}"):
+        # F03（2026-10-21 第三方审查 P1）：gold 套件全 skip/xfail 时 rc==0，
+        # 但没有任何断言执行——不可验证，不得给 correct。
+        return {"status": "unverifiable", "rc": rc_val, "old_patch_correct": old_correct}
     return {
         "status": "correct" if rc_val == 0 else "wrong_patch",
         "rc": rc_val,

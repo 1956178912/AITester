@@ -75,6 +75,7 @@ from experiments.misguided_metrics import (  # noqa: E402
     sha256_file,
     sha256_text,
 )
+from src.budget.token_usage import aggregate_row_token_usage, token_metric_reading  # noqa: E402
 from src.specs import extract_signature_params, parse_logic_analysis  # noqa: E402
 from src.specs.spec_ir_v2 import self_validate_examples  # noqa: E402
 
@@ -498,19 +499,39 @@ def aggregate_arm(tasks: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def generation_summary(generations: list[dict[str, Any]], price_table: dict[str, Any]) -> dict[str, Any]:
-    """示例生成审计：状态分布、示例数、LLM 调用/token/成本、prompt 规模。"""
+    """示例生成审计：状态分布、示例数、LLM 调用/token/成本、prompt 规模。
+
+    AU（2026-10-21）：token / 调用 / 命中列全部走共享读数。改前 `int(u.get(...) or 0)`
+    把上游拒绝（`None`）和 AT 的写拒绝标记折成 0——报告读起来像"完整且为 0"。
+    现 token 三元组任一行不可读 → 三列同为 `None`（不给部分和）且金额不计算；
+    `llm_calls` 是独立事实，只有自己的坏值才为 `None`；命中列见
+    `spec_examples_generator.cache_hits_reading`。干净路径键集与数值不变。
+    """
     status_counts = Counter(str(g.get("status")) for g in generations)
-    usages = [g.get("usage") or {} for g in generations]
-    input_tokens = sum(int(u.get("input_tokens", 0) or 0) for u in usages)
-    output_tokens = sum(int(u.get("output_tokens", 0) or 0) for u in usages)
-    llm_calls = sum(int(u.get("llm_calls", 0) or 0) for u in usages)
-    cache_hits = sum(int(u.get("cache_hits", 0) or 0) for u in usages)
+    agg = aggregate_row_token_usage([{"token_usage": g.get("usage")} for g in generations])
+    cache_hits_reading = gen.cache_hits_reading([g.get("usage") for g in generations])
+    input_tokens = agg["input_tokens"]
+    output_tokens = agg["output_tokens"]
+    llm_calls = agg["llm_calls"]
+    cache_hits = cache_hits_reading["hits"] if cache_hits_reading["present"] else 0
     model = str(generations[0].get("model") or "unknown") if generations else "unknown"
-    cost = gen.estimate_cost_usd(
-        model,
-        {"input_tokens": input_tokens, "output_tokens": output_tokens},
-        price_table,
-    )
+    cost: float | None = None
+    cost_reason = gen.price_block_reason_for(model, price_table)
+    if cost_reason is None:
+        if input_tokens is not None and output_tokens is not None:
+            cost = gen.estimate_cost_usd(
+                model,
+                {"input_tokens": input_tokens, "output_tokens": output_tokens},
+                price_table,
+            )
+        else:
+            # 解释"为什么没有金额"时，具体坏值优先于第三字段缺席（缺席码排首位只会
+            # 说"少了一个键"，而真正拦住金额的是在场坏值）。
+            reasons = agg["reading_reasons"]
+            cost_reason = next(
+                (code for code in reasons if not code.startswith("token_field_absent:")),
+                next(iter(reasons), None),
+            )
     tasks_with_examples = [g for g in generations if g.get("examples")]
     summary = {
         "n_tasks": len(generations),
@@ -532,22 +553,35 @@ def generation_summary(generations: list[dict[str, Any]], price_table: dict[str,
                 "n_examples": len(g.get("examples") or []),
                 "prompt_sha256": g.get("prompt_sha256"),
                 "wall_s": g.get("wall_s"),
-                "llm_calls": (g.get("usage") or {}).get("llm_calls"),
+                "llm_calls": (
+                    token_metric_reading(g.get("usage"), "llm_calls")["value"]
+                    if isinstance(g.get("usage"), dict)
+                    else None
+                ),
             }
             for g in generations
         ],
     }
+    if agg["reading_reasons"]:
+        summary["token_reading_reasons"] = agg["reading_reasons"]
+    if cache_hits_reading["reasons"]:
+        summary["cache_reading_reasons"] = cache_hits_reading["reasons"]
     # AB-15c：算不出钱时把**机制名**随工件带走（判定与归因同源，见
     # `spec_examples_generator.price_block_reason_for`）。披露键只在真拒绝时写入
     # ⇒ 已入库的 P-1 工件（USD 已计价）返回域逐键不变。
-    if cost is None:
-        summary["cost_unpriced_reason"] = gen.price_block_reason_for(model, price_table)
+    if cost_reason is not None:
+        summary["cost_unpriced_reason"] = cost_reason
     return summary
 
 
 def _mean(values: list[Any]) -> float | None:
     nums = [float(v) for v in values]
     return round(sum(nums) / len(nums), 3) if nums else None
+
+
+def _reading_text(value: Any) -> str:
+    """计数读数的呈现（AU）：`None` 是上游拒绝，不得印成 `None` 或 0。"""
+    return "不可读" if value is None else str(value)
 
 
 def render_readme(report: dict[str, Any]) -> str:
@@ -591,8 +625,10 @@ def render_readme(report: dict[str, Any]) -> str:
     else:
         cost_txt = f"**${est_cost}**"
     add(
-        f"- LLM 调用 {generation.get('llm_calls')}（缓存命中 {generation.get('cache_hits')}）；"
-        f"tokens in/out = {generation.get('input_tokens')}/{generation.get('output_tokens')}；"
+        f"- LLM 调用 {_reading_text(generation.get('llm_calls'))}"
+        f"（缓存命中 {_reading_text(generation.get('cache_hits'))}）；"
+        f"tokens in/out = {_reading_text(generation.get('input_tokens'))}/"
+        f"{_reading_text(generation.get('output_tokens'))}；"
         f"估算成本 {cost_txt}（价目：experiments/price_table.json）"
     )
     add("")

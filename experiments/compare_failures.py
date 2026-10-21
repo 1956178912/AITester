@@ -37,6 +37,12 @@ from collections import Counter
 from datetime import datetime
 from typing import Any
 
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
+from src.budget.token_usage import aggregate_row_token_totals, row_total_token_reading  # noqa: E402
+
 
 def load_summary(summary_path: str) -> dict[str, Any]:
     """加载 benchmark 汇总 JSON。"""
@@ -126,6 +132,35 @@ def _suspected_stage(full_result: dict[str, Any], base_result: dict[str, Any]) -
     return "需人工查看环节级产物"
 
 
+def _token_cell(row: dict[str, Any]) -> str:
+    """单行 token 展示（AO，2026-10-21）：读不动显示“不可读”，不折成 0。
+
+    此前 `(row.get("token_usage") or {}).get("total_tokens", "?")` 把真值
+    非对象行炸成 AttributeError，且在 `total_tokens` 缺席而 in/out 齐全时
+    显示 "?"（共享读数可给出 in+out）。缺席 / null 保留历史 "?"；零值
+    半套 schema 也保留 "?"（不把"没记账"显示成"记了 0"）。
+    """
+    reading = row_total_token_reading(row)
+    if reading["total"] is None:
+        return "不可读"
+    if reading["absent"]:
+        return "?"
+    usage = row.get("token_usage")
+    if isinstance(usage, dict) and "total_tokens" not in usage and reading["total"] == 0:
+        return "?"
+    return str(reading["total"])
+
+
+def _token_total_text(agg: dict[str, Any]) -> str:
+    """聚合总量的展示文本：不可读时点名行数，不给部分和。"""
+    if agg["total_tokens"] is None:
+        return f"不可读（{agg['n_unreadable_rows']} 行无法读取）"
+    text = str(agg["total_tokens"])
+    if agg["n_contradiction_rows"]:
+        text += f"（其中 {agg['n_contradiction_rows']} 行 total 与 in+out 不一致）"
+    return text
+
+
 def build_report(
     inverted: list[dict[str, Any]],
     full_baseline: str,
@@ -156,27 +191,40 @@ def build_report(
     for item in inverted:
         task_id = item["task_id"]
         full_r, base_r = item["full"], item["base"]
-        full_tokens = (full_r.get("token_usage") or {}).get("total_tokens", "?")
-        base_tokens = (base_r.get("token_usage") or {}).get("total_tokens", "?")
+        full_tokens = _token_cell(full_r)
+        base_tokens = _token_cell(base_r)
         lines.append(
             f"| {task_id} | FAIL（{full_r.get('error_category', '?')}）"
             f" | PASS | {full_r.get('iterations', 0)} | {full_tokens} | {base_tokens}"
             f" | {_suspected_stage(full_r, base_r)} |"
         )
 
-    # token 汇总
-    full_total = sum((i["full"].get("token_usage") or {}).get("total_tokens", 0) for i in inverted)
-    base_total = sum((i["base"].get("token_usage") or {}).get("total_tokens", 0) for i in inverted)
-    lines += [
-        "",
-        f"**翻转任务 token 对比**：{full_baseline} 合计 {full_total}，{base_baseline} 合计 {base_total}"
-        + (
+    # token 汇总（共享聚合：任一行读不动 → 合计不可读，不给部分和）
+    full_agg = aggregate_row_token_totals([i["full"] for i in inverted])
+    base_agg = aggregate_row_token_totals([i["base"] for i in inverted])
+    full_total = full_agg["total_tokens"]
+    base_total = base_agg["total_tokens"]
+    if full_total is not None and base_total is not None:
+        comparison = (
             f"（完整系统多消耗 {full_total - base_total}，性价比倒挂需关注）"
             if full_total > base_total
             else "（完整系统消耗未倒挂）"
-        ),
+        )
+    else:
+        comparison = "（Token 合计不可读，不作性价比倒挂判断）"
+    lines += [
         "",
+        f"**翻转任务 token 对比**：{full_baseline} 合计 {_token_total_text(full_agg)}，"
+        f"{base_baseline} 合计 {_token_total_text(base_agg)}" + comparison,
     ]
+    if full_total is None or base_total is None:
+        unreadable_parts = []
+        for name, agg in ((full_baseline, full_agg), (base_baseline, base_agg)):
+            if agg["total_tokens"] is None:
+                reasons = "、".join(f"{code}×{count}" for code, count in agg["reading_reasons"].items())
+                unreadable_parts.append(f"{name} {agg['n_unreadable_rows']} 行（{reasons}）")
+        lines.append(f"Token 读数机制：{'；'.join(unreadable_parts)}")
+    lines.append("")
 
     # ── 逐任务环节级对比 ─────────────────────────────────────────────────────
     lines.append("## 逐任务环节级对比")

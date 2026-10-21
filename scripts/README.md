@@ -9,7 +9,7 @@
 
 > 命名不是判定依据：`tools/check_quota.py` 虽以 `check_` 开头，但它是对 LLM 端点发探测请求的运维工具，不参与门禁；`tools/generate_static_report.py` 虽被 CI 调用，但产物是报告而非判定，故归 `tools/`。
 
-## gates/（26 个）
+## gates/（27 个）
 
 CI / pre-commit 阻断项，`make gates` 跑其中大部分：
 
@@ -29,6 +29,7 @@ CI / pre-commit 阻断项，`make gates` 跑其中大部分：
 | `check_env_budget.py` | 环境变量开关预算棘轮 |
 | `check_env_snapshot_keys.py` | 环境开关 provenance 快照完备性 |
 | `check_json_contract_sites.py` | JSON 契约调用点计数一致性 |
+| `check_json_strict.py` | 工件严格 JSON（RFC 8259，拒绝裸 `NaN`/`Infinity`）+ 源码写入点 `allow_nan=False` |
 | `check_llm_configs_schema.py` | `llm_configs.json` schema |
 | `check_lock_sync.py` | `requirements.txt` ↔ `requirements.lock` 双轨同步 |
 | `check_model_fingerprint.py` | 模型版本指纹锁定 |

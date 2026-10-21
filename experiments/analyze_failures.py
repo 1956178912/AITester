@@ -574,7 +574,7 @@ def cli(results_dir: str, output: str, knowledge_base: str | None):
     out = Path(kb_path)
     out.parent.mkdir(parents=True, exist_ok=True)
     with open(out, "w", encoding="utf-8") as f:
-        json.dump(kb_cases, f, ensure_ascii=False, indent=2)
+        json.dump(kb_cases, f, ensure_ascii=False, indent=2, allow_nan=False)
     print(f"知识库已保存: {out}（{len(kb_cases)} 条案例）")
 
 

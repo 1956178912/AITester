@@ -104,7 +104,7 @@ def generate_config_json(output_file: str = "llm_configs.json") -> str:
                 "required_api_key": f"{model['provider'].upper()}_API_KEY",
             }
         )
-    content = json.dumps(configs, indent=2, ensure_ascii=False)
+    content = json.dumps(configs, indent=2, ensure_ascii=False, allow_nan=False)
     with open(output_file, "w", encoding="utf-8") as f:
         f.write(content)
     return content

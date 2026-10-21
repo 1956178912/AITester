@@ -405,7 +405,7 @@ def main(argv: list[str] | None = None) -> int:
     json_path = args.out / "PROMPT_ARTIFACTS.json"
     md_path = args.out / "PROMPT_ARTIFACTS.md"
     card_path = args.out / "PROMPT_CARD.md"
-    atomic_write_text(json_path, json.dumps(payload, ensure_ascii=False, indent=2) + "\n", mode=0o644)
+    atomic_write_text(json_path, json.dumps(payload, ensure_ascii=False, indent=2, allow_nan=False) + "\n", mode=0o644)
     md_path.write_text(build_markdown(rows, json_name=json_path.name), encoding="utf-8")
     card_path.write_text(build_prompt_card(rows, generated_at=_today()), encoding="utf-8")
     # SHA256SUMS：与仓库其它工件目录同口径（可 checksum_results 校验）

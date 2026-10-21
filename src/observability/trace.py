@@ -38,6 +38,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import threading
 import time
 import uuid
@@ -45,6 +46,7 @@ from collections.abc import Callable
 from typing import Any, ClassVar
 
 from src.utils.env_utils import env_flag
+from src.utils.json_strict import strict_json_dumps
 
 logger = logging.getLogger(__name__)
 
@@ -128,6 +130,25 @@ def _redact_json_value(value: Any, mask: Callable[[str], str]) -> Any:
     return mask(str(value))
 
 
+#: 结构标识字段的合法形状：脱敏层不得改写这些由本模块生成的字段。
+#: 32 位 hex 会被通用"长十六进制密钥"模式命中，若不按字段豁免，run_id
+#: 落盘后变成 `<REDACTED_KEY>`，导出端只能退回按路径派生 trace_id。
+_IDENTIFIER_FIELD_SHAPES: dict[str, re.Pattern[str]] = {
+    "run_id": re.compile(r"[0-9a-fA-F]{32}"),
+    "span_id": re.compile(r"[0-9a-fA-F]{16}"),
+    "parent_span_id": re.compile(r"[0-9a-fA-F]{16}"),
+}
+
+
+def _restore_identifier_fields(original: dict[str, Any], redacted: dict[str, Any]) -> dict[str, Any]:
+    """只保留形状合法的结构标识字段；普通文本里的长 hex 仍照常脱敏。"""
+    for field, shape in _IDENTIFIER_FIELD_SHAPES.items():
+        value = original.get(field)
+        if isinstance(value, str) and shape.fullmatch(value):
+            redacted[field] = value
+    return redacted
+
+
 def _redact_record(record: dict[str, Any]) -> dict[str, Any]:
     """返回记录的结构感知脱敏副本（不修改入参，键与字符串值均脱敏）。
 
@@ -143,7 +164,7 @@ def _redact_record(record: dict[str, Any]) -> dict[str, Any]:
     try:
         from src.utils.logging_utils import mask_sensitive_info as _mask
 
-        return _redact_json_value(record, _mask)
+        return _restore_identifier_fields(record, _redact_json_value(record, _mask))
     except Exception:
         logger.warning("追踪记录结构脱敏失败（降级原样序列化）", exc_info=True)
         return record
@@ -205,22 +226,28 @@ class TraceSession:
         self._file_path: str | None = None
         self._started_at: float | None = None
         # O7（2026-09-29 审查 P1）：run_id —— 本次工作流运行的唯一标识
-        # （会话级，同一 TraceSession 内所有 record_node 共享）。
-        # 供跨任务聚合（"同一 run 的 N 个 task"）与 OTel 语义对齐。
-        self._run_id = uuid.uuid4().hex[:16]
+        # （会话级，同一 TraceSession 内所有事件共享）。32 位小写 hex 即
+        # OTel trace_id 宽度；root span_id 为 16 位，node/task_end 以它为父。
+        self._run_id = uuid.uuid4().hex
+        self._root_span_id = uuid.uuid4().hex[:16]
+        started_at = time.time()
         if self._enabled and directory is not None:
             os.makedirs(directory, exist_ok=True)
             safe_task = "".join(c if c.isalnum() or c in "-_." else "_" for c in task_id) or "task"
             self._file_path = os.path.join(directory, f"{safe_task}.trace.jsonl")
-            self._started_at = time.time()
-            self._append(
-                {
-                    "event": "task_start",
-                    "task": task_id,
-                    "ts": self._started_at,
-                    "meta": {k: _summarize(v) for k, v in (task_meta or {}).items()},
-                }
-            )
+            self._started_at = started_at
+        # root 事件在文件追踪与纯内存两种模式下都写入 records：没有 root，
+        # 子事件的 parent_span_id 就会悬空，内存快照也无法复原一条完整 trace。
+        self._append(
+            {
+                "event": "task_start",
+                "task": task_id,
+                "ts": started_at,
+                "run_id": self._run_id,
+                "span_id": self._root_span_id,
+                "meta": {k: _summarize(v) for k, v in (task_meta or {}).items()},
+            }
+        )
 
     def _append(self, record: dict[str, Any]) -> None:
         """向 JSONL 追加一条记录（锁内追加，失败仅 warning 不抛出）。
@@ -247,13 +274,15 @@ class TraceSession:
         # 序列化后再用 json.loads 做结构守卫——坏行丢弃并告警，绝不写坏 JSONL。
         redacted = _redact_record(record)
         try:
-            line = json.dumps(redacted, ensure_ascii=False, default=str)
+            # AF（2026-10-20）：strict_json_dumps 额外拒绝 NaN/±Infinity——
+            # Python 的 json.loads 会接受裸 token，不能只靠结构守卫发现。
+            line = strict_json_dumps(redacted, default=str)
         except Exception as e:
-            # 自定义对象 __str__ 抛异常等场景：记录无法序列化，记 warning 后放弃
+            # 自定义对象 __str__ 抛异常 / 记录含非有限浮点：无法序列化，记 warning 后放弃
             logger.warning("追踪记录序列化失败（丢弃本条）: %s", e)
             return
         # A20 结构完整性守卫：合法 JSONL 是该观测层对消费方的硬契约。
-        # 默认 json.dumps 的产物本应合法；此处兜底断言"脱敏链路没有破坏结构"，
+        # strict_json_dumps 已保证产物是 RFC 8259 JSON；此处兜底断言"脱敏链路没有破坏结构"，
         # 不合法即丢弃（宁可少一条观测记录，也不写坏行污染整份轨迹）。
         try:
             json.loads(line)
@@ -315,11 +344,12 @@ class TraceSession:
             "ts": time.time(),
             # O7（2026-09-29 审查 P1）：结构化追踪 run_id / span_id / parent
             # —— run_id 标识本次工作流运行（会话级），span_id 标识本节点
-            # 调用（节点级），parent 指向父 span（路由层 → 节点层）。
-            # 缺省自动填充（uuid4 短 ID），历史调用方零变化（新键不影响
-            # 既有 JSONL 消费方的解析，仅多 3 个可选字段）。
-            "run_id": getattr(self, "_run_id", None),
-            "span_id": uuid.uuid4().hex[:12],
+            # 调用（节点级），parent 指向本次会话的 root span（task_start）。
+            # 缺省自动填充，历史调用方零变化（新键不影响既有 JSONL
+            # 消费方的解析，仅多 3 个可选字段）。
+            "run_id": self._run_id,
+            "span_id": uuid.uuid4().hex[:16],
+            "parent_span_id": self._root_span_id,
         }
         if output_summary is not None:
             record["output"] = _summarize(output_summary)
@@ -360,6 +390,9 @@ class TraceSession:
             "event": "task_end",
             "task": self.task_id,
             "ts": time.time(),
+            "run_id": self._run_id,
+            "span_id": uuid.uuid4().hex[:16],
+            "parent_span_id": self._root_span_id,
             "passed": passed,
         }
         if self._started_at is not None:
@@ -464,7 +497,7 @@ def dump_recent_to(target_dir: str, limit: int | None = None) -> str | None:
                 for record in snap.get("records", []):
                     redacted = _redact_record(record)
                     try:
-                        line = json.dumps(redacted, ensure_ascii=False, default=str)
+                        line = strict_json_dumps(redacted, default=str)
                         json.loads(line)
                     except Exception as e:  # 诊断出口：坏行不落盘
                         logger.warning("失败诊断快照记录非法 JSON（丢弃该行）: %s", e)
@@ -472,9 +505,8 @@ def dump_recent_to(target_dir: str, limit: int | None = None) -> str | None:
                     f.write(line + "\n")
                 # 快照级收尾标记（非 TraceSession 事件，供诊断区分任务边界）
                 f.write(
-                    json.dumps(
+                    strict_json_dumps(
                         {"event": "snapshot_task", "task": snap.get("task"), "ts": snap.get("ts")},
-                        ensure_ascii=False,
                     )
                     + "\n"
                 )

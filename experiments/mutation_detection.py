@@ -38,7 +38,11 @@ import random
 import time
 from typing import Any
 
-from experiments._m1_metrics import _looks_like_test_execution_error, _run_pytest_in_tmp
+from experiments._m1_metrics import (
+    _looks_like_test_execution_error,
+    _run_pytest_in_tmp,
+    _suite_has_effective_pass,
+)
 from experiments.mutation_testing import MutationGenerator
 
 logger = logging.getLogger(__name__)
@@ -76,9 +80,10 @@ def mutation_detection_rate(
     """计算生成测试在 gold fixed 代码变异体上的检出率（SWE-Mutation 口径）。
 
     流程：
-        1. 基线段：test_code 在 fixed_code 上跑 pytest，必须全绿（rc == 0
-           且无收集错误）；不绿 → 测试本身坏则无法裁决 → rate=None +
-           skipped=True（保守不误报）；
+        1. 基线段：test_code 在 fixed_code 上跑 pytest，必须有效全绿
+           （rc == 0 ∧ 无收集错误 ∧ 至少 1 个真实 passed）；不绿或全
+           skip/xfail → 测试本身无法裁决 → rate=None + skipped=True
+           （F03：rc==0 的"零断言执行"不是全绿；保守不误报）；
         2. 变异段：MutationGenerator 对 fixed_code 生成 AST 变异体，多于
            n_mutants 时按 seed 随机采样（可复现），不足时用实际可得数；
         3. 裁决段：逐个变异体写盘 + 子进程 pytest：rc != 0 且非收集错误
@@ -126,6 +131,11 @@ def mutation_detection_rate(
     base_rc, base_out, base_err = baseline
     if base_rc != 0 or _looks_like_test_execution_error(base_rc, base_out + "\n" + base_err):
         return _skip(f"测试在 gold fixed 代码上不绿（rc={base_rc}），测试本身坏则无法裁决")
+    if not _suite_has_effective_pass(base_out + "\n" + base_err):
+        # F03（2026-10-21 第三方审查 P1）：全 skip/xfail 的测试同样 rc==0，
+        # 但没有断言执行——不能当"全绿基线"，否则变异体全部"存活"被误报成
+        # rate=0.0（测试没检出力）而非"不可测"。
+        return _skip(f"测试在 gold fixed 代码上无有效 passed（rc={base_rc}），无法裁决")
 
     # 2. 变异段：复用内置 AST 变异器（7 类变异 + 代码级去重 + 均匀截断）
     all_mutants = MutationGenerator().generate(fixed_code)

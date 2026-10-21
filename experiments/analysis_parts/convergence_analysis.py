@@ -10,6 +10,8 @@ import ast
 from collections import Counter
 from typing import Any
 
+from src.budget.token_usage import count_reason, row_total_token_reading
+
 
 def _safe_int(v: Any) -> int:
     """安全 int 转换：None / 非数字字符串 / dict 回退 0（round10 P2）。
@@ -380,7 +382,17 @@ def _convergence_token_efficiency(details: list[dict[str, Any]]) -> dict[str, An
     - Token 消耗字段：details[].token_usage.total_tokens（旧 JSON 兜底累加）；
       逐轮 Token 明细（iterations[].tokens）若存在则精确到轮次，否则按
       "总 Token / 任务经历的轮次数"均摊（保守口径，避免高估单轮成本）；
-    - 无 Token 数据时 available=False，渲染跳过章节。
+    - 空 details 时 available=False；整键缺席按历史 0（available 仍为 True）。
+
+    # AO（2026-10-21）：读不动的行不再被 `_safe_float(... or 0)` 折成 0。
+    此前真值非对象 `token_usage` 直接 AttributeError；`"100"` / `10.7` /
+    `True` 被 float() 收下；负数被 clamp 成 0；`nan` 进入边际收益；
+    `total_tokens` 缺席而 in/out 齐全的行读 0（共享总量读数读 in+out）。
+    现在：总量交 :func:`row_total_token_reading`，逐轮 `tokens` 交
+    :func:`count_reason`；任一行（用于当轮的逐轮值或总量）不可读 →
+    `available=False` 并给出 `n_token_unreadable_rows` /
+    `token_reading_reasons`（不给部分曲线，也不把坏值当"无 Token 数据"）。
+    整键缺席 / null 仍是历史 0（available 口径不变）。
 
     2026-09-26 round9（P2 口径修复）：无逐轮明细的旧 JSON 回退路径改为
     "仅当任务恰好到达当轮（iterations == k，k≥3 时 iterations >= 3）时按
@@ -393,7 +405,50 @@ def _convergence_token_efficiency(details: list[dict[str, Any]]) -> dict[str, An
     """
     total = len(details)
     if total == 0:
-        return {"available": False, "total_tasks": 0, "rounds": {}}
+        return {
+            "available": False,
+            "total_tasks": 0,
+            "rounds": {},
+            "best_marginal_round": None,
+            "n_token_unreadable_rows": 0,
+            "token_reading_reasons": {},
+        }
+    # AO 预扫描：不可读的行不得进入任何一轮的 Token 累计（读不动不是 0）。
+    unreadable_reasons: dict[str, int] = {}
+    n_unreadable = 0
+    for r in details:
+        reading = row_total_token_reading(r)
+        row_reasons = list(reading["reasons"])
+        usage = r.get("token_usage")
+        if isinstance(usage, dict):
+            per_round = usage.get("iterations")
+            if per_round is not None and not isinstance(per_round, list):
+                row_reasons.append(f"token_usage_iterations_not_list:{type(per_round).__name__}")
+            elif isinstance(per_round, list) and per_round:
+                # 只检查当轮实际会读到的下标（k 最大到 3+，对应下标 3）。
+                max_index = min(_safe_int(r.get("iterations", 0) or 0), 3)
+                for idx, entry in enumerate(per_round[: max_index + 1]):
+                    if not isinstance(entry, dict):
+                        row_reasons.append(f"per_round_not_object:{type(entry).__name__}")
+                    elif "tokens" not in entry:
+                        row_reasons.append(f"token_field_absent:tokens[round={idx}]")
+                    else:
+                        reason = count_reason(entry["tokens"], f"tokens[round={idx}]")
+                        if reason is not None:
+                            row_reasons.append(reason)
+        if row_reasons:
+            n_unreadable += 1
+            for code in row_reasons:
+                unreadable_reasons[code] = unreadable_reasons.get(code, 0) + 1
+    if n_unreadable:
+        return {
+            "available": False,
+            "total_tasks": total,
+            "rounds": {},
+            "best_marginal_round": None,
+            "n_token_unreadable_rows": n_unreadable,
+            "token_reading_reasons": dict(sorted(unreadable_reasons.items())),
+        }
     max_observed = max((_safe_int(r.get("iterations", 0) or 0) for r in details), default=-1)
     # 逐轮累计：到达任务数 / 累计通过 / 累计 Token（含本轮增量）
     rounds: dict[str, dict[str, Any]] = {}
@@ -414,21 +469,27 @@ def _convergence_token_efficiency(details: list[dict[str, Any]]) -> dict[str, An
         # 到达轮），轮次累计单调不减，负增量不再可能出现。
         round_tokens = 0.0
         for r in reached:
-            usage = r.get("token_usage") or {}
-            per_round = usage.get("iterations")
-            if isinstance(per_round, list) and k < len(per_round) and isinstance(per_round[k], dict):
-                round_tokens += _safe_float(per_round[k].get("tokens", 0) or 0)
+            usage = r.get("token_usage")
+            per_round = usage.get("iterations") if isinstance(usage, dict) else None
+            if (
+                isinstance(per_round, list)
+                and k < len(per_round)
+                and isinstance(per_round[k], dict)
+                and "tokens" in per_round[k]
+            ):
+                round_tokens += per_round[k]["tokens"]
             else:
                 # 无逐轮明细：仅当任务恰好到达当轮（最终轮）时计入
                 r_iters = _safe_int(r.get("iterations", 0) or 0)
+                counts = row_total_token_reading(r)["total"] or 0
                 if k >= 3:
                     # 3+ 轮：计入 iterations>=3 的任务（最终轮=3+）
                     if r_iters >= 3:
-                        round_tokens += _safe_float(usage.get("total_tokens", 0) or 0) / (r_iters + 1)
+                        round_tokens += counts / (r_iters + 1)
                 else:
                     # 0/1/2 轮：计入 iterations==k 的任务（最终轮=k）
                     if r_iters == k:
-                        round_tokens += _safe_float(usage.get("total_tokens", 0) or 0) / (k + 1)
+                        round_tokens += counts / (k + 1)
         incremental_passed = max(0, cumulative_passed - prev_cumulative_passed)
         # 2026-09-26 round9（P2 口径修复）：增量 Token = 当轮 round_tokens
         # （本轮"恰好到达最终轮"的任务的 total/(轮数+1) 分摊值）。旧实现按
@@ -465,6 +526,8 @@ def _convergence_token_efficiency(details: list[dict[str, Any]]) -> dict[str, An
         "total_tasks": total,
         "rounds": rounds,
         "best_marginal_round": best_round,
+        "n_token_unreadable_rows": 0,
+        "token_reading_reasons": {},
     }
 
 

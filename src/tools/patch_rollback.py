@@ -137,7 +137,7 @@ def save_snapshot_json(snap: dict[str, str], path: str) -> str:
     p = pathlib.Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
     tmp = p.with_suffix(".tmp")
-    tmp.write_text(json.dumps(snap, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.write_text(json.dumps(snap, ensure_ascii=False, indent=2, allow_nan=False), encoding="utf-8")
     tmp.replace(p)
     return str(p.resolve())
 

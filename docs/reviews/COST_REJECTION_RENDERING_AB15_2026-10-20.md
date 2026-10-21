@@ -157,6 +157,9 @@ ext 三臂 `0.025884977011494247 / 0.003358973563218391 / 0.004543231034482759`�
 4. **ext 未登记模型仍是 `0.0` 部分和 + note**：`_cost_per_task` 对 `prices.get(m)` 缺席的模型
    只记 `unpriced` 并继续累加其余份额；新锁显式锁定这一旧口径（`test_unregistered_model_remains_a_partial_sum_with_a_note`）。
    "拒绝"与"未登记"是两种事实，本轮只保证前者不产生金额。
+   **AH（2026-10-20）已处置**：未登记 / 无归因 / 归因不闭合 / 零任务分母一律 `usd_per_task=None`
+   并在 note 点名机制；上述旧锁改写为 `test_unregistered_model_is_no_amount_not_a_zero_partial_sum`，
+   真批次三臂读数 0 行改变（`docs/reviews/COST_COMPLETENESS_AH_2026-10-20.md`）。
 5. **`statistical_analysis.py:1333` 的 `（缺: ）`**：`missing_models` 为空时仍渲染为
    "未计价——（缺: ）"，空清单无归因；同节 `$/task` 标题也没有机制点名行。AB-14 登记，未处置。
 6. **测试侧第二套口径**：`tests/test_ae_batch.py:125` 的 `entry.get("currency", "USD")`

@@ -364,7 +364,7 @@ def cli(
         out_path = Path(output).expanduser()
         out_path.parent.mkdir(parents=True, exist_ok=True)
         with open(out_path, "w", encoding="utf-8") as f:
-            json.dump(report, f, ensure_ascii=False, indent=2)
+            json.dump(report, f, ensure_ascii=False, indent=2, allow_nan=False)
         print(f"\n质量报告已写入: {out_path}")
     else:
         print(f"\n{json.dumps(report, ensure_ascii=False, indent=2)}")

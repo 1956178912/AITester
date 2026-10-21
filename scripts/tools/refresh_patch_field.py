@@ -636,7 +636,9 @@ def main(argv: list[str] | None = None) -> int:
         if results_root.resolve() in target.resolve().parents:
             print(f"[fence-recompute] 拒绝写入批次目录（只读工具）：{target}", file=sys.stderr)
             return 2
-    out_json.write_text(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True, default=str), encoding="utf-8")
+    out_json.write_text(
+        json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True, default=str, allow_nan=False), encoding="utf-8"
+    )
     out_md.write_text(render_md(report), encoding="utf-8")
 
     total = report["subtotals"]["all_groups"]

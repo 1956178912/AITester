@@ -334,7 +334,7 @@ def main():
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
     with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(all_results, f, indent=2, ensure_ascii=False)
+        json.dump(all_results, f, indent=2, ensure_ascii=False, allow_nan=False)
 
     print(f"\n详细结果已保存至: {output_path}")
 

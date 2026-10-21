@@ -189,6 +189,7 @@ def _render_markdown(on_summary: dict[str, Any], off_summary: dict[str, Any], ou
             f,
             ensure_ascii=False,
             indent=2,
+            allow_nan=False,
         )
     print(f"[A/B] 汇总已写入: {md_path}")
     print(f"[A/B] 原始数据: {json_path}")

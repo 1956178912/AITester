@@ -681,7 +681,7 @@ def main(argv: list[str] | None = None) -> int:
         out = PROJECT_ROOT / args.json_out if not Path(args.json_out).is_absolute() else Path(args.json_out)
         out.parent.mkdir(parents=True, exist_ok=True)
         with out.open("w", encoding="utf-8") as fh:
-            json.dump(report, fh, ensure_ascii=False, indent=2)
+            json.dump(report, fh, ensure_ascii=False, indent=2, allow_nan=False)
         print(f"[four_channel] JSON 报告 → {out}")
     if args.md_out:
         out = PROJECT_ROOT / args.md_out if not Path(args.md_out).is_absolute() else Path(args.md_out)

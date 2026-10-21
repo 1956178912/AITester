@@ -217,6 +217,23 @@ def pytest_summary_counts(output: str) -> dict[str, int]:
     return counts
 
 
+def _suite_has_effective_pass(output: str) -> bool:
+    """rc==0 的输出是否含有效通过证据：至少 1 个 ``passed`` 且无 ``failed``。
+
+    F03（2026-10-21 第三方审查 P1）：pytest 对"没有任何断言执行"的套件同样
+    返回 rc==0——全 skip / xfail / xpass / deselect 的摘要行里 ``passed==0``。
+    只看 rc 会把"没跑起来"计成有效 green，使 detection 的 fixed 侧与
+    repair 的 gold 侧各有一条假阳性通道（审计最小条件：buggy 红 + fixed
+    "1 skipped" → 旧实现返回 1.0）。
+
+    口径边界：**部分 skip 与真实 passed 并存仍算有效通过**（审查报告明确
+    警告"部分 skip 可以与有效断言通过并存"）；只拒绝 ``passed==0``。
+    摘要不可解析（空输出 / 自定义运行器）同样不算有效通过——fail-closed。
+    """
+    counts = pytest_summary_counts(output)
+    return int(counts.get("passed", 0)) > 0 and int(counts.get("failed", 0)) == 0
+
+
 def _suite_run_verdict(run: tuple[int, str, str] | None) -> str:
     """一次 pytest 子进程结果 → ``pass`` / ``fail`` / ``unavailable``（fail-closed）。
 
@@ -731,6 +748,10 @@ def _compute_detection_rate(task: Any, final_state: dict[str, Any] | None) -> fl
         三者同时成立 → detection_rate = 1.0（真实 fail-to-pass 检出）；
         任一不成立 → 0.0。
 
+        F03（2026-10-21 第三方审查 P1）：第二段的 rc==0 必须伴随**至少
+        1 个真实 passed**（全 skip / xfail / xpass / deselect 的套件没有
+        断言通过）——否则记 None（不可测），不得计为检出。
+
         特别地，"恒失败测试"（assert False / 恒不存在的 import /
         语法错误文件）在 fixed 上同样非 0 或有收集错误 → 判定 0.0，
         消除 N1 的"坏测试刷满指标"通道。
@@ -805,6 +826,10 @@ def _compute_detection_rate(task: Any, final_state: dict[str, Any] | None) -> fl
         return 0.0
     if _looks_like_test_execution_error(fixed_rc, fixed_out + "\n" + fixed_err):
         return 0.0  # fixed 侧红且是收集/语法错误 = 测试本身坏
+    if not _suite_has_effective_pass(fixed_out + "\n" + fixed_err):
+        # F03：fixed 侧 rc==0 但全 skip/xfail/deselect——没有断言通过，
+        # F2P 第二段不成立也不可能成立，记不可测（None），不误报检出。
+        return None
     return 1.0
 
 
@@ -860,7 +885,8 @@ def _compute_repair_rate(task: Any, final_state: dict[str, Any] | None) -> float
     定义：
         系统生成补丁 → safe_apply_patch(original_code, patch) →
         new_code；再在 new_code 上跑 gold test_cases（模板自带）：
-        rc == 0 → repair_rate = 1.0（修复被独立验证）；
+        rc == 0 且含至少 1 个真实 passed → repair_rate = 1.0（修复被独立验证）；
+        rc == 0 但全 skip / xfail / deselect（F03）→ None（不可测，不误判修好）；
         rc != 0 → 0.0（补丁未通过 gold 材料独立裁决）；
         无补丁（iterations=0，patch 为空）→ 0.0（没有修复动作，与历史口径区分）；
         rc == 5（no tests collected，gold 材料未跑起来）→ None（R16
@@ -915,8 +941,13 @@ def _compute_repair_rate(task: Any, final_state: dict[str, Any] | None) -> float
     rc = _run_pytest_in_tmp(test_cases, new_code, module_name, task_metadata=task_md)
     if rc is None:
         return None
-    rc_val, _out, _err = rc
+    rc_val, out, err = rc
     if rc_val == 0:
+        # F03（2026-10-21 第三方审查 P1）：gold 套件全 skip/xfail 时 rc==0，
+        # 但没有任何断言通过——不能当作"补丁通过独立裁决"。记 None
+        # （不可测），与 rc==5 的 fail-closed 同口径。
+        if not _suite_has_effective_pass(out + "\n" + err):
+            return None
         return 1.0
     if rc_val == 5:
         # R16 fail-closed：gold 材料收集到 0 个用例 = "没跑起来"，非"没修好"

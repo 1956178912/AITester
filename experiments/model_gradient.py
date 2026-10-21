@@ -52,6 +52,7 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 from config import LLM_CONFIGS  # noqa: E402
+from src.budget.token_usage import aggregate_row_token_totals  # noqa: E402
 from src.utils.process_utils import run_with_timeout  # noqa: E402
 
 RESULT_DIR = os.path.join(PROJECT_ROOT, "experiments", "results", "model_gradient")
@@ -133,6 +134,25 @@ def _extract_baseline_details(result_json: Path, baseline: str) -> list[dict[str
     return details if isinstance(details, list) else []
 
 
+def _tier_token_metrics(details: list[dict[str, object]]) -> dict[str, object]:
+    """档位 token 汇总（AO，2026-10-21）：交给共享总量读数，不再自持 `int(... or 0)`。
+
+    此前本文件逐行 `int(tu.get("total_tokens", 0) or 0)` 求和：非对象行静默跳过、
+    `"100"` 被接受、`10.7` 被截断、`True` 记 1、负数入总量、nan/inf 直接令
+    整个实验崩溃；`total_tokens` 缺席而 in/out 齐全的行读成 0（共享读数读
+    in+out）。现返回共享聚合的读数字段：总量不可读时为 None（不给部分和），
+    行数与机制名一并透出供 markdown 披露。
+    """
+    agg = aggregate_row_token_totals(details)
+    return {
+        "total_tokens": agg["total_tokens"],
+        "n_token_absent_rows": agg["n_absent_rows"],
+        "n_token_unreadable_rows": agg["n_unreadable_rows"],
+        "token_reading_reasons": agg["reading_reasons"],
+        "n_token_split_mismatch_rows": agg["n_contradiction_rows"],
+    }
+
+
 def _tier_label(tier: dict[str, int | float | str | None]) -> str:
     """档位标签：model_name + cost_weight（同 model_name 多端点时加 index）。"""
     name = str(tier.get("model_name") or "model")
@@ -164,7 +184,8 @@ def _render_markdown(
         "> - **首次修复成功率**：iteration == 1 且 passed 的任务占比（保守口径，未记录 iteration 的任务不入分母）",
         "> - **平均迭代次数**：各任务 iterations 均值（非数值跳过）",
         "> - **llm_applied 比例**：repo_verification.llm_applied 为 True 的任务占比（仅仓库级验证批次，单文件批次 N/A）",
-        "> - **总 token 消耗**：该档位全任务的 total_tokens 合计（若结果 JSON 携带）",
+        "> - **总 token 消耗**：该档位全任务的 token 三元组合计（若结果 JSON 携带）；"
+        "行内三元组在场却读不动时显示“不可读”（不折成 0、不给部分和）",
         "",
         "| 模型档位 | 首次修复成功率 | 平均迭代次数 | llm_applied 比例 | 总 token 消耗 | 备注 |",
         "|----------|----------------|--------------|------------------|---------------|------|",
@@ -173,12 +194,35 @@ def _render_markdown(
         applied = m.get("llm_applied_ratio")
         applied_str = "N/A" if applied is None else f"{applied:.2%}"
         tokens = m.get("total_tokens")
-        tokens_str = str(int(tokens)) if isinstance(tokens, (int, float)) else "N/A"
+        if tokens is None:
+            tokens_str = "不可读"
+        elif isinstance(tokens, (int, float)):
+            tokens_str = str(int(tokens))
+        else:
+            tokens_str = "N/A"
         note = m.get("note", "")
         lines.append(
             f"| {m.get('tier')} | {m.get('first_success_rate', 0.0):.2%} "
             f"| {m.get('avg_iterations', 0.0):.2f} | {applied_str} | {tokens_str} | {note} |"
         )
+    disclosures: list[str] = []
+    for m in tier_metrics:
+        unreadable = m.get("n_token_unreadable_rows", 0)
+        if isinstance(unreadable, int) and unreadable > 0:
+            reasons = m.get("token_reading_reasons") or {}
+            detail = "、".join(f"{code}×{count}" for code, count in reasons.items())
+            disclosures.append(f"> - `{m.get('tier')}`：{unreadable} 行 token 读数不可用（{detail}）")
+        mismatch = m.get("n_token_split_mismatch_rows", 0)
+        if isinstance(mismatch, int) and mismatch > 0:
+            disclosures.append(
+                f"> - `{m.get('tier')}`：{mismatch} 行 total_tokens 与 in+out 不一致（总量仍按行内 total 计）"
+            )
+    if disclosures:
+        lines += [
+            "",
+            "> **token 读数披露**（读不动不是 0，不给部分和）：",
+            *disclosures,
+        ]
     lines += [
         "",
         "## 解读口径",
@@ -292,18 +336,18 @@ def main() -> int:
             continue
 
         details = _extract_baseline_details(current_tier_json, args.baseline)
-        total_tokens = 0
-        for d in details:
-            tu = d.get("token_usage")
-            if isinstance(tu, dict):
-                total_tokens += int(tu.get("total_tokens", 0) or 0)
+        token_metrics = _tier_token_metrics(details)
         m: dict[str, object] = {
             "tier": label,
             "index": idx,
             "first_success_rate": _first_attempt_success_rate(details),
             "avg_iterations": _avg_iterations(details),
             "llm_applied_ratio": _llm_applied_ratio(details),
-            "total_tokens": total_tokens,
+            "total_tokens": token_metrics["total_tokens"],
+            "n_token_absent_rows": token_metrics["n_token_absent_rows"],
+            "n_token_unreadable_rows": token_metrics["n_token_unreadable_rows"],
+            "token_reading_reasons": token_metrics["token_reading_reasons"],
+            "n_token_split_mismatch_rows": token_metrics["n_token_split_mismatch_rows"],
             "task_count": len(details),
             "source": str(current_tier_json),
         }

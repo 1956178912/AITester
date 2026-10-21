@@ -371,8 +371,8 @@ class TestStatisticalCurrencyMechanisms:
                 "aitester": [
                     {
                         "token_usage": {
-                            "input_tokens": 1_000_000,
-                            "output_tokens": 1_000_000,
+                            "input_tokens": 2_000_000,
+                            "output_tokens": 2_000_000,
                             "total_tokens": 4_000_000,
                             "llm_calls": 1,
                             "by_model": {"a": 1_000_000, "b": 1_000_000, "c": 1_000_000, "d": 1_000_000},
@@ -387,7 +387,12 @@ class TestStatisticalCurrencyMechanisms:
         assert len(blocked) == 4
 
     def test_price_missing_and_currency_missing_are_not_merged(self) -> None:
-        """`missing_models`（价目不全）与 `unpriced_currency_models`（币种不可判定）分桶记账。"""
+        """价格域与币种维分桶记账（AG 起 `missing_models` 只收**表内未登记**）。
+
+        AG（2026-10-20）口径变更：表内条目的价格坏值不再冒充"未登记"，进
+        `unpriced_model_reasons`；币种维仍进 `unpriced_currency_models`（状态词汇沿用
+        AB-14）。三个桶互斥，完整索引是 `unpriced_model_reasons`。
+        """
         table = {
             "models": {
                 "priced_no_cur": _entry(),
@@ -410,8 +415,12 @@ class TestStatisticalCurrencyMechanisms:
             },
             table,
         )
-        assert rows[0]["missing_models"] == ["no_price"]
+        assert rows[0]["missing_models"] == []
         assert rows[0]["unpriced_currency_models"] == {"priced_no_cur": "absent"}
+        assert rows[0]["unpriced_model_reasons"] == {
+            "no_price": "price_null",
+            "priced_no_cur": "currency_absent",
+        }
 
     def test_clean_path_return_domain_is_a_superset_only(self) -> None:
         """只增不改：币种可判定时不写新键（受保护文本因此逐行不变）。"""

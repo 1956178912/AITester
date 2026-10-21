@@ -58,6 +58,7 @@ import click
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+from src.budget.token_usage import row_total_token_reading  # noqa: E402
 from src.utils.process_utils import run_with_timeout  # noqa: E402
 
 logger = logging.getLogger(__name__)
@@ -140,7 +141,9 @@ def _parse_task_record(record: dict) -> dict[str, Any]:
     .get 落到默认值（token≡0、duration≡0、failure_category≡"none"），
     RAG A/B 报告的 token 收益 / 耗时 / 错误分布三大结论恒为假数据。
     现按真实键读取：
-    - tokens_total ← record["token_usage"]["total_tokens"]（嵌套 dict）；
+    - tokens_total ← record 的 token 总量，走共享读数（AP，2026-10-21）：
+      整键缺席 / null → 历史 0；在场坏值 / 正值的部分和 → None（机制名见
+      `token_reading_reasons`，只在不可读时写入）；
     - duration_s   ← record["elapsed_seconds"]；
     - failure_category ← record["error_category"]（run_benchmark 用
       refine_final_error_category 产出；通过任务为 "none"）；
@@ -152,22 +155,24 @@ def _parse_task_record(record: dict) -> dict[str, Any]:
     total_tests = record.get("total_tests", 0)
     passed_count = record.get("passed_count", 0)
     # token_usage: {"input_tokens":..., "output_tokens":..., "total_tokens":..., "llm_calls":...}
-    token_usage = record.get("token_usage") or {}
-    tokens_total = token_usage.get("total_tokens", 0)
+    token_reading = row_total_token_reading(record)
     iterations = record.get("iterations", 0)
     duration_s = record.get("elapsed_seconds", 0.0)
     # 错误类型：run_benchmark 真实键为 error_category；通过任务为 "none"
     failure_category = record.get("error_category") or ("none" if passed else "unknown")
-    return {
+    parsed: dict[str, Any] = {
         "task_id": task_id,
         "passed": bool(passed),
         "total_tests": total_tests,
         "passed_count": passed_count,
-        "tokens_total": tokens_total,
+        "tokens_total": token_reading["total"],
         "iterations": iterations,
         "duration_s": duration_s,
         "failure_category": failure_category,
     }
+    if token_reading["reasons"]:
+        parsed["token_reading_reasons"] = list(token_reading["reasons"])
+    return parsed
 
 
 def _load_results(result_path: str) -> list[dict[str, Any]]:
@@ -237,6 +242,20 @@ def compare_ab(
     on_dur = [on_by_id[t]["duration_s"] for t in paired_ids]
     off_dur = [off_by_id[t]["duration_s"] for t in paired_ids]
 
+    # token 读数门（AP，2026-10-21）：`_parse_task_record` 已把在场坏值读成
+    # None，这里只要有一行不可读就不能出统计量——此前 None 进 scipy 会崩、
+    # 字符串进 isnan 会崩、bool / 负数会被当数字收下；也不得把不可读折成 0
+    # 后照常报"无显著差异"。机制名随报告披露。
+    token_unreadable = sum(
+        1 for t in paired_ids if on_by_id[t]["tokens_total"] is None or off_by_id[t]["tokens_total"] is None
+    )
+    token_reasons: dict[str, int] = {}
+    for t in paired_ids:
+        for side in (on_by_id[t], off_by_id[t]):
+            for code in side.get("token_reading_reasons", []):
+                token_reasons[code] = token_reasons.get(code, 0) + 1
+    tokens_available = token_unreadable == 0
+
     # 成功率
     on_pass = sum(1 for t in paired_ids if on_by_id[t]["passed"])
     off_pass = sum(1 for t in paired_ids if off_by_id[t]["passed"])
@@ -266,9 +285,12 @@ def compare_ab(
     rag_effective_rate = (n - rag_retrieval_empty) / max(n, 1) if n else 0.0
 
     # 统计检验（token / 迭代 / 耗时）
-    t_tok, p_tok = _welch_ttest(on_tokens, off_tokens)
-    u_tok, pu_tok = _mann_whitney_u(on_tokens, off_tokens)
-    d_tok = _cohens_d(on_tokens, off_tokens)
+    if tokens_available:
+        t_tok, p_tok = _welch_ttest(on_tokens, off_tokens)
+        u_tok, pu_tok = _mann_whitney_u(on_tokens, off_tokens)
+        d_tok = _cohens_d(on_tokens, off_tokens)
+    else:
+        t_tok = p_tok = u_tok = pu_tok = d_tok = None
 
     t_it, p_it = _welch_ttest(on_iters, off_iters)
     u_it, pu_it = _mann_whitney_u(on_iters, off_iters)
@@ -278,8 +300,8 @@ def compare_ab(
         "paired_tasks": n,
         "rag_on": {
             "success_rate": round(on_pass / max(n, 1), 4),
-            "avg_tokens": round(_mean(on_tokens), 1),
-            "std_tokens": round(_std(on_tokens), 1),
+            "avg_tokens": round(_mean(on_tokens), 1) if tokens_available else None,
+            "std_tokens": round(_std(on_tokens), 1) if tokens_available else None,
             "avg_iterations": round(_mean(on_iters), 2),
             "avg_duration_s": round(_mean(on_dur), 1),
             "failure_distribution": {k: len(v) for k, v in on_groups.items()},
@@ -288,26 +310,30 @@ def compare_ab(
         },
         "rag_off": {
             "success_rate": round(off_pass / max(n, 1), 4),
-            "avg_tokens": round(_mean(off_tokens), 1),
-            "std_tokens": round(_std(off_tokens), 1),
+            "avg_tokens": round(_mean(off_tokens), 1) if tokens_available else None,
+            "std_tokens": round(_std(off_tokens), 1) if tokens_available else None,
             "avg_iterations": round(_mean(off_iters), 2),
             "avg_duration_s": round(_mean(off_dur), 1),
             "failure_distribution": {k: len(v) for k, v in off_groups.items()},
         },
         "token_saving": {
-            "delta_avg": round(_mean(off_tokens) - _mean(on_tokens), 1),
+            "delta_avg": round(_mean(off_tokens) - _mean(on_tokens), 1) if tokens_available else None,
             # 六、Token 效率验证：RAG ON vs OFF 的 token 消耗降低百分比
             # （ICSE 2025 知识增强修复工作基线：17.49%-34.24%；
             # ContextSniper 进一步优化：-51.5%）。delta_pct > 0 表示 RAG ON
             # 比 OFF 省 token（论文可直接引用的效率指标）；< 0 表示 RAG 负向。
             # 分母用 max(_mean(off_tokens), 1) 防除零（OFF 全任务 0 token 时
             # 返回 0 而非 inf）。
-            "delta_pct": round(((_mean(off_tokens) - _mean(on_tokens)) / max(_mean(off_tokens), 1)) * 100, 2),
-            "t_stat": round(t_tok, 4),
-            "p_value_welch": round(p_tok, 6),
-            "u_stat": round(u_tok, 2),
-            "p_value_mann_whitney": round(pu_tok, 6),
-            "cohens_d": round(d_tok, 4),
+            "delta_pct": (
+                round(((_mean(off_tokens) - _mean(on_tokens)) / max(_mean(off_tokens), 1)) * 100, 2)
+                if tokens_available
+                else None
+            ),
+            "t_stat": round(t_tok, 4) if tokens_available else None,
+            "p_value_welch": round(p_tok, 6) if tokens_available else None,
+            "u_stat": round(u_tok, 2) if tokens_available else None,
+            "p_value_mann_whitney": round(pu_tok, 6) if tokens_available else None,
+            "cohens_d": round(d_tok, 4) if tokens_available else None,
         },
         "iteration_saving": {
             "delta_avg": round(_mean(off_iters) - _mean(on_iters), 2),
@@ -322,8 +348,16 @@ def compare_ab(
     }
 
     # 自动解读
+    if not tokens_available:
+        report["token_saving"]["n_token_unreadable_records"] = token_unreadable
+        report["token_saving"]["token_reading_reasons"] = dict(sorted(token_reasons.items()))
     interp: dict[str, str] = {}
-    if p_tok < 0.05:
+    if not tokens_available:
+        interp["token"] = (
+            f"RAG ON token 消耗不可判定：{token_unreadable} 个配对任务存在不可读记录"
+            f"（{', '.join(sorted(token_reasons)) or '机制未记录'}），不做均值与显著性检验"
+        )
+    elif p_tok < 0.05:
         interp["token"] = (
             f"RAG ON 平均节省 {report['token_saving']['delta_avg']} tokens "
             f"({report['token_saving']['delta_pct']}%)，p={p_tok:.4f}（显著）"
@@ -566,28 +600,31 @@ def main(
     # 写报告
     report_path = Path(output_dir) / "rag_ab_report.json"
     with open(report_path, "w", encoding="utf-8") as f:
-        json.dump(report, f, ensure_ascii=False, indent=2)
+        json.dump(report, f, ensure_ascii=False, indent=2, allow_nan=False)
 
     # 打印摘要
+    def _shown(value: Any, spec: str) -> str:
+        return "不可读" if value is None else format(value, spec)
+
     print("\nP0 3.1 RAG A/B 对比实验结果：")
     print(f"  配对任务数: {report['paired_tasks']}")
     print(
         f"  RAG ON:  成功率={report['rag_on']['success_rate']:.2f}  "
-        f"avg_tokens={report['rag_on']['avg_tokens']:.0f}  "
+        f"avg_tokens={_shown(report['rag_on']['avg_tokens'], '.0f')}  "
         f"avg_iters={report['rag_on']['avg_iterations']:.1f}  "
         f"RAG effective={report['rag_on']['rag_effective_rate']:.2f}"
     )
     print(
         f"  RAG OFF: 成功率={report['rag_off']['success_rate']:.2f}  "
-        f"avg_tokens={report['rag_off']['avg_tokens']:.0f}  "
+        f"avg_tokens={_shown(report['rag_off']['avg_tokens'], '.0f')}  "
         f"avg_iters={report['rag_off']['avg_iterations']:.1f}"
     )
     print(
-        f"\n  Token 节省: Δavg={report['token_saving']['delta_avg']} "
-        f"({report['token_saving']['delta_pct']}%)  "
-        f"p_welch={report['token_saving']['p_value_welch']:.4f}  "
-        f"p_MWU={report['token_saving']['p_value_mann_whitney']:.4f}  "
-        f"Cohen's d={report['token_saving']['cohens_d']:.3f}"
+        f"\n  Token 节省: Δavg={_shown(report['token_saving']['delta_avg'], '')} "
+        f"({_shown(report['token_saving']['delta_pct'], '')}%)  "
+        f"p_welch={_shown(report['token_saving']['p_value_welch'], '.4f')}  "
+        f"p_MWU={_shown(report['token_saving']['p_value_mann_whitney'], '.4f')}  "
+        f"Cohen's d={_shown(report['token_saving']['cohens_d'], '.3f')}"
     )
     print(
         f"\n  迭代节省: Δavg={report['iteration_saving']['delta_avg']}  "

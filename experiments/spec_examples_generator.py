@@ -48,6 +48,13 @@ from pathlib import Path
 from typing import Any
 
 from src.budget.pricing import entry_block_reason, load_table_json, models_layer
+from src.budget.token_usage import (
+    aggregate_row_token_usage,
+    cache_write_rejection_reasons,
+    count_reason,
+    token_metric_reading,
+    token_write_rejection_reasons,
+)
 from src.specs.spec_ir import _DEFAULT_EXAMPLES_MAX, parse_examples
 from src.utils.env_utils import env_flag
 
@@ -266,10 +273,123 @@ def _usage_snapshot() -> dict[str, Any]:
         return {}
 
 
-def _usage_delta(before: dict[str, Any], after: dict[str, Any]) -> dict[str, int]:
-    """两次快照差值（input/output/total/llm_calls/cache_hits）。"""
+def _usage_delta(before: dict[str, Any], after: dict[str, Any]) -> dict[str, Any]:
+    """两次快照差值（input/output/total/llm_calls/cache_hits）。
+
+    AU（2026-10-21）：计数走共享值域，读不动记 `None`（不折 0）；AT 的写拒绝
+    标记以嵌套计数差值随记录带走——否则汇总层完全看不见"这次调用的量未知"。
+    干净路径的键集与数值逐位不变（标记 delta 为 0 时不写键）。
+    """
     keys = ("input_tokens", "output_tokens", "total_tokens", "llm_calls", "cache_hits", "cache_avoided_tokens")
-    return {key: int(after.get(key, 0) or 0) - int(before.get(key, 0) or 0) for key in keys}
+    delta: dict[str, Any] = {}
+    reasons: dict[str, int] = {}
+    for key in keys:
+        left = token_metric_reading(before, key)
+        right = token_metric_reading(after, key)
+        if left["value"] is None or right["value"] is None:
+            delta[key] = None
+            for code in (*left["reasons"], *right["reasons"]):
+                reasons[code] = reasons.get(code, 0) + 1
+        else:
+            delta[key] = right["value"] - left["value"]
+    for field in ("token_write_reasons", "cache_write_reasons"):
+        marker_delta = _marker_delta(before.get(field), after.get(field))
+        if marker_delta:
+            delta[field] = marker_delta
+    if reasons:
+        delta["usage_delta_reasons"] = dict(sorted(reasons.items()))
+    return delta
+
+
+def _marker_delta(before: Any, after: Any) -> dict[str, int]:
+    """写拒绝标记的累计值差（AT 语义：只带走本次新增，0 不写键）。"""
+    if not isinstance(after, dict):
+        return {}
+    base = before if isinstance(before, dict) else {}
+    delta: dict[str, int] = {}
+    for code, count in after.items():
+        if not isinstance(code, str) or not code:
+            continue
+        if count_reason(count, "write_reasons") is not None or count == 0:
+            continue
+        was = base.get(code, 0)
+        if count_reason(was, "write_reasons") is not None:
+            was = 0
+        if count > was:
+            delta[code] = count - was
+    return dict(sorted(delta.items()))
+
+
+def _usage_token_reading(usage: Any, key: str) -> dict[str, Any]:
+    """usage 计数字段的共享读数；非对象整份不可读（不崩在 `.get` 上）。"""
+    if not isinstance(usage, dict):
+        return {"absent": False, "value": None, "reasons": [f"usage_not_object:{type(usage).__name__}"]}
+    return token_metric_reading(usage, key)
+
+
+def cache_hits_reading(usages: list[Any]) -> dict[str, Any]:
+    """多行缓存**命中列**读数（AU）：只依赖本列，不被避免 token 列缺席连坐。
+
+    `cache_totals` 判"缓存口径完整"要求命中与避免两列都在场（AJ 的金额口径）；
+    但生成记录的 `usage` 只保证带 `cache_hits`（旧工件甚至只此一列），汇总也只
+    报告命中数——用 `cache_totals` 会让"避免 token 缺席"把可读命中数折成 None。
+    仍走共享值域：命中列坏值 / 在场 null / 非对象 usage / AT 的缓存写拒绝标记
+    任一在场 → `hits=None` + 机制名进 `reasons`，部分和不冒充完整和。
+    """
+    total = 0
+    present = False
+    readable = True
+    reasons: dict[str, int] = {}
+
+    def bump(code: str) -> None:
+        reasons[code] = reasons.get(code, 0) + 1
+
+    for usage in usages:
+        if not isinstance(usage, dict):
+            present = True
+            readable = False
+            bump(f"usage_not_object:{type(usage).__name__}")
+            continue
+        markers = cache_write_rejection_reasons(usage)
+        if markers:
+            present = True
+            readable = False
+            for code in markers:
+                bump(code)
+        reading = token_metric_reading(usage, "cache_hits")
+        if reading["absent"]:
+            continue
+        present = True
+        if reading["value"] is None:
+            readable = False
+            for code in reading["reasons"]:
+                bump(code)
+        else:
+            total += reading["value"]
+    return {
+        "present": present,
+        "hits": total if readable else None,
+        "reasons": dict(sorted(reasons.items())),
+    }
+
+
+def usage_block_reason_for(usage: Any) -> str | None:
+    """这笔估算为什么没有 token 读数；可读 → None（AU，2026-10-21）。
+
+    - 非对象 usage：整份不可读；
+    - AT 写拒绝标记在场：已收下的计数只是部分和，金额不可计算；
+    - in/out 任一场为 null / bool / 小数 / 字符串 / 负数 / 非有限：拒绝。
+    """
+    if not isinstance(usage, dict):
+        return f"usage_not_object:{type(usage).__name__}"
+    markers = token_write_rejection_reasons(usage)
+    if markers:
+        return markers[0]
+    for key in ("input_tokens", "output_tokens"):
+        reading = _usage_token_reading(usage, key)
+        if reading["value"] is None:
+            return reading["reasons"][0] if reading["reasons"] else f"token_metric_unreadable:{key}"
+    return None
 
 
 def load_price_table(path: Path = _PRICE_TABLE_PATH) -> dict[str, Any]:
@@ -368,23 +488,51 @@ def price_block_reason_for(model: str, price_table: Any = _UNSET) -> str | None:
     return _price_admission(model, price_table)[1]
 
 
+def cost_block_reason(
+    model: str,
+    usage: Any,
+    price_table: dict[str, Any] | _UnsetPriceTable | None = _UNSET,
+) -> str | None:
+    """这笔估算**为什么**没有金额：价目先判，价目可用再看 usage（AU，2026-10-21）。
+
+    与 :func:`estimate_cost_usd` 同源：金额为 None 时调用方取本函数，不会出现
+    "判定说 usage 坏了、归因却报价目"的分叉。价目不可用时金额本来就算不出，
+    优先返回价目机制；usage 机制仍在汇总层的 `token_reading_reasons` 里。
+    """
+    _, price_reason = _price_admission(model, price_table)
+    if price_reason is not None:
+        return price_reason
+    return usage_block_reason_for(usage)
+
+
 def estimate_cost_usd(
     model: str,
     usage: dict[str, Any],
     price_table: dict[str, Any] | _UnsetPriceTable | None = _UNSET,
 ) -> float | None:
-    """按项目 `price_table.json` 估算美元成本（价目缺失/币种不可判定/币种非 USD/价目数字不可用 → None，不编造）。
+    """按项目 `price_table.json` 估算美元成本（价目或 usage 不可读 → None，不编造）。
 
     AB-12e 哨兵分离：原先 `price_table=None` 兼作"未提供"哨兵，而 `None` 恰是 `json.loads` 的
     合法返回——实测显式传 `None`（例如调用方从工件里取到 `"price_table": null`）会**回头重读
     盘上的真表**并给出金额（`0.0027`），把"这里没有价目表"读成"按另一份文件的价目计费"。
     现在只有**省略**该形参才读盘；显式 `None` 与非对象价目一律 `None` + 留痕，不再崩也不再编。
+
+    AU（2026-10-21）：金额所需的每个 token 字段都过共享值域（`count_reason` 同源）——
+    改前对两个字段做"取不到就折 0"的宽松读数：`None` 未知读成 0（输出侧照常计价，
+    部分和冒充完整和）、`True` 当 1、`"12"` 当 12、负数编出负数金额、`nan` 产出非有限
+    金额；AT 的写拒绝标记也完全被无视。现在任一侧不可读即整笔 None（不给部分和）。
     """
     entry, reason = _price_admission(model, price_table)
     if reason is not None:
         return None
-    input_tokens = float(usage.get("input_tokens", 0) or 0)
-    output_tokens = float(usage.get("output_tokens", 0) or 0)
+    usage_reason = usage_block_reason_for(usage)
+    if usage_reason is not None:
+        logger.warning("usage 不可读（%s）⇒ 成本 None（不折 0、不给部分和）", usage_reason)
+        return None
+    input_tokens = _usage_token_reading(usage, "input_tokens")["value"]
+    output_tokens = _usage_token_reading(usage, "output_tokens")["value"]
+    if input_tokens is None or output_tokens is None:  # usage_block_reason_for 已排除；仅供类型收窄
+        return None
     return round(
         input_tokens / 1_000_000 * float(entry["input_per_mtok"])
         + output_tokens / 1_000_000 * float(entry["output_per_mtok"]),
@@ -657,12 +805,16 @@ def generate_examples_multisample(
         status = "error"
     else:
         status = "empty"
-    usage_totals = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0, "llm_calls": 0, "cache_hits": 0}
-    for record in samples:
-        usage = record.get("usage") or {}
-        for key in usage_totals:
-            usage_totals[key] += int(usage.get(key, 0) or 0)
-    return {
+    agg = aggregate_row_token_usage([{"token_usage": record.get("usage")} for record in samples])
+    cache_hits = cache_hits_reading([record.get("usage") for record in samples])
+    usage_totals = {
+        "input_tokens": agg["input_tokens"],
+        "output_tokens": agg["output_tokens"],
+        "total_tokens": agg["total_tokens"],
+        "llm_calls": agg["llm_calls"],
+        "cache_hits": cache_hits["hits"] if cache_hits["present"] else 0,
+    }
+    result = {
         "task_id": task_id,
         "k": k_eff,
         "status": status,
@@ -690,6 +842,11 @@ def generate_examples_multisample(
         "wall_s": round(time.time() - t0, 3),
         "model": samples[0].get("model") if samples else "unknown",
     }
+    if agg["reading_reasons"]:
+        result["usage_reasons"] = agg["reading_reasons"]
+    if cache_hits["reasons"]:
+        result["cache_reasons"] = cache_hits["reasons"]
+    return result
 
 
 def should_fallback_canonical(record: dict[str, Any]) -> bool:

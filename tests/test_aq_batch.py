@@ -125,7 +125,10 @@ class TestArtifactsManifestE7:
         # （协议 §7.1 备料工件、已进 main_batch SHA256SUMS）此前被 .gitignore
         # 通配排除压掉且本清单漏登记，"被忽略 = 永远不可能入库"型双静默缺口；
         # 本批 .gitignore narrow 放行 + 此处登记一并收口。
-        assert len(module.MANIFEST) == 185
+        # AZ 轮（2026-10-21）：185 → 188——F01/F02 修正后的重发工件
+        # emse_stats_extensions_20261021（README / JSON / SHA256SUMS）；
+        # 20261016 历史归档继续在册，只读不重写。
+        assert len(module.MANIFEST) == 188
 
 
 class TestSurveyPackagingErrata:

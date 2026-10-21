@@ -7,8 +7,13 @@ src/observability/otel_export.export_trace_jsonl 的 JSONL → OTel span 映射�
 3. 每 event 映射（task_start/task_end → root，node → 子 span parent=root）；
 4. GenAI 语义属性映射（gen_ai.system / gen_ai.operation.name /
    gen_ai.usage.*）+ aitester.* 专有属性；
-5. run_id/span_id 稳定（同文件重复导出 span id 一致，缺失时派生）；
-6. 损坏行跳过（不阻断整文件）。
+5. 标识形态（AR，2026-10-21）：trace_id 32 位小写 hex、span_id 16 位
+   （短 hex 左补零、大小写归一），一个文件一个 trace_id，缺失 / 非法标识
+   按确定性规则派生（不再随机），重复导出逐字稳定；
+6. 损坏行跳过（不阻断整文件）；
+7. 数值值域（AQ，2026-10-21）：坏值不原样导出、非有限时间戳不中止导出，
+   详见 tests/test_otel_export_value_domain_aq.py；
+8. 标识 / 字符串值域（AR）详见 tests/test_otel_export_identifier_domain_ar.py。
 """
 
 from __future__ import annotations
@@ -43,14 +48,20 @@ def test_export_empty_file_synthesizes_root(tmp_path):
 
 def test_task_start_becomes_root_and_nodes_are_children(tmp_path):
     records = [
-        {"event": "task_start", "task": "t1", "ts": 1000.0, "run_id": "r1"},
+        {
+            "event": "task_start",
+            "task": "t1",
+            "ts": 1000.0,
+            "run_id": "0123456789abcdef",
+            "span_id": "0123456789abcdea",
+        },
         {
             "event": "node",
             "node": "planner",
             "task": "t1",
             "ts": 1000.5,
-            "run_id": "r1",
-            "span_id": "s1",
+            "run_id": "0123456789abcdef",
+            "span_id": "0123456789abcdef",
             "decision": "done",
             "token_usage": {"input_tokens": 10, "output_tokens": 20, "total_tokens": 30},
             "strategy_selected": "single_patch",
@@ -58,7 +69,7 @@ def test_task_start_becomes_root_and_nodes_are_children(tmp_path):
             "iteration": 1,
             "duration_ms": 123.4,
         },
-        {"event": "task_end", "task": "t1", "ts": 1001.0, "run_id": "r1", "stop_reason": "test_passed"},
+        {"event": "task_end", "task": "t1", "ts": 1001.0, "run_id": "0123456789abcdef", "stop_reason": "test_passed"},
     ]
     spans = export_trace_jsonl(_write_trace(tmp_path, records))
     by_name = {s["name"]: s for s in spans}
@@ -88,24 +99,25 @@ def test_task_start_becomes_root_and_nodes_are_children(tmp_path):
 
 def test_trace_id_from_run_id(tmp_path):
     records = [
-        {"event": "task_start", "task": "t1", "ts": 1.0, "run_id": "my-run-42"},
-        {"event": "node", "node": "generator", "task": "t1", "ts": 2.0, "run_id": "my-run-42"},
+        {"event": "task_start", "task": "t1", "ts": 1.0, "run_id": "abcd1234abcd1234"},
+        {"event": "node", "node": "generator", "task": "t1", "ts": 2.0, "run_id": "abcd1234abcd1234"},
     ]
     spans = export_trace_jsonl(_write_trace(tmp_path, records))
-    assert all(s["trace_id"] == "my-run-42" for s in spans)
+    # 16 位 hex run_id 左补零到 OTel trace_id 宽度（32 位小写 hex）
+    assert all(s["trace_id"] == "0" * 16 + "abcd1234abcd1234" for s in spans)
 
 
 def test_span_id_stable_for_same_file(tmp_path):
     records = [
-        {"event": "task_start", "task": "t1", "ts": 1.0, "run_id": "r", "span_id": "root-x"},
-        {"event": "node", "node": "executor", "task": "t1", "ts": 2.0, "run_id": "r", "span_id": "node-x"},
+        {"event": "task_start", "task": "t1", "ts": 1.0, "run_id": "0123456789abcdef", "span_id": "00ab"},
+        {"event": "node", "node": "executor", "task": "t1", "ts": 2.0, "run_id": "0123456789abcdef", "span_id": "00cd"},
     ]
     p = _write_trace(tmp_path, records)
     first = export_trace_jsonl(p)
     second = export_trace_jsonl(p)
     assert [s["span_id"] for s in first] == [s["span_id"] for s in second]
-    assert first[0]["span_id"] == "root-x"
-    assert first[1]["span_id"] == "node-x"
+    assert first[0]["span_id"] == "0" * 12 + "00ab"
+    assert first[1]["span_id"] == "0" * 12 + "00cd"
 
 
 def test_corrupt_lines_skipped(tmp_path):
@@ -128,10 +140,11 @@ def test_corrupt_lines_skipped(tmp_path):
 
 def test_node_without_token_usage_omits_genai_usage(tmp_path):
     records = [
-        {"event": "task_start", "task": "t", "ts": 1.0, "run_id": "r"},
-        {"event": "node", "node": "router", "task": "t", "ts": 2.0, "run_id": "r"},
+        {"event": "task_start", "task": "t", "ts": 1.0, "run_id": "0123456789abcdef"},
+        {"event": "node", "node": "router", "task": "t", "ts": 2.0, "run_id": "0123456789abcdef"},
     ]
     spans = export_trace_jsonl(_write_trace(tmp_path, records))
     router = next(s for s in spans if s["name"] == "router")
     assert "gen_ai.usage.input_tokens" not in router["attributes"]
     assert "gen_ai.usage.output_tokens" not in router["attributes"]
+    assert "aitester.export_value_reasons" not in router["attributes"]

@@ -554,7 +554,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[paper-audit] ❌ {failure}")
 
     if args.json:
-        Path(args.json).write_text(json.dumps(audit, ensure_ascii=False, indent=2), encoding="utf-8")
+        Path(args.json).write_text(json.dumps(audit, ensure_ascii=False, indent=2, allow_nan=False), encoding="utf-8")
         print(f"[paper-audit] JSON 已写入 {args.json}")
     if args.md:
         Path(args.md).write_text(render_markdown(audit), encoding="utf-8")

@@ -139,7 +139,8 @@ class TestVocabularyIsWrittenOnce:
         assert "from src.budget.pricing import entry_block_reason, load_table_json, models_layer" in src["report"]
         assert "from src.budget.pricing import entry_block_reason, models_layer, table_read_reason" in src["ext"]
         assert "from src.budget.pricing import entry_block_reason, load_table_json, models_layer" in src["analyze"]
-        assert "from src.budget.pricing import entry_block_reason, load_table_models" in src["run_b8"]
+        # AG（2026-10-20）：缺席分支也收进共享谓词，run_b8 不再直接接线 entry_block_reason
+        assert "from src.budget.pricing import load_table_models, model_entry_reason" in src["run_b8"]
         assert "pricing.load_table_json(" in src["statistical"]
         assert "pricing.models_layer(" in src["statistical"]
 
@@ -294,7 +295,8 @@ class TestAbsentKeyIsNotTheSameAsNullValue:
         assert usd is None and "entry_not_object:NoneType" in note
         _stub_price_models(monkeypatch, {})
         _, usd, note = ext._cost_per_task(ext.MAIN_BATCH_FILES, "aitester")
-        assert usd is not None and "未计价模型：['deepseek-flash']" in note, note
+        # AH：键缺席与"值 null"一样不产生金额，区别只在机制名（model_unregistered vs 条目谓词）。
+        assert usd is None and "model_unregistered←deepseek-flash" in note, note
 
     def test_analyze_null_entry_is_named_by_entry_predicate(self, tmp_path: Path) -> None:
         p = tmp_path / "t.json"

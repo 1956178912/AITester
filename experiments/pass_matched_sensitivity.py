@@ -413,7 +413,7 @@ def main(argv: list[str] | None = None) -> int:
         "out": str(args.out),
     }
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    atomic_write_text(args.out, json.dumps(payload, ensure_ascii=False, indent=2) + "\n", mode=0o644)
+    atomic_write_text(args.out, json.dumps(payload, ensure_ascii=False, indent=2, allow_nan=False) + "\n", mode=0o644)
     md_path = args.md_out or args.out.with_suffix(".md")
     md_path.write_text(build_report(payload), encoding="utf-8")
 

@@ -359,6 +359,11 @@ def _record_response_usage(usage: Any, model_name: str) -> bool:
 
     Returns:
         True = 预算内（或预算开关关闭，历史口径）；False = 已超限。
+
+    AT（2026-10-21）：不再 `int(... or 0)` 归一。缺席 / null 保持历史 0；bool /
+    小数 / 数字字符串 / 负数 / 非有限原值交写入口 `count_reason` 判定。拒绝时
+    调用已发生（`llm_calls` +1）但 token 不计入；预算开关开启按 O14 口径
+    fail-closed 抛错，关闭则披露后继续（历史"静默忽略"只保留给真正的记账异常）。
     """
     if not usage:
         return True
@@ -366,12 +371,22 @@ def _record_response_usage(usage: Any, model_name: str) -> bool:
         from src.budget.token_usage import record_usage
 
         if isinstance(usage, dict):
-            input_tokens = int(usage.get("input_tokens", usage.get("prompt_tokens", 0)) or 0)
-            output_tokens = int(usage.get("output_tokens", usage.get("completion_tokens", 0)) or 0)
+            input_tokens = usage.get("input_tokens", usage.get("prompt_tokens", 0))
+            output_tokens = usage.get("output_tokens", usage.get("completion_tokens", 0))
         else:
-            input_tokens = int(getattr(usage, "prompt_tokens", 0) or 0)
-            output_tokens = int(getattr(usage, "completion_tokens", 0) or 0)
-        record_usage(input_tokens, output_tokens, model=model_name)
+            input_tokens = getattr(usage, "prompt_tokens", 0)
+            output_tokens = getattr(usage, "completion_tokens", 0)
+        if input_tokens is None:
+            input_tokens = 0
+        if output_tokens is None:
+            output_tokens = 0
+        reasons = record_usage(input_tokens, output_tokens, model=model_name)
+        if reasons:
+            from src.budget.cost_budget import _budget_enabled as _write_budget_enabled
+
+            if _write_budget_enabled():
+                raise RuntimeError(f"token 记账被拒绝（fail-closed）: {','.join(reasons)}")
+            return True
         # 5.4 预算守卫（默认关：未启用时 check_budget 恒 True，零行为变化）。
         # D1（N-5，2026-10-17）：USD 生产记账接线——N-4 实测此路径只传 token、
         # consumed_delta_usd 恒 0 → COST_BUDGET_USD 永不触发（纸面开关）。

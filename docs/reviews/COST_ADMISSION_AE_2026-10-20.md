@@ -137,10 +137,16 @@ AB-16/AB-17 把"什么算一条合格价目"收进了 `src.budget.pricing.entry_
    "价目表没登记这个模型"属覆盖缺口、按诚实降级披露（note 点名未计价模型）。
    本轮**不重开该口径**，只登记它与 AB-15 判据的边界；若要改成"未登记也不产生金额"需单独一轮并
    改写 `tests/test_experiments_cost_rejection_ab15.py:519`。
+   **AH（2026-10-20）即为该单独一轮且已处置**：未登记 / 无归因 / 归因不闭合 / 零任务分母一律
+   `usd_per_task=None` 并在 note 点名机制，`tests/test_experiments_cost_rejection_ab15.py:519`
+   旧锁按新口径改写；真批次三臂读数 0 行改变
+   （`docs/reviews/COST_COMPLETENESS_AH_2026-10-20.md`）。
 2. **C：`cost_analysis` 的 `missing_models` 桶不区分"未登记 / 域不合格 / 形状坏"**。
    真批次 0 实例；构造矩阵下域坏（`inf`/负/`bool`/缺键）与"未登记"同桶、形状码反而落进名为
    `unpriced_currency_models` 的桶（名不副实），全未计价早退分支的归因统一教读者"补价目字段"。
    仅归因措辞、不产生错误金额，登记待后续轮次。
+   **AG（2026-10-20）已处置**：三桶互斥 + 行级归因 + 按码族渲染建议，真批次 522 行读数 0 行改变
+   （`docs/reviews/COST_ATTRIBUTION_AG_2026-10-20.md`）。
 3. **E：P-1 归档 README 不是渲染器产物**（归档 251 行 vs 当前渲染器 64 行、10 个手写独有章节，含
    `$0.006195`）；受 `SHA256SUMS` 保护，本轮只锁"未重写"，不当作可再生成工件。
 4. **G：`trace` A20 坏行守卫**——Y2 已消化，当前 `trace.py` 未覆盖 0 行；`scripts/tools/audit_fix_coverage.py`
@@ -204,7 +210,8 @@ AB-16/AB-17 把"什么算一条合格价目"收进了 `src.budget.pricing.entry_
 
 ## 8. 不得据本册引用
 
-- 不得引用"成本/价目准入已全仓统一"：B / C 两处按现行口径保留（§5.1 / §5.2），
+- 不得引用"成本/价目准入已全仓统一"：B 处按现行口径保留（§5.1）；C 处已由
+  **AG 轮（2026-10-20）处置**，见 §11（本条为日期化补记，不改写原判据），
   `_write_json` 的 `allow_nan` 与 68 份历史非严格 JSON 工件未处置（§5.6 / §5.7）。
 - 不得引用"入库 e2 报告可逐位复现"：陈旧差值仍在（现树 94 / 100 / canonical 122 行），
   本轮只更新登记数字与成因。
@@ -227,3 +234,40 @@ AB-16/AB-17 把"什么算一条合格价目"收进了 `src.budget.pricing.entry_
 COVERAGE_FILE=.coverage.ci .venv/bin/python -m pytest tests/ -n 4 --dist loadfile \
   --cov=src --cov-branch --cov-report=term-missing --cov-report=xml
 ```
+
+## 10. AF 轮日期化勘误（2026-10-20，只追加、不改写上文）
+
+**勘误对象：§5.6 第 6 条「仓内 68 份 JSON 含裸 `NaN`/`Nan`/`Infinity` token」。**
+
+该计数来自**文本 grep**，把字符串值内部的同名字样也计入了。AF 轮以
+`json.loads(parse_constant=拒绝)` 对 `git ls-files` 的 7273 份 `.json`/`.jsonl` 逐份严格解析：
+**违规 0 份**；`experiments/results/` 下确有 69 份文件（worktree；42 份 tracked）在字符串内
+出现这些字样（如测试名 `test_sqrt_positive_infinity`、诊断文本 "x 为 NaN"），它们在 RFC 8259
+下**合法**，严格解析器接受。因此 §5.6 的"68 份非严格工件"不成立，应读作
+"68 份文件文本中出现该字样"；真正的缺口是 §5.7 的写入路径。
+
+**§5.7 已由 AF 轮处置**：`run_b8._write_json` 与 `_Injection._record`、`atomic_write_json`、
+`trace` 三处写盘全部改走 `src/utils/json_strict.strict_json_dumps`（fail-closed，带 JSON 路径），
+另为 39 份源码的 41 个直写点补 `allow_nan=False`，并新增门禁
+`scripts/gates/check_json_strict.py`（工件 7273 份 = 严格 7271 + 2 份 A20 历史截断行登记豁免
++ 违规 0；源码 300 份写入点违规 0）。详见 `docs/reviews/JSON_STRICT_AF_2026-10-20.md`。
+
+
+## 11. AG 轮日期化补记（2026-10-20）：候选 C 已处置
+
+**补记对象：§5 第 2 条（C）「`cost_analysis` 的 `missing_models` 桶不区分未登记 / 域不合格 / 形状坏」。**
+
+AG 轮已按该条登记的方向处置，**不改写上文**：
+
+- `missing_models` 现**只含真键缺席**（`model_unregistered`）；
+- 价格域坏值（`price_null` / `price_not_a_number:*` / `price_negative` /
+  `price_not_finite:*`）与形状码（`entry_not_object:*` / `entry_empty`）不再冒充未登记，
+  也不再落进名为「币种」的桶；
+- 新增 `unpriced_model_reasons` 完整机制图与 `unpriced_row_reason`
+  （`mixed_currencies:*` / `mixed_price_pairs`）；三个条目桶互斥，行级是另一种事实；
+- 全未计价早退分支按机制给建议，不再统一教读者补价目字段；
+- **真批次 0 行改变**：522 行、模型集 `{"deepseek-flash"}`、成本单元格与未计价注逐字节相同。
+
+判据 = 删掉 15 处行为锚点中任一处必红（red 1–25，collected 恒 365，中性对照 0 红）。
+详见 `docs/reviews/COST_ATTRIBUTION_AG_2026-10-20.md`。**B（`emse_stats_extensions` 的
+未登记部分和口径）仍按 §5 第 1 条保留**；本条只关闭 C。

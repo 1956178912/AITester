@@ -91,9 +91,21 @@ class TestReadmeEnHeader:
         U/V 两轮未随该约定推进日期行（旧锁停留在批次 XIV/2026-10-07）；
         X 轮漏维护本锁，Y 轮文档同步时一并收口 X/Y 两轮；Z→AB 批
         （2026-10-19~20）漏维护后由 AB 收口轮补推至 2026-10-20；AC 轮 / AD 轮 / AE 轮
-        （均 2026-10-20）相继推进短语（日期同为 2026-10-20）。"""
-        assert "Last updated: 2026-10-20" in README_EN_HEAD
-        assert "AE round" in README_EN_HEAD
+        （均 2026-10-20）相继推进短语（日期同为 2026-10-20）；AF 轮（2026-10-20）推进
+        至 "AF round"——本锁在 AF 的 `make gates` 里当场转红，README 头部同步后转绿；
+        AG 轮（2026-10-20）按同一约定推进至 "AG round"；AH 轮（2026-10-20）推进至
+        "AH round"；AI 轮（2026-10-21）推进至 "AI round" 并随日期行改为 2026-10-21；
+        AJ 轮（2026-10-21）推进至 "AJ round"；AK 轮（2026-10-21）推进至 "AK round"；
+        AL 轮（2026-10-21）推进至 "AL round"；AM 轮（2026-10-21）推进至 "AM round"；
+        AN 轮（2026-10-21）推进至 "AN round"；AO 轮（2026-10-21）推进至 "AO round"；
+        AP 轮（2026-10-21）推进至 "AP round"；AQ 轮（2026-10-21）推进至 "AQ round"；
+        AR 轮（2026-10-21）推进至 "AR round"；AS 轮（2026-10-21）推进至 "AS round"；
+        AT 轮（2026-10-21）推进至 "AT round"；AU 轮（2026-10-21）推进至 "AU round"；
+        AV 轮（2026-10-21）推进至 "AV round"；AW 轮（2026-10-21）推进至 "AW round"；
+        AX 轮（2026-10-21）推进至 "AX round"；AY 轮（2026-10-21）推进至 "AY round"；
+        AZ 轮（2026-10-21）推进至 "AZ round"；BA 轮（2026-10-21）推进至 "BA round"。"""
+        assert "Last updated: 2026-10-21" in README_EN_HEAD
+        assert "BA round" in README_EN_HEAD
 
 
 class TestDeprecationTimeline:

@@ -187,6 +187,8 @@ M8 空对象改点名）；每处变异前后 **collected 恒为 484**（无 `Im
 5. **ext 未登记模型仍是 `0.0` 部分和 + note**：`_cost_per_task` 对 `prices.get(m)` 缺席的模型
    只记 `unpriced` 并继续累加其余份额（AB-15 §5.4 延续；"拒绝"与"未登记"是两种事实，
    前者不产生金额已锁）。
+   **AH（2026-10-20）已处置**：未登记 ⇒ `None` + 机制名，该锁按新口径改写
+   （`docs/reviews/COST_COMPLETENESS_AH_2026-10-20.md`）。
 6. **`price_block_reason` 对非 `int|float` 的真数一律拒**（AB-16 §5.6 延续）：
    `Decimal("1.0")` / `numpy.float64` 落 `price_not_a_number:<T>`；仓内价目表是 JSON 载入，
    当前无站点吃到这类值。
