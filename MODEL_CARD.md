@@ -87,7 +87,12 @@ ADR-0021/0027/0029 测量口径修正后为 **39.31%（v2，57/145 可重放行�
   （gold diff 对齐修复后口径）。
 - 成本：aitester $0.0259 / plain_llm_df $0.0045 每任务（价目表 2026-10-06
   官方登记口径：deepseek-flash 峰时价、qwen-long 标准价；agnes 无公开
-  官方价未登记）。
+  官方价未登记）。**plain_llm_df 的 $0.0045 是已记录花费的下界，不是精确
+  均值，也不是"免费"**：主批 261 行中 35 行 token 三元组全 0 但
+  `generated_test` 非空（其中 3 行 detection=1.0），S11 阈值单侧通过
+  （无记账行 13.4% < 50%），改前这些行以 0 进金额分子、仍占任务分母；
+  AK 轮起 `cost_caliber="recorded_lower_bound"` 显式披露，真实花费只会更高
+  （`docs/reviews/PARTIAL_ACCOUNTING_AK_2026-10-21.md`）。
 - spec_compile_rate 在 logic 档实测恒 0.0（AB1 验证批 12/12）——"逻辑驱动"
   规格链未被激活，当前检出收益归因于检出优先提示协议；E1（预注册阈值
   ≥0.3 保留 / <0.2 放弃）为该主张的生死裁决。

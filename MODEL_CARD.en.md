@@ -98,6 +98,15 @@ system is research code, not a deployed product).
 - Cost: aitester $0.0259 / plain_llm_df $0.0045 per task (officially sourced
   price table, 2026-10-06: deepseek-flash peak-hour rates, qwen-long
   standard rates; agnes unregistered absent a public official price).
+  **plain_llm_df's $0.0045 is a lower bound on recorded spend, not an exact
+  mean and not "free"**: 35 of the main batch's 261 rows carry an all-zero
+  token triple with a non-empty `generated_test` (3 of them
+  `detection_rate=1.0`); S11's threshold passed on the one-sided side
+  (13.4% unaccounted rows < 50%), and before this fix those rows entered the
+  amount numerator as 0 while still occupying the task denominator. Since
+  round AK this is disclosed explicitly via
+  `cost_caliber="recorded_lower_bound"`; true spend can only be higher
+  (`docs/reviews/PARTIAL_ACCOUNTING_AK_2026-10-21.md`).
 - spec_compile_rate measured constantly 0.0 in the logic profile (AB1
   validation batch 12/12) — the "logic-driven" spec chain is not activated;
   current detection gains attribute to the detection-first prompting
