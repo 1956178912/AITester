@@ -89,16 +89,6 @@
 > 9358 条生成测试 / 114 条含标记 / 12 条 detection=1.0（均条件性标记）。
 > 手册：`docs/reviews/EFFECTIVE_GREEN_BA_2026-10-21.md`。
 
-## [Unreleased] — 2026-10-21 AY 轮（补记）：run_b8 载荷装配保留 `token_metrics` 原始形状（零 LLM，$0）
-
-> `_load_arm` / `_load_harness_smoke` 的 `rd.get("token_metrics") or {}`
-> 把假值非对象（`[]` / `""` / `0` / `False`）改写成 `{}`——"载荷坏了"
-> 被读成"没有 metrics"，成本报 $0.0 且无机制名。现读取层原样搬运，
-> 金额判定只在 `_cost_usd` 一处（假值非对象 ⇒ `None` +
-> `token_metrics_not_object:<T>`）。真批次 14 份 JSON / 12 键全 dict，
-> 两臂成本与四行冒烟逐位复现。`tests/test_run_b8_payload_ay.py` 27 例 +
-> 6/6 变异锚点。手册：`docs/reviews/RUN_B8_PAYLOAD_AY_2026-10-21.md`。
-
 ## [Unreleased] — 2026-10-21 AZ 轮：统计量的量纲与尾部不得被实现改写——Cohen's g 回 0–0.5，精确 p 去除 epsilon（零 LLM，$0）
 
 > 本轮不加能力：修正 `emse_stats_extensions.py` 两处与声称口径不一致的
@@ -157,6 +147,16 @@
   dict，两臂成本与四行冒烟成本/载荷逐位复现。
 
 ---
+
+## [Unreleased] — 2026-10-21 AY 轮（补记）：run_b8 载荷装配保留 `token_metrics` 原始形状（零 LLM，$0）
+
+> `_load_arm` / `_load_harness_smoke` 的 `rd.get("token_metrics") or {}`
+> 把假值非对象（`[]` / `""` / `0` / `False`）改写成 `{}`——"载荷坏了"
+> 被读成"没有 metrics"，成本报 $0.0 且无机制名。现读取层原样搬运，
+> 金额判定只在 `_cost_usd` 一处（假值非对象 ⇒ `None` +
+> `token_metrics_not_object:<T>`）。真批次 14 份 JSON / 12 键全 dict，
+> 两臂成本与四行冒烟逐位复现。`tests/test_run_b8_payload_ay.py` 27 例 +
+> 6/6 变异锚点。手册：`docs/reviews/RUN_B8_PAYLOAD_AY_2026-10-21.md`。
 
 ## [Unreleased] — 2026-10-21 AX 轮：基准/全栈汇总的呈现与聚合读点也有值域——呈现可以折历史 0，均值不可以（零 LLM，$0）
 

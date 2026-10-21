@@ -103,9 +103,14 @@ class TestReadmeEnHeader:
         AT 轮（2026-10-21）推进至 "AT round"；AU 轮（2026-10-21）推进至 "AU round"；
         AV 轮（2026-10-21）推进至 "AV round"；AW 轮（2026-10-21）推进至 "AW round"；
         AX 轮（2026-10-21）推进至 "AX round"；AY 轮（2026-10-21）推进至 "AY round"；
-        AZ 轮（2026-10-21）推进至 "AZ round"；BA 轮（2026-10-21）推进至 "BA round"。"""
+        AZ 轮（2026-10-21）推进至 "AZ round"；BA 轮（2026-10-21）推进至 "BA round"；
+        BB 轮（2026-10-21）与 BC 轮（2026-10-21）**未推进本锁**——BC 头部历史链
+        含 "After the BA round…" / "Previously **BA round**:" 两处 "BA round"
+        字面，旧断言因此恒真（**误绿**）；本次文档收口把断言推进至 "BC round"，
+        并把 README.en 头部统一为 "**BC round:" 写法（行锁必须指向唯一最新批次
+        标记，不能指向会在历史链里反复出现的旧轮次名）。"""
         assert "Last updated: 2026-10-21" in README_EN_HEAD
-        assert "BA round" in README_EN_HEAD
+        assert "BC round" in README_EN_HEAD
 
 
 class TestDeprecationTimeline:
