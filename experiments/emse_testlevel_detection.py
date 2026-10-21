@@ -82,6 +82,7 @@ from experiments._m1_metrics import (  # noqa: E402
     _needs_quixbugs_support,
     _packaged_support_ready,
     _prepare_packaged_test_tree,
+    _suite_has_effective_pass,
 )
 from experiments.emse_optimization import (  # noqa: E402
     bayes_factor_discordant,
@@ -462,6 +463,20 @@ def _n_ast_test_defs(code: str) -> int:
     )
 
 
+def _fixed_side_effective_pass(side: dict[str, Any]) -> bool:
+    """一侧运行是否含有效通过证据（BB，2026-10-21，F03 同型）。
+
+    优先用逐测试 ``outcomes``（本脚本自有的插件/verbose 解析，值为
+    ``pass/fail/error/skip``）：存在任一 ``pass`` 即有效；解析缺失
+    （``outcomes`` 为空）时回退共享谓词 ``_suite_has_effective_pass``
+    解析 stdout 摘要行。两者都读不到 ⇒ ``False``（fail-closed）。
+    """
+    outcomes = side.get("outcomes") or {}
+    if outcomes:
+        return any(v == "pass" for v in outcomes.values())
+    return _suite_has_effective_pass(side.get("stdout") or "")
+
+
 def classify_tests(
     module: str, buggy: dict[str, Any], fixed: dict[str, Any]
 ) -> tuple[list[dict[str, str]], dict[str, int]]:
@@ -597,7 +612,8 @@ def run_source(
         # 如 IndexError/TypeError）vs setup/teardown 异常（夹具/清理阶段失败）
         f2p_assert = sum(1 for t in tests if t["cls"] == "f2p" and b_map.get(t["node"]) == "fail")
         f2p_err = sum(1 for t in tests if t["cls"] == "f2p" and b_map.get(t["node"]) == "error")
-        # 任务级三段判据复算（与 _compute_detection_rate 逐字同规则）
+        # 任务级三段判据复算（与 _compute_detection_rate 同规则；BA 轮起
+        # 第二段新增有效通过证据，本文件同步——勿再逐字复制旧规则）
         reproduced: float | None
         if buggy["timed_out"] or fixed["timed_out"]:
             reproduced = None
@@ -608,6 +624,11 @@ def run_source(
             # exec_error_heuristic，不用被截断的 tail）
             if b_rc == 0 or buggy["exec_error_heuristic"] or f_rc != 0 or fixed["exec_error_heuristic"]:
                 reproduced = 0.0
+            elif not _fixed_side_effective_pass(fixed):
+                # BB（2026-10-21，F03 同型）：fixed 侧 rc==0 但全 skip/xfail/
+                # deselect（ outcomes 无 pass 或摘要 passed==0）——F2P 第二段
+                # 没有"断言通过"证据，记 None（不可测），不误报检出。
+                reproduced = None
             else:
                 reproduced = 1.0
 

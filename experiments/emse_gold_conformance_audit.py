@@ -60,6 +60,7 @@ from experiments._m1_metrics import (  # noqa: E402
     _gold_fixed_code,
     _needs_quixbugs_support,
     _run_pytest_in_tmp,
+    _suite_has_effective_pass,
 )
 from src.utils.atomic_io import atomic_write_json  # noqa: E402
 
@@ -180,6 +181,13 @@ def _audit_one(tag: str, task: Any) -> dict[str, Any]:
         return rec
     rc, out, err = res
     rec["rc"] = rc
+    if rc == 0 and not _suite_has_effective_pass(out + "\n" + err):
+        # BB（2026-10-21，F03 同型）：gold 套件全 skip/xfail/deselect 时
+        # rc==0 但没有任何断言通过——"自洽"证据不存在，记 unverifiable
+        # （fail-closed），不得记 pass。
+        rec["status"] = "unverifiable"
+        rec["reason"] = "fail-closed（rc==0 但无有效通过：全 skip/xfail/deselect）"
+        return rec
     rec["status"] = "pass" if rc == 0 else "fail"
     if rc != 0:
         rec["failure_class"] = _classify_failure(out or "", err or "", rc)

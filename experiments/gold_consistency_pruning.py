@@ -55,6 +55,10 @@ logger = logging.getLogger(__name__)
 
 _BLOCK_SPLIT = re.compile(r"(?m)^(?=def test_|class Test)")
 
+# BB（2026-10-21，F03 同型）：rc==0 判绿前的有效通过证据谓词
+# （BA 轮建立于 _m1_metrics，此处为同族消费点复用，勿复制第二套判据）
+from experiments._m1_metrics import _suite_has_effective_pass  # noqa: E402
+
 
 @dataclass
 class PruneResult:
@@ -86,8 +90,13 @@ class PruneResult:
         }
 
 
-def _run_suite(code: str, test_code: str, module_name: str, timeout: int) -> int | None:
-    """在 code 上跑测试，返回 pytest 退出码（不可判定返回 None）。"""
+def _run_suite(code: str, test_code: str, module_name: str, timeout: int) -> tuple[int, str] | None:
+    """在 code 上跑测试，返回 ``(pytest 退出码, 合并输出)``（不可判定 None）。
+
+    BB（2026-10-21，F03 同型）：退出码单独不足以判绿——全 skip/xfail/
+    deselect 的运行同样 rc==0；调用方须配合 ``_suite_has_effective_pass``
+    判定"是否真有断言通过"，故一并返回输出。
+    """
     tmp = tempfile.mkdtemp(prefix="aitester_gcp_")
     try:
         with open(os.path.join(tmp, f"{module_name}.py"), "w", encoding="utf-8") as f:
@@ -119,7 +128,7 @@ def _run_suite(code: str, test_code: str, module_name: str, timeout: int) -> int
             )
         except subprocess.TimeoutExpired:
             return None
-        return res.returncode
+        return res.returncode, (res.stdout or "") + "\n" + (res.stderr or "")
     except Exception:
         logger.debug("GCP 执行失败", exc_info=True)
         return None
@@ -152,8 +161,9 @@ def prune_inconsistent_blocks(
     if not (test_code or "").strip() or not (gold_code or "").strip():
         out.not_available_reason = "empty_input"
         return out
-    if _run_suite(gold_code, test_code, module_name, timeout) == 0:
-        # 原套件在 gold 上本就全绿 → 无可剪枝
+    _baseline = _run_suite(gold_code, test_code, module_name, timeout)
+    if _baseline is not None and _baseline[0] == 0 and _suite_has_effective_pass(_baseline[1]):
+        # 原套件在 gold 上本就全绿（且真有断言通过）→ 无可剪枝
         out.available = True
         out.head = test_code
         out.kept_blocks = []
@@ -170,13 +180,20 @@ def prune_inconsistent_blocks(
     pruned: list[str] = []
     reasons: list[str] = []
     for b in blocks:
-        rc = _run_suite(gold_code, head + "\n" + b, module_name, timeout)
-        if rc == 0:
+        run = _run_suite(gold_code, head + "\n" + b, module_name, timeout)
+        # BB（2026-10-21，F03 同型）：rc==0 但全 skip/xfail/deselect 的块
+        # 没有"与 gold 一致"的断言证据——按不一致剔除（保守，不保留假绿块）。
+        if run is not None and run[0] == 0 and _suite_has_effective_pass(run[1]):
             kept.append(b)
         else:
             pruned.append(b)
             name = b.splitlines()[0][:60] if b.splitlines() else "?"
-            reasons.append(f"{name} → rc={rc}")
+            if run is None:
+                reasons.append(f"{name} → 不可判定（超时/执行失败）")
+            elif run[0] == 0:
+                reasons.append(f"{name} → rc=0 但无有效通过（全 skip/xfail/deselect）")
+            else:
+                reasons.append(f"{name} → rc={run[0]}")
     if not kept:
         # 全部被剔除：产出空套件会让 detection 变成"恒红-不绿"或不可测，
         # 保守返回不可用，由调用方决定（不产出净化后的假套件）。

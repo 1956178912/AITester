@@ -1568,11 +1568,19 @@ def _run_mutant_tests(
     test_code: str,
     module_name: str = "",
     timeout_seconds: int = 30,
+    *,
+    detail: list[dict[str, Any]] | None = None,
 ) -> bool:
     """在沙箱中执行单个变异体 + 测试套件，返回变异体是否被"杀死"。
 
     变异体被杀死 = 测试套件在变异代码上至少一个用例失败（说明测试捕获了该变异）。
     变异体存活 = 测试套件全部通过（说明测试未能检测出该变异）。
+
+    ``detail``（BB，2026-10-21）：调用方传入列表时，追加一条
+    ``{"rc": int | None, "effective_pass": bool}``——"套件是否含至少 1 个
+    真实 passed"（共享谓词 ``_suite_has_effective_pass``）。用于基线诊断：
+    all-skip 套件 rc==0 会被误读成"测试在原始代码上全过"，须与
+    pre-existing failure 区分。默认 None 时行为与历史逐位一致。
 
     2026-09-26 全面审查（P0 正确性修复）：此前 `return proc.returncode != 0`
     把 pytest 的**所有**非零退出码（含 2=收集错误 / ModuleNotFoundError /
@@ -1652,13 +1660,25 @@ def _run_mutant_tests(
             # 超时终止（被 SIGKILL）→ 保守视为存活（不夸大变异得分）
             if getattr(proc, "timed_out", False):
                 logger.debug("变异体执行超时，保守判为存活: %s", mutant_file)
-                return False
-            # 2026-09-26 全面审查：仅 rc==1（有测试失败）才算"杀死"。
-            # rc==0（全通过）= 存活；rc==2/5（收集错误/无测试）或超时 =
-            # 套件未成功运行，按保守口径视为存活（不误杀、不夸大得分）。
-            return proc.returncode == 1
+                _killed = False
+                _rc: int | None = None
+                _output = ""
+            else:
+                _killed = proc.returncode == 1
+                _rc = proc.returncode
+                _output = (proc.stdout or "") + "\n" + (proc.stderr or "")
+            # BB（2026-10-21，F03 同型）：把"套件是否真的跑过"随结果带回——
+            # rc==0 但全 skip/xfail/deselect 时 passed==0，调用方（基线诊断）
+            # 不得把"没有断言执行"当成"测试在原始代码上全过"。
+            if detail is not None:
+                from experiments._m1_metrics import _suite_has_effective_pass
+
+                detail.append({"rc": _rc, "effective_pass": _suite_has_effective_pass(_output)})
+            return _killed
     except Exception:
         # 执行失败视为存活（保守：不夸大变异得分）
+        if detail is not None:
+            detail.append({"rc": None, "effective_pass": False})
         return False
 
 
@@ -1706,8 +1726,12 @@ def compute_mutation_score(
         {"available": bool, "mutation_score": float,
          "mutants_total": int, "mutants_killed": int,
          "pre_existing_failures": int,
+         "baseline_no_effective_pass": bool,
          "elapsed_seconds": float, "seed": int | None}
         无变异体时 available=False，mutation_score=None。
+        ``baseline_no_effective_pass``（BB）：基线套件 rc==0 但无有效通过
+        （全 skip/xfail/deselect）——score 的 0.0 是"没跑起来"而非"测试弱"，
+        与 ``pre_existing_failures``（测试真在原始代码上全过）互斥。
     """
     generator = MutationGenerator()
     all_mutants = generator.generate(source_code)
@@ -1718,6 +1742,7 @@ def compute_mutation_score(
             "mutants_total": 0,
             "mutants_killed": 0,
             "pre_existing_failures": 0,
+            "baseline_no_effective_pass": False,
             "elapsed_seconds": 0.0,
             "seed": seed,
         }
@@ -1738,11 +1763,32 @@ def compute_mutation_score(
     # 原始代码（有缺陷）上测试**应**失败（被杀死）——False 表示测试在
     # 原始缺陷代码上全过，即 pre-existing failure（测试本身没检出缺陷，
     # kill 判据不可靠），保守标记 _pre_existing_failures=1。
+    #
+    # BB（2026-10-21，F03 同型）：False 有两种截然不同的成因——
+    # ① 测试真的在原始代码上全部通过（pre-existing failure，测试没检出缺陷）；
+    # ② 套件全 skip/xfail/deselect：rc==0 且 passed==0，没有任何断言执行。
+    # 旧实现把 ② 也记成 pre-existing failure（"测试没检出缺陷"的误诊），
+    # 且所有变异体随之"存活"→ score=0.0 被归因为测试弱而非没跑起来。
+    # 现用 detail 带回有效通过证据区分两者：② 单独记
+    # baseline_no_effective_pass（不得与 pre_existing_failures 混用），
+    # score 保持保守口径不变（不夸大）。
     _pre_existing_failures = 0
+    _baseline_no_effective_pass = False
+    _baseline_detail: list[dict[str, Any]] = []
     _original_mutant = Mutant(code=source_code, mutant_type="original", description="pre-existing baseline")
-    _original_killed = _run_mutant_tests(_original_mutant, test_code, timeout_seconds=timeout_seconds)
+    _original_killed = _run_mutant_tests(
+        _original_mutant, test_code, timeout_seconds=timeout_seconds, detail=_baseline_detail
+    )
     if not _original_killed:
-        _pre_existing_failures = 1
+        if _baseline_detail and not _baseline_detail[-1].get("effective_pass"):
+            _baseline_no_effective_pass = True
+            logger.warning(
+                "变异基线无有效通过（rc=%s，全 skip/xfail/deselect）——"
+                "mutation_score 为'没跑起来'而非'测试弱'，按 baseline_no_effective_pass 披露",
+                _baseline_detail[-1].get("rc"),
+            )
+        else:
+            _pre_existing_failures = 1
 
     t0 = time.time()
     killed = 0
@@ -1752,12 +1798,13 @@ def compute_mutation_score(
     elapsed = round(time.time() - t0, 2)
     score = round(killed / len(selected), 4) if selected else 0.0
     logger.info(
-        "变异得分: %d/%d 杀死，score=%.4f，耗时 %.1fs（pre_existing_failures=%d, seed=%s）",
+        "变异得分: %d/%d 杀死，score=%.4f，耗时 %.1fs（pre_existing_failures=%d, baseline_no_effective_pass=%s, seed=%s）",
         killed,
         len(selected),
         score,
         elapsed,
         _pre_existing_failures,
+        _baseline_no_effective_pass,
         seed,
     )
     return {
@@ -1766,6 +1813,7 @@ def compute_mutation_score(
         "mutants_total": len(selected),
         "mutants_killed": killed,
         "pre_existing_failures": _pre_existing_failures,
+        "baseline_no_effective_pass": _baseline_no_effective_pass,
         "elapsed_seconds": elapsed,
         "seed": seed,
     }

@@ -31,6 +31,7 @@ REPO = Path(__file__).resolve().parent.parent
 if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
+from experiments._m1_metrics import _suite_has_effective_pass  # noqa: E402
 from src.utils.atomic_io import atomic_write_json  # noqa: E402
 from src.utils.process_utils import run_with_timeout  # noqa: E402
 
@@ -64,7 +65,13 @@ def _run_one(module_name: str, fixed_code: str, test_code: str) -> dict[str, Any
     stdout = (proc.stdout or "").strip()
     if stdout:
         tail = stdout.splitlines()[-1][:160]
-    status = "pass" if proc.returncode == 0 else "fail"
+    # BB（2026-10-21，F03 同型）：rc==0 但无有效通过 ⇒ unverifiable（fail-closed）
+    if proc.returncode == 0:
+        status = (
+            "pass" if _suite_has_effective_pass((proc.stdout or "") + "\n" + (proc.stderr or "")) else "unverifiable"
+        )
+    else:
+        status = "fail"
     return {"status": status, "rc": proc.returncode, "wall_s": round(time.time() - t0, 1), "tail": tail}
 
 
@@ -100,6 +107,10 @@ def main() -> int:
     n_fail = sum(1 for r in records if r["status"] == "fail")
     n_nonterm = sum(1 for r in records if r["status"] == "nonterminate")
     n_missing = sum(1 for r in records if r["status"] == "material_missing")
+    # BB（2026-10-21，F03 同型）：rc==0 但无有效通过 = 未演示 green，
+    # 既不算通过也不进分母（与 material_missing 同口径：不可测行不得
+    # 进入"green_on_fut 准确率"的分母），单独计数披露。
+    n_unverifiable = sum(1 for r in records if r["status"] == "unverifiable")
     denom = n_pass + n_fail + n_nonterm
     accuracy = round(n_pass / denom, 4) if denom else None
 
@@ -107,13 +118,22 @@ def main() -> int:
         "benchmark": args.benchmark,
         "arm": args.arm,
         "caliber": "green_on_fut（生成套件在 task_metadata.fixed 上 30s 内通过）",
-        "counts": {"pass": n_pass, "fail": n_fail, "nonterminate": n_nonterm, "material_missing": n_missing},
+        "counts": {
+            "pass": n_pass,
+            "fail": n_fail,
+            "nonterminate": n_nonterm,
+            "unverifiable": n_unverifiable,
+            "material_missing": n_missing,
+        },
         "denominator": denom,
         "accuracy": accuracy,
         "records": records,
     }
     atomic_write_json(args.out, report, indent=2, mode=0o644)
-    print(f"\n[dfsmo] accuracy = {accuracy}（{n_pass}/{denom}）; fail={n_fail} nonterm={n_nonterm} missing={n_missing}")
+    print(
+        f"\n[dfsmo] accuracy = {accuracy}（{n_pass}/{denom}）; fail={n_fail} nonterm={n_nonterm} "
+        f"unverifiable={n_unverifiable} missing={n_missing}"
+    )
     print(f"[dfsmo] 报告 → {args.out}")
     return 0
 

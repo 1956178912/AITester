@@ -239,7 +239,10 @@ def _parse_pytest(stdout: str, rc: int | None) -> dict[str, Any]:
     if collection_error is not None:
         status = "collection_error"
     elif rc == 0:
-        status = "pass"
+        # BB（2026-10-21，F03 同型）：rc==0 但没有任何 PASSED 测试
+        # （全 skip/xfail/deselect）——"gold 全过"证据不存在，记
+        # unverifiable（fail-closed），不得记 pass。
+        status = "pass" if n_passed > 0 else "unverifiable"
     else:
         status = "fail"
     return {
@@ -489,6 +492,10 @@ def attribute_task(run_o: dict[str, Any], run_c: dict[str, Any], n_gold: int) ->
         c_buckets["collection_error"] += 1
     if run_c["status"] == "nonterminate" or run_o["status"] == "nonterminate":
         return "undecidable_nonterminate", "corrected harness 或官方契约下超时——无法判定断言内容"
+    if run_c["status"] == "unverifiable" or run_o["status"] == "unverifiable":
+        # BB（2026-10-21，F03 同型）：rc==0 但无有效通过（全 skip/xfail/
+        # deselect）——两侧都没有"断言通过"证据，不得归因到任何缺陷类。
+        return "undecidable_no_effective_pass", "rc==0 但无有效通过（全 skip/xfail/deselect）——无法判定断言内容"
     c_ok = run_c["status"] == "pass"
     o_ok = run_o["status"] == "pass"
     if c_ok:

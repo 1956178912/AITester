@@ -413,12 +413,19 @@ def test_helper_env_survives_unimportable_host_plugin(tmp_path: Path, monkeypatc
 
 @pytest.mark.unit
 def test_real_gold_pruning_site_survives_poisoned_host_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """真实站点最小化调用：gold 剪枝 ``_run_suite`` 在宿主污染下仍返回 rc=0。"""
+    """真实站点最小化调用：gold 剪枝 ``_run_suite`` 在宿主污染下仍返回 rc=0。
+
+    BB（2026-10-21）：``_run_suite`` 返回 ``(rc, 合并输出)``（调用方据此
+    判"是否含有效通过"），rc 判据本身不变。
+    """
     from experiments.gold_consistency_pruning import _run_suite
 
     monkeypatch.setenv("PYTEST_PLUGINS", "no_such_host_plugin_xyz")
-    rc = _run_suite(_TRIVIAL_TARGET, _TRIVIAL_TEST, "m", timeout=120)
+    run = _run_suite(_TRIVIAL_TARGET, _TRIVIAL_TEST, "m", timeout=120)
+    assert run is not None, "真实站点在宿主 PYTEST_PLUGINS 污染下不可判定"
+    rc, output = run
     assert rc == 0, f"真实站点在宿主 PYTEST_PLUGINS 污染下未跑通（rc={rc}）"
+    assert "1 passed" in output
 
 
 @pytest.mark.unit

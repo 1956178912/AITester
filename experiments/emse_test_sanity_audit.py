@@ -30,6 +30,7 @@ REPO = Path(__file__).resolve().parent.parent
 if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
+from experiments._m1_metrics import _suite_has_effective_pass  # noqa: E402
 from experiments.emse_ult_mutk import _gold_tests_to_pytest_code  # noqa: E402
 from src.utils.atomic_io import atomic_write_json  # noqa: E402
 from src.utils.process_utils import run_with_timeout  # noqa: E402
@@ -97,7 +98,13 @@ def _run_one(module_name: str, fixed_code: str, test_code: str) -> dict[str, Any
     stdout = (proc.stdout or "").strip()
     if stdout:
         tail = stdout.splitlines()[-1][:160]
-    status = "pass" if proc.returncode == 0 else "fail"
+    # BB（2026-10-21，F03 同型）：rc==0 但无有效通过 ⇒ unverifiable（fail-closed）
+    if proc.returncode == 0:
+        status = (
+            "pass" if _suite_has_effective_pass((proc.stdout or "") + "\n" + (proc.stderr or "")) else "unverifiable"
+        )
+    else:
+        status = "fail"
     return {"status": status, "rc": proc.returncode, "wall_s": round(time.time() - t0, 1), "tail": tail}
 
 
@@ -143,12 +150,14 @@ def main() -> int:
         "",
         "> **用途**：全量 Mut@k 跑批的健全性前置门依据 + 稿件披露节证据。",
         "> 判定：测试在**正确代码**（task_metadata.fixed）上 30s 内运行，",
-        "> rc=0 → pass；rc≠0 → fail；超时 → nonterminate。",
-        "> 口径：pass 集合 = Mut@k 可测任务（fail/nonterminate 的击杀为",
-        "> 恒红/超时驱动的平凡信号，不可归因于变异敏感性）。",
+        "> rc=0 ∧ 有有效通过 → pass；rc=0 但全 skip/xfail/deselect →",
+        "> unverifiable（BB 轮：rc==0 不等于有断言执行）；rc≠0 → fail；",
+        "> 超时 → nonterminate。",
+        "> 口径：pass 集合 = Mut@k 可测任务（fail/nonterminate/unverifiable",
+        "> 的击杀为恒红/超时/没跑起来驱动的平凡信号，不可归因于变异敏感性）。",
         "",
-        "| 任务集 | 测试 | pass | fail | nonterminate | material_missing | 合计 |",
-        "|---|---|---|---|---|---|---|",
+        "| 任务集 | 测试 | pass | fail | nonterminate | unverifiable | material_missing | 合计 |",
+        "|---|---|---|---|---|---|---|---|",
     ]
     for set_label, _, kinds in SETS:
         for kind in kinds:
@@ -156,11 +165,12 @@ def main() -> int:
             if not sub:
                 continue
             counts = {
-                s: sum(1 for r in sub if r["status"] == s) for s in ("pass", "fail", "nonterminate", "material_missing")
+                s: sum(1 for r in sub if r["status"] == s)
+                for s in ("pass", "fail", "nonterminate", "unverifiable", "material_missing")
             }
             lines.append(
                 f"| {set_label} | {kind} | {counts['pass']} | {counts['fail']} | "
-                f"{counts['nonterminate']} | {counts['material_missing']} | {len(sub)} |"
+                f"{counts['nonterminate']} | {counts['unverifiable']} | {counts['material_missing']} | {len(sub)} |"
             )
     lines.extend(
         [
