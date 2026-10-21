@@ -1,6 +1,6 @@
 # AITester 模型卡（MODEL CARD）
 
-最后更新：2026-10-14（LLM 结构化输出加固批次：§2 新增"调用配置"节——thinking 默认 disabled〔成本保护〕+ `LLM_JSON_MODE` 默认 on〔DeepSeek 官方 JSON Output，七处 JSON 契约调用点〕+ finish_reason 守卫 + 数值表达式解析层修复〔ADR-0031〕。此前 2026-10-08 R2 落地批次：叙事对齐 ADR-0016——§1 去"多智能体"主断言，"多智能体编排"降为可消融容器；repair 数字更新为修正口径 v2）
+最后更新：2026-10-21（2026-10-21 测量口径批次：§4 新增「有效通过」口径——BA/BB/BC 三轮把 `rc==0` ≠ 有断言执行的通过写入派生读数判据。此前 2026-10-14 LLM 结构化输出加固批次：§2 新增"调用配置"节——thinking 默认 disabled〔成本保护〕+ `LLM_JSON_MODE` 默认 on〔DeepSeek 官方 JSON Output，七处 JSON 契约调用点〕+ finish_reason 守卫 + 数值表达式解析层修复〔ADR-0031〕。此前 2026-10-08 R2 落地批次：叙事对齐 ADR-0016——§1 去"多智能体"主断言，"多智能体编排"降为可消融容器；repair 数字更新为修正口径 v2）
 
 ## 1. 系统概述
 
@@ -93,6 +93,18 @@ ADR-0021/0027/0029 测量口径修正后为 **39.31%（v2，57/145 可重放行�
   （无记账行 13.4% < 50%），改前这些行以 0 进金额分子、仍占任务分母；
   AK 轮起 `cost_caliber="recorded_lower_bound"` 显式披露，真实花费只会更高
   （`docs/reviews/PARTIAL_ACCOUNTING_AK_2026-10-21.md`）。
+- **套件判绿口径（BA→BC 轮，2026-10-21）**：pytest 对全 skip / xfail /
+  deselect 的套件同样返回 `rc==0`，故 `rc==0` 不等于"有断言执行的通过"。
+  M1 detection / repair、`repair_replay`、`mutation_detection` 与
+  `experiments/` 侧 11 处判绿点一律要求有效通过（至少 1 个 passed 且 0 个
+  failed），否则 fail-closed（`None` / `unverifiable` / `not_applicable` /
+  `skipped`）；重放对账工具的"未演示 green"不再记成 False 或 mismatch。
+  真实语料审计：246 份 benchmark / 736 份 gold 套件 / 4895 条 mutation 行、
+  3 份 MISGUIDED_REPORT（350 任务行 / 700 侧）零模块级全 skip ⇒ 历史读数
+  零影响；该口径只影响派生读数与判定，不改写任何归档工件（详见
+  `docs/reviews/EFFECTIVE_GREEN_BA_2026-10-21.md` /
+  `EFFECTIVE_GREEN_CONSUMERS_BB_2026-10-21.md` /
+  `MISGUIDED_REPLAY_EFFECTIVE_GREEN_BC_2026-10-21.md`）。
 - spec_compile_rate 在 logic 档实测恒 0.0（AB1 验证批 12/12）——"逻辑驱动"
   规格链未被激活，当前检出收益归因于检出优先提示协议；E1（预注册阈值
   ≥0.3 保留 / <0.2 放弃）为该主张的生死裁决。

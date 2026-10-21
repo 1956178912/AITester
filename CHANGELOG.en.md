@@ -101,18 +101,6 @@ Manual: `docs/reviews/EFFECTIVE_GREEN_CONSUMERS_BB_2026-10-21.md`.
 > 9358 generated tests / 114 with markers / 12 with detection=1.0 (all
 > conditional markers). Manual: `docs/reviews/EFFECTIVE_GREEN_BA_2026-10-21.md`.
 
-## [Unreleased] — 2026-10-21 AY round (backfill): run_b8 payload assembly preserves the raw shape of `token_metrics` (zero LLM, $0)
-
-> `_load_arm` / `_load_harness_smoke` used `rd.get("token_metrics") or {}`,
-> rewriting falsy non-objects (`[]` / `""` / `0` / `False`) into `{}` —
-> "broken payload" read as "no metrics", cost reported as $0.0 with no
-> mechanism name. Reading layers now pass the value through as-is; cost
-> judgment lives only in `_cost_usd` (falsy non-object ⇒ `None` +
-> `token_metrics_not_object:<T>`). Real batches: 14 JSONs / 12 keys all
-> dict; both-arm costs and four smoke rows reproduced bit-for-bit.
-> `tests/test_run_b8_payload_ay.py` 27 cases + 6/6 mutation anchors.
-> Manual: `docs/reviews/RUN_B8_PAYLOAD_AY_2026-10-21.md`.
-
 ## [Unreleased] — 2026-10-21 AZ round: a statistic's scale and tail must not be rewritten by the implementation — Cohen's g back to 0–0.5, exact p without an epsilon (zero LLM, $0)
 
 > This round adds no capability: it fixes two statistical definitions in
@@ -185,6 +173,18 @@ Manual: `docs/reviews/EFFECTIVE_GREEN_CONSUMERS_BB_2026-10-21.md`.
   four smoke rows reproduce bit-for-bit together with their payloads.
 
 ---
+
+## [Unreleased] — 2026-10-21 AY round (backfill): run_b8 payload assembly preserves the raw shape of `token_metrics` (zero LLM, $0)
+
+> `_load_arm` / `_load_harness_smoke` used `rd.get("token_metrics") or {}`,
+> rewriting falsy non-objects (`[]` / `""` / `0` / `False`) into `{}` —
+> "broken payload" read as "no metrics", cost reported as $0.0 with no
+> mechanism name. Reading layers now pass the value through as-is; cost
+> judgment lives only in `_cost_usd` (falsy non-object ⇒ `None` +
+> `token_metrics_not_object:<T>`). Real batches: 14 JSONs / 12 keys all
+> dict; both-arm costs and four smoke rows reproduced bit-for-bit.
+> `tests/test_run_b8_payload_ay.py` 27 cases + 6/6 mutation anchors.
+> Manual: `docs/reviews/RUN_B8_PAYLOAD_AY_2026-10-21.md`.
 
 ## [Unreleased] — 2026-10-21 AX round: the benchmark/full-stack summary presentation and aggregation read points have a value domain too — presentation may fold absent to the historical 0, averaging may not (zero LLM, $0)
 

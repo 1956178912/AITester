@@ -1,6 +1,6 @@
 # AITester Model Card
 
-Last updated: 2026-10-14 (LLM structured-output hardening batch: §2 gains an "Invocation configuration" bullet — thinking disabled by default [cost protection] + `LLM_JSON_MODE` on by default [DeepSeek official JSON Output at seven JSON-contract call sites] + finish_reason guard + parse-layer numeric-expression repair [ADR-0031]; previously 2026-10-08 R2 landing batch: narrative alignment with ADR-0016 — §1 drops "multi-agent" as the primary claim; "multi-agent orchestration" demoted to an ablatable container; repair numbers updated to corrected caliber v2)
+Last updated: 2026-10-21 (2026-10-21 measurement-caliber batch: §4 gains an "effective pass" caliber — the BA/BB/BC rounds write "rc==0 is not assertions-executed pass" into derived-reading criteria. Previously the 2026-10-14 LLM structured-output hardening batch: §2 gains an "Invocation configuration" bullet — thinking disabled by default [cost protection] + `LLM_JSON_MODE` on by default [DeepSeek official JSON Output at seven JSON-contract call sites] + finish_reason guard + parse-layer numeric-expression repair [ADR-0031]; previously 2026-10-08 R2 landing batch: narrative alignment with ADR-0016 — §1 drops "multi-agent" as the primary claim; "multi-agent orchestration" demoted to an ablatable container; repair numbers updated to corrected caliber v2)
 
 ## 1. System Overview
 
@@ -107,6 +107,21 @@ system is research code, not a deployed product).
   round AK this is disclosed explicitly via
   `cost_caliber="recorded_lower_bound"`; true spend can only be higher
   (`docs/reviews/PARTIAL_ACCOUNTING_AK_2026-10-21.md`).
+- **Suite-green caliber (BA→BC rounds, 2026-10-21)**: pytest also returns
+  `rc==0` for suites that are all skip / xfail / deselect, so `rc==0` is not
+  "a pass with assertions executed". M1 detection / repair, `repair_replay`,
+  `mutation_detection` and the 11 remaining verdict sites in `experiments/`
+  now require an effective pass (at least one passed and zero failed) and
+  otherwise fail closed (`None` / `unverifiable` / `not_applicable` /
+  `skipped`); "green not demonstrated" in the replay reconciliation tool is
+  no longer recorded as False or as a mismatch. Real-corpus audit: 246
+  benchmark files / 736 gold suites / 4895 mutation rows and 3
+  MISGUIDED_REPORT archives (350 task rows / 700 sides) contain zero
+  module-level all-skip suites ⇒ zero impact on archived readings; the
+  caliber affects derived readings and verdicts only and rewrites no
+  archived artifact (see `docs/reviews/EFFECTIVE_GREEN_BA_2026-10-21.md` /
+  `EFFECTIVE_GREEN_CONSUMERS_BB_2026-10-21.md` /
+  `MISGUIDED_REPLAY_EFFECTIVE_GREEN_BC_2026-10-21.md`).
 - spec_compile_rate measured constantly 0.0 in the logic profile (AB1
   validation batch 12/12) — the "logic-driven" spec chain is not activated;
   current detection gains attribute to the detection-first prompting
