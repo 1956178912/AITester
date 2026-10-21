@@ -14,11 +14,14 @@ from src.budget.token_usage import (
     _thread_local,
     _usage_lock,
     attach_usage,
+    cache_write_rejection_reasons,
     get_usage,
     global_usage,
     record_cache_hit_usage,
     record_usage,
     reset,
+    token_write_rejection_reasons,
+    write_rejection_count,
 )
 
 __all__ = [
@@ -28,9 +31,12 @@ __all__ = [
     "_thread_local",
     "_usage_lock",
     "attach_usage",
+    "cache_write_rejection_reasons",
     "get_usage",
     "global_usage",
     "record_cache_hit_usage",
     "record_usage",
     "reset",
+    "token_write_rejection_reasons",
+    "write_rejection_count",
 ]

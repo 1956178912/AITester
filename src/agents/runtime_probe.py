@@ -271,7 +271,7 @@ def main():
     frames = frames[:_MAX_FRAMES]
     os.makedirs(_out_dir, exist_ok=True)
     with open(os.path.join(_out_dir, "frames.json"), "w", encoding="utf-8") as _fh:
-        json.dump({"frames": frames}, _fh)
+        json.dump({"frames": frames}, _fh, allow_nan=False)
 
 
 main()

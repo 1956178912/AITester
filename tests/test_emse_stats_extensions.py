@@ -62,14 +62,24 @@ class TestEffectSizes:
     """Cohen's g / OR / 精确 p。"""
 
     def test_cohens_g_known(self):
-        # 12/80：|12-80|/92 = 0.73913
-        assert cohens_g(12, 80) == pytest.approx(0.7391, abs=1e-4)
+        # 12/80：|12-80|/(2×92) = 0.369565（标准 g 尺度，范围 0–0.5）
+        assert cohens_g(12, 80) == pytest.approx(0.3696, abs=1e-4)
 
     def test_cohens_g_zero_discordant(self):
         assert cohens_g(0, 0) == 0.0
 
     def test_cohens_g_one_sided(self):
-        assert cohens_g(5, 0) == 1.0
+        # 完全一边倒 = 最大不对称 0.5，不是 1.0
+        assert cohens_g(5, 0) == 0.5
+
+    def test_cohens_g_matches_effectsize_identity(self):
+        # effectsize：g = max(b,c)/(b+c) − 0.5 = |b−c|/(2(b+c))
+        for b, c in [(12, 80), (2, 24), (113, 0), (7, 7)]:
+            assert cohens_g(b, c) == pytest.approx(max(b, c) / (b + c) - 0.5, abs=1e-12)
+
+    def test_cohens_g_upper_bound_half(self):
+        for b, c in [(0, 1), (5, 0), (0, 261), (1, 260)]:
+            assert 0.0 <= cohens_g(b, c) <= 0.5
 
     def test_odds_ratio_known(self):
         # b=12.5, c=80.5（Haldane +0.5）：OR=0.15528, CI≈(0.0856, 0.2818)
@@ -87,6 +97,16 @@ class TestEffectSizes:
     def test_binom_exact_two_sided_known(self):
         # 0/14 双尾精确 p = 2 × 0.5^14 = 0.000122
         assert binom_exact_two_sided(0, 14) == pytest.approx(2 * 0.5**14, rel=1e-6)
+
+    def test_binom_exact_extreme_tail_not_floored_by_epsilon(self):
+        # 113/0：2×0.5^113 = 1.925929944387236e-34——1e-12 epsilon 会把
+        # 所有 <1e-12 的尾部项一并收进来，抬高到 ~1.93e-12。
+        assert binom_exact_two_sided(0, 113) == pytest.approx(1.925929944387236e-34, rel=1e-9)
+
+    def test_binom_exact_non_half_p_probability_ordering(self):
+        # p=0.1, n=10, k=0：概率序双侧排除唯一比 X=0 更可能的 X=1
+        # （pmf(1)=10×0.1×0.9^9），故 p = 1 − pmf(1) = 0.612579511
+        assert binom_exact_two_sided(0, 10, p=0.1) == pytest.approx(1 - 10 * 0.1 * 0.9**9, rel=1e-12)
 
     def test_binom_exact_extreme(self):
         # 7/14：双尾 p = 1（完全无方向）

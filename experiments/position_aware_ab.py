@@ -240,6 +240,7 @@ def _render_markdown(
             f,
             ensure_ascii=False,
             indent=2,
+            allow_nan=False,
         )
     print(f"[A/B] 汇总已写入: {md_path}")
     print(f"[A/B] 原始数据: {json_path}")

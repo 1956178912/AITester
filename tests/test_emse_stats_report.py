@@ -53,9 +53,14 @@ def _row(
     repair: float | None,
     false_fix: float | None,
     passed: bool,
-    tokens: float,
+    tokens: int,
 ) -> dict[str, Any]:
-    """构造一条结果行（字段名与真实批次 JSON 的 details 行一致）。"""
+    """构造一条结果行（字段名与真实批次 JSON 的 details 行一致）。
+
+    AM（2026-10-21）：token 计数用整数且 in+out=total——AI 值域起 float
+    不是计数（`100.0` 也不收），旧夹具的 `tokens / 3` 会让 S11 整臂断裂。
+    """
+    input_tokens = tokens // 3
     return {
         "task_id": task_id,
         "detection_rate": detection,
@@ -63,8 +68,8 @@ def _row(
         "false_fix_rate": false_fix,
         "passed": passed,
         "token_usage": {
-            "input_tokens": tokens / 3,
-            "output_tokens": tokens / 3,
+            "input_tokens": input_tokens,
+            "output_tokens": tokens - input_tokens,
             "total_tokens": tokens,
             "llm_calls": 1,
         },
@@ -80,34 +85,34 @@ def _fixture_arms() -> dict[str, list[dict[str, Any]]]:
     n10/n01=2/0；ai vs df n_common=7、n10/n01=0/3；df vs llm n_common=8、n10/n01=5/0。
     """
     ai = [
-        _row("task_0000", 1.0, 0.0, 1.0, True, 300.0),
-        _row("task_0001", 1.0, 0.0, 1.0, True, 400.0),
-        _row("task_0002", 1.0, 1.0, 0.0, True, 500.0),
-        _row("task_0003", 0.0, 0.0, 0.0, True, 600.0),
-        _row("task_0004", 0.0, 0.0, 1.0, False, 700.0),
-        _row("task_0005", 0.0, 0.0, 0.0, False, 800.0),
-        _row("task_0006", 0.0, 0.0, 0.0, False, 0.0),  # 记账为 0 → 成本口径剔除
-        _row("task_0007", None, None, None, False, 900.0),  # 不可测行（M1 None 口径）
+        _row("task_0000", 1.0, 0.0, 1.0, True, 300),
+        _row("task_0001", 1.0, 0.0, 1.0, True, 400),
+        _row("task_0002", 1.0, 1.0, 0.0, True, 500),
+        _row("task_0003", 0.0, 0.0, 0.0, True, 600),
+        _row("task_0004", 0.0, 0.0, 1.0, False, 700),
+        _row("task_0005", 0.0, 0.0, 0.0, False, 800),
+        _row("task_0006", 0.0, 0.0, 0.0, False, 0),  # 记账为 0 → 成本口径剔除
+        _row("task_0007", None, None, None, False, 900),  # 不可测行（M1 None 口径）
     ]
     llm = [
-        _row("task_0000", 1.0, 0.0, 1.0, True, 100.0),
-        _row("task_0001", 0.0, 0.0, 0.0, False, 110.0),
-        _row("task_0002", 0.0, 0.0, 0.0, False, 120.0),
-        _row("task_0003", 0.0, 0.0, 1.0, True, 130.0),
-        _row("task_0004", 0.0, 0.0, 1.0, True, 140.0),
-        _row("task_0005", 0.0, 0.0, 1.0, True, 150.0),
-        _row("task_0006", 0.0, 0.0, 1.0, False, 160.0),
-        _row("task_0007", 0.0, 0.0, 0.0, False, 170.0),
+        _row("task_0000", 1.0, 0.0, 1.0, True, 100),
+        _row("task_0001", 0.0, 0.0, 0.0, False, 110),
+        _row("task_0002", 0.0, 0.0, 0.0, False, 120),
+        _row("task_0003", 0.0, 0.0, 1.0, True, 130),
+        _row("task_0004", 0.0, 0.0, 1.0, True, 140),
+        _row("task_0005", 0.0, 0.0, 1.0, True, 150),
+        _row("task_0006", 0.0, 0.0, 1.0, False, 160),
+        _row("task_0007", 0.0, 0.0, 0.0, False, 170),
     ]
     df = [
-        _row("task_0000", 1.0, 0.0, 0.0, True, 200.0),
-        _row("task_0001", 1.0, 0.0, 0.0, True, 210.0),
-        _row("task_0002", 1.0, 0.0, 1.0, False, 220.0),
-        _row("task_0003", 1.0, 0.0, 1.0, False, 230.0),
-        _row("task_0004", 1.0, 0.0, 1.0, False, 240.0),
-        _row("task_0005", 1.0, 0.0, 1.0, False, 250.0),
-        _row("task_0006", 0.0, 0.0, 0.0, False, 260.0),
-        _row("task_0007", 0.0, 0.0, 0.0, False, 270.0),
+        _row("task_0000", 1.0, 0.0, 0.0, True, 200),
+        _row("task_0001", 1.0, 0.0, 0.0, True, 210),
+        _row("task_0002", 1.0, 0.0, 1.0, False, 220),
+        _row("task_0003", 1.0, 0.0, 1.0, False, 230),
+        _row("task_0004", 1.0, 0.0, 1.0, False, 240),
+        _row("task_0005", 1.0, 0.0, 1.0, False, 250),
+        _row("task_0006", 0.0, 0.0, 0.0, False, 260),
+        _row("task_0007", 0.0, 0.0, 0.0, False, 270),
     ]
     return {"aitester": ai, "plain_llm": llm, "plain_llm_df": df}
 

@@ -361,7 +361,7 @@ def main(argv: list[str] | None = None) -> int:
         # 落盘：全量数据 JSON + 人读报告 md
         result_path = os.path.join(out_dir, "search_result.json")
         with open(result_path, "w", encoding="utf-8") as f:
-            json.dump(report, f, ensure_ascii=False, indent=2, default=str)
+            json.dump(report, f, ensure_ascii=False, indent=2, default=str, allow_nan=False)
         md_path = os.path.join(out_dir, "attribution_report.md")
         with open(md_path, "w", encoding="utf-8") as f:
             f.write(

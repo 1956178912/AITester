@@ -597,7 +597,7 @@ def pytest_exception_interact(node, call, report):
 def pytest_sessionfinish(session, exitstatus):
     try:
         with open(_REPORT_PATH, "w", encoding="utf-8") as f:
-            json.dump(_RECORDS, f)
+            json.dump(_RECORDS, f, allow_nan=False)
     except Exception:
         pass
 '''

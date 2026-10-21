@@ -373,7 +373,7 @@ def _render_cli() -> None:
         os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
         with open(out_path, "w", encoding="utf-8") as f:
             for row in rows:
-                f.write(json.dumps(row, ensure_ascii=False) + "\n")
+                f.write(json.dumps(row, ensure_ascii=False, allow_nan=False) + "\n")
         print(f"已生成 {summary['total']} 个合成任务（{summary['by_level']}）→ {out_path}")
     else:
         for row in rows:

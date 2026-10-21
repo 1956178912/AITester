@@ -471,8 +471,14 @@ class TestRagAnalysisNonDictElements:
             {"task_id": "t2", "passed": False, "iterations": None, "token_usage": None},
         ]
         r = _rag_token_efficiency(details)
-        # 两组均有任务；非数字值归 0
+        # AP（2026-10-21）：字符串 token 不是计数——该组均值不可读（不再静默归 0），
+        # 对照组的整键缺席仍按历史 0。
         assert r["available"] is True
+        assert r["rag_group"]["avg_tokens"] is None
+        assert r["rag_group"]["n_token_unreadable_rows"] == 1
+        assert r["rag_group"]["token_reading_reasons"] == {"token_not_count:total_tokens:str": 1}
+        assert r["no_rag_group"]["avg_tokens"] == 0.0
+        assert r["token_delta_ratio"] is None
 
 
 # ─── P2 compare_failures regressed 排除 new_categories ─────────────────────────

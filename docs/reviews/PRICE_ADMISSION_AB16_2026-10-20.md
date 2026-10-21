@@ -180,6 +180,8 @@ AB-16 轮复算实测 **421 passed / 1 warning**，已就地更正并标注。
 7. **ext 未登记模型仍是 `0.0` 部分和 + note**：`_cost_per_task` 对 `prices.get(m)` 缺席的模型
    只记 `unpriced` 并继续累加其余份额；新锁显式锁定这一旧口径。"拒绝"与"未登记"是两种事实，
    本轮只保证前者不产生金额（AB-15 §5.4 延续）。
+   **AH（2026-10-20）已处置**：未登记 ⇒ `None` + `model_unregistered←<models>`，该锁按新口径改写
+   （`docs/reviews/COST_COMPLETENESS_AH_2026-10-20.md`）。
 8. **测试侧第二套口径**：`tests/test_ae_batch.py:125` 的 `entry.get("currency", "USD")`
    是测试自己造的缺省美元（AB-15 §5.6 延续）。
 9. **`pricing.load_price_table()` 仍静默过滤非 dict 条目**（`src/budget/pricing.py:76-77`；

@@ -60,6 +60,7 @@ _FULL_STACK_KEYS: tuple[str, ...] = (
 # import 须放在 sys.path 注入之后（PROJECT_ROOT 已入 sys.path），
 # 模块顶层 import 无法在 experiments/ 脚本运行时解析 src.* 包。
 from src.agents.error_classifier import ErrorCategory  # noqa: E402
+from src.budget.token_usage import token_metric_reading  # noqa: E402
 
 # 全量枚举值（动态，与 error_classifier 单一来源）
 _ERROR_BUCKETS: tuple[str, ...] = tuple(v.value for v in ErrorCategory)
@@ -91,6 +92,11 @@ def _aggregate_group(summaries: list[dict[str, Any]]) -> dict[str, Any]:
         - 错误类型分桶：归一到 _ERROR_BUCKETS 五桶 + "other"；
         - 平均迭代 / 平均耗时 / 总 token：逐基线求均值。
 
+    AX（2026-10-21）：token 均值只收共享读数认可的合法计数。缺席块按历史
+    不参与均值（`or {}` 时代的行为）；任一在场块不可读（非对象 / 在场
+    `None` / 坏值）⇒ 该基线均值为 `None` + `avg_total_tokens_reason`，
+    不给部分均值，也不中止其它基线或成功率统计。
+
     Args:
         summaries: 同组（全开 ON 或全开 OFF）的 benchmark 结果 JSON 列表。
 
@@ -103,6 +109,8 @@ def _aggregate_group(summaries: list[dict[str, Any]]) -> dict[str, Any]:
     per_baseline_iterations: dict[str, list[float]] = {}
     per_baseline_elapsed: dict[str, list[float]] = {}
     per_baseline_tokens: dict[str, list[float]] = {}
+    per_baseline_token_reasons: dict[str, list[str]] = {}
+    per_baseline_token_unreadable: set[str] = set()
 
     for summary in summaries:
         results = summary.get("results", {})
@@ -134,9 +142,12 @@ def _aggregate_group(summaries: list[dict[str, Any]]) -> dict[str, Any]:
                 per_baseline_iterations[baseline].append(float(bl["avg_iterations"]))
             if bl.get("avg_elapsed_seconds") is not None:
                 per_baseline_elapsed[baseline].append(float(bl["avg_elapsed_seconds"]))
-            token_total = (bl.get("token_metrics") or {}).get("total_tokens")
-            if token_total is not None:
-                per_baseline_tokens[baseline].append(float(token_total))
+            token_reading = token_metric_reading(bl.get("token_metrics"), "total_tokens")
+            if token_reading["value"] is None:
+                per_baseline_token_unreadable.add(baseline)
+                per_baseline_token_reasons.setdefault(baseline, []).extend(token_reading["reasons"])
+            elif not token_reading["absent"]:
+                per_baseline_tokens[baseline].append(float(token_reading["value"]))
 
     def _avg(values: list[float]) -> float | None:
         return round(sum(values) / len(values), 3) if values else None
@@ -149,15 +160,20 @@ def _aggregate_group(summaries: list[dict[str, Any]]) -> dict[str, Any]:
         total = per_baseline_tasks[baseline]
         passed = per_baseline_passed[baseline]
         success_rate = round(passed / total * 100, 2) if total > 0 else 0.0
-        aggregation["baselines"][baseline] = {
+        entry: dict[str, Any] = {
             "total_tasks": total,
             "passed_count": passed,
             "success_rate": success_rate,
             "error_buckets": dict(per_baseline_errors.get(baseline, {})),
             "avg_iterations": _avg(per_baseline_iterations.get(baseline, [])),
             "avg_elapsed_seconds": _avg(per_baseline_elapsed.get(baseline, [])),
-            "avg_total_tokens": _avg(per_baseline_tokens.get(baseline, [])),
+            "avg_total_tokens": (
+                None if baseline in per_baseline_token_unreadable else _avg(per_baseline_tokens.get(baseline, []))
+            ),
         }
+        if baseline in per_baseline_token_unreadable:
+            entry["avg_total_tokens_reason"] = "|".join(dict.fromkeys(per_baseline_token_reasons[baseline]))
+        aggregation["baselines"][baseline] = entry
     return aggregation
 
 

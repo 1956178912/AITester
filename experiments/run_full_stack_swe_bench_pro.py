@@ -40,6 +40,8 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
+from src.budget.token_usage import token_metric_reading  # noqa: E402
+
 
 def _apply_full_stack_env(output_dir: str) -> dict[str, str]:
     """导出全开链路环境变量（含追踪目录），返回实际生效的配置 dict。
@@ -173,6 +175,38 @@ def _run_full_stack_benchmark(args: argparse.Namespace) -> dict[str, Any]:
     return summary
 
 
+def _render_baseline_table(summary: dict[str, Any]) -> list[str]:
+    """各基线成功率 / 覆盖率 / 迭代 / 总 token 表（AX，2026-10-21）。
+
+    总 token 走共享读数：形状先于字段，字段在场 `None` 是上游拒绝，非对象 /
+    坏值点名机制；整份 / 字段缺席按 AE2 历史 0。坏读数只废该单元，不中止
+    整张表——此前 `bl.get("token_metrics", {})` 遇到 `null` / 非对象直接
+    `AttributeError`，坏值则原样印进 Markdown。
+    """
+    lines = [
+        "## 各基线成功率",
+        "",
+        "| 基线 | 成功率 | 平均覆盖率 | 平均迭代 | 总 token |",
+        "|------|--------|------------|----------|----------|",
+    ]
+    notes: list[str] = []
+    for baseline, bl in summary.get("results", {}).items():
+        reading = token_metric_reading(bl.get("token_metrics"), "total_tokens")
+        if reading["value"] is None:
+            cell = "不可读"
+            notes.append(f"> {baseline} 的总 token 不可读（{'；'.join(reading['reasons'])}）")
+        else:
+            cell = str(reading["value"])
+        lines.append(
+            f"| {baseline} | {bl.get('success_rate')}% | {bl.get('avg_coverage')}% "
+            f"| {bl.get('avg_iterations')} | {cell} |"
+        )
+    if notes:
+        lines.append("")
+        lines.extend(notes)
+    return lines
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="G8 全开链路 SWE-bench Pro 复测")
     parser.add_argument("--dataset", default="swe_bench_pro", help="数据集名称（默认 swe_bench_pro）")
@@ -215,7 +249,7 @@ def main() -> int:
     ts = summary.get("timestamp", "").replace(":", "-").replace("T", "_").split(".")[0]
     json_path = os.path.join(args.output_dir, f"full_stack_{args.dataset}_{ts}.json")
     with open(json_path, "w", encoding="utf-8") as f:
-        json.dump(summary, f, ensure_ascii=False, indent=2)
+        json.dump(summary, f, ensure_ascii=False, indent=2, allow_nan=False)
 
     md_lines = [
         f"# G8 全开链路复测汇总（{args.dataset}）",
@@ -225,17 +259,8 @@ def main() -> int:
         f"- 任务数: {summary.get('total_tasks')}",
         f"- 全开配置: {json.dumps(summary.get('full_stack_config', {}), ensure_ascii=False)}",
         "",
-        "## 各基线成功率",
-        "",
-        "| 基线 | 成功率 | 平均覆盖率 | 平均迭代 | 总 token |",
-        "|------|--------|------------|----------|----------|",
     ]
-    for baseline, bl in summary.get("results", {}).items():
-        tm = bl.get("token_metrics", {})
-        md_lines.append(
-            f"| {baseline} | {bl.get('success_rate')}% | {bl.get('avg_coverage')}% "
-            f"| {bl.get('avg_iterations')} | {tm.get('total_tokens')} |"
-        )
+    md_lines.extend(_render_baseline_table(summary))
     md_lines.extend(["", "## 失败类别分布", ""])
     for baseline, bl in summary.get("results", {}).items():
         dist = bl.get("failure_category_distribution", {})

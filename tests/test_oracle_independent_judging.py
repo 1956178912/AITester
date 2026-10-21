@@ -439,7 +439,8 @@ class TestM1IndependentJudging:
 
         def fake_run(test_code, target_code, module_name, **kwargs):
             calls.append(kwargs)
-            return (1, "", "") if target_code == _BUGGY_CODE else (0, "", "")
+            # F03 口径：rc==0 需携带有效 passed 摘要才算 green（空摘要 fail-closed）
+            return (1, "1 failed in 0.01s", "") if target_code == _BUGGY_CODE else (0, "1 passed in 0.01s", "")
 
         monkeypatch.setattr(m1, "_run_pytest_in_tmp", fake_run)
         detection = m1._compute_detection_rate(_synthetic_task(), _state_with_generated(_LLM_TEST))

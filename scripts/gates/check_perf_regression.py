@@ -100,7 +100,9 @@ def main() -> int:
             "note": "由 scripts/gates/check_perf_regression.py --update-baseline 生成；跨机偏差说明见 docs/performance_baseline.json 原始注释与脚本 docstring。",
         }
         baseline_path.parent.mkdir(parents=True, exist_ok=True)
-        baseline_path.write_text(json.dumps(current, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        baseline_path.write_text(
+            json.dumps(current, indent=2, ensure_ascii=False, allow_nan=False) + "\n", encoding="utf-8"
+        )
         print(f"[基线刷新] 已写入 {baseline_path}（请提交该文件使新基线生效）")
         return 0
 

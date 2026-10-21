@@ -99,6 +99,7 @@ from experiments.contamination_check import (  # noqa: E402
     render_resistant_benchmark_section,
 )
 from experiments.difficulty_stratification import render_stratification_section  # noqa: E402
+from src.budget.token_usage import token_metric_reading  # noqa: E402
 
 
 def load_latest_benchmark(results_dir: str = "experiments/results") -> str:
@@ -281,13 +282,33 @@ def render_markdown(analysis: dict[str, Any], source_file: str) -> str:
     lines.append("")
     lines.append("| 基线 | 总Token | 输入 | 输出 | LLM调用次数 | 平均每任务Token |")
     lines.append("|------|---------|------|------|------------|----------------|")
+    # AP（2026-10-21）：聚合 token_metrics 的字段走共享读数——此前
+    # `t.get(..., 0)` 把在场 None 印成字面量 `None`（与缺席 0 同形），
+    # 非对象 / 坏值要么崩要么冒充数字。不可读落"不可读"，干净读数逐字不变。
+    token_notes: list[str] = []
     for baseline, m in per.items():
         t = m["token_metrics"]
-        lines.append(
-            f"| {baseline} | {t.get('total_tokens', 0)} | {t.get('total_input_tokens', 0)} "
-            f"| {t.get('total_output_tokens', 0)} | {t.get('total_llm_calls', 0)} "
-            f"| {t.get('avg_tokens_per_task', 0)} |"
-        )
+        readings = {
+            "total_tokens": token_metric_reading(t, "total_tokens"),
+            "total_input_tokens": token_metric_reading(t, "total_input_tokens"),
+            "total_output_tokens": token_metric_reading(t, "total_output_tokens"),
+            "total_llm_calls": token_metric_reading(t, "total_llm_calls"),
+            "avg_tokens_per_task": token_metric_reading(t, "avg_tokens_per_task", allow_float=True),
+        }
+        unreadable_fields = [key for key, reading in readings.items() if reading["value"] is None]
+        if unreadable_fields:
+            codes = sorted(
+                {code for reading in readings.values() if reading["value"] is None for code in reading["reasons"]}
+            )
+            token_notes.append(
+                f"{baseline} 的 {'、'.join(f'`{key}`' for key in unreadable_fields)} 不可读（{'；'.join(codes)}）"
+            )
+        cells = ["不可读" if reading["value"] is None else reading["value"] for reading in readings.values()]
+        lines.append(f"| {baseline} | {cells[0]} | {cells[1]} | {cells[2]} | {cells[3]} | {cells[4]} |")
+    lines.append("")
+    lines.extend(f"> Token 读数不可判定：{note}" for note in token_notes)
+    if token_notes:
+        lines.append(">")
     lines.append("")
 
     # 迭代次数分布
@@ -362,32 +383,49 @@ def render_markdown(analysis: dict[str, Any], source_file: str) -> str:
         for b, m in per.items()
         if m.get("convergence_token_efficiency", {}).get("available")
     ]
-    if conv_token_rows:
+    # AO（2026-10-21）：行读数不可用导致整条曲线不可读时点名披露
+    # （读不动不是 0；不能让该基线的曲线静默消失）。
+    conv_token_blocked = [
+        (b, m["convergence_token_efficiency"])
+        for b, m in per.items()
+        if not m.get("convergence_token_efficiency", {}).get("available")
+        and m.get("convergence_token_efficiency", {}).get("n_token_unreadable_rows", 0) > 0
+    ]
+    if conv_token_rows or conv_token_blocked:
         lines.append("## 修复收敛 Token 效率曲线（1.3）")
         lines.append("")
-        lines.append("| 基线 | 轮次 | 到达任务 | 增量通过 | 增量Token | 边际收益(通过/Token) | 最佳边际轮次 |")
-        lines.append("|------|------|---------|---------|----------|--------------------|------------|")
-        for baseline, ct in conv_token_rows:
-            total = ct.get("total_tasks", 0)
-            best = ct.get("best_marginal_round")
-            for k in ("0", "1", "2", "3+"):
-                r = ct.get("rounds", {}).get(k)
-                if not r:
-                    continue
-                marginal = r.get("marginal_pass_per_token")
-                marginal_text = f"{marginal:.4f}" if marginal is not None else "N/A"
-                lines.append(
-                    f"| {baseline} | {k} | {r.get('reached_tasks', 0)} "
-                    f"| {r.get('incremental_passed', 0)} | {r.get('incremental_tokens', 0)} "
-                    f"| {marginal_text} | {best if k == '3+' else '—'} |"
-                )
-            lines.append(f"| {baseline} | 总任务 | {total} | — | — | — | — |")
-        lines.append("")
-        lines.append(
-            "> 解读：边际收益 = 该轮增量通过任务数 / 该轮增量 Token 消耗；"
-            'best_marginal_round 标记"第几轮修复最划算"（边际收益最高的轮次），'
-            '用于回答"第几轮修复的边际收益最高"。'
-        )
+        if conv_token_rows:
+            lines.append("| 基线 | 轮次 | 到达任务 | 增量通过 | 增量Token | 边际收益(通过/Token) | 最佳边际轮次 |")
+            lines.append("|------|------|---------|---------|----------|--------------------|------------|")
+            for baseline, ct in conv_token_rows:
+                total = ct.get("total_tasks", 0)
+                best = ct.get("best_marginal_round")
+                for k in ("0", "1", "2", "3+"):
+                    r = ct.get("rounds", {}).get(k)
+                    if not r:
+                        continue
+                    marginal = r.get("marginal_pass_per_token")
+                    marginal_text = f"{marginal:.4f}" if marginal is not None else "N/A"
+                    lines.append(
+                        f"| {baseline} | {k} | {r.get('reached_tasks', 0)} "
+                        f"| {r.get('incremental_passed', 0)} | {r.get('incremental_tokens', 0)} "
+                        f"| {marginal_text} | {best if k == '3+' else '—'} |"
+                    )
+                lines.append(f"| {baseline} | 总任务 | {total} | — | — | — | — |")
+            lines.append("")
+        for baseline, ct in conv_token_blocked:
+            reasons = "、".join(f"{code}×{count}" for code, count in ct.get("token_reading_reasons", {}).items())
+            lines.append(
+                f"> - `{baseline}` Token 曲线不可读：{ct.get('n_token_unreadable_rows')} 行读数不可用（{reasons}）。"
+            )
+        if conv_token_blocked:
+            lines.append("")
+        if conv_token_rows:
+            lines.append(
+                "> 解读：边际收益 = 该轮增量通过任务数 / 该轮增量 Token 消耗；"
+                'best_marginal_round 标记"第几轮修复最划算"（边际收益最高的轮次），'
+                '用于回答"第几轮修复的边际收益最高"。'
+            )
         lines.append("")
 
     # 修复迭代分布的难度分层统计（1.3）
@@ -593,17 +631,32 @@ def render_markdown(analysis: dict[str, Any], source_file: str) -> str:
         lines.append(
             "|------|--------------|---------------|-----------|----------------|-----------------|-------------|----------|--------|"
         )
+        rag_token_notes: list[str] = []
         for baseline, rt in rag_token_rows:
             g = rt.get("rag_group", {})
             ng = rt.get("no_rag_group", {})
             ratio = rt.get("token_delta_ratio")
             ratio_text = f"{ratio:.2f}" if ratio is not None else "N/A"
+            # AP：组均值不可读时不得借用 `.get(..., 0)` 印 0（"没有 token"与
+            # "读不出 token"必须分形）。
+            rag_avg = "不可读" if g.get("avg_tokens") is None else g.get("avg_tokens", 0)
+            no_rag_avg = "不可读" if ng.get("avg_tokens") is None else ng.get("avg_tokens", 0)
+            for side_key, group in (("RAG组", g), ("无RAG组", ng)):
+                if group.get("avg_tokens") is None:
+                    reasons = "；".join(group.get("token_reading_reasons", {}))
+                    rag_token_notes.append(
+                        f"{baseline} {side_key} 的 `avg_tokens` 不可读"
+                        f"（{group.get('n_token_unreadable_rows', 0)} 行不可读：{reasons or '机制未记录'}）"
+                    )
             lines.append(
-                f"| {baseline} | {g.get('tasks', 0)} | {g.get('avg_tokens', 0)} "
-                f"| {g.get('success_rate', 0.0)} | {ng.get('tasks', 0)} | {ng.get('avg_tokens', 0)} "
+                f"| {baseline} | {g.get('tasks', 0)} | {rag_avg} "
+                f"| {g.get('success_rate', 0.0)} | {ng.get('tasks', 0)} | {no_rag_avg} "
                 f"| {ng.get('success_rate', 0.0)} | {ratio_text} | {rt.get('iteration_delta', 0.0)} |"
             )
         lines.append("")
+        lines.extend(f"> Token 读数不可判定：{note}" for note in rag_token_notes)
+        if rag_token_notes:
+            lines.append(">")
         lines.append(
             "> 解读：Token 比率 > 1 表示启用 RAG 的任务消耗更多 Token（检索 + 提示注入开销）；"
             '结合成功率差异判断 RAG 的"性价比"——若成功率提升足以抵消 Token 开销则值得，'

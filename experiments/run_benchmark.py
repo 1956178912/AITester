@@ -87,6 +87,7 @@ from src.api.complexity_router import (  # noqa: E402
     compute_complexity_score,
     routing_enabled,
 )
+from src.budget.token_usage import aggregate_row_token_usage, token_metric_reading  # noqa: E402
 from src.datasets.dataset_loader import (  # noqa: E402
     BenchmarkTask,
     InMemoryDataset,
@@ -927,7 +928,7 @@ def _dump_state_artifacts(output_dir: str, task: BenchmarkTask, baseline: str, f
     os.makedirs(raw_dir, exist_ok=True)
     artifact_file = os.path.join(raw_dir, f"{baseline}.json")
     with open(artifact_file, "w", encoding="utf-8") as f:
-        json.dump(artifact, f, ensure_ascii=False, indent=2)
+        json.dump(artifact, f, ensure_ascii=False, indent=2, allow_nan=False)
 
 
 def _compute_contamination_risk_level(
@@ -1621,6 +1622,33 @@ def _aggregate_rag_metrics(bl_results: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _token_efficiency_texts(metrics: Any) -> tuple[str, str, list[str]]:
+    """终端 token 效率两行主体 + 不可读机制（AX，2026-10-21）。
+
+    `token_metrics` 是 AN 写盘的聚合对象：字段在场 `None` 是上游拒绝
+    （AT 的写拒绝 / AN 的不给部分和），缺席按 AE2 历史 0。此前终端行用
+    `%d` / `%.2f` 直出，一个被拒绝的字段会让整轮基准在跑完后的汇总处抛
+    `TypeError`。返回 `(日志行主体, 进度行主体, 去重机制名)`。
+    """
+    total = token_metric_reading(metrics, "total_tokens")
+    avg = token_metric_reading(metrics, "avg_tokens_per_task", allow_float=True)
+    calls = token_metric_reading(metrics, "total_llm_calls")
+    reasons = list(
+        dict.fromkeys(
+            code for reading in (total, avg, calls) if reading["value"] is None for code in reading["reasons"]
+        )
+    )
+    total_text = "不可读" if total["value"] is None else str(total["value"])
+    avg_text = "不可读" if avg["value"] is None else str(avg["value"])
+    avg_fixed = "不可读" if avg["value"] is None else f"{avg['value']:.2f}"
+    calls_text = "不可读" if calls["value"] is None else str(calls["value"])
+    return (
+        f"总tokens={total_text}, 平均每任务tokens={avg_fixed}, LLM调用次数={calls_text}",
+        f"平均每任务Token: {avg_text}, LLM调用次数: {calls_text}",
+        reasons,
+    )
+
+
 def _aggregate_token_metrics(bl_results: list[dict[str, Any]]) -> dict[str, Any]:
     """聚合一个基线的 token 消耗（P0-2：多智能体系统 vs Plain LLM 性价比对比）。
 
@@ -1628,38 +1656,78 @@ def _aggregate_token_metrics(bl_results: list[dict[str, Any]]) -> dict[str, Any]
     avg_output_per_call——输出 token 单价约为输入命中缓存的 10 倍以上
     （DeepSeek 口径），输出占比是成本结构的首要指标（R-P0-2 实测
     aitester 臂输出占 78%）。
+
+    AN（2026-10-21）：逐行读数交给 `aggregate_row_token_usage`（与可信报告 /
+    旧批次兜底同一份策略）。整键缺席按历史 0；在场坏值让对应总量为 None
+    （不折 0、不给部分和）；拆分矛盾只披露（token 总量仍取行内真值）；缓存
+    半套 / 坏值让缓存读数为 None。披露键只在真发生时写入 ⇒ 干净批次的
+    `token_metrics` 返回域逐键不变（真批次 783 行复算与已落值一致）。
+
+    缓存指标口径：
+        cache_hit_rate = 命中 / (命中 + 真实调用)——缓存命中率是成本首要指标
+        （前沿：缓存命中率 0%→94% 产生 9 倍成本差异，超过模型层级差异）。
+        uncached_theoretical_tokens = 真实 + 避免——还原"无缓存理论成本"，
+        消除"缓存命中率漂移导致 $/token 结论不可比"的系统性偏差。
     """
-    total_input = sum((r.get("token_usage") or {}).get("input_tokens", 0) for r in bl_results)
-    total_output = sum((r.get("token_usage") or {}).get("output_tokens", 0) for r in bl_results)
-    total_calls = sum((r.get("token_usage") or {}).get("llm_calls", 0) for r in bl_results)
-    # P0 止血（缓存记账缺口）配套：缓存命中数 + 避免 token（cache_avoided_tokens
-    # 来自 token_usage.as_dict() 新增字段，结果行已自动携带）。
-    #   cache_hit_rate = 命中 / (命中 + 真实调用)——缓存命中率是成本首要指标
-    #   （前沿：缓存命中率 0%→94% 产生 9 倍成本差异，超过模型层级差异）。
-    #   uncached_theoretical_tokens = 真实 + 避免——还原"无缓存理论成本"，
-    #   消除"缓存命中率漂移导致 $/token 结论不可比"的系统性偏差。
-    total_cache_hits = sum((r.get("token_usage") or {}).get("cache_hits", 0) for r in bl_results)
-    total_cache_avoided = sum((r.get("token_usage") or {}).get("cache_avoided_tokens", 0) for r in bl_results)
-    total = len(bl_results)
-    return {
+    agg = aggregate_row_token_usage(bl_results)
+    total_input = agg["input_tokens"]
+    total_output = agg["output_tokens"]
+    total_tokens = agg["total_tokens"]
+    total_calls = agg["llm_calls"]
+    cache = agg["cache"]
+    if cache["present"]:
+        total_cache_hits = cache["hits"]
+        total_cache_avoided = cache["avoided"]
+    else:
+        # 旧 schema 整批无缓存字段：历史 0（AJ：缓存披露键只在真发生时写入）。
+        total_cache_hits = 0
+        total_cache_avoided = 0
+    total = agg["n_rows"]
+
+    if total_cache_hits is None or total_calls is None:
+        cache_hit_rate: float | None = None
+    elif total_cache_hits + total_calls > 0:
+        cache_hit_rate = round(total_cache_hits / (total_cache_hits + total_calls) * 100, 2)
+    else:
+        cache_hit_rate = 0.0
+    uncached = None if total_tokens is None or total_cache_avoided is None else total_tokens + total_cache_avoided
+    avg_tokens_per_task = None if total_tokens is None else (round(total_tokens / total, 2) if total > 0 else 0)
+    if total_input is None or total_output is None:
+        output_share: float | None = None
+    elif total_input + total_output > 0:
+        output_share = round(total_output / (total_input + total_output) * 100, 2)
+    else:
+        output_share = 0.0
+    avg_output_per_task = None if total_output is None else (round(total_output / total, 2) if total > 0 else 0)
+    avg_output_per_call = (
+        None
+        if total_output is None or total_calls is None
+        else (round(total_output / total_calls, 2) if total_calls > 0 else 0)
+    )
+
+    metrics: dict[str, Any] = {
         "total_input_tokens": total_input,
         "total_output_tokens": total_output,
-        "total_tokens": total_input + total_output,
+        "total_tokens": total_tokens,
         "total_llm_calls": total_calls,
         "total_cache_hits": total_cache_hits,
         "total_cache_avoided_tokens": total_cache_avoided,
-        "cache_hit_rate_pct": round(total_cache_hits / (total_cache_hits + total_calls) * 100, 2)
-        if (total_cache_hits + total_calls) > 0
-        else 0.0,
-        "uncached_theoretical_tokens": total_input + total_output + total_cache_avoided,
-        "avg_tokens_per_task": round((total_input + total_output) / total, 2) if total > 0 else 0,
+        "cache_hit_rate_pct": cache_hit_rate,
+        "uncached_theoretical_tokens": uncached,
+        "avg_tokens_per_task": avg_tokens_per_task,
         # AD1：输出成本结构观测（键集合同构，纯新增）
-        "output_share_pct": round(total_output / (total_input + total_output) * 100, 2)
-        if (total_input + total_output) > 0
-        else 0.0,
-        "avg_output_per_task": round(total_output / total, 2) if total > 0 else 0,
-        "avg_output_per_call": round(total_output / total_calls, 2) if total_calls > 0 else 0,
+        "output_share_pct": output_share,
+        "avg_output_per_task": avg_output_per_task,
+        "avg_output_per_call": avg_output_per_call,
     }
+    if agg["n_unreadable_rows"]:
+        metrics["n_token_unreadable_rows"] = agg["n_unreadable_rows"]
+        metrics["token_reading_reasons"] = agg["reading_reasons"]
+    if agg["n_contradiction_rows"]:
+        metrics["n_token_split_mismatch_rows"] = agg["n_contradiction_rows"]
+    if cache["present"] and not cache["complete"]:
+        metrics["cache_reading_reasons"] = {**cache["missing"], **cache["reasons"]}
+    return metrics
 
 
 def _aggregate_failure_categories(bl_results: list[dict[str, Any]]) -> dict[str, int]:
@@ -4624,7 +4692,7 @@ def run_benchmark(
     timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_file = os.path.join(output_dir, f"benchmark_{dataset_name}_{timestamp_str}.json")
     with open(output_file, "w", encoding="utf-8") as f:
-        json.dump(summary, f, ensure_ascii=False, indent=2)
+        json.dump(summary, f, ensure_ascii=False, indent=2, allow_nan=False)
 
     logger.info("基准测试完成，结果已保存至: %s", output_file)
     logger.info("汇总：总耗时=%.1fs", total_time)
@@ -4639,15 +4707,14 @@ def run_benchmark(
         )
     # 2.2 公平性对照：Token 效率维度（"完整系统 vs Plain LLM"不能只看成功率，
     # 多智能体系统 token 消耗通常远高于单模型直答，效率-效果二维对照才有意义）
+    token_texts: dict[str, tuple[str, str, list[str]]] = {}
     for baseline in baselines:
-        tm = summary["results"][baseline]["token_metrics"]
-        logger.info(
-            "  [%s] Token效率: 总tokens=%d, 平均每任务tokens=%.2f, LLM调用次数=%d",
-            baseline,
-            tm["total_tokens"],
-            tm["avg_tokens_per_task"],
-            tm["total_llm_calls"],
-        )
+        tm = summary["results"][baseline].get("token_metrics")
+        token_texts[baseline] = _token_efficiency_texts(tm)
+        log_text, _, reasons = token_texts[baseline]
+        logger.info("  [%s] Token效率: %s", baseline, log_text)
+        if reasons:
+            logger.warning("  [%s] Token读数不可判定：%s", baseline, "；".join(reasons))
 
     if use_progress:
         print("\n" + "=" * 60)
@@ -4655,9 +4722,11 @@ def run_benchmark(
         print("=" * 60)
         for baseline in baselines:
             bl = summary["results"][baseline]
-            tm = bl["token_metrics"]
+            _, progress_text, reasons = token_texts[baseline]
             print(f"  [{baseline}] 成功率: {bl['success_rate']}%, 平均覆盖率: {bl['avg_coverage']}%")
-            print(f"  [{baseline}] 平均每任务Token: {tm['avg_tokens_per_task']}, LLM调用次数: {tm['total_llm_calls']}")
+            print(f"  [{baseline}] {progress_text}")
+            if reasons:
+                print(f"  [{baseline}] Token读数不可判定：{'；'.join(reasons)}")
         print(f"总耗时: {total_time:.1f}s")
         print(f"结果文件: {output_file}")
         print("=" * 60)

@@ -42,6 +42,16 @@ if str(_REPO_ROOT) not in sys.path:
 # AB-15a（2026-10-20）：币种判定与机制名的唯一事实源在 `src.budget.pricing`。
 from src.budget.pricing import entry_block_reason, models_layer, table_read_reason  # noqa: E402
 
+# AJ（2026-10-21）：token 计数值域谓词与缓存口径读取的唯一事实源在生产者模块
+# （`src.budget.token_usage`）。下方 `token_count_reason` 保留为别名——既有锁与
+# 调用方零改动，但仓内只剩一份实现。
+from src.budget.token_usage import (  # noqa: E402
+    cache_caliber,
+    cache_totals,
+    count_reason,
+    row_token_counts,
+)
+
 # ─── 输入工件（R-P0-2 当前口径三种子 + E6 对照 + E4 修正结算）──────────────
 MAIN_BATCH_FILES = [
     "experiments/results/main_batch/benchmark_synthetic_20261006_140906.json",  # seed 42
@@ -58,6 +68,11 @@ PRICE_TABLE = "experiments/price_table.json"
 BOOTSTRAP_N = 10_000
 BOOTSTRAP_SEED = 42
 Z95 = 1.959963985  # 双尾 95% 正态分位数（比 1.96 精确，避免手抄常数漂移）
+
+# AZ（2026-10-21）：F01/F02 修正后重发到新日期目录。20261016 归档受
+# SHA256SUMS 保护、保留为历史值（g 记录的是 2g；精确尾被 1e-12 epsilon
+# 抬高），不得原地重写。
+DEFAULT_OUT_DIR = "experiments/results/emse_stats_extensions_20261021"
 
 
 # ─── 纯函数（单测锁定）────────────────────────────────────────────────────
@@ -85,11 +100,16 @@ def wilson_ci(successes: int, n: int, z: float = Z95) -> tuple[float, float]:
 
 
 def cohens_g(n10: int, n01: int) -> float:
-    """McNemar 不一致对的 Cohen's g = |b - c| / (b + c)（0 = 无差异，1 = 完全一边倒）。"""
+    """McNemar 不一致对的 Cohen's g = |n10 - n01| / (2 * (n10 + n01))。
+
+    effectsize 口径：把不一致对归一为 max/(sum) 后减 0.5，即
+    (max - min) / (2 * sum)。范围 0（完全对称）– 0.5（完全一边倒）。
+    2026-10-21 前本函数返回的是 2g（范围 0–1），不是标准 g。
+    """
     total = n10 + n01
     if total == 0:
         return 0.0
-    return abs(n10 - n01) / total
+    return abs(n10 - n01) / (2 * total)
 
 
 def odds_ratio_ci(n10: int, n01: int, z: float = Z95) -> tuple[float, float, float]:
@@ -109,17 +129,24 @@ def odds_ratio_ci(n10: int, n01: int, z: float = Z95) -> tuple[float, float, flo
 def binom_exact_two_sided(k: int, n: int, p: float = 0.5) -> float:
     """二项分布精确双尾 p 值（McNemar 精确检验；纯 stdlib，不依赖 scipy）。
 
-    口径：两尾概率之和（min 尾 ×2 与全尾枚举的较保守者取小，防超 1）。
+    口径：概率序双侧——累加所有 pmf(i) <= pmf(k) 的结局概率。
+    p=0.5 时用整数权重 comb(n, i) 精确比较（McNemar 唯一实参），
+    不得引入 epsilon 容差：概率小于容差时它会把整条尾部一起收进来
+    （113/0 曾被抬到 ~1.93e-12，正确值 1.926e-34）。
     """
     if n == 0:
         return 1.0
+
+    if p == 0.5:
+        weights = [math.comb(n, i) for i in range(n + 1)]
+        cutoff = weights[k]
+        return min(1.0, sum(w for w in weights if w <= cutoff) / 2**n)
 
     def pmf(i: int) -> float:
         return math.comb(n, i) * (p**i) * ((1 - p) ** (n - i))
 
     prob_k = pmf(k)
-    tail = sum(pmf(i) for i in range(n + 1) if pmf(i) <= prob_k + 1e-12)
-    return min(1.0, tail)
+    return min(1.0, sum(pmf(i) for i in range(n + 1) if pmf(i) <= prob_k))
 
 
 def paired_bootstrap_diff_ci(
@@ -227,12 +254,155 @@ def _load_price_models() -> tuple[dict[str, Any] | None, str | None]:
     return models, None
 
 
-def _cost_per_task(files: list[str], arm: str) -> tuple[float, float | None, str]:
+# ─── AI（2026-10-21）：token 计数的值域与记账闭合，一处写一遍 ─────────────────
+#
+# AH 把"三种不完整的和"判在金额侧，但 token 本身仍是 `sum += value or 0`：形状、缺席、
+# 类型、符号、有限性都没有判定。同一行 token_usage 在 `_cost_per_task` 与
+# `_bootstrap_cost_ci` 各读一遍，坏值的结局一边崩溃、一边把 inf/nan 带进 CI。下面四个
+# 助手把"一行 token 记账算什么"收成一次读取，两个消费点只负责取数与格式化。
+
+# AJ：实现迁到 `src.budget.token_usage.count_reason`（与缓存字段共用一套值域词汇），
+# 本名保留为别名——AI 轮既有锁与外部调用零改动。
+token_count_reason = count_reason
+
+# AL：行级三元组读取迁到 `src.budget.token_usage.row_token_counts`，报告 §4.1
+# 与本模块共用同一份值域判定；本名保留为别名。
+_row_token_counts = row_token_counts
+
+
+def _reason_summary(reasons: list[str]) -> str:
+    """机制名去重计数：`code←n 行；…`（一行可同时缺多个字段）。"""
+    counts: dict[str, int] = {}
+    for reason in reasons:
+        counts[reason] = counts.get(reason, 0) + 1
+    return "；".join(f"{code}←{n} 行" for code, n in sorted(counts.items()))
+
+
+def _read_tokens(files: list[str], arm: str) -> dict[str, Any]:
+    """臂内 token 记账单次读取：计数、归因、值域机制一次判完（AI）。
+
+    - `value_reasons` 非空 ⇒ 三元组不完整，`tokens/task` 无读数（`None`）；
+    - `split_reasons` 非空 ⇒ total 可读，但行级 `in+out ≠ total`，金额无读数；
+    - `model_reasons` 非空 ⇒ `by_model` 读不动（形状/键/值域），金额无读数；
+    - `rows` 只收三元组合法的行，bootstrap 与 `_cost_per_task` 同源；
+    - `cache`（AJ）：缓存口径汇总——`present` 判 schema 代次，旧批次（两个键都缺席）
+      的读数与 note 因此逐字不变。
+    - AK：`n_zero_rows` 收显式三元组全 0 且无缓存证据的行（有产出、无花费记录），
+      `n_zero_output_rows` 是其中 generated_test 非空的子集；两者供 note 声明下界。
+      纯缓存臂的真实 0 由缓存解释，不计入 `n_zero_rows`。
+
+    读取不完整的行（`value_reasons`）不进 `n_zero_rows`：它们连 0 都没有，机制名
+    已逐条点名，不能混成"读数确为零"。
+    """
+    reading: dict[str, Any] = {
+        "n_tasks": 0,
+        "n_rows": 0,
+        "total": 0,
+        "input": 0,
+        "output": 0,
+        "rows": [],
+        "by_model": {},
+        "value_reasons": [],
+        "split_reasons": [],
+        "model_reasons": [],
+        "n_zero_rows": 0,
+        "n_zero_output_rows": 0,
+        "cache": cache_totals([]),
+    }
+    usages: list[Any] = []
+    for rel in files:
+        data = _load(rel)
+        reading["n_tasks"] += data["total_tasks"]
+        for r in _arm_detection_rows(data, arm):
+            reading["n_rows"] += 1
+            usage = r.get("token_usage")
+            usages.append(usage)
+            counts, reasons = _row_token_counts(r)
+            if counts is None:
+                reading["value_reasons"].extend(reasons)
+            else:
+                total, inp, out = counts
+                if (
+                    total == 0
+                    and inp == 0
+                    and out == 0
+                    and not (isinstance(usage, dict) and cache_caliber(usage)["evidence"])
+                ):
+                    reading["n_zero_rows"] += 1
+                    if isinstance(r.get("generated_test"), str) and r["generated_test"].strip():
+                        reading["n_zero_output_rows"] += 1
+                reading["total"] += total
+                reading["input"] += inp
+                reading["output"] += out
+                reading["rows"].append(total)
+                if inp + out != total:
+                    reading["split_reasons"].append(f"token_split_mismatch:{inp + out}/{total}")
+            if not isinstance(usage, dict) or "by_model" not in usage:
+                continue
+            by_model = usage["by_model"]
+            if not isinstance(by_model, dict):
+                reading["model_reasons"].append(f"by_model_not_object:{type(by_model).__name__}")
+                continue
+            for model, tokens in by_model.items():
+                if not isinstance(model, str):
+                    reading["model_reasons"].append(f"by_model_key_not_string:{type(model).__name__}")
+                    continue
+                reason = token_count_reason(tokens, "by_model")
+                if reason is not None:
+                    reading["model_reasons"].append(reason)
+                    continue
+                reading["by_model"][model] = reading["by_model"].get(model, 0) + tokens
+    reading["cache"] = cache_totals(usages)
+    return reading
+
+
+def _cache_note(cache: dict[str, Any]) -> str:
+    """缓存口径披露串（AJ）：臂内无缓存字段 ⇒ 空串，历史 note 逐字不变。
+
+    命中数 / 避免 token 是**独立于真实 API 消耗**的口径：token 与 $/task 仍是
+    真实花费（缓存命中记 0 是对的），但"0"不等于免费——避免的 token 必须同读。
+    读取不完整（坏值 / 半套 schema）⇒ 不给部分和，机制名留在 note 里。
+    """
+    if not cache["present"]:
+        return ""
+    coverage = f"{cache['n_rows_with_fields']}/{cache['n_rows']} 行带缓存字段"
+    if not cache["complete"]:
+        codes: dict[str, int] = {}
+        for code in list(cache["reasons"]) + list(cache["missing"]):
+            codes[code] = codes.get(code, 0) + 1
+        detail = "；".join(f"{code}←{n} 行" for code, n in sorted(codes.items()))
+        return f"；缓存读数不可用（{detail}）⇒ 命中/避免 token 无读数（不是 0）"
+    return (
+        f"；缓存口径：命中 {cache['hits']} 次、避免 {cache['avoided']} tokens（{coverage}；"
+        "真实 API 消耗不含避免 token，$/task 仍为真实花费口径）"
+    )
+
+
+def _zero_token_note(reading: dict[str, Any]) -> str:
+    """部分记账下界披露（AK）：臂内无显式零 token 行 ⇒ 空串，旧批次 note 逐字不变。
+
+    `n_zero_rows` 只收三元组全 0 且无缓存证据的行。分母用 `n_tasks`（与
+    tokens/task 的分母同一口径）；有 generated_test 的子集单独点名——"生成了
+    测试却零记账"是记录下界，不是免费。
+    """
+    n_zero = reading.get("n_zero_rows") or 0
+    if not n_zero:
+        return ""
+    n_out = reading.get("n_zero_output_rows") or 0
+    detail = f"，其中 {n_out} 行 generated_test 非空（有产出、无花费记录）" if n_out else ""
+    return (
+        f"；{n_zero}/{reading['n_tasks']} 行 token 全 0{detail} ⇒ tokens/task 与 $/task "
+        "是已记录下界（缺记账行按 0 计），不是免费"
+    )
+
+
+def _cost_per_task(files: list[str], arm: str) -> tuple[float | None, float | None, str]:
     """每任务 token 与 $/task 点估计。
 
     $ 换算假设（显式披露）：按该臂聚合 input:output 比例 × deepseek-flash
     峰时全价（价目表登记口径）；多模型臂按各模型 token 占比加权（价目缺失
-    的模型不计入 $，只计 token）。返回 (tokens_per_task, usd_per_task, note)。
+    的模型不计入 $，只计 token）。返回 (tokens_per_task | None,
+    usd_per_task | None, note)。
 
     AB-15a（2026-10-20）：改前这里读 `input_per_mtok` / `output_per_mtok` 却**从不看币种**
     ——把批次实际用到的模型在价目表里改标 `CNY`，`usd_per_task` 逐位不变
@@ -253,31 +423,78 @@ def _cost_per_task(files: list[str], arm: str) -> tuple[float, float | None, str
     `_load(PRICE_TABLE)["models"]` 对同一份坏表直接崩（六种异常），现在坏表落
     `(tpt, None, "价目表不可用（<机制名>）…")`：不崩、不静默用内置价、$/task 无金额；
     条目检索从 `prices.get(m)` 的 `is None` 改 `not in`——"值 null"不再被读成"未登记"。
+
+    AH（2026-10-20）：$/task 只在**价目覆盖全部 by_model token 且 token 归因闭合**时才给
+    金额。改前"价目没登记"走部分和（全未登记得 0.0）、`by_model` 缺失或合计与
+    `total_tokens` 不符时照样给 0.0/部分和、无任务分母也返回 0.0——三种"不完整的和"都
+    披着金额的形状。现在：未登记模型 → `model_unregistered←…`；有 token 但无 `by_model`
+    → `no_model_attribution`；`by_model` 合计 ≠ `total_tokens` →
+    `token_attribution_mismatch:<合计>/<总数>`；无任务 → 没有分母。以上一律
+    `usd_per_task=None` 并在 note 点名。真批次三臂 by_model 合计与 total_tokens 逐位相等
+    （delta 0）⇒ 三个读数一字不变；token 总数确实为 0 时 0.0 仍是真金额（没有可漏计的
+    token），不在此轮拒绝范围内。
+
+    AI（2026-10-21）：token 计数也有值域。AH 只判了"和是否完整"，读入侧仍是
+    `sum += value or 0`——`"100"` 抛 TypeError、`token_usage` 为真值非对象在 `.get` 上抛
+    AttributeError、`True` 当 1 收下、`-5` 让 tokens/task 与金额同时为负、`inf` 让占比成
+    `nan`（且 `inf != inf` 为假，AH 的闭合检查恰好放行），而 `total_tokens` 键缺席、只有
+    in/out 有数字的行被 `or {}` 折成 0，读出 `tokens/task=0.0`。现在一行 token 记账是
+    **三个非负整数**：形状/缺席/类型/负数/非有限任一不成立，整臂 `tokens/task` 与
+    `$/task` 都无读数（`None`），机制名逐条点名；`in+out ≠ total_tokens` 只废金额
+    （总数仍可读）；`by_model` 的形状/键/值域与 AH 的合计闭合同样只废金额。
+    `tokens_per_task` 因此改为 `float | None`（AH §7 第 1 条一并处置：无任务 ⇒ None）。
+
+    AJ（2026-10-21）：缓存命中不是记账断裂，也不是免费。旧批次两个缓存键都缺席 ⇒
+    note 逐字不变；带缓存字段的臂增补命中数 / 避免 token 与字段覆盖率——tokens/task
+    与 $/task 仍是**真实 API 消耗**口径（纯缓存臂读 0 是对的），避免的 token 只披露、
+    不计入成本（生产者不写缓存命中的 by_model，无从按价目折算）。
+
+    AK（2026-10-21）：三元组合法但全 0 的行（无缓存证据）会以 0 进入分子，分母仍是
+    全部任务——主批 plain_llm_df 35/261 行生成测试后零记账，旧 note 对此只字未提，
+    `usd_per_task` 被读成精确值。现在 note 追加"N/M 行 token 全 0（K 行 generated_test
+    非空）⇒ 已记录下界"，只在真有零行时出现：全记账臂 / 旧批次 note 逐字不变，
+    `tpt` / `usd` 的数学口径不动（缺记账行按 0 计是 AE2/AH 锁定口径）。
     """
     prices, table_reason = _load_price_models()
-    tok = inp = out = 0
-    n_tasks = 0
-    for rel in files:
-        data = _load(rel)
-        n_tasks += data["total_tasks"]
-        for r in _arm_detection_rows(data, arm):
-            tu = r.get("token_usage") or {}
-            tok += tu.get("total_tokens", 0) or 0
-            inp += tu.get("input_tokens", 0) or 0
-            out += tu.get("output_tokens", 0) or 0
+    reading = _read_tokens(files, arm)
+    if reading["value_reasons"]:
+        # 三元组不完整：既没有可用的 token 总数，也没有可算金额的 in/out 比例。
+        note = (
+            f"token 读数不可用：{_reason_summary(reading['value_reasons'])} ⇒ tokens/task 与 $/task 均无读数（不是 0）"
+        )
+        return (None, None, note + _cache_note(reading["cache"]))
+    n_tasks = reading["n_tasks"]
+    tok, inp, out = reading["total"], reading["input"], reading["output"]
     if n_tasks == 0:
-        return (0.0, 0.0, "无任务")
+        # AH：没有分母就没有"每任务金额"——0.0 是编造出来的读数，不是"没花钱"。
+        return (None, None, "无任务 ⇒ tokens/task 与 $/task 无读数（不是 0）" + _cache_note(reading["cache"]))
     tpt = tok / n_tasks
     if prices is None:
         # AB-17：坏表不许崩、也不许静默——token 读数照常，$/task 无金额并点名机制。
-        return (tpt, None, f"价目表不可用（{table_reason}）⇒ $/task 无金额（不是 0）")
-    # 价目加权（按 by_model token 占比；未登记价目模型跳过并披露）
-    model_tok: dict[str, int] = {}
-    for rel in files:
-        data = _load(rel)
-        for r in _arm_detection_rows(data, arm):
-            for m, t in (r.get("token_usage") or {}).get("by_model", {}).items():
-                model_tok[m] = model_tok.get(m, 0) + (t or 0)
+        return (
+            tpt,
+            None,
+            f"价目表不可用（{table_reason}）⇒ $/task 无金额（不是 0）"
+            + _zero_token_note(reading)
+            + _cache_note(reading["cache"]),
+        )
+    # AH：三种"不完整的和"先点名——少算了谁、根本没归因、归因不闭合，都不得以金额形状出现。
+    model_tok = reading["by_model"]
+    model_tok_sum = sum(model_tok.values())
+    attribution: str | None = None
+    # AI：by_model 在场但读不动时，提示语必须指向"值域"而不是"补归因"——否则照提示
+    # 去加 by_model 也不会变绿（AG 判据）。只有真的没有 by_model（或缺省/空对象）才报
+    # `no_model_attribution`。
+    if tok > 0 and not model_tok and not reading["model_reasons"]:
+        attribution = "no_model_attribution"
+    elif model_tok and model_tok_sum != tok:
+        attribution = f"token_attribution_mismatch:{model_tok_sum}/{tok}"
+    # AI：split 与 by_model 的值域问题只废金额——total_tokens 本身仍是可读的计数。
+    token_gaps: list[str] = []
+    if reading["split_reasons"]:
+        token_gaps.append(_reason_summary(reading["split_reasons"]))
+    if reading["model_reasons"]:
+        token_gaps.append(_reason_summary(reading["model_reasons"]))
     usd = 0.0
     unpriced = []
     blocked: dict[str, list[str]] = {}
@@ -302,27 +519,43 @@ def _cost_per_task(files: list[str], arm: str) -> tuple[float, float | None, str
         # 价目为每百万 token 单价 → /1e6 换算为每 token；in/out 比例用该臂聚合口径
         usd += share * tpt * (pi * (inp / max(tok, 1)) + po * (out / max(tok, 1))) / 1_000_000
     note = f"价目加权（in:out={inp}:{out}）；未计价模型：{unpriced or '无'}"
+    gaps: list[str] = []
+    if unpriced:
+        gaps.append(f"model_unregistered←{'、'.join(sorted(unpriced))}")
+    if attribution is not None:
+        gaps.append(attribution)
+    if gaps:
+        note += "；无金额机制：" + "；".join(gaps)
+    if token_gaps:
+        note += "；token 读数问题：" + "；".join(token_gaps)
     if blocked:
         note += "；计价被拒：" + "；".join(
             f"{code}←{'、'.join(sorted(models))}" for code, models in sorted(blocked.items())
         )
-    # 任一份额被拒 ⇒ $/task 没有金额（部分和不得冒充全额），机制名留在 note 里。
-    return (tpt, None if blocked else usd, note)
+    if blocked or gaps or token_gaps:
+        note += " ⇒ $/task 无金额（不是 0）"
+    # 任一份额被拒/未登记/归因不闭合 ⇒ $/task 没有金额（部分和不得冒充全额），机制名留在 note 里。
+    note += _zero_token_note(reading)
+    note += _cache_note(reading["cache"])
+    return (tpt, None if (blocked or gaps or token_gaps) else usd, note)
 
 
 def _bootstrap_cost_ci(
     files: list[str], arm: str, n_boot: int = BOOTSTRAP_N, seed: int = BOOTSTRAP_SEED
-) -> tuple[float, float]:
+) -> tuple[float, float] | None:
     """每任务 token 均值的任务级 bootstrap 95% CI（种子化）。
 
     性能（2026-10-16 C 轮优化）：同 :func:`paired_bootstrap_diff_ci`，
     逐元素 randrange → ``rng.choices(rows, k=n)``（实测 4.6×）。
+
+    AI（2026-10-21）：与 `_cost_per_task` 共用 `_read_tokens`——改前这里另写一遍
+    `(r.get("token_usage") or {}).get("total_tokens", 0) or 0`，坏值一边崩一边把
+    `inf`/`nan` 原样带进 CI。三元组不完整或无任务分母 ⇒ `None`（区间不是 0）。
     """
-    rows: list[int] = [
-        (r.get("token_usage") or {}).get("total_tokens", 0) or 0
-        for rel in files
-        for r in _arm_detection_rows(_load(rel), arm)
-    ]
+    reading = _read_tokens(files, arm)
+    if reading["value_reasons"] or reading["n_tasks"] == 0:
+        return None
+    rows: list[int] = reading["rows"]
     if not rows:
         return (0.0, 0.0)
     rng = random.Random(seed)
@@ -348,11 +581,11 @@ def build_report() -> dict[str, Any]:
         ones, total = _arm_totals(MAIN_BATCH_FILES, arm)
         lo, hi = wilson_ci(ones, total)
         tpt, usd, note = _cost_per_task(MAIN_BATCH_FILES, arm)
-        clo, chi = _bootstrap_cost_ci(MAIN_BATCH_FILES, arm)
+        cost_ci = _bootstrap_cost_ci(MAIN_BATCH_FILES, arm)
         report["arms"][f"rp02_{arm}"] = {
             "detection": {"killed": ones, "denominator": total, "rate": ones / max(total, 1), "wilson95": [lo, hi]},
             "tokens_per_task": tpt,
-            "tokens_per_task_bootstrap95": [clo, chi],
+            "tokens_per_task_bootstrap95": list(cost_ci) if cost_ci is not None else None,
             "usd_per_task": usd,
             "usd_note": note,
         }
@@ -451,6 +684,8 @@ def render_markdown(rep: dict[str, Any]) -> str:
         f"- 口径：{rep['caliber']}",
         f"- bootstrap：n={rep['bootstrap']['n']}，seed={rep['bootstrap']['seed']}（逐位可复现）",
         "- 输入：R-P0-2 三种子（261 任务/臂口径）+ E6 对照 + E4 QuixBugs 修正结算（零 LLM 重算）",
+        "- 工件沿革：AZ 轮（2026-10-21）重发，修正 Cohen's g 尺度与精确二项尾的",
+        "  epsilon 放大；`emse_stats_extensions_20261016/` 保留为历史值（不重写）。",
         "",
         "## 1. 各臂点估计 + Wilson 95% CI",
         "",
@@ -489,24 +724,32 @@ def render_markdown(rep: dict[str, Any]) -> str:
     ]
     for name, blk in rep["arms"].items():
         if "tokens_per_task" in blk:
-            lo, hi = blk["tokens_per_task_bootstrap95"]
+            # AI：token 读数与区间都可能是 None（值域坏 / 无分母）——不得用 0 填充。
+            tpt = blk["tokens_per_task"]
+            ci = blk["tokens_per_task_bootstrap95"]
+            tpt_cell = f"{tpt:.0f}" if tpt is not None else "—（无 token 读数）"
+            ci_cell = f"[{ci[0]:.0f}, {ci[1]:.0f}]" if ci is not None else "—"
             # AB-15a：被拒的金额不得挂 `$`（改前这里对 None 直接 `:.4f` 崩，而只要聚合出
             # 数字就照原样印成全额）。机制名在同行"换算假设"列里点名。
             usd_cell = f"${blk['usd_per_task']:.4f}" if blk["usd_per_task"] is not None else "—（无金额）"
-            lines.append(
-                f"| {name} | {blk['tokens_per_task']:.0f} | [{lo:.0f}, {hi:.0f}] | {usd_cell} | {blk['usd_note']} |"
-            )
+            lines.append(f"| {name} | {tpt_cell} | {ci_cell} | {usd_cell} | {blk['usd_note']} |")
     lines += [
         "",
         "## 4. 口径纪律",
         "",
         "- Wilson CI 为 Wilson score 区间（小样本稳健）；不与 naive 正态近似混用；",
-        "- Cohen's g 仅用 McNemar 不一致对（b/c），与 OR 互为方向/强度表述；",
+        "- 精确 p 为 p=0.5 的对称双尾二项尾（整数权重比较，无 1e-12 epsilon 容差）；",
+        "- Cohen's g = |n10-n01| / (2*(n10+n01))（effectsize 口径，范围 0–0.5），",
+        "  仅用 McNemar 不一致对，与 OR 互为方向/强度表述；",
         "- bootstrap 为任务级重抽样（配对结构保持），种子 42，10k 次；",
         "- 表中 rate_a / rate_b 为**配对子集**口径（denominator = n_paired），与第 1 节",
         "  全分母口径（如 df 44.83% @261）可能不同，引用时须区分；",
         "- n01=0 时 OR 经 Haldane-Anscombe +0.5 修正，CI 上界极大属正确行为",
         "  （零不一致对 = 点估计无穷方向的保守截断），不得解读为「效应不显著」；",
+        "- tokens/task 仅在每行 token_usage 为对象、三个计数字段均为非负整数时给出读数；",
+        "  形状/缺席/类型/负数/非有限、无任务分母一律记「—（无 token 读数）」并点名机制；",
+        "- $/task 另要求行级 in+out = total_tokens 且 by_model 合计 = total_tokens；",
+        "  未登记、无归因、归因不闭合、token 读数问题一律记「—（无金额）」并在 note 点名机制；",
         "- $/task 换算假设见各行 note（价目表官方登记口径，峰时全价保守上界）；",
         "- 本工件所有数字可由 `python -m experiments.emse_stats_extensions` 零 LLM 逐位复算。",
         "",
@@ -517,7 +760,7 @@ def render_markdown(rep: dict[str, Any]) -> str:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="统计报告规范补强（Wilson CI / 效应量 / 成本 bootstrap）")
     parser.add_argument("--stdout", action="store_true", help="只打印 markdown，不落盘")
-    parser.add_argument("--out-dir", default="experiments/results/emse_stats_extensions_20261016")
+    parser.add_argument("--out-dir", default=DEFAULT_OUT_DIR)
     args = parser.parse_args(argv)
 
     rep = build_report()

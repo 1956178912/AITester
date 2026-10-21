@@ -524,13 +524,14 @@ class TestEmseExtensionsAdmission:
         assert usd is None
         assert "计价被拒：entry_not_object:int←deepseek-flash" in note
 
-    def test_unregistered_model_keeps_the_old_partial_sum_caliber(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """未登记（键缺席）仍是既有"未计价模型"口径：跳过并披露、保留剩余部分和——
-        "没登记"与"登记了却用不了"是两件事，拒绝才不留部分和。"""
+    def test_unregistered_model_is_no_amount_not_a_partial_sum(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """AB-16 当时保留"未计价模型"部分和；AH（2026-10-20）起未登记 ⇒ 无金额 + 机制名。
+        "没登记"与"登记了却用不了"仍是两件事：前者记 model_unregistered、后者记计价被拒。"""
         _fake_price(monkeypatch, {})
         _, usd, note = ext._cost_per_task(ext.MAIN_BATCH_FILES, "aitester")
-        assert usd == 0.0
+        assert usd is None
         assert "未计价模型：['deepseek-flash']" in note
+        assert "model_unregistered←deepseek-flash" in note
         assert "计价被拒" not in note
 
     def test_zero_price_is_a_real_amount(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -686,10 +687,16 @@ class TestStatisticalAnalysisAdmission:
         assert sa._model_is_priced(_REAL_MODELS["agnes-3.0-flash"]) is False
         assert sa._model_is_priced(_REAL_MODELS["qwen-long"]) is True
 
-    def test_cost_analysis_bad_number_goes_to_missing_not_a_price(self) -> None:
+    def test_cost_analysis_bad_number_goes_to_mechanism_index_not_a_price(self) -> None:
+        """AG（2026-10-20）口径变更：域坏值不再与"未登记"同桶，进机制索引。
+
+        删掉本条会让 `price_not_finite:inf` 重新冒充 `missing_models`——报告据此
+        让人去登记一个**已经登记**的模型。
+        """
         rows = sa.cost_analysis(_arm("m"), {"models": {"m": _entry("USD", input_per_mtok=_INF)}})
         assert rows[0]["priced"] is False
-        assert rows[0]["missing_models"] == ["m"]
+        assert rows[0]["missing_models"] == []
+        assert rows[0]["unpriced_model_reasons"] == {"m": "price_not_finite:inf"}
         assert rows[0]["cost"] is None
 
     def test_cost_analysis_valid_entry_still_prices(self) -> None:

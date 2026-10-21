@@ -90,7 +90,7 @@ def convert(source: Path, output: Path) -> int:
                 "test_cases": _normalize_tests(row.get("tests", row.get("test_list", row.get("test_input", [])))),
                 "cyclomatic_complexity": complexity,
             }
-            f.write(json.dumps(out_row, ensure_ascii=False) + "\n")
+            f.write(json.dumps(out_row, ensure_ascii=False, allow_nan=False) + "\n")
             written += 1
     print(f"[OK] {source.name} → {output}（{written} 条，跳过 {skipped} 条无效记录）")
     return 0

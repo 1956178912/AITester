@@ -151,3 +151,17 @@ Appendix B 的 "discovery evidence, not confirmatory evidence" 标注正确。
 - 新入库 6 脚本危险模式扫描全部 CLEAN
 - 全量测试（两阶段合计 +14 例）：正常环境口径 **9153 passed / 5 skipped / 0 failed**（collected 9158）；本机沙箱 9138 passed / 19 skipped / 1 failed（唯一失败 = 基线守卫，刷新 BASELINE 后转绿）
 - 门禁：ruff（828 文件）+ mypy（134 源文件 0 错）+ 双语文档 strict + 链接 strict + 基线/基线数字 + 状态契约 + env 预算/快照 + 模型指纹 + JSON 契约 + 零断言（390 文件）+ 引用 + 审计脱敏 + 凭证剔除 + 锁同步 + 工件对账 + prompt 哈希锁（7 artifact）+ 分支覆盖 + 棘轮（92.70% ≥ 92.50%）+ 工件入库（179/179）+ main_batch 清单 2029 项——全部通过
+
+## AZ 轮日期化勘误（2026-10-21，只追加、不改写上文）
+
+**勘误对象：§3 表中「Row 1 效应量 g=0.739 | 正文 | Cliff δ 量级
+\|b−c\|/(b+c)=68/92=0.7391 复算吻合 | **一致**」行。**
+
+该行的复算与当时的实现自洽，但当时的实现把 **2g 记作 Cohen's g**：
+标准 g = |b−c| / (2(b+c)) = 68 / (2×92) = **0.369565**（范围 0–0.5），
+不是 0.7391；它也不是 "Cliff δ 量级"（Cliff's δ 是另一族有序效应量）。
+第三方静态审查 F02 与 effectsize 官方实现（g = max/(sum) − 0.5）复核后，
+AZ 轮已修正 `experiments/emse_stats_extensions.py::cohens_g`；受保护归档
+`emse_stats_extensions_20261016/` 保留历史值不重写，修正值重发于
+`emse_stats_extensions_20261021/`。本行结论应读作：**数值与当时实现自洽，
+但效应量标签与尺度错误；标准 g = 0.3696**。

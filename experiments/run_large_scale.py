@@ -81,7 +81,7 @@ def cli(task_count: int, baselines: str, seed: int, output_dir: str, parallel: i
     }
     meta_file = Path(output_dir) / "experiment_meta.json"
     with open(meta_file, "w", encoding="utf-8") as f:
-        json.dump(meta, f, ensure_ascii=False, indent=2)
+        json.dump(meta, f, ensure_ascii=False, indent=2, allow_nan=False)
     logger.info("实验元数据已保存: %s", meta_file)
 
     print("\n" + "=" * 70)

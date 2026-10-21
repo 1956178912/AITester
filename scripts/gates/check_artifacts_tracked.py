@@ -105,8 +105,13 @@ MANIFEST: tuple[str, ...] = (
     # seed43 目录仅含 traces，由下方 emse_* 目录扫描兜底"整目录入库"）
     "experiments/results/emse_t08_gates_seed44_20261013/benchmark_synthetic_20261014_002657.json",
     # 统计扩展（SUBMISSION_SKELETON 引用的证据源）
+    # AZ（2026-10-21）：20261016 为 F01/F02 修正前历史归档（保留，不重写）；
+    # 20261021 为当前重发工件（入库时需 git add -f，目录被 results/** 通配排除）。
     "experiments/results/emse_stats_extensions_20261016/README.md",
     "experiments/results/emse_stats_extensions_20261016/STATS_EXTENSIONS.json",
+    "experiments/results/emse_stats_extensions_20261021/README.md",
+    "experiments/results/emse_stats_extensions_20261021/STATS_EXTENSIONS.json",
+    "experiments/results/emse_stats_extensions_20261021/SHA256SUMS",
     # L 轮（2026-10-17）：P1 独立 docstring 锚三臂正式批（真 LLM，预注册判定）
     # —— BASELINE benchmark.docstring_anchor / README 最新优化 / 登记册 L-2 的证据源
     "experiments/results/emse_docstring_anchor_20261017/README.md",

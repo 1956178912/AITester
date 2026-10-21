@@ -265,7 +265,9 @@ def main() -> int:
     all_solvable = all(r["solvable"] for r in results)
     if args.json_output:
         with open(args.json_output, "w", encoding="utf-8") as f:
-            json.dump({"results": results, "all_solvable": all_solvable}, f, ensure_ascii=False, indent=2)
+            json.dump(
+                {"results": results, "all_solvable": all_solvable}, f, ensure_ascii=False, indent=2, allow_nan=False
+            )
         print(f"\n结果已写入: {args.json_output}")
 
     return 0 if all_solvable else 1

@@ -33,7 +33,7 @@ def download_swe_bench(subset: str = "lite", output_dir: str | None = None) -> P
         ds = load_dataset("princeton-nlp/SWE-bench", name=f"swe_bench_{subset}", split="test")
         with open(output_file, "w", encoding="utf-8") as f:
             for item in ds:
-                f.write(json.dumps(item, ensure_ascii=False) + "\n")
+                f.write(json.dumps(item, ensure_ascii=False, allow_nan=False) + "\n")
         logger.info("下载完成，共 %d 条记录", len(ds))
     except ImportError:
         logger.error("请先安装 datasets 库: pip install datasets")

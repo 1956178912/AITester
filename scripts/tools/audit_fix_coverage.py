@@ -179,7 +179,7 @@ def main() -> int:
     print(render(result))
 
     if args.json != "-":
-        Path(args.json).write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+        Path(args.json).write_text(json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False), encoding="utf-8")
         print(f"\nJSON 已写入 {args.json}")
     return 0
 

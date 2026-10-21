@@ -98,7 +98,10 @@ _L1_COMMANDS: list[tuple[str, list[str], int]] = [
 # 需校验 SHA256SUMS 的工件目录（存在即校验，缺失则标记 skipped）
 _CHECKSUM_DIRS: list[str] = [
     "experiments/results/main_batch",
+    # AZ（2026-10-21）：20261016 为 F01/F02 修正前的历史归档（只校验、不重写）；
+    # 当前代码默认重发到 20261021。
     "experiments/results/emse_stats_extensions_20261016",
+    "experiments/results/emse_stats_extensions_20261021",
     "experiments/results/emse_quixbugs_mutk_full_20261015",
     "experiments/results/emse_ult_mutk_full_20261015",
 ]
@@ -241,7 +244,7 @@ def main() -> int:
         "commands": results,
         "checksums": checksums,
     }
-    REPORT_JSON.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    REPORT_JSON.write_text(json.dumps(payload, ensure_ascii=False, indent=2, allow_nan=False), encoding="utf-8")
 
     print(f"\n[repro] 报告 → {REPORT_MD}")
     print(f"[repro] JSON  → {REPORT_JSON}")

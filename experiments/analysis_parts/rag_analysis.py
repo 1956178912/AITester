@@ -9,6 +9,8 @@ from __future__ import annotations
 from collections.abc import Iterator
 from typing import Any
 
+from src.budget.token_usage import aggregate_row_token_usage, row_total_token_reading
+
 
 def _iter_rag_stats(details: list[dict[str, Any]]) -> Iterator[dict[str, Any]]:
     """遍历 details[].rag_stats 中的 dict 记录，跳过非 dict 元素。
@@ -26,18 +28,28 @@ def _iter_rag_stats(details: list[dict[str, Any]]) -> Iterator[dict[str, Any]]:
 
 
 def _token_metrics_from_details(details: list[dict[str, Any]]) -> dict[str, Any]:
-    """旧版 JSON（无 baseline 级 token_metrics）兜底：从逐任务 token_usage 累加。"""
-    total_input = sum((r.get("token_usage") or {}).get("input_tokens", 0) for r in details)
-    total_output = sum((r.get("token_usage") or {}).get("output_tokens", 0) for r in details)
-    total_calls = sum((r.get("token_usage") or {}).get("llm_calls", 0) for r in details)
-    total = len(details)
-    return {
-        "total_input_tokens": total_input,
-        "total_output_tokens": total_output,
-        "total_tokens": total_input + total_output,
-        "total_llm_calls": total_calls,
-        "avg_tokens_per_task": round((total_input + total_output) / total, 2) if total > 0 else 0,
+    """旧版 JSON（无 baseline 级 token_metrics）兜底：逐任务累加走共享读取器（AN）。
+
+    返回域与写盘 `token_metrics` 对齐：整键缺席按历史 0；在场坏值让对应总量为
+    None（不折 0、不给部分和）；拆分矛盾只披露（总量仍取行内真值）。披露键
+    只在真发生时写入 ⇒ 干净旧 JSON 的五键读数逐位不变。
+    """
+    agg = aggregate_row_token_usage(details)
+    total = agg["n_rows"]
+    total_tokens = agg["total_tokens"]
+    metrics: dict[str, Any] = {
+        "total_input_tokens": agg["input_tokens"],
+        "total_output_tokens": agg["output_tokens"],
+        "total_tokens": total_tokens,
+        "total_llm_calls": agg["llm_calls"],
+        "avg_tokens_per_task": (None if total_tokens is None else (round(total_tokens / total, 2) if total > 0 else 0)),
     }
+    if agg["n_unreadable_rows"]:
+        metrics["n_token_unreadable_rows"] = agg["n_unreadable_rows"]
+        metrics["token_reading_reasons"] = agg["reading_reasons"]
+    if agg["n_contradiction_rows"]:
+        metrics["n_token_split_mismatch_rows"] = agg["n_contradiction_rows"]
+    return metrics
 
 
 def _rag_by_kind_from_details(details: list[dict[str, Any]]) -> dict[str, Any]:
@@ -104,10 +116,14 @@ def _rag_token_efficiency(details: list[dict[str, Any]]) -> dict[str, Any]:
     - rag_stats 非空（任务内发生过检索）= 启用 RAG 组；
     - 其余 = 未启用 RAG 组（含 RAG 关闭时的历史任务）。
     - 两组任一为空时 available=False（无法对比）。
+    - token 总量走共享行级读数（AP，2026-10-21）：组内任一行不可读 ⇒ 该组
+      `avg_tokens=None`（不给部分和），披露 `n_token_unreadable_rows` /
+      `token_reading_reasons`；`token_delta_ratio` 仅在两侧均值都可读且分母
+      非零时给出。
 
     Returns:
         {"available": bool, "rag_group": {tasks, avg_tokens, avg_iterations, success_rate},
-         "no_rag_group": {...}, "token_delta_ratio": float,
+         "no_rag_group": {...}, "token_delta_ratio": float | None,
          "iteration_delta": int}
     """
     rag_rows: list[dict[str, Any]] = []
@@ -120,24 +136,42 @@ def _rag_token_efficiency(details: list[dict[str, Any]]) -> dict[str, Any]:
 
     def _group_stats(rows: list[dict[str, Any]]) -> dict[str, Any]:
         n = len(rows)
-        # 2026-09-26 round10 P2：iterations/total_tokens 可能为非数字
-        # （历史 JSON 混入异常值），int()/float() 崩溃使 build_analysis
-        # 失败——安全归一（解析失败回退 0，口径不变：贡献 0）
-        from experiments.analysis_parts.convergence_analysis import _safe_float, _safe_int
+        # 2026-09-26 round10 P2：iterations 可能为非数字（历史 JSON 混入
+        # 异常值），int() 崩溃使 build_analysis 失败——安全归一（回退 0）。
+        # token 总量走共享行级读数（AP，2026-10-21）：旧实现
+        # `_safe_float(... or 0)` 会把 "100" 静默解析成 100、把 True 当 1、
+        # 把负数 / nan 原样入均值；现在行内坏值 ⇒ 本组 avg_tokens 为 None
+        # （不给部分和），机制名与行数只在真发生时披露。
+        from experiments.analysis_parts.convergence_analysis import _safe_int
 
+        token_readings = [row_total_token_reading(r) for r in rows]
+        unreadable = [reading for reading in token_readings if reading["total"] is None]
         avg_tokens = (
-            round(sum(_safe_float((r.get("token_usage") or {}).get("total_tokens", 0) or 0) for r in rows) / n, 2)
-            if n
-            else 0.0
+            None if unreadable else (round(sum(reading["total"] for reading in token_readings) / n, 2) if n else 0.0)
         )
         avg_iterations = round(sum(_safe_int(r.get("iterations", 0) or 0) for r in rows) / n, 2) if n else 0.0
         success_rate = round(sum(1 for r in rows if r.get("passed")) / n, 4) if n else 0.0
-        return {"tasks": n, "avg_tokens": avg_tokens, "avg_iterations": avg_iterations, "success_rate": success_rate}
+        stats: dict[str, Any] = {
+            "tasks": n,
+            "avg_tokens": avg_tokens,
+            "avg_iterations": avg_iterations,
+            "success_rate": success_rate,
+        }
+        if unreadable:
+            reasons: dict[str, int] = {}
+            for reading in unreadable:
+                for code in reading["reasons"]:
+                    reasons[code] = reasons.get(code, 0) + 1
+            stats["n_token_unreadable_rows"] = len(unreadable)
+            stats["token_reading_reasons"] = dict(sorted(reasons.items()))
+        return stats
 
     rag_stat = _group_stats(rag_rows)
     no_rag_stat = _group_stats(no_rag_rows)
     token_delta_ratio = (
-        round(rag_stat["avg_tokens"] / no_rag_stat["avg_tokens"], 4) if no_rag_stat["avg_tokens"] else None
+        round(rag_stat["avg_tokens"] / no_rag_stat["avg_tokens"], 4)
+        if rag_stat["avg_tokens"] is not None and no_rag_stat["avg_tokens"]
+        else None
     )
     iteration_delta = round(rag_stat["avg_iterations"] - no_rag_stat["avg_iterations"], 2)
     return {

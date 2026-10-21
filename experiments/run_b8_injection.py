@@ -74,7 +74,9 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from src.budget.pricing import entry_block_reason, load_table_models  # noqa: E402
+from src.budget.pricing import load_table_models, model_entry_reason  # noqa: E402
+from src.budget.token_usage import sum_token_metric_values, token_metric_reading  # noqa: E402
+from src.utils.json_strict import strict_json_dumps  # noqa: E402
 
 # 常量（INJECT 口径；聚合模式无需依赖 worktree 也能读）
 INJECT_ENV = "AITESTER_B8_INJECTION_ENABLE"
@@ -94,8 +96,10 @@ def _sha256_file(path: Path) -> str:
 
 
 def _write_json(path: Path, payload: Any) -> None:
+    # AF（2026-10-20）：严格 RFC 8259——非有限浮点抛 NonFiniteJSONError 并点名路径，
+    # 不再把裸 NaN/Infinity 写进 REPORT.json（Python 能读回，严格解析器读不动）。
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    path.write_text(strict_json_dumps(payload, indent=2), encoding="utf-8")
 
 
 def _git(root: str, *args: str) -> str:
@@ -156,7 +160,7 @@ def _load_arm(arm_dir: Path) -> dict[str, Any]:
         "arm_key": arm_key,
         "data": data,
         "details": details,
-        "token_metrics": rd.get("token_metrics") or {},
+        "token_metrics": rd.get("token_metrics"),
         "meta": meta,
         "injection_records": records,
         "injection_records_path": str(rec_path) if rec_path.is_file() else None,
@@ -184,36 +188,58 @@ def _load_harness_smoke(out_root: Path, price_in: float, price_out: float) -> li
             rd = next(iter(results.values()))
             details = rd.get("details") or []
             env = (data.get("provenance") or {}).get("env_snapshot") or {}
-            rows.append(
-                {
-                    "smoke_dir": dirname,
-                    "setting": label,
-                    "arm": arm,
-                    "coverage_stall_env": env.get("COVERAGE_STALL_DETECT_ENABLE"),
-                    "patch_evidence_gate_env": env.get("PATCH_EVIDENCE_GATE_ENABLE") or "default(true)",
-                    "n_tasks": len(details),
-                    "stop_reason_counts": {
-                        sr: sum(1 for r in details if str(r.get("stop_reason") or "<none>") == sr)
-                        for sr in sorted({str(r.get("stop_reason") or "<none>") for r in details})
-                    },
-                    "iterations": [int(r.get("iterations") or 0) for r in details],
-                    "iterations_mean": round(sum(int(r.get("iterations") or 0) for r in details) / len(details), 4)
-                    if details
-                    else None,
-                    "token_metrics": rd.get("token_metrics") or {},
-                    "cost_usd_standard_price": _cost_usd(rd.get("token_metrics") or {}, price_in, price_out),
-                    "batch_path": str(batch),
-                }
-            )
+            tm = rd.get("token_metrics")
+            cost, cost_reasons = _cost_usd(tm, price_in, price_out)
+            row = {
+                "smoke_dir": dirname,
+                "setting": label,
+                "arm": arm,
+                "coverage_stall_env": env.get("COVERAGE_STALL_DETECT_ENABLE"),
+                "patch_evidence_gate_env": env.get("PATCH_EVIDENCE_GATE_ENABLE") or "default(true)",
+                "n_tasks": len(details),
+                "stop_reason_counts": {
+                    sr: sum(1 for r in details if str(r.get("stop_reason") or "<none>") == sr)
+                    for sr in sorted({str(r.get("stop_reason") or "<none>") for r in details})
+                },
+                "iterations": [int(r.get("iterations") or 0) for r in details],
+                "iterations_mean": round(sum(int(r.get("iterations") or 0) for r in details) / len(details), 4)
+                if details
+                else None,
+                "token_metrics": tm,
+                "cost_usd_standard_price": cost,
+                "batch_path": str(batch),
+            }
+            if cost_reasons:
+                row["cost_usd_standard_price_reasons"] = cost_reasons
+            rows.append(row)
     return rows
 
 
-def _cost_usd(tm: dict[str, Any], price_in: float, price_out: float) -> float:
-    return round(
-        float(tm.get("total_input_tokens") or 0) / 1e6 * price_in
-        + float(tm.get("total_output_tokens") or 0) / 1e6 * price_out,
-        6,
-    )
+def _cost_usd(tm: Any, price_in: float, price_out: float) -> tuple[float | None, dict[str, int]]:
+    """聚合 `token_metrics` 的标准价读数：`(金额, 机制名计数)`（AU，2026-10-21）。
+
+    改前对两个字段做"取不到折 0"的宽松读数：AN 聚合给出的 `None`（上游拒绝）
+    被读成免费，`True` / 小数 / 负数 / NaN / Inf 一路进 `REPORT.json` 与 README。
+    现逐个字段过 :func:`token_metric_reading`：缺席才是历史 0，任一字段不可读
+    → 整笔 `None`（不给部分和）；非对象 `token_metrics` 整份不可读。
+    """
+    if not isinstance(tm, dict):
+        if tm is None:
+            return 0.0, {}
+        return None, {f"token_metrics_not_object:{type(tm).__name__}": 1}
+    readings = {key: token_metric_reading(tm, key) for key in ("total_input_tokens", "total_output_tokens")}
+    reasons: dict[str, int] = {}
+    for reading in readings.values():
+        if reading["value"] is None:
+            for code in reading["reasons"]:
+                reasons[code] = reasons.get(code, 0) + 1
+    if reasons:
+        return None, dict(sorted(reasons.items()))
+    input_tokens = readings["total_input_tokens"]["value"]
+    output_tokens = readings["total_output_tokens"]["value"]
+    if input_tokens is None or output_tokens is None:  # 上面已排除；仅类型收窄
+        return None, {}
+    return round(input_tokens / 1e6 * price_in + output_tokens / 1e6 * price_out, 6), {}
 
 
 def _arm_summary(loaded: dict[str, Any], price_in: float, price_out: float) -> dict[str, Any]:
@@ -241,13 +267,14 @@ def _arm_summary(loaded: dict[str, Any], price_in: float, price_out: float) -> d
     real_rounds = sum(1 for r in recs if r.get("injected") is False)
     n = len(details)
     wall = float(loaded["meta"].get("wall_seconds") or 0.0)
-    return {
+    cost, cost_reasons = _cost_usd(tm, price_in, price_out)
+    summary = {
         "n_tasks": n,
         "batch_path": loaded["batch_path"],
         "batch_sha256": loaded["batch_sha256"],
         "wall_seconds": wall,
         "token_metrics": tm,
-        "cost_usd_standard_price": _cost_usd(tm, price_in, price_out),
+        "cost_usd_standard_price": cost,
         "stop_reason_counts": dict(sorted(stop_reasons.items())),
         "coverage_stall_count": stop_reasons.get("coverage_stall", 0),
         "coverage_stall_rate": round(stop_reasons.get("coverage_stall", 0) / n, 4) if n else None,
@@ -295,6 +322,9 @@ def _arm_summary(loaded: dict[str, Any], price_in: float, price_out: float) -> d
             for row in details
         ],
     }
+    if cost_reasons:
+        summary["cost_usd_standard_price_reasons"] = cost_reasons
+    return summary
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -436,7 +466,7 @@ class _Injection:
         with self._lock:
             self._records.append(record)
             with open(self._records_path, "a", encoding="utf-8") as fh:
-                fh.write(json.dumps(record, ensure_ascii=False) + "\n")
+                fh.write(strict_json_dumps(record) + "\n")
                 fh.flush()
 
     def records(self) -> list[dict[str, Any]]:
@@ -668,14 +698,13 @@ def run_arm(args: argparse.Namespace) -> int:
 def _price_entry_reason(table: dict[str, Any], model: str) -> str | None:
     """聚合侧价目**条目级**准入（AE 轮，2026-10-20）：可用 → None，否则机制码。
 
-    "没登记"与"登记了但读不出"是两种事实（AB-11 判据），不得共用码：键缺席由本函数
-    点名 `model_unregistered`；条目形状 / 空条目 / 币种不可判定或非 USD / 数字域坏值
-    （含 `bool`、字符串、`nan` / `inf`、负价）一律交 `src.budget.pricing.entry_block_reason`
-    回答——本脚本不再自持一套 `isinstance(..., (int, float))` 数字门。
+    "没登记"与"登记了但读不出"是两种事实（AB-11 判据），不得共用码：键缺席 →
+    `model_unregistered`；条目形状 / 空条目 / 币种不可判定或非 USD / 数字域坏值
+    （含 `bool`、字符串、`nan` / `inf`、负价）→ `entry_block_reason` 的机制码。
+    AG（2026-10-20）起连缺席分支一起委托 `pricing.model_entry_reason`：本脚本不再
+    自持任何一层准入判定（AE 时数字门已收，本轮把"表级缺席"也收走）。
     """
-    if model not in table:
-        return "model_unregistered"
-    return entry_block_reason(table[model])
+    return model_entry_reason(table, model)
 
 
 def aggregate(args: argparse.Namespace) -> int:
@@ -795,6 +824,10 @@ def aggregate(args: argparse.Namespace) -> int:
         verdict = "not_confirmed_harness_limitation"
     else:
         verdict = "not_confirmed"
+    # AU：任一侧 token 读数被拒绝时，合计同样不给数字（部分和不冒充全额）。
+    on_cost = on["cost_usd_standard_price"]
+    off_cost = off["cost_usd_standard_price"]
+    cost_total = round(on_cost + off_cost, 6) if on_cost is not None and off_cost is not None else None
     report = {
         "experiment": "S-2 / B8 / A-19 coverage-stall ablation with deterministic failure injection",
         "created_epoch": time.time(),
@@ -858,10 +891,16 @@ def aggregate(args: argparse.Namespace) -> int:
                     "met": harness_ok,
                 },
             },
-            "cost_total_usd": round(on["cost_usd_standard_price"] + off["cost_usd_standard_price"], 6),
+            "cost_total_usd": cost_total,
             "wall_total_seconds": round(on["wall_seconds"] + off["wall_seconds"], 2),
         },
     }
+    if cost_total is None:
+        total_reasons: dict[str, int] = {}
+        for summary in (on, off):
+            for code, count in (summary.get("cost_usd_standard_price_reasons") or {}).items():
+                total_reasons[code] = total_reasons.get(code, 0) + count
+        report["verdict"]["cost_total_reasons"] = dict(sorted(total_reasons.items()))
     _write_json(out_root / "REPORT.json", report)
     _write_isolation(out_root, report)
     _write_readme(out_root, report)
@@ -944,6 +983,23 @@ def _write_isolation(out_root: Path, report: dict[str, Any]) -> None:
     _write_json(out_root / "ISOLATION.json", payload)
 
 
+def _token_metric_text(metrics: Any, key: str) -> str:
+    """B8 README 的 token 读数呈现（AP）：`None` / 坏值 → 不可读，不折 0。"""
+    reading = token_metric_reading(metrics, key)
+    return "不可读" if reading["value"] is None else str(reading["value"])
+
+
+def _cost_text(value: Any, reasons: dict[str, Any] | None = None) -> str:
+    """B8 README 的美元读数呈现（AU）：**被拒绝的金额不得披着金额形状出现**。
+
+    `None` 落 `—（无法估算：<机制名×次数>）`；数值仍落 `$<value>`。
+    """
+    if value is None:
+        shown = "、".join(f"{code}×{count}" for code, count in sorted((reasons or {}).items()))
+        return f"—（无法估算：{shown or '机制未记录'}）"
+    return f"${value}"
+
+
 def _write_readme(out_root: Path, report: dict[str, Any]) -> None:
     on, off = report["arms"]["on"], report["arms"]["off"]
     v = report["verdict"]
@@ -957,9 +1013,43 @@ def _write_readme(out_root: Path, report: dict[str, Any]) -> None:
     )
     sr = lambda d: ", ".join(f"`{k}`×{n}" for k, n in d.items())  # noqa: E731
     smoke = report.get("harness_smoke") or []
-    smoke_tokens = sum(int((row.get("token_metrics") or {}).get("total_tokens") or 0) for row in smoke)
-    smoke_cost = round(sum(float(row.get("cost_usd_standard_price") or 0.0) for row in smoke), 6)
-    grand_cost = round(float(v["cost_total_usd"]) + smoke_cost, 6)
+    # AP（2026-10-21）：冒烟与主批的 token 读数走共享聚合——None 是上游拒绝，
+    # 不得 `or 0` 折成 0，也不得 `int()` 把 "100" / True / 小数收成计数。
+    smoke_tokens_agg = sum_token_metric_values([row.get("token_metrics") for row in smoke], "total_tokens")
+    smoke_tokens_text = "不可读" if smoke_tokens_agg["value"] is None else str(smoke_tokens_agg["value"])
+    on_total = token_metric_reading(on.get("token_metrics"), "total_tokens")
+    off_total = token_metric_reading(off.get("token_metrics"), "total_tokens")
+    on_calls = token_metric_reading(on.get("token_metrics"), "total_llm_calls")
+    off_calls = token_metric_reading(off.get("token_metrics"), "total_llm_calls")
+    main_tokens_text = (
+        "不可读"
+        if on_total["value"] is None or off_total["value"] is None
+        else str(on_total["value"] + off_total["value"])
+    )
+    token_reasons: dict[str, int] = {}
+    for reading in (on_total, off_total, on_calls, off_calls):
+        for code in reading["reasons"]:
+            token_reasons[code] = token_reasons.get(code, 0) + 1
+    for code, count in smoke_tokens_agg["reasons"].items():
+        token_reasons[code] = token_reasons.get(code, 0) + count
+    token_note = (
+        "\n\n> **token 读数不可用**（"
+        + "、".join(f"{code}×{count}" for code, count in sorted(token_reasons.items()))
+        + "）：不可读字段不折 0、不给部分和；对应金额不给数字（`None` + 机制名）。"
+        if token_reasons
+        else ""
+    )
+    smoke_costs = [row.get("cost_usd_standard_price") for row in smoke]
+    smoke_cost = round(sum(smoke_costs), 6) if all(cost is not None for cost in smoke_costs) else None
+    smoke_cost_reasons: dict[str, int] = {}
+    for row in smoke:
+        for code, count in (row.get("cost_usd_standard_price_reasons") or {}).items():
+            smoke_cost_reasons[code] = smoke_cost_reasons.get(code, 0) + count
+    main_cost = v["cost_total_usd"]
+    grand_cost = round(main_cost + smoke_cost, 6) if main_cost is not None and smoke_cost is not None else None
+    grand_cost_reasons = dict(smoke_cost_reasons)
+    for code, count in (v.get("cost_total_reasons") or {}).items():
+        grand_cost_reasons[code] = grand_cost_reasons.get(code, 0) + count
     smoke_lines = (
         "\n".join(
             f"| `{row['smoke_dir']}` | {row['arm']} | {row['patch_evidence_gate_env']} | {row['iterations']} | "
@@ -1052,12 +1142,12 @@ def _write_readme(out_root: Path, report: dict[str, Any]) -> None:
 | detection（可测/检出） | {on["detection"]["measurable"]}/{on["detection"]["positive"]}（{on["detection"]["rate"]}） | {off["detection"]["measurable"]}/{off["detection"]["positive"]}（{off["detection"]["rate"]}） |
 | crash 行 | {on["crash_count"]} | {off["crash_count"]} |
 | 注入记录（注入/真实轮） | {on["injection"]["injected_rounds"]}/{on["injection"]["real_rounds"]} | {off["injection"]["injected_rounds"]}/{off["injection"]["real_rounds"]} |
-| tokens / LLM calls | {on["token_metrics"].get("total_tokens")} / {on["token_metrics"].get("total_llm_calls")} | {off["token_metrics"].get("total_tokens")} / {off["token_metrics"].get("total_llm_calls")} |
-| 成本（标准价上界） | ${on["cost_usd_standard_price"]} | ${off["cost_usd_standard_price"]} |
+| tokens / LLM calls | {_token_metric_text(on.get("token_metrics"), "total_tokens")} / {_token_metric_text(on.get("token_metrics"), "total_llm_calls")} | {_token_metric_text(off.get("token_metrics"), "total_tokens")} / {_token_metric_text(off.get("token_metrics"), "total_llm_calls")} |
+| 成本（标准价上界） | {_cost_text(on["cost_usd_standard_price"], on.get("cost_usd_standard_price_reasons"))} | {_cost_text(off["cost_usd_standard_price"], off.get("cost_usd_standard_price_reasons"))} |
 | provenance git_sha/dirty | {on["provenance"]["git_sha"]}/{on["provenance"]["git_dirty"]} | {off["provenance"]["git_sha"]}/{off["provenance"]["git_dirty"]} |
 | env_snapshot.COVERAGE_STALL_DETECT_ENABLE | {on["provenance"]["coverage_stall_env"]} | {off["provenance"]["coverage_stall_env"]} |
 
-成本合计 ≈ **${v["cost_total_usd"]}**（预算 ≤$0.3）；两臂并发墙钟合计 {v["wall_total_seconds"]}s。{price_note}
+成本合计 ≈ **{_cost_text(v["cost_total_usd"], v.get("cost_total_reasons"))}**（预算 ≤$0.3）；两臂并发墙钟合计 {v["wall_total_seconds"]}s。{price_note}
 
 ## 5. 配对（共同任务；Δ iterations = off − on）
 
@@ -1092,8 +1182,8 @@ n_pairs = {report["paired"]["n_pairs"]}；Δ均值 = **{report["paired"]["delta_
 
 两轮冒烟用于在冻结预注册前验证注入 harness 与停滞判据可达性（工件在
 `_harness_smoke/`、`_harness_smoke_gateoff/`，不参与主判定）。冒烟合计
-**{smoke_tokens} tokens ≈ ${smoke_cost}**（标准价）；主批 {on["token_metrics"].get("total_tokens", 0) + off["token_metrics"].get("total_tokens", 0)} tokens ≈ ${v["cost_total_usd"]}；
-**含冒烟总成本 ≈ ${grand_cost}**（预算 ≤$0.3）。
+**{smoke_tokens_text} tokens ≈ {_cost_text(smoke_cost, smoke_cost_reasons)}**（标准价）；主批 {main_tokens_text} tokens ≈ {_cost_text(v["cost_total_usd"], v.get("cost_total_reasons"))}；
+**含冒烟总成本 ≈ {_cost_text(grand_cost, grand_cost_reasons)}**（预算 ≤$0.3）。{token_note}
 
 | 冒烟目录 | 臂 | PATCH_EVIDENCE_GATE_ENABLE | iterations | iterations 均值 | stop_reason 分布 |
 |---|---|---|---|---|---|

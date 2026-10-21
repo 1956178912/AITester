@@ -18,7 +18,7 @@
 | `main_batch/` | **R-P0-2 主批次**（当前口径）：三种子三臂原始结果 JSON + 统计报告 + SHA256SUMS | JSON（每任务一行 details）+ Markdown 报告 + 校验和 |
 | `e6_a1_batches/` | E1-E7 系列：E4 QuixBugs 修正结算双臂、E6 等预算对照、各消融臂 | JSON + log + SHA256SUMS |
 | `emse_*_2026101[3-6]/` | EMSE 优化批次工件：DSL 诊断、Mut@k 全量、校准、规格扩展复算、统计扩展 | JSON + README + SHA256SUMS |
-| `emse_stats_extensions_20261016/` | **本批新增**：Wilson CI / Cohen's g / OR / 成本 bootstrap（零 LLM 逐位复算，种子化确定性已验证） | JSON + Markdown + SHA256SUMS |
+| `emse_stats_extensions_20261021/` | **当前重发（AZ 轮，2026-10-21）**：Wilson CI / Cohen's g / OR / 成本 bootstrap（零 LLM 逐位复算）；修正标准 g 尺度与精确二项尾 epsilon；`20261016/` 为修正前历史归档，只读保留 | JSON + Markdown + SHA256SUMS |
 | `benchmark_*.json`（根散点） | 历史批次原始结果（2026-08 至 2026-10），保留供审计追溯 | JSON |
 | `SHA256SUMS`（各子目录内） | 工件完整性校验 | 文本（sha256 + 文件名） |
 
@@ -32,7 +32,7 @@
 |---|---|---|
 | detection 三臂 15.8% / 1.5% / 44.8%（n=261） | `main_batch/benchmark_synthetic_20261006_*.json` | `make mutation-det-correlation` 或独立聚合脚本 |
 | McNemar χ²=48.79 / p≈2.8e-12 | 同上 | `python -m experiments.bayesian_paired`（频率派部分） |
-| Wilson CI / Cohen's g / OR / 成本 bootstrap | `emse_stats_extensions_20261016/` | `python -m experiments.emse_stats_extensions`（种子 42，逐位确定） |
+| Wilson CI / Cohen's g / OR / 成本 bootstrap | `emse_stats_extensions_20261021/`（历史值见 `20261016/`） | `python -m experiments.emse_stats_extensions`（种子 42，逐位确定） |
 | E4 QuixBugs 45.9% vs 83.8%；repair 92.5% | `e6_a1_batches/e4_quixbugs_FIXED_harness/` | `python -m experiments.emse_optimization --mutation-correlation ...` |
 | false_fix 口径矩阵（100% / 59.58% / 87.16%） | `main_batch/` + `emse_optimization.py::false_fix_caliber` | `python -m experiments.emse_optimization`（零 LLM） |
 | Mut@k 全量 0.9396（QuixBugs，健全 29/50） | `emse_quixbugs_mutk_full_20261015/` | `python -m experiments.emse_quixbugs_mutk_full`（cosmic-ray 本地执行，无 LLM，耗时数小时） |

@@ -32,6 +32,7 @@ import argparse
 import json
 from typing import Any
 
+from src.budget.token_usage import aggregate_row_token_usage
 from src.tools.patch_abstain import evaluate_patch_abstention
 from src.tools.patch_validate import evaluate_patch_validation
 
@@ -75,16 +76,27 @@ def arm_trusted_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
     # "被弃权 bug 不计分母"语义）；分母为 0 时保守 None（与 _pct 同口径）。
     filtered_denominator = total - abstain_count
 
-    # 缓存命中（P0-1 后 token_usage.as_dict() 携带；历史批次缺字段记 0）
-    cache_hits = sum((r.get("token_usage") or {}).get("cache_hits", 0) for r in rows)
-    cache_avoided = sum((r.get("token_usage") or {}).get("cache_avoided_tokens", 0) for r in rows)
-    total_tokens = sum((r.get("token_usage") or {}).get("total_tokens", 0) for r in rows)
-    llm_calls = sum((r.get("token_usage") or {}).get("llm_calls", 0) for r in rows)
+    # 缓存命中 / 真实 token / 调用（P0-1 后 token_usage.as_dict() 携带；历史批次
+    # 缺字段记 0）。AN（2026-10-21）：改走共享多行聚合——与写盘 token_metrics
+    # 同一读数；在场坏值不再折 0（对应读数为 None），拆分矛盾只披露。
+    agg = aggregate_row_token_usage(rows)
+    cache = agg["cache"]
+    if cache["present"]:
+        cache_hits = cache["hits"]
+        cache_avoided = cache["avoided"]
+    else:
+        cache_hits = 0
+        cache_avoided = 0
+    total_tokens = agg["total_tokens"]
+    llm_calls = agg["llm_calls"]
 
     def _pct(n: int, d: int) -> float | None:
         return round(n / d * 100, 2) if d > 0 else None
 
-    return {
+    cache_hit_rate = None if cache_hits is None or llm_calls is None else _pct(cache_hits, cache_hits + llm_calls)
+    uncached = None if total_tokens is None or cache_avoided is None else total_tokens + cache_avoided
+
+    metrics: dict[str, Any] = {
         "total": total,
         "passed": passed,
         "passed_rate_pct": _pct(passed, total),
@@ -99,9 +111,18 @@ def arm_trusted_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "filtered_pass_rate_pct": _pct(filtered_pass, filtered_denominator),
         "cache_hits": cache_hits,
         "cache_avoided_tokens": cache_avoided,
-        "cache_hit_rate_pct": _pct(cache_hits, cache_hits + llm_calls),
-        "uncached_theoretical_tokens": total_tokens + cache_avoided,
+        "llm_calls": llm_calls,
+        "cache_hit_rate_pct": cache_hit_rate,
+        "uncached_theoretical_tokens": uncached,
     }
+    if agg["n_unreadable_rows"]:
+        metrics["n_token_unreadable_rows"] = agg["n_unreadable_rows"]
+        metrics["token_reading_reasons"] = agg["reading_reasons"]
+    if agg["n_contradiction_rows"]:
+        metrics["n_token_split_mismatch_rows"] = agg["n_contradiction_rows"]
+    if cache["present"] and not cache["complete"]:
+        metrics["cache_reading_reasons"] = {**cache["missing"], **cache["reasons"]}
+    return metrics
 
 
 def build_report(batch_path: str) -> dict[str, Any]:
@@ -158,7 +179,7 @@ def main() -> None:
         print(f"  trusted_pass（可信通过）: {m['trusted_pass']} ({m['trusted_pass_rate_pct']}%)")
         print(f"  验证（有独立验证证据）: {m['validated']}")
         print(f"  filtered_pass（弃权+验证）: {m['filtered_pass']} ({m['filtered_pass_rate_pct']}%）")
-        print(f"  缓存命中率: {m['cache_hit_rate_pct']}%（命中 {m['cache_hits']} / 调用 {m['cache_hits']} + 真实）")
+        print(f"  缓存命中率: {m['cache_hit_rate_pct']}%（命中 {m['cache_hits']} / 真实调用 {m['llm_calls']}）")
         print(f"  无缓存理论 token: {m['uncached_theoretical_tokens']}（真实 + 避免 {m['cache_avoided_tokens']}）")
         print()
 

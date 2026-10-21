@@ -316,6 +316,7 @@ def main() -> int:
                 fh,
                 ensure_ascii=False,
                 indent=2,
+                allow_nan=False,
             )
         print(f"\n审计结果已写入: {args.json}")
     return 0 if result.gate_ok else 1

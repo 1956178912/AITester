@@ -70,6 +70,15 @@ from scripts.tools.power_analysis import (  # noqa: E402
     required_n_paired,
 )
 from src.budget.pricing import entry_block_reason, load_table_json, models_layer  # noqa: E402
+
+# AJ（2026-10-21）：缓存口径读取的唯一事实源（与 statistical_analysis / ext 共享）。
+# AL（2026-10-21）：行级 token 三元组读取与 §4.1 共用同一份值域判定。
+from src.budget.token_usage import (  # noqa: E402
+    by_model_reason,
+    cache_caliber,
+    cache_totals,
+    row_token_counts,
+)
 from src.utils.atomic_io import atomic_write_json  # noqa: E402
 
 # ─── 口径常量（默认值 = 预注册 R-P0-2 三种子合并口径） ────────────────────
@@ -403,6 +412,28 @@ def mde_block(
 
 
 # ─── 成本分布（中位数 + IQR，不只报均值） ────────────────────────────────
+def _cache_disclosure(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """缓存口径披露字段（AJ，2026-10-21）：行内无缓存字段 ⇒ 空字典。
+
+    只对带生产者缓存字段（`cache_hits` / `cache_avoided_tokens`）的批次增键：
+    旧批次（主批次 / E6 / E4 的 token_usage 都没有这两个键）的 cost_block 与
+    cost_effectiveness_block 返回域逐键不变。读取不完整 ⇒ 金额为 `None` 并给机制名，
+    不给部分和。
+    """
+    cache = cache_totals([r.get("token_usage") for r in rows])
+    if not cache["present"]:
+        return {}
+    out: dict[str, Any] = {
+        "cache_hits": cache["hits"],
+        "cache_avoided_tokens": cache["avoided"],
+        "n_cache_hit_rows": cache["n_hit_rows"],
+        "n_cache_rows": cache["n_rows_with_fields"],
+    }
+    if not cache["complete"]:
+        out["cache_reading_reasons"] = {**cache["missing"], **cache["reasons"]}
+    return out
+
+
 def cost_block(rows: list[dict[str, Any]]) -> dict[str, Any]:
     """单臂 token 成本分布（中位数/IQR/均值）＋ 记账健全性（复用 S11 判定）。
 
@@ -429,6 +460,8 @@ def cost_block(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "iqr_tokens": None,
         "mean_tokens": None,
     }
+    # AJ：缓存披露键只在行内真带缓存字段时写入（旧批次返回域逐键不变）。
+    out.update(_cache_disclosure(rows))
     if not sanity["computable"]:
         return out
     if not tokens:
@@ -512,6 +545,25 @@ def cost_effectiveness_block(
     同样回头读盘**并给出金额（1M+1M token 读出 1.5），调用方的"这次不要计价"被读成"按
     experiments/price_table.json 计费"。现在只有省略该形参才读盘；显式 `None` 与非对象价目
     一律按空表计并留痕。真批次只用到 USD 已登记的 `deepseek-flash`，故三臂 $/task 读数一字不变。
+
+    AK（2026-10-21）：显式零 token 行（input/output/total 全 0）本来就被 `total_tokens > 0`
+    过滤掉，却没有计数——主批 plain_llm_df 35/261 行生成测试后零记账，§4.1 仍显示
+    "226 行计价 / 0 行不可计价"，读者无从知道 35 行消失了。现在另计
+    `n_zero_token_rows` 与其中有 generated_test 的 `n_zero_token_output_rows`（仅 >0 时
+    写入；全记账臂返回域逐键不变），呈现层据此声明 `total_usd` / `$/detection` /
+    `tokens/detection` 是已记录花费下界。检出分母仍收全部行（AE2 口径不变）。
+
+    AL（2026-10-21）：行级读取改走共享 `row_token_counts`（与 ext / S11 同一值域）：
+    - 改前 `usage.get(...) or 0` 把缺席、null、`"100"`、`True`、负数、`nan`/`inf`
+      折成可计价数字——现在三元组任一项读不动 ⇒ `total_tokens` / `total_usd` /
+      两个比值一律 `None`（机制名见 `token_reading_reasons`），不给部分和；
+    - 检出计数与 token 可读性解耦：改前 `token_usage` 非对象的行在计数前被
+      `continue`，检出分母随记账好坏缩水；现在 `n_detections` 只看 `detection_rate`；
+    - `input+output != total`、`by_model` 形状/键/值域坏、`by_model` 求和与 total
+      不符、正 token 行无归因 ⇒ 只废金额（`token_money_reasons`），token 总量与
+      `tokens/detection` 仍可读（金额给 `None`，不拿局部和冒充全额）；
+    - 缓存证据行（命中数 > 0 解释的真实零消耗）不计入 AK 零行下界（AK 边界⑥）。
+    真批次 783 行全部三元组合法、归因一致，故三臂读数与返回域逐键不变。
     """
     table: dict[str, dict[str, Any]]
     if isinstance(price_table, _UnsetPriceTable):
@@ -537,29 +589,83 @@ def cost_effectiveness_block(
     n_priced = 0
     n_detections = 0
     n_detect_measurable = 0
+    n_zero_token_rows = 0
+    n_zero_token_output_rows = 0
+    n_unreadable = 0
+    n_money_blocked = 0
     reasons: dict[str, int] = {}
+    token_reasons: dict[str, int] = {}
+    money_reasons: dict[str, int] = {}
+    tokens_readable = True
+    money_readable = True
 
     def _unpriceable(reason: str) -> None:
         nonlocal n_unpriceable
         n_unpriceable += 1
         reasons[reason] = reasons.get(reason, 0) + 1
 
+    def _block_money(reason: str) -> None:
+        nonlocal n_money_blocked, money_readable
+        n_money_blocked += 1
+        money_readable = False
+        money_reasons[reason] = money_reasons.get(reason, 0) + 1
+
+    def _attribution_reason(by_model: dict[Any, Any], total: int) -> str | None:
+        # AM（2026-10-21）：判定体迁到 `src/budget/token_usage.by_model_reason`，
+        # 与成本表聚合共用一份；本地保留函数名，AL 的既有锁与调用点零改动。
+        return by_model_reason(by_model, total)
+
     for r in rows:
-        usage = r.get("token_usage")
-        if not isinstance(usage, dict):
-            continue
-        tt = usage.get("total_tokens")
-        if isinstance(tt, (int, float)) and not isinstance(tt, bool) and tt > 0:
-            total_tokens += float(tt)
+        # AL：检出数只由 detection_rate 决定——token_usage 是否可读不得缩水分母。
         det = r.get("detection_rate")
         if det is not None:
             n_detect_measurable += 1
             if det == 1.0:
                 n_detections += 1
+        counts, row_reasons = row_token_counts(r)
+        if counts is None:
+            # AL：任一项读不动 ⇒ 总量与金额都不给部分和（改前 `or 0` 把它折成可计价 0）。
+            tokens_readable = False
+            money_readable = False
+            n_unreadable += 1
+            for code in row_reasons:
+                token_reasons[code] = token_reasons.get(code, 0) + 1
+            continue
+        total, inp, out = counts
+        total_tokens += float(total)
+        usage = r["token_usage"]
+        # AK：显式三元组全 0 的行不进 token 合计、也不产生金额，但仍进检出分母。
+        # 有 generated_test 的是"有产出、无花费记录"，必须在 §4.1 单独披露。
+        # AL：缓存命中解释的真实零消耗不是记账缺口，不得落进 AK 下界口径（边界⑥）。
+        if total == 0 and inp == 0 and out == 0 and not cache_caliber(usage)["evidence"]:
+            n_zero_token_rows += 1
+            if isinstance(r.get("generated_test"), str) and r["generated_test"].strip():
+                n_zero_token_output_rows += 1
+        if inp + out != total:
+            # AL：拆分与总量自相矛盾 ⇒ token 总量仍可读，但金额没有可信的输入口径。
+            _block_money("token_split_mismatch")
+            continue
         by_model = usage.get("by_model")
-        if not isinstance(by_model, dict) or len(by_model) != 1:
-            if isinstance(by_model, dict) and by_model:
-                _unpriceable("multi_model_row")
+        if not isinstance(by_model, dict):
+            # 正 token 行没有归因对象 ⇒ 金额不可读；零 token 行无需归因（原行为）。
+            if total > 0:
+                _block_money(
+                    "token_field_absent:by_model"
+                    if "by_model" not in usage
+                    else f"by_model_not_object:{type(by_model).__name__}"
+                )
+            continue
+        if not by_model:
+            if total > 0:
+                _block_money("by_model_empty")
+            continue
+        attribution_reason = _attribution_reason(by_model, total)
+        if attribution_reason is not None:
+            if total > 0:
+                _block_money(attribution_reason)
+            continue
+        if len(by_model) != 1:
+            _unpriceable("multi_model_row")
             continue
         model = next(iter(by_model))
         # AB-17：改前 `table.get(model)` 的 `is None` 把"键缺席"与"值为 null"共读成
@@ -578,26 +684,39 @@ def cost_effectiveness_block(
         if reason is not None:
             _unpriceable(reason)
             continue
-        it = usage.get("input_tokens") or 0
-        ot = usage.get("output_tokens") or 0
         total_usd += (
-            float(it) * float(price["input_per_mtok"]) + float(ot) * float(price["output_per_mtok"])
+            float(inp) * float(price["input_per_mtok"]) + float(out) * float(price["output_per_mtok"])
         ) / 1_000_000.0
         n_priced += 1
     out: dict[str, Any] = {
-        "total_tokens": round(total_tokens, 2),
+        "total_tokens": round(total_tokens, 2) if tokens_readable else None,
         "n_rows_with_tokens_positive": n_priced + n_unpriceable,
         "n_priced_rows": n_priced,
         "n_unpriceable_rows": n_unpriceable,
-        "total_usd": round(total_usd, 6),
+        "total_usd": round(total_usd, 6) if money_readable else None,
         "n_detections": n_detections,
         "n_detection_measurable": n_detect_measurable,
-        "usd_per_detection": (round(total_usd / n_detections, 6) if n_detections else None),
-        "tokens_per_detection": (round(total_tokens / n_detections, 2) if n_detections else None),
+        "usd_per_detection": (round(total_usd / n_detections, 6) if money_readable and n_detections else None),
+        "tokens_per_detection": (round(total_tokens / n_detections, 2) if tokens_readable and n_detections else None),
     }
     # 披露键只在真发生剔除时写入：真批次三臂 n_unpriceable 均为 0，返回域因此逐键不变。
     if reasons:
         out["n_unpriceable_reasons"] = dict(sorted(reasons.items()))
+    # AL：行级读取缺口只在真发生时披露（真批次 783 行全部可读、归因一致 ⇒ 逐键不变）。
+    if token_reasons:
+        out["n_token_unreadable_rows"] = n_unreadable
+        out["token_reading_reasons"] = dict(sorted(token_reasons.items()))
+    if money_reasons:
+        out["n_token_money_blocked_rows"] = n_money_blocked
+        out["token_money_reasons"] = dict(sorted(money_reasons.items()))
+    # AK：显式零 token 行不进 token/金额合计；有产出零记账的行另计数。
+    # 只在真发生时写入 ⇒ 全记账臂（主批 aitester / plain_llm）返回域逐键不变。
+    if n_zero_token_rows:
+        out["n_zero_token_rows"] = n_zero_token_rows
+        if n_zero_token_output_rows:
+            out["n_zero_token_output_rows"] = n_zero_token_output_rows
+    # AJ：缓存口径披露（仅行内带缓存字段时增键；主批次三臂返回域逐键不变）。
+    out.update(_cache_disclosure(rows))
     return out
 
 
@@ -795,6 +914,34 @@ def _render_endpoint_section(
     return lines
 
 
+def _render_cache_lines(arms_data: dict[str, dict[str, Any]]) -> list[str]:
+    """§4 缓存口径披露（AJ）：无缓存字段的臂 ⇒ []，历史报告文本逐字不变。"""
+    shown: list[str] = []
+    for arm, data in arms_data.items():
+        cost = data.get("cost") or {}
+        if "cache_hits" not in cost:
+            continue
+        if cost.get("cache_hits") is None:
+            codes = cost.get("cache_reading_reasons") or {}
+            detail = "；".join(f"{code}←{n} 行" for code, n in sorted(codes.items())) or "未登记机制名"
+            shown.append(f"- `{arm}`：缓存读数不可用（{detail}）⇒ 命中/避免 token 无读数（不是 0）。")
+            continue
+        shown.append(
+            f"- `{arm}`：命中 {cost['cache_hits']} 次、避免 {cost['cache_avoided_tokens']} tokens"
+            f"（{cost['n_cache_rows']}/{cost['n_rows']} 行带缓存字段，{cost['n_cache_hit_rows']} 行命中）。"
+        )
+    if not shown:
+        return []
+    return [
+        "",
+        "**缓存口径（AJ）**——缓存命中不是记账断裂，也不是免费：命中服务的行真实 API 消耗为 0"
+        "（记 0 是对的），避免的 token 另记且不计入成本，两种口径须同读；S11 记账健全性把"
+        "缓存命中行计为有记账，而 §4 的分布仍只统计真实 `total_tokens > 0` 的行。",
+        *shown,
+        "",
+    ]
+
+
 def _render_cost_section(arms_data: dict[str, dict[str, Any]]) -> list[str]:
     """§4 成本分布。"""
     lines = [
@@ -812,10 +959,13 @@ def _render_cost_section(arms_data: dict[str, dict[str, Any]]) -> list[str]:
                 f"| 记账断裂：{sanity['reason']} |"
             )
             continue
+        cache_note = f"；{cost['n_cache_hit_rows']} 行缓存命中记账" if cost.get("n_cache_hit_rows") else ""
+        zero_out = sanity.get("n_zero_output_rows") or 0
+        output_note = f"；其中 {zero_out} 行 generated_test 非空、有产出无花费记录" if zero_out else ""
         lines.append(
             f"| `{arm}` | {cost['n_rows']} | {cost['n_tokens_positive']} | {_f(cost['median_tokens'], 1)} "
             f"| {_f(cost['q1_tokens'], 1)} | {_f(cost['q3_tokens'], 1)} | {_f(cost['iqr_tokens'], 1)} "
-            f"| {_f(cost['mean_tokens'], 1)} | 可计算（{sanity['n_without_accounting']} 行无记账） |"
+            f"| {_f(cost['mean_tokens'], 1)} | 可计算（{sanity['n_without_accounting']} 行无记账{output_note}{cache_note}） |"
         )
     lines += [
         "",
@@ -823,6 +973,9 @@ def _render_cost_section(arms_data: dict[str, dict[str, Any]]) -> list[str]:
         "只统计 `token_usage.total_tokens > 0` 的行（与 S11 记账健全性判定同口径）；"
         "记账断裂的臂一律输出 NOT_COMPUTABLE，不给成本数字。",
         "",
+    ]
+    lines += _render_cache_lines(arms_data)
+    lines += [
         "### 4.1 成本-效果：$/detection（A-07，2026-10-17 增补）",
         "",
         "| 臂 | 检出数/可测 | 总 tokens | 总 $（可计价行） | $/detection | tokens/detection | 计价健全性 |",
@@ -832,12 +985,13 @@ def _render_cost_section(arms_data: dict[str, dict[str, Any]]) -> list[str]:
         eff = data.get("cost_eff")
         if not eff:
             continue
+        tokens = _f(eff["total_tokens"], 0)
         usd = "—" if eff["total_usd"] is None else _f(eff["total_usd"], 6)
         usd_per_det = "—" if eff["usd_per_detection"] is None else _f(eff["usd_per_detection"], 6)
         tok_per_det = "—" if eff["tokens_per_detection"] is None else _f(eff["tokens_per_detection"], 1)
         lines.append(
             f"| `{arm}` | {eff['n_detections']}/{eff['n_detection_measurable']} "
-            f"| {_f(eff['total_tokens'], 0)} | {usd} | {usd_per_det} | {tok_per_det} "
+            f"| {tokens} | {usd} | {usd_per_det} | {tok_per_det} "
             f"| {eff['n_priced_rows']} 行计价 / {eff['n_unpriceable_rows']} 行不可计价 |"
         )
     lines += [
@@ -851,8 +1005,59 @@ def _render_cost_section(arms_data: dict[str, dict[str, Any]]) -> list[str]:
         "检出数 = `detection_rate == 1.0` 且非 None 的行（None 不进分母）；"
         "检出数为 0 时 $/detection 与 tokens/detection 均记 `—`（不除零、不臆造）。",
         "tokens/detection 为无价目伴侣指标（不依赖价目表），可与 $/detection 互证。",
+    ]
+    al_arms: list[tuple[str, dict[str, Any]]] = [
+        (arm, data.get("cost_eff") or {})
+        for arm, data in arms_data.items()
+        if (data.get("cost_eff") or {}).get("n_token_unreadable_rows")
+        or (data.get("cost_eff") or {}).get("n_token_money_blocked_rows")
+    ]
+    if al_arms:
+        lines.append(
+            "**token 行级读取（AL）**——下列臂有行无法读出完整三元组或金额归因不一致："
+            "读不动 ⇒ `total_tokens` / 总 $ / 两个比值一律 `—`（不给部分和；"
+            "改前缺席/坏值被 `or 0` 折成 0 并计价）；拆分或归因不一致 ⇒ token 总量与 "
+            "tokens/detection 仍可读，金额与 $/detection 记 `—`。"
+            "检出数只由 `detection_rate` 决定，不随 token 可读性缩水。"
+        )
+        for arm, eff in al_arms:
+            parts: list[str] = []
+            if eff.get("n_token_unreadable_rows"):
+                codes = eff.get("token_reading_reasons") or {}
+                detail = "、".join(f"{k}×{v}" for k, v in sorted(codes.items())) or "未登记机制名"
+                parts.append(f"{eff['n_token_unreadable_rows']} 行 token 不可读（{detail}）")
+            if eff.get("n_token_money_blocked_rows"):
+                codes = eff.get("token_money_reasons") or {}
+                detail = "、".join(f"{k}×{v}" for k, v in sorted(codes.items())) or "未登记机制名"
+                parts.append(f"{eff['n_token_money_blocked_rows']} 行金额被阻断（{detail}）")
+            lines.append(f"- `{arm}`：" + "；".join(parts) + "。")
+        lines.append("")
+    if any("cache_hits" in (data.get("cost") or {}) for data in arms_data.values()):
+        lines.append(
+            "缓存命中行的 tokens / $ / detection 均为**真实 API 消耗**口径：0 是真的 0，但不是免费"
+            "——命中次数与避免的 token 见上（§4 缓存口径）。"
+        )
+    lines += [
         "",
     ]
+    zero_arms = [
+        (arm, data) for arm, data in arms_data.items() if (data.get("cost_eff") or {}).get("n_zero_token_rows")
+    ]
+    if zero_arms:
+        lines.append(
+            "**零 token 行的成本口径（AK）**——下列臂有行 token 全 0：这些行不进 "
+            "`total_tokens` / `total_usd`，但检出数仍计入分母 ⇒ 总 $、$/detection 与 "
+            "tokens/detection 是**已记录花费的下界**（缺记账行按 0 计），不是真实均值，更不是免费。"
+        )
+        for arm, data in zero_arms:
+            eff = data["cost_eff"]
+            n_zero = eff["n_zero_token_rows"]
+            n_out = eff.get("n_zero_token_output_rows") or 0
+            total = (data.get("cost") or {}).get("n_rows")
+            ratio = f"{n_zero}/{total}" if isinstance(total, int) and total > 0 else f"{n_zero}"
+            detail = f"，其中 {n_out} 行 generated_test 非空（有产出、无花费记录）" if n_out else ""
+            lines.append(f"- `{arm}`：{ratio} 行 token 全 0{detail}。")
+        lines.append("")
     for arm, data in arms_data.items():
         eff = data.get("cost_eff") or {}
         reasons = eff.get("n_unpriceable_reasons")
@@ -1197,6 +1402,14 @@ def _print_console_summary(data: dict[str, Any], report_path: Path, json_path: P
         print(
             f"   {arm}: median={_f(cost['median_tokens'], 1)} IQR=[{_f(cost['q1_tokens'], 1)}, "
             f"{_f(cost['q3_tokens'], 1)}] (IQR={_f(cost['iqr_tokens'], 1)}) mean={_f(cost['mean_tokens'], 1)}"
+            + (
+                (
+                    f"；缓存命中 {cost['cache_hits']} 次、避免 {cost['cache_avoided_tokens']} tokens"
+                    "（真实消耗口径，0 ≠ 免费）"
+                )
+                if cost.get("cache_hits") is not None
+                else ("；缓存读数不可用（机制见报告 §4）" if "cache_hits" in cost else "")
+            )
         )
     print()
     if data.get("corrected") is None:

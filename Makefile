@@ -5,7 +5,7 @@
 #
 # 用法：make help 查看全部目标。
 
-.PHONY: help install lint format typecheck test test-cov docs-check env-budget baseline-check state-contract env-snapshot model-fingerprint tool-versions json-contract-sites prompt-artifacts-check preflight artifact-doc-consistency proc-hygiene perf-bench perf-check zero-assert self-mutation self-mutation-ci gates repro power self-check clean-traces build-check cpr-idr repair-replay cf-upper-bound corrected-metrics target-quality mutation-det-correlation swebench-disclosure pass-matched emse-stats
+.PHONY: help install lint format typecheck test test-cov docs-check env-budget baseline-check state-contract env-snapshot model-fingerprint tool-versions json-contract-sites json-strict prompt-artifacts-check preflight artifact-doc-consistency proc-hygiene perf-bench perf-check zero-assert self-mutation self-mutation-ci gates repro power self-check clean-traces build-check cpr-idr repair-replay cf-upper-bound corrected-metrics target-quality mutation-det-correlation swebench-disclosure pass-matched emse-stats
 
 PY := .venv/bin/python
 
@@ -58,6 +58,9 @@ model-fingerprint:  ## 模型版本指纹锁定守卫（S29，接入 CI；默认
 json-contract-sites:  ## JSON 契约调用点计数一致性（EMSE 批次 2026-10-15：口径 A=7，防文档 6/7 分裂）
 	$(PY) scripts/gates/check_json_contract_sites.py
 
+json-strict:  ## 全仓严格 JSON（AF 轮：工件拒绝裸 NaN/Infinity + 源码写入点 allow_nan=False）
+	$(PY) scripts/gates/check_json_strict.py
+
 prompt-artifacts:  ## Instruction artifact 清单生成（逐字抽取 + sha256；新增 prompt 后必须重跑）
 	$(PY) -m experiments.prompt_artifacts
 
@@ -103,7 +106,7 @@ perf-check:  ## 性能回归比对（默认 non-blocking 告警；本地同机�
 tool-versions:  ## CI/pre-commit/lock 三方工具版本一致守卫（AK4 接入 CI）
 	$(PY) scripts/gates/check_tool_versions.py
 
-gates: lint format typecheck test docs-check env-budget baseline-check state-contract env-snapshot model-fingerprint tool-versions json-contract-sites artifact-doc-consistency zero-assert  ## 本地全部门禁（合并前自检；format = ruff format --check，2026-10-12 质量债清偿批次补入；zero-assert = K 轮补入，此前 CI 阻断但本地 gates 缺席）
+gates: lint format typecheck test docs-check env-budget baseline-check state-contract env-snapshot model-fingerprint tool-versions json-contract-sites json-strict artifact-doc-consistency zero-assert  ## 本地全部门禁（合并前自检；format = ruff format --check，2026-10-12 质量债清偿批次补入；zero-assert = K 轮补入，此前 CI 阻断但本地 gates 缺席；json-strict = AF 轮补入）
 
 repro:  ## 复现主批次（详见 reproduce.sh；消耗 LLM 配额，勿自动触发）
 	bash reproduce.sh

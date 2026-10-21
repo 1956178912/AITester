@@ -129,7 +129,10 @@ _lru_negatives: dict[tuple[str, str, float | None], float] = {}
 # P0 止血（缓存记账缺口）：LRU 正缓存并行存"该 key 对应的上次实际调用 token
 # 数"，供 LRU 快路径命中时还原 cache_avoided_tokens（此前快路径拿不到 token、
 # 只能记 0，导致进程内重复命中的"避免 token"被系统性低估）。
-_lru_tokens: dict[tuple[str, str, float | None], int] = {}
+# AT（2026-10-21）：值可能是文件里的原始 tokens（坏记账值原样保留，命中时由
+# record_cache_hit_usage 统一判定并披露），也可能是 None（本次调用发生写拒绝，
+# 消耗量未知）。
+_lru_tokens: dict[tuple[str, str, float | None], Any] = {}
 _lru_lock = threading.Lock()
 
 
@@ -142,8 +145,8 @@ def _lru_lookup(key: tuple[str, str, float | None]) -> str | None:
         return None
 
 
-def _lru_lookup_tokens(key: tuple[str, str, float | None]) -> int:
-    """读取 LRU 中该 key 对应的上次实际调用 token 数（P0 止血，0 = 无记录）。"""
+def _lru_lookup_tokens(key: tuple[str, str, float | None]) -> Any:
+    """读取 LRU 中该 key 对应的上次实际调用 token 数（0 = 无记录；原值交由写入口判定）。"""
     with _lru_lock:
         return _lru_tokens.get(key, 0)
 
@@ -164,7 +167,7 @@ def _lru_check_negative(key: tuple[str, str, float | None]) -> bool:
         return False
 
 
-def _lru_store(key: tuple[str, str, float | None], value: str | None, tokens: int = 0) -> None:
+def _lru_store(key: tuple[str, str, float | None], value: str | None, tokens: Any = 0) -> None:
     """进程内 LRU 写入（None 记为负缓存，容量超限时淘汰最久未用条目）。
 
     非 None 值写入 LRU 正缓存的同时清除该键的负缓存条目（文件写入成功
@@ -701,10 +704,13 @@ class BaseAgent:
                 # 保守记 0（fail-closed，与 LRU 快路径"历史条目无 token
                 # 记录时记 0"同口径）。同时把 token 数并入 LRU 回填，
                 # 使同一 key 的后续 LRU 命中也能还原正确值。
-                _sem_tokens = 0
+                # AT（2026-10-21）：tokens 原值交给 record_cache_hit_usage 判定；
+                # 不再 int() 归一（坏记账值曾让整次语义命中退化成真实调用）。
+                # 键缺席 = 历史 0；在场 null = 本次调用写拒绝、消耗量未知。
+                _sem_tokens: Any = 0
                 try:
                     with open(_sem_hit[0], encoding="utf-8") as _sem_f:
-                        _sem_tokens = int(json.load(_sem_f).get("tokens", 0) or 0)
+                        _sem_tokens = json.load(_sem_f).get("tokens", 0)
                 except (OSError, ValueError):
                     _sem_tokens = 0
                 from src.budget.token_usage import record_cache_hit_usage
@@ -740,12 +746,16 @@ class BaseAgent:
                     # 串（uid 不可得的平台）同样跳过校验。
                     and cache_creator_ok(cached_data.get("creator_uid"))
                 ):
-                    _lru_store(lru_key, cached_data["response"], int(cached_data.get("tokens", 0) or 0))
+                    # AT（2026-10-21）：tokens 原值落 LRU 并交写入口判定——坏记账值
+                    # 不得让一次身份校验通过的缓存命中退化成真实 LLM 调用；缺席 = 0，
+                    # 在场 null = 消耗量未知（披露而非折零）。
+                    _cached_tokens: Any = cached_data.get("tokens", 0)
+                    _lru_store(lru_key, cached_data["response"], _cached_tokens)
                     # P0 止血（缓存记账缺口）：读缓存文件记录的上次实际调用 token，
                     # 计入 cache_avoided_tokens（独立口径，不污染真实消耗语义）。
                     from src.budget.token_usage import record_cache_hit_usage
 
-                    record_cache_hit_usage(int(cached_data.get("tokens", 0) or 0))
+                    record_cache_hit_usage(_cached_tokens)
                     logger.info("LLM 缓存命中 (文件→LRU): %s", cache_key[:50])
                     return cached_data["response"]
                 # 文件存在但键材料/归属不匹配（md5 前 16 位碰撞或跨用户
@@ -778,7 +788,7 @@ class BaseAgent:
                     and "request_identity" not in legacy_data
                     and cache_creator_ok(legacy_data.get("creator_uid"))
                 ):
-                    _legacy_tokens = int(legacy_data.get("tokens", 0) or 0)
+                    _legacy_tokens: Any = legacy_data.get("tokens", 0)
                     _lru_store(lru_key, legacy_data["response"], _legacy_tokens)
                     from src.budget.token_usage import record_cache_hit_usage
 
@@ -799,8 +809,10 @@ class BaseAgent:
         # _record_response_usage 累加到线程局部，此处取调用前后 total 差值
         # （含内部重试/故障转移的全部真实消耗，正是缓存命中省下的量）。
         from src.budget.token_usage import get_usage as _get_usage
+        from src.budget.token_usage import write_rejection_count as _write_rejection_count
 
         _before_total = _get_usage().total_tokens
+        _before_rejections = _write_rejection_count()
         # A10：清空"最近成功请求"记录后再调用——故障转移场景下真正返回响应的
         # 端点可能不是请求链首选；_call_llm 成功时会记录真实配置供下方 payload
         # 写入 response_identity（provenance/cache 标签取真实请求身份）。
@@ -816,7 +828,13 @@ class BaseAgent:
             response = self._call_llm(user_message, max_retries, temperature=temperature, **_jm_kwargs)
         else:
             response = self._call_llm(user_message, max_retries, **_jm_kwargs)
-        _call_tokens = max(0, _get_usage().total_tokens - _before_total)
+        # AT（2026-10-21）：本次调用若发生 token 写拒绝，差值只是部分和 → 缓存
+        # tokens 记 null（未知），不得把部分和当"避免的 token"全额复用。
+        _call_tokens: Any = (
+            None
+            if _write_rejection_count() != _before_rejections
+            else max(0, _get_usage().total_tokens - _before_total)
+        )
         # A10：真实响应来源（故障转移后可能 ≠ 请求链首选）。仅内存配置，写入
         # payload 时只保留脱敏端点 + 模型名（api_key 绝不落盘）。
         _actual_config = get_last_request_config()
@@ -877,7 +895,7 @@ class BaseAgent:
             tmp_file = f"{cache_file}.tmp.{threading.get_ident()}"
             try:
                 with open(tmp_file, "w", encoding="utf-8") as f:
-                    json.dump(payload, f, ensure_ascii=False)
+                    json.dump(payload, f, ensure_ascii=False, allow_nan=False)
                 # 18. 安全改进：缓存文件收敛 0o600（仅当前用户可读），
                 # 防完整 prompt + 响应（可能夹带代码片段）被同机其他用户读取
                 secure_cache_file(tmp_file)

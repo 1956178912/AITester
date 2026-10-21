@@ -524,7 +524,9 @@ def _main(argv: list[str] | None = None) -> int:
         "load_errors": load_errors,
     }
     if args.json_out:
-        Path(args.json_out).write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+        Path(args.json_out).write_text(
+            json.dumps(report, ensure_ascii=False, indent=2, allow_nan=False), encoding="utf-8"
+        )
         print(f"[e2e] JSON 报告：{args.json_out}")
     if args.md_out:
         Path(args.md_out).write_text(render_markdown(rows, include_llm=include_llm), encoding="utf-8")

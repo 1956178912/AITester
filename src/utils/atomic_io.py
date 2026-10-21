@@ -22,11 +22,12 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 import tempfile
 from typing import Any
+
+from src.utils.json_strict import strict_json_dumps
 
 logger = logging.getLogger(__name__)
 
@@ -70,7 +71,11 @@ def atomic_write_text(path: str, content: str, *, mode: int | None = 0o600) -> N
 
 
 def atomic_write_json(path: str, obj: Any, *, indent: int = 2, mode: int | None = 0o600) -> None:
-    """原子写 JSON 文件（ensure_ascii=False + atomic_write_text）。
+    """原子写**严格** JSON 文件（ensure_ascii=False + atomic_write_text）。
+
+    AF（2026-10-20）：序列化改走 `strict_json_dumps`——非有限浮点（NaN/±Infinity）
+    抛 `NonFiniteJSONError` 并点名 JSON 路径，绝不落盘非 RFC 8259 的裸 token；
+    失败发生在建临时文件之前，目标文件保持旧内容。
 
     Args:
         path: 目标文件路径。
@@ -78,7 +83,7 @@ def atomic_write_json(path: str, obj: Any, *, indent: int = 2, mode: int | None 
         indent: json.dump 缩进（默认 2，与仓内既有落盘风格一致）。
         mode: 同 atomic_write_text。
     """
-    atomic_write_text(path, json.dumps(obj, ensure_ascii=False, indent=indent), mode=mode)
+    atomic_write_text(path, strict_json_dumps(obj, indent=indent), mode=mode)
 
 
 __all__ = ["atomic_write_json", "atomic_write_text"]

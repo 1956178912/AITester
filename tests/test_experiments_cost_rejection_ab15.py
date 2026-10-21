@@ -516,12 +516,13 @@ class TestEmseExtensionsCostPerTask:
         # AB-16 改名：非对象条目按形状事实点名（原 currency_unreachable:int）。
         assert "entry_not_object:int←deepseek-flash" in note
 
-    def test_unregistered_model_remains_a_partial_sum_with_a_note(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """ "价目没登记"是既有口径（只计 token、$ 少算并在 note 点名），不是本轮的"拒绝"。"""
+    def test_unregistered_model_is_no_amount_not_a_zero_partial_sum(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """AH（2026-10-20）：未登记模型使 $/task 不完整——返回 None 并点名机制，不再是 0.0 部分和。"""
         _fake_price(monkeypatch, {})
         _, usd, note = ext._cost_per_task(ext.MAIN_BATCH_FILES, "aitester")
-        assert usd == 0.0
+        assert usd is None
         assert "未计价模型：['deepseek-flash']" in note
+        assert "model_unregistered←deepseek-flash" in note
 
     def test_render_never_formats_none_as_a_float(self) -> None:
         report = {
@@ -619,9 +620,12 @@ class TestWiringAndArtifacts:
         assert "def price_block_reason_for" in source
 
     def test_oracle_attaches_reason_only_on_rejection(self) -> None:
+        """AU：判定源从"金额是否 None"改为 `cost_reason`（价格机制优先、token 机制兜底）；
+        不变量仍是"只在拒绝时写 `cost_unpriced_reason`"（干净路径键集由 AU 行为锁覆盖）。"""
         source = inspect.getsource(oe.generation_summary)
-        assert "if cost is None:" in source
-        assert "cost_unpriced_reason" in source
+        assert "cost_reason = gen.price_block_reason_for(" in source
+        assert "if cost_reason is not None:" in source
+        assert 'summary["cost_unpriced_reason"] = cost_reason' in source
 
     def test_oracle_render_branches_on_none(self) -> None:
         source = inspect.getsource(oe.render_readme)

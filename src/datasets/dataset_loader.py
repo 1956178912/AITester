@@ -869,7 +869,7 @@ class SWEBenchDataset(BaseDatasetLoader):
         # 文件名带子集标识，避免不同子集互相覆盖（加载器按子集读取）
         output_path = os.path.join(target_dir, f"swe_bench_{subset}_instances.jsonl")
         with open(output_path, "w", encoding="utf-8") as f:
-            f.writelines(json.dumps(item, ensure_ascii=False) + "\n" for item in dataset)
+            f.writelines(json.dumps(item, ensure_ascii=False, allow_nan=False) + "\n" for item in dataset)
 
         logger.info("SWE-bench [%s] 下载完成，已保存至: %s", subset, output_path)
         return output_path
