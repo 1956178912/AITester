@@ -54,6 +54,10 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+# BB（2026-10-21，F03 同型）：rc==0 判绿前的有效通过证据谓词
+# （BA 轮建立于 _m1_metrics，此处为同族消费点复用，勿复制第二套判据）
+from experiments._m1_metrics import _suite_has_effective_pass  # noqa: E402
+
 
 @dataclass
 class SuiteRepairResult:
@@ -85,7 +89,13 @@ class SuiteRepairResult:
 
 
 def _runs_green_on(code: str, test_code: str, module_name: str, timeout: int) -> bool | None:
-    """在 code 上跑 test_code 是否全绿；不可判定返回 None。"""
+    """在 code 上跑 test_code 是否**有效**全绿；不可判定返回 None。
+
+    BB（2026-10-21，F03 同型）：rc==0 不等于套件跑过——全 skip/xfail/
+    deselect 的 pytest 运行同样 rc==0 且摘要 passed==0。此类运行没有
+    "断言通过"证据，与执行失败同样判 None（不可判定），不得作为见证
+    注入的安全门通过依据。
+    """
     tmp = tempfile.mkdtemp(prefix="aitester_srp_")
     try:
         with open(os.path.join(tmp, f"{module_name}.py"), "w", encoding="utf-8") as f:
@@ -117,7 +127,7 @@ def _runs_green_on(code: str, test_code: str, module_name: str, timeout: int) ->
             )
         except subprocess.TimeoutExpired:
             return None
-        return res.returncode == 0
+        return res.returncode == 0 and _suite_has_effective_pass((res.stdout or "") + "\n" + (res.stderr or ""))
     except Exception:
         logger.debug("SRP 执行失败", exc_info=True)
         return None

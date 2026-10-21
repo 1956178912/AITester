@@ -38,6 +38,10 @@ SWEBENCH_SUMMARY = _REPO_ROOT / "experiments" / "results" / "swebench_20_summary
 # 主批次工件目录（R-P0-2 口径来源）
 MAIN_BATCH_DIR = _REPO_ROOT / "experiments" / "results" / "main_batch"
 
+# BB（2026-10-21，F03 同型）：rc==0 判绿前的有效通过证据谓词
+# （BA 轮建立于 _m1_metrics，此处为同族消费点复用，勿复制第二套判据）
+from experiments._m1_metrics import _suite_has_effective_pass  # noqa: E402
+
 
 # ─── McNemar 统计原语（对照 statistical_report 已定案值） ─────────────────
 def mcnemar_exact_p(b: int, c: int) -> float:
@@ -465,7 +469,14 @@ def over_red_cases(rows: list[tuple[str, dict]], k: int = 5, seed: int = 42) -> 
 
 
 def _rerun_on_fixed(task_id: str, fixed_code: str, test_code: str) -> dict[str, Any]:
-    """在 gold fixed 上真实复跑（零 LLM，子进程 pytest）并记录 rc/模式。"""
+    """在 gold fixed 上真实复跑（零 LLM，子进程 pytest）并记录 rc/模式。
+
+    BB（2026-10-21，F03 同型）：``rc == 0`` 不等于套件真的跑过——全
+    skip / xfail / deselect 的 pytest 运行同样 rc==0 且摘要 ``passed==0``。
+    此类运行记 ``passes_on_fixed=None`` + ``P5_no_effective_pass_on_fixed``
+    （不可测，既不算"在 fixed 上通过"也不算失败签名），与 BA 轮
+    ``_suite_has_effective_pass`` 同口径。
+    """
     with tempfile.TemporaryDirectory(prefix="emse_overred_") as tmp:
         tmp = Path(tmp)
         module_name = task_id.rsplit("__", 1)[-1] if "__" in task_id else "task_m"
@@ -481,8 +492,13 @@ def _rerun_on_fixed(task_id: str, fixed_code: str, test_code: str) -> dict[str, 
             timeout=60,
         )
         rc = proc.returncode
-        passes = rc == 0
-        mode = "P4_passes_on_fixed" if passes else classify_failure_signature(proc.stdout + proc.stderr)
+        output = (proc.stdout or "") + "\n" + (proc.stderr or "")
+        if rc == 0 and not _suite_has_effective_pass(output):
+            passes: bool | None = None
+            mode = "P5_no_effective_pass_on_fixed"
+        else:
+            passes = rc == 0
+            mode = "P4_passes_on_fixed" if passes else classify_failure_signature(output)
         return {
             "task_id": task_id,
             "status": "ok" if proc is not None else "error",

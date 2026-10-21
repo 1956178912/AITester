@@ -39,6 +39,7 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
+from experiments._m1_metrics import _suite_has_effective_pass  # noqa: E402
 from experiments.emse_ult_mutk import (  # noqa: E402
     _gold_tests_to_pytest_code,
     _load_detail_rows,
@@ -92,8 +93,11 @@ def _sanity_gate(fixed_code: str, test_code: str, module_name: str) -> dict[str,
             )
         except subprocess.TimeoutExpired:
             return {"status": "nonterminate", "rc": None, "wall_s": round(time.time() - t0, 1)}
+    # BB（2026-10-21，F03 同型）：rc==0 但无有效通过 ⇒ unverifiable（fail-closed）
     return {
-        "status": "pass" if proc.returncode == 0 else "fail",
+        "status": "pass"
+        if proc.returncode == 0 and _suite_has_effective_pass((proc.stdout or "") + "\n" + (proc.stderr or ""))
+        else ("unverifiable" if proc.returncode == 0 else "fail"),
         "rc": proc.returncode,
         "wall_s": round(time.time() - t0, 1),
     }
@@ -137,7 +141,12 @@ def measure_task(row: dict[str, Any], test_kind: str) -> dict[str, Any]:
 
     sanity = _sanity_gate(fixed_code, test_code, function_name)
     if sanity["status"] != "pass":
-        reason = "test_nonterminating_on_fixed" if sanity["status"] == "nonterminate" else "test_fails_on_fixed"
+        # BB（2026-10-21，F03 同型）：unverifiable（rc==0 但无有效通过）
+        # 与 fail 同样阻断测量——不得把"没跑起来"当成"在 fixed 上通过"。
+        reason = {
+            "nonterminate": "test_nonterminating_on_fixed",
+            "unverifiable": "test_no_effective_pass_on_fixed",
+        }.get(sanity["status"], "test_fails_on_fixed")
         return _skip(reason, sanity)
 
     t0 = time.time()
