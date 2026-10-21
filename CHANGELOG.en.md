@@ -1,10 +1,1085 @@
-> Last updated: 2026-10-20 (**round AE**: the **entry-level** price admission of `run_b8_injection.aggregate` now delegates to the shared predicate -- its self-held `isinstance((int, float))` digit gate (`bool` / `nan` / `inf` / negative prices all accepted, `nan`/`inf` written into `REPORT.json` as non-RFC-8259 bare `NaN`/`Infinity`) + currency blindness (`CNY` recorded as USD) + a silent fallback to the builtin price when the entry cannot be read are all collapsed into "shared-predicate decision + builtin-price ceiling + named mechanism"; the test-side price-table schema domain is closed the same way; the `86 / 88` stale-diff gasket registered by AB-15/AB-16 is recomputed on the current tree as `94 / 100` (canonical 110→122, the delta being 100% the AD-1 rendering) and the registered numbers/attribution are updated without rewriting protected artifacts; 23 new regression locks, 10/10 mutation anchors red; zero LLM, $0. Previously **round AD**: statistical-quantity rendering preserves magnitude + the normal-tail complement pattern eliminated + a repo-wide census of silent precision-loss patterns. Previously **the Z→AB close-out round**: the ~18 rounds of work that sat in the working tree from the evening of 2026-10-19 (Z / AA / engineering-quality / AB-1~17) committed in one go + the README bilingual "Latest Optimization" rotation done late (the batch maintained only CHANGELOG/BASELINE/INDEX/register, leaving the README at round Y -- the 4th recurrence of this convention, with the AO3 lock advanced to 2026-10-20 in step) + the E7 entry sheets' "ignored by .gitignore = can never be committed" gap fixed (the six blank sheets had entered SHA256SUMS yet were suppressed by the wildcard and unregistered in the MANIFEST -- a double silent gap; narrow negation + registration 179→185 + committed, all 2040 manifest entries now checkable out on a fresh clone); zero LLM, $0. Previously **round AB-17**: **"whether this file reads out as a table" written once** -- after AB-16 collapsed "what counts as an admissible entry" into one place, their common upstream (file → `models` layer) was still written seven times: the `src` cached wrapper read seven different breakages (top-level list / null / empty object / missing key / `models` as list·str·null) into the same sentence "structure mismatch (missing models dict)"; `emse_stats_extensions` crashed outright on all seven (FileNotFoundError / JSONDecodeError / TypeError ×2 / KeyError ×2 / AttributeError ×3); `emse_stats_report` kept six distinct Chinese phrases in stderr while attributing everything to `model_unregistered`; `spec_examples_generator` only logged at the file level and passed the `models` layer through; `statistical_analysis` was silent on the file-path channel and used another phrase set on the argument channel; `run_b8_injection` silently fell back to the builtin price behind an `is_file()` guard; and the retrieval layer's `.get(model)` `is None` test merged "key absent" with "value null" into one `model_unregistered`. Closed into four shared helpers in `src.budget.pricing`: `table_read_reason` (three families: `price_table_file_missing` / `price_table_json_invalid:<T>` incl. UnicodeDecodeError / `price_table_file_unreadable:<T>`), `load_table_json` (`(None, None)` is a legal reading -- the file content is `null`), `models_layer` (non-object top level `price_table_not_object:<T>`; missing key in a non-empty object `models_key_absent`; key present with a non-object value truthy or falsy alike `models_not_object:<T>`; `{}` / `{"models": {}}` silent -- "an empty object has no shape to speak of"; usable models handed through as-is, non-object entries no longer silently filtered) and `load_table_models` (one step); all seven read sites wired (cached wrapper / spec / report / ext / statistical / analyze / run_b8, whose `table_reason` is written only when the table is truly unusable and whose self-held digit gate stays registered-unfixed with only `isinstance(row, dict)` added); the retrieval layer's `.get` switched to `not in` (value null → `entry_not_object:NoneType`, key absent → `model_unregistered`, at spec / report / ext / analyze); two `isinstance(v, dict)` silent filters removed (src + statistical). Real-batch readings unchanged (pooled `1.447277 / 0.260967 / 0.541408`, total `2.249652`, ext three-arm `$/task` bit-identical; run_b8's real-table `price` metadata field-for-field equal to the protected `REPORT.json` with aggregation run on tmp copies only; archived P-1 README not regenerated). `tests/test_experiments_table_admission_ab17.py` **26 cases** + **8 anchors each turning red** (red counts `14/7/5/1/1/3/1/4`, collected constant at 484, sha256 byte restore); five existing lock files rewritten to the new vocabulary (net 0 cases); two documented design-time reading differences (spec loader's models-layer pass-through, ext's `is_file()` guard reading a directory as "missing"); close-out full suite **10283 passed / 5 skipped / 0 failed / collected 10288** (pre-registration run 10282 passed / 1 failed / 5 skipped, 181.15s with `--cov`, the only failure being the baseline guard itself; confirmation run 185.04s, rc=0, coverage.xml recomputed twice to the same values), lines **97.24%** (18439/18963 = 97.2367%) / branches **93.84%** (6653/7090 = 93.8364%), +20 lines / +15 arcs over AB-16 with every new line executed by a lock, uncovered lines 524 and partial arcs 437 (difference itemised to pricing.py); nine boundaries registered unfixed, see booklet section 5; zero LLM, $0. **Previously round AB-16**: **"what counts as a price number and what counts as an admissible entry" written once** -- after AB-15 collapsed the decision and its attribution into one place, the admission domain itself was still written five times across the repo: production's `_as_non_negative_float` accepted `nan`/`inf`; spec/report took values through `float()` directly (`True` as 1 giving `3.0`, `"1.0"` accepted, `-1.0` fabricating a negative-amount total of `1.0`, `[1.0]` raising `TypeError`, `nan`/`inf` multiplying into non-finite amounts); ext blocked `bool` but folded an empty entry / `null` price into a 0.0 partial sum; analyze's local `_price_reject_reason` ignored non-finite values; and statistical's `p >= 0` accepted `inf` -- so one entry is priced at one site, rejected at the second and crashes at the third: the non-object entry `5` reads `currency_unreachable:int` in spec/ext/analyze but `entry_not_object:int` in report; the empty entry `{}` reads three different things across four sites; and spec's truthy non-object `models` still raised `AttributeError` at `models.get`. Disposition: `src/budget/pricing.price_block_reason` (absence > type > negative > non-finite; `bool` in its own tier; `-inf` still `price_negative` with every existing AB-15b code preserved) + `entry_block_reason` (shape → empty → currency → digits), both predicates wired into all six consumer sites (deleting `_as_non_negative_float` and `_price_reject_reason`; spec names truthy non-object models as `models_not_object:<T>`; non-object entries read `entry_not_object:<T>` everywhere like report already did; ext moves empty entries / `null` prices from "unpriced" to **rejected**, with any rejected share forcing `usd_per_task=None`). **Real-batch readings change by zero** (only deepseek-flash is priceable in the real table -- `USD 0.3/1.2`, agnes has `null` prices and qwen is CNY; pooled `1.447277 / 0.260967 / 0.541408`, total `2.249652`, ext's six readings bit-identical, no new disclosure keys). `tests/test_experiments_price_admission_ab16.py` **148 cases** + **21 anchors each turning red** (7/12/13/21/1/29/8/6/5/1/10/3/12/11/1/11/10/10/9/3/12, collected constant at 148, two behaviour-neutral controls 0 red, sha256 byte restoration); close-out full suite **10257 passed / 5 skipped / 0 failed / collected 10262** (pre-registration run 10256 passed / 1 failed / 5 skipped, 173.05s, the single failure being the baseline guard itself; confirmation run 176.35s, rc=0), lines **97.23%** (18419/18944 = 97.2287%) / branches **93.81%** (6638/7076 = 93.8101%), +16 lines / +12 arcs over AB-15 with every new line executed by a lock and the 525 uncovered lines / 438 partial arcs bit-identical; statistical's only reading change is `inf` moving from priced to unpriced; eleven boundaries registered but not fixed, see booklet section 5; zero LLM. **Previously AB-15**: **a rejected amount must not wear the shape of an amount, and "why there is no amount" must come from the same decision** -- after AB-14 collapsed the decision into one place, the downstream still had three channels where a rejection wore a dollar-shaped label and three different attribution vocabularies: `oracle_examples_replay.render_readme` printed `**$None**` for both an unregistered model and a CNY model while a true zero printed `**$0.0**` (one dollar prefix, no mechanism); `analyze_t1_b2_main_batch`'s pooling used `or 0.0` and folded the per-seed `None` back into an amount, so "the whole arm could not be priced" and "nothing was actually spent" both read `$0.0`; `emse_stats_extensions._cost_per_task` was the **sixth** currency-blind site AB-14 missed (relabelling the real-table model as `CNY` left `usd_per_task` bit-identical at `0.025884977011494247`); and the reasons were written independently (an if/elif chain in the report, another bucket vocabulary in `statistical_analysis`, no name at all in oracle, and admission versus attribution as two drifting code paths in spec). Disposition: `src/budget/pricing.currency_block_reason` + `CURRENCY_UNDETERMINED_STATUSES` as the single mechanism vocabulary (`usd -> None`; absent / `null` / blank -> `currency_absent`; other -> `currency_not_usd:<NORM>`; non-string -> `currency_not_usd:not_string:<T>`; remaining -> `currency_unreachable:<T>`) + `spec_examples_generator._price_admission` making "can this be priced" and "why not" the same decision + all six sites rewired (the shared vocabulary plus five consumer sites); **a rejection never gets `$`, never folds to `0.0`, and a partial sum never poses as a full amount** (pooling / batch / ext return `None` if any share is rejected), with disclosure keys written only on a real rejection. **Real-batch readings change by zero** (pooled `1.447277 / 0.260967 / 0.541408`, total `2.249652`, ext's three arms `0.025884977011494247 / 0.003358973563218391 / 0.004543231034482759` bit-identical, no new disclosure keys, the archived P-1 README not regenerated, and the archived statistical reports still differing by the pre-existing 86 / 88 lines). `tests/test_experiments_cost_rejection_ab15.py` **109 cases** + **27 anchors each turning red** (5/19/6/2/5/2/6/12/3/3/3/6/2/6/3/4/3/1/3/1/4/2/4/5/1/3/3, collected constant at 109, neutral control 0 red, sha256 byte restoration); close-out full suite **10109 passed / 5 skipped / 0 failed / collected 10114** (pre-registration run 10108 passed / 1 failed / 5 skipped, 181.66s, the single failure being the baseline guard itself; confirmation run 180.55s, rc=0), lines **97.23%** (18403/18928 = 97.2263%) / branches **93.80%** (6626/7064 = 93.7995%), +12 lines / +8 arcs over AB-14 with every new line executed by a lock and the 525 uncovered lines / 438 partial arcs bit-identical; ten boundaries are registered but not fixed, see booklet section 5; zero LLM. **Previously AB-14**: **write the judgement once; absence must not default to any unit; a term that "looks redundant" still needs an observable surface** -- AB-13 closed with "another caliber exists in the repo, not unified this round", and this round expanded that sentence into a measurement table: **the single question "is this money dollars" is written four times here and all four disagree, while the fifth is not written at all** (`pricing.py` defaults an absent key to USD and prices it yet refuses to price a `null` -- two absences, opposite answers; `statistical_analysis.py`'s `or "USD"` prints the same `USD` for absent / null / empty string, so the unit in the report was invented by code rather than registered; `spec_examples_generator` and `emse_stats_report` instead exclude absence and, without stripping, exclude `" USD "` too; the case-sensitive currency set turns `USD` next to `usd` into size 2, which drops the whole arm's cost to `None` while `missing_models` stays empty -- the report prints one line with **no attribution**; a `["USD"]` currency makes the set comprehension raise `TypeError`, measured as **CLI exit 1 and no statistical report at all**; the fifth site, `analyze_t1_b2_main_batch.add_cost`, **never reads `currency` at all** and sums non-dollars into `cost_usd`). Disposition: `src/budget.pricing.currency_status` as the single source of truth (seven-family domain; 13 inputs land on **9 mutually distinct readings**, asserted as set equality), pricing admission separated from the renderable label (`currency_label` yields a label only for `usd` / `other:<NORM>` -- **absence must never be rendered as a unit name**, above all not `USD`), and **all five sites rewired with no local spelling left**; site differences are allowed only in "is there a column to print the unit", so the currency-columned table may price `other:CNY` under a normalized label plus a unit reminder while single-dollar columns exclude non-USD -- one judgement, two dispositions, by design. **Product-side behaviour change, the first `src/` edit after five rounds of zero `src/` changes: an entry without a currency key is no longer treated as dollars** and now falls back to `COST_USD_PER_1K` or is recorded as unpriced; every entry in the real table registers a currency, so existing readings are unchanged -- which is also the whole basis for rewriting zero protected artifacts (three snapshots of `statistical_report_e2*.md` byte-identical, `SHA256SUMS` 2040 entries OK, 21 archived `cost_usd` values bit-identical). `tests/test_experiments_currency_caliber_ab14.py` **124 cases** plus **19 mutation anchors each turning red** (21 / 25 / 26 / 21 / 22 / 1 / 1 / 1 / 29 / 1 / 9 / 1 / 1 / 1 / 21 / 5 / 3 / 12 / 5; neutral control 0 red, baseline collected 709 stable, sha256 byte-exact restore). One self-correction is the methodological output: `not currency_blocked` was **0 red at first** (undecidable currency also empties `labels`, so `len(labels) == 1` blocks it first), and instead of declaring it redundant the reasoning found the only input that can trigger it alone -- one model in USD, one with no currency written, **identical price numbers** -- after which the anchor turns red and baseline goes 708 -> 709. Closing full run **10000 passed / collected 10005 / 0 failed** (pre-registration run 9999 / 1 failed / 5 skipped, 176.76s, the single failure being the baseline guard itself), lines **97.22%** (18391/18916) / branches **93.79%** (6618/7056): **+20 lines / +12 arcs over AB-13, every one executed by a lock**, while 525 uncovered lines and 438 partial arcs stay bit-identical and all ten per-module readings are unchanged -- **coverage changed nature this round**, and section 14's rule now cuts both ways: a moving reading is no more evidence of a defect than an equal one is evidence of an untouched `src/`. Watermarks 96.40/92.50 unchanged; **six sites registered unfixed** and handed to AB-15, two of them only after the pre-close-out re-check falsified what this line had originally claimed about them; lessons in `docs/MEASUREMENT_INTEGRITY.md` section 17; zero LLM. **previous round AB-13**: **a unit asserted by a field name is not a constraint until the implementation judges it** -- `total_usd` / `usd_per_detection` / `$/task` in `emse_stats_report.py` hard-code the unit in their names while **nothing in the implementation reads `currency`**: the pre-measurement fed one synthetic `qwen-long` row (the on-disk table registers CNY 0.5 / 2.0 from the official pricing page) and measured `total_usd=2.5`, `n_priced_rows=1`, printed in the "total $" column with a non-empty denominator, non-empty prices and no unpriceable disclosure -- **completely normal-looking accounts**. Disposition: only entries whose `currency` upper-cases to `USD` enter `total_usd`, an absent key is recorded as `currency_absent` (**absence defaults to no unit at all**), unpriceable mechanisms split into seven mutually exclusive buckets, and the disclosure key appears only when exclusions actually happened. The two sites handed over by AB-12 were handled in the same pass (the six legal non-object top levels returned verbatim, crashing the caller's `.get` while the docstring promised an empty table; `price_table=None` producing the same amount as omission), replaced by mechanism-named traces and an `_UnsetPriceTable` tri-state with **the return domain unchanged**. The real batches' 783 rows use only the USD-registered `deepseek-flash` and `n_unpriceable` is 0, so **the gate changes zero rows of archived readings**, the six protected cost readings reproduce bit-for-bit and no `SHA256SUMS`-protected file was rewritten -- while that same zero is exactly why "the gate never executed" remains a live suspicion, hence the coverage floor and the CNY/null two-model contrast are asserted. **When a new caliber collides with an existing assertion, adjudicate the old expectation first and keep the case testing what it claims** (`test_zero_detection_no_division` needed `n_priced_rows == 1 and total_usd > 0` on top of `currency`, otherwise a zero numerator reaches the division guard for no reason at all). `tests/test_experiments_price_table_ab13.py`, **51 cases** + 2 rewritten existing assertions (net +51, collected 9830 -> 9881) + **15 mutation anchors each turning red** (7 / 2 / 10 / 2 / 1 / 9 / 7 / 4 / 2 / 1 / 1 / 2 / 4 / 9 / 5, control 0 red, collected stable at 78, sha256 byte-exact restore); close-out full run **9876 passed / collected 9881 / 0 failed** (the pre-registration run measured 9875 passed / 1 failed / 5 skipped in 177.56s with `--cov`, the single failure being the baseline guard itself; the post-refresh confirmation run took 179.05s at rc=0), lines 97.22% (18371/18896) / branches 93.78% (6606/7044) -- the same values as the previous five rounds, which per section 14 are **not** evidence that `src/` was untouched (the change list is). **Two currency calibers coexist and were not unified** (`statistical_analysis.py:991` treats an absent key as USD); the ratchet water mark stays at 96.40/92.50; the lesson is in `docs/MEASUREMENT_INTEGRITY.md` section 16; zero LLM. **Previously round AB-12** (its sections were already filed while this summary line was not refreshed -- a drift registered and corrected here): **a race branch locked instead of pragma-ed, five registered sites closed in one go** -- `process_utils.py:638-642`'s `killpg(SIGKILL)` fallback gained 5 deterministic locks with **`src/` unchanged and no pragma added** (four anchors 5 / 1 / 1 / 5 red plus a text-only control at 0 red), so the 18371 -> 18369 -> 18371 line jitter measured in AB-11 is now executed by locks; site a's three absence mechanisms (`(x or {})` collapse, a missing `GATES.json` rendered as `FAIL`, a wide `except` dropping a batch without a trace) gained 53 locks; site c's non-object trace lines left the "valid files" denominator (32 locks); the shared loader's same-`task_id` overwrite became a named WARN with five mutually exclusive buckets (26 locks); the price table's non-object top levels and `None` sentinel gained 26 locks. **142 new locks** in total, each of the five mutation groups carrying one behaviour-neutral control, no archived artifact rewritten, with two same-family sites and the `--write` idempotence fork handed over to AB-13. **Previously round AB-11**: **"key absent" is not "value null", and neither is "unreadable"** — the 3 sites AB-10 left registered are all handled, and each turned out to be an **attribution collapse** rather than lost data. `spec_augment_applied` put "the producer wrote `null` (genuinely not triggered)", "the row has no such key" and "the second raw read failed" into one `none` bucket — and hid the only truth-telling branch behind `# pragma: no cover`; it is now a three-state value domain plus a named WARN and a three-number disclosure, and measurement showed 50/50 df-arm rows carry the key as `null`, so the committed bucket reading and Markdown stay byte-identical while the new buckets sit at 0 instances (the reason to split them, not a reason not to). `_profile_presets` returned the same `{}` for four failure mechanisms while the caller **hardcoded** "git show failed" — right shape, false contents — and `old.get(profile) or {}` made "profile does not exist" render as "no drift"; reasons are now assembled per mechanism, a missing-profile branch was added, and `_profile_drift(b533cff…, a93c1f60…)` was first shown to equal the archived `profile_preset_drift` field by field. `parse_trace_file` returned `None` on damage, filing a file whose own `meta.baseline` names the arm under `unknown` and voiding the records parsed before the bad line without a trace — a repo-wide census measured 148 `*/traces` directories, 9086 files, **5 damaged files and 44 voided records** — so damage now keeps a trace, is attributed with the same rule as intact files, and the voided volume is disclosed; replaying the 5 damaged directories old-versus-new proves the decision denominator is unchanged. Also registered: a committed claim **voided by input growth** (`mast_distribution_report.md` says 963 files, reproducible bit-for-bit; the same directory now holds 2007), locked rather than rewritten. 31 new locks + 2 rewritten assertions (+33 cases, collected 9655 → 9688) and **18 mutation anchors each turning red**, one of which produced a lesson about the method itself: the first c4 anchor left orphan indentation, `ImportError` killed the file and collection dropped 86 → 41 — **red is not a lock**, caught only by the equal-collected-count precondition, now backed by a `compile()` pre-check. Four mechanisms named in AB-9's original rows stay registered, all measured at 0 instances: all **three** of site two's row (`(x or {})` empty-object degradation, absent `GATES.json` rendering as `FAIL`, and a broad `except Exception: continue` that silently drops one seed pair from the paired comparison — the profile-preset site AB-11 actually handled is a different site in the same file and was never listed in that row, so the earlier "partially disposed by AB-11" attribution was wrong and has been withdrawn), plus site three's non-object lines in the denominator; as does the duplicate-`task_id` collapse living in the shared loader. Close-out run **9683 passed / collected 9688 / 0 failed** (pre-refresh 9682 passed / 1 failed / 5 skipped at 170.11s with `--cov`, the single failure being the baseline guard itself); lines **97.22%** (18371/18896) and branches **93.78%** (6606/7044) equal to the two previous rounds — but the `format` gate caught this round's new reason string as two implicitly concatenated literals, and after `ruff format` two more full-caliber runs of the **same tree** read **18369 lines / 6605 arcs** before returning to 18371 / 6606, the only per-line diff being `src/utils/process_utils.py:641-642` (638-642 is a load-dependent `killpg(SIGKILL)`-failed fallback with no deterministic lock), so **digit-identity is no longer cited as evidence that `src/` was untouched** — the change-surface file list is; all 18 mutation anchors were re-run after formatting and still turned red one by one (collected 86 held); watermark 96.40/92.50 unchanged; lessons recorded in `docs/MEASUREMENT_INTEGRITY.md` §13 and §14; zero LLM. **Previously round AB-10**: **absence and unreadability must not be reported as "zero hits / consistent / not requested"** — 2 of the 5 sites AB-9 left registered are handled, both in `experiments/emse_ult_gold_diagnosis.py`, and all three readings are measured rather than inferred: with no upstream row loaded the script wraps the local gold and compares it against the local gold through `_normalize_test_body`, which makes `upstream_bodies_equal` **trivially True** (AB-9's inference confirmed by recomputation); `_load_json_array` returned an empty list for any non-list top level, which four call sites read as "the upstream has no such row"; and README sections 4c / 4d vanished whenever a supplementary artifact was absent from the output directory, with no message. Dispositions: new `_load_upstream_array` (missing file → `FileNotFoundError`, zero object rows → `ValueError`, matching the `FileNotFoundError` precedent already in the same file), `_official_tests_for` (agreement widens to a three-state value including "not verifiable"), `_load_supplement` plus the two section renderers (which now state in place that a section was not rendered because the artifact is absent); non-object rows are still skipped but stderr reports dropped and retained counts. **Measuring the real path first was the precondition**: 200 / 3909 rows all retained (0 dropped) and 71/71 tasks take the upstream branch, 0 the wrapping branch — which is why the `SHA256SUMS`-protected committed README reproduces **byte-for-byte** (twice), the reproduction needing both `--supplement` and `SUPPLEMENT_GENERATED_MUTK.json` in the output directory, while `--from-json` rewrites the JSON it reads in place (both gotchas registered). 35 locks in `tests/test_experiments_absent_vs_zero_ab10.py` (all synthetic `tmp_path`, nothing read from `~/.cache/aitester`, no new skips) plus 10 mutation anchors each turning red; the 3 sites AB-9 still lists are untouched. Close-out run **9650 passed / collected 9655 / 0 failed** (pre-refresh 9649 passed / 1 failed / 5 skipped at 168.76s with `--cov`, the single failure being the baseline guard itself); lines **97.22%** (18371/18896) and branches **93.78%** (6606/7044) equal to the two previous rounds (written then as "digit-identical, therefore `src/` untouched" — an inference withdrawn in AB-11, see `docs/MEASUREMENT_INTEGRITY.md` §14); watermark 96.40/92.50 unchanged; lesson recorded in `docs/MEASUREMENT_INTEGRITY.md` §12; zero LLM. **Previously round AB-9**: **the `json.loads` return domain censused across `experiments/` — 68 sites classified, one silent denominator turned into disclosed counts** — AB-8's "the `experiments/` layer was never censused" boundary is retracted: 95 files scanned, 42 of them holding call sites, 68 sites in total, each read against the parser's return domain and classified as 42 loud crashes / 9 already fail-closed / 5 crashes swallowed by an outer handler but still visible / 12 silently dropping data. The criterion is restated for this layer: a loud non-zero exit beats a plausible wrong number, so the 42 crash sites are deliberately left alone and blanket `isinstance` guards would have traded crashes for silence. One of the twelve is handled — `target_quality_replay.py` (entry `make target-quality`, output inside the SHA256SUMS-protected `results/main_batch`, numbers cited by `BASELINE.yaml`) now counts skipped batches in two separate lists, appends a read-integrity section only when something was skipped and warns on stderr, with exit codes unchanged; 14 locks, six mutation anchors all red, and the committed report reproduced byte-for-byte with its inputs asserted to exist first. Two census by-readings: `experiments/` holds exactly two hand-written JSON inputs, neither under any `SHA256SUMS`, and `price_table.json` is the only multi-consumer one (all five non-object returns crash loudly at all five read sites, one of them after a paid LLM replay; the single-consumer `injection_benchmark_samples.json` crashes the same way and its value domain is unguarded too) and a `.jsonl` suffix is not line-delimited here. Two of this round's own inferences were falsified by probing. Close-out run **9615 passed / collected 9620 / 0 failed** (pre-refresh 9614 passed / 1 failed / 5 skipped at 169.40s with `--cov`, the single failure being the baseline guard itself); lines **97.22%** (18371/18896) and branches **93.78%** (6606/7044) equal to AB-8 (written then as "digit-identical, therefore `src/` untouched" — withdrawn in AB-11, see `docs/MEASUREMENT_INTEGRITY.md` §14); watermark 96.40/92.50 unchanged; lesson recorded in `docs/MEASUREMENT_INTEGRITY.md` §11; zero LLM. **Previously round AB-8**: **the `json.loads` return domain — non-object rows and the primary-key domain closed at six sites** — AB-5's rule ("a bad row invalidates that row only") held only for the two shapes it had tested; `json.loads` returns six legal values, and feeding the five non-object ones (`[]`, `null`, `"abc"`, `3`, `true`) into the production readers and the G8 gate aborted whole batches (`AttributeError`) or silently survived: an int/bool `instance_id` lands in the enrichment mapping and never matches the string-keyed lookup, so the log still says "loaded N records" while the file contributes nothing. The gate was the absurd one — its documentation promises "exit 1 means not ready" but the reality was a crash, and Python's crash code is also 1, so the block looked effective while the caller got a traceback instead of a report. All six sites were fixed by **aligning with conventions already in the repo** (the `isinstance(raw_row, dict)` filter in `dataset_ult.py`, the gate's own `unparsed_` fail-closed precedent) rather than a new design; tracing is split by who authored the file (hand-written enrichment files get one aggregate warning per defect class, official main data gets a per-line warning with path and line number); the primary-key caliber was **re-decided once mid-round** (dropping int keys on both sides makes enrichment "configured but zero-effect", so scalars are now `str()`-normalized, container keys are skipped with a trace, falsy values keep AB-5's counter and **none of AB-5's 24 locks changed caliber**); the gate report **only adds** `enrichment_stats` — no existing key touched, and non-object rows still count into `total_tasks` and the issue list, so nothing was re-judged from "not ready" to "ready"; 47 new locks in `tests/test_jsonl_non_object_row_tolerance.py` with all seven guards mutation-verified; two self-catches registered honestly: a one-off probe **falsified** my path inference about `dataset_ult._iter_records` (`[]` never reaches the JSONL branch), and the first mutation harness reported "all seven guards red" while **matching zero cases** through a `-k` label filter; close-out full suite **9601 passed / collected 9606 / 0 failed**, lines **97.22%** (18371/18896) / branches **93.78%** (6606/7044) with 1 of 10 per-module readings moving (`dataset_loader` 97.12 → 97.28), the pre-refresh run's single failure being the baseline guard itself; watermark held at 96.40/92.50; lesson in `docs/MEASUREMENT_INTEGRITY.md` §10; zero LLM); previously **round AB**: **real-corpus replay falsifies a synthetic-enumeration premise + a documented criterion becomes an executable artifact + dataset-adapter tolerance backfill + silently-dropped table cells fixed under a repo-wide criterion + evidence-based coverage close-out** — the tier-2 first-object repair tier's "permanently unreachable" verdict is replaced by observation plus mechanism: replaying 7,565 real LLM responses gives 692 reached / 667 fragment / 1 divergent / **0** that would actually fire, and **falsifies** AA-5's premise (a real divergent sample exists where tier 1 returns `None`, so tier 2 is the first and only tier producing a fragment for that class), now argued by mechanism (a divergent fragment must contain a bare backslash outside strings and none of the five candidates removes backslashes; targeted enumeration: 716 divergent inputs, 0 rescuable), disposition unchanged — **kept** (same decision, new basis); the AA-8 process-state criterion is promoted from prose to a script the test **executes**, so document and lock are one artifact (a fifth reader turns both red); the 47 dataset-adapter lines named in ROUND3 turn out to need **no dataset at all** — they are bad-input tolerance reachable with genuine `tmp_path` files, so 24 locks cover 36 lines and 9 are registered with their mechanism, and a real defect is fixed (`_load_enrichment` silently dropped rows lacking `instance_id`; return semantics unchanged); the lock criterion is tightened to "a lock counts only if deleting the corresponding guard necessarily turns it red"; one stale ROUND3 ② "to be covered" registration retracted; **silently-dropped table cells**: 6 live-doc rows placed a bare pipe inside inline code (shell pipeline / regex alternation / absolute-value notation), and since GFM splits cells without recognizing code spans and discards the tail cells of any row wider than the header, the source looked complete while a whole column vanished — every row escaped, plus a 29-case repo-wide lock; the detector implements the **GitHub cmark-gfm odd/even-backslash rule** (the first pass was validated with markdown-it and wrongly judged "fixed" — the two reference implementations disagree on the same text; that fork is now pinned as a semantic lock, lesson in `docs/MEASUREMENT_INTEGRITY.md` §9); the frozen surface (5 rows in `docs/history/` + 4 in `experiments/results/`) is registered per file under a ratchet instead of rewritten (two of those directories are SHA256SUMS-protected), so the only defensible claim is "zero loss in live docs"; two draft figures were corrected by recomputation (12 rows to 9, 27 cases to 29) and the bilingual `docs/INDEX` "four measurement artifacts" line now reads "five plus five round-scoped appendices"; one stray unmatched closing parenthesis in this very summary line (present in both languages) removed; round AB closed at **9525 passed / collected 9530 / 0 failed** and after AB-7 the suite is **9554 passed / collected 9559 / 0 failed**, lines **97.22%** (18349/18874) / branches **93.76%** (6591/7030) (digit-identical, since `src/` did not change), and the pre-refresh run's 2 failures were the document↔artifact gate correctly reporting §1 lagging `coverage.xml` (not a guard, not an order dependency); watermark held at 96.40/92.50 pending CI calibration; zero LLM); previously 2026-10-19 round AA (**cross-platform ratchet guard, silent-fallback close-out, evidence-based coverage registration, D3b Step B boundary locks, E7 adjudication execution surface, cross-file order-dependency fix** — the coverage ratchet's local auto-bump now requires an explicit `--allow-bump` (bumping from a macOS reading makes the CI ubuntu blocking tier necessarily red, and the failure looks like "coverage regressed"); `analyze_results.load_latest_benchmark`'s "fall back to all JSON when no benchmark file exists" degradation is now fail-closed; one stale registration that contradicted its own register was retracted and a missed ±0.10pp tolerance comment in `ci.yml` corrected; 9 new deterministic regression locks plus reproducible evidence for 9 constructively-unreachable defensive sites, with no `# pragma: no cover` and no deletion of the subsumed repair tier; D3b Step B is judged **not to be implemented** — four prerequisites located in code plus 3 reverse locks (implementing them turns the locks red); E7 human adjudication moved from protocol document to an **executable surface** (6 CSV entry sheets + five-category scale validation + unweighted Cohen's κ merge + 10,000-replicate bootstrap CI at seed=42) with 3 reverse locks asserting "E7 not executed, no κ artifact exists"; the closing full run caught and fixed a cross-file process-level sentinel order dependency (AA-8: autouse reset fixture + 1 contamination-replay lock; deregistering the fixture turns it red), criterion recorded in `docs/MEASUREMENT_INTEGRITY.md` §8; full suite **9485 passed / collected 9490 / 0 failed** (178.62s), lines 96.98% / branches 93.51%; watermark held at 96.40/92.50 pending CI calibration; zero LLM); previously the engineering-quality round: **three-node complexity split + reachable-branch backfill in four modules** — generator / executor / patch-applier nodes in `src/graph/nodes.py` decomposed into testable units, 75 cases net added (13 behavioural contracts + 1 source-wiring lock + 61 branch locks), full suite 9413 passed / collected 9418, lines 96.95% / branches 93.48% (local caliber; CI recalibrates); previously round Z: **remediation of the fourth third-party full static review, 20 findings** (Windows environment; reviewed commit `55bb711`; P0=0 / P1=14 / P2=6; all 20 statically confirmed and fixed: standard BH q + full recalculation, paired denominator, rlimit/DB/shared-venv/official-harness fixes, MDO assertion classification and Windows probe, negative-rc guard, config and chart provenance, strict JSON, protocol/validity/data-card docs; 5 new regression-lock files with 138 cases; zero LLM); previously round Y5: **E7's three paths fully provisioned + a nesting regression lock** — the n=72 full-frame census artifacts are now ready so work can start as soon as the path is chosen; corrected the protocol's over-promise that "n=8 ⊆ n=41 needs zero rework" (13% of 150 synthetic combinations are not set-nested — it is a fact of the current parameters, not an algorithmic guarantee), now guarded by a regression lock. Previously round Y4: responses to the third round's eight open questions (five closed / two awaiting a decision / one not done); round Y3: audit wrap-up and a repo-wide uncovered-line map; round Y2: audit closure and first audit of experiments/; round Y: fix-coverage gap audit; round X: paper reproducibility closure; rounds W/V: second/first third-party review remediation; rounds U/T/S/R/Q/P/O/N/M/L/K registered the same day
+> Last updated: 2026-10-21 (**round BA**: **rc==0 is not an effective pass — an all-skip / xfail suite executes no assertion**. pytest also returns `rc==0` for a suite that runs no assertion; the old code read only `rc`: detection's fixed side and repair's gold side each had a false-positive channel (all-skip counted as **1.0**), the replay tool said `correct`, and mutation detection misread "the tests did not run" as "the tests have no detection power" (`rate=0.0`). Fix: a shared predicate `_suite_has_effective_pass` (at least 1 `passed` and 0 `failed`; partial skip with a real pass remains valid; an unparseable summary is `False`), wired into four consumers, all fail-closed without an effective pass (`None` / `unverifiable` / `skipped`). Real corpus 246 benchmark files / 9358 generated tests / 114 marked with skip·xfail / 12 with `detection=1.0` (all conditional, none module-wide all-skip), 736 gold suites / 2 marked / 0 all-skip, 4895 mutation rows / 1376 measured / 132 marked; **35 new locks + 6 mutation anchors red (red counts 14/1/3/3/1/2) + neutral control 0 red**; pre-run 11256 passed / 1 failed / 5 skipped (the only failure = baseline guard), coverage 19002/19528 = 97.3064% / 6960/7396 = 94.1049% (`src/` untouched); confirmation run **11257 passed / 5 skipped / 0 failed, 204.07s, rc=0**. See the [BA booklet](reviews/EFFECTIVE_GREEN_BA_2026-10-21.md). Previously **round AZ**: **no implementation may silently rewrite a scale or a tail — Cohen's g is 0–0.5, not 2g, and an exact p must not be lifted by an epsilon**. `emse_stats_extensions.cohens_g` returned `abs(n10−n01)/(n10+n01)` (**2g**, range 0–1), a scale mismatch with the Cohen's g the name and the paper cite (0–0.5); `binom_exact_two_sided` compared floats with `pmf <= prob_k + 1e-12` for `p=0.5`, lifting the 113/0 tail of **1.926e-34** to ~1.93e-12 (22 orders of magnitude). Fix: g now uses the effectsize definition `abs(n10−n01)/(2*(n10+n01))`; the exact tail uses integer `math.comb` weights for exact comparison, and the `p≠0.5` branch keeps probability ordering. Real batches: R-P0-2 aitester vs df **g 0.370 / p 1.716e-13** (was 0.739 / 1.073e-12), df vs plain LLM **g 0.500 / p 1.926e-34** (was 1.000 / 1.931e-12), E6 **g 0.423** (was 0.846), E4 **g 0.500**. The protected 20261016 archive is untouched (sha256 re-verified OK) and corrected values are reissued under 20261021; the paper / EMSE skeleton / replication package / X-round errata are updated in the same batch; **21 new locks + mutation M1 11 red / M2 4 red**; confirmation run **11222 passed / 5 skipped / 0 failed, 187.56s, rc=0**. Previously **round AY**: **preserve at the read layer, judge at the decision layer — run_b8 must not rewrite the `token_metrics` shape with `or {}`, and a falsy non-object is not free**. `_load_arm` and `_load_harness_smoke` in `run_b8_injection` still normalised with `rd.get("token_metrics") or {}`: `[]` / `""` / `0` / `False` became `{}`, so `_arm_summary` read "the payload is broken" as "there are no metrics", reported **$0.0** with no mechanism, and `REPORT.json` lost the original bad shape; the smoke row's cost was computed before the rewrite, but its payload evidence was already lost. Fix: both read layers carry `token_metrics` verbatim (absent / null stays `None`, non-objects keep their original value), and amount judgement lives only in `_cost_usd` — a falsy non-object likewise yields `None` + `token_metrics_not_object:<T>` rather than the historical 0; clean dicts and the absent/null historical-0 caliber are unchanged. Real batch: 14 JSON files / 12 `token_metrics` keys, all dicts and zero bad shapes; the two arm costs 0.046531 / 0.060761 and four smoke rows 0.007456 / 0.008501 / 0.007356 / 0.009719 reproduce bit-for-bit together with their payloads, protected artifacts untouched; **27 new locks + 6/6 mutation anchors red**; confirmation run **11201 passed / 5 skipped / 0 failed, 177.62s, rc=0**. Previously **round AX**: **the benchmark/full-stack summary presentation and aggregation read points have a value domain too — presentation may fold absent to the historical 0, averaging may not**. After AW closed the per-arm statistics, three summary sites still passed aggregate `token_metrics` through raw: the terminal Token-efficiency lines used `%d` / `%.2f`, so a legitimate upstream `None` rejection made a completed benchmark raise `TypeError` at wrap-up; the G8 table's total-token cell used `bl.get("token_metrics", {})`, which cannot hold `null` / non-objects and printed bad values into Markdown; `summarize_full_stack` averaged with `or {}` + `float()`, aborting the whole summary on a truthy non-object, silently skipping a falsy one, and folding bool / string / negative / non-finite values into the mean. Fix: all three sites use the shared `token_metric_reading` — presentation keeps absent / null at the AE2 historical 0 and renders present-but-unreadable as `不可读` plus mechanism names (the terminal also logs a warning and never aborts); the mean skips absent blocks historically and makes that baseline `None` + `avg_total_tokens_reason` if any present block is unreadable, never a partial mean, without poisoning task statistics or other baselines. Real corpus: 64 top-level benchmark files / 324 recursive `token_metrics` keys (246 `results.<baseline>` summary blocks + 78 nested shapes) with zero bad values; the 246 summary blocks' terminal texts, the clean full-stack row and all four baseline means are bit-for-bit unchanged (6 nested PREFLIGHT blocks lack `avg_tokens_per_task` and are excluded from the terminal comparison); **48 new lock examples + 8/8 mutation anchors red**; confirmation run **11174 passed / 5 skipped / 0 failed, 177.06s, rc=0**. Previously **round AW**: **the T1/B2 per-arm statistics' `token_metrics` shape and event count have a value domain too — a bad shape does not abort the analysis, and an event count is not a check-free pass-through**. After AV closed `add_cost`, `arm_stats` still fell back with `res.get("token_metrics") or {}`: a truthy non-object (`"abc"` / `True`) reached `.get` and raised `AttributeError`, aborting the whole analysis, while a falsy non-object (`[]` / `""` / `0`) was silently rewritten to `{}` — "the payload is broken" posing as "there are no metrics"; `"calls": tm.get("total_llm_calls")` passed event counts through raw, so bool / numeric strings / decimals / negatives contradicted the pooled column (`sum_token_metric_values` rejects the same value) in the same report. The fix keeps `token_metrics` verbatim for the downstream shared readers and routes `calls` through `token_metric_reading` — absent / null metrics / absent field stay historical 0 (AE2), present-but-unreadable ⇒ `None` + `calls_reason` (deduplicated, vertical-bar-joined, written only when non-empty); event counts and token money do not contaminate each other. Real corpus 324/324 arms clean; the stored T1/B2 report reproduces 18/18 and new raw arms 9/9 bit-for-bit, the recomputed `ANALYSIS_REPORT.json` is byte-identical (35542 bytes), protected artifacts untouched; **22 new locks + 6/6 mutation anchors red** (0 escapes); pre-registration run 11125 passed / 1 failed / 5 skipped (180.28s, collected 11131, the only failure = baseline guard) and the confirmation run 11126 passed / 5 skipped / 0 failed, 179.21s, rc=0; lines 19002/19528 = 97.3064% / branches 6960/7396 = 94.1049% (`src/` unchanged, bit-identical to AV); zero LLM, $0. Previously **round AV**: **the T1/B2 analysis-side cost entry has a value domain too — a one-sided unknown is not a partial sum, and unknown money is not the string `None`**. After AU closed the three experiment-side aggregators, `analyze_t1_b2_main_batch.add_cost` still priced directly with `tm.get(...) or 0`: `token_metrics=None` folded to 0, a `None` input still priced the output side alone, `True` counted as 1, decimals multiplied straight through, negatives produced negative amounts, `nan`/`inf` entered the report, strings raised `TypeError`, and non-objects raised `AttributeError` on `.get`; the fragment renderer also printed unknown money as the YAML string `None`. The fix routes the two token fields through the shared `token_metric_reading`: a wholly absent / `null` / `{}` `token_metrics` stays historical 0 (AE2), while present-but-unreadable fields make `cost_usd=None` with deduplicated mechanism names joined by `|` and no partial sum; unknown YAML money is always `null`, and unknown tokens render as “unreadable”. Real batch: 18/18 per-seed costs reproduce bit-for-bit and the stored fragment is byte-identical; **19 new locks + 6/6 mutation anchors red**; confirmation run 11104 passed / 5 skipped / 0 failed; lines 97.31% / branches 94.10%. Previously **round AU**: **on the experiment side, unknown is not zero — no number when unreadable, no partial sums posing as full sums, and AT write-rejection markers must not be lost**. After AI–AT closed the shared readers and report-side reading layer layer by layer, three live experiment aggregators still folded on their own: `estimate_cost_usd` used `float(... or 0)` on usage (`input_tokens=None` plus 1,000,000 output tokens priced the output side only at **$1.2**; `True` became 1; `"12"` became 12; negatives produced negative amounts; `nan` produced non-finite amounts); `generation_summary` / `usage_totals` summed with `int(... or 0)`, so AT write-rejection markers vanished from the totals; `run_b8._cost_usd` folded `None` to 0, a total could add one unknown side to the other side's amount, and the README printed `$None`. The fix routes amounts and counts through the shared value domain: absence is historical 0, unreadable is `None` + mechanism name, and any unreadable field blocks the whole amount/group; event counters stay independent; the hits column depends only on its own column; `cost_total_usd` and the smoke-inclusive total are `None` when either side is unknown, with merged reasons; the README renders “unreadable / cannot estimate (mechanism)”. Real corpus 1701 JSON files with zero bad values; 37/37 b8 costs and 6/6 generation costs reproduce read-only; **62 new locks + 7/7 mutation anchors red**; confirmation run 11085 passed / 5 skipped / 0 failed; lines 97.31% / branches 94.10%. Previously **round AT**: **token counting on the write side has a value domain too — a rejected write is not zero, and every rejection must be traceable**. After rounds AI–AS separated "zero / absent / unreadable" on the read side layer by layer, the write side still coerced bad values silently with `int(... or 0)`: bool became 1, floats were truncated, numeric strings were accepted, negatives entered the totals, and `nan`/`inf` or unparsable strings crashed; a bad cache-file `tokens` value could even turn a genuine cache hit into a genuine LLM call. The fix routes `record_usage` / `record_cache_hit_usage` through the shared `count_reason` predicate — a rejected write records no counts but still increments the `llm_calls` / `cache_hits` events, and mechanism names are written to `token_write_reasons` / `cache_write_reasons` only when non-empty; readers treat `token_write_rejected:<mech>` / `cache_write_rejected:<mech>` as unreadable, `otel_export` exports no token attributes, and `write_rejection_count` separates a cache `tokens: null` "unknown" from historical absence. Real corpus 1701 trace files / 10629 `token_usage` rows with zero bad values, existing readings bit-identical; **62 new locks + 19/19 mutation anchors red**; confirmation run 11023 passed / 5 skipped / 0 failed; lines 97.31% / branches 94.10%. Previously **round AS**: the producer must write legal identifiers first — `TraceSession` wrote a 16-hex `run_id`, a 12-hex `span_id`, no identifiers on `task_start`/`task_end`, and never wrote `parent_span_id`; real corpus 9086 files / 110926 nodes: 61188 with 16/12-hex identifiers, 49738 without (all before O7), 9085 `task_start` / 9046 `task_end` events with none, 0 parent fields. The fix: a 32-hex `run_id`, a 16-hex root and child spans, `task_start` producing a root in both file and memory modes, node/task_end parents pointing at the root, and an exact name + shape exemption for structural identifier fields from the generic 32+ hex redaction; **10 new locks + 18/18 mutation anchors red**; close-out 10961 passed / 5 skipped / 0 failed; lines 97.29% / branches 94.06%. Previously **round AR**: the OTel export's identifiers and string value domain — `run_id` was used verbatim as a trace_id (real corpus: 16 hex chars) and `span_id` was exported verbatim (12 hex chars), neither meeting OTel (trace_id 32 / span_id 16); missing identifiers fell back to a fresh uuid on every export, and nodes overwrote the file-level trace with their `run_id`, so **8002 files carried two traces, 61188 parent links were broken, and 9086/9086 files exported unstable identifiers**. The fix canonicalises identifiers to 32/16 lowercase hex (short hex left-padded, case folded; non-str/empty/non-hex/too-long/all-zero rejected), keeps one trace_id per file, derives deterministic SHA-256 ids for missing/invalid values, re-derives duplicate `span_id`s within a trace with a `span_id_duplicate` disclosure, and exports only `str` string attributes; the real 9086 files / 129058 spans all have a single trace, compliant identifiers, in-file parents, zero disclosures and byte-identical repeat exports; **48 new locks + 16/16 mutation anchors red**; close-out 10951 passed / 5 skipped / 0 failed; lines 97.29% / branches 94.06%. Previously **round AQ**: the OTel export boundary's numeric value domain — token attributes no longer leak bool/str/decimals/negatives/NaN/Inf/containers, bad timestamps no longer abort a whole file, and the silent drop of a non-object `token_usage` becomes an `aitester.export_value_reasons` disclosure. Token counts reuse the shared `count_reason`; time/duration/budget accept only finite non-negative numbers; the real corpus of 9086 files / 129058 spans has zero disclosures and 18 stable files are bit-identical; 61 new locks + 12/12 mutations red; close-out 10903 passed / 5 skipped / 0 failed; lines 97.29% / branches 94.05%. Previously **round AP**: five report-side aggregate token summarisers each folded on their own — t1_b2 pooling, the b8 README, rag_ab parsing/statistics, RAG group averages and the cost table. A present `None` was folded to 0, bool read as 1, `"100"` accepted by `int()`/`_safe_float`, negatives dragged totals down, nan/inf propagated or crashed, non-objects crashed; `None` broke `_mean` and nan turned `p<0.05` false so the report said “no significant difference”. The fix adds aggregate-metric shared readers `token_metric_reading` + `sum_token_metric_values` (absence is historical 0, a present `None` is upstream refusal, counts go through `count_reason`, derived averages use `allow_float`) and wires the five consumers; unreadable yields no partial sum and tables/README/interpretation say “unreadable”. Real artifact readings are bit-identical; 67 new locks + 33/33 mutation anchors red; close-out 10842 passed / 5 skipped / 0 failed; lines 97.28% / branches 93.98%. Previously **round AO**: **three report-level token total readers held loose folds too — tier totals, flip comparison and convergence curves each summed their own way**. `model_gradient`'s `int(... or 0)` read bool as 1, truncated floats, accepted strings, produced negative totals and crashed on nan/inf; `compare_failures`'s `(row.get("token_usage") or {}).get(...)` crashed on truthy non-objects and on string totals, and folded bad values into the total; `convergence_analysis`'s `_safe_float(... or 0)` accepted str/bool/negative/nan. The fix adds total-oriented shared readers `row_total_token_reading` + `aggregate_row_token_totals` and wires the three consumers: unreadable means no partial sum, total-only legacy schema stays readable, and split contradictions are disclosed only. Real batches: 10659 rows / 322 arms with zero instances and zero 9-arm old-vs-new differences. 52 new locks + 16/16 mutation anchors red. Previously **round AN**: **three token aggregation readers held their own `or 0` too — unreadable is not zero, and a partial sum is not a total**. After AM collapsed the row-level policy into the shared reader, the three **aggregation** consumers still summed `(r.get("token_usage") or {}).get(..., 0)` independently: a truthy non-object `token_usage` crashed `run_benchmark`'s write path with `AttributeError`, a falsy non-object `[]` silently became 0, `bool`/`float`/`str`/negative/`nan` were folded in as counts (a `cache_hits=-3` row produced a −300% hit rate), a row whose `total_tokens` disagreed with `in+out` had consumers silently disagreeing (110 vs 999), the trusted report printed 0 for a missing `total_tokens`, a half cache schema produced partial sums, and the old JSON fallback's CLI printed the literal "命中 X / 调用 X + 真实" as its denominator. Fix: `row_token_reading` migrated into the producer module `src/budget/token_usage.py` and a new `aggregate_row_token_usage`: absent key / `null` ⇒ historical 0 (AE2, counted in `n_absent_rows`); present-but-invalid values or a partial positive triple ⇒ `input/output/total` all `None` with `n_unreadable_rows` + `reading_reasons` (no partial sums); `llm_calls` judged independently; `in+out != total` keeps totals readable and only discloses `n_token_split_mismatch_rows` (no money at the aggregation layer); cache via `cache_totals` (old schema ⇒ `present=False` ⇒ consumer-side historical 0; half schema / bad values / non-object ⇒ both `None`); three consumers wired (`run_benchmark._aggregate_token_metrics`, `trusted_verification.arm_trusted_metrics`, `rag_analysis._token_metrics_from_details`); `statistical_analysis._row_cost_tokens` became a `row_token_reading` alias (AM/AL locks untouched). Real batch: all 783 rows int and self-consistent, cache schema absent ⇒ the five-key `token_metrics` recompute is bit-identical for all 9 arms; repo-wide census 11197 rows / 337 arms / 1218 absent (historical 0) / 0 bad / 0 partial / 0 contradictions; protected artifacts not rewritten. 38 new locks + **15/15 mutation anchors red** (M0 neutral control 0 red, collected constant 210, `compile()` before every write, sha256 byte restore; AO3 lock advanced to "AN round", net 0 cases). Pre-registration run 10722 passed / 1 failed / 5 skipped (176.35s; the only failure was the baseline guard); confirming run **10723 passed / 5 skipped / 0 failed, 176.40s, rc=0**; coverage **18662/19186 = 97.27% lines** / **6765/7202 = 93.93% branches** (+77 lines / +38 arcs = the new reader + aggregator; uncovered 524 and missing arcs 437 bit-identical to AM; `coverage report`'s 383 partial arcs is a different caliber and no recovery is claimed); zero LLM, $0. Previously **round AM**: **row-level token reads in the cost aggregate have a value domain too — `or 0` folded present-but-invalid values into priceable numbers** (false $0, dropped attribution, non-count S11 evidence). `cost_analysis` now uses the shared `row_token_counts` with two-level blocking (unreadable ⇒ arm tokens/money `None`; split/attribution inconsistency ⇒ money only), attribution moved to `src/budget/token_usage.by_model_reason`, and S11 evidence uses `count_reason`; all 783 real-batch rows are clean, so the three arm readings and return domains are unchanged; **64 new examples + 10/10 mutation anchors red**; close-out 10685 passed / 5 skipped / 0 failed; lines 97.26% / branches 93.90%. Previously **round AL**: **row-level token arithmetic in the report has a value domain too — an unreadable row is not zero**. `emse_stats_report.cost_effectiveness_block` kept its own second copy of the arithmetic: `usage.get("input_tokens") or 0` folded absent/null/string/bool/negative/nan/inf into priceable numbers; rows with missing or non-dict `token_usage` were skipped before detection counting, so `n_detections` shrank with token readability; positive-token rows with no `by_model` attribution, `input+output != total`, or `Σby_model != total` silently escaped or priced contradictory numbers; and cache-explained zero rows entered the AK lower bound. Fix: `row_token_counts` moved into `src/budget/token_usage.py` (ext keeps aliases, so existing AI locks are untouched) and the report reads the shared reader — unreadable ⇒ token total, total $ and both ratios are `None` with `token_reading_reasons`; split/attribution inconsistency blocks money only (tokens and tokens/detection stay readable, `token_money_reasons`); detections no longer depend on token readability; cache-zero rows stay out of the AK lower bound. All 783 real-batch rows are clean, so the three arm totals 6.755979 / 0.876692 / 1.185783 are bit-identical and protected artifacts are not rewritten; 57 locks + 6/6 mutation anchors; full suite 10621 passed / 5 skipped / 0 failed, numbers in BASELINE.yaml. Previously **round AK**: **a handful of unaccounted rows is neither free nor exact — the cost readings are lower bounds on recorded spend**. The `plain_llm_df` arm has 35/261 rows (13.4%) whose token triple is all zero with `llm_calls=0` and a non-empty `generated_test` (3 of them have `detection_rate=1.0`); because the zero share stays below S11's 50% threshold, `computable=True` and those rows enter the amount numerator as 0 while still occupying the task denominator, so `$/task = 1.1857833/261 = 0.004543231034482759` and `$/solved` were rendered as exact values. Fix: S11 gains an `n_zero_output_rows` subset (written only when >0; `_row_has_generated_test` accepts only non-empty strings; AJ's valid cache-evidence rows are not counted); `cost_analysis` writes `token_zero_output_rows` and `cost_caliber="recorded_lower_bound"` only when the cost is not None, `computable`, and unaccounted rows > 0; three presentation layers share the same source (a "**cost-caliber lower bound (AK)**" section plus a `$/solved` suffix in the cost report / a subset note in `emse_stats_report` section 4 and a "**zero-token rows' cost caliber (AK)**" block after 4.1 / `_zero_token_note` on all four ext `_cost_per_task` return paths); the row-level arithmetic (AE2) and S11 threshold are unchanged, fully-accounted arms and legacy batches keep their return domains and text verbatim, and protected archives are not rewritten. **21 new locks + 4/4 mutation anchors red** (red 3/5/3/1, neutral control 0 red, collected constant 89, sha256 byte restoration); two AJ locks rewritten to the new caliber (net 0). Pre-registration run 10563 passed / 1 failed / 5 skipped (173s; the only failure was the baseline guard); after refresh the confirming run reports **10564 passed / 5 skipped / 0 failed, 177.85s, rc=0**; coverage **18554/19077 = 97.26% lines** / **6708/7144 = 93.90% branches** (+1 line / +1 arc vs AJ, within the registered jitter; `src/` untouched, evidenced by the change-surface list only); zero LLM, $0. Previously **round AJ**: **a cache hit is a third accounting state — neither broken accounting nor "free"**. The producer `record_cache_hit_usage` has always written `cache_hits` / `cache_avoided_tokens`, but every cost reader looked only at real tokens: cache-dense arms were flagged `NOT_COMPUTABLE` by S11 because real-token-zero rows reached the 50% threshold (QuixBugs df arm: 50/50 rows hit, 64 hits / 123644 avoided, previously `n_without_accounting=50`), and pure-cache arms rendered an unexplained "（缺: ）" (ULT df arm: 20 hit rows, 39 / 89249), with the examples df arm (2 / 3387) rejected the same way. A shared reader now lives in the producer module `src/budget/token_usage.py` (`cache_caliber` for one row, `cache_totals` for one arm; `count_reason` moved from ext as the single value-domain predicate shared by token triples and cache fields), feeding S11 / `cost_analysis` / both `emse_stats_report` cost blocks and section / ext `_cost_per_task`: valid positive cache evidence counts as "has accounting"; a hit row's real spend of 0 is correct, but 0 is not free; invalid / half-schema / non-object fields yield `None` for both `hits` and `avoided`, naming `token_field_absent:<field>` / `token_not_count:<field>:<T>` / `token_not_finite:<field>` / `token_negative:<field>` with no partial sums; a pure-cache arm gets `cache_hit_no_api_spend`; avoided tokens are not written to `by_model` and are never converted into dollars, only disclosed. Legacy-schema batches (main batch 261 rows/arm, E6, E4 with no cache keys) keep return domains, notes and protected artifacts byte-identical — the three ext readings `26114.854406130267 / 0.025884977011494247`, `3209.44061302682 / 0.003358973563218391`, `4223.103448275862 / 0.004543231034482759` are bit-identical and the archived `STATS_EXTENSIONS.json` is field-equal. 68 new locks + **19/19 mutation anchors red** (38/10/10/11/6/6/10/4/2/3/1/3/1/3/1/2/2/1/1, neutral control 0 red, collected constant at 298, sha256 byte restoration). Pre-registration run **10542 passed / 1 failed / 5 skipped** (collected 10548, 175.54s with `--cov`; the only failure was the baseline guard itself); confirming run **10543 passed / 5 skipped / 0 failed, 179.94s, rc=0**; coverage **18553/19077 = 97.25% lines** / **6707/7144 = 93.88% branches** (−1 line / −1 arc vs pre-registration, registered jitter; `src/budget/token_usage.py`: 130 of 131 statements executed; all ten core modules bit-identical); zero LLM, $0. Previously **round AI**: **token counts also have a value domain — an incomplete token sum is not a token reading**. Disposing AH section 7 items 1–3: the read side of `emse_stats_extensions` was `sum += value or 0` written twice (in `_cost_per_task` and `_bootstrap_cost_ci`), so `"100"` raised `TypeError`, a truthy non-object `token_usage` crashed at `.get`, `True` counted as 1, `-5` made tokens/task and the amount negative together, `inf` turned shares into `nan` (and `inf != inf` being false let AH's closure check pass), an absent `token_usage` / `{}` with real in/out was folded to 0 by `or {}`, `by_model: []` / `"x"` crashed outright, `{5: 100}` keys were not rejected, `{"m": "100"}` raised `TypeError` on `+=`, a row-level `in+out != total` had no judgement at all, and a zero-task denominator still printed 0.0. Now one row's accounting is **three non-negative integers**: shape / absence / type / negative / non-finite ⇒ the whole arm's `tokens/task` and `$/task` are `None` with the mechanism named (`token_usage_absent` / `token_usage_not_object:<T>` / `token_field_absent:<field>` / `token_not_count:<field>:<T>` / `token_not_finite:<field>` / `token_negative:<field>`); a row-level split mismatch and `by_model` shape/key/value problems void only the amount (the token total stays readable), and a `by_model` that is present but unreadable no longer also reports `no_model_attribution`. `tokens_per_task` becomes `float | None`, the bootstrap CI `tuple | None`, rendered `—（无 token 读数）` / `—`. Real batch: all three arms bit-identical (`26114.854406130267 / 3209.44061302682 / 4223.103448275862`; `$/task` `0.025884977011494247 / 0.003358973563218391 / 0.004543231034482759`), protected archive untouched. 63 new locks + **18/18 mutation anchors red** (red 4/7/11/3/2/8/3/3/3/1/6/14/2/3/3/9/4/1, neutral control 0 red, collected constant 78, sha256 byte restore); one AH lock rewritten (net 0 tests). Close-out full suite **10475 passed / 5 skipped / 0 failed** (collected 10480, 177.44s), lines **18491/19015 = 97.24%** / branches **6675/7112 = 93.86%** (`src/` + `config.py` unchanged, readings bit-identical to AH); zero LLM, $0. Previously **round AH**: **an incomplete sum is not an amount — coverage, attribution and denominator: missing any one means there is no $/task**. Disposing AE review section 5.2 candidate B: `emse_stats_extensions._cost_per_task` used to record an unpriced model in `unpriced` and keep accumulating, returning the partial sum as `$/task`; it also returned an amount when `by_model` was absent despite `tok > 0`, when the `by_model` total differed from `total_tokens`, and for a zero-task denominator (0.0). Now `usd_per_task` is produced only when the price table covers every `by_model` token, the totals agree, and `n_tasks > 0`; otherwise `None` with the note naming `model_unregistered←<models>` / `no_model_attribution` / `token_attribution_mismatch:<a>/<b>` / `无任务 ⇒ $/task 无金额（不是 0）`, coexisting with AB-15's `计价被拒`; `tok == 0` remains a genuine 0.0. Real batch: all three arms' `by_model` totals close exactly (6815977 / 837664 / 1102230), 0 rows changed. 15 new locks + **6/6 mutation anchors red** (neutral control 0 red, collected constant 298, sha256 byte restore); AB-15 / AB-16 / AB-17 locks rewritten to the new caliber (net 0 tests). Close-out full suite **10412 passed / 5 skipped / 0 failed** (collected 10417, 177.80s), lines **18491/19015 = 97.24%** / branches **6675/7112 = 93.86%** (`src/` unchanged, readings bit-identical to AG); zero LLM, $0. Previously **round AG**: **attribution is not wording — different mechanisms must not share one sentence; following the wrong hint will not turn anything green**. Disposing AE review section 5.2 candidate C: `cost_analysis` used to put "not registered in the table" and "bad price domain" into `missing_models`, put entry-shape codes into a bucket named "currency", and reduced row-level mixed arithmetic to `（缺: ）`, while the all-unpriced branch told readers to fill price fields. Added shared predicate `src.budget.pricing.model_entry_reason` (absent key → `model_unregistered`, everything else delegates to `entry_block_reason`; `allow_non_usd=True` admits only **decidable non-USD** entries, undecidable currencies stay blocked), and `run_b8_injection._price_entry_reason` is now a pure delegation; `cost_analysis` derives three disjoint buckets (`missing_models` keeps only true key absence / `unpriced_currency_models` keeps the AB-14 vocabulary / `unpriced_model_reasons` is the full mechanism map) plus row-level `mixed_currencies:*` / `mixed_price_pairs`, and disclosure keys are written only when non-empty; the renderer gives mechanism-specific advice (`**成本不可计算**` + `**未计价机制**`), while pure-unregistered / no-token-observation text stays line-for-line unchanged. Real batch **522 rows, 0 rows changed** (cost cell and unpriced note byte-identical). 46 new locks + **15/15 mutation anchors red** (red 1–25, collected constant 365, neutral control 0 red); AB-14 / AB-16 / AB-17 locks rewritten to the new caliber (net 0 tests). Close-out full run **10397 passed / 5 skipped / 0 failed** (collected 10402, 178.78s with `--cov`), lines **18491/19015 = 97.24%** / branches **6675/7112 = 93.86%**; zero LLM, $0. Previously **round AF**: **what lands on disk is a contract -- no token outside RFC 8259 may leave any controlled write path**. Disposing AE review sections 5.6 and 5.7 together: `json.dumps` defaults to `allow_nan=True`, writing `nan`/`±inf` as bare `NaN`/`Infinity`, which Python itself reads back while jq / Go / Rust serde / JS `JSON.parse` all reject -- the producer writes silently, the consumer cannot read. New `src/utils/json_strict.py` (`strict_json_dumps` + `nonfinite_pointers`, which names the JSON path recursively; `NonFiniteJSONError` fail-closed; `allow_nan=False` as a second line of defence; **no silent null coercion**), wired into the four central write paths (`atomic_write_json` fails before the temp file is created; `run_b8._write_json`; `_Injection._record` leaves no half line; `trace`'s three serialization sites keep "better to miss a record than to write a bad one" -- a bad record is dropped whole while the file stays strictly parseable line by line), plus `allow_nan=False` added to 41 direct write sites in 39 source files (src 8 files/8 sites, experiments 17/19, scripts 14/14). New repo-wide gate `scripts/gates/check_json_strict.py` (strict parsing of every tracked `.json`/`.jsonl` + an AST scan of write sinks in `src|experiments|scripts`; empty sets and "an exempt file became strictly parseable" drift both fail closed), measured **7273 artifacts = 7271 strict + 2 A20 historical truncated lines exempted per path + 0 violations; 300 source files, 0 sink violations**, wired into `make gates` + CI. **AE section 5.6's "68 JSON files with bare `NaN`" reproved as a text-grep false positive** -- 69 worktree files (42 tracked) contain `NaN`/`Infinity` only **inside string values** (test names, diagnostic text) and every strict parser accepts them; the real gap was section 5.7's write path, registered as a dated erratum without rewriting the AE text. 28 new locks + **9/9 mutation anchors red** (M1–M9, including the gate's four paths; collected constant at 28, `compile()` before every write, sha256 restore); close-out full suite **10351 passed / 5 skipped / 0 failed** (collected 10356, 191.66s with `--cov`), lines **18486/19009 = 97.25%** / branches **6674/7110 = 93.87%** (+46 lines / +20 arcs, every new line executed by a lock, 523 uncovered lines and 436 partial arcs); the pre-registration run measured 10349 passed / 2 failed / 5 skipped -- failure ② was **a real defect introduced this round**: a CI step `name` containing an unquoted `AF: ` raised a YAML ScannerError and was caught on the spot by `test_ci_yaml_parses`; quoting it turned the suite green (the self-catch is registered honestly); zero LLM, $0. Previously **round AE**: the **entry-level** price admission of `run_b8_injection.aggregate` now delegates to the shared predicate -- its self-held `isinstance((int, float))` digit gate (`bool` / `nan` / `inf` / negative prices all accepted, `nan`/`inf` written into `REPORT.json` as non-RFC-8259 bare `NaN`/`Infinity`) + currency blindness (`CNY` recorded as USD) + a silent fallback to the builtin price when the entry cannot be read are all collapsed into "shared-predicate decision + builtin-price ceiling + named mechanism"; the test-side price-table schema domain is closed the same way; the `86 / 88` stale-diff gasket registered by AB-15/AB-16 is recomputed on the current tree as `94 / 100` (canonical 110→122, the delta being 100% the AD-1 rendering) and the registered numbers/attribution are updated without rewriting protected artifacts; 23 new regression locks, 10/10 mutation anchors red; zero LLM, $0. Previously **round AD**: statistical-quantity rendering preserves magnitude + the normal-tail complement pattern eliminated + a repo-wide census of silent precision-loss patterns. Previously **the Z→AB close-out round**: the ~18 rounds of work that sat in the working tree from the evening of 2026-10-19 (Z / AA / engineering-quality / AB-1~17) committed in one go + the README bilingual "Latest Optimization" rotation done late (the batch maintained only CHANGELOG/BASELINE/INDEX/register, leaving the README at round Y -- the 4th recurrence of this convention, with the AO3 lock advanced to 2026-10-20 in step) + the E7 entry sheets' "ignored by .gitignore = can never be committed" gap fixed (the six blank sheets had entered SHA256SUMS yet were suppressed by the wildcard and unregistered in the MANIFEST -- a double silent gap; narrow negation + registration 179→185 + committed, all 2040 manifest entries now checkable out on a fresh clone); zero LLM, $0. Previously **round AB-17**: **"whether this file reads out as a table" written once** -- after AB-16 collapsed "what counts as an admissible entry" into one place, their common upstream (file → `models` layer) was still written seven times: the `src` cached wrapper read seven different breakages (top-level list / null / empty object / missing key / `models` as list·str·null) into the same sentence "structure mismatch (missing models dict)"; `emse_stats_extensions` crashed outright on all seven (FileNotFoundError / JSONDecodeError / TypeError ×2 / KeyError ×2 / AttributeError ×3); `emse_stats_report` kept six distinct Chinese phrases in stderr while attributing everything to `model_unregistered`; `spec_examples_generator` only logged at the file level and passed the `models` layer through; `statistical_analysis` was silent on the file-path channel and used another phrase set on the argument channel; `run_b8_injection` silently fell back to the builtin price behind an `is_file()` guard; and the retrieval layer's `.get(model)` `is None` test merged "key absent" with "value null" into one `model_unregistered`. Closed into four shared helpers in `src.budget.pricing`: `table_read_reason` (three families: `price_table_file_missing` / `price_table_json_invalid:<T>` incl. UnicodeDecodeError / `price_table_file_unreadable:<T>`), `load_table_json` (`(None, None)` is a legal reading -- the file content is `null`), `models_layer` (non-object top level `price_table_not_object:<T>`; missing key in a non-empty object `models_key_absent`; key present with a non-object value truthy or falsy alike `models_not_object:<T>`; `{}` / `{"models": {}}` silent -- "an empty object has no shape to speak of"; usable models handed through as-is, non-object entries no longer silently filtered) and `load_table_models` (one step); all seven read sites wired (cached wrapper / spec / report / ext / statistical / analyze / run_b8, whose `table_reason` is written only when the table is truly unusable and whose self-held digit gate stays registered-unfixed with only `isinstance(row, dict)` added); the retrieval layer's `.get` switched to `not in` (value null → `entry_not_object:NoneType`, key absent → `model_unregistered`, at spec / report / ext / analyze); two `isinstance(v, dict)` silent filters removed (src + statistical). Real-batch readings unchanged (pooled `1.447277 / 0.260967 / 0.541408`, total `2.249652`, ext three-arm `$/task` bit-identical; run_b8's real-table `price` metadata field-for-field equal to the protected `REPORT.json` with aggregation run on tmp copies only; archived P-1 README not regenerated). `tests/test_experiments_table_admission_ab17.py` **26 cases** + **8 anchors each turning red** (red counts `14/7/5/1/1/3/1/4`, collected constant at 484, sha256 byte restore); five existing lock files rewritten to the new vocabulary (net 0 cases); two documented design-time reading differences (spec loader's models-layer pass-through, ext's `is_file()` guard reading a directory as "missing"); close-out full suite **10283 passed / 5 skipped / 0 failed / collected 10288** (pre-registration run 10282 passed / 1 failed / 5 skipped, 181.15s with `--cov`, the only failure being the baseline guard itself; confirmation run 185.04s, rc=0, coverage.xml recomputed twice to the same values), lines **97.24%** (18439/18963 = 97.2367%) / branches **93.84%** (6653/7090 = 93.8364%), +20 lines / +15 arcs over AB-16 with every new line executed by a lock, uncovered lines 524 and partial arcs 437 (difference itemised to pricing.py); nine boundaries registered unfixed, see booklet section 5; zero LLM, $0. **Previously round AB-16**: **"what counts as a price number and what counts as an admissible entry" written once** -- after AB-15 collapsed the decision and its attribution into one place, the admission domain itself was still written five times across the repo: production's `_as_non_negative_float` accepted `nan`/`inf`; spec/report took values through `float()` directly (`True` as 1 giving `3.0`, `"1.0"` accepted, `-1.0` fabricating a negative-amount total of `1.0`, `[1.0]` raising `TypeError`, `nan`/`inf` multiplying into non-finite amounts); ext blocked `bool` but folded an empty entry / `null` price into a 0.0 partial sum; analyze's local `_price_reject_reason` ignored non-finite values; and statistical's `p >= 0` accepted `inf` -- so one entry is priced at one site, rejected at the second and crashes at the third: the non-object entry `5` reads `currency_unreachable:int` in spec/ext/analyze but `entry_not_object:int` in report; the empty entry `{}` reads three different things across four sites; and spec's truthy non-object `models` still raised `AttributeError` at `models.get`. Disposition: `src/budget/pricing.price_block_reason` (absence > type > negative > non-finite; `bool` in its own tier; `-inf` still `price_negative` with every existing AB-15b code preserved) + `entry_block_reason` (shape → empty → currency → digits), both predicates wired into all six consumer sites (deleting `_as_non_negative_float` and `_price_reject_reason`; spec names truthy non-object models as `models_not_object:<T>`; non-object entries read `entry_not_object:<T>` everywhere like report already did; ext moves empty entries / `null` prices from "unpriced" to **rejected**, with any rejected share forcing `usd_per_task=None`). **Real-batch readings change by zero** (only deepseek-flash is priceable in the real table -- `USD 0.3/1.2`, agnes has `null` prices and qwen is CNY; pooled `1.447277 / 0.260967 / 0.541408`, total `2.249652`, ext's six readings bit-identical, no new disclosure keys). `tests/test_experiments_price_admission_ab16.py` **148 cases** + **21 anchors each turning red** (7/12/13/21/1/29/8/6/5/1/10/3/12/11/1/11/10/10/9/3/12, collected constant at 148, two behaviour-neutral controls 0 red, sha256 byte restoration); close-out full suite **10257 passed / 5 skipped / 0 failed / collected 10262** (pre-registration run 10256 passed / 1 failed / 5 skipped, 173.05s, the single failure being the baseline guard itself; confirmation run 176.35s, rc=0), lines **97.23%** (18419/18944 = 97.2287%) / branches **93.81%** (6638/7076 = 93.8101%), +16 lines / +12 arcs over AB-15 with every new line executed by a lock and the 525 uncovered lines / 438 partial arcs bit-identical; statistical's only reading change is `inf` moving from priced to unpriced; eleven boundaries registered but not fixed, see booklet section 5; zero LLM. **Previously AB-15**: **a rejected amount must not wear the shape of an amount, and "why there is no amount" must come from the same decision** -- after AB-14 collapsed the decision into one place, the downstream still had three channels where a rejection wore a dollar-shaped label and three different attribution vocabularies: `oracle_examples_replay.render_readme` printed `**$None**` for both an unregistered model and a CNY model while a true zero printed `**$0.0**` (one dollar prefix, no mechanism); `analyze_t1_b2_main_batch`'s pooling used `or 0.0` and folded the per-seed `None` back into an amount, so "the whole arm could not be priced" and "nothing was actually spent" both read `$0.0`; `emse_stats_extensions._cost_per_task` was the **sixth** currency-blind site AB-14 missed (relabelling the real-table model as `CNY` left `usd_per_task` bit-identical at `0.025884977011494247`); and the reasons were written independently (an if/elif chain in the report, another bucket vocabulary in `statistical_analysis`, no name at all in oracle, and admission versus attribution as two drifting code paths in spec). Disposition: `src/budget/pricing.currency_block_reason` + `CURRENCY_UNDETERMINED_STATUSES` as the single mechanism vocabulary (`usd -> None`; absent / `null` / blank -> `currency_absent`; other -> `currency_not_usd:<NORM>`; non-string -> `currency_not_usd:not_string:<T>`; remaining -> `currency_unreachable:<T>`) + `spec_examples_generator._price_admission` making "can this be priced" and "why not" the same decision + all six sites rewired (the shared vocabulary plus five consumer sites); **a rejection never gets `$`, never folds to `0.0`, and a partial sum never poses as a full amount** (pooling / batch / ext return `None` if any share is rejected), with disclosure keys written only on a real rejection. **Real-batch readings change by zero** (pooled `1.447277 / 0.260967 / 0.541408`, total `2.249652`, ext's three arms `0.025884977011494247 / 0.003358973563218391 / 0.004543231034482759` bit-identical, no new disclosure keys, the archived P-1 README not regenerated, and the archived statistical reports still differing by the pre-existing 86 / 88 lines). `tests/test_experiments_cost_rejection_ab15.py` **109 cases** + **27 anchors each turning red** (5/19/6/2/5/2/6/12/3/3/3/6/2/6/3/4/3/1/3/1/4/2/4/5/1/3/3, collected constant at 109, neutral control 0 red, sha256 byte restoration); close-out full suite **10109 passed / 5 skipped / 0 failed / collected 10114** (pre-registration run 10108 passed / 1 failed / 5 skipped, 181.66s, the single failure being the baseline guard itself; confirmation run 180.55s, rc=0), lines **97.23%** (18403/18928 = 97.2263%) / branches **93.80%** (6626/7064 = 93.7995%), +12 lines / +8 arcs over AB-14 with every new line executed by a lock and the 525 uncovered lines / 438 partial arcs bit-identical; ten boundaries are registered but not fixed, see booklet section 5; zero LLM. **Previously AB-14**: **write the judgement once; absence must not default to any unit; a term that "looks redundant" still needs an observable surface** -- AB-13 closed with "another caliber exists in the repo, not unified this round", and this round expanded that sentence into a measurement table: **the single question "is this money dollars" is written four times here and all four disagree, while the fifth is not written at all** (`pricing.py` defaults an absent key to USD and prices it yet refuses to price a `null` -- two absences, opposite answers; `statistical_analysis.py`'s `or "USD"` prints the same `USD` for absent / null / empty string, so the unit in the report was invented by code rather than registered; `spec_examples_generator` and `emse_stats_report` instead exclude absence and, without stripping, exclude `" USD "` too; the case-sensitive currency set turns `USD` next to `usd` into size 2, which drops the whole arm's cost to `None` while `missing_models` stays empty -- the report prints one line with **no attribution**; a `["USD"]` currency makes the set comprehension raise `TypeError`, measured as **CLI exit 1 and no statistical report at all**; the fifth site, `analyze_t1_b2_main_batch.add_cost`, **never reads `currency` at all** and sums non-dollars into `cost_usd`). Disposition: `src/budget.pricing.currency_status` as the single source of truth (seven-family domain; 13 inputs land on **9 mutually distinct readings**, asserted as set equality), pricing admission separated from the renderable label (`currency_label` yields a label only for `usd` / `other:<NORM>` -- **absence must never be rendered as a unit name**, above all not `USD`), and **all five sites rewired with no local spelling left**; site differences are allowed only in "is there a column to print the unit", so the currency-columned table may price `other:CNY` under a normalized label plus a unit reminder while single-dollar columns exclude non-USD -- one judgement, two dispositions, by design. **Product-side behaviour change, the first `src/` edit after five rounds of zero `src/` changes: an entry without a currency key is no longer treated as dollars** and now falls back to `COST_USD_PER_1K` or is recorded as unpriced; every entry in the real table registers a currency, so existing readings are unchanged -- which is also the whole basis for rewriting zero protected artifacts (three snapshots of `statistical_report_e2*.md` byte-identical, `SHA256SUMS` 2040 entries OK, 21 archived `cost_usd` values bit-identical). `tests/test_experiments_currency_caliber_ab14.py` **124 cases** plus **19 mutation anchors each turning red** (21 / 25 / 26 / 21 / 22 / 1 / 1 / 1 / 29 / 1 / 9 / 1 / 1 / 1 / 21 / 5 / 3 / 12 / 5; neutral control 0 red, baseline collected 709 stable, sha256 byte-exact restore). One self-correction is the methodological output: `not currency_blocked` was **0 red at first** (undecidable currency also empties `labels`, so `len(labels) == 1` blocks it first), and instead of declaring it redundant the reasoning found the only input that can trigger it alone -- one model in USD, one with no currency written, **identical price numbers** -- after which the anchor turns red and baseline goes 708 -> 709. Closing full run **10000 passed / collected 10005 / 0 failed** (pre-registration run 9999 / 1 failed / 5 skipped, 176.76s, the single failure being the baseline guard itself), lines **97.22%** (18391/18916) / branches **93.79%** (6618/7056): **+20 lines / +12 arcs over AB-13, every one executed by a lock**, while 525 uncovered lines and 438 partial arcs stay bit-identical and all ten per-module readings are unchanged -- **coverage changed nature this round**, and section 14's rule now cuts both ways: a moving reading is no more evidence of a defect than an equal one is evidence of an untouched `src/`. Watermarks 96.40/92.50 unchanged; **six sites registered unfixed** and handed to AB-15, two of them only after the pre-close-out re-check falsified what this line had originally claimed about them; lessons in `docs/MEASUREMENT_INTEGRITY.md` section 17; zero LLM. **previous round AB-13**: **a unit asserted by a field name is not a constraint until the implementation judges it** -- `total_usd` / `usd_per_detection` / `$/task` in `emse_stats_report.py` hard-code the unit in their names while **nothing in the implementation reads `currency`**: the pre-measurement fed one synthetic `qwen-long` row (the on-disk table registers CNY 0.5 / 2.0 from the official pricing page) and measured `total_usd=2.5`, `n_priced_rows=1`, printed in the "total $" column with a non-empty denominator, non-empty prices and no unpriceable disclosure -- **completely normal-looking accounts**. Disposition: only entries whose `currency` upper-cases to `USD` enter `total_usd`, an absent key is recorded as `currency_absent` (**absence defaults to no unit at all**), unpriceable mechanisms split into seven mutually exclusive buckets, and the disclosure key appears only when exclusions actually happened. The two sites handed over by AB-12 were handled in the same pass (the six legal non-object top levels returned verbatim, crashing the caller's `.get` while the docstring promised an empty table; `price_table=None` producing the same amount as omission), replaced by mechanism-named traces and an `_UnsetPriceTable` tri-state with **the return domain unchanged**. The real batches' 783 rows use only the USD-registered `deepseek-flash` and `n_unpriceable` is 0, so **the gate changes zero rows of archived readings**, the six protected cost readings reproduce bit-for-bit and no `SHA256SUMS`-protected file was rewritten -- while that same zero is exactly why "the gate never executed" remains a live suspicion, hence the coverage floor and the CNY/null two-model contrast are asserted. **When a new caliber collides with an existing assertion, adjudicate the old expectation first and keep the case testing what it claims** (`test_zero_detection_no_division` needed `n_priced_rows == 1 and total_usd > 0` on top of `currency`, otherwise a zero numerator reaches the division guard for no reason at all). `tests/test_experiments_price_table_ab13.py`, **51 cases** + 2 rewritten existing assertions (net +51, collected 9830 -> 9881) + **15 mutation anchors each turning red** (7 / 2 / 10 / 2 / 1 / 9 / 7 / 4 / 2 / 1 / 1 / 2 / 4 / 9 / 5, control 0 red, collected stable at 78, sha256 byte-exact restore); close-out full run **9876 passed / collected 9881 / 0 failed** (the pre-registration run measured 9875 passed / 1 failed / 5 skipped in 177.56s with `--cov`, the single failure being the baseline guard itself; the post-refresh confirmation run took 179.05s at rc=0), lines 97.22% (18371/18896) / branches 93.78% (6606/7044) -- the same values as the previous five rounds, which per section 14 are **not** evidence that `src/` was untouched (the change list is). **Two currency calibers coexist and were not unified** (`statistical_analysis.py:991` treats an absent key as USD); the ratchet water mark stays at 96.40/92.50; the lesson is in `docs/MEASUREMENT_INTEGRITY.md` section 16; zero LLM. **Previously round AB-12** (its sections were already filed while this summary line was not refreshed -- a drift registered and corrected here): **a race branch locked instead of pragma-ed, five registered sites closed in one go** -- `process_utils.py:638-642`'s `killpg(SIGKILL)` fallback gained 5 deterministic locks with **`src/` unchanged and no pragma added** (four anchors 5 / 1 / 1 / 5 red plus a text-only control at 0 red), so the 18371 -> 18369 -> 18371 line jitter measured in AB-11 is now executed by locks; site a's three absence mechanisms (`(x or {})` collapse, a missing `GATES.json` rendered as `FAIL`, a wide `except` dropping a batch without a trace) gained 53 locks; site c's non-object trace lines left the "valid files" denominator (32 locks); the shared loader's same-`task_id` overwrite became a named WARN with five mutually exclusive buckets (26 locks); the price table's non-object top levels and `None` sentinel gained 26 locks. **142 new locks** in total, each of the five mutation groups carrying one behaviour-neutral control, no archived artifact rewritten, with two same-family sites and the `--write` idempotence fork handed over to AB-13. **Previously round AB-11**: **"key absent" is not "value null", and neither is "unreadable"** — the 3 sites AB-10 left registered are all handled, and each turned out to be an **attribution collapse** rather than lost data. `spec_augment_applied` put "the producer wrote `null` (genuinely not triggered)", "the row has no such key" and "the second raw read failed" into one `none` bucket — and hid the only truth-telling branch behind `# pragma: no cover`; it is now a three-state value domain plus a named WARN and a three-number disclosure, and measurement showed 50/50 df-arm rows carry the key as `null`, so the committed bucket reading and Markdown stay byte-identical while the new buckets sit at 0 instances (the reason to split them, not a reason not to). `_profile_presets` returned the same `{}` for four failure mechanisms while the caller **hardcoded** "git show failed" — right shape, false contents — and `old.get(profile) or {}` made "profile does not exist" render as "no drift"; reasons are now assembled per mechanism, a missing-profile branch was added, and `_profile_drift(b533cff…, a93c1f60…)` was first shown to equal the archived `profile_preset_drift` field by field. `parse_trace_file` returned `None` on damage, filing a file whose own `meta.baseline` names the arm under `unknown` and voiding the records parsed before the bad line without a trace — a repo-wide census measured 148 `*/traces` directories, 9086 files, **5 damaged files and 44 voided records** — so damage now keeps a trace, is attributed with the same rule as intact files, and the voided volume is disclosed; replaying the 5 damaged directories old-versus-new proves the decision denominator is unchanged. Also registered: a committed claim **voided by input growth** (`mast_distribution_report.md` says 963 files, reproducible bit-for-bit; the same directory now holds 2007), locked rather than rewritten. 31 new locks + 2 rewritten assertions (+33 cases, collected 9655 → 9688) and **18 mutation anchors each turning red**, one of which produced a lesson about the method itself: the first c4 anchor left orphan indentation, `ImportError` killed the file and collection dropped 86 → 41 — **red is not a lock**, caught only by the equal-collected-count precondition, now backed by a `compile()` pre-check. Four mechanisms named in AB-9's original rows stay registered, all measured at 0 instances: all **three** of site two's row (`(x or {})` empty-object degradation, absent `GATES.json` rendering as `FAIL`, and a broad `except Exception: continue` that silently drops one seed pair from the paired comparison — the profile-preset site AB-11 actually handled is a different site in the same file and was never listed in that row, so the earlier "partially disposed by AB-11" attribution was wrong and has been withdrawn), plus site three's non-object lines in the denominator; as does the duplicate-`task_id` collapse living in the shared loader. Close-out run **9683 passed / collected 9688 / 0 failed** (pre-refresh 9682 passed / 1 failed / 5 skipped at 170.11s with `--cov`, the single failure being the baseline guard itself); lines **97.22%** (18371/18896) and branches **93.78%** (6606/7044) equal to the two previous rounds — but the `format` gate caught this round's new reason string as two implicitly concatenated literals, and after `ruff format` two more full-caliber runs of the **same tree** read **18369 lines / 6605 arcs** before returning to 18371 / 6606, the only per-line diff being `src/utils/process_utils.py:641-642` (638-642 is a load-dependent `killpg(SIGKILL)`-failed fallback with no deterministic lock), so **digit-identity is no longer cited as evidence that `src/` was untouched** — the change-surface file list is; all 18 mutation anchors were re-run after formatting and still turned red one by one (collected 86 held); watermark 96.40/92.50 unchanged; lessons recorded in `docs/MEASUREMENT_INTEGRITY.md` §13 and §14; zero LLM. **Previously round AB-10**: **absence and unreadability must not be reported as "zero hits / consistent / not requested"** — 2 of the 5 sites AB-9 left registered are handled, both in `experiments/emse_ult_gold_diagnosis.py`, and all three readings are measured rather than inferred: with no upstream row loaded the script wraps the local gold and compares it against the local gold through `_normalize_test_body`, which makes `upstream_bodies_equal` **trivially True** (AB-9's inference confirmed by recomputation); `_load_json_array` returned an empty list for any non-list top level, which four call sites read as "the upstream has no such row"; and README sections 4c / 4d vanished whenever a supplementary artifact was absent from the output directory, with no message. Dispositions: new `_load_upstream_array` (missing file → `FileNotFoundError`, zero object rows → `ValueError`, matching the `FileNotFoundError` precedent already in the same file), `_official_tests_for` (agreement widens to a three-state value including "not verifiable"), `_load_supplement` plus the two section renderers (which now state in place that a section was not rendered because the artifact is absent); non-object rows are still skipped but stderr reports dropped and retained counts. **Measuring the real path first was the precondition**: 200 / 3909 rows all retained (0 dropped) and 71/71 tasks take the upstream branch, 0 the wrapping branch — which is why the `SHA256SUMS`-protected committed README reproduces **byte-for-byte** (twice), the reproduction needing both `--supplement` and `SUPPLEMENT_GENERATED_MUTK.json` in the output directory, while `--from-json` rewrites the JSON it reads in place (both gotchas registered). 35 locks in `tests/test_experiments_absent_vs_zero_ab10.py` (all synthetic `tmp_path`, nothing read from `~/.cache/aitester`, no new skips) plus 10 mutation anchors each turning red; the 3 sites AB-9 still lists are untouched. Close-out run **9650 passed / collected 9655 / 0 failed** (pre-refresh 9649 passed / 1 failed / 5 skipped at 168.76s with `--cov`, the single failure being the baseline guard itself); lines **97.22%** (18371/18896) and branches **93.78%** (6606/7044) equal to the two previous rounds (written then as "digit-identical, therefore `src/` untouched" — an inference withdrawn in AB-11, see `docs/MEASUREMENT_INTEGRITY.md` §14); watermark 96.40/92.50 unchanged; lesson recorded in `docs/MEASUREMENT_INTEGRITY.md` §12; zero LLM. **Previously round AB-9**: **the `json.loads` return domain censused across `experiments/` — 68 sites classified, one silent denominator turned into disclosed counts** — AB-8's "the `experiments/` layer was never censused" boundary is retracted: 95 files scanned, 42 of them holding call sites, 68 sites in total, each read against the parser's return domain and classified as 42 loud crashes / 9 already fail-closed / 5 crashes swallowed by an outer handler but still visible / 12 silently dropping data. The criterion is restated for this layer: a loud non-zero exit beats a plausible wrong number, so the 42 crash sites are deliberately left alone and blanket `isinstance` guards would have traded crashes for silence. One of the twelve is handled — `target_quality_replay.py` (entry `make target-quality`, output inside the SHA256SUMS-protected `results/main_batch`, numbers cited by `BASELINE.yaml`) now counts skipped batches in two separate lists, appends a read-integrity section only when something was skipped and warns on stderr, with exit codes unchanged; 14 locks, six mutation anchors all red, and the committed report reproduced byte-for-byte with its inputs asserted to exist first. Two census by-readings: `experiments/` holds exactly two hand-written JSON inputs, neither under any `SHA256SUMS`, and `price_table.json` is the only multi-consumer one (all five non-object returns crash loudly at all five read sites, one of them after a paid LLM replay; the single-consumer `injection_benchmark_samples.json` crashes the same way and its value domain is unguarded too) and a `.jsonl` suffix is not line-delimited here. Two of this round's own inferences were falsified by probing. Close-out run **9615 passed / collected 9620 / 0 failed** (pre-refresh 9614 passed / 1 failed / 5 skipped at 169.40s with `--cov`, the single failure being the baseline guard itself); lines **97.22%** (18371/18896) and branches **93.78%** (6606/7044) equal to AB-8 (written then as "digit-identical, therefore `src/` untouched" — withdrawn in AB-11, see `docs/MEASUREMENT_INTEGRITY.md` §14); watermark 96.40/92.50 unchanged; lesson recorded in `docs/MEASUREMENT_INTEGRITY.md` §11; zero LLM. **Previously round AB-8**: **the `json.loads` return domain — non-object rows and the primary-key domain closed at six sites** — AB-5's rule ("a bad row invalidates that row only") held only for the two shapes it had tested; `json.loads` returns six legal values, and feeding the five non-object ones (`[]`, `null`, `"abc"`, `3`, `true`) into the production readers and the G8 gate aborted whole batches (`AttributeError`) or silently survived: an int/bool `instance_id` lands in the enrichment mapping and never matches the string-keyed lookup, so the log still says "loaded N records" while the file contributes nothing. The gate was the absurd one — its documentation promises "exit 1 means not ready" but the reality was a crash, and Python's crash code is also 1, so the block looked effective while the caller got a traceback instead of a report. All six sites were fixed by **aligning with conventions already in the repo** (the `isinstance(raw_row, dict)` filter in `dataset_ult.py`, the gate's own `unparsed_` fail-closed precedent) rather than a new design; tracing is split by who authored the file (hand-written enrichment files get one aggregate warning per defect class, official main data gets a per-line warning with path and line number); the primary-key caliber was **re-decided once mid-round** (dropping int keys on both sides makes enrichment "configured but zero-effect", so scalars are now `str()`-normalized, container keys are skipped with a trace, falsy values keep AB-5's counter and **none of AB-5's 24 locks changed caliber**); the gate report **only adds** `enrichment_stats` — no existing key touched, and non-object rows still count into `total_tasks` and the issue list, so nothing was re-judged from "not ready" to "ready"; 47 new locks in `tests/test_jsonl_non_object_row_tolerance.py` with all seven guards mutation-verified; two self-catches registered honestly: a one-off probe **falsified** my path inference about `dataset_ult._iter_records` (`[]` never reaches the JSONL branch), and the first mutation harness reported "all seven guards red" while **matching zero cases** through a `-k` label filter; close-out full suite **9601 passed / collected 9606 / 0 failed**, lines **97.22%** (18371/18896) / branches **93.78%** (6606/7044) with 1 of 10 per-module readings moving (`dataset_loader` 97.12 → 97.28), the pre-refresh run's single failure being the baseline guard itself; watermark held at 96.40/92.50; lesson in `docs/MEASUREMENT_INTEGRITY.md` §10; zero LLM); previously **round AB**: **real-corpus replay falsifies a synthetic-enumeration premise + a documented criterion becomes an executable artifact + dataset-adapter tolerance backfill + silently-dropped table cells fixed under a repo-wide criterion + evidence-based coverage close-out** — the tier-2 first-object repair tier's "permanently unreachable" verdict is replaced by observation plus mechanism: replaying 7,565 real LLM responses gives 692 reached / 667 fragment / 1 divergent / **0** that would actually fire, and **falsifies** AA-5's premise (a real divergent sample exists where tier 1 returns `None`, so tier 2 is the first and only tier producing a fragment for that class), now argued by mechanism (a divergent fragment must contain a bare backslash outside strings and none of the five candidates removes backslashes; targeted enumeration: 716 divergent inputs, 0 rescuable), disposition unchanged — **kept** (same decision, new basis); the AA-8 process-state criterion is promoted from prose to a script the test **executes**, so document and lock are one artifact (a fifth reader turns both red); the 47 dataset-adapter lines named in ROUND3 turn out to need **no dataset at all** — they are bad-input tolerance reachable with genuine `tmp_path` files, so 24 locks cover 36 lines and 9 are registered with their mechanism, and a real defect is fixed (`_load_enrichment` silently dropped rows lacking `instance_id`; return semantics unchanged); the lock criterion is tightened to "a lock counts only if deleting the corresponding guard necessarily turns it red"; one stale ROUND3 ② "to be covered" registration retracted; **silently-dropped table cells**: 6 live-doc rows placed a bare pipe inside inline code (shell pipeline / regex alternation / absolute-value notation), and since GFM splits cells without recognizing code spans and discards the tail cells of any row wider than the header, the source looked complete while a whole column vanished — every row escaped, plus a 29-case repo-wide lock; the detector implements the **GitHub cmark-gfm odd/even-backslash rule** (the first pass was validated with markdown-it and wrongly judged "fixed" — the two reference implementations disagree on the same text; that fork is now pinned as a semantic lock, lesson in `docs/MEASUREMENT_INTEGRITY.md` §9); the frozen surface (5 rows in `docs/history/` + 4 in `experiments/results/`) is registered per file under a ratchet instead of rewritten (two of those directories are SHA256SUMS-protected), so the only defensible claim is "zero loss in live docs"; two draft figures were corrected by recomputation (12 rows to 9, 27 cases to 29) and the bilingual `docs/INDEX` "four measurement artifacts" line now reads "five plus five round-scoped appendices"; one stray unmatched closing parenthesis in this very summary line (present in both languages) removed; round AB closed at **9525 passed / collected 9530 / 0 failed** and after AB-7 the suite is **9554 passed / collected 9559 / 0 failed**, lines **97.22%** (18349/18874) / branches **93.76%** (6591/7030) (digit-identical, since `src/` did not change), and the pre-refresh run's 2 failures were the document↔artifact gate correctly reporting §1 lagging `coverage.xml` (not a guard, not an order dependency); watermark held at 96.40/92.50 pending CI calibration; zero LLM); previously 2026-10-19 round AA (**cross-platform ratchet guard, silent-fallback close-out, evidence-based coverage registration, D3b Step B boundary locks, E7 adjudication execution surface, cross-file order-dependency fix** — the coverage ratchet's local auto-bump now requires an explicit `--allow-bump` (bumping from a macOS reading makes the CI ubuntu blocking tier necessarily red, and the failure looks like "coverage regressed"); `analyze_results.load_latest_benchmark`'s "fall back to all JSON when no benchmark file exists" degradation is now fail-closed; one stale registration that contradicted its own register was retracted and a missed ±0.10pp tolerance comment in `ci.yml` corrected; 9 new deterministic regression locks plus reproducible evidence for 9 constructively-unreachable defensive sites, with no `# pragma: no cover` and no deletion of the subsumed repair tier; D3b Step B is judged **not to be implemented** — four prerequisites located in code plus 3 reverse locks (implementing them turns the locks red); E7 human adjudication moved from protocol document to an **executable surface** (6 CSV entry sheets + five-category scale validation + unweighted Cohen's κ merge + 10,000-replicate bootstrap CI at seed=42) with 3 reverse locks asserting "E7 not executed, no κ artifact exists"; the closing full run caught and fixed a cross-file process-level sentinel order dependency (AA-8: autouse reset fixture + 1 contamination-replay lock; deregistering the fixture turns it red), criterion recorded in `docs/MEASUREMENT_INTEGRITY.md` §8; full suite **9485 passed / collected 9490 / 0 failed** (178.62s), lines 96.98% / branches 93.51%; watermark held at 96.40/92.50 pending CI calibration; zero LLM); previously the engineering-quality round: **three-node complexity split + reachable-branch backfill in four modules** — generator / executor / patch-applier nodes in `src/graph/nodes.py` decomposed into testable units, 75 cases net added (13 behavioural contracts + 1 source-wiring lock + 61 branch locks), full suite 9413 passed / collected 9418, lines 96.95% / branches 93.48% (local caliber; CI recalibrates); previously round Z: **remediation of the fourth third-party full static review, 20 findings** (Windows environment; reviewed commit `55bb711`; P0=0 / P1=14 / P2=6; all 20 statically confirmed and fixed: standard BH q + full recalculation, paired denominator, rlimit/DB/shared-venv/official-harness fixes, MDO assertion classification and Windows probe, negative-rc guard, config and chart provenance, strict JSON, protocol/validity/data-card docs; 5 new regression-lock files with 138 cases; zero LLM); previously round Y5: **E7's three paths fully provisioned + a nesting regression lock** — the n=72 full-frame census artifacts are now ready so work can start as soon as the path is chosen; corrected the protocol's over-promise that "n=8 ⊆ n=41 needs zero rework" (13% of 150 synthetic combinations are not set-nested — it is a fact of the current parameters, not an algorithmic guarantee), now guarded by a regression lock. Previously round Y4: responses to the third round's eight open questions (five closed / two awaiting a decision / one not done); round Y3: audit wrap-up and a repo-wide uncovered-line map; round Y2: audit closure and first audit of experiments/; round Y: fix-coverage gap audit; round X: paper reproducibility closure; rounds W/V: second/first third-party review remediation; rounds U/T/S/R/Q/P/O/N/M/L/K registered the same day
 
 > **Language**: [简体中文](CHANGELOG.md) | English (this file)
 
 # Changelog
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+## [Unreleased] — 2026-10-21 AZ round: a statistic's scale and tail must not be rewritten by the implementation — Cohen's g back to 0–0.5, exact p without an epsilon (zero LLM, $0)
+
+> This round adds no capability: it fixes two statistical definitions in
+> `emse_stats_extensions.py` that disagreed with the definition they claim.
+> `cohens_g` returned **2g** (0–1), not Cohen's g (0–0.5);
+> `binom_exact_two_sided` compared with a `1e-12` tolerance for `p=0.5`,
+> lifting the 113/0 tail of **1.926e-34** to ~1.93e-12. Fix: g uses the
+> effectsize definition `abs(n10−n01)/(2*(n10+n01))`; the exact tail uses
+> integer `math.comb` weights, and the non-0.5 branch keeps probability
+> ordering. The protected 20261016 archive is untouched and corrected values
+> are reissued under 20261021. Manual:
+> `docs/reviews/STATS_DEFINITION_AZ_2026-10-21.md`.
+
+### Fixed — Cohen's g returns to the standard scale
+
+- `cohens_g`: the denominator restores the factor 2, returning
+  `abs(n10−n01)/(2*(n10+n01))` in 0–0.5 and satisfying the effectsize
+  identity `max/(sum) − 0.5`.
+- Real batches: R-P0-2 aitester vs df **0.370** (was 0.739), df vs plain
+  LLM **0.500** (was 1.000), E6 **0.423** (was 0.846), E4 **0.500** (was 1.000).
+
+### Fixed — the exact binomial tail is no longer lifted by an epsilon
+
+- `binom_exact_two_sided`: the `p=0.5` branch compares integer weights and
+  drops `+ 1e-12`; 113/0 goes from 1.93144963207924e-12 back to
+  **1.925929944387236e-34**; 12/80 goes from 1.073374741074801e-12 back to
+  **1.715599535972955e-13**.
+- The non-0.5 branch keeps probability-ordering two-sided p, with a new
+  independent cross lock (`k=0, n=10, p=0.1` → `1 − pmf(1) = 0.612579511`).
+
+### Changed — artifact reissue and citation propagation
+
+- Added `experiments/results/emse_stats_extensions_20261021/`
+  (README + JSON + SHA256SUMS); the 20261016 archive is preserved
+  byte-for-byte; `reproduce_zero_llm` verifies both generations.
+- Paper `g = 0.739` → 0.370, EMSE skeleton range → 0.37–0.50, replication
+  package path re-pointed to 20261021, and the X-round review gains an
+  append-only errata (0.7391 was 2g, not Cliff's δ).
+- Regression locks `tests/test_emse_stats_definition_az.py` **17 cases** +
+  4 net new in the extensions test; **mutation M1 11 red / M2 4 red**
+  (collected constant at 107, sha256 byte restore).
+
+---
+
+> This round adds no capability: after AW closed the per-arm statistics, the
+> two read layers in `run_b8_injection` still normalised `token_metrics`
+> with `or {}`. `_load_arm` turned a falsy non-object (`[]` / `""` / `0` /
+> `False`) into `{}`, so `_arm_summary` read "the payload is broken" as
+> "there are no metrics": it reported `$0.0` with no mechanism and the
+> stored `REPORT.json` lost the original bad shape; `_load_harness_smoke`
+> applied the same normalisation to smoke rows (the cost was computed before
+> the rewrite, so the amount was right while the evidence was gone). Fix:
+> the read layers carry `token_metrics` verbatim, and amount judgement lives
+> only in `_cost_usd` — a falsy non-object likewise yields `None` +
+> `token_metrics_not_object:<T>` instead of the historical 0; clean dicts and
+> the absent/null historical-0 caliber are unchanged. Booklet:
+> `docs/reviews/RUN_B8_PAYLOAD_AY_2026-10-21.md`.
+
+### Fixed — run_b8 read layers no longer rewrite the `token_metrics` shape
+
+- `_load_arm` / `_load_harness_smoke`: removed `or {}`; absence / `null`
+  stays `None` and non-objects keep their original value; the smoke row's
+  cost and payload are derived from the same `tm`.
+- `_cost_usd`: a falsy non-object takes the existing rejection path
+  (`None` + mechanism name) rather than folding to 0; the historical 0
+  belongs only to absence / `null`.
+- Regression locks `tests/test_run_b8_payload_ay.py` **27 examples**;
+  **6/6 mutation anchors red** (0 escapes; sha256 byte restore); the real
+  batch's 14 JSON files / 12 keys are all dicts, and the two arm costs and
+  four smoke rows reproduce bit-for-bit together with their payloads.
+
+---
+
+## [Unreleased] — 2026-10-21 AX round: the benchmark/full-stack summary presentation and aggregation read points have a value domain too — presentation may fold absent to the historical 0, averaging may not (zero LLM, $0)
+
+> This round adds no capability: after AW closed the per-arm statistics, the
+> benchmark and full-stack summaries still passed aggregate `token_metrics`
+> through raw at three sites. The terminal Token-efficiency lines formatted
+> with `%d` / `%.2f`, so a legitimate upstream `None` rejection made a
+> completed benchmark raise `TypeError` at wrap-up; the G8 table's
+> total-token cell used `bl.get("token_metrics", {})`, which cannot hold
+> `null` / non-objects and even printed bad values into Markdown;
+> `summarize_full_stack` averaged with `or {}` + `float()`, aborting the whole
+> summary on a truthy non-object, silently skipping a falsy one, and folding
+> bool / string / negative / non-finite values into the mean. The fix routes
+> all three sites through the shared `token_metric_reading`: presentation
+> keeps absent / null at the AE2 historical 0 and renders present-but-
+> unreadable as `不可读` plus mechanism names (the terminal also logs a
+> warning and never aborts); the mean skips absent blocks historically and
+> makes that baseline `None` + `avg_total_tokens_reason` if any present block
+> is unreadable — never a partial mean, and never poisoning task statistics
+> or other baselines. Booklet:
+> `docs/reviews/SUMMARY_TOKEN_READERS_AX_2026-10-21.md`.
+
+### Fixed — benchmark/full-stack summaries no longer pass values through raw, and means no longer give partial sums
+
+- `run_benchmark._token_efficiency_texts` /
+  `run_full_stack_swe_bench_pro._render_baseline_table` /
+  `summarize_full_stack._aggregate_group`: all three read points use the
+  shared reading; a bad cell only invalidates itself and never aborts the
+  round.
+- Regression locks `tests/test_token_usage_summary_ax.py` **48 examples**;
+  **8/8 mutation anchors red** (0 escapes; sha256 byte restore); real corpus
+  64 top-level benchmark files / 324 recursive `token_metrics` keys (246
+  `results.<baseline>` summary blocks + 78 nested shapes) with zero bad
+  values, and the 246 summary blocks' terminal texts, the clean full-stack
+  row and all four baseline means remain bit-for-bit unchanged (6 nested
+  PREFLIGHT blocks lack `avg_tokens_per_task`, excluded from that comparison).
+
+---
+
+## [Unreleased] — 2026-10-21 AW round: the T1/B2 per-arm statistics' `token_metrics` shape and event count have a value domain too — a bad shape does not abort the analysis, and an event count is not a check-free pass-through (zero LLM, $0)
+
+> This round adds no capability: after AV closed `add_cost`, the same payload
+> still went through `arm_stats` before reaching the money gate.
+> `tm = res.get("token_metrics") or {}` let a truthy non-object raise
+> `AttributeError` on `.get`, aborting the whole analysis, and silently
+> rewrote a falsy non-object to `{}` — "the payload is broken" posing as
+> "there are no metrics"; `"calls": tm.get("total_llm_calls")` passed event
+> counts through raw, contradicting the pooled column. The fix keeps
+> `token_metrics` verbatim for the downstream readers and routes `calls`
+> through the shared `token_metric_reading` (absent / null metrics / absent
+> field stay historical 0; present-but-unreadable ⇒ `None` +
+> `calls_reason`). Booklet:
+> `docs/reviews/COST_USAGE_READERS_AW_2026-10-21.md`.
+
+### Fixed — per-arm statistics no longer rewrite the payload shape, and event counts are no longer passed through raw
+
+- `arm_stats`: dropped `res.get("token_metrics") or {}`; `token_metrics` is
+  preserved verbatim; `calls` goes through `token_metric_reading` and writes
+  `calls_reason` only when unreadable (deduplicated, vertical-bar-joined).
+- Regression locks `tests/test_cost_usage_readers_aw.py` **22 examples**;
+  **6/6 mutation anchors red** (0 escapes; sha256 byte restore); real corpus
+  324/324 arms clean, the stored T1/B2 report reproduces 18/18 and new raw
+  arms 9/9 bit-for-bit, the recomputed `ANALYSIS_REPORT.json` is
+  byte-identical (35542 bytes).
+
+---
+
+## [Unreleased] — 2026-10-21 AV round: the T1/B2 analysis-side cost entry has a value domain too — a one-sided unknown is not a partial sum, and unknown money is not the string `None` (zero LLM, $0)
+
+> This round adds no capability: after AU closed the three experiment-side
+> aggregators, `analyze_t1_b2_main_batch.add_cost` still folded with
+> `stats.get("token_metrics") or {}` + `tm.get(...) or 0`. An upstream
+> `token_metrics` of `None` became 0, so a one-sided unknown became a partial
+> sum; `True` counted as 1, decimals multiplied straight through, negatives
+> produced negative amounts, `nan`/`inf` entered the report, strings raised
+> `TypeError`, and non-objects raised `AttributeError`. The fragment renderer
+> also printed unknown money as the YAML string `None`. The fix routes the two
+> token fields through the shared `token_metric_reading` (a wholly absent /
+> `null` / `{}` `token_metrics` stays historical 0; present-but-unreadable
+> fields make `cost_usd=None` with deduplicated mechanism names joined by `|`
+> and no partial sum); unknown YAML money is always `null` and unknown tokens
+> render as “unreadable”. Booklet:
+> `docs/reviews/COST_USAGE_READERS_AV_2026-10-21.md`.
+
+### Fixed — the analysis-side cost entry no longer folds, and unknown money is YAML `null`
+
+- `add_cost`: `total_input_tokens` / `total_output_tokens` each go through
+  `token_metric_reading`; any unreadable field blocks the amount and writes
+  deduplicated mechanism names joined by `|` into `cost_unpriced_reason`;
+  clean pricing and rounding are bit-identical.
+- `render_baseline_fragment` / `render_readme`: new `_yaml_scalar` renders
+  unknown `cost_usd` / `actual_est_usd` / `preflight_estimate_usd` /
+  `amended_estimate_usd` / `budget_usd` as `null`; unknown token totals render
+  as “unreadable” (`_tokens_text`).
+- Locks `tests/test_cost_usage_readers_av.py` **19 cases**; **6/6 mutation
+  anchors red** (0 escaped; sha256 byte restore); real batch 18/18 per-seed
+  costs reproduce bit-for-bit and the stored `BASELINE_FRAGMENT.yaml` is
+  byte-identical.
+
+---
+
+## [Unreleased] — 2026-10-21 AU round: on the experiment side, unknown is not zero — no number when unreadable, no partial sums posing as full sums, and AT write-rejection markers must not be lost (zero LLM, $0)
+
+> This round adds no capability: after AI–AT closed the shared readers and
+> report-side reading layer, three live experiment aggregators still folded with
+> `int/float(... or 0)`: `estimate_cost_usd` had no value-domain gate on usage,
+> `generation_summary` / `usage_totals` folded unknown values and write-rejection
+> markers to 0, and `run_b8._cost_usd` read `None` as free and added one unknown
+> side to the other side's amount. The fix routes amounts and counts through the
+> shared value domain: absence is historical 0, unreadable is `None` + mechanism
+> name, and any unreadable field blocks the whole amount/group; event counters
+> stay independent; the `None` total propagates to artifacts and the README.
+> Booklet: `docs/reviews/COST_USAGE_READERS_AU_2026-10-21.md`.
+
+### Fixed — amounts and counts no longer fold unknown into zero or partial sums
+
+- `estimate_cost_usd` / `usage_block_reason_for` / `cost_block_reason`: input /
+  output go through the shared value domain; a non-object usage, AT
+  write-rejection markers, or bool / float / string / negative / non-finite values
+  make the whole amount `None` + mechanism name, with no partial sum; the amount
+  and its attribution share one decision (price first, usage reasons kept in the
+  aggregate disclosure).
+- `generation_summary`: the token triple now uses `aggregate_row_token_usage`; any
+  unreadable field makes all three `None`; `llm_calls` is read independently; the
+  hits column uses `cache_hits_reading`; per-task calls use
+  `token_metric_reading`; the README renders `None` as “unreadable”.
+- `generate_examples_multisample`: `usage_totals` uses the shared aggregate; the
+  hits column depends only on its own column (not on an absent avoided-token
+  column), while bad values / present nulls / cache write-rejection markers still
+  block it; disclosure keys are written only when something really happened.
+- `_usage_delta`: both sides go through the value domain; unreadable keys become
+  `None`; AT's two write-rejection markers travel as cumulative deltas (only new
+  increments); the clean key set and values are unchanged.
+- `run_b8_injection._cost_usd`: returns `(amount, mechanisms)`; absence is still
+  historical 0, any unreadable field is `None`; `_arm_summary` /
+  `_load_harness_smoke` write mechanism keys conditionally; `aggregate`'s
+  `cost_total_usd` is `None` when either arm is unknown, with
+  `cost_total_reasons`.
+
+### Changed — totals and rendering never wear a numeric shape
+
+- The README cost now uses `_cost_text`: `None` renders as
+  `—（无法估算：mechanism×count）`; smoke / main / smoke-inclusive totals use the
+  same rule; token readings reuse AP's shared aggregate with a mechanism note;
+  `$None` no longer appears.
+- The clean return domain is key-for-key unchanged; read-only recomputation gives
+  37/37 b8 costs and 6/6 generation costs identical, and protected artifacts are
+  not rewritten.
+
+### Tests — 62 cases + 7/7 mutation anchors
+
+- `tests/test_cost_usage_readers_au.py` **62 cases** (41 functions expanded by
+  parametrisation): amount domain 30 / deltas 5 / summaries 8 / multisample 2 /
+  rendering 1 / b8 cost 13 / no-loose-fold regression 3.
+- Mutations: 7/7 real anchors red, 0 escapes; collected constant at 62, `compile()`
+  before every write, sha256 byte restore; the old lock
+  `test_experiments_cost_rejection_ab15.py` was rewritten to the new decision
+  source (1 case, net 0).
+- Pre-registration run 11084 passed / 1 failed / 5 skipped (sole failure = baseline
+  guard, 179.18s, collected 11090); confirmation run **11085 passed / 5 skipped /
+  0 failed, 180.59s, rc=0**; coverage 19002/19528 lines = 97.31% / 6960/7396
+  arcs = 94.10% (no `src/` change this round; all ten core modules identical).
+- AB-17 ② register erratum: run_b8's local numeric gate was already handled in
+  AE/AG; AU adds the dated correction.
+
+## [Unreleased] — 2026-10-21 AT round: token counting on the write side has a value domain too — a rejected write is not zero, and every rejection must be traceable (zero LLM, $0)
+
+> This round adds no capability: after rounds AI–AS separated "zero / absent /
+> unreadable" on the read side layer by layer, the write side still turned bad
+> values into counts silently with `int(... or 0)`: bool became 1, floats were
+> truncated, numeric strings were accepted, negatives entered the totals, and
+> `nan`/`inf` or unparsable strings crashed; a bad cache-file `tokens` value could
+> even turn a genuine cache hit into a genuine LLM call. The fix routes
+> `record_usage` / `record_cache_hit_usage` through the shared `count_reason`
+> predicate, records no counts on rejection while still counting the event, and
+> writes mechanism names to `token_write_reasons` / `cache_write_reasons`; readers
+> treat write-rejection markers as unreadable, and `write_rejection_count`
+> separates a cache `tokens: null` "unknown" from historical absence. Booklet:
+> `docs/reviews/TOKEN_WRITE_DOMAIN_AT_2026-10-21.md`.
+
+### Fixed — the write side no longer rewrites token counts silently
+
+- `record_usage` / `record_cache_hit_usage`: both fields go through `count_reason`;
+  any invalid value writes no counts at all (no partial sums) but still increments
+  the `llm_calls` / `cache_hits` event and records the mechanism in
+  `token_write_reasons` / `cache_write_reasons`.
+- `_record_response_usage`: only `None` keeps the historical zero; numeric strings
+  / bool / float / non-finite values are no longer swallowed or truncated by
+  `int()`, but rejected with a disclosure; fail-closed when the budget is enabled.
+- The cache-hit path keeps the raw `tokens`: a bad value or half schema records the
+  hit as "hit with unknown tokens" and must not fall back to a real LLM call.
+
+### Changed — a rejection becomes a readable state, not zero
+
+- `TokenUsage.as_dict()` writes `token_write_reasons` / `cache_write_reasons` only
+  when non-empty; `merge()` sums both mechanism counters (legacy records have no
+  key, so the return domain is unchanged).
+- Readers: `row_token_counts` / `row_token_reading` / `row_total_token_reading` /
+  `cache_caliber` return unreadable (`None` + reasons) for
+  `token_write_rejected:<mech>` / `cache_write_rejected:<mech>` — no zero, no
+  partial sums.
+- `otel_export._token_attributes` exports no token attributes on write-rejection
+  markers (reusing AQ's disclosure channel).
+- `write_rejection_count()` lets callers separate "there was genuinely no cache
+  usage" (historical 0) from "cache usage is unknown" (a write rejection during
+  this call) by difference.
+
+### Tests — 62 cases + 19/19 mutation anchors
+
+- `tests/test_token_write_domain_at.py` **62 cases**: real writes 15 / cache writes
+  11 / rejection counting 2 / response normalisation 12 / read-side markers 11 /
+  OTel export 2 / cache-path raw values 7 / real corpus zero markers 2.
+- Mutations: 19/19 real anchors red, 0 escapes; collected constant at 62, `compile()`
+  before every write, sha256 byte restore.
+- Real corpus: 1701 trace files (1593 parseable) / 10629 `token_usage` rows /
+  324 `token_metrics` rows, all clean, existing readings bit-identical.
+- Pre-registration run 11022 passed / 1 failed / 5 skipped (sole failure = baseline
+  guard, 183.38s, collected 11028); confirmation run **11023 passed / 5 skipped /
+  0 failed, 182.75s, rc=0**; coverage 19002/19528 lines = 97.31% / 6960/7396
+  arcs = 94.10% (`base_agent.py` 98.53%, the other nine core modules bit-identical).
+
+
+## [Unreleased] — 2026-10-21 AS round: the producer must write legal identifiers first — 32/16 hex, root, parent links (zero LLM, $0)
+
+> This round adds no capability: after AR canonicalised identifiers, derived missing
+> ones and enforced one trace per file at the export boundary, the producer still
+> wrote a 16-hex `run_id`, a 12-hex `span_id`, no identifiers on
+> `task_start`/`task_end`, and never wrote `parent_span_id`. Real corpus: 9086 files
+> / 110926 nodes — 61188 nodes with 16/12-hex identifiers, 49738 without (all
+> before O7), 9085 `task_start` / 9046 `task_end` events with none, and 0 parent fields. The fix:
+> `TraceSession` writes a 32-hex run_id, a 16-hex root and child spans, task_start
+> produces a root in both file and memory modes, and node/task_end parents point to
+> the root; structural identifier fields get an exact name + shape exemption from
+> the generic 32+ hex redaction. Booklet:
+> `docs/reviews/TRACE_IDENTIFIER_DOMAIN_AS_2026-10-21.md`.
+
+### Fixed — the producer writes exportable identifiers and parent links
+
+- `TraceSession.__init__`: `_run_id = uuid4().hex` (32 hex),
+  `_root_span_id = uuid4().hex[:16]` (16 hex); `task_start` is appended to `records`
+  in both file-tracing and memory-only modes, and the root carries no
+  `parent_span_id`.
+- `record_node` / `record_task_end`: each event gets a unique 16-hex `span_id` and a
+  `parent_span_id` pointing at the session root; task_end carries the full identity
+  even when `passed=None`.
+- `_IDENTIFIER_FIELD_SHAPES` / `_restore_identifier_fields`: `run_id` (32 hex),
+  `span_id` / `parent_span_id` (16 hex) are exempted from the generic long-hex
+  redaction by exact field name + `fullmatch` shape; the same hex in ordinary text
+  is still redacted and the global `mask_sensitive_info` is unchanged.
+
+### Changed — new writes meet OTel widths; historical corpus is not backfilled
+
+- A producer trace now exports directly as one trace: legal 32/16 widths, all
+  parents inside the file, no synthetic root, no `aitester.export_value_reasons`,
+  and two exports are byte-identical.
+- The memory-only `records` list now starts with `task_start` (consumers must adapt;
+  existing in-repo locks were reviewed and hold no such assertion).
+- The 9086 historical trace files are not rewritten; their identifiers still go
+  through AR's exporter canonicalisation, and derived ids still mean
+  "derived ≠ observed".
+
+### Tests — 10 cases + 18/18 mutation anchors
+
+- `tests/test_trace_identifier_domain_as.py` **10 cases**: widths / root / task_end /
+  parent / many-node uniqueness / session isolation / memory mode / dump /
+  redaction exemption / exporter end-to-end.
+- Mutations: 18/18 real anchors red, 0 escapes; M0 neutral control 0 red, collected
+  constant at 10, `compile()` before writes, sha256 byte restore (`92a0d308…`).
+- Pre-registration run 10960 passed / 1 failed / 5 skipped (sole failure = baseline
+  guard, 179.19s); confirmation run **10961 passed / 5 skipped / 0 failed, 176.09s,
+  rc=0** (collected 10966); coverage 18908/19434 lines = 97.29% / 6906/7342
+  arcs = 94.06% (`trace.py` 181 statements / 58 branches / 0 miss / 0 partial = 100%).
+
+
+## [Unreleased] — 2026-10-21 AR round: the OTel exporter's identifiers must be legal before they can be stable — one trace, 32/16 hex, deterministic derivation (zero LLM, $0)
+
+> This round adds no capability: after AQ closed the numeric value domain, the same
+> identifier fact still had three fates at the export boundary — leaked verbatim
+> (a 16-hex `run_id` used as trace_id, a 12-hex `span_id`, uppercase, non-hex,
+> all-zero), random fallback (a fresh uuid for missing identifiers on every
+> export), or cross-trace breakage (a node's `run_id` overwrote the file-level
+> trace, so its parent pointed at another trace's root). The fix adds five private
+> predicates / derivators, canonicalises identifiers to 32/16 lowercase hex, keeps
+> one trace per file, derives missing/invalid identifiers deterministically from
+> SHA-256, re-derives collisions with a disclosure, and exports only `str` string
+> attributes. Booklet:
+> `docs/reviews/OTEL_EXPORT_IDENTIFIER_DOMAIN_AR_2026-10-21.md`.
+
+### Fixed — legal identifiers, one trace, closed parents, stable repeat exports
+
+- `_canonical_identifier`: identifiers accept only a non-empty `str` of hex digits,
+  no wider than the field, not all-zero; lowercase + left zero-pad to 32/16 chars;
+  non-str / empty / non-hex / too-long / all-zero values are not exported raw and
+  are named per field (`run_id_not_string:<T>` / `run_id_invalid_format` /
+  `span_id_not_string:<T>` / `span_id_invalid_format`).
+- `_file_trace_id`: one trace_id per file — first canonicalisable `run_id` → SHA-256
+  of the first non-empty invalid string → SHA-256 of `path:<path>`; a record-level
+  `run_id` no longer overwrites the file trace, and a mismatch discloses
+  `run_id_mismatch`.
+- `_derived_span_id` / `_ensure_unique_span`: missing / invalid identifiers are
+  derived as `SHA-256("aitester-span:{trace}:{index}:{attempt}")`; a duplicate
+  `span_id` within a trace keeps the first occurrence, re-derives the later one and
+  appends `span_id_duplicate`; the synthetic root no longer uses uuid.
+- `_span_name`: non-node ⇒ `task_<event>`; a node name accepts only a non-empty
+  `str`, while non-str / empty values fall back to `"node"` and disclose
+  `node_not_string:<T>` / `node_empty`.
+- String attributes: `decision` / `decision_reason` / `strategy_selected` /
+  `stop_reason` / `task` export only `str`; non-str values are named per field and
+  not exported raw.
+
+### Changed — clean records keep their attributes verbatim; identifiers are canonicalised
+
+- Full real corpus: 9086 files / 129058 spans; **exactly one** trace_id per file,
+  all trace/span ids 32/16 lowercase hex, every parent inside the same file's span
+  set, no duplicate span ids within a file, `export_value_reasons` **0 instances**;
+  exporting the same file twice returns **byte-identical** results (9086/9086).
+- Pre-fix measurement: 8002 files with >1 trace_id, 61188 broken parent links,
+  9086/9086 files with unstable identifiers across two exports. **This round
+  deliberately changes clean-export identifiers** — the regression criterion is
+  "the same file exports identically twice", not "identical to pre-AR"; attributes
+  (numeric and string) are unchanged (AQ numeric semantics hold).
+- No archived or raw batch JSON was rewritten.
+
+### Tests — 48 cases + 16/16 mutation anchors
+
+- `tests/test_otel_export_identifier_domain_ar.py` **48 cases**: canonicalisation 10 +
+  record mapping 11 + file trace 4 + duplicates 4 + string domain 11 + reason order 1 +
+  end-to-end 5 + real corpus 2; `tests/test_p2_1_otel_export.py` rewrites its
+  identifier assertions to the new caliber (case count unchanged at 7), and
+  `tests/test_otel_export_value_domain_aq.py` swaps fixtures to valid hex (case
+  count unchanged at 61).
+- Mutations: 16/16 anchors red, 0 survivors, collected constant at 147,
+  `compile()` before writes, sha256 byte restore (`2ae8fee0…`).
+- Close-out confirmation run **10951 passed / 5 skipped / 0 failed, 177.27s,
+  rc=0** (collected 10956); coverage 18898/19424 lines = 97.29% / 6902/7338
+  arcs = 94.06%.
+
+
+## [Unreleased] — 2026-10-21 AQ round: the OTel exporter exports only verifiable numbers — bad tokens do not leak, bad timestamps do not abort a whole file (zero LLM, $0)
+
+> This round adds no capability: the export boundary wrote record numbers into span
+> attributes verbatim. The same bad value had three fates here — leaked verbatim
+> (NaN/Inf/string/bool), silently dropped (non-object `token_usage`, present
+> `None`), or aborting the whole file (non-finite `ts`/`duration_ms` in `int()`).
+> The fix adds three private predicates + the shared `count_reason`, exports no
+> raw bad values, and names mechanisms in `aitester.export_value_reasons`.
+> Booklet: `docs/reviews/OTEL_EXPORT_VALUE_DOMAIN_AQ_2026-10-21.md`.
+
+### Fixed — bad values no longer leak, bad timestamps no longer abort a file, silent drops are disclosed
+
+- `_token_attributes`: token counts go through `count_reason` field by field;
+  bool / str / finite decimals / negatives / nan / inf / containers no longer
+  enter `gen_ai.usage.*`; non-object `token_usage` ⇒
+  `token_usage_not_object:<T>` (no longer silent); a present `None` is treated
+  like absence — not exported, not disclosed.
+- `_timestamp_ns`: `ts` / `duration_ms` accept only finite non-negative numbers;
+  non-finite / negative / scaled overflow fall back to the existing 0 sentinel
+  and are named (`*_not_finite` / `*_negative` / `*_out_of_range`), no longer
+  raising `ValueError` / `OverflowError` and aborting the whole file.
+- `_numeric_attribute`: `budget_remaining` accepts only finite non-negative
+  numbers; `iteration` reuses `count_reason`; bad values are not exported raw.
+- Disclosure: mechanism names are comma-joined in the order ts → duration_ms →
+  token (input/output/total) → budget_remaining → iteration; clean records have
+  no such attribute.
+
+### Changed — clean exports are bit-identical; the real corpus has zero disclosures
+
+- 18 stable `trace.jsonl` files / 174 spans: zero differences in
+  `(name, start, duration, attrs)` before and after.
+- Full real corpus: 9086 files / 129062 lines → 129058 spans;
+  `export_value_reasons` has 0 instances, all 27135 `gen_ai.usage.*` attributes
+  are ints, all timestamps are non-negative ints; all 5 `NaN` literals live
+  inside `output` text. The 9045 real token records have zero bad values — this
+  is a latent-defect round.
+- No archived or raw batch JSON was rewritten.
+
+### Tests — 61 cases + 12/12 mutation anchors
+
+- `tests/test_otel_export_value_domain_aq.py` **61 cases**: token domain 20 +
+  timestamps 17 + numeric custom attributes 14 + disclosure aggregation 3 +
+  predicate units 3 + end-to-end/real corpus 4; the header of
+  `tests/test_p2_1_otel_export.py` now lists 7 calibers and one "no disclosure"
+  assertion was added (case count unchanged).
+- Mutations: 12/12 anchors red, 0 survivors (including the non-finite timestamp
+  crash path and the missing disclosure attribute), collected constant at 61,
+  `compile()` before writes, sha256 byte restore.
+- Close-out confirmation run **10903 passed / 5 skipped / 0 failed, 178.10s,
+  rc=0** (collected 10908); coverage 18819/19343 lines = 97.29% / 6862/7296
+  arcs = 94.05%.
+
+
+## [Unreleased] — 2026-10-21 AP round: five report-side aggregate token summarisers also read one way — pooling, smoke, A/B, group averages and the cost table must not each fold their own (zero LLM, $0)
+
+> This round adds no capability: after AO collapsed the row-level total readers,
+> the **aggregate** objects written as `token_metrics` still had five consumers
+> each folding on their own. The same bad field became a silent 0 in t1_b2
+> pooling, crashed the b8 README, fed `None` into rag_ab statistics, was coerced
+> by `_safe_float` in RAG group averages, and printed as a literal `None` in the
+> cost table. The fix adds **aggregate-metric-oriented** shared readers
+> `token_metric_reading` + `sum_token_metric_values` and wires the five
+> consumers. Booklet:
+> `docs/reviews/TOKEN_USAGE_REPORT_RESIDUAL_AP_2026-10-21.md`.
+
+### Fixed — aggregate `None` is refusal, absence is historical zero, bad values are not counts
+
+- `token_metric_reading`: whole metrics / field absence ⇒ historical 0
+  (`absent=True`); a present `None` ⇒ `value=None` + `token_metric_unreadable`
+  (**upstream already refused**); non-object ⇒ `token_metrics_not_object`;
+  bool / str / negative / nan / inf counts ⇒ `count_reason` mechanism names;
+  `allow_float=True` accepts only finite non-negative int/float.
+- `sum_token_metric_values`: any unreadable source ⇒ `value=None` (no partial
+  sum) + `n_unreadable` + mechanism counts; absent sources keep historical 0
+  and count in `n_absent`.
+- `analyze_t1_b2_main_batch`: per-seed pooling and batch total go through the
+  shared sum; any unreadable arm ⇒ total `None` + `token_unreadable_arms`;
+  rendering shows “unreadable”.
+- `run_b8_injection._write_readme`: smoke total, main-batch table and §9 total
+  use the shared readers; unreadable renders “unreadable” plus a mechanism
+  note; the cost column remains the standard-price upper bound.
+- `rag_ab_experiment`: parsing uses `row_total_token_reading`; any unreadable
+  side of a pair ⇒ means / std / delta / percentage / Welch / Mann-Whitney /
+  Cohen's d all `None`, interpretation says “undecidable” — nan is no longer
+  read as `p >= 0.05` and reported as “no significant difference”.
+- `rag_analysis._rag_token_efficiency`: any unreadable row in a group ⇒ group
+  average `None` + `n_token_unreadable_rows` + mechanism names; ratio `None`.
+- `analyze_results`: the five cost-table fields are read one by one; unreadable
+  cells render “unreadable” plus a note; the RAG section refuses digits when a
+  group average is unreadable and shows `N/A` for the ratio.
+
+### Changed — real artifacts are bit-identical; stale report statistics are registered only
+
+- t1_b2 pooled `2629059 / 310018 / 643952`, b8 `83246 / 113638`, the rag_ab
+  20+20 pairs and the main-batch table `2544615 / 284317 / 404268` are all
+  bit-identical.
+- `rag_ab_synthetic` stores `p_welch 0.29198 / u 113.5 / p_mw 1.0` while the
+  same details recompute to `0.298675 / 286.5 / 0.019944`; `rag_lvl25h_n40`
+  stores `p 2.4e-05` versus `6.7e-05`. Those reports predate the 2026-10-01
+  statistics fix; this round records the difference and does not rewrite them.
+
+### Tests — 67 cases + 33/33 mutation anchors
+
+- `tests/test_token_usage_reports_ap.py` **67 cases**: shared reading 20 +
+  aggregate sum 5 + t1_b2 6 + b8 4 + rag_ab parse 8 + rag_ab pairs 6 + RAG
+  groups 10 + cost table 8; one old round10 lock was rewritten to the new
+  caliber (string tokens are no longer folded to 0).
+- Mutations: 33/33 behavioural anchors red, 0 escapes, collected constant at
+  67, `compile()` before writes, sha256 byte restore; `ar-rag-avg-fold` first
+  escaped because of the test shape (only the no-RAG group was unreadable) and
+  turned red after adding the RAG-group case.
+- Close-out confirmation run **10842 passed / 5 skipped / 0 failed, 178.84s,
+  rc=0** (collected 10847); coverage 18760/19284 lines = 97.28% / 6825/7262
+  arcs = 93.98% (all +43 lines / +28 arcs executed by locks).
+
+
+## [Unreleased] — 2026-10-21 AO round: report-level token totals also read one way — tier, flip comparison and convergence curves must not each sum their own (zero LLM, $0)
+
+> This round adds no capability: after AN collapsed the cost triple and three
+> aggregation readers, three **report-level total** readers still folded
+> `total_tokens` on their own. The same bad row silently became 0 in the tier
+> table, crashed the whole flip report, or produced negative increments and nan
+> marginals in the convergence curve. The fix adds **total-oriented** shared
+> readers (cost still needs in/out; reports only show the total) and wires the
+> three consumers. Booklet:
+> `docs/reviews/TOKEN_USAGE_REPORT_AGGREGATE_AO_2026-10-21.md`.
+
+### Fixed — report totals no longer fold unreadable rows into 0, a crash or a partial sum
+
+- `row_total_token_reading`: whole-key absence / `null` ⇒ historical 0
+  (`absent=True`); non-object / a `total_tokens` that is bool / float / str /
+  negative / nan / inf ⇒ `total=None` plus the mechanism name; when
+  `total_tokens` is absent, all-zero / all-missing are the historical zero row,
+  a valid in/out pair sums, and any other partial sum is unreadable;
+  `total != in+out` keeps the total readable and only sets `contradiction=True`.
+- `aggregate_row_token_totals`: any unreadable row ⇒ aggregate
+  `total_tokens=None` (no partial sum) + `n_unreadable_rows` +
+  `reading_reasons`; absent rows count in `n_absent_rows` (historical 0);
+  contradictory rows still count toward the total and only increment
+  `n_contradiction_rows`.
+- `model_gradient` tier table: totals go through the shared aggregate; markdown
+  shows “unreadable” plus a `> **token reading disclosure**…` block.
+- `compare_failures`: per-row and total go through the shared readers;
+  unreadable shows “unreadable” / “unreadable (N rows)” plus a mechanism line;
+  when either total is unreadable it does **not** judge cost inversion.
+- `convergence_analysis`: unreadable ⇒ `available=False`, `rounds={}`,
+  `n_token_unreadable_rows` + mechanism names (no fake curve from 0); per-round
+  bad values block only within the curve's used `min(iterations, 3)`;
+  `analyze_results` prints an unreadable-baseline note.
+
+### Changed — real-batch readings and legacy-schema consumers are bit-identical
+
+- Repository census of 244 files / 322 arms / 10659 rows: only 3 `token_usage`
+  shapes (5315 full triples / 4366 with cache / 978 absent); non-object / bad
+  values / missing total / split mismatch **0 rows**, per-round detail arms
+  **0**; old-vs-new totals differ on **0** of the 9 main-batch arms.
+- Total-only rows (`{"total_tokens": 200}`) stay readable; absent rows keep
+  historical 0.
+
+### Tests — 52 cases + 16/16 mutation anchors
+
+- `tests/test_token_usage_report_ao.py` **52 cases**: shared total reading 19 +
+  `model_gradient` 6 + `compare_failures` 8 + convergence 19; one case is the
+  coverage self-correction lock that now executes `token_usage.py:406`.
+- Mutations: 16/16 behavioural anchors red + 1 neutral docstring control green,
+  collected constant at 192, `compile()` before writes, sha256 byte restore;
+  M14 first escaped because of the test shape and turned red after reshuffling
+  the parameters.
+- Close-out confirmation run **10775 passed / 5 skipped / 0 failed, 177.09s,
+  rc=0** (collected 10780); coverage 18717/19241 lines = 97.28% / 6797/7234
+  arcs = 93.96% (all new lines and arcs executed by locks).
+
+## [Unreleased] — 2026-10-21 AN round: three token aggregation readers held their own `or 0` too — unreadable is not zero, and a partial sum is not a total (zero LLM, $0)
+
+> This round adds no capability: after AM collapsed the row-level policy into the
+> shared reader, the three **aggregation** consumers still summed
+> `(r.get("token_usage") or {}).get(..., 0)` each on its own. The same bad row
+> crashed the write path, silently became 0 in the offline report, and produced a
+> partial sum in the old-JSON fallback. The fix moves aggregation into
+> `aggregate_row_token_usage` and separates "the whole batch has no such key"
+> (historical 0) from "half schema / bad value" (`None`). Booklet:
+> `docs/reviews/TOKEN_USAGE_AGGREGATE_AN_2026-10-21.md`.
+
+### Fixed — the aggregation layer no longer folds unreadable tokens into 0 or a partial sum
+
+- `row_token_reading` migrated from AM into `src/budget/token_usage.py`; new
+  `aggregate_row_token_usage`: a whole-key absence / `null` ⇒ historical 0 and
+  counted in `n_absent_rows`; a field that is present but bool / float / str /
+  nan / inf / negative, or a positive triple with a missing field ⇒
+  `input/output/total` all `None`, with `n_unreadable_rows` + `reading_reasons`;
+  a non-object `token_usage` makes the triple, the call count and the cache all
+  unreadable at once.
+- `llm_calls` is judged independently: a bad call count voids only the call count,
+  not the tokens; `in+out != total` keeps the total readable and only writes
+  `n_token_split_mismatch_rows` (there is no money at the aggregation layer).
+- Cache goes through `cache_totals`: a whole-batch old schema ⇒ `present=False`
+  (consumer-side historical 0); half schema / bad values / non-object ⇒
+  `hits` / `avoided` both `None` plus the mechanism name.
+- Three consumers wired: `run_benchmark._aggregate_token_metrics`,
+  `trusted_verification.arm_trusted_metrics`,
+  `rag_analysis._token_metrics_from_details`; the old CLI's literal
+  "命中 X / 调用 X + 真实" denominator now prints the real `llm_calls`.
+- `statistical_analysis._row_cost_tokens` became a `row_token_reading` alias
+  (AM / AL locks untouched).
+
+### Changed — real-batch readings and old-schema consumers key-for-key unchanged
+
+- All 783 main-batch rows across 9 arms are int and self-consistent with the
+  cache schema absent ⇒ the five-key `token_metrics` recompute is bit-identical
+  arm by arm; the repo-wide census counts 11197 rows / 337 arms, of which 1218
+  are absent (historical 0) and 0 bad / 0 partial / 0 contradictions; protected
+  artifacts and raw batch JSON were not rewritten.
+- Disclosure keys are written only when they actually happen:
+  `n_token_unreadable_rows` / `token_reading_reasons` /
+  `n_token_split_mismatch_rows` / `cache_reading_reasons`.
+
+### Tests — 38 examples + 15/15 mutation anchors
+
+- `tests/test_token_usage_aggregate_an.py` **38 examples**: shared row reading 6 +
+  aggregation semantics 16 + `run_benchmark` write path 7 + trusted report 5 +
+  old-JSON fallback 4; the real-batch group calls `pytest.fail` when artifacts are
+  missing instead of skipping silently.
+- M1–M15 each turn red, the neutral comment control stays 0 red, collected stays
+  at 210, `compile()` before every write, sha256 byte restore; the AO3 lock
+  advances to "AN round" (net 0 cases).
+- Close-out full suite **10723 passed / 5 skipped / 0 failed** (collected 10728,
+  176.40s); lines **18662/19186 = 97.27%** / branches **6765/7202 = 93.93%**
+  (denominator +77 lines / +38 arcs = the new reader and aggregator; uncovered
+  524 / missing arcs 437 bit-identical to AM; `coverage report`'s 383 partial
+  arcs is a different caliber and no recovery is claimed).
+
+## [Unreleased] — 2026-10-21 AM round: row-level token reads in the cost table have a value domain too — the rendering layer must not cover for the aggregator (zero LLM, $0)
+
+> This round adds no capability: `statistical_analysis.cost_analysis` (the only
+> aggregator behind `$/task` and `$/solved`) still used `tu.get(...) or 0`, folding
+> present-but-invalid values into priceable numbers, pricing positive-token rows
+> with a missing split as $0, accepting unclosed `by_model` attribution, and letting
+> S11 treat non-counts as accounting evidence. The fix wires row-level reads to the
+> shared value domain and separates "unreadable" (total-level block) from
+> "inconsistent" (money-level block). Booklet:
+> `docs/reviews/COST_AGGREGATE_AM_2026-10-21.md`.
+
+### Fixed — the cost aggregate no longer folds unreadable tokens to 0
+
+- `_row_cost_tokens`: row triples go through the shared `row_token_counts`;
+  non-object `token_usage`, present non-negative-integer failures, and positive
+  values with missing fields are unreadable (a missing field is not 0). AE2
+  absent-key semantics and "total absent while in/out are both valid ⇒ read
+  in+out" are preserved.
+- Unreadable ⇒ that arm's `input_tokens` / `output_tokens` /
+  `unattributed_tokens` / `by_model` and money become `None`/empty, with
+  `n_token_unreadable_rows` + `token_reading_reasons` (no partial sums).
+- Split / attribution inconsistency (`in+out != total`, non-dict `by_model`,
+  non-string keys, non-count values, sum mismatch) ⇒ token totals stay readable,
+  money only is blocked, with `n_token_money_blocked_rows` +
+  `token_money_reasons`; bad attribution at zero total also blocks money.
+- `by_model_reason` moved into `src/budget/token_usage.py`; the cost table calls
+  it directly and `emse_stats_report._attribution_reason` delegates in one line
+  (existing AL locks untouched).
+- S11 `_row_has_token_accounting` now validates evidence through `count_reason`:
+  bool / float / nan / inf / negative / string no longer counts as accounting;
+  the 50% threshold and counting caliber are unchanged.
+- Rendering: `None` token cells show `—`; a "token read gaps (AM)" section names
+  mechanisms; AM-blocked arms are not filed under price-only; the no-price heading
+  switches to "cost not computable" only when AM keys are present.
+
+### Changed — real-batch readings unchanged, clean-arm return domain key-for-key identical
+
+- All 783 main-batch rows are int and self-consistent (`in+out=total`,
+  `Σby_model=total`), so the three arms (6.755979 / 0.876692 / 1.185783) and their
+  return domains are unchanged, with no AM keys; `plain_llm_df` keeps
+  `cost_caliber=recorded_lower_bound` and the AK keys.
+- Protected archives and raw batch JSON were not rewritten.
+
+### Tests — 64 examples + 10/10 mutation anchors
+
+- `tests/test_cost_aggregate_token_reading_am.py` **64 examples**: attribution
+  predicate 9 + value-domain unreadable 11 + absent compatibility 4 + partial
+  triple 6 + money-only blocking 11 + S11 evidence domain 11 + rendering 9 +
+  real batch 3.
+- Three existing fixtures (AG / AB-14 / report) were updated to the new domain
+  because the fixtures themselves violated it — not a relaxation of assertions.
+- M1–M8 all turn red (19/5/5/7/1/3/2/1/2), neutral control 0 red, collected
+  constant 188, `compile()` before writes, sha256 byte-for-byte restore; AO3 lock
+  advanced to "AM round" (net 0 examples).
+- Close-out full run **10685 passed / 5 skipped / 0 failed** (collected 10690,
+  177.94s); lines **18585/19109 = 97.26%** / branches **6727/7164 = 93.90%**
+  (denominator +10 lines / +8 arcs from `by_model_reason`; 524 missed / 437
+  partial identical to AL).
+
+## [Unreleased] — 2026-10-21 AL round: row-level token arithmetic in the report has a value domain too — an unreadable row is not zero (zero LLM, $0)
+
+> This round adds no capability: `cost_effectiveness_block` kept a second copy of the
+> row-level arithmetic (`usage.get(...) or 0`), so the same row was unreadable in ext
+> but folded to 0 and priced in section 4.1; unreadable rows were also skipped before
+> detection counting, shrinking the detection denominator with accounting quality.
+> The reader is now consolidated into the producer module, and "unreadable" (total-level
+> block) is separated from "inconsistent" (money-level block). Booklet:
+> `docs/reviews/REPORT_TOKEN_READING_AL_2026-10-21.md`.
+
+### Fixed — the report cost-effectiveness block no longer folds unreadable rows to 0
+
+- `row_token_counts` moved into `src/budget/token_usage.py`; ext keeps
+  `_row_token_counts` / `token_count_reason` aliases (existing AI locks untouched);
+  `emse_stats_report.cost_effectiveness_block` now reads the shared reader.
+- An unreadable triple makes `total_tokens` / `total_usd` / `usd_per_detection` /
+  `tokens_per_detection` all `None` and discloses `n_token_unreadable_rows` +
+  `token_reading_reasons` (no partial sums).
+- A split or attribution inconsistency (`in+out != total`, missing/empty/non-dict
+  `by_model`, non-string keys, bad values, sum mismatch) blocks money only:
+  the token total and `tokens/detection` stay readable, with
+  `n_token_money_blocked_rows` + `token_money_reasons`.
+- Detection counting is decoupled from token readability: it depends on
+  `detection_rate` alone, and unreadable rows still count into the detection denominator.
+- Cache-evidence zero rows (AJ caliber) no longer enter AK's `n_zero_token_rows` /
+  `n_zero_token_output_rows`.
+- Section 4.1 gains an AL disclosure block (only when it actually happens); unreadable
+  readings render as `—` via `_f(None)`.
+
+### Changed — real-batch readings unchanged, clean arms keep their exact return domain
+
+- All 783 main-batch rows are int, with `in+out=total` and `Σby_model=total` on every
+  row; 0 bad splits / attributions. The three arm totals 6.755979 / 0.876692 / 1.185783
+  and their return domains are bit-identical (the df arm has 226 priced rows and 35
+  explicit-zero rows disclosed by the AK key).
+- The protected archive `results/emse_stats_extensions_20261016/` is not rewritten;
+  clean arms and pure-cache zero arms gain no section-4.1 lines.
+
+### Tests — 57 locks + 6/6 mutation anchors
+
+- `tests/test_report_token_reading_al.py` **57 tests**: triple value domain 16 +
+  detection denominator 4 + money blocking 18 + zero/cache rows 5 + clean domain 3 +
+  real batch 5 + rendering 6.
+- M1–M6 each turn red (3/1/15/14/8/2); neutral control 0 red; collected constant 57;
+  `compile()` before writes and sha256 byte restore; AO3 lock advanced to "AL round"
+  (net 0 tests).
+- Full suite **10621 passed / 5 skipped / 0 failed** (collected 10626, 175.84s);
+  lines **18575/19099 = 97.26%** / branches **6719/7156 = 93.89%**
+  (denominator +22 lines / +12 arcs from moving the reader into `src/`, within the
+  registered jitter band; `src/` changed, so the change-surface list is the evidence).
+
+## [Unreleased] — 2026-10-21 AK round: a handful of unaccounted rows is neither free nor exact — cost readings are lower bounds on recorded spend (zero LLM, $0)
+
+> This round adds no capability: when S11's 50% breakage threshold passes on the
+> one-sided side (`0 < unaccounted rows < 50%`), zero-token rows enter the amount
+> numerator as 0 while still occupying the task denominator, so `$/task` was rendered
+> as an exact value. Only disclosure and caliber keys are added; the row-level
+> arithmetic (AE2) is unchanged. Booklet: `docs/reviews/PARTIAL_ACCOUNTING_AK_2026-10-21.md`.
+
+### Fixed — partially accounted arms no longer pose a lower bound as an exact mean
+
+- `token_accounting_sanity` gains `n_zero_output_rows` (written only when >0): rows with
+  no accounting whose `generated_test` is a non-empty string; fully accounted arms keep
+  the legacy 5-key return domain, and cache-evidence rows are not counted.
+- `cost_analysis` gains `token_zero_output_rows` and
+  `cost_caliber="recorded_lower_bound"` (only when the cost is not None, `computable`,
+  and unaccounted rows > 0); ≥50% breakage still yields `NOT_COMPUTABLE`, and fully
+  accounted arms / legacy schema keep their key sets.
+- Three presentation layers share one source: a "**cost-caliber lower bound (AK)**"
+  section plus a `$/solved` suffix in the cost report; a subset note in
+  `emse_stats_report` section 4 and a "**zero-token rows' cost caliber (AK)**" block
+  after section 4.1; `_zero_token_note` on all four ext `_cost_per_task` return paths.
+
+### Changed — the main batch's `plain_llm_df` cost reading carries a lower-bound label
+
+- 35/261 rows (13.4%) with an all-zero token triple, `llm_calls=0`, and a non-empty
+  `generated_test` (3 of them `detection_rate=1.0`): `cost=1.1857833` and
+  `$/task=0.004543231034482759` are unchanged, with new `cost_caliber` /
+  `token_zero_output_rows=35`; the other two arms (`aitester` / `plain_llm`) keep their
+  key sets and readings bit-identical.
+- Cache-evidence rows (AJ) are not labelled as lower bounds; avoided tokens are still
+  never converted into dollars.
+
+### Tests — 21 cases + 4/4 mutation anchors
+
+- `tests/test_partial_accounting_ak.py` **21 cases**: S11 subset 4 + cost caliber keys 4 +
+  cost report 2 + report sections 5 + ext note 3 + real batch 3.
+- Mutation anchors M1–M4 each turn red (3/5/3/1), neutral control 0 red, collected
+  constant at 89, `compile()` before every write, sha256 byte restore; two AJ locks
+  rewritten to the new caliber (net 0 cases).
+- Close-out full suite **10564 passed / 5 skipped / 0 failed** (collected 10569,
+  177.85s); lines **18554/19077 = 97.26%** / branches **6708/7144 = 93.90%** (+1 line /
+  +1 arc vs AJ, within the registered jitter; `src/` untouched, evidenced by the
+  change-surface list only).
+
+## [Unreleased] — 2026-10-21 AJ round (backfilled): a cache hit is a third accounting state — neither broken accounting nor "free" (zero LLM, $0)
+
+> Backfilled during the AK close-out: round AJ updated the header summary and the
+> register but left no section in this file. The content matches
+> `docs/reviews/CACHE_CALIBER_AJ_2026-10-21.md`.
+
+### Fixed — cache hits are no longer read as broken accounting
+
+- A shared reader now lives in `src/budget/token_usage.py`: `cache_caliber` for one
+  row, `cache_totals` for one arm, and `count_reason` moved from ext to serve both
+  token triples and cache fields.
+- S11 / `cost_analysis` / both `emse_stats_report` cost blocks and section /
+  ext `_cost_per_task` share the same source: valid positive cache evidence counts as
+  "has accounting"; invalid / half-schema / non-object fields yield `None` for both
+  `hits` and `avoided` with the mechanism named, never a partial sum.
+- Pure-cache arms get `cache_hit_no_api_spend`; avoided tokens are not written to
+  `by_model` and are never converted into dollars.
+
+### Tests — 68 cases + 19/19 mutation anchors
+
+- `tests/test_experiments_cache_caliber_aj.py` **68 cases**; 19/19 mutation anchors red
+  (red 38/10/10/11/6/6/10/4/2/3/1/3/1/3/1/2/2/1/1), neutral control 0 red, collected
+  constant at 298.
+- Legacy-schema batches (main batch 261 rows/arm, E6, E4) keep return domains, notes and
+  protected artifacts byte-identical; three cache-dense arms move from `NOT_COMPUTABLE` /
+  unexplained "（缺: ）" to computable with disclosure.
+- Close-out full suite **10543 passed / 5 skipped / 0 failed** (collected 10548, 179.94s);
+  lines **18553/19077 = 97.25%** / branches **6707/7144 = 93.88%** (−1 line / −1 arc vs
+  the pre-registration run, registered jitter).
+
+## [Unreleased] — 2026-10-21 AI round: token counts also have a value domain — an incomplete token sum is not a token reading (zero LLM, $0)
+
+> This round adds no capability: it disposes AH section 7 items 1–3 (the `tokens_per_task`
+> two-state reading / the `by_model` shape domain / `input+output` versus `total_tokens`
+> consistency) — AH judged the "three kinds of incomplete sums" on the amount side while the
+> read side was still `sum += value or 0`.
+> Booklet: `docs/reviews/TOKEN_DOMAIN_AI_2026-10-21.md`.
+
+### Fixed — a row's token accounting is three non-negative integers
+
+- `token_usage` absent / `null` / non-object / empty object, a missing field, `bool` /
+  float / string / negative / non-finite: these used to fold to 0, crash, count `True`
+  as 1, carry `-5` into a negative amount, or turn shares into `nan` via `inf`
+  (`inf != inf` being false let AH's closure check pass); each now names its mechanism
+  and the whole arm's `tokens/task` and `$/task` are `None` — no zero folding, no partial sums.
+- `by_model` non-object / non-string key / bad value domain, and a row-level
+  `input+output != total_tokens`: the token total stays readable and only the amount is
+  voided (`token_split_mismatch:<in+out>/<total>` and friends), and per the AG discipline a
+  `by_model` that is present but unreadable no longer also reports `no_model_attribution` —
+  following the wrong hint will not turn anything green.
+- `n_tasks == 0`: `tokens/task` becomes `None` too (AH section 7 item 1), and the
+  bootstrap CI becomes `None`.
+
+### Changed — one reading shared by two consumers
+
+- `_cost_per_task` and `_bootstrap_cost_ci` now share `_read_tokens` (each used to write
+  its own `or 0`); four helpers added: `token_count_reason` / `_row_token_counts` /
+  `_reason_summary` / `_read_tokens`.
+- `tokens_per_task` becomes `float | None`, the CI `tuple[float, float] | None`; the
+  renderer prints `—（无 token 读数）` / `—`, and `build_report`'s bootstrap key may be `null`.
+- A genuine zero must be written as three explicit 0s: `token_usage: {}` moves from 0.0 to
+  "whole arm has no reading" (a behaviour change relative to AH, see booklet section 7 item 2).
+
+### Tests — 63 cases + 18/18 mutation anchors
+
+- `tests/test_experiments_token_domain_ai.py` **63 cases**: `token_count_reason` 16 +
+  row reading 7 + `_cost_per_task` value domain 15 + attribution value domain 12 +
+  true zero / zero denominator 2 + bootstrap 7 + rendering 2 + real-batch invariants 2.
+- Mutation verification M1–M18 each turning red (4/7/11/3/2/8/3/3/3/1/6/14/2/3/3/9/4/1),
+  comment-only neutral control 0 red; baseline collected constant at 78, `compile()` before
+  every write, sha256 assertion of the source file's original bytes after restore.
+- One AH lock rewritten (`test_zero_tasks_has_no_denominator`: `tpt == 0.0` → `is None`),
+  net 0 cases; the three arms' readings and bootstrap CIs are bit-identical and the protected
+  archive is untouched.
+
+## [Unreleased] — 2026-10-20 AH round: an incomplete sum is not an amount — coverage, attribution and denominator closure for $/task (zero LLM, $0)
+
+> This round adds no capability: it disposes AE review section 5.2 candidate B (the item
+> AB-15 / AB-16 / AB-17 / AE / AG kept registering unfixed) —
+> `emse_stats_extensions._cost_per_task` returned an "incomplete sum" as `$/task`.
+> Booklet: `docs/reviews/COST_COMPLETENESS_AH_2026-10-20.md`.
+
+### Fixed — four "no complete amount" cases no longer wear an amount's shape
+
+- Unregistered model: used to accumulate the remaining priced shares into a partial sum;
+  now `usd_per_task=None` and the note names `model_unregistered←<sorted models>`.
+- No attribution: `tok > 0` with `by_model` absent / empty ⇒ `no_model_attribution`.
+- Attribution not closed: `by_model` total ≠ `total_tokens` ⇒
+  `token_attribution_mismatch:<by_model total>/<total_tokens>`.
+- Zero-task denominator: used to return `0.0`; now `None` +
+  `无任务 ⇒ $/task 无金额（不是 0）`.
+- `tok == 0` with no token to under-count remains a genuine `0.0`; AB-15's
+  `计价被拒：<code>←<models>` and `价目表不可用（<机制名>）` calibers are preserved.
+
+### Changed — rendering caliber discipline
+
+- The existing `—（无金额）` rendering is unchanged; section 4 gains two discipline
+  bullets: `$/task` is produced only when the price table covers every `by_model` token
+  and the `by_model` total equals `total_tokens`; unregistered / no attribution /
+  unclosed attribution / zero-task denominator all render `—（无金额）` with the
+  mechanism named in the note.
+
+### Tests — 15 cases + 6/6 mutation anchors
+
+- `tests/test_experiments_cost_completeness_ah.py` **15 cases**: incomplete sums 10 +
+  real-batch invariants 2 + rendering and vocabulary 3.
+- Mutation verification ah1–ah6 each turning red (1 / 2 / 3 / 10 / 2 / 10), comment-only
+  neutral control 0 red; baseline collected constant at 298, `compile()` before writing,
+  sha256 byte restore after reverting.
+- AB-15 / AB-16 / AB-17 locks rewritten to the new caliber (net 0 cases; a registered
+  caliber change, not accommodating a failure).
+- Real-batch readings change by zero rows (`by_model` totals equal `total_tokens`:
+  6815977 / 837664 / 1102230), enforced by locks.
+
+### Close-out
+
+- Full suite **10412 passed / 5 skipped / 0 failed** (collected 10417, +15; 177.80s);
+  coverage lines **18491/19015 = 97.2443%** / branches **6675/7112 = 93.8555%**
+  (`src/` + `config.py` unchanged, readings bit-identical to AG; the change-surface
+  list is the evidence).
+- Pre-registration run 10411 passed / 1 failed / 5 skipped (176.83s); the only failure
+  was the baseline guard itself.
+- `make gates` full chain rerun **three times separately, rc=0 each time** (178s / 180s /
+  189s wall; in-chain pytest 10412 passed / 5 skipped / 0 failed in 173.61s / 174.40s /
+  182.16s, without `--cov`, not interchangeable with the coverage caliber above).
+
+## [Unreleased] — 2026-10-20 AG round: unpriced attribution closed to a single mechanism index (zero LLM, $0)
+
+> This round adds no capability: it disposes AE review section 5, item 2 (candidate C) —
+> `cost_analysis`'s `missing_models` bucket conflated "not registered / bad price domain /
+> bad shape" under one name, so the repair advice did not match the cause. Booklet:
+> `docs/reviews/COST_ATTRIBUTION_AG_2026-10-20.md`.
+
+### Fixed — unpriced attribution in `cost_analysis` (real defect, 0 real-batch rows changed)
+
+- Before: a model present in the table with a bad price domain (`price_null` / `bool` /
+  `str` / negative / `nan` / `inf`) landed in `missing_models`; a bad entry shape
+  (`entry_not_object:*` / `entry_empty`) landed in the bucket named
+  `unpriced_currency_models`; row-level mixed arithmetic (cross-currency / cross-price)
+  was left as a bare `（缺: ）`.
+- Fix: added shared predicate `model_entry_reason(models, model, *, allow_non_usd=False)` —
+  `model not in models` → `model_unregistered`, everything else delegates to
+  `entry_block_reason` (a `null` value remains `entry_not_object:NoneType`, the AB-17
+  judgment); `run_b8_injection._price_entry_reason` drops its local absence branch and
+  delegates.
+- `cost_analysis` derives three disjoint buckets from that index: `missing_models` keeps
+  only true key absence; `unpriced_currency_models` keeps the AB-14 vocabulary;
+  `unpriced_model_reasons` carries the full mechanism map; when every entry is usable but
+  the combination cannot be summed, `unpriced_row_reason` is written
+  (`mixed_currencies:<L1/L2>` / `mixed_price_pairs`). Disclosure keys are written only
+  when non-empty, so the return domain is superset-only.
+
+### Changed — report advice by mechanism (pure-unregistered / no-observation text line-for-line unchanged)
+
+- When a real mechanism exists: `**成本不可计算**` + `**未计价机制**`, listing
+  "model (code)" per baseline and giving advice by code family (`entry_*`: fix the shape /
+  empty entry; `price_*`: fix the number; `mixed_*`: split and report separately).
+  "How to fill" is printed only when `missing_models` is non-empty.
+- Pure unregistered / no token observation: the legacy four lines are unchanged; the
+  per-row unpriced note keeps the legacy "missing / currency" segments and appends
+  `；未计价机制:` and `；行级:`.
+
+### Added — regression locks and mutation verification
+
+- `tests/test_experiments_cost_attribution_ag.py` **46 tests**: shared predicate 7 +
+  mechanism index 22 + row-level reasons 4 + rendering 10 + real-batch invariants 3.
+- AB-14 / AB-16 / AB-17 locks rewritten to the new bucket caliber (net 0 tests; a
+  registered caliber change, not accommodating a failure).
+- Mutation verification: **15/15 behavioral anchors red** (red 1–25; baseline 365 green,
+  collected constant 365, `compile()` before writing, sha256 byte-for-byte restore);
+  neutral comment-only control 0 red.
+
+### Close-out
+
+- Full suite: **10397 passed / 5 skipped / 0 failed** (collected 10402, +46 for AG),
+  178.78s; coverage lines **18491/19015 = 97.2443%**, branches **6675/7112 = 93.8555%**;
+  the 6 new statements / 2 arcs in `pricing.py` are fully exercised.
+- Pre-registration run: 10396 passed / 1 failed / 5 skipped (186.08s); the only failure
+  was the baseline guard (BASELINE not yet refreshed), green after the refresh.
+- Real batch: 522 rows (2 batches, model set `{"deepseek-flash"}`); 0 new disclosure keys,
+  the six cost-row cells (`aitester` / 174 / 662361 / 523895 / 0.0048 / USD) and
+  `注：1 个基线未计价——single_agent（缺: ）。` byte-identical.
+- `make gates` full chain re-run **alone, rc=0** (178s wall; in-chain pytest
+  **10397 passed / 5 skipped / 0 failed, 173.32s**, without `--cov`; the AO3 English
+  README header line lock advanced to "AG round" under its maintenance convention;
+  `json-strict` / `artifact-doc-consistency` / zero-assert gates all green).
+- Boundaries: row-level reasons surface only when every entry is usable (entry defects
+  take precedence); `missing_models` narrows in meaning; `allow_non_usd` admits only
+  decidable non-USD entries; archived reports are not rewritten. See booklet §8.
+
+## [Unreleased] — 2026-10-20 AF round: JSON writes closed to RFC 8259 + a repo-wide strict-JSON gate (zero LLM, $0)
+
+> This round adds no capability: it disposes AE review sections 5.6 (non-strict JSON
+> artifacts repo-wide, no gate) and 5.7 (`run_b8._write_json`'s `allow_nan=True`), and
+> corrects a measurement misreading in 5.6 with a dated erratum. Booklet:
+> `docs/reviews/JSON_STRICT_AF_2026-10-20.md`.
+
+### Added — strict serialization primitive `src/utils/json_strict.py`
+
+- `nonfinite_pointers(obj)` locates NaN/±Infinity recursively (including dict keys) and
+  returns JSON paths (`$.arms[1].cost`, `$.x[<key nan>]`); shared and self-referential
+  containers are neither duplicated nor followed forever.
+- `strict_json_dumps(...)`: any non-finite value raises `NonFiniteJSONError` (with paths
+  and the total count, "and N more" beyond five); otherwise
+  `json.dumps(..., allow_nan=False)` as a second line of defence.
+- **No silent null coercion**: a non-finite value usually signals an upstream defect, and
+  writing it as `null` would just be another kind of silence.
+
+### Fixed — four central write paths now serialize strictly
+
+- `src/utils/atomic_io.atomic_write_json`: the failure happens before the temp file is
+  created, so the old target is never touched.
+- `experiments/run_b8_injection._write_json`: aggregate reports can no longer emit bare
+  `NaN`/`Infinity`.
+- `experiments/run_b8_injection._Injection._record`: a record holding a non-finite value
+  now fails explicitly instead of writing a bad half line.
+- `src/observability/trace.py`, three serialization sites: "better to miss a record than
+  to write a bad one" is preserved -- a bad record is dropped whole with a warning while
+  **the file itself remains strictly parseable line by line**.
+
+### Fixed — `allow_nan=False` added to 41 direct write sites
+
+39 source files, 41 write sites (by file: `src/` 8, `experiments/` 17, `scripts/` 14;
+by site: 8 / 19 / 14). The gate re-scans all 41; violations: 0.
+
+### Added — repo-wide gate `scripts/gates/check_json_strict.py` (`make gates` + CI)
+
+- Artifact side: every `.json` / `.jsonl` from `git ls-files` is parsed strictly
+  (`.jsonl` line by line with line numbers), falling back to `rglob` outside git;
+  measured **7273 artifacts = 7271 strict + 2 registered exemptions + 0 violations**.
+- Source side: an AST scan of `src|experiments|scripts` -- `json.dump`, and any
+  `json.dumps` inside the argument chain of
+  `write`/`writelines`/`write_text`/`atomic_write_text`/`stdout.write`, must carry a
+  literal `allow_nan=False`; **300 source files, 0 sink violations**.
+- No vacuous green: an empty scan set fails outright; the 2 A20 historical truncated
+  traces are exempted per path, and **an exempt file that becomes strictly parseable is
+  reported as exemption drift**.
+
+### Changed — AE section 5.6 measurement erratum (append only, AE text untouched)
+
+AE's "68 files" was a text-grep count, not a count of bare-token violations: strict
+parsing of every controlled artifact found **0 violations**; the 69 files under
+`experiments/results/` (42 tracked) contain `NaN`/`Infinity` only inside string values
+(test names such as `test_sqrt_positive_infinity`, diagnostic text "x is NaN"), which is
+legal JSON. The lesson is mechanized as two locks: the gate never counts string-embedded
+text as a violation, and the serializer neither escapes nor deletes it.
+
+### Tests — 28 cases + 9/9 mutation anchors
+
+- `tests/test_json_strict_af.py`, **28 cases**: serializer path naming 8, atomic
+  write / run_b8 fail-closed 4, trace drop-not-corrupt 3, gate 7 (including a real-repo
+  run and "NaN inside a string is not a violation"), library-level 6.
+- Mutation anchors M1–M9 each turned red (8 / 1 / 2 / 2 / 3 / 2 / 1 / 1 / 1), zero
+  0-red anchors; baseline 28 passed, collected constant at 28, `compile()` before every
+  write, sha256 assertion after restore. M3/M4/M5 additionally trip the real-repo gate
+  case, showing the gate is an independent second lock against sink regressions.
+
+### Close-out
+
+- Full suite: **10351 passed / 5 skipped / 0 failed** (collected 10356, +28), 191.66s;
+  coverage lines **18486/19009 = 97.2487%**, branches **6674/7110 = 93.8678%**
+  (every new line covered).
+- Pre-registration run 10349 passed / 2 failed / 5 skipped: ① the baseline guard
+  (BASELINE not yet refreshed); ② **a real defect introduced this round** -- a CI step
+  `name` containing an unquoted `AF: ` caused a YAML ScannerError, caught by
+  `test_ci_yaml_parses`; quoting it turned the suite green, registered as a self-catch.
+- A **third** self-catch came from the `make gates` chain (the pre-existing AO3 header
+  lock): it still asserted "AE round" while the English README header had advanced to
+  AF -- the phrase was advanced per that lock's own maintenance convention (not a lock
+  relaxed to fit a failure), turning it green.
+- Close-out re-run: after those fixes `make gates` was re-run **alone**, rc=0,
+  10351 passed / 5 skipped / 0 failed in **183.51s** (the in-chain suite runs without
+  `--cov`; that is a different caliber from 191.66s and the two must not be interchanged).
+- No committed artifact rewritten; the 2 A20 historical truncated traces kept byte-exact
+  (per-path exemption + drift detection).
+- Boundaries: the gate only recognises a literal `allow_nan=False` (runtime-assembled
+  keyword arguments are outside the static scan); `tests/` is outside the sink scan;
+  `NaN` text inside strings stays legal; trace drop semantics are detailed in booklet
+  section 7.
 
 ## [Unreleased] — 2026-10-20 AE round: entry-level price admission of the run_b8 aggregator delegated to the shared predicate + test-side domain closure + stale-diff registration update (zero LLM, $0)
 
