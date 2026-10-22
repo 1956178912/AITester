@@ -3050,3 +3050,24 @@ BK 的总数从 78 更新到 79 时同时说明新增站点直接吃共享 `AST_
 （5 个后端 × 断言"不启动子进程"），且 trace 能区分 `probe_blocked`（按契约拒绝）与
 `probe_degraded`（探针自身故障）。判据：**凡是"同一代码在不同执行链下安全性不同"的模块，
 隔离级别必须作为输入显式传递，不能在模块内部推断。**
+
+---
+
+## 63. 附：BS 轮（2026-10-22）口径必须写进配置，不能只靠调用参数——同一命令行的两种 coverage 格式
+
+**① 同一个 `--cov-branch`，控制进程与 worker 写出的数据格式不同，直到 combine 才报错。**
+`pytest --cov=src --cov-branch -n 4` 实测：`.coverage`（控制进程）`line_bits=1 / arc=0`，
+四个 `.coverage.*`（worker）`line_bits=0 / arc=2438…23136`；`coverage combine` 抛
+`Can't combine branch coverage data with statement data`，整轮覆盖率不可得。
+根因不是命令写错，而是**分支口径只由 CLI 开关传递**：xdist 控制器 / 子进程没有这个
+参数，coverage 按配置默认（语句）写盘。数据文件的 `line_bits` 与 `arc` 表是唯一可核对
+的证据——日志只会给一句 URL，不指向"谁写错了格式"。
+
+**判据：任何"工件格式 / 统计口径"标志位，若只由调用方传参，必须同时写进配置并在测试里锁。**
+只在命令行传的参数对"非该入口"不可见；不同入口写出不可合并的工件时，失败点会远离
+根因（本轮失败在 combine，根因在 pyproject 缺 `[tool.coverage.run] branch`）。
+
+**② 棘轮的"余量够"不等于"可以抬水位"（AA-4 复述）。**
+本轮行余量 1.04pp、分支余量 1.78pp，均超过 0.5pp 步长，但水位仍取 CI ubuntu 口径、
+不上调：本地 macOS 与 ubuntu 的分支差实测 0.13pp，用本地余量抬水位会让 CI 必红。
+判据：**水位是跨平台契约，不是本地读数；余量只用来判断"是否需要人工去 CI 侧确认"。**

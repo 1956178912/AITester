@@ -7,6 +7,21 @@
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
 ## [Unreleased] — 2026-10-22 BP 轮：统计对照面把「这一行没记录污染级别」折成沉默——两种缺席在两个消费者手里去向不同（零 LLM，$0）
+## [Unreleased] — 2026-10-22 BS 轮：覆盖率口径写进配置（branch=true）+ 基线复算（零 LLM，$0）
+
+> 发现：`pytest --cov=src --cov-branch -n 4` 在本机直接崩在 combine——`.coverage`（控制进程）lines 1 / arcs 0，四个 worker 2.4k–23k 弧，同一命令行两种口径。详见 `docs/reviews/COVERAGE_CONFIG_BS_2026-10-22.md`。
+
+### 改了什么
+
+- `pyproject.toml` 新增 `[tool.coverage.run] branch = true`：分支口径不再只靠 CLI 开关，xdist 控制器 / 子进程等非 CLI 入口同口径写数据（CI 已带 `--cov-branch`，读数不变）。
+- `tests/test_packaging.py::test_coverage_branch_mode_is_pinned_in_config`：解析 TOML 锁定配置，缺失即红（失败信息写明"非 CLI 入口会写语句口径数据，覆盖率无法合并"）。
+- `BASELINE.yaml` 覆盖率段按本轮 `coverage.xml` 复算：行 **19526/20040 = 97.4351%**（97.44，+133/+136 行、未覆盖 511→514）、分支 **7148/7582 = 94.2759%**（94.28，+45/+50 弧、缺弧 429→434）；逐模块仅 base_agent 98.52（399/405）、graph_nodes 99.88（864/865）、graph_state 100.00（126/126）三项变动。
+
+### 测试
+
+- collected **12070** = passed **12065** + skipped 5 + failed 0（规范口径）；沙箱确认跑 **12051 passed / 19 skipped / 0 failed、202.70s / rc=0**。
+- 棘轮：行 97.44 ≥ 96.40（余量 1.04pp）、分支 94.28 ≥ 92.50（余量 1.78pp），`rc=0`；`check_branch_coverage` 门槛达标；**水位不上调**（AA-4：只认 CI ubuntu 口径）。
+
 ## [Unreleased] — 2026-10-22 BR 轮：第三方集中复审 27 项全部确认并收口（零 LLM，$0）
 
 > 报告 HEAD `53bbbbd4`，收口 HEAD `f49959b2`；P1=14 / P2=13、P0=0，逐项在收口 HEAD 复核，**零误报**。详见 `docs/reviews/BR_ROUND_CENTRAL_REVIEW_2026-10-22.md`。

@@ -101,6 +101,21 @@ def test_db_optional_extra_exists():
     assert not ({"pymysql", "dbutils"} & deps), "pymysql/DBUtils 不得在核心运行时依赖中"
 
 
+def test_coverage_branch_mode_is_pinned_in_config():
+    """BS 轮（2026-10-22）：覆盖率口径必须写进配置，不能只靠 `--cov-branch`。
+
+    xdist 控制器 / 子进程等非 CLI 入口拿不到该开关，会按语句口径写数据；
+    `pytest --cov=src --cov-branch -n 4` 实测报
+    `Can't combine branch coverage data with statement data`（主进程 lines-only、
+    四个 worker arc 数据），整轮覆盖率不可得。
+    """
+    with (PROJECT_ROOT / "pyproject.toml").open("rb") as f:
+        config = _tomllib.load(f)
+    assert config.get("tool", {}).get("coverage", {}).get("run", {}).get("branch") is True, (
+        "[tool.coverage.run] branch=true 缺失：非 CLI 入口会写语句口径数据，覆盖率无法合并"
+    )
+
+
 # N-漂移守卫（2026-10-05 复审）：setup.py 是非 PEP 517 回退路径，其
 # install_requires 曾与 pyproject [project].dependencies 漂移（多出
 # pymysql/DBUtils/pytest/pytest-cov——P2-5 分组后未同步回退路径），导致
