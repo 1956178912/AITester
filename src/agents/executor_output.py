@@ -13,6 +13,8 @@ import re
 import subprocess
 from typing import Any
 
+from src.utils.pytest_output import pytest_summary_counts
+
 logger = logging.getLogger(__name__)
 
 # ─── 预编译正则表达式（避免重复编译开销）─────────────────────────────────────
@@ -40,6 +42,21 @@ def build_error_info(last_result: subprocess.CompletedProcess[str], output: str)
         "returncode": last_result.returncode,
         "has_syntax_error": "SyntaxError" in output or "ImportError" in output,
         "has_runtime_error": any(e in output for e in ["TypeError", "ValueError", "ZeroDivisionError"]),
+    }
+
+
+def build_no_effective_pass_info(returncode: int, output: str) -> dict[str, Any]:
+    """rc==0 但摘要无有效通过（全 skip / xfail / deselect / 不可解析）的诊断。
+
+    BE（2026-10-21）：此类结果不是断言失败，不能记 ``test_failure``
+    （否则 Debugger 会按"代码有缺陷"方向空转）；单列 ``no_effective_pass``
+    让失败归因与工件口径如实区分"测试没跑起来"与"代码没修好"。
+    """
+    return {
+        "type": "no_effective_pass",
+        "returncode": returncode,
+        "message": "pytest rc==0，但摘要无有效通过证据（无 passed / 全 skip 或 deselected）——不能作为修复正确证据",
+        "summary": pytest_summary_counts(output),
     }
 
 

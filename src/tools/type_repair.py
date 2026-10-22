@@ -34,6 +34,13 @@ import os
 import re
 from typing import Any
 
+from src.utils.check_status import (
+    CHECK_DISABLED,
+    CHECK_ERROR,
+    CHECK_OK,
+    record_check_outcome,
+    worst_check_status,
+)
 from src.utils.env_utils import env_flag
 
 # T7（2026-10-11 独立评审落地）：_repair_with_llm 需在语法校验前剥离
@@ -86,10 +93,55 @@ def _static_type_check_backend() -> str:
     return os.getenv("TYPE_CHECK_BACKEND", "mypy").strip().lower()
 
 
+# ─── BG（2026-10-21）：检查器"不可测量"状态 ──────────────────────────────────
+# 缺陷族：历史实现对检查器崩溃/超时/退出码异常/报告损坏一律返回空 findings，
+# 与"检查器正常跑完且确实零疑点"不可区分；`mypy_findings_count=0` 又把
+# "未启用 / 未安装 / 检查通过 / 检查失败"折成同一个 0（假干净）。
+# 现每条返回路径经 outcome_sink 记录 {backend, status, reason}，layer 聚合为
+# static_check_status / static_check_outcomes。status 语义：
+#   ok          — 检查器执行完成且报告结构可信；findings（含空）可作证据
+#   disabled    — 开关关 / 后端未选中 / 输入为空：按设计未检查
+#   unavailable — 工具未安装：预期降级，不代表干净
+#   error       — 工具在但未产出可信报告（超时/崩溃/rc 异常/报告损坏）：
+#                 **不得**把 findings=[] 读成"无类型问题"
+STATIC_CHECK_OK = "ok"
+STATIC_CHECK_DISABLED = "disabled"
+STATIC_CHECK_UNAVAILABLE = "unavailable"
+STATIC_CHECK_ERROR = "error"
+
+
+def _record_static_check_outcome(
+    sink: list[dict[str, Any]] | None,
+    backend: str,
+    status: str,
+    reason: str = "",
+) -> None:
+    """记录单次检查器尝试的结果（sink 为 None 时零开销）。"""
+    if sink is not None:
+        sink.append({"backend": backend, "status": status, "reason": reason})
+
+
+def _overall_static_check_status(outcomes: list[dict[str, Any]]) -> str:
+    """聚合多次检查器尝试：任一 ok 即 ok；否则 error > unavailable > disabled。
+
+    语义：只要有一条可信报告，"零疑点"就可作为证据；全部失败时必须是
+    error，不能被 unavailable/disabled 掩盖成"没检查过所以没问题"。
+    """
+    statuses = {str(o.get("status", "")) for o in outcomes}
+    if STATIC_CHECK_OK in statuses:
+        return STATIC_CHECK_OK
+    if STATIC_CHECK_ERROR in statuses:
+        return STATIC_CHECK_ERROR
+    if STATIC_CHECK_UNAVAILABLE in statuses:
+        return STATIC_CHECK_UNAVAILABLE
+    return STATIC_CHECK_DISABLED
+
+
 def _run_mypy_findings(
     original_code: str,
     patched_code: str,
     file_path: str = "patched_code.py",
+    outcome_sink: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """2.1 mypy 静态类型检查（TYPE_CHECK_ENABLE=true 时启用）。
 
@@ -117,13 +169,16 @@ def _run_mypy_findings(
         疑点列表（与 _static_type_findings 同 schema，kind 前缀 "mypy_"）。
     """
     if not _static_type_check_enabled():
+        _record_static_check_outcome(outcome_sink, "mypy", STATIC_CHECK_DISABLED, "type_check_disabled")
         return []
     if not patched_code or not patched_code.strip():
+        _record_static_check_outcome(outcome_sink, "mypy", STATIC_CHECK_DISABLED, "empty_input")
         return []
     try:
         import mypy.api
     except ImportError:
         logger.debug("mypy 未安装，跳过静态类型检查（保持 ast 层口径）")
+        _record_static_check_outcome(outcome_sink, "mypy", STATIC_CHECK_UNAVAILABLE, "mypy_not_installed")
         return []
     # 仅消费高置信度错误类别（过滤 mypy 的"推断失败"类低置信度告警）
     _HIGH_CONFIDENCE_KINDS = frozenset(
@@ -173,6 +228,12 @@ def _run_mypy_findings(
                         "kind": f"mypy_{_cat.replace('-', '_')}",
                     }
                 )
+            # BG：mypy exit 0=无错误 / 1=有错误；>=2 为命令/文件级失败，
+            # 此时输出不可作为"检查完成"的证据（即便解析出若干行）。
+            if _exit_code in (0, 1):
+                _record_static_check_outcome(outcome_sink, "mypy", STATIC_CHECK_OK)
+            else:
+                _record_static_check_outcome(outcome_sink, "mypy", STATIC_CHECK_ERROR, f"mypy_rc_{_exit_code}")
             return findings
         finally:
             # 清理临时文件（保守：失败也不阻断主流程）
@@ -180,6 +241,7 @@ def _run_mypy_findings(
                 os.unlink(_tmp_path)
     except Exception as e:
         logger.debug("mypy 静态检查异常（保守降级为 ast 层）: %s", e)
+        _record_static_check_outcome(outcome_sink, "mypy", STATIC_CHECK_ERROR, "mypy_exception")
         return []
 
 
@@ -195,6 +257,7 @@ def _run_pyright_findings(
     original_code: str,
     patched_code: str,
     file_path: str = "patched_code.py",
+    outcome_sink: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """2.1 pyright 静态类型检查（TYPE_CHECK_ENABLE=true 且
     TYPE_CHECK_BACKEND=pyright 时启用）。
@@ -223,10 +286,13 @@ def _run_pyright_findings(
         kind 前缀 "pyright_"）。
     """
     if not _static_type_check_enabled():
+        _record_static_check_outcome(outcome_sink, "pyright", STATIC_CHECK_DISABLED, "type_check_disabled")
         return []
     if _static_type_check_backend() != "pyright":
+        _record_static_check_outcome(outcome_sink, "pyright", STATIC_CHECK_DISABLED, "backend_not_selected")
         return []
     if not patched_code or not patched_code.strip():
+        _record_static_check_outcome(outcome_sink, "pyright", STATIC_CHECK_DISABLED, "empty_input")
         return []
 
     # 高置信度规则白名单（过滤 pyright 的 suggest/information 级低置信度输出）
@@ -267,6 +333,7 @@ def _run_pyright_findings(
                 backend_cmd = None
         if backend_cmd is None:
             logger.debug("pyright 不可用（CLI 与 pyright-python 均未装），跳过静态类型检查")
+            _record_static_check_outcome(outcome_sink, "pyright", STATIC_CHECK_UNAVAILABLE, "pyright_not_found")
             return []
 
         with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False, encoding="utf-8") as _f:
@@ -275,9 +342,9 @@ def _run_pyright_findings(
 
         # 2026-10-11 全面优化批次：run_with_timeout 接线（孤儿风险消除）——
         # 文件后端 + 进程组 kill 保证必然返回；超时 → timed_out=True，
-        # stdout/stderr 为已捕获部分（可能为空），下方 JSON 解析自然降级为
-        # 空 findings（与历史 TimeoutExpired → 降级分支同口径，见下方
-        # except Exception 兜底）。
+        # stdout/stderr 为已捕获部分（可能为空）。
+        # BG（2026-10-21）：超时 / 未知退出码 / 报告损坏不再静默读成"零疑点"，
+        # 经 outcome_sink 上报为 error（见文件头状态语义）。
         from src.utils.process_utils import run_with_timeout
 
         proc = run_with_timeout(
@@ -294,16 +361,30 @@ def _run_pyright_findings(
         # 解析 JSON 输出：{"version":..., "generalDiagnostics": [...]}
         import json as _json
 
+        raw_stdout = proc.stdout or ""
         findings: list[dict[str, Any]] = []
-        try:
-            report = _json.loads(proc.stdout or "{}")
-        except _json.JSONDecodeError:
-            # JSON 解析失败 → 退回文本输出逐行解析（--outputjson 缺失时）
-            report = {}
+        report: dict[str, Any] = {}
+        report_error = ""
+        if not raw_stdout.strip():
+            report_error = "pyright_empty_output"
+        else:
+            try:
+                _parsed = _json.loads(raw_stdout)
+            except _json.JSONDecodeError:
+                report_error = "pyright_invalid_json"
+            else:
+                if not isinstance(_parsed, dict):
+                    report_error = "pyright_invalid_json"
+                elif not isinstance(_parsed.get("generalDiagnostics"), list):
+                    # pyright --outputjson 恒含该键（空检查也是 []）；缺失/类型
+                    # 错误说明报告结构不可信，不能当作"无诊断"。
+                    report_error = "pyright_missing_diagnostics"
+                else:
+                    report = _parsed
         diagnostics = report.get("generalDiagnostics") or []
         if not diagnostics:
-            # 兜底：从 stdout 文本逐行匹配（--outputjson 缺失时）
-            for _line in (proc.stdout or "").splitlines():
+            # 兜底：从 stdout 文本逐行匹配（--outputjson 缺失/损坏时）
+            for _line in raw_stdout.splitlines():
                 _m = _re_pyright_line.match(_line)
                 if not _m:
                     continue
@@ -333,9 +414,21 @@ def _run_pyright_findings(
                     "kind": f"pyright_{rule.replace('-', '_')}" if rule else "pyright_error",
                 }
             )
+        # 状态优先级：超时 > 退出码异常 > 报告损坏 > ok。诊断仍照常返回
+        # （能解析出的疑点不丢），但只有 ok 才允许把空 findings 当证据。
+        _rc = getattr(proc, "returncode", None)
+        if bool(getattr(proc, "timed_out", False)):
+            _record_static_check_outcome(outcome_sink, "pyright", STATIC_CHECK_ERROR, "pyright_timeout")
+        elif _rc not in (0, 1):
+            _record_static_check_outcome(outcome_sink, "pyright", STATIC_CHECK_ERROR, f"pyright_rc_{_rc}")
+        elif report_error:
+            _record_static_check_outcome(outcome_sink, "pyright", STATIC_CHECK_ERROR, report_error)
+        else:
+            _record_static_check_outcome(outcome_sink, "pyright", STATIC_CHECK_OK)
         return findings
     except Exception as e:
         logger.debug("pyright 静态检查异常（保守降级为 ast 层）: %s", e)
+        _record_static_check_outcome(outcome_sink, "pyright", STATIC_CHECK_ERROR, "pyright_exception")
         return []
     finally:
         if tmp_path:
@@ -707,8 +800,18 @@ def type_repair_layer(
 
     Returns:
         {"findings": 疑点列表, "repaired_code": 修订后代码（无修订时 = patched_code）,
-         "repaired": bool, "contract_ok": bool, "missing_symbols": [缺失符号]}
+         "repaired": bool, "contract_ok": bool, "missing_symbols": [缺失符号],
+         "contract_status"/"contract_reason"/"contract_outcomes": BI 轮补的契约
+         回环可测量性披露, "mypy_findings_count": int,
+         "static_check_status"/"static_check_outcomes": BG 轮补的检查器可测量性披露}
         任何失败路径都不抛异常，保守降级为"未修订 + 疑点记录"。
+
+    BI 轮（2026-10-22）口径：``contract_ok=True`` **单独不构成契约证据**——本函数
+    只在"LLM 层产出修订 + enforce_contract=true"时才真正回环跑符号比较，其余路径
+    （无疑点早退 / LLM 层未启用 / enforce_contract=false / 守卫抛异常）历史上同样
+    留 ``contract_ok=True``。读 ``contract_ok`` 必须与 ``contract_status`` 配对：
+    ``disabled`` = 按设计未比较，``error`` = 想比但没比成（含 patch_applier 侧
+    原文/补丁读不懂），只有 ``ok`` 才是"比较完成"。判定值逐字节不变。
 
     静态层来源（2.1 改进，TYPE_CHECK_ENABLE=true 时启用仓库级静态类型分析）：
     - ast 层：_static_type_findings（保守启发式，零外部依赖）；
@@ -722,15 +825,22 @@ def type_repair_layer(
     # 2.1 静态类型分析层（TYPE_CHECK_ENABLE=true 时生效；后端由
     # TYPE_CHECK_BACKEND 选择：pyright 优先探测，不可用/未指定时回退 mypy 口径）
     _checker_findings: list[dict[str, Any]] = []
+    _checker_outcomes: list[dict[str, Any]] = []
     if _static_type_check_backend() == "pyright":
-        _checker_findings = _run_pyright_findings(original_code, patched_code)
+        _checker_findings = _run_pyright_findings(original_code, patched_code, outcome_sink=_checker_outcomes)
         if not _checker_findings:
             # pyright 不可用（CLI/包均未装）时保守回退 mypy 口径，
             # 保持 TYPE_CHECK_ENABLE=true 的"仓库级静态分析"语义不丢失
-            _checker_findings = _run_mypy_findings(original_code, patched_code)
+            _checker_findings = _run_mypy_findings(original_code, patched_code, outcome_sink=_checker_outcomes)
     else:
-        _checker_findings = _run_mypy_findings(original_code, patched_code)
+        _checker_findings = _run_mypy_findings(original_code, patched_code, outcome_sink=_checker_outcomes)
     _mypy_findings = _checker_findings  # 保留历史变量名（结果 dict 的 mypy_findings_count 键口径不变）
+    _static_check_status = _overall_static_check_status(_checker_outcomes)
+    if _static_check_status == STATIC_CHECK_ERROR:
+        logger.warning(
+            "2.1 静态类型层不可测量（findings=[] 不可读作无类型问题）：%s",
+            "; ".join(f"{o.get('backend')}={o.get('status')}:{o.get('reason') or 'n/a'}" for o in _checker_outcomes),
+        )
     if _mypy_findings:
         # 去重：同 file+line+kind 只保留一条（ast 层优先，mypy/pyright 层补充）
         _existing_keys = {(f.get("file"), f.get("line", 0), f.get("kind")) for f in findings}
@@ -744,14 +854,28 @@ def type_repair_layer(
             len(_new_findings),
             len(findings),
         )
+    _contract_outcomes: list[dict[str, Any]] = []
     result: dict[str, Any] = {
         "findings": findings,
         "repaired_code": patched_code,
         "repaired": False,
         "contract_ok": True,
         "missing_symbols": [],
+        # BI（2026-10-22）：contract_ok 的可测量性披露。本函数只在"LLM 层产出
+        # 修订且 enforce_contract=true"时才回环跑命名契约守卫；其余路径（无疑点
+        # 早退 / LLM 层未启用 / enforce_contract=false / 守卫自身异常）从未做过
+        # 符号比较，历史一律留 contract_ok=true —— 消费方读成"契约成立"即假干净。
+        # 默认 disabled = 本次调用未评估契约（判定值与历史逐字节一致）。
+        "contract_status": CHECK_DISABLED,
+        "contract_reason": "contract_not_evaluated",
+        "contract_outcomes": _contract_outcomes,
         # 2.1 mypy 层观测（未启用时全 0，保持历史口径）
         "mypy_findings_count": len(_mypy_findings),
+        # BG（2026-10-21）：检查器是否可测量。status != "ok" 时
+        # mypy_findings_count=0 **不代表**"无类型问题"（见文件头状态语义）；
+        # outcomes 逐条记录 {backend,status,reason} 供实验/日志审计。
+        "static_check_status": _static_check_status,
+        "static_check_outcomes": _checker_outcomes,
     }
     if not findings:
         return result
@@ -777,9 +901,26 @@ def type_repair_layer(
                     ok, missing = check_naming_contract(
                         enforce_contract_ref if enforce_contract_ref is not None else original_code,
                         repaired,
+                        outcome_sink=_contract_outcomes,
                     )
                     result["contract_ok"] = ok
                     result["missing_symbols"] = missing
+                    result["contract_status"] = worst_check_status(str(o.get("status", "")) for o in _contract_outcomes)
+                    result["contract_reason"] = (
+                        ""
+                        if result["contract_status"] == CHECK_OK
+                        else next(
+                            (str(o.get("reason") or "") for o in _contract_outcomes if o.get("status") != CHECK_OK),
+                            "",
+                        )
+                    )
+                    if result["contract_status"] == CHECK_ERROR:
+                        logger.warning(
+                            "类型修复契约回环不可测量（reason=%s）：contract_ok=%s 只表示口径下的放行/拒绝，"
+                            "符号比较并未真正完成",
+                            result["contract_reason"] or "-",
+                            ok,
+                        )
                     if ok:
                         result["repaired_code"] = repaired
                         result["repaired"] = True
@@ -787,8 +928,12 @@ def type_repair_layer(
                     else:
                         logger.warning("类型修复修订破坏命名契约（缺失 %s），拒绝修订", missing)
                 except Exception as e:
+                    record_check_outcome(_contract_outcomes, "naming_contract", CHECK_ERROR, "contract_check_exception")
+                    result["contract_status"] = CHECK_ERROR
+                    result["contract_reason"] = "contract_check_exception"
                     logger.warning("类型修复契约回环检查异常（保守保留原补丁）: %s", e)
             else:
+                result["contract_reason"] = "contract_enforcement_disabled"
                 result["repaired_code"] = repaired
                 result["repaired"] = True
                 logger.info("类型修复成功（LLM 层，未做契约回环）")

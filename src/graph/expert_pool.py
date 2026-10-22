@@ -51,6 +51,14 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
+from src.utils.check_status import (
+    AST_UNREADABLE_ERRORS,
+    CHECK_DISABLED,
+    CHECK_ERROR,
+    CHECK_OK,
+    record_check_outcome,
+    unparseable_shape,
+)
 from src.utils.env_utils import env_flag
 
 logger = logging.getLogger(__name__)
@@ -171,14 +179,20 @@ def _expert_timeout_seconds() -> int:
     return max(30, min(n, 600))
 
 
-def _normalize_patch_for_voting(patch: str) -> str:
+def _normalize_patch_for_voting(patch: str, outcome_sink: list[dict[str, Any]] | None = None) -> str:
     """AST 归一化补丁文本（去空白 + 排序语句，供交叉验证投票用）。
 
     保守口径：仅做 AST 级归一化（忽略注释 / 空白差异），不做语义等价
     判定（那需要 LLM，超出本模块零成本约束）。归一化失败时返回原文
     （保守：无法归一化的补丁仍参与投票，不误杀）。
+
+    BK 轮披露（返回值不变）：走"原文参与投票"这条保守支时，逐候选记一条
+    ``patch_normalization=error:unparseable_patch:<形态>``——否则"两个候选文本
+    不同但 AST 相同"与"两个候选都没被归一化、纯按字面比对"在投票结果里同形，
+    读不出来。``outcome_sink`` 为 None 时零开销。
     """
     if not patch:
+        record_check_outcome(outcome_sink, "patch_normalization", CHECK_DISABLED, "empty_patch")
         return ""
     # 提取 ```python 代码块（与 base_agent._extract_python_code 同口径）
     code = patch
@@ -194,8 +208,15 @@ def _normalize_patch_for_voting(patch: str) -> str:
         normalized = "\n".join(
             sorted(ast.dump(stmt, annotate_fields=True) for stmt in tree.body if not isinstance(stmt, ast.Expr))
         )
+        record_check_outcome(outcome_sink, "patch_normalization", CHECK_OK, "normalized")
         return normalized or ast.dump(tree, annotate_fields=True)
-    except SyntaxError:
+    except AST_UNREADABLE_ERRORS:
+        record_check_outcome(
+            outcome_sink,
+            "patch_normalization",
+            CHECK_ERROR,
+            f"unparseable_patch:{unparseable_shape(code)}",
+        )
         return code  # 归一化失败 → 保守用原文参与投票
 
 
@@ -374,7 +395,12 @@ class ExpertPoolAgent:
         pool.shutdown(wait=False)
         return [c for c in candidates if c is not None]
 
-    def cross_validate(self, candidates: list[dict[str, Any]], min_agreement: int = 2) -> list[dict[str, Any]]:
+    def cross_validate(
+        self,
+        candidates: list[dict[str, Any]],
+        min_agreement: int = 2,
+        outcome_sink: list[dict[str, Any]] | None = None,
+    ) -> list[dict[str, Any]]:
         """交叉验证：对候选做两两一致性投票（AST 归一化 + 多数同意）。
 
         投票口径（保守、零 LLM 成本）：
@@ -401,6 +427,9 @@ class ExpertPoolAgent:
             candidates: generate_parallel 产出的候选列表。
             min_agreement: 最小同意数（默认 2 = 至少 1 个其他专家同意，
                 1 = 不投票仅按置信度排序）。
+            outcome_sink: BK 轮侧信道，逐候选披露 AST 归一化是否真的读到
+                （reason 前缀为专家维度名，便于定位是哪个候选没被归一化）。
+                排序与过滤口径完全不变。
 
         Returns:
             排序后的候选列表（每项追加 "verified_count" / "agreed_dimensions"
@@ -410,7 +439,14 @@ class ExpertPoolAgent:
         if not valid:
             return []
         # AST 归一化每个候选
-        normalized = [(c, _normalize_patch_for_voting(c["patch"])) for c in valid]
+        normalized: list[tuple[dict[str, Any], str]] = []
+        for c in valid:
+            _legs: list[dict[str, Any]] = []
+            _norm = _normalize_patch_for_voting(c["patch"], outcome_sink=_legs)
+            normalized.append((c, _norm))
+            for _leg in _legs:
+                _leg = {**_leg, "reason": f"{c.get('dimension')}:{_leg['reason']}"}
+                record_check_outcome(outcome_sink, _leg["check"], _leg["status"], _leg["reason"])
         # 两两投票（O(N²)，N ≤ 7 可接受）
         for i, (c, norm_i) in enumerate(normalized):
             agreed = [i]

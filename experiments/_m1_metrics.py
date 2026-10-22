@@ -35,6 +35,9 @@ import sys
 import tempfile
 from typing import Any
 
+from src.utils.pytest_output import pytest_summary_counts as _pytest_summary_counts
+from src.utils.pytest_output import suite_has_effective_pass
+
 logger = logging.getLogger(__name__)
 
 # 收集错误 / 语法错误的保守信号（pytest 输出子串，大小写不敏感匹配）。
@@ -100,7 +103,6 @@ _ORACLE_SUITE_TIMEOUT_MARKERS: tuple[str, ...] = ("failed: timeout (>", "timeout
 # 背景：oracle 仪器加固后，崩溃被 harness 转成 pytest.skip → 该测试的 rc=0；
 # 若只看退出码会把"仪器不可用"误判为"pass"（进而把 oracle 判成 silent/fp）。
 # 摘要行形如 "1 skipped in 0.12s" / "2 passed, 1 skipped in 0.3s"。
-_PYTEST_SUMMARY_COUNT_RE = re.compile(r"(\d+) (passed|failed|skipped|errors?|deselected|xfailed|xpassed)")
 _ORACLE_SKIP_SENTINEL = "oracle-unavailable:"
 
 
@@ -204,34 +206,11 @@ def suite_filters(generated_test: Any) -> tuple[str | None, str | None]:
     return _LLM_SUITE_KEYWORD_FILTER, _ORACLE_SUITE_KEYWORD_FILTER
 
 
-def pytest_summary_counts(output: str) -> dict[str, int]:
-    """从 pytest 摘要行解析结果计数（O-1：skip/unavailable 识别用）。
-
-    只解析标准摘要片段（``N passed`` / ``N skipped`` / ...）；重复出现取首个
-    出现值（pytest 摘要行只出现一次）。解析失败 → 空 dict（调用方保守处理）。
-    """
-    counts: dict[str, int] = {}
-    for match in _PYTEST_SUMMARY_COUNT_RE.finditer(str(output or "")):
-        kind = "error" if match.group(2).startswith("error") else match.group(2)
-        counts.setdefault(kind, int(match.group(1)))
-    return counts
-
-
-def _suite_has_effective_pass(output: str) -> bool:
-    """rc==0 的输出是否含有效通过证据：至少 1 个 ``passed`` 且无 ``failed``。
-
-    F03（2026-10-21 第三方审查 P1）：pytest 对"没有任何断言执行"的套件同样
-    返回 rc==0——全 skip / xfail / xpass / deselect 的摘要行里 ``passed==0``。
-    只看 rc 会把"没跑起来"计成有效 green，使 detection 的 fixed 侧与
-    repair 的 gold 侧各有一条假阳性通道（审计最小条件：buggy 红 + fixed
-    "1 skipped" → 旧实现返回 1.0）。
-
-    口径边界：**部分 skip 与真实 passed 并存仍算有效通过**（审查报告明确
-    警告"部分 skip 可以与有效断言通过并存"）；只拒绝 ``passed==0``。
-    摘要不可解析（空输出 / 自定义运行器）同样不算有效通过——fail-closed。
-    """
-    counts = pytest_summary_counts(output)
-    return int(counts.get("passed", 0)) > 0 and int(counts.get("failed", 0)) == 0
+# F03（BA 轮建立、BD 轮上移）：计数解析与「有效通过」谓词的唯一实现在
+# ``src/utils/pytest_output.py``。保留私有别名是因为本模块内约 20 个消费点
+# 与既有回归锁按 ``_suite_has_effective_pass`` 这个名字引用（同一对象）。
+pytest_summary_counts = _pytest_summary_counts
+_suite_has_effective_pass = suite_has_effective_pass
 
 
 def _suite_run_verdict(run: tuple[int, str, str] | None) -> str:

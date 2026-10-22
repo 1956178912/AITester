@@ -36,6 +36,16 @@ import ast
 import logging
 from typing import Any
 
+from src.utils.check_status import (
+    AST_UNREADABLE_ERRORS,
+    CHECK_DISABLED,
+    CHECK_ERROR,
+    CHECK_OK,
+    parse_error_text,
+    parses_as_module,
+    record_check_outcome,
+    unparseable_shape,
+)
 from src.utils.env_utils import env_flag
 
 logger = logging.getLogger(__name__)
@@ -79,8 +89,18 @@ def parse_edit_intents(value: Any) -> list[dict[str, str]]:
     return intents
 
 
-def apply_edit_intents(code: str, intents: list[dict[str, str]]) -> dict[str, Any]:
+def apply_edit_intents(
+    code: str,
+    intents: list[dict[str, str]],
+    outcome_sink: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     """确定性应用编辑意图（锚点唯一性 + 原子性 + AST 语法门）。
+
+    Args:
+        outcome_sink: BK 轮侧信道（None 时零开销）。旧口径下"原文读不懂 ⇒ 语法门
+            跳过 ⇒ ``ok=True``"与"原文读得懂、结果也读得懂 ⇒ ``ok=True``"在返回值
+            里同形；本参数把两侧的可读性分开披露，``ok`` / ``code`` / ``applied`` /
+            ``total`` / ``diagnostics`` 五个判定字段的取值逐字节不变。
 
     Returns:
         {"ok": bool, "code": str, "applied": int, "total": int,
@@ -89,7 +109,17 @@ def apply_edit_intents(code: str, intents: list[dict[str, str]]) -> dict[str, An
     total = len(intents)
     diagnostics: list[str] = []
     if not code.strip():
+        record_check_outcome(outcome_sink, "original_readability", CHECK_DISABLED, "empty_original_code")
         return {"ok": False, "code": code, "applied": 0, "total": total, "diagnostics": ["empty_original_code"]}
+    if not parses_as_module(code):
+        record_check_outcome(
+            outcome_sink,
+            "original_readability",
+            CHECK_ERROR,
+            f"unparseable_original:{unparseable_shape(code)}",
+        )
+    else:
+        record_check_outcome(outcome_sink, "original_readability", CHECK_OK, "original_parsed")
     working = code
     applied = 0
     for idx, intent in enumerate(intents, start=1):
@@ -105,14 +135,20 @@ def apply_edit_intents(code: str, intents: list[dict[str, str]]) -> dict[str, An
     # 错误不应误杀合法编辑；该场景由下游执行层自然暴露）
     try:
         ast.parse(working)
-    except SyntaxError as exc:
+    except AST_UNREADABLE_ERRORS as exc:
+        detail = parse_error_text(exc)
         try:
             ast.parse(code)
-        except SyntaxError:
-            diagnostics.append(f"result_syntax_error_preexisting:{exc.msg}")
+        except AST_UNREADABLE_ERRORS:
+            diagnostics.append(f"result_syntax_error_preexisting:{detail}")
+            record_check_outcome(
+                outcome_sink, "edit_result_readability", CHECK_ERROR, f"preexisting_unreadable:{detail}"
+            )
             return {"ok": True, "code": working, "applied": applied, "total": total, "diagnostics": diagnostics}
-        diagnostics.append(f"result_syntax_error:{exc.msg}")
-        logger.warning("编辑意图应用结果语法错误（%s），原子回退", exc.msg)
+        diagnostics.append(f"result_syntax_error:{detail}")
+        record_check_outcome(outcome_sink, "edit_result_readability", CHECK_ERROR, f"unparseable_result:{detail}")
+        logger.warning("编辑意图应用结果语法错误（%s），原子回退", detail)
         return {"ok": False, "code": code, "applied": 0, "total": total, "diagnostics": diagnostics}
+    record_check_outcome(outcome_sink, "edit_result_readability", CHECK_OK, "result_parsed")
     diagnostics.append(f"applied:{applied}/{total}")
     return {"ok": True, "code": working, "applied": applied, "total": total, "diagnostics": diagnostics}

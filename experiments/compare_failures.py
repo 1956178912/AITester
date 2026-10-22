@@ -90,15 +90,44 @@ def find_inverted_tasks(
     return inverted
 
 
-def load_state_artifact(raw_dir: str | None, task_id: str, baseline: str) -> dict[str, Any] | None:
-    """加载环节级状态落盘文件（--save-state 产物），不存在时返回 None。"""
+def load_state_artifact_status(raw_dir: str | None, task_id: str, baseline: str) -> tuple[dict[str, Any] | None, str]:
+    """加载环节级状态落盘文件并给出**为何**读不到（BO，2026-10-22）。
+
+    status ∈ {"ok", "no_raw_dir", "file_absent", "unreadable"}。改前本函数
+    位置（`load_state_artifact`）对损坏 JSON 直接 `json.load` 抛穿，一份坏件
+    就让整份报告中断；三种缺席又都返回 None，读者分不清"没落盘""件没了"
+    "件坏了"。缺席只做披露，不做归因，也不做崩溃。
+    """
     if not raw_dir:
-        return None
+        return None, "no_raw_dir"
     path = os.path.join(raw_dir, task_id, f"{baseline}.json")
     if not os.path.exists(path):
-        return None
-    with open(path, encoding="utf-8") as f:
-        return json.load(f)
+        return None, "file_absent"
+    try:
+        with open(path, encoding="utf-8") as f:
+            artifact = json.load(f)
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+        return None, "unreadable"
+    if not isinstance(artifact, dict):
+        return None, "unreadable"
+    return artifact, "ok"
+
+
+def load_state_artifact(raw_dir: str | None, task_id: str, baseline: str) -> dict[str, Any] | None:
+    """加载环节级状态落盘文件（--save-state 产物），不可用时返回 None。
+
+    需要区分"为什么不可用"请直接用 `load_state_artifact_status`。
+    """
+    return load_state_artifact_status(raw_dir, task_id, baseline)[0]
+
+
+# 缺席形态的人读文本（BO）：让"没落盘 / 件没了 / 件坏了"在报告里各不相同。
+_ABSENCE_TEXT = {
+    "ok": "可读",
+    "no_raw_dir": "未提供 raw 目录（跑批未加 --save-state）",
+    "file_absent": "该任务的环节件不存在",
+    "unreadable": "环节件不可读（JSON 损坏或顶层非对象）",
+}
 
 
 def _truncate(text: Any, limit: int = 600) -> str:
@@ -174,6 +203,9 @@ def build_report(
         f"- 生成时间: {datetime.now().isoformat(timespec='seconds')}",
         f"- 完整系统基线: `{full_baseline}`，简单基线: `{base_baseline}`",
         f"- 翻转任务数（{base_baseline} 通过 / {full_baseline} 失败）: {len(inverted)}",
+        # BO（2026-10-22）：整份报告的环节级证据面先自证——raw 目录没给时，
+        # 下文所有"环节产物"小节都只能是缺失声明，不能读成"这些臂没有产物"。
+        (f"- 环节级工件目录: `{raw_dir}`" if raw_dir else "- 环节级工件目录: 未提供（下文环节级对比只能声明缺席）"),
         "",
     ]
 
@@ -240,13 +272,28 @@ def build_report(
             f"- **疑似环节**: {_suspected_stage(full_r, base_r)}",
         ]
 
-        full_artifact = load_state_artifact(raw_dir, task_id, full_baseline)
-        base_artifact = load_state_artifact(raw_dir, task_id, base_baseline)
+        full_artifact, full_status = load_state_artifact_status(raw_dir, task_id, full_baseline)
+        base_artifact, base_status = load_state_artifact_status(raw_dir, task_id, base_baseline)
         if full_artifact is None and base_artifact is None:
             lines.append("- 环节级产物缺失：请重跑 benchmark 时加 `--save-state`。")
+            lines.append(
+                f"- 缺席形态（BO 披露，不互相折叠）: {full_baseline}={_ABSENCE_TEXT[full_status]}；"
+                f"{base_baseline}={_ABSENCE_TEXT[base_status]}"
+            )
             continue
 
-        if full_artifact:
+        # BO（2026-10-22）：单臂缺席不再静默——改前只有"两臂都缺"才有一行披露，
+        # 一臂可读时另一臂的"没落盘 / 件损坏"被渲染成什么都没有，读起来像
+        # "那一臂确实没有环节产物"。
+        if full_artifact is None:
+            lines.append(f"- {full_baseline} 环节级工件不可用：{_ABSENCE_TEXT[full_status]}（≠ 该臂无产物）。")
+        if base_artifact is None:
+            lines.append(f"- {base_baseline} 环节级工件不可用：{_ABSENCE_TEXT[base_status]}（≠ 该臂无产物）。")
+
+        # BO：判"有没有工件"用 is not None，不写 `if artifact:`——`{}` 是合法
+        # 的空产物（可读、但没带任何环节字段），旧写法把它和"件不存在"一起
+        # 渲染成什么都不说。
+        if full_artifact is not None:
             lines += [
                 "",
                 f"**{full_baseline} 环节产物**：",
@@ -255,7 +302,7 @@ def build_report(
                 f"- 生成测试代码: {_truncate(full_artifact.get('generated_test'), 400)}",
                 f"- 修复补丁: {_truncate(full_artifact.get('patch') or '（未触发）', 400)}",
             ]
-        if base_artifact:
+        if base_artifact is not None:
             lines += [
                 "",
                 f"**{base_baseline} 环节产物**：",
@@ -264,7 +311,7 @@ def build_report(
             ]
 
         # RAG 检索指标（若启用）
-        rag_stats = full_artifact.get("rag_stats") if full_artifact else None
+        rag_stats = full_artifact.get("rag_stats") if full_artifact is not None else None
         if rag_stats:
             lines.append(f"- RAG 检索记录: {json.dumps(rag_stats, ensure_ascii=False)}")
 

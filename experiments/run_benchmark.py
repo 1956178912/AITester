@@ -922,6 +922,27 @@ def _dump_state_artifacts(output_dir: str, task: BenchmarkTask, baseline: str, f
         # 显式登记进白名单，ADR-0032 的 logic_degraded ∧ m10_leaf_fallback
         # 可分离性变为**可机读**。
         "m10_leaf_fallback": final_state.get("m10_leaf_fallback"),
+        # BN（2026-10-22）：状态通道的落盘归位。BH→BM 五轮把"读不懂 ⇒ 判优"逐个
+        # 收成四值 status 并在判定侧/消费侧接上双读，但这些通道既不在本白名单、
+        # 也没进结果行。实测（scripts/tools/bn_dump_boundary_probe.py）：
+        # static/safety/oracle 三个检查通道的 status+outcomes 在**两道落盘边界**
+        # 都是"5 种运行时态 → 1 种落盘形状"（ok / error / unavailable / disabled /
+        # 键不存在逐字节同形）；contract_status 在结果行已披露、在 raw 仍被丢弃。
+        # 后果：归档里这些键 0 次出现（普查 1700 个 JSON + 9096 条 JSONL 轨迹行，
+        # 见 scripts/tools/bn_archive_status_census.py），"检查完成且零疑点"与
+        # "检查崩了 / 按设计没跑"事后不可复核——前几轮补的披露只活在内存里。
+        # 本轮只做归位：判定值与判定方向逐字节不变，历史工件一个字节不动，
+        # 新批次里默认档（通道未写入）落 null、写入了落真实取值。
+        "contract_status": final_state.get("contract_status"),
+        "static_check_status": final_state.get("static_check_status"),
+        "static_check_outcomes": final_state.get("static_check_outcomes"),
+        "safety_check_status": final_state.get("safety_check_status"),
+        "safety_check_outcomes": final_state.get("safety_check_outcomes"),
+        "oracle_check_status": final_state.get("oracle_check_status"),
+        "oracle_check_outcomes": final_state.get("oracle_check_outcomes"),
+        "detection_first_status": final_state.get("detection_first_status"),
+        "edit_intent_status": final_state.get("edit_intent_status"),
+        "deterministic_repair_status": final_state.get("deterministic_repair_status"),
         "task_metadata": task.metadata,
     }
     raw_dir = os.path.join(output_dir, "raw", task.task_id)
@@ -935,7 +956,7 @@ def _compute_contamination_risk_level(
     task_result: dict[str, Any],
     golden_patches: dict[str, str] | None,
 ) -> str:
-    """五、多维度污染检测：对单个任务计算污染风险等级（high/medium/low/not_applicable）。
+    """五、多维度污染检测：对单个任务计算污染风险等级（high/medium/low/unknown/not_applicable）。
 
     口径（与 experiments.contamination_check 一致）：
     - 取 task_result["patch"]（系统生成的补丁）与 golden_patches 中对应
@@ -943,7 +964,7 @@ def _compute_contamination_risk_level(
       补丁文本），调 patch_semantic_similarity 的多维度检测（token Jaccard +
       AST 语句骨架 LCS + 嵌入余弦/词袋余弦保守代理；EMBEDDING_BACKEND 接入
       真实嵌入库时自动升级为 CodeBERT 类语义余弦），综合得出 risk_level；
-    - 返回 "high" / "medium" / "low" / "not_applicable" 之一，写入 details[]
+    - 返回 "high" / "medium" / "low" / "unknown" / "not_applicable" 之一，写入 details[]
       的 contamination_risk_level 字段（供 analyze_results 的
       _contamination_cross_analysis 消费，区分"含污染样本"与"不含
       污染样本"的结果）。
@@ -953,8 +974,11 @@ def _compute_contamination_risk_level(
       为空）→ "not_applicable"（N7，2026-10-05 复审：合成数据集此前恒标
       "low"，把"检测没有发生"与"检测过且无重叠证据"混为一谈——前者
       应显式声明检测不适用，而非暗示低风险）；
-    - 检测器抛异常（补丁格式异常等）→ "low"（保守不阻断实验主流程；
-      检测已尝试、无重叠证据）；
+    - 检测器抛异常（补丁非文本、依赖导入失败等）→ "unknown"（BM 轮，
+      2026-10-22：此前折成 "low"，把"这条腿没测成"记进 statistical_analysis
+      的"干净组"分母——O22 在 _combined_risk_level 里修掉的就是同一个
+      fail-open，包装器漏改）。主流程仍不阻断（不抛异常），但崩了既不
+      判污染也不判干净，与两个消费侧已排除 unknown 的口径对齐；
     - 仅读 task_result["patch"]（LLM 修订后的最终补丁），不读中间态。
     """
     task_id = task_result.get("task_id", "")
@@ -980,8 +1004,8 @@ def _compute_contamination_risk_level(
         )
         return _level
     except Exception:
-        logger.debug("污染风险等级计算失败（保守标记 low）: task=%s", task_id, exc_info=True)
-        return "low"
+        logger.debug("污染风险等级计算失败（标记 unknown，不入干净组）: task=%s", task_id, exc_info=True)
+        return "unknown"
 
 
 def _compute_detection_rate(task: Any, final_state: dict[str, Any] | None) -> float | None:
@@ -1862,12 +1886,30 @@ def _build_task_result(
             "execution_trace": final_state.get("execution_trace"),
             # 1.3 命名契约符号守卫（守卫拒绝时 _patch_applier_node 写入）
             "contract_missing_symbols": final_state.get("contract_missing_symbols"),
+            # BL 轮（2026-10-22）：上一行的**读法**。contract_missing_symbols=null
+            # 在 contract_status≠ok 时只表示"没比出符号差异"，不是"契约成立"；
+            # 两个键必须一起落盘，否则归档里这两种情形折叠成同一件事（实测归档
+            # 8865 处 contract_missing_symbols 全是 None，历史无法回溯区分）。
+            "contract_status": final_state.get("contract_status"),
+            # BN 轮（2026-10-22）：另外三条静态预检通道的"读法"随值落盘。
+            # static/safety/oracle 的 status+outcomes 此前**两道落盘边界都不在**
+            # （5 种运行时态折成 1 种行形状，逐字节同形），结果行只带了
+            # contract_status 一条腿；findings 类键（type_repair_findings /
+            # oracle_findings）为空时的四种成因因此无法从工件区分。
+            # 纯新增列：passed / coverage / stop_reason 等判分字段一个不动。
+            "static_check_status": final_state.get("static_check_status"),
+            "static_check_outcomes": final_state.get("static_check_outcomes"),
+            "safety_check_status": final_state.get("safety_check_status"),
+            "safety_check_outcomes": final_state.get("safety_check_outcomes"),
+            "oracle_check_status": final_state.get("oracle_check_status"),
+            "oracle_check_outcomes": final_state.get("oracle_check_outcomes"),
             # 2.2 补丁后处理重采样统计（PATCH_RESAMPLE_ENABLE=true 时写入）
             "patch_resample_stats": final_state.get("patch_resample_stats"),
             # 五、多维度污染检测：对单任务计算 risk_level（high/medium/low/
-            # not_applicable）（供 analyze_results 的 _contamination_cross_analysis
+            # unknown/not_applicable）（供 analyze_results 的 _contamination_cross_analysis
             # 消费；无黄金补丁材料时返回 "not_applicable"——N7 口径：检测
-            # 不适用与"检测过且无重叠证据"的 "low" 区分）
+            # 不适用与"检测过且无重叠证据"的 "low" 区分；检测腿崩了返回
+            # "unknown"——BM 轮：崩了不折成最有利档 "low"）
             "contamination_risk_level": _compute_contamination_risk_level(
                 {"task_id": task.task_id, "patch": final_state.get("patch") or ""},
                 golden_patches,
@@ -2168,6 +2210,15 @@ def _build_task_result(
         # 1.3 命名契约符号守卫 / 2.2 重采样：失败分支无 final_state，
         # 各以 None 兜底保持键集合同构
         "contract_missing_symbols": None,
+        # BL：失败分支无 final_state，读法同样 None 占位（与上一行同数，保持键集合同构）
+        "contract_status": None,
+        # BN：失败分支同口径 None 占位（与成功分支新增的六键保持键集合同构）
+        "static_check_status": None,
+        "static_check_outcomes": None,
+        "safety_check_status": None,
+        "safety_check_outcomes": None,
+        "oracle_check_status": None,
+        "oracle_check_outcomes": None,
         "patch_resample_stats": None,
         # 五、多维度污染检测：失败分支无生成补丁（patch=None）→ 检测不适用
         # （N7 口径：与"检测过且无重叠证据"的 "low" 区分；成功分支走
@@ -2330,6 +2381,12 @@ def _build_risk_summary_for_result(final_state: dict[str, Any] | None) -> dict[s
         - 默认关（历史默认）时返回 `{"enabled": False}` 占位，保持结果键集合同构，
           不改变任何历史实验口径。
 
+    BM 轮（2026-10-22）：成功分支把 `final_state["contract_status"]` 逐字透传给
+    `build_risk_summary`。发布侧（BI/BL 轮）已经把该键写进工作流状态和结果行，
+    这里是实验侧最后一个"写了没人读"的消费点；它只驱动披露文本
+    （`contract_unmeasurable(...)`）与摘要里的读法字段，**不参与任何打分**。
+    失败分支没有最终状态，保持 `None`（="这条腿本轮没做"），不按 0 处理。
+
     Args:
         final_state: 任务最终状态 dict（成功分支）；None 表示失败分支
             （无最终状态，保守占位，不打风险分）。
@@ -2374,6 +2431,7 @@ def _build_risk_summary_for_result(final_state: dict[str, Any] | None) -> dict[s
         full_file_patch=None,
         budget_ratio=budget_ratio,
         budget_exceeded=budget_exceeded,
+        contract_status=final_state.get("contract_status"),
     )
 
 
@@ -4627,6 +4685,16 @@ def run_benchmark(
         # 多档位批次横比时分析侧无法直接分桶。config.ACTIVE_PROFILE 为
         # import 期 _apply_profile_presets 的生效值（None = 默认档 fast）。
         "profile": ACTIVE_PROFILE,
+        # BO（2026-10-22）：环节级工件落盘开关态入 provenance。`--save-state`
+        # 决定 raw/<task_id>/<baseline>.json 到底存不存在，而 raw 读侧的一切
+        # "工件缺席"折叠（根因归因、定位命中率、失败对比报告）都以它为唯一
+        # 前提。实测（scripts/tools/bo_raw_readside_fold_probe.py A 段）：246 份
+        # 批次 JSON 中该值出现 0 次、provenance 15 个键里也没有它，而 raw 是否
+        # 随归档留存是**逐批次**事实（磁盘 34 个 raw/ 目录，只有 88 份文件入库，
+        # `.gitignore:172` 忽略 `experiments/results/**`）⇒ 事后既不能证明"当初
+        # 没落盘"，也不能证明"落盘了但没归档"。本字段只对新批次生效，历史工件
+        # 一字节不动（同 BN 口径：归位不改判定，只补可复核性）。
+        "save_state": bool(save_state),
         "env_snapshot": _env_snapshot,
         "cache_enabled": os.environ.get("AITESTER_LLM_CACHE", "1") != "0",
         "cache_isolate_model": os.environ.get("AITESTER_CACHE_ISOLATE_MODEL", "1") != "0",

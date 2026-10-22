@@ -33,6 +33,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from src.utils.check_status import CHECK_ERROR, CHECK_UNAVAILABLE
 from src.utils.env_utils import env_flag
 
 logger = logging.getLogger(__name__)
@@ -55,6 +56,8 @@ _FAILURE_PATTERN_NAMES: tuple[str, ...] = (
     "execution_trace_missing",
     "budget_early_stop",
     "contract_break_rewrite",
+    # BL 轮（2026-10-22）：status 通道"跑了但没测成"的空结论不可读作干净
+    "check_unmeasurable",
     "import_break_after_rewrite",
     "repair_not_converging",
     "cross_file_topology_mismatch",
@@ -88,6 +91,9 @@ _PATTERN_TO_MAST: dict[str, str | None] = {
     "budget_early_stop": None,
     # 命名契约破坏重写 → 违反系统指令（禁止重写契约）
     "contract_break_rewrite": "Instruction violations",
+    # 静态检查腿没测成（error/unavailable）→ 验证环节形同虚设：结论以"没读出问题"
+    # 的形态冒充"验过没问题"（BL 轮；MAST 的 Inadequate verification 正是此类）
+    "check_unmeasurable": "Inadequate verification",
     # 重写破坏导入 → 违反任务/过程依赖（依赖图破坏）
     "import_break_after_rewrite": "Violation of task and process dependencies",
     # 修复不收敛（iteration 递增 correctness 恒 0）→ 优化目标与任务目标失调
@@ -136,6 +142,20 @@ def agent_telemetry_enabled() -> bool:
     return env_flag("AGENT_TELEMETRY_ENABLE")
 
 
+# ─── BL 轮（2026-10-22）：status 通道的判定侧读者 ────────────────────────────
+# 五个通道都是 src/utils/check_status.py 的四值词汇（ok / disabled / unavailable
+# / error），发布侧 BI→BK 已逐个补齐，判定侧此前一个读者都没有。
+_UNMEASURABLE_STATUS_KEYS: tuple[str, ...] = (
+    "contract_status",
+    "safety_check_status",
+    "static_check_status",
+    "oracle_check_status",
+    "check_status",
+)
+#: "跑了但没测出可信结论"的取值（disabled 是"按设计未检查"，不计入失败模式）
+_UNMEASURABLE_STATUSES: tuple[str, ...] = (CHECK_ERROR, CHECK_UNAVAILABLE)
+
+
 def _pattern_llm_empty_response_loop(record: dict[str, Any]) -> bool:
     """LLM 空响应循环：decision=debug + error_category=llm_empty_response。"""
     category = str(record.get("error_category", "")).lower()
@@ -173,6 +193,26 @@ def _pattern_contract_break_rewrite(record: dict[str, Any]) -> bool:
     """契约破坏重写：contract_missing_symbols 非空。"""
     missing = record.get("contract_missing_symbols") or []
     return bool(missing)
+
+
+def _pattern_check_unmeasurable(record: dict[str, Any]) -> bool:
+    """BL 轮（2026-10-22）：任一静态检查腿**跑了但没测出可信结论**。
+
+    本轮缺陷族的判定侧读者：``contract_missing_symbols=[]`` /
+    ``mypy_findings_count=0`` / ``oracle_findings=[]`` / 危险 API 差集为空，在
+    对应 ``*_check_status ≠ "ok"`` 时只表示"没读出问题"，不是"没有问题"。
+    这些 status 键此前在 ``src/`` 的判定侧读者为零（BL 手册 §3 的 A 腿普查：
+    11 个 status/outcome 通道里 8 个判定读点 = 0，其余 3 处——
+    ``contract_status`` ×2、``contract_reason`` ×1——都在生产模块
+    ``type_repair`` 内部自读，链路下游无人读），于是"没测成"在
+    周报里与"测过且干净"折叠成同一件事。
+
+    口径（保守）：
+    - 只认 ``error`` / ``unavailable``；``disabled``（按设计未检查）与 ``None``
+      （历史记录没有这个键，含全部归档）都不算命中 ⇒ 归档读数零变化；
+    - 纯观测：不改任何路由与判定，只把"没测成"计进失败模式命中。
+    """
+    return any(str(record.get(key, "")).lower() in _UNMEASURABLE_STATUSES for key in _UNMEASURABLE_STATUS_KEYS)
 
 
 def _pattern_import_break_after_rewrite(record: dict[str, Any]) -> bool:
@@ -238,6 +278,8 @@ _PATTERN_DETECTORS: dict[str, Any] = {
     "execution_trace_missing": _pattern_execution_trace_missing,
     "budget_early_stop": _pattern_budget_early_stop,
     "contract_break_rewrite": _pattern_contract_break_rewrite,
+    # BL 轮（2026-10-22）：status 通道的判定侧读者（消费 trace 的 5 个 *_check_status）
+    "check_unmeasurable": _pattern_check_unmeasurable,
     "import_break_after_rewrite": _pattern_import_break_after_rewrite,
     "repair_not_converging": _pattern_repair_not_converging,
     "cross_file_topology_mismatch": _pattern_cross_file_topology_mismatch,

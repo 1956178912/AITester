@@ -460,7 +460,11 @@ def main() -> None:
 
 
 def _print_r4_summary(batch_path: Path) -> None:
-    """R4：批次 M1 指标 + 三指标 + R52/R53 摘要打印（供人工/CI 判定批次质量）。"""
+    """R4：批次 M1 指标 + 三指标 + R52/R53 摘要打印（供人工/CI 判定批次质量）。
+
+    BM 轮（2026-10-22）口径：R4/N1 与 M1 三指标一样带"可测 k/n"——分母只数
+    该指标真正可测的行，不可测（None/缺键）行不再被算成"没回归/没测试错误"。
+    """
     with open(batch_path, encoding="utf-8") as f:
         d = json.load(f)
     print("\n" + "=" * 60)
@@ -478,8 +482,19 @@ def _print_r4_summary(batch_path: Path) -> None:
         )
         rep_rate = round(sum(1 for r in m1_meas if r["repair_rate"] == 1.0) / m1_denom * 100, 1) if m1_denom else None
         ff_rate = round(sum(1 for r in m1_meas if r["false_fix_rate"] == 1.0) / m1_denom * 100, 1) if m1_denom else None
-        regr_rate = round(sum(1 for r in det if r.get("regression_rate") == 1.0) / n * 100, 1) if n else None
-        te_rate = round(sum(1 for r in det if r.get("test_error_rate") == 1.0) / n * 100, 1) if n else None
+        # BM 轮（2026-10-22）：R4/N1 与上面 M1 三指标同口径——分母只用**可测**行。
+        # 此前用 n（全部行）：None/缺键行等于按"没回归 / 没测试错误"计分，而 0.0%
+        # 恰好是最好看的读数。实测归档 11197 行里 regression_rate 可测 0 行
+        # （8012 None + 3185 缺键），故这一路恒打印 0.0%；test_error_rate 可测
+        # 7206/11197，现口径 7.3% vs 可测口径 11.3%。不可测时明写"不可测"，
+        # 不再输出会被读成"零回归"的 0.0%。
+        regr_meas = [r for r in det if r.get("regression_rate") is not None]
+        te_meas = [r for r in det if r.get("test_error_rate") is not None]
+        regr_k, te_k = len(regr_meas), len(te_meas)
+        regr_rate = (
+            round(sum(1 for r in regr_meas if r["regression_rate"] == 1.0) / regr_k * 100, 1) if regr_k else None
+        )
+        te_rate = round(sum(1 for r in te_meas if r["test_error_rate"] == 1.0) / te_k * 100, 1) if te_k else None
         fl1 = [r.get("fl_at_k") or {} for r in det]
         fl1_hit = sum(1 for x in fl1 if x.get("fl_at_1") == 1.0)
         fl1_meas = sum(1 for x in fl1 if x.get("fl_at_1") is not None)
@@ -490,7 +505,11 @@ def _print_r4_summary(batch_path: Path) -> None:
         print(
             f"    M1 三指标（可测 {m1_denom}/{n} 任务）: detection={det_rate}% repair={rep_rate}% false_fix={ff_rate}%"
         )
-        print(f"    R4 regression_rate={regr_rate}% / N1 test_error_rate={te_rate}%")
+        regr_text = f"{regr_rate}%" if regr_rate is not None else "不可测（无可测行）"
+        te_text = f"{te_rate}%" if te_rate is not None else "不可测（无可测行）"
+        print(
+            f"    R4 regression_rate={regr_text}（可测 {regr_k}/{n}） / N1 test_error_rate={te_text}（可测 {te_k}/{n}）"
+        )
         if fl1_meas:
             print(f"    R8 FL@1 命中率: {fl1_hit}/{fl1_meas} ({round(fl1_hit / fl1_meas * 100, 1)}%)")
 

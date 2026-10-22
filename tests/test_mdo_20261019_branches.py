@@ -30,7 +30,7 @@ class _M:
         self.line_no = 1
 
 
-_GREEN = mdo.TestRunResult(0, "", 0, 0, True)
+_GREEN = mdo.TestRunResult(0, "1 passed in 0.01s", 0, 0, True)
 
 
 def _base_args(mutants: list[_M]) -> dict[str, object]:

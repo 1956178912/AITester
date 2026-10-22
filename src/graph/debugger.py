@@ -370,17 +370,24 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
         _det_result: dict[str, Any] | None = None
         if deterministic_repair_first_enabled() and state.get("deterministic_repair_status") is None:
             from src.tools.deterministic_repair import attempt_deterministic_repair
+            from src.utils.check_status import worst_check_status
 
+            _det_legs: list[dict[str, Any]] = []
             _det = attempt_deterministic_repair(
                 target_code=state["target_code"],
                 test_output=state.get("test_output") or "",
                 error_category=str(state.get("error_category") or ""),
+                outcome_sink=_det_legs,
             )
             _det_status = {
                 "attempted": bool(_det.get("attempted")),
                 "method": _det.get("method"),
                 "reason": _det.get("reason"),
                 "patch_produced": bool(_det.get("patch_code")),
+                # BK 轮：确定性路由自己的可测量性（目标读没读得懂、候选过没过 AST 门）。
+                # 旧口径只有 reason="no_matching_transformer"，读不懂与无线索同形。
+                "check_status": worst_check_status(str(_leg.get("status", "")) for _leg in _det_legs),
+                "check_outcomes": list(_det_legs),
             }
             if _det.get("patch_code"):
                 from src.tools.deterministic_repair import build_deterministic_debug_result
@@ -580,7 +587,10 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
             # None 时本参数零作用（维度表固定原序，历史口径零变化）。
             error_category=state.get("error_category"),
         )
-        verified = pool.cross_validate(candidates, min_agreement=2)
+        from src.utils.check_status import worst_check_status
+
+        _ep_legs: list[dict[str, Any]] = []
+        verified = pool.cross_validate(candidates, min_agreement=2, outcome_sink=_ep_legs)
         # G6 多 Agent 辩论收敛（EXPERT_POOL_DEBATE_ENABLE=true 时启用，默认关）：
         # 在 cross_validate 投票结果之上对 top-K 候选做"互辩修订"——
         # 产出一个综合修订版候选（吸收 top-K 共性修复点，规避各自弱点），
@@ -677,11 +687,11 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
                     _cp = str(c.get("patch") or "")
                     _applied = c.get("new_code")
                     if not _applied:
-                        _sok, _sreason, _applied2 = _static_validate(state["target_code"], _cp)
+                        _sok, _sreason, _applied2 = _static_validate(state["target_code"], _cp, outcome_sink=_ep_legs)
                         _applied = _applied2 if _sok else None
                     if _applied:
                         synth_inputs.append(CandidateResult(index=i, patch=_cp, new_code=_applied, static_passed=True))
-                synth_code, synth_labels = _synth_candidates(state["target_code"], synth_inputs)
+                synth_code, synth_labels = _synth_candidates(state["target_code"], synth_inputs, outcome_sink=_ep_legs)
                 if synth_code:
                     result["patch"] = synth_code
                     result["expert_pool_winner"] = True
@@ -704,6 +714,12 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
                     "winner_dimension": best.get("dimension"),
                     "agreed_dimensions": best.get("agreed_dimensions", []),
                     "expert_pool_applied": bool(best.get("patch")),
+                    # BK 轮：投票是否真的按 AST 归一化比对（读不懂的候选退回字面
+                    # 比对，两两"同意"的含义随之改变），以及多解合成的输入/结果
+                    # 到底读没读出来——排序与返回值不变，只补披露。聚合放在合成
+                    # 之后，让合成腿与投票腿一起进同一次读数。
+                    "check_status": worst_check_status(str(_leg.get("status", "")) for _leg in _ep_legs),
+                    "check_outcomes": list(_ep_legs),
                 }
             )
             logger.info(
@@ -773,6 +789,10 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
         "type_repair_findings": result.get("type_repair_findings", []),
         # 2.1 mypy 静态层观测（TYPE_CHECK_ENABLE=true 时非 0，未启用/未安装时 0）
         "mypy_findings_count": result.get("mypy_findings_count", 0),
+        # BG（2026-10-21）：检查器可测量状态；status="error" 时上一条 0
+        # 不得读作"无类型问题"（超时/崩溃/报告损坏 → 假干净的关闭点）
+        "static_check_status": result.get("static_check_status"),
+        "static_check_outcomes": result.get("static_check_outcomes"),
         # 1.3 分层压缩降级链：本轮是否因契约拒绝反馈而收紧了上下文
         # （contract_reject_feedback 非空时 True；实验分析"降级链触发率"消费）
         "downgrade_triggered": result.get("downgrade_triggered", False),
@@ -891,6 +911,11 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
             changed_lines=len([ln for ln in (result.get("patch") or "").splitlines() if ln.strip()]),
             changed_files=_changed_files_val,
             contract_missing_symbols=state.get("contract_missing_symbols"),
+            # BL 轮（2026-10-22）：空列表的**读法**必须和列表一起取。上一行单独
+            # 传 contract_missing_symbols 时，"契约比完且一个不缺"与"契约根本没
+            # 比成"落到同一个 impact=0.2 / low / auto_merge（BL 手册 §3 B1 实测
+            # 四行读数逐位相同）；status 只补披露，不把 error 翻成拒绝。
+            contract_status=state.get("contract_status"),
             full_file_patch=False,
             budget_ratio=_budget_ratio_val,
             budget_exceeded=_budget_exceeded_val,

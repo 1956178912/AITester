@@ -42,6 +42,7 @@ import os
 from dataclasses import dataclass, field
 from typing import Any
 
+from src.utils.check_status import CHECK_OK
 from src.utils.env_utils import env_flag
 
 logger = logging.getLogger(__name__)
@@ -119,16 +120,38 @@ def _confidence_factor(confidence: float | None) -> tuple[float, str]:
     return factor, reason
 
 
+def _contract_disclosure(contract_status: str | None) -> str:
+    """BL 轮（2026-10-22）：空缺失列表 + 不可测量 status 的**披露文本**。
+
+    缺陷族：发布侧（BI 轮）已经带上 ``contract_status``，判定侧仍只看列表真假。
+    ``status != "ok"`` 时 ``missing`` 为空只表示"没比出符号差异"（这条腿没跑 /
+    两侧读不懂），不是"命名契约成立"的证据。
+
+    口径：**只补披露，不改因子**。把 ``error`` 翻成"按契约破坏顶到 0.9"是一次
+    路由方向变更（``auto_merge`` → ``human_confirm``），按本仓既有规矩
+    （"阻断 / 策略切换须先有 A/B 数据与预注册判据"）不属于本轮范围。
+    """
+    if not contract_status or contract_status == CHECK_OK:
+        return ""
+    return (
+        f"contract_unmeasurable({contract_status}): 命名契约腿 status≠ok，"
+        "缺失符号为空只表示「没比出差异」，不是「契约成立」的证据"
+    )
+
+
 def _impact_factor(
     changed_lines: int | None,
     changed_files: int | None,
     contract_missing_symbols: list[str] | None,
     full_file_patch: bool | None = None,
+    contract_status: str | None = None,
 ) -> tuple[float, str]:
     """补丁影响面因子：行数 / 文件数 / 契约破坏 / 全文件替换。
 
     保守口径：任一强信号（契约缺失符号、全文件替换）直接顶到 0.9；
     行数与文件数按分段线性打分（small=0.2 / medium=0.5 / large=0.8）。
+
+    BL 轮：``contract_status`` 只是**读法**（空列表可不可信），不参与打分。
     """
     lines = int(changed_lines or 0)
     files = int(changed_files or 0)
@@ -146,6 +169,10 @@ def _impact_factor(
     if missing:
         factor = max(factor, 0.9)
         reasons.append(f"contract_missing({len(missing)}): 命名契约缺失符号")
+    else:
+        note = _contract_disclosure(contract_status)
+        if note:
+            reasons.append(note)
     if full_file_patch:
         factor = max(factor, 0.9)
         reasons.append("full_file_patch: 全文件替换路径")
@@ -180,6 +207,7 @@ def assess_task_risk(
     full_file_patch: bool | None = None,
     budget_ratio: float | None = None,
     budget_exceeded: bool | None = None,
+    contract_status: str | None = None,
 ) -> RiskAssessment:
     """按三因子加权模型评估单任务风险（纯数据，零 LLM 成本）。
 
@@ -191,6 +219,9 @@ def assess_task_risk(
         full_file_patch: 是否走全文件替换路径（True 即强风险信号）。
         budget_ratio: 预算消耗比例（consumed/limit，None 表示未配置预算）。
         budget_exceeded: 是否已触发预算超限（True 时预算因子直接顶格）。
+        contract_status: 命名契约腿的可测量状态（BL 轮）。``None`` = 本轮没做这条腿
+            （历史口径，无披露）；``"ok"`` = 空列表可作"契约成立"的证据；
+            其余取值 = 空列表**不可**作证据，只在 reasons 里披露，不改打分。
 
     Returns:
         RiskAssessment（risk_score / risk_level / approval_action / factors / reasons）。
@@ -208,7 +239,7 @@ def assess_task_risk(
 
     conf_score, conf_reason = _confidence_factor(confidence)
     impact_score, impact_reason = _impact_factor(
-        changed_lines, changed_files, contract_missing_symbols, full_file_patch
+        changed_lines, changed_files, contract_missing_symbols, full_file_patch, contract_status
     )
     budget_score, budget_reason = _budget_factor(budget_ratio, budget_exceeded)
 
@@ -226,6 +257,12 @@ def assess_task_risk(
         approval_action = "auto_merge"
 
     reasons = [conf_reason, impact_reason, budget_reason]
+    # BL 轮（2026-10-22）：披露必须在消费点可见。`reasons` 此前只随 RiskAssessment
+    # 返回、全仓无人读取（graph/debugger.py 只取 pause_requested / risk_level /
+    # approval_action），写在里面的"没比成"等于没写；现把它打成 WARNING。
+    _unmeasurable = [r for r in reasons if r.startswith("contract_unmeasurable(")]
+    if _unmeasurable:
+        logger.warning("G2 缺失符号列表不可作证据（判定不变）：%s", "; ".join(_unmeasurable))
     logger.info(
         "G2 风险分级：level=%s action=%s score=%.3f (conf=%.2f impact=%.2f budget=%.2f)",
         risk_level,
@@ -252,6 +289,7 @@ def build_risk_summary(
     full_file_patch: bool | None,
     budget_ratio: float | None,
     budget_exceeded: bool | None,
+    contract_status: str | None = None,
 ) -> dict[str, Any]:
     """构建 benchmark 结果行可直接 JSON 序列化的风险摘要 dict。
 
@@ -273,6 +311,8 @@ def build_risk_summary(
 
     Returns:
         可直接嵌入 JSON 的 dict（包含 enabled=False 占位，保持键集合同构）。
+        BL 轮起带 ``contract_status``：它是"缺失符号为空可不可信"的读法字段，
+        两个分支都写，取值与入参逐字相同（不参与任何打分）。
     """
     enabled = risk_approval_enabled()
     if not enabled:
@@ -283,6 +323,7 @@ def build_risk_summary(
             "approval_action": None,
             "factors": {},
             "reasons": [],
+            "contract_status": contract_status,
             "pause_requested": False,
         }
     result = assess_task_risk(
@@ -293,6 +334,7 @@ def build_risk_summary(
         full_file_patch=full_file_patch,
         budget_ratio=budget_ratio,
         budget_exceeded=budget_exceeded,
+        contract_status=contract_status,
     )
     # M12：medium/high 风险级别需要人工回路 → 请求暂停
     _needs_pause = result.approval_action in ("human_confirm", "force_review")
@@ -304,7 +346,12 @@ def build_risk_summary(
             result.risk_level,
             result.risk_score,
         )
-    return {"enabled": True, **result.to_dict(), "pause_requested": _needs_pause}
+    return {
+        "enabled": True,
+        **result.to_dict(),
+        "contract_status": contract_status,
+        "pause_requested": _needs_pause,
+    }
 
 
 __all__ = [

@@ -40,20 +40,27 @@
 
 4. **rc 分类按 pytest 官方退出码，invalid 单列不进分母**：
    - rc == 1（TESTS_FAILED，测试跑起来且有失败）→ **killed**；
-   - rc == 0（全部通过）→ **survived**；
-   - rc == 2/3/4/5（中断/收集错误/内部错误/用法错误/没收集到测试）或超时
-     → **invalid**（超时单独计 timeout）。理由：套件根本没成功运行时，
-     "被杀死"与"存活"都无法判定；把它算成存活会低估分数，算成杀死会虚增
-     分数，两种都会让指标失去鉴别力。故 invalid 单独披露，不参与
+   - rc == 0 **且摘要含有效通过**（至少 1 个真实 passed、0 failed）→
+     **survived**；
+   - rc == 2/3/4/5（中断/收集错误/内部错误/用法错误/没收集到测试）、超时，
+     以及 **rc == 0 但没有任何断言执行**（全 skip / xfail / deselect，摘要
+     不可解析）→ **invalid**（超时单独计 timeout）。理由：套件根本没成功
+     运行时，"被杀死"与"存活"都无法判定；把它算成存活会低估分数，算成
+     杀死会虚增分数，两种都会让指标失去鉴别力。故 invalid 单独披露，不参与
      mutation score = killed / (killed + survived)。
    注意这与 `experiments/mutation_testing._run_mutant_tests` 的**保守口径**
    （rc≠1 一律记存活）刻意不同：那里是给 LLM 测试打分的流水线，宁可低估；
    这里是度量项目自身测试强度，必须显式区分"测试弱"与"测试没跑起来"。
+   BF（2026-10-21）：pytest 对全 skip / xfail / deselect 的套件同样返回
+   rc==0，裸 rc 会把"没跑起来"记成 survived、把分数无证据地压低；判绿统一
+   走 `src.utils.pytest_output.run_has_effective_pass` 单一事实源。
 
 5. **green baseline 前置校验**：正式执行前在副本上跑一遍**未变异**的测试命令。
    测试套件本身红着时，任何变异体的 rc=1 都可能是既有失败而非"被杀死"——
    分数会全部虚增。baseline 不绿时默认中止（退出码 2），只有显式
    `--allow-red-baseline` 才继续并在报告中标记 `measurement_valid=false`。
+   baseline 的"绿"同样是 rc==0 **且含有效通过**：全 skip 的基线没有执行
+   任何断言，其后的变异体也不可能被真实杀死（BF）。
 
 6. **确定性与可复算**：变异体按源码位置（行号、类型、描述）排序后
    **等距抽样**，同一份源码 + 同一 `--max-mutants` 得到同一变异体集合（ID 取
@@ -122,6 +129,7 @@ from experiments.mutation_testing import (  # noqa: E402
     Mutant,
 )
 from src.utils.process_utils import nested_pytest_env, run_with_timeout  # noqa: E402
+from src.utils.pytest_output import pytest_summary_counts, run_has_effective_pass  # noqa: E402
 
 # ─── 常量 ────────────────────────────────────────────────────────────────────
 
@@ -457,19 +465,31 @@ def build_test_command(template: str, python: str, test_files: Sequence[str]) ->
     return argv
 
 
-def classify_result(returncode: int | None, timed_out: bool) -> tuple[str, str]:
-    """按 pytest 官方退出码与超时标记分类，返回 (outcome, reason)。
+def _no_effective_pass_detail(output: str) -> str:
+    """rc==0 却无有效通过时的归因子串（点名摘要计数，便于区分"全 skip"与"解析失败"）。"""
+    counts = pytest_summary_counts(output)
+    if not counts:
+        return "unparseable_summary"
+    order = ("passed", "failed", "skipped", "xfailed", "xpassed", "deselected", "error")
+    return ",".join(f"{kind}={counts[kind]}" for kind in order if kind in counts)
 
-    口径（与模块 docstring 第 4 条一致）：rc==1 kill、rc==0 survive、
-    其余与超时一律 invalid（不进 mutation score 分母）；超时单独成类以便
-    归因"测试是否会被变异体拖死"。
+
+def classify_result(returncode: int | None, timed_out: bool, output: str) -> tuple[str, str]:
+    """按 pytest 官方退出码、超时标记与有效通过证据分类，返回 (outcome, reason)。
+
+    口径（与模块 docstring 第 4 条一致）：rc==1 kill；rc==0 **且含有效通过**
+    survive；其余与超时一律 invalid（不进 mutation score 分母）；超时单独成类
+    以便归因"测试是否会被变异体拖死"。rc==0 但全 skip / xfail / deselect
+    （没有断言执行）同样 invalid——裸 rc 会把"没跑起来"记成 survived。
     """
     if timed_out:
         return OUTCOME_TIMEOUT, "超时：已 killpg 整树终止（单独记 invalid，不进分母）"
     if returncode is None:
         return OUTCOME_INVALID, "no_returncode"
     if returncode == 0:
-        return OUTCOME_SURVIVED, ""
+        if run_has_effective_pass(returncode, output):
+            return OUTCOME_SURVIVED, ""
+        return OUTCOME_INVALID, f"no_effective_pass:{_no_effective_pass_detail(output)}"
     if returncode == 1:
         return OUTCOME_KILLED, ""
     reason = _PYTEST_EXIT_REASONS.get(returncode, f"unexpected_exit(rc={returncode})")
@@ -665,10 +685,11 @@ def _run_single_mutant(
     duration = time.perf_counter() - started
     timed_out = bool(getattr(proc, "timed_out", False))
     returncode = getattr(proc, "returncode", None)
-    outcome, reason = classify_result(returncode, timed_out)
+    output = f"{getattr(proc, 'stdout', '')}\n{getattr(proc, 'stderr', '')}"
+    outcome, reason = classify_result(returncode, timed_out, output)
     output_tail = ""
     if outcome in (OUTCOME_INVALID, OUTCOME_TIMEOUT):
-        output_tail = _tail(f"{getattr(proc, 'stdout', '')}\n{getattr(proc, 'stderr', '')}")
+        output_tail = _tail(output)
     return MutantOutcome(
         mutant_id=mutant_id,
         module=module_rel,
@@ -768,20 +789,37 @@ def _run_preflight(
             duration = time.perf_counter() - started
             timed_out = bool(getattr(proc, "timed_out", False))
             returncode = getattr(proc, "returncode", None)
-            green = returncode == 0 and not timed_out
+            output = f"{getattr(proc, 'stdout', '')}\n{getattr(proc, 'stderr', '')}"
+            green = run_has_effective_pass(returncode, output) and not timed_out
+            if green:
+                reason = ""
+            elif returncode == 0 and not timed_out:
+                reason = "baseline_no_effective_pass"
+            else:
+                reason = "baseline_not_green"
             report = {
                 "green": green,
                 "returncode": returncode,
                 "duration_s": round(duration, 3),
                 "timed_out": timed_out,
-                "reason": "" if green else "baseline_not_green",
-                "output_tail": "" if green else _tail(f"{getattr(proc, 'stdout', '')}\n{getattr(proc, 'stderr', '')}"),
+                "reason": reason,
+                "output_tail": "" if green else _tail(output),
             }
             reports[plan.module] = report
             status = "GREEN" if green else "RED"
             if not quiet:
                 print(f"[self-mutation] baseline {status}: {plan.module} ({duration:.2f}s)", flush=True)
             if not green and not allow_red_baseline:
+                if reason == "baseline_no_effective_pass":
+                    raise SelfMutationError(
+                        "未变异副本上的测试没有有效通过（baseline 非绿），本次测量无效："
+                        "rc==0 但摘要不含真实 passed（全 skip / xfail / deselect 同样返回 rc=0，"
+                        "没有任何断言执行）。"
+                        f" 模块={plan.module}。"
+                        f" 输出尾部:\n{report['output_tail']}\n"
+                        " 处理方式：确认该测试集合真实执行断言；确需继续请显式传 --allow-red-baseline"
+                        "（报告会标记 measurement_valid=false）。"
+                    )
                 raise SelfMutationError(
                     "未变异副本上的测试未通过（baseline 非绿），本次测量无效。"
                     f" 模块={plan.module} rc={returncode} timed_out={timed_out}。"
@@ -952,7 +990,10 @@ def render_markdown(report: dict[str, Any]) -> str:
     lines.append("## 测量口径")
     lines.append("")
     lines.append("- mutation score = killed / (killed + survived)；invalid/timeout **不进分母**。")
-    lines.append("- rc 分类：rc==1 killed、rc==0 survived、rc==2/3/4/5 或超时 invalid。")
+    lines.append(
+        "- rc 分类：rc==1 killed；rc==0 **且摘要含有效通过**（至少 1 个真实 passed、0 failed）survived；"
+        "rc==2/3/4/5、超时、以及 rc==0 但全 skip / xfail / deselect（没有断言执行）一律 invalid。"
+    )
     lines.append("- 变异在 tempfile 临时副本中进行，工作树零改动；子进程 pytest 经")
     lines.append("  `nested_pytest_env` 隔离宿主配置、经 `run_with_timeout` 整树超时终止。")
     lines.append("- 基线（未变异副本）执行结果单列于各模块 `baseline`，红基线默认阻断。")

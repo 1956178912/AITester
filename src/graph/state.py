@@ -317,7 +317,18 @@ class AITesterState(TypedDict, total=False):
     # mypy 静态层疑点数（原为 4 键之一，未在 TypedDict 声明 → LangGraph 静默
     # 丢弃，导致 TYPE_CHECK_ENABLE 的效果永远无法被度量）。缺省 0 = 未启用 /
     # 未安装 mypy。
+    # BG（2026-10-21）：0 本身**不区分**"未启用 / 未安装 / 检查通过 / 检查失败"，
+    # 读 count 时必须结合 static_check_status（ok 才是"检查完成且零疑点"）。
     mypy_findings_count: int | None
+    # BG（2026-10-21）：静态类型检查器整体可测量状态：
+    # "ok"（至少一条可信报告，findings 含空可作证据）/ "disabled"（开关关/
+    # 后端未选中/输入为空）/ "unavailable"（工具未安装，预期降级）/
+    # "error"（超时/崩溃/退出码异常/报告损坏—— findings=[] 不可读作干净）。
+    # 缺省 None = 本轮未执行类型修复层（旧路径 / 确定性接管）。
+    static_check_status: str | None
+    # BG：逐条检查器尝试 {backend, status, reason}（pyright 失败后回退 mypy
+    # 时两条都会出现）；缺省 None = 未执行。
+    static_check_outcomes: list[dict[str, Any]] | None
     # M14：1.3 分层压缩降级链本轮是否因契约拒绝反馈而收紧了上下文
     # （原 4 键之一，声明缺失被丢弃）。缺省 False = 未触发降级。
     downgrade_triggered: bool | None
@@ -340,6 +351,24 @@ class AITesterState(TypedDict, total=False):
     # 无契约拒绝。供 1.3 分层降级链（advance_context_tier）与实验分析消费
     # （"5/7 任务破坏 sqlfluff 插件命名契约"场景的直接可观测信号）
     contract_missing_symbols: list[str] | None
+    # BI（2026-10-22）：写盘前两道静态预检（命名契约符号守卫 + 危险 API 增量
+    # 守卫）的逐道可测量结果 {check, status, reason}；缺省 None = 本轮未执行
+    # 预检（补丁未改变代码 / 未走到写盘前分支）。
+    # ⚠️ status 为 error/disabled 时 missing_symbols 空集**不等于**"契约成立"、
+    # 危险增量空集**不等于**"无新增危险调用"——只表示"没测成"。
+    safety_check_outcomes: list[dict[str, Any]] | None
+    # BI：两道预检的整体状态（worst-of 聚合：独立检查，最差层决定整体）。
+    # ok / disabled / unavailable / error；缺省 None = 本轮未执行。
+    # 与 BG 的 static_check_status 同为四值词汇但聚合方向不同（BG 可互换后端
+    # 取 any-ok，BI 独立检查取 worst），口径详见 src/utils/check_status.py。
+    safety_check_status: str | None
+    # BL（2026-10-22）：``safety_check_status`` 是两道独立预检的 worst-of 聚合，
+    # 拿它给"命名契约缺失符号"定口径会把"危险 API 腿读不懂"错记到契约头上。
+    # 本键按检查腿拆出**命名契约这一腿自己**的可测量性（``status_for_check``
+    # 口径）：ok = 缺失列表可作"契约成立"证据；error/disabled = 只表示没比成；
+    # 缺省 None = 本轮该腿没记录（与 contract_missing_symbols=None 同义不同源，
+    # 消费侧必须两个一起读，见 risk_approval._contract_disclosure）。
+    contract_status: str | None
     # 2.2 改进（补丁后处理重采样）：_patch_applier_node 的
     # apply_patch_with_resample 统计 {ast_valid, resampled, resample_count,
     # success, tiered_context: 1.3 降级链档位名}；None = 未启用重采样
@@ -544,7 +573,18 @@ class AITesterState(TypedDict, total=False):
     # 写入）：check_assertions() 产出的疑点列表（每项 {type, line, message,
     # suggestion}）；None = 开关关 / 无生成内容 / 无疑点（历史口径不变）。
     # 供实验分析"恒真断言占比 / 魔数断言占比"消费（观测层，不参与路由）。
+    # BJ 轮起：为空时的四种成因由下方 oracle_check_status 区分（历史口径不变）。
     oracle_findings: list[dict[str, Any]] | None
+    # BJ（2026-10-22，缺陷族 F03 静态侧）：AST 断言一致性检查两条独立腿
+    # （assertion_consistency / target_type_inference）的逐腿可测量结果
+    # {check, status, reason}；缺省 None = Generator 本轮未运行。
+    # ⚠️ status 为 error/disabled 时 oracle_findings 空集**不等于**"断言无疑点"：
+    # 读不懂产物 / 开关关 / 无生成内容时同样为空，且 O4 强制重生成恒不触发。
+    oracle_check_outcomes: list[dict[str, Any]] | None
+    # BJ：上述两腿的整体状态（worst-of 聚合：独立检查，最差层决定整体；词表同
+    # BG/BI，见 src/utils/check_status.py）。注意与实验侧 oracle_quality_replay
+    # 的 oracle_status（规约 oracle 臂的 task["oracle"]["status"]）不是同一字段。
+    oracle_check_status: str | None
     # ANNEAL-lite 故障频率强化提示注入标志（FAILURE_FREQUENCY_ENABLE=true 且
     # 高频故障检测命中时 _debugger_node 写入 True）：供实验分析"哪些任务
     # 走了故障频率强化路径"消费。None = 开关关 / 非高频（历史口径不变）。
@@ -793,12 +833,20 @@ def create_initial_state(
         # 对抗性推理键 + 专家池元数据（原 4 键未在 TypedDict 声明 → LangGraph
         # 静默丢弃；expert_pool_meta 原为节点内死局部变量，现并入 state）
         mypy_findings_count=None,
+        # BG（2026-10-21）：静态类型检查器可测量状态（默认 None = 未执行）
+        static_check_status=None,
+        static_check_outcomes=None,
         downgrade_triggered=None,
         downgrade_tier=None,
         adversarial_check=None,
         expert_pool_meta=None,
         # 1.3 命名契约符号守卫（默认 None，_patch_applier_node 契约拒绝时写入）
         contract_missing_symbols=None,
+        # BI（2026-10-22）：写盘前静态预检可测量状态（默认 None = 本轮未执行）
+        safety_check_outcomes=None,
+        safety_check_status=None,
+        # BL（2026-10-22）：命名契约单腿可测量状态（默认 None = 本轮该腿无记录）
+        contract_status=None,
         # 2.2 补丁后处理重采样统计（默认 None，未启用重采样时为 None）
         patch_resample_stats=None,
         # 1.1 LLM 输出后处理层标签（默认 None，单文件分支运行后处理层时写入）
@@ -875,6 +923,10 @@ def create_initial_state(
         # AST 级断言一致性检查疑点（默认 None，ORACLE_VALIDATE_ENABLE=true 时
         # 由 _generator_node 写入疑点列表；开关默认关时恒 None，历史口径不变）
         oracle_findings=None,
+        # BJ 轮新增两键（默认 None = Generator 本轮未运行；运行时由
+        # _generator_node 恒写，含开关关时的 disabled 披露）
+        oracle_check_outcomes=None,
+        oracle_check_status=None,
         # ANNEAL-lite 故障频率强化提示是否注入（默认 None，FAILURE_FREQUENCY_ENABLE
         # =true 且高频故障检测命中时 _debugger_node 写入 True；开关默认关时恒 None）
         failure_frequency_applied=None,

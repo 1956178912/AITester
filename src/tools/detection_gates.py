@@ -32,6 +32,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from src.utils.env_utils import env_flag
+from src.utils.pytest_output import suite_has_effective_pass
 
 logger = logging.getLogger(__name__)
 
@@ -106,6 +107,12 @@ def _run_test_against_code(
             return {"green": False, "rc": res[0], "unavailable": True}
     except Exception:
         logger.warning("AC2 门执行错误判据不可用，回退历史 rc==0 口径", exc_info=True)
+    # BE（2026-10-21）：rc==0 但无有效通过（全 skip / xfail / deselect）→
+    # 不可判定（unavailable），不是"gold fixed 仍红"（over_red）也不是绿。
+    # 门①的语义是"buggy 红 + fixed 绿 = 缺陷特异"；fixed 侧没断言执行时
+    # 两侧证据都不存在，必须保守放行到历史路由。
+    if res[0] == 0 and not suite_has_effective_pass(res[1] + "\n" + res[2]):
+        return {"green": False, "rc": res[0], "unavailable": True}
     return {"green": res[0] == 0, "rc": res[0], "unavailable": False}
 
 

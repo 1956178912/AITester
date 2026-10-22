@@ -45,6 +45,7 @@ from typing import Any
 
 from src.utils.credential_scrub import scrub_os_environ
 from src.utils.env_utils import env_flag, env_flag_opt_out, env_float
+from src.utils.pytest_output import run_has_effective_pass
 
 logger = logging.getLogger(__name__)
 
@@ -1058,10 +1059,22 @@ class RepoExecutor:
                 env,
             )
             if res.returncode in (0, 1):
-                if res.returncode == 0:
+                _node_output = res.stdout + res.stderr
+                if res.returncode == 0 and run_has_effective_pass(0, _node_output):
                     passed_count += 1
+                elif res.returncode == 0:
+                    # BE（2026-10-21）：rc==0 但无有效通过（全 skip / xfail /
+                    # deselect）→ 记失败。F2P/P2P 判定消费 failed_cases
+                    # （f2p_all / p2p_no_regression 看"无失败用例"），若放行
+                    # 会把"没跑起来"读成"补丁正确"。
+                    failed_cases.append(
+                        {
+                            "name": node,
+                            "error": f"无有效通过（rc=0，摘要无 passed / 全 skip）: {_node_output.strip()[-400:]}",
+                        }
+                    )
                 else:
-                    failed_cases.append({"name": node, "error": (res.stdout + res.stderr).strip()[-400:]})
+                    failed_cases.append({"name": node, "error": _node_output.strip()[-400:]})
             elif res.returncode == 4:
                 # 节点解析失败（测试不存在 / 收集错误）：按失败记录
                 failed_cases.append(

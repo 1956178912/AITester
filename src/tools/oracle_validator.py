@@ -15,11 +15,18 @@ AST 级断言一致性检查（Oracle Validator，默认关）。
     - 检查 3（魔数检测）：断言中出现的未命名整型/浮点常量
       （非 0/1/2 的魔数），标记为"建议命名"疑点。
 
+BJ 轮（2026-10-22，缺陷族 F03 静态侧）：本模块的"空疑点列表"此前既可能是
+    "扫过且无疑点"，也可能是"根本没扫成"（输入空 / 文本读不懂 / 被测侧读不懂
+    ⇒ 类型推断通道失效）。现 `check_assertions` 接受可选 `outcome_sink`，
+    逐条披露 `{check, status, reason}`（词表与聚合方向取自
+    `src/utils/check_status.py` 单一事实源），判定值与判定方向逐字节不变。
+
 设计约束（与 ADR-0003 默认关 + ADR-0004 零默认依赖口径一致）：
     - `ORACLE_VALIDATE_ENABLE=false`（默认）时，本模块零行为变化；
     - 开关开启后，仅做 AST 静态分析（不消耗 LLM token），
       产出"疑点列表"（非阻断）供 Generator / 实验分析消费；
-    - 疑点列表为空时（无问题）返回 []，调用方保守降级不注入额外 prompt；
+    - 疑点列表为空时返回 []，调用方保守降级不注入额外 prompt；但 BJ 轮起
+      读取口径为"空 + status=ok 才是无疑点"，空 + error/disabled 只表示没读出；
     - 纯只读（不修改测试代码），疑点仅作观测层信号。
 
 使用方式（_generator_node / 实验分析集成）：
@@ -28,8 +35,9 @@ AST 级断言一致性检查（Oracle Validator，默认关）。
         check_assertions,
     )
 
+    outcomes: list[dict[str, str]] = []
     if oracle_validate_enabled():
-        findings = check_assertions(test_code, target_code)
+        findings = check_assertions(test_code, target_code, outcome_sink=outcomes)
         if findings:
             logger.info("断言一致性检查发现 %d 个疑点", len(findings))
 """
@@ -40,9 +48,19 @@ import ast
 import logging
 from typing import Any
 
+from src.utils.check_status import (
+    CHECK_DISABLED,
+    CHECK_ERROR,
+    CHECK_OK,
+    parses_as_module,
+    record_check_outcome,
+)
 from src.utils.env_utils import env_flag
 
 logger = logging.getLogger(__name__)
+
+#: markdown 代码围栏标记（整块围栏是"生成器把 ```python 块原样返回"的传输层伪影）
+_FENCE_MARKER = "```"
 
 # 魔数白名单：这些整型常量在测试中是常见的合法值（边界/单位/基数）
 _TOLERATED_INTS: frozenset[int] = frozenset({0, 1, 2, -1, 10, 100, 256, 1000})
@@ -66,6 +84,7 @@ def oracle_validate_enabled() -> bool:
 def check_assertions(
     test_code: str,
     target_code: str | None = None,
+    outcome_sink: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """对测试代码的 assert 语句做 AST 级一致性检查（零 LLM 成本）。
 
@@ -74,9 +93,23 @@ def check_assertions(
     2. 魔数断言：assert result == N（N ∉ 白名单）→ 建议命名常量；
     3. 类型不一致：assert f(x) == "str"（LHS 推断为 int，RHS 为 str）。
 
+    BJ 轮（2026-10-22）：``[]`` 此前是**四件事**共用的返回值——"扫过且无疑点"、
+    "输入为空"、"测试文本读不懂（从未扫描）"、加上被测侧的"读不懂 ⇒ 类型推断
+    通道静默失效"。生产实测语料（手册 §3）：10855 条 ``generated_test`` 中
+    153 条（77 空 + 76 读不懂）走的就是后两条腿，消费侧
+    ``_run_generator_postchecks`` 把它们读成 ``tautological_count = 0`` ⇒
+    O4"恒真断言强制重生成"对**读不懂的产物**永不触发。现按 sink 逐条披露
+    ``{check, status, reason}``，**返回值与判定方向逐字节不变**，只补可测量性。
+    唯一披露的口径变化：解析改走 ``parses_as_module``，孤立代理位文本触发的
+    ``UnicodeEncodeError``（``SyntaxError`` 之外的 ``ValueError`` 子类）不再抛穿
+    本函数，按"读不懂"处理（与 BH/BI 同口径，手册 §5 登记 + 锁）。
+
     Args:
         test_code: 生成的 pytest 测试代码字符串。
         target_code: 被测代码全文（可选，提供时增强类型推断精度）。
+        outcome_sink: 可选列表，逐条追加 ``{check, status, reason}``（None 零开销）。
+            至多两条：``assertion_consistency``（必记）与 ``target_type_inference``
+            （仅在提供了 ``target_code`` 时记）。
 
     Returns:
         疑点列表，每项含：
@@ -84,48 +117,75 @@ def check_assertions(
         - "line": 行号（int）
         - "message": 人类可读的描述
         - "suggestion": 改进建议（可选）
-        无问题时返回空列表。
+        无问题时返回空列表（**只在 sink 的 ``assertion_consistency`` 为
+        ``ok`` 时**才是"断言无疑点"的证据）。
     """
     if not test_code or not test_code.strip():
+        record_check_outcome(outcome_sink, "assertion_consistency", CHECK_DISABLED, "empty_input")
         return []
 
-    try:
-        tree = ast.parse(test_code)
-    except SyntaxError:
-        # 测试代码本身语法错误 → 无法 AST 分析，保守返回空（不阻断主流程）
+    if not parses_as_module(test_code):
+        # 测试代码本身读不懂 → 从未做过任何 assert 扫描，保守返回空（不阻断主流程）。
+        # 但"空疑点列表"此时**不是**"断言干净"的证据：BJ 轮前它与真干净逐字节相同。
+        record_check_outcome(outcome_sink, "assertion_consistency", CHECK_ERROR, _unparseable_test_reason(test_code))
         return []
+
+    tree = ast.parse(test_code)
 
     findings: list[dict[str, Any]] = []
+    assert_nodes = [node for node in ast.walk(tree) if isinstance(node, ast.Assert)]
+    record_check_outcome(
+        outcome_sink,
+        "assertion_consistency",
+        CHECK_OK,
+        "assertions_checked" if assert_nodes else "no_assert_statements",
+    )
 
     # 收集被测代码中的函数名（用于推断调用返回值类型）
     target_func_names: set[str] = set()
     target_return_types: dict[str, str] = {}
-    if target_code:
-        try:
-            target_tree = ast.parse(target_code)
-            for node in ast.walk(target_tree):
-                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                    target_func_names.add(node.name)
-                    # 推断返回类型（保守：只看简单的 return 常量）
-                    for sub in ast.walk(node):
-                        if isinstance(sub, ast.Return) and sub.value:
-                            rt = _infer_constant_type(sub.value)
-                            if rt:
-                                target_return_types[node.name] = rt
-                                break
-                            # 非常量返回值（如 BinOp）→ 保守推断为 int（算术运算）
-                            if isinstance(sub.value, ast.BinOp):
-                                target_return_types[node.name] = "int"
-                                break
-        except SyntaxError:
-            pass
+    if not target_code:
+        record_check_outcome(outcome_sink, "target_type_inference", CHECK_DISABLED, "target_not_provided")
+    elif not parses_as_module(target_code):
+        # 被测侧读不懂 → 类型推断表恒空 ⇒ type_mismatch 疑点通道实际关闭（旧口径静默）。
+        record_check_outcome(outcome_sink, "target_type_inference", CHECK_ERROR, "unparseable_target")
+    else:
+        target_tree = ast.parse(target_code)
+        record_check_outcome(outcome_sink, "target_type_inference", CHECK_OK, "target_parsed")
+        for node in ast.walk(target_tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                target_func_names.add(node.name)
+                # 推断返回类型（保守：只看简单的 return 常量）
+                for sub in ast.walk(node):
+                    if isinstance(sub, ast.Return) and sub.value:
+                        rt = _infer_constant_type(sub.value)
+                        if rt:
+                            target_return_types[node.name] = rt
+                            break
+                        # 非常量返回值（如 BinOp）→ 保守推断为 int（算术运算）
+                        if isinstance(sub.value, ast.BinOp):
+                            target_return_types[node.name] = "int"
+                            break
 
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Assert):
-            continue
+    for node in assert_nodes:
         _check_assert_node(node, test_code, target_func_names, target_return_types, findings)
 
     return findings
+
+
+def _unparseable_test_reason(test_code: str) -> str:
+    """读不懂测试文本时区分"整块 markdown 围栏"与"真语法错误"（仅用于披露）。
+
+    判据是"剥掉前导空白后以 ````` ``` ````` 开头"：实测语料（BJ 轮手册 §3）里
+    这类占 72/76——生成器把整块 ```` ```python … ```` 当作测试文件返回，属传输层
+    伪影；余下 4 条是产物本身的语法缺陷（缩进丢失等）。两者判定值相同（均返回
+    ``[]``），但归因不同，读数侧需要能分开。围栏出现在正文中间（模型答了一段
+    带代码块的解释）按 ``syntax`` 报——对 AST 而言它确实是语法错误，不自愈。
+    """
+    stripped = test_code.lstrip()
+    if stripped.startswith(_FENCE_MARKER):
+        return "unparseable_test:fenced_block"
+    return "unparseable_test:syntax"
 
 
 def _infer_constant_type(expr: ast.expr) -> str | None:

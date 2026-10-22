@@ -5,7 +5,7 @@
 #
 # 用法：make help 查看全部目标。
 
-.PHONY: help install lint format typecheck test test-cov docs-check env-budget baseline-check state-contract env-snapshot model-fingerprint tool-versions json-contract-sites json-strict prompt-artifacts-check preflight artifact-doc-consistency proc-hygiene perf-bench perf-check zero-assert self-mutation self-mutation-ci gates repro power self-check clean-traces build-check cpr-idr repair-replay cf-upper-bound corrected-metrics target-quality mutation-det-correlation swebench-disclosure pass-matched emse-stats
+.PHONY: help install lint format typecheck test test-cov docs-check env-budget baseline-check state-contract env-snapshot model-fingerprint tool-versions json-contract-sites json-strict prompt-artifacts-check preflight artifact-doc-consistency proc-hygiene perf-bench perf-check zero-assert ast-guards status-persistence self-mutation self-mutation-ci gates repro power self-check clean-traces build-check cpr-idr repair-replay cf-upper-bound corrected-metrics target-quality mutation-det-correlation swebench-disclosure pass-matched emse-stats
 
 PY := .venv/bin/python
 
@@ -76,6 +76,12 @@ artifact-doc-consistency:  ## 报告→工件数值对账（两个数字族：mu
 zero-assert:  ## 零断言测试守卫（U3，CI 阻断项；K 轮补入本地 gates，此前 HEAD 曾因此红而不自知）
 	$(PY) scripts/gates/check_zero_assert_tests.py
 
+ast-guards:  ## ast.parse 守卫捕获面棘轮（BK 轮，CI 阻断项：新增单腿守卫=抛穿 ValueError 族；豁免只允许变短）
+	$(PY) scripts/gates/check_ast_parse_guards.py
+
+status-persistence:  ## 状态通道落盘可达性棘轮（BN 轮，CI 阻断项：声明了却不落盘=归档里 0 出现、事后不可复核；豁免清单为空）
+	$(PY) scripts/gates/check_status_persistence.py
+
 self-mutation:  ## 自身测试套件变异测试（零 LLM；临时副本内变异；默认 3 个核心模块等距抽样 120/文件）
 	$(PY) scripts/tools/self_mutation.py
 
@@ -106,7 +112,7 @@ perf-check:  ## 性能回归比对（默认 non-blocking 告警；本地同机�
 tool-versions:  ## CI/pre-commit/lock 三方工具版本一致守卫（AK4 接入 CI）
 	$(PY) scripts/gates/check_tool_versions.py
 
-gates: lint format typecheck test docs-check env-budget baseline-check state-contract env-snapshot model-fingerprint tool-versions json-contract-sites json-strict artifact-doc-consistency zero-assert  ## 本地全部门禁（合并前自检；format = ruff format --check，2026-10-12 质量债清偿批次补入；zero-assert = K 轮补入，此前 CI 阻断但本地 gates 缺席；json-strict = AF 轮补入）
+gates: lint format typecheck test docs-check env-budget baseline-check state-contract env-snapshot model-fingerprint tool-versions json-contract-sites json-strict artifact-doc-consistency zero-assert ast-guards status-persistence  ## 本地全部门禁（合并前自检；format = ruff format --check，2026-10-12 质量债清偿批次补入；zero-assert = K 轮补入，此前 CI 阻断但本地 gates 缺席；json-strict = AF 轮补入；ast-guards = BK 轮补入，捕获面棘轮；status-persistence = BN 轮补入，落盘可达性棘轮）
 
 repro:  ## 复现主批次（详见 reproduce.sh；消耗 LLM 配额，勿自动触发）
 	bash reproduce.sh

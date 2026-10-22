@@ -34,7 +34,12 @@ from src.agents.executor_imports import (
     resolve_module_paths,
 )
 from src.agents.executor_modes import execute_docker, execute_sandboxed
-from src.agents.executor_output import build_error_info, parse_coverage, parse_failed_cases
+from src.agents.executor_output import (
+    build_error_info,
+    build_no_effective_pass_info,
+    parse_coverage,
+    parse_failed_cases,
+)
 from src.agents.executor_runtime import (
     cleanup_sandbox,
     cleanup_temp_file,
@@ -44,6 +49,7 @@ from src.agents.executor_runtime import (
 )
 from src.utils.credential_scrub import scrub_os_environ
 from src.utils.env_utils import env_flag
+from src.utils.pytest_output import run_has_effective_pass
 
 logger = logging.getLogger(__name__)
 
@@ -342,7 +348,10 @@ class ExecutorAgent:
 
             coverage = self._parse_coverage(output)  # type: ignore[attr-defined]
             failed_cases = self._parse_failed_cases(output)  # type: ignore[attr-defined]
-            passed = last_result is not None and last_result.returncode == 0
+            # BE（2026-10-21）：rc==0 不再等于 passed——全 skip / xfail /
+            # deselect 的套件同样 rc==0，但没有断言执行，不能作为修复正确
+            # 证据（F03 生产路径收口；谓词与 M1/MDO 同一事实源）。
+            passed = last_result is not None and run_has_effective_pass(last_result.returncode, output)
 
             result_dict = {
                 "passed": passed,
@@ -365,6 +374,10 @@ class ExecutorAgent:
             if self._kernel_sandbox_obs:
                 result_dict["kernel_sandbox_obs"] = self._kernel_sandbox_obs
 
+            if last_result is not None and last_result.returncode == 0 and not passed:
+                # 不是断言失败：单列 no_effective_pass，避免 Debugger 按
+                # "代码有缺陷"方向空转（详见 build_no_effective_pass_info）。
+                result_dict["error_info"] = build_no_effective_pass_info(last_result.returncode, output)
             if last_result and last_result.returncode != 0:
                 result_dict["error_info"] = self._build_error_info(last_result, output)  # type: ignore[attr-defined]
                 # N-2（2026-10-17）：沙箱启动/配置失败（profile 语法/exec 被拒/

@@ -25,7 +25,10 @@ G5 执行无关（testless）修复验证（默认关）。
     if testless_validation_enabled():
         result = run_testless_validation(original_code, patched_code, target_module)
         # result["passed"] / result["layers"] = {ast_symbol_guard, mypy,
-        # naming_contract, import_smoke: {"passed": bool, "detail": str}}
+        # naming_contract, import_smoke: {"passed": bool, "detail": str,
+        # "status": "ok|disabled|unavailable|error"[, "reason": str]}}
+        # result["validation_status"] / result["degraded_layers"]：整体可测量性
+        # —— passed=True 且 validation_status != "ok" 时不构成"验证通过"的证据。
 """
 
 from __future__ import annotations
@@ -38,6 +41,56 @@ from typing import Any
 from src.utils.env_utils import env_flag
 
 logger = logging.getLogger(__name__)
+
+# BH 轮（2026-10-21）：四层验证的状态词汇与 BG 轮 type_repair 的静态检查
+# 状态取值逐字一致（ok / disabled / unavailable / error），但**聚合方向相反**：
+# type_repair 的两个后端是同一检查的可替代实现（任一 ok ⇒ 整体可测量），
+# 本模块四层是相互独立的检查（任一层不可测量 ⇒ 整体验证不完整），故取
+# 最差者。语义：
+#   ok          本层确实执行完成且报告可信 ⇒ passed 可作证据
+#   disabled    按设计未检查（开关关 / 拒跑）⇒ passed=True 不是"干净"的证据
+#   unavailable 依赖或解释器缺席，预期降级 ⇒ 同上
+#   error       本层跑了但没产出可信报告（超时 / 崩溃 / rc 异常 / 输入不可解析）
+#               ⇒ **不可测量**，passed 不得当作"验证通过"
+VALIDATION_OK = "ok"
+VALIDATION_DISABLED = "disabled"
+VALIDATION_UNAVAILABLE = "unavailable"
+VALIDATION_ERROR = "error"
+
+# 最差者优先（error > unavailable > disabled > ok）。
+_STATUS_PRECEDENCE = (VALIDATION_ERROR, VALIDATION_UNAVAILABLE, VALIDATION_DISABLED, VALIDATION_OK)
+
+
+def _worst_layer_status(layers: dict[str, dict[str, Any]]) -> str:
+    """把逐层 status 聚合为整体验证状态（最差者优先）。
+
+    Args:
+        layers: ``run_testless_validation`` 收集的四层结果。
+
+    Returns:
+        聚合状态；未知/缺失 status 按 ``error`` 保守处理（fail-closed）。
+    """
+    statuses = [layer.get("status") for layer in layers.values()]
+    for candidate in _STATUS_PRECEDENCE:
+        if any(status == candidate for status in statuses):
+            return candidate
+    return VALIDATION_ERROR
+
+
+def _unparseable_side(original_code: str, patched_code: str) -> str | None:
+    """判定 AST 层的输入是否可解析（不可解析 ⇒ 该层根本没做比较）。
+
+    Returns:
+        ``"unparseable_original"`` / ``"unparseable_patched"`` / ``None``（两侧均可解析）。
+    """
+    import ast
+
+    for side, code in (("unparseable_original", original_code), ("unparseable_patched", patched_code)):
+        try:
+            ast.parse(code)
+        except (SyntaxError, ValueError):
+            return side
+    return None
 
 
 def testless_validation_enabled() -> bool:
@@ -70,10 +123,28 @@ def _run_ast_symbol_guard(original_code: str, patched_code: str) -> dict[str, An
     检查 4）同口径，但独立成层（testless 场景下不依赖 multi_candidate
     是否启用）。
 
+    BH 轮（2026-10-21）：不可解析输入此前被折成"守卫通过"——``_top_level_defs``
+    遇 SyntaxError 返回空集，于是原文不可解析 ⇒ 原符号集为空 ⇒ 差集恒空 ⇒
+    ``passed=True``，与"比较过且没删符号"逐字同形（实测：原文 ``def f(:`` +
+    正常补丁 → "AST 符号守卫通过（新增 1 个模块级定义，不影响守卫）"）。补丁
+    不可解析时更糟：报"补丁删除了原代码的模块级定义 ['f']"，把**解析失败**
+    归因成**删符号**。现两侧先判可解析性，任一侧不可解析即 status=error +
+    fail-closed（passed=False），不再冒充比较结论。
+
     Returns:
-        {"passed": bool, "detail": str}（detail 含被删符号清单）。
+        ``{"passed": bool, "detail": str, "status": str[, "reason": str]}``。
     """
     import ast
+
+    unparseable = _unparseable_side(original_code, patched_code)
+    if unparseable is not None:
+        side = "原始代码" if unparseable == "unparseable_original" else "补丁代码"
+        return {
+            "passed": False,
+            "status": VALIDATION_ERROR,
+            "reason": unparseable,
+            "detail": f"AST 符号守卫不可测量（{side}无法解析，未做任何符号比较）",
+        }
 
     def _top_level_defs(code: str) -> set[str]:
         names: set[str] = set()
@@ -90,21 +161,50 @@ def _run_ast_symbol_guard(original_code: str, patched_code: str) -> dict[str, An
     patched_defs = _top_level_defs(patched_code)
     removed = sorted(orig_defs - patched_defs)
     if removed:
-        return {"passed": False, "detail": f"AST 符号守卫失败：补丁删除了原代码的模块级定义 {removed}"}
+        return {
+            "passed": False,
+            "status": VALIDATION_OK,
+            "detail": f"AST 符号守卫失败：补丁删除了原代码的模块级定义 {removed}",
+        }
     added = sorted(patched_defs - orig_defs)
     detail = "AST 符号守卫通过"
     if added:
         detail += f"（新增 {len(added)} 个模块级定义，不影响守卫）"
-    return {"passed": True, "detail": detail}
+    return {"passed": True, "status": VALIDATION_OK, "detail": detail}
 
 
 def _run_mypy_layer(patched_code: str, target_module: str) -> dict[str, Any]:
-    """mypy 静态检查层（TYPE_CHECK_ENABLE 口径，缺 mypy 依赖时保守跳过）。"""
+    """mypy 静态检查层（TYPE_CHECK_ENABLE 口径，缺 mypy 依赖时保守跳过）。
+
+    BH 轮（2026-10-21）收口两类"不可测量 → 假读数"（实测于 mypy 1.15.0 /
+    Python 3.14.6）：
+
+    1. **恒不可测量（根因）**：命令行传 ``--silent-imports``，该拼写在现代
+       mypy 中已不存在（正确写法 ``--follow-imports=silent``）⇒ 每次调用都
+       rc=2 用法错误。旧代码把 ``mypy: error: unrecognized arguments`` 这一行
+       当作**被测代码的疑点**，于是干净代码 / 类型错误代码 / 语法错误代码
+       三者返回逐字节相同的 ``{"passed": False, "detail": "mypy 发现 1 处
+       问题…"}``——该层从未真正检查过任何代码，且把工具链失败记成代码缺陷。
+    2. **假干净**：rc ∉ {0,1} 且输出里没有 ``error:`` / ``note:`` 行时，旧代码
+       ``passed = len(error_lines) == 0`` ⇒ ``True``，detail "mypy 发现 0 处
+       问题"。实测两条可达路径：mypy 读不到目标文件（rc=2，输出
+       ``mypy: can't read file …``）、mypy 被信号杀死（rc=-9，输出为空）。
+
+    现按 rc 语义三态化：0 = 可信报告且零疑点（ok）；1 = 可信报告且有疑点
+    （ok）；其余（含 2 致命 / 3 内部错误 / 负数信号 / None）= 未产出可信报告
+    ⇒ status=error + fail-closed（passed=False），detail 携带原始输出而不再
+    声称"发现 N 处问题"。
+    """
     import subprocess
     import tempfile
 
     if not _layer_enabled("mypy", "TESTLESS_MYPY_ENABLE", "true"):
-        return {"passed": True, "detail": "mypy 层显式关闭（TESTLESS_MYPY_ENABLE=false），跳过"}
+        return {
+            "passed": True,
+            "status": VALIDATION_DISABLED,
+            "reason": "mypy_layer_disabled",
+            "detail": "mypy 层显式关闭（TESTLESS_MYPY_ENABLE=false），跳过",
+        }
 
     try:
         import mypy.api  # noqa: F401  # 探活（缺依赖时降级跳过，不阻断）
@@ -113,6 +213,8 @@ def _run_mypy_layer(patched_code: str, target_module: str) -> dict[str, Any]:
         return {
             "passed": True,
             "infra_degraded": True,
+            "status": VALIDATION_UNAVAILABLE,
+            "reason": "mypy_not_installed",
             "detail": "mypy 未安装（ADR-0004 零默认依赖口径），保守跳过",
         }
 
@@ -146,7 +248,10 @@ def _run_mypy_layer(patched_code: str, target_module: str) -> dict[str, Any]:
                 "-m",
                 "mypy",
                 "--no-error-summary",
-                "--silent-imports",
+                # BH（2026-10-21）：--silent-imports 是 mypy 早已移除的旧拼写，
+                # 现代 mypy 只认 --follow-imports=silent；沿用旧拼写会让本层
+                # 恒 rc=2 用法错误（见函数 docstring 缺陷 1）。
+                "--follow-imports=silent",
                 "--ignore-missing-imports",
                 "--allow-redefinition",
                 "--python-version",
@@ -161,19 +266,44 @@ def _run_mypy_layer(patched_code: str, target_module: str) -> dict[str, Any]:
         if getattr(result, "timed_out", False):
             raise subprocess.TimeoutExpired(cmd="mypy", timeout=60)
         output = (result.stdout + result.stderr).strip()
-        # mypy 返回码：0 = 无错误，1 = 有类型错误，2 = 致命错误，3 = 内部错误
-        if result.returncode == 0:
-            return {"passed": True, "detail": "mypy 通过（0 错误）"}
+        # mypy 返回码：0 = 无错误，1 = 有类型错误，2 = 致命错误，3 = 内部错误。
+        # 实测补充：目标文件含语法错误时 mypy 亦以 rc=2 报 `error: invalid
+        # syntax [syntax]`（它放弃对该文件做类型分析），因此 rc=2 一律按
+        # "未产出可信类型报告"处理，原始输出仍进 detail 供人工判读。
+        exit_code = result.returncode
         error_lines = [ln for ln in output.splitlines() if "error:" in ln or "note:" in ln]
-        detail = f"mypy 发现 {len(error_lines)} 处问题（前 5 条）：" + "；".join(error_lines[:5])
-        return {"passed": len(error_lines) == 0, "detail": detail}
+        if exit_code == 0:
+            return {"passed": True, "status": VALIDATION_OK, "detail": "mypy 通过（0 错误）"}
+        if exit_code == 1:
+            if not error_lines:
+                # rc=1 声称有疑点却解析不出任何疑点行 ⇒ 报告不可信，
+                # 不能把它读成"0 处问题"（与 BG 轮 pyright_empty_output 同型）。
+                return {
+                    "passed": False,
+                    "status": VALIDATION_ERROR,
+                    "reason": "mypy_rc1_no_findings",
+                    "detail": f"mypy rc=1 但未解析出疑点行（报告不可信）：{output[-400:] or '（无输出）'}",
+                }
+            detail = f"mypy 发现 {len(error_lines)} 处问题（前 5 条）：" + "；".join(error_lines[:5])
+            return {"passed": False, "status": VALIDATION_OK, "detail": detail}
+        return {
+            "passed": False,
+            "status": VALIDATION_ERROR,
+            "reason": f"mypy_rc_{exit_code}",
+            "detail": f"mypy 未产出可信报告（rc={exit_code}，本轮无类型证据）：{output[-400:] or '（无输出）'}",
+        }
     except (OSError, subprocess.TimeoutExpired) as e:
         # U5（2026-10-05 系统性审查落地）：fail-open 三态化——保持 passed=True
         # 保守跳过语义不变（ADR-0003），但新增 infra_degraded=True 显式区分
         # "mypy 真实通过" 与 "mypy 不可用跳过"（防降级被当稳健统计）。
+        # BH：补 status=error（跑了但没产出可信报告）；passed 口径不变——
+        # 已披露的降级路径本轮不动，只收口未披露的假干净。
+        reason = "mypy_timeout" if isinstance(e, subprocess.TimeoutExpired) else "mypy_exception"
         return {
             "passed": True,
             "infra_degraded": True,
+            "status": VALIDATION_ERROR,
+            "reason": reason,
             "detail": f"mypy 执行失败（保守跳过，不阻断）: {e}",
         }
     finally:
@@ -182,15 +312,51 @@ def _run_mypy_layer(patched_code: str, target_module: str) -> dict[str, Any]:
 
 
 def _run_naming_contract_layer(original_code: str, patched_code: str) -> dict[str, Any]:
-    """命名契约回归层（复用 patch_applier.check_naming_contract 的 Python AST 专属实现）。"""
+    """命名契约回归层（复用 patch_applier.check_naming_contract 的 Python AST 专属实现）。
+
+    BH 轮（2026-10-21）：``check_naming_contract`` 的 ``(True, [])`` 是三件事
+    共用的返回值——"比较过且无符号被删"、"原文/补丁不可解析所以没得比"、
+    "PATCH_CONTRACT_CHECK=false 恒放行"。旧代码一律渲染成
+    "命名契约回归通过（无被删模块级符号）"，实测原文 ``def f(:`` 时该句为
+    **假陈述**（从未做过比较）。本轮在 testless 侧前置判别（不改
+    patch_applier 的对外契约），把三者分开披露。
+    """
     if not _layer_enabled("naming_contract", "TESTLESS_NAMING_CONTRACT_ENABLE", "true"):
-        return {"passed": True, "detail": "命名契约层显式关闭（TESTLESS_NAMING_CONTRACT_ENABLE=false），跳过"}
+        return {
+            "passed": True,
+            "status": VALIDATION_DISABLED,
+            "reason": "naming_contract_layer_disabled",
+            "detail": "命名契约层显式关闭（TESTLESS_NAMING_CONTRACT_ENABLE=false），跳过",
+        }
+
+    unparseable = _unparseable_side(original_code, patched_code)
+    if unparseable is not None:
+        side = "原始代码" if unparseable == "unparseable_original" else "补丁代码"
+        return {
+            "passed": False,
+            "status": VALIDATION_ERROR,
+            "reason": unparseable,
+            "detail": f"命名契约回归不可测量（{side}无法解析，未做任何符号比较）",
+        }
+
+    if not env_flag("PATCH_CONTRACT_CHECK", True):
+        return {
+            "passed": True,
+            "status": VALIDATION_DISABLED,
+            "reason": "patch_contract_check_disabled",
+            "detail": "命名契约回归未执行（PATCH_CONTRACT_CHECK=false 恒放行），跳过",
+        }
+
     from src.tools.patch_applier import check_naming_contract
 
     ok, missing = check_naming_contract(original_code, patched_code)
     if ok:
-        return {"passed": True, "detail": "命名契约回归通过（无被删模块级符号）"}
-    return {"passed": False, "detail": f"命名契约回归失败：缺失符号 {sorted(missing)}"}
+        return {"passed": True, "status": VALIDATION_OK, "detail": "命名契约回归通过（无被删模块级符号）"}
+    return {
+        "passed": False,
+        "status": VALIDATION_OK,
+        "detail": f"命名契约回归失败：缺失符号 {sorted(missing)}",
+    }
 
 
 def _run_import_smoke_layer(
@@ -208,7 +374,12 @@ def _run_import_smoke_layer(
     import tempfile
 
     if not _layer_enabled("import_smoke", "TESTLESS_IMPORT_SMOKE_ENABLE", "true"):
-        return {"passed": True, "detail": "导入冒烟层显式关闭（TESTLESS_IMPORT_SMOKE_ENABLE=false），跳过"}
+        return {
+            "passed": True,
+            "status": VALIDATION_DISABLED,
+            "reason": "import_smoke_layer_disabled",
+            "detail": "导入冒烟层显式关闭（TESTLESS_IMPORT_SMOKE_ENABLE=false），跳过",
+        }
 
     # H-1 安全修复（2026-09-29）②：执行前对 patched_code 做危险 API 静态
     # 预检（patch_applier.dangerous_api_added 差集口径，与原代码做差集，
@@ -222,8 +393,12 @@ def _run_import_smoke_layer(
 
     _added = dangerous_api_added(original_code, patched_code)
     if _added:
+        # 拒跑是"按设计未执行导入"，不是导入通过的证据：status=disabled
+        # （passed 仍为 False，保持既有 fail-closed 拒绝语义）。
         return {
             "passed": False,
+            "status": VALIDATION_DISABLED,
+            "reason": "refused_dangerous_api",
             "detail": f"导入冒烟拒跑（危险 API 预检命中，不执行）: {sorted(_added)}",
         }
 
@@ -268,12 +443,20 @@ def _run_import_smoke_layer(
         if getattr(result, "timed_out", False):
             raise subprocess.TimeoutExpired(cmd=smoke_script, timeout=timeout)
     except subprocess.TimeoutExpired:
-        return {"passed": False, "detail": f"导入冒烟超时（>{timeout}s）"}
+        return {
+            "passed": False,
+            "status": VALIDATION_ERROR,
+            "reason": "import_smoke_timeout",
+            "detail": f"导入冒烟超时（>{timeout}s）",
+        }
     except OSError as e:
         # U5（2026-10-05 系统性审查落地）：三态化（同 mypy 层口径）
+        # BH：解释器起不来 ⇒ 本层没跑成，status=unavailable；passed 口径不变。
         return {
             "passed": True,
             "infra_degraded": True,
+            "status": VALIDATION_UNAVAILABLE,
+            "reason": "import_smoke_exception",
             "detail": f"导入冒烟执行失败（保守跳过，不阻断）: {e}",
         }
     finally:
@@ -281,9 +464,17 @@ def _run_import_smoke_layer(
             os.unlink(tmp_path)
 
     if result.returncode == 0:
-        return {"passed": True, "detail": f"导入冒烟通过（import {module_name} 成功）"}
+        return {
+            "passed": True,
+            "status": VALIDATION_OK,
+            "detail": f"导入冒烟通过（import {module_name} 成功）",
+        }
     tail = (result.stderr or result.stdout or "").strip()[-400:]
-    return {"passed": False, "detail": f"导入冒烟失败（import {module_name} 异常）：{tail or '（无输出）'}"}
+    return {
+        "passed": False,
+        "status": VALIDATION_OK,
+        "detail": f"导入冒烟失败（import {module_name} 异常）：{tail or '（无输出）'}",
+    }
 
 
 def sys_executable() -> str:
@@ -316,7 +507,11 @@ def run_testless_validation(
         target_module: 被测模块名（导入冒烟层用；空时用临时文件名兜底）。
 
     Returns:
-        验证结果 dict：{"passed": bool, "layers": {...}, "failed_layers": [name, ...]}
+        验证结果 dict：``{"passed": bool, "layers": {...}, "failed_layers":
+        [name, ...], "validation_status": str, "degraded_layers": [name, ...]}``。
+        **``passed=True`` 只在 ``validation_status == "ok"`` 时才是"四层都验证
+        过且无疑点"的证据**；status 为 disabled / unavailable / error 时
+        passed=True 仅表示"没有一层报告缺陷"，不表示验证发生过。
     """
     layers: dict[str, dict[str, Any]] = {}
     layers["ast_symbol_guard"] = _run_ast_symbol_guard(original_code, patched_code)
@@ -326,15 +521,29 @@ def run_testless_validation(
 
     failed = [name for name, layer in layers.items() if not layer.get("passed", True)]
     overall_passed = len(failed) == 0
+    # BH 轮（2026-10-21）：整体可测量性。四层相互独立，故取最差 status
+    # （与 BG 轮 type_repair 的"任一后端 ok ⇒ ok"方向相反，见模块常量注释）。
+    validation_status = _worst_layer_status(layers)
+    degraded = [name for name, layer in layers.items() if layer.get("status", VALIDATION_OK) != VALIDATION_OK]
     result: dict[str, Any] = {
         "passed": overall_passed,
         "layers": layers,
         "failed_layers": failed,
+        "validation_status": validation_status,
+        "degraded_layers": degraded,
     }
+    if degraded:
+        # 点名 layer=status:reason，使"passed=True"不会被单独读成验证完成。
+        logger.warning(
+            "G5 testless 验证可测量性降级（整体 status=%s）：%s",
+            validation_status,
+            ", ".join(f"{name}={layers[name].get('status')}:{layers[name].get('reason', '-')}" for name in degraded),
+        )
     logger.info(
-        "G5 testless 验证：%s（失败层: %s）",
+        "G5 testless 验证：%s（失败层: %s；status: %s）",
         "通过" if overall_passed else "未通过",
         ", ".join(failed) if failed else "无",
+        validation_status,
     )
     return result
 

@@ -68,6 +68,22 @@
   （reason=`probe_unavailable`）；单个变异体探针无效 → `probe_invalid`
   排除出分母；全部无效 → 不可测，不得输出 `measured` 零值。
 
+**BD（2026-10-21）：rc==0 不是有效通过（F03 同族）**
+
+pytest 对"没有任何断言执行"的套件同样返回 rc==0（全 skip / xfail / xpass /
+deselect）。MDO 有两个只看退出码的判绿点，本轮一并收口，谓词唯一实现在
+``src/utils/pytest_output.py::suite_has_effective_pass``：
+
+- **基线**：rc==0 且无执行错误但摘要里 ``passed==0`` → 整体
+  ``not_measurable``（reason=``test_not_green_on_base(no_effective_pass)``），
+  不再进入探针/变异体循环、不再输出 ``measured`` 的 MDR=0；
+- **变异体**：rc==0 但无有效通过 → ``no_effective_pass=True``，排除出
+  MTR/MDR 分母并单列披露（``mdo_no_effective_pass``）；全部变异体如此 →
+  ``not_measurable``（reason=``mutant_runs_no_effective_pass``）。skip 既不是
+  判别也不是崩溃，把它留在分母会以"未判别"压低 MDR。
+
+口径边界与 BA/BB/BC 一致：部分 skip 与真实 passed 并存仍算有效通过。
+
 **开关**：本模块为纯函数 + 子进程执行，无 LLM 调用、无默认行为变化；由调用方
 显式使用（不接入主链路，先作为测量层）。
 """
@@ -85,6 +101,8 @@ import sys
 import tempfile
 from dataclasses import dataclass, field
 from typing import Any, NamedTuple
+
+from src.utils.pytest_output import suite_has_effective_pass
 
 logger = logging.getLogger(__name__)
 
@@ -175,8 +193,13 @@ class MutantOutcome:
     # - rc>=2 / 5 / 负 rc：收集/编译中断、无测试、被信号终止；
     # - F12：rc==1 但失败为**纯运行异常**（ValueError / TypeError / ...）。
     crashed: bool = False
-    # 套件在该变异体上能否成功运行（rc in {0,1}；F12 后含运行异常 rc==1）
+    # 套件在该变异体上能否成功运行且至少一条断言真实通过（rc in {0,1}；
+    # F12 后含运行异常 rc==1）。rc==0 但无有效通过由 no_effective_pass 单列。
     ran: bool = False
+    # BD（2026-10-21，F03 同族）：rc==0 但摘要里没有任何真实 passed（全
+    # skip / xfail / xpass / deselect）→ 没有断言执行证据。排除出 MTR/MDR
+    # 分母；不得当作"未判别"压低 MDR，也不得记 crashed。
+    no_effective_pass: bool = False
     # **行为探针不可终止**（变异体自身挂死）→ 无判别信息，须出 MDR 分母。
     # 2026-10-11 修正：此前"探针超时"被折叠为 divergent=False，导致
     # ① 非终止变异体被误算为"等价"；② 修复后又会被算成"测试未判别"。
@@ -235,7 +258,11 @@ class MDOResult:
             # F13：探针无效（如 Windows 无 SIGALRM）单列披露——这些变异体
             # 不进入 MTR/MDR 分母，也不得被当作"行为相同"。
             "mdo_probe_invalid": sum(1 for o in self.outcomes if o.probe_invalid),
-            "mdo_evaluable": sum(1 for o in self.outcomes if not o.non_terminating and not o.probe_invalid),
+            # BD：rc==0 但套件没有真实 passed，不进入 MTR/MDR 分母。
+            "mdo_no_effective_pass": sum(1 for o in self.outcomes if o.no_effective_pass),
+            "mdo_evaluable": sum(
+                1 for o in self.outcomes if not o.non_terminating and not o.probe_invalid and not o.no_effective_pass
+            ),
         }
         if self.available and not self.pool_floor_ok:
             # 池不足 → 规范键一律 None（数字出口关闭），原始值移入审计字段
@@ -809,6 +836,8 @@ def compute_mdo(
     `assertion_failed`；纯运行异常（ValueError 等）记 `crashed`，MDR 不增。
     F13：base 行为探针无效 → `not_measurable(reason="probe_unavailable")`；
     单个变异体探针无效 → 排除出 MTR/MDR 分母；全部无效 → 不可测。
+    BD：rc==0 不再单独判绿——基线无有效通过 → 整体不可测；变异体无有效
+    通过 → 排除分母并单列；全部如此 → 不可测（不输出伪零值 MDR）。
     """
     if not (test_code or "").strip():
         return MDOResult(not_available_reason="no_test_code", status="not_measurable")
@@ -829,6 +858,15 @@ def compute_mdo(
     if base_rc != _RC_ALL_PASSED:
         return MDOResult(
             not_available_reason=f"test_not_green_on_base(rc={base_rc})",
+            status="not_measurable",
+        )
+    # BD（2026-10-21，F03 同族）：rc==0 不蕴含"断言跑过"。全 skip / xfail /
+    # deselect 的基线同样 rc==0 且无执行错误；若不在此短路，每个变异体也会
+    # 以 rc==0 收场 → 最终输出 measured 且 MDR=0（把"没跑起来"记成判别力）。
+    if not suite_has_effective_pass(base_out):
+        logger.warning("MDO 基线 rc==0 但无有效通过（全 skip/xfail/空摘要）→ 不可测")
+        return MDOResult(
+            not_available_reason="test_not_green_on_base(no_effective_pass)",
             status="not_measurable",
         )
 
@@ -877,7 +915,11 @@ def compute_mdo(
         rc = run[0]
         out = run[1]
         if rc == _RC_ALL_PASSED:
-            outcome.ran = True
+            # BD：rc==0 只有在至少一条断言真实通过时才是可评估运行。
+            if suite_has_effective_pass(out):
+                outcome.ran = True
+            else:
+                outcome.no_effective_pass = True
         elif _is_execution_error(rc, out):
             # 收集/语法错误、无测试、信号终止 → CRASH，不计判别
             outcome.crashed = True
@@ -910,7 +952,7 @@ def compute_mdo(
     # 给测试记功（不是测试触发的），也不能记过（测试无从判别）。计入分母
     # 会双向污染（实测：QuixBugs `cond_negate` 在负数输入上永不终止，会让
     # 强断言测试的 MDR 反低于弱断言测试）。
-    denom = [o for o in outcomes if not o.non_terminating and not o.probe_invalid]
+    denom = [o for o in outcomes if not o.non_terminating and not o.probe_invalid and not o.no_effective_pass]
     probe_invalid_count = sum(1 for o in outcomes if o.probe_invalid)
     if not denom and probe_invalid_count > 0:
         # F13：全部变异体探针无效（如 Windows 无 SIGALRM 场景）→ 不可测，
@@ -918,6 +960,17 @@ def compute_mdo(
         logger.warning("MDO 全部变异体行为探针无效（%d/%d）→ 不可测", probe_invalid_count, n)
         return MDOResult(
             not_available_reason="probe_unavailable",
+            status="not_measurable",
+            pool_size=n,
+            outcomes=outcomes,
+        )
+    no_effective_pass_count = sum(1 for o in outcomes if o.no_effective_pass)
+    if not denom and no_effective_pass_count > 0:
+        # BD：基线有效但所有变异体上套件都全 skip（条件化套件）→ 没有任何
+        # 断言执行证据，不得返回 measured 且 MDR=0。
+        logger.warning("MDO 全部变异体运行无有效通过（%d/%d）→ 不可测", no_effective_pass_count, n)
+        return MDOResult(
+            not_available_reason="mutant_runs_no_effective_pass",
             status="not_measurable",
             pool_size=n,
             outcomes=outcomes,

@@ -51,6 +51,7 @@ import tempfile
 from typing import Any
 
 from src.utils.env_utils import env_flag
+from src.utils.pytest_output import run_has_effective_pass
 
 logger = logging.getLogger(__name__)
 
@@ -232,7 +233,19 @@ def run_p2p_regression(
             verdict = "regression_failed" if fail_closed else "regression_error"
             return {"verdict": verdict, "returncode": rc, "output_tail": output[-500:]}
         if rc == 0:
-            return {"verdict": "verified", "returncode": 0, "output_tail": output[-500:]}
+            # BE（2026-10-21）：rc==0 + 有效通过才 verified。回归测试全 skip /
+            # xfail / deselect 时没有任何断言执行——"没跑起来"不能证明补丁
+            # 安全（与 rc>=2 同口径：默认 regression_error 不误杀好补丁，
+            # fail-closed 时 regression_failed 触发回滚）。
+            if run_has_effective_pass(rc, output):
+                return {"verdict": "verified", "returncode": 0, "output_tail": output[-500:]}
+            verdict = "regression_failed" if fail_closed else "regression_error"
+            return {
+                "verdict": verdict,
+                "returncode": 0,
+                "output_tail": output[-500:],
+                "no_effective_pass": True,
+            }
         # rc == 1 = 存在测试失败（断言级）→ 回归未过 → 触发自动回滚
         return {"verdict": "regression_failed", "returncode": rc, "output_tail": output[-500:]}
     except OSError as e:
