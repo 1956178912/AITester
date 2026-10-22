@@ -127,9 +127,9 @@ class TestReadmeEnHeader:
         "**BM round:"（同一写法：BL 的标记随之改为 "Previously **BL round:"，带冒号的
         最新字面在头部唯一命中），日期行仍为 2026-10-22；BN 轮（2026-10-22）推进至
         "**BN round:"（同一写法：BM 的标记随之改为 "Previously **BM round:"，带冒号的最新字面
-        在头部唯一命中），日期行仍为 2026-10-22；BO 轮（2026-10-22）推进至 "**BO round:"（同一写法：BN 的标记随之改为 "Previously **BN round:"，带冒号的最新字面在头部唯一命中），日期行仍为 2026-10-22；BP 轮（2026-10-22）推进至 "**BP round:"（同一写法：BO 的标记随之改为 "Previously **BO round:"，带冒号的最新字面在头部唯一命中；本轮头部叙述按 EN 惯例把轮次名加粗闭合，避免插入奇数个 `**` 打乱整行的粗体配对），日期行仍为 2026-10-22。"""
+        在头部唯一命中），日期行仍为 2026-10-22；BO 轮（2026-10-22）推进至 "**BO round:"（同一写法：BN 的标记随之改为 "Previously **BN round:"，带冒号的最新字面在头部唯一命中），日期行仍为 2026-10-22；BP 轮（2026-10-22）推进至 "**BP round:"（同一写法：BO 的标记随之改为 "Previously **BO round:"，带冒号的最新字面在头部唯一命中；本轮头部叙述按 EN 惯例把轮次名加粗闭合，避免插入奇数个 `**` 打乱整行的粗体配对），日期行仍为 2026-10-22；BQ 轮（2026-10-22）推进至 "**BQ round:"（同一写法：BP 的标记随之改为 "Previously **BP round:"，带冒号的最新字面在头部唯一命中；本轮头部叙述按 EN 惯例把轮次名加粗闭合，避免插入奇数个 `**` 打乱整行的粗体配对——BP 轮 §6⑤ 的口径：单逻辑行 + 剔除行内代码后奇偶必须为偶，本轮轮换后实测为偶），日期行仍为 2026-10-22。"""
         assert "Last updated: 2026-10-22" in README_EN_HEAD
-        assert "**BP round:" in README_EN_HEAD
+        assert "**BQ round:" in README_EN_HEAD
 
 
 class TestDeprecationTimeline:
