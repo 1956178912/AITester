@@ -287,4 +287,4 @@ make test-cov && make test && make gates
   ast-guards 136/78/20/0/20/19；status-persistence 10 通道 3 处全覆盖）。
   **第二跑存在的理由**：脏树上看不到未跟踪文件，干净树才是入库后的真实门禁
   状态——BP 轮漏掉的正是这一遍。
-- 回填后**链外复验**（文档锁子集 + json-strict 单跑）：读数回填于此。
+- 回填后**链外复验**（双语登记回填之后，只读或可自还原；按 BP 先例不叠第三链）：文档锁子集 7 份（`test_check_baseline_numbers` / `test_ao_batch` / `test_markdown_table_integrity` / `test_check_doc_links` / `test_al_batch` / `test_ar_batch` / `test_artifact_doc_consistency_gate`）**154 passed / 0 failed、4.86s**；`ruff format --check .` = **999 files already formatted**；`check_bilingual_docs.py --strict` 0 警告 / 0 失败；`check_doc_links.py --strict` 185 文件 / 899 链接 / 0 错误；`check_baseline_numbers.py` 零硬编码通过；`check_artifact_doc_consistency.py` 1 份文档 × 3 臂 × 11 列通过；`check_json_strict.py` 通过（工件 7274 份 = 严格 7272 + 登记豁免 2 + 违规 0）。
