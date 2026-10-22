@@ -289,16 +289,26 @@ class TestMoneyOnlyBlocking:
         assert out["cost"] is None
         assert out["token_money_reasons"] == {"by_model_not_object:str": 1}
 
-    def test_missing_attribution_is_unattributed_not_blocked(self) -> None:
+    def test_missing_attribution_blocks_full_amount(self) -> None:
+        """N04（2026-10-22 第三方复审 P1）：缺归因的正 token 不得由已知价格补齐。
+
+        历史口径（本测试原名 test_missing_attribution_is_unattributed_not_blocked）：
+        `unattributed_tokens=100` 但全额仍按整臂 100 计价——未知 token 被其他行
+        的单价覆盖。现在全额不可计算 + 点名 `attribution_missing_rows`，可归因
+        部分只作小计。
+        """
         out = _cost({"total_tokens": 100, "input_tokens": 40, "output_tokens": 60})
         assert out["unattributed_tokens"] == 100
         assert out["cost"] is None
-        assert not {"n_token_unreadable_rows", "n_token_money_blocked_rows"} & set(out)
+        assert out["n_unattributed_rows"] == 1
+        assert out["token_money_reasons"] == {"attribution_missing_rows:1": 1}
+        assert out["n_token_money_blocked_rows"] == 1
 
-    def test_empty_attribution_is_unattributed(self) -> None:
+    def test_empty_attribution_blocks_full_amount(self) -> None:
         out = _cost({"total_tokens": 100, "input_tokens": 40, "output_tokens": 60, "by_model": {}})
         assert out["unattributed_tokens"] == 100
-        assert not {"n_token_unreadable_rows", "n_token_money_blocked_rows"} & set(out)
+        assert out["cost"] is None
+        assert out["token_money_reasons"] == {"attribution_missing_rows:1": 1}
 
     def test_money_blocked_row_does_not_null_good_rows(self) -> None:
         rows = sa.cost_analysis(

@@ -362,11 +362,16 @@ def _record_response_usage(usage: Any, model_name: str) -> bool:
 
     AT（2026-10-21）：不再 `int(... or 0)` 归一。缺席 / null 保持历史 0；bool /
     小数 / 数字字符串 / 负数 / 非有限原值交写入口 `count_reason` 判定。拒绝时
-    调用已发生（`llm_calls` +1）但 token 不计入；预算开关开启按 O14 口径
-    fail-closed 抛错，关闭则披露后继续（历史"静默忽略"只保留给真正的记账异常）。
+    调用已发生（`llm_calls` +1）但 token 不计入；**存在有效预算**（env 开关或
+    实例级 cap，N02 起口径统一）时锁存 `budget.exceeded` 并抛不可重试的
+    `BudgetAccountingError`；无有效预算则披露后继续（历史"静默忽略"只保留给
+    真正无约束的记账异常）。
     """
     if not usage:
         return True
+    # N02：预算异常类型需在 except 分支可见（延迟导入，保持模块加载零依赖）
+    from src.budget.cost_budget import BudgetExceededError
+
     try:
         from src.budget.token_usage import record_usage
 
@@ -382,10 +387,17 @@ def _record_response_usage(usage: Any, model_name: str) -> bool:
             output_tokens = 0
         reasons = record_usage(input_tokens, output_tokens, model=model_name)
         if reasons:
-            from src.budget.cost_budget import _budget_enabled as _write_budget_enabled
+            # N02（2026-10-22 第三方复审 P1）：拒绝分支必须与"有效预算"同口径。
+            # 历史实现只查 COST_BUDGET_ENABLE，导致 set_task_token_cap() 注入的
+            # 实例级 cap（AM1：cap 自足生效，无需 env 开关）被绕过——坏 usage
+            # 既不累计也不锁死，重试/故障转移继续付费。
+            # 现：存在有效预算 → 锁存 exceeded（后续前置守卫/重试复查必停）+
+            # 抛不可重试的 BudgetAccountingError；无有效预算 → 保持历史披露口径。
+            from src.budget.cost_budget import BudgetAccountingError, budget_effective, mark_budget_exceeded
 
-            if _write_budget_enabled():
-                raise RuntimeError(f"token 记账被拒绝（fail-closed）: {','.join(reasons)}")
+            if budget_effective():
+                mark_budget_exceeded("token 写入被拒绝: " + ",".join(reasons))
+                raise BudgetAccountingError(reasons)
             return True
         # 5.4 预算守卫（默认关：未启用时 check_budget 恒 True，零行为变化）。
         # D1（N-5，2026-10-17）：USD 生产记账接线——N-4 实测此路径只传 token、
@@ -416,6 +428,12 @@ def _record_response_usage(usage: Any, model_name: str) -> bool:
                     pricing_source,
                 )
         return record_usage_and_check(input_tokens, output_tokens, usd_cost=usd_cost)
+    except BudgetExceededError:
+        # N02（2026-10-22 第三方复审 P1）：预算类异常是**控制流信号**，绝不能被
+        # 下方 O14 的 fail-closed 包装吞掉或降级成普通 RuntimeError——否则：
+        # ① env 关闭但实例 cap 生效时会被 `return True` 静默放行（分支 B）；
+        # ② env 开启时被包装为可重试 RuntimeError，重试器会再次发起请求。
+        raise
     except Exception as e:  # O14（2026-09-29 审查 P0）：记账异常 fail-closed。
         # 历史口径：except Exception: return True（统计失败不影响主流程）——
         # 缺陷：记账层任何异常（含磁盘满 / import 失败）都会静默把
@@ -616,7 +634,7 @@ def _call_zai(
             max_retries=max_retries,
             base_wait=_ZAI_RATE_LIMIT_WAIT_BASE_SECONDS,  # zai 限流基准 5 秒
             retryable_exceptions=_ZAI_RETRYABLE_EXCEPTIONS,
-            non_retryable_exceptions=(LLMEmptyResponseError,),
+            non_retryable_exceptions=(LLMEmptyResponseError, BudgetExceededError),
             pre_retry_check=_raise_if_budget_exceeded,
         )
     except BudgetExceededError:

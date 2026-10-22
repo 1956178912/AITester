@@ -1917,6 +1917,33 @@ def _apply_executor_patch_rollback(update: dict[str, Any], state: AITesterState,
         update["last_applied_repair"] = None
 
 
+def _runtime_probe_backend(agent: Any, result: dict[str, Any]) -> str:
+    """N01（2026-10-22 第三方复审 P1）：主执行实际隔离级别 → 探针可用后端。
+
+    探针只在宿主解释器里跑，因此只有在主执行本来就没有更强隔离可用时
+    （local / venv）才允许重放；Docker / 内核沙箱 / 隔离拒绝一律返回不可用
+    档位，由 `capture_failure_snapshot` 拒绝启动子进程（宁缺不降级）。
+
+    Args:
+        agent: 执行器实例（读 use_docker / use_venv / 内核沙箱观测）。
+        result: 执行结果（读 error_info.type 识别隔离拒绝）。
+
+    Returns:
+        "local" / "venv" / "docker" / "kernel" / "refused"。
+    """
+    err_type = str(((result or {}).get("error_info") or {}).get("type") or "")
+    if err_type in ("docker_unavailable", "kernel_sandbox_unavailable", "sandbox_unavailable"):
+        # 显式隔离拒绝之后不得在宿主重执行（威胁模型 T4：不可用即拒绝）
+        return "refused"
+    if getattr(agent, "use_docker", False):
+        return "docker"
+    if getattr(agent, "_kernel_sandbox_executable", None):
+        return "kernel"
+    if getattr(agent, "use_venv", False):
+        return "venv"
+    return "local"
+
+
 def _executor_node(state: AITesterState) -> dict[str, Any]:
     """
     ExecutorAgent 节点：执行测试并记录结果。
@@ -2030,17 +2057,26 @@ def _executor_node(state: AITesterState) -> dict[str, Any]:
     if not _passed and _runtime_probe_enabled():
         from src.agents.runtime_probe import capture_failure_snapshot
 
+        _probe_backend = _runtime_probe_backend(agent, result)
         runtime_probe_snapshot = capture_failure_snapshot(
             test_code=state.get("generated_test") or "",
             target_module=state.get("module_name"),
+            target_file=state.get("target_file"),
+            backend=_probe_backend,
         )
         _trace_node(
             "runtime_probe",
             output_summary={
                 "captured": runtime_probe_snapshot is not None,
                 "frames": len((runtime_probe_snapshot or {}).get("frames", [])),
+                "backend": _probe_backend,
             },
-            decision="probe_captured" if runtime_probe_snapshot else "probe_degraded",
+            # N01：隔离级别不匹配时是"按契约拒绝"，与探针自身降级分开标注
+            decision=(
+                "probe_captured"
+                if runtime_probe_snapshot
+                else ("probe_blocked" if _probe_backend not in ("local", "venv") else "probe_degraded")
+            ),
             iteration=state.get("iteration", 0),
         )
 

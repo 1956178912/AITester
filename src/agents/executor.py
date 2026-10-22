@@ -308,10 +308,14 @@ class ExecutorAgent:
                 else:
                     # S1（2026-09-29 审查 P0）：fail-closed —— obs["supported"]=False
                     # 时拒绝执行，返回 error_info type=kernel_sandbox_unavailable。
+                    # F12（2026-10-22 第三方复审）：提示不得再把 ALLOW_UNSANDBOXED
+                    # 说成可用恢复路径——该开关不改变本消费点的拒绝（builder 仍回
+                    # supported=False），照做也跑不起来。正确处置是补齐沙箱后端或
+                    # 改走 Docker。
                     return {
                         "passed": False,
                         "output": "内核级沙箱在当前平台不可用（S1 fail-closed 拒绝执行；"
-                        "如需无隔离调试请显式设 ALLOW_UNSANDBOXED=true 并记录工件档位）",
+                        "请安装 bubblewrap / 启用 macOS Seatbelt，或设 EXECUTOR_USE_DOCKER=true 走容器隔离）",
                         "coverage": 0.0,
                         "failed_cases": [],
                         "error_info": {

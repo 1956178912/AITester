@@ -666,7 +666,11 @@ class TestCaptureRatchetGate:
         paths = gate._iter_py_dirs([gate.SRC_DIR])
         violations, sites, hits = gate.scan(paths)
         assert violations == []
-        assert sites == 78  # BK 收口读数（含 try 句子树内的解析调用）
+        # BK 收口读数（含 try 句子树内的解析调用）。
+        # BR（2026-10-22）：+1 = `executor_imports._insert_sys_path_prefix`——
+        # F04 的 docstring/future 让位插入需要 AST 定界；该站点直接捕获共享
+        # `AST_UNREADABLE_ERRORS`，不新增豁免（EXEMPT 与命中数不变）。
+        assert sites == 79
         assert len(hits) == sum(quota for quota, _ in gate.EXEMPT.values()) == 20
         assert set(gate.EXEMPT) == set(hits)
 

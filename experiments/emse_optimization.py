@@ -33,6 +33,8 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
+from experiments._row_pairing import latest_rows_by_task  # noqa: E402  （须在 sys.path 注入之后）
+
 # swebench 工件路径（相对仓库根）
 SWEBENCH_SUMMARY = _REPO_ROOT / "experiments" / "results" / "swebench_20_summary.json"
 # 主批次工件目录（R-P0-2 口径来源）
@@ -81,19 +83,24 @@ def paired_contrast(rows_x: list[dict], rows_y: list[dict], field: str = "detect
 
     δ = X − Y（第一臂 − 第二臂，标签方向）；
     返回 {n_pairs, only_first, only_second, both, neither, delta_pp}。
+
+    N05（2026-10-22 第三方复审 P1）：必须**先按 task_id 选最新行、再排除 None**。
+    历史实现"val 非 None 才 setdefault"→ 最新行的 None 不占位，旧批次的可测值
+    顶替上来（构造例 n=3/δ=0pp，正确 n=2/δ=+50pp），同份报告的不同统计块会
+    使用不同人群。选择逻辑委托共享原语 `latest_rows_by_task`（A07 单一事实源）。
     """
+    latest_x = latest_rows_by_task(rows_x)
+    latest_y = latest_rows_by_task(rows_y)
     map_x: dict[str, float] = {}
     map_y: dict[str, float] = {}
-    for r in rows_x:
-        tid = r.get("task_id")
-        val = r.get(field)
-        if tid and val is not None:
-            map_x.setdefault(tid, val)
-    for r in rows_y:
-        tid = r.get("task_id")
-        val = r.get(field)
-        if tid and val is not None:
-            map_y.setdefault(tid, val)
+    for tid, row in latest_x.items():
+        val = row.get(field)
+        if val is not None:
+            map_x[tid] = val
+    for tid, row in latest_y.items():
+        val = row.get(field)
+        if val is not None:
+            map_y[tid] = val
     common = set(map_x) & set(map_y)
     only_first = only_second = both = neither = 0
     for tid in common:

@@ -238,6 +238,17 @@ class TestResponseUsageNormalization:
 
     def setup_method(self):
         tu.reset()
+        # BR 轮（N02）：拒绝分支在有效预算下会锁存 budget.exceeded——这是生产
+        # 语义（下一次调用必须快速失败），但会跨用例泄漏。每个用例前后都重置
+        # 线程局部预算，保证断言只观察本用例的锁存状态。
+        from src.budget.cost_budget import reset_budget
+
+        reset_budget()
+
+    def teardown_method(self):
+        from src.budget.cost_budget import reset_budget
+
+        reset_budget()
 
     @staticmethod
     def _record(usage: object, model: str = "m"):

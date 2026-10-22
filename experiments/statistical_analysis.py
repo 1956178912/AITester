@@ -346,12 +346,38 @@ def _load_batch_file(
         if pool_seeds:
             _seed = (data.get("provenance") or {}).get("seed")
             _seed_prefix = f"s{_seed}__" if _seed is not None else f"{json_file.stem}__"
+        # F07（2026-10-22 第三方复审 P1）：先完整装配再一次性提交。历史实现
+        # 在 baselines 循环里直接 extend——前一臂成功、后一臂 details 为 null
+        # 抛异常时，函数返回 False（不登记来源）却已把前臂写进 results，
+        # 形成"无来源的前臂"。任何一步失败都必须零提交。
+        staged: dict[str, list[dict]] = {}
+        _batch_tag = _seed_prefix or json_file.stem
         for baseline, baseline_data in data.get("results", {}).items():
-            if baseline in results:
-                details = baseline_data.get("details", [])
-                if _seed_prefix is not None:
-                    details = [{**row, "task_id": f"{_seed_prefix}{row.get('task_id', '')}"} for row in details]
-                results[baseline].extend(details)
+            if baseline not in results:
+                continue
+            details = baseline_data.get("details", [])
+            if not isinstance(details, list):
+                raise TypeError(f"{baseline}.details 不是列表（{type(details).__name__}）")
+            _rows: list[dict] = []
+            for row in details:
+                if not isinstance(row, dict):
+                    raise TypeError(f"{baseline}.details 含非对象行（{type(row).__name__}）")
+                _rows.append(
+                    {
+                        **row,
+                        "task_id": (
+                            f"{_seed_prefix}{row.get('task_id', '')}"
+                            if _seed_prefix is not None
+                            else row.get("task_id", "")
+                        ),
+                        # F06：行级批次标记——pass@k 的裸 task_id 只在同批内才可能是
+                        # "同题多轮"；跨批同号必须先比程序身份（task_metadata.fixed）。
+                        "_batch_tag": _batch_tag,
+                    }
+                )
+            staged[baseline] = _rows
+        for baseline, details in staged.items():
+            results[baseline].extend(details)
         return True
     except Exception as e:
         print(f"警告：加载 {json_file} 失败: {e}")
@@ -1144,6 +1170,9 @@ def cost_analysis(results: dict[str, list[dict]], price_table: dict[str, dict]) 
         input_total = 0
         output_total = 0
         unattributed = 0
+        n_unattributed_rows = 0
+        attributed_input = 0
+        attributed_output = 0
         by_model: dict[str, int] = {}
         usages: list[Any] = []
         totals_readable = True
@@ -1183,10 +1212,12 @@ def cost_analysis(results: dict[str, list[dict]], price_table: dict[str, dict]) 
                     continue
                 if basis > 0:
                     unattributed += basis
+                    n_unattributed_rows += 1
                 continue
             if not bm:
                 if basis > 0:
                     unattributed += basis
+                    n_unattributed_rows += 1
                 continue
             attribution_reason = by_model_reason(bm, basis)
             if attribution_reason is not None:
@@ -1198,6 +1229,17 @@ def cost_analysis(results: dict[str, list[dict]], price_table: dict[str, dict]) 
                 continue
             for model_name, tokens in bm.items():
                 by_model[model_name] = by_model.get(model_name, 0) + tokens
+            attributed_input += inp
+            attributed_output += out
+        if n_unattributed_rows:
+            # N04（2026-10-22 第三方复审 P1）：正 token 缺模型归因的行，其金额
+            # 不可追溯——历史实现把它计入 input/output 总量后，用**其他行**的
+            # 单价补齐（两行各 100，只有第一行归因 m，实际给全额 $0.0002，而
+            # 可归因小计只有 $0.0001）。未知不得由已知价格补齐 ⇒ 全额不可计算；
+            # 可归因部分单独作为明确标注范围的小计输出。
+            money_readable = False
+            n_money_blocked += 1
+            _count_reason_codes(money_reasons, [f"attribution_missing_rows:{n_unattributed_rows}"])
         cache = cache_totals(usages)
         used_models = [m for m, t in by_model.items() if t > 0]
         # AG（2026-10-20）：未计价归因收口为**单一机制索引**，三个披露桶全部由它派生。
@@ -1263,6 +1305,12 @@ def cost_analysis(results: dict[str, list[dict]], price_table: dict[str, dict]) 
         ):
             row_reason = "cache_hit_no_api_spend"
         cost_per_task = cost / len(rows) if cost is not None and rows else None
+        # N04：缺归因行存在时全额不可计算，但"已知价格 × 已归因 token"的小计
+        # 仍是可追溯的数——单独给字段并标注范围，读者不会把它当全额。
+        attributed_cost: float | None = None
+        if n_unattributed_rows and used_models and not unpriced_reasons and len(labels) == 1 and len(price_pairs) == 1:
+            p_in, p_out = next(iter(price_pairs))
+            attributed_cost = attributed_input / 1_000_000 * float(p_in) + attributed_output / 1_000_000 * float(p_out)
         row = {
             "baseline": baseline,
             "n_tasks": len(rows),
@@ -1301,6 +1349,11 @@ def cost_analysis(results: dict[str, list[dict]], price_table: dict[str, dict]) 
             row["unpriced_currency_models"] = dict(sorted(currency_blocked.items()))
         if row_reason is not None:
             row["unpriced_row_reason"] = row_reason
+        if n_unattributed_rows:
+            row["n_unattributed_rows"] = n_unattributed_rows
+            if attributed_cost is not None:
+                row["attributed_cost"] = attributed_cost
+                row["attributed_cost_scope"] = "attributed_rows_only"
         # AM：行级读取缺口只在真发生时披露（真批次 783 行全部可读、拆分与归因
         # 一致 ⇒ 返回域逐键不变）。读不动与只废金额是两种事实，分开点名。
         if token_reasons:
@@ -1354,6 +1407,30 @@ def _pass_at_k_value(n: int, c: int, k: int) -> float | None:
     return 1.0 - prod
 
 
+def _pass_at_k_identity(row: Mapping[str, Any]) -> tuple[str, str]:
+    """pass@k 的分组键（F06，2026-10-22 第三方复审 P1）。
+
+    背景：主批 task_id 是**中性化序号**（task_0000…），跨 seed 指向不同题目
+    （同号不同函数），裸编号不是稳定题目身份。把跨批同号当"同题多轮"会把
+    pass@k 从"同一程序多次采样"偷换成"不同程序拼成一次解决"。
+
+    口径：优先用稳定程序身份——`task_metadata.fixed` 的 SHA256（同一程序在
+    多批/多种子重跑 → 真正的同题多轮）；缺失时退回"同批 task_id"（`_batch_tag`
+    由加载层写入），跨批同号不再合并。
+
+    Returns:
+        (分组键, 依据)。依据 ∈ {"content", "batch_scoped"}，用于报告披露。
+    """
+    metadata = row.get("task_metadata")
+    fixed = metadata.get("fixed") if isinstance(metadata, Mapping) else None
+    if isinstance(fixed, str) and fixed.strip():
+        digest = hashlib.sha256(fixed.strip().encode("utf-8")).hexdigest()
+        return f"code:{digest}", "content"
+    tid = str(row.get("task_id", ""))
+    tag = str(row.get("_batch_tag") or "")
+    return f"id:{tag}:{tid}", "batch_scoped"
+
+
 def pass_at_k_summary(data: dict[str, list[dict]], field: str = "patch_correct") -> dict[str, dict[str, Any]]:
     """批次 IX（ADR-0023）：按臂的 pass@k（多轮采样并集解决率）。
 
@@ -1370,6 +1447,7 @@ def pass_at_k_summary(data: dict[str, list[dict]], field: str = "patch_correct")
     summary: dict[str, dict[str, Any]] = {}
     for baseline in sorted(data):
         rounds_by_task: dict[str, list[bool]] = {}
+        identity_basis: Counter[str] = Counter()
         for row in data[baseline] or []:
             tid = str(row.get("task_id", ""))
             if not tid:
@@ -1377,7 +1455,9 @@ def pass_at_k_summary(data: dict[str, list[dict]], field: str = "patch_correct")
             val = row.get(field)
             if val is None:
                 continue  # 不可测行不入轮次（M1 None 口径一致）
-            rounds_by_task.setdefault(tid, []).append(bool(val))
+            key, basis = _pass_at_k_identity(row)
+            identity_basis[basis] += 1
+            rounds_by_task.setdefault(key, []).append(bool(val))
         if not rounds_by_task:
             summary[baseline] = {"n_tasks": 0}
             continue
@@ -1397,6 +1477,8 @@ def pass_at_k_summary(data: dict[str, list[dict]], field: str = "patch_correct")
             "rounds_median": n_median,
             "rounds_max": n_max,
             "pass_at": table,
+            # F06 披露：多少行按稳定程序身份分组、多少行只能按"同批编号"分组。
+            "identity_basis": dict(identity_basis),
         }
     return summary
 
