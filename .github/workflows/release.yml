@@ -26,36 +26,84 @@ permissions:
 
 jobs:
   # P1-10（2026-10-05 独立审查）：CI 绿门——发布作业此前不依赖 CI 结果
-  #（tag 可指向测试全红/安全扫描未过的 commit 直接构建发布）。本作业用
-  # GitHub commit status API 查询 tag 所指 commit 的 ci.yml 汇总状态
-  #（"AITester CI" workflow 的 test/security 作业），任一失败/pending
-  # 即阻断发布。tag push 时 CI 若尚未跑完，status 为 pending → 发布等待
-  # 由重试逻辑覆盖（最多 10 分钟，超时保守阻断——发布可以重打 tag，
-  # 误发不可撤回）。
+  #（tag 可指向测试全红/安全扫描未过的 commit 直接构建发布）。
+  # F08（2026-10-22 第三方集中复审 P1）：**必须限定必需工作流与 SHA**。
+  # 历史实现查 `commits/{sha}/check-runs`：
+  #   ① 不区分 workflow——发布自身（本作业）也是一个 in_progress 的 check run，
+  #      于是"等自己跑完"，10 分钟内必然超时（tag 发布恒失败）；
+  #   ② "latest 全绿"不等于 "ci.yml 成功"——其他 workflow 的 check run 缺席或
+  #      失败会把结论带偏，且 ci.yml 未触发时没有任何 check run 也会被当成绿。
+  # 现改为：按 `actions/workflows/ci.yml/runs?head_sha=...` 查询**该 commit 上
+  # 该工作流**的运行，要求已有 completed/success 的运行且其所有作业成功；
+  # 发布工作流自身的运行不在 ci.yml 集合里，天然排除自我等待。
   ci-green:
     name: Require CI green on tagged commit
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # 读 Actions 运行/作业需要 actions: read（旧实现查 check-runs/status 的
+    # 权限口径不适用于 workflow runs API；缺权限会 403，绿门永远不放行）。
+    permissions:
+      actions: read
+      contents: read
     steps:
-      - name: Check CI status of tagged commit
+      - name: Check required CI workflow on tagged commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
-          sha="${{ github.sha }}"
-          echo "检查 commit ${sha} 的 CI 状态..."
-          for i in $(seq 1 20); do
-            resp=$(curl -sSf -H "Authorization: Bearer ${{ github.token }}" \
-              -H "Accept: application/vnd.github+json" \
-              "https://api.github.com/repos/${{ github.repository }}/commits/${sha}/check-runs?per_page=100")
-            fail_count=$(echo "$resp" | python3 -c "import json,sys; d=json.load(sys.stdin); runs=d.get('check_runs',[]); print(sum(1 for r in runs if r['conclusion'] in ('failure','timed_out','action_required') or r['status']!='completed'))")
-            total=$(echo "$resp" | python3 -c "import json,sys; d=json.load(sys.stdin); print(len(d.get('check_runs',[])))")
-            echo "第 $i 次轮询：check_runs 总数 ${total}，未通过/在途 ${fail_count}"
-            if [ "$total" -gt 0 ] && [ "$fail_count" -eq 0 ]; then
-              echo "CI 全绿，放行发布"
-              exit 0
-            fi
-            sleep 30
-          done
-          echo "::error title=CI 绿门超时::tagged commit 的 CI 未在 10 分钟内全绿（或无任何 check run——请确认 CI 已在该 commit 上触发），保守阻断发布"
-          exit 1
+          python3 - <<'PY'
+          import json, os, sys, time, urllib.error, urllib.request
+
+          sha = os.environ["GITHUB_SHA"]
+          repo = os.environ["GITHUB_REPOSITORY"]
+          token = os.environ["GH_TOKEN"]
+          api = f"https://api.github.com/repos/{repo}"
+          headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"}
+          deadline = time.time() + 600
+          last = "尚未查询"
+
+          def get(url):
+              req = urllib.request.Request(url, headers=headers)
+              with urllib.request.urlopen(req, timeout=30) as resp:
+                  return json.load(resp)
+
+          print(f"检查 commit {sha} 上 ci.yml 的运行状态（最多 10 分钟）...")
+          while True:
+              try:
+                  runs = get(f"{api}/actions/workflows/ci.yml/runs?head_sha={sha}&per_page=20").get(
+                      "workflow_runs", []
+                  )
+              except urllib.error.URLError as exc:
+                  last = f"查询失败：{exc}"
+                  runs = []
+              mine = [r for r in runs if r.get("head_sha") == sha]
+              if mine:
+                  run = max(mine, key=lambda r: r.get("created_at", ""))
+                  status, conclusion = run.get("status"), run.get("conclusion")
+                  if status == "completed":
+                      if conclusion != "success":
+                          print(f"::error title=CI 未通过::ci.yml 运行 #{run.get('run_number')} 结论={conclusion}，阻断发布")
+                          sys.exit(1)
+                      jobs = get(f"{api}/actions/runs/{run['id']}/jobs?per_page=100").get("jobs", [])
+                      bad = [j.get("name") for j in jobs if j.get("conclusion") != "success"]
+                      if bad:
+                          print(f"::error title=CI 作业未全绿::未成功作业：{bad}，阻断发布")
+                          sys.exit(1)
+                      print(f"ci.yml 运行 #{run.get('run_number')} 全绿（{len(jobs)} 个作业），放行发布")
+                      sys.exit(0)
+                  last = f"在途（status={status}）"
+              else:
+                  last = "该 commit 上尚无 ci.yml 运行"
+              if time.time() > deadline:
+                  print(
+                      "::error title=CI 绿门超时::"
+                      f"ci.yml 未在 10 分钟内完成且全绿（最后状态：{last}），保守阻断发布"
+                  )
+                  sys.exit(1)
+              print(f"等待中：{last}")
+              time.sleep(30)
+          PY
 
   release:
     name: Build and release (sdist + wheel + SBOM)
