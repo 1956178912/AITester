@@ -276,7 +276,15 @@ make test-cov && make test && make gates
   零断言扫描 **461** 个测试文件 0 违规（BP 458）；ast-guards 136 文件 78 站点
   未覆盖 20 违规 0 豁免命中 20；status-persistence 声明 10 通道、落盘面 3 处
   全覆盖。
-- **门禁链第二跑**（代码批次提交后、干净树；双语登记回填前）：读数回填于此
-  （第二跑存在的理由：§6-1 的盲区——脏树上看不到未跟踪文件，干净树才是入库后
-  的真实门禁状态）。
+- **门禁链第二跑**（代码批次提交后、干净树；`git status` 干净、全部新文件已跟踪；
+  `make gates` 等价命令，19 步逐项记录 rc 与墙钟）：**全 19 步 rc=0、总墙钟
+  233s**，与第一跑逐项同值（链内全量 **11973 passed / 19 skipped / 0 failed in
+  199.02s**、34 warnings；`999 files already formatted`；mypy 137；双语文档
+  0 警告；文档链接 897 链接 0 错误；env-budget 253；baseline 双检通过；
+  state-contract 136；env-snapshot 84；json-contract-sites 口径 A；
+  **json-strict 通过**——§6-1 的盲区在干净树上不再成立：修复随代码批次入库后，
+  扫描面看得到它；artifact-doc-consistency 通过；零断言 461 文件 0 违规；
+  ast-guards 136/78/20/0/20/19；status-persistence 10 通道 3 处全覆盖）。
+  **第二跑存在的理由**：脏树上看不到未跟踪文件，干净树才是入库后的真实门禁
+  状态——BP 轮漏掉的正是这一遍。
 - 回填后**链外复验**（文档锁子集 + json-strict 单跑）：读数回填于此。
