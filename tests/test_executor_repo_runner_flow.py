@@ -78,7 +78,7 @@ class TestRunTestNodesDispatch:
 
     def test_exit_124_is_timeout_and_loop_continues(self, tmp_path: Path, recorder: dict[str, object]):
         """超时哨兵（124）按失败记录并继续下一节点——不得让整个验证任务崩掉。"""
-        recorder["results"] = [_proc(124, "", "killed"), _proc(0, "ok")]
+        recorder["results"] = [_proc(124, "", "killed"), _proc(0, "1 passed in 0.01s")]
         result = RepoExecutor(timeout=7)._run_test_nodes(
             str(tmp_path), ["tests/test_a.py::slow", "tests/test_b.py::fast"]
         )

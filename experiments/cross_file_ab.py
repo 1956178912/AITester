@@ -164,7 +164,8 @@ def _render_markdown(
         lines.append(
             "- 提示：level3.5 为 3 文件依赖链，未达阈值时优先检查 "
             "CROSS_FILE_BIDIRECTIONAL_ENABLE（双向依赖图）是否启用，"
-            "以及 cross_file_root_cause.py 的 DEP_GRAPH_INCOMPLETE 占比。"
+            "以及 cross_file_root_cause.py 的 DEP_GRAPH_INCOMPLETE 占比"
+            "（须带 --raw-dir：工件不可用时该档不判定，只落 RAW_UNAVAILABLE）。"
         )
     elif difficulty == "level1":
         dropped = delta_pp < -T4_MAX_DROP_PP
@@ -271,8 +272,12 @@ def main() -> int:
     # 2026-10 改进：跑完后提示根因分析脚本（level3/level3.5 未达 T1 时定位瓶颈）
     if args.difficulty in ("level3", "level3.5"):
         print(f"\n[A/B] 提示：若 delta 未达 T1（+{T1_MIN_DELTA_PP:.0f}pp），可用根因分析脚本定位 2% 未修复任务瓶颈：")
+        # BO（2026-10-22）：本臂跑批时就带 save_state=True，raw 就在 on_dir/raw 下；
+        # 此前提示的命令不带 --raw-dir，照抄一次就把"没读工件"折成
+        # DEP_GRAPH_INCOMPLETE（复放实测：29 例失败里 14 例这样翻转）。
         print(
-            f"  python experiments/cross_file_root_cause.py --results-on {on_dir}/benchmark_*.json --difficulty {args.difficulty}"
+            f"  python experiments/cross_file_root_cause.py --results-on {on_dir}/benchmark_*.json "
+            f"--raw-dir {on_dir}/raw --difficulty {args.difficulty}"
         )
     return 0
 

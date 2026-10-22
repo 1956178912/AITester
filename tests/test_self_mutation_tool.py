@@ -258,24 +258,26 @@ def test_dry_run_records_are_not_run(tool: ModuleType) -> None:
 
 
 @pytest.mark.parametrize(
-    ("returncode", "timed_out", "expected"),
+    ("returncode", "timed_out", "output", "expected"),
     [
-        (0, False, "survived"),
-        (1, False, "killed"),
-        (2, False, "invalid"),
-        (3, False, "invalid"),
-        (4, False, "invalid"),
-        (5, False, "invalid"),
-        (None, False, "invalid"),
-        (-9, False, "invalid"),
-        (1, True, "timeout"),
-        (0, True, "timeout"),
-        (2, True, "timeout"),
+        (0, False, "1 passed in 0.01s", "survived"),
+        (1, False, "1 failed in 0.01s", "killed"),
+        (2, False, "ERROR collecting", "invalid"),
+        (3, False, "", "invalid"),
+        (4, False, "", "invalid"),
+        (5, False, "no tests ran in 0.01s", "invalid"),
+        (None, False, "", "invalid"),
+        (-9, False, "", "invalid"),
+        (1, True, "", "timeout"),
+        (0, True, "", "timeout"),
+        (2, True, "", "timeout"),
     ],
 )
-def test_classify_result_matrix(tool: ModuleType, returncode: int | None, timed_out: bool, expected: str) -> None:
+def test_classify_result_matrix(
+    tool: ModuleType, returncode: int | None, timed_out: bool, output: str, expected: str
+) -> None:
     """rc 分类矩阵：只有 0/1 进分母，收集错误/超时一律 invalid（防虚增/虚减）。"""
-    outcome, reason = tool.classify_result(returncode, timed_out)
+    outcome, reason = tool.classify_result(returncode, timed_out, output)
     assert outcome == expected
     if expected == "invalid":
         assert reason, "invalid 必须带归因原因"
@@ -285,7 +287,7 @@ def test_classify_result_matrix(tool: ModuleType, returncode: int | None, timed_
 
 def test_classify_invalid_reason_mentions_collection_failure(tool: ModuleType) -> None:
     """rc==2 的归因必须点名收集错误（否则 invalid 无法与"测试弱"区分）。"""
-    _, reason = tool.classify_result(2, False)
+    _, reason = tool.classify_result(2, False, "")
     assert "collection" in reason
 
 
@@ -508,7 +510,7 @@ def test_sandbox_end_to_end_kill_restore_survive(tool: ModuleType, fake_repo: Pa
             killed = sandbox.run_tests(["tests/test_foo.py"], tool.DEFAULT_TEST_COMMAND, timeout=120)
         finally:
             sandbox.restore_module("src/foo.py")
-        assert tool.classify_result(killed.returncode, killed.timed_out)[0] == "killed"
+        assert tool.classify_result(killed.returncode, killed.timed_out, killed.stdout)[0] == "killed"
         restored = sandbox.run_tests(["tests/test_foo.py"], tool.DEFAULT_TEST_COMMAND, timeout=120)
         assert restored.returncode == 0
     finally:

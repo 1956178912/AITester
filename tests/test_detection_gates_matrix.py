@@ -200,10 +200,15 @@ class TestDelegationFailurePaths:
         assert _run_test_against_code("def test_x(): assert True", _FIXED, "target_mod") is None
 
     def test_exec_error_predicate_failure_falls_back_to_rc_caliber(self, monkeypatch: pytest.MonkeyPatch):
-        """执行错误判据不可用时回退历史 rc==0 口径（仍须返回结构，不得抛异常）。"""
+        """执行错误判据不可用时不得抛异常；真 passed 的 rc==0 仍判绿。
+
+        BE（2026-10-21）：rc==0 同时须满足共享"有效通过"谓词——夹具改用
+        真实摘要行（旧夹具 ``"ok"`` 无摘要，按新口径属不可判定）。本用例
+        仍锁定"判据自身异常不阻断返回结构"这一历史意图。
+        """
         import experiments._m1_metrics as m1
 
-        self._patch_runner(monkeypatch, (0, "ok", ""))
+        self._patch_runner(monkeypatch, (0, "1 passed in 0.01s", ""))
 
         def _boom(*_args: object, **_kwargs: object) -> bool:
             raise RuntimeError("predicate unavailable")

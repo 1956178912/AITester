@@ -2,7 +2,8 @@
 
 覆盖：
 - experiments/multi_candidate_ab.py：_success_rate / _bucket_error_counts 聚合
-- experiments/position_aware_ab.py：_locate_accuracy 定位正确率 + 缺 state 保守 0.0
+- experiments/position_aware_ab.py：_locate_accuracy 定位正确率；工件读不到时
+  按 grade 分档为 -1.0「不可计算」（BO 口径改写：0.0 是伪测量，不是保守值）
 - experiments/summarize_full_stack.py：_aggregate_group / _render_on_vs_off
   保守 verdict（ON 组全零 → "无正向信息量"）
 - experiments/run_full_stack_swe_bench_pro.py：_apply_full_stack_env 七开关注入
@@ -161,22 +162,38 @@ def test_position_aware_ab_locate_accuracy_repaired_but_unfocused() -> None:
 
 
 def test_position_aware_ab_locate_accuracy_no_raw_dir() -> None:
-    """raw/ 目录缺失 → 保守 0.0。"""
-    from experiments.position_aware_ab import _locate_accuracy
+    """raw/ 目录缺席 → -1.0「不可计算」，不再写 0.0（BO，2026-10-22 口径改写）。
+
+    改前这里断言"保守 0.0"，但 0.0 在渲染层就是"定位正确率 0.0%"——那是一个
+    测量值，会被读成"定位全跑偏"。raw 缺席时一次都没测过，记成 0.0 等于用
+    缺席造读数（本轮探针 C 段实测：raw 缺席 / 任务件缺席 / 实测 0% / focus 键缺
+    四条腿改前逐字节同形，数值都是 0.0、文本都是 "0.0%"）。0.0 不是保守值，
+    是伪测量；保守的做法是给出可区分的"不可计算"档，并由 grade 点名是哪一种
+    缺席。既有 -1.0 数值档（原义"无激活样本"）保持不变，语义由 grade 细分。
+    """
+    from experiments.position_aware_ab import _locate_accuracy, _locate_stats
 
     with tempfile.TemporaryDirectory() as d:
         summary = {"results": {"aitester": {"details": [{"task_id": "task_1"}]}}}
-        assert _locate_accuracy(d, summary) == 0.0
+        assert _locate_accuracy(d, summary) == -1.0
+        stats = _locate_stats(d, summary)
+        assert stats["grade"] == "raw_dir_absent"
+        assert stats["n_used"] == 0 and stats["n_hit"] == 0
+        assert dict(stats["skipped"]) == {}
 
 
 def test_position_aware_ab_locate_accuracy_details_not_list() -> None:
-    """details 缺失 / 非 list（旧 JSON 形态）→ 保守 0.0，不崩溃。"""
-    from experiments.position_aware_ab import _locate_accuracy
+    """details 缺失 / 非 list（旧 JSON 形态）→ -1.0 不可计算、不崩溃。
+
+    BO 口径改写：没有可遍历的行就不是"0% 命中"，同 no_raw_dir 腿一个道理。
+    """
+    from experiments.position_aware_ab import _locate_accuracy, _locate_stats
 
     with tempfile.TemporaryDirectory() as d:
         os.makedirs(os.path.join(d, "raw"))
-        assert _locate_accuracy(d, {"results": {}}) == 0.0
-        assert _locate_accuracy(d, {"results": {"aitester": {}}}) == 0.0
+        assert _locate_accuracy(d, {"results": {}}) == -1.0
+        assert _locate_accuracy(d, {"results": {"aitester": {}}}) == -1.0
+        assert _locate_stats(d, {"results": {}})["grade"] == "details_unavailable"
 
 
 # ─── summarize_full_stack 聚合与 verdict ──────────────────────────────────────

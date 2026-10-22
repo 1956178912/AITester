@@ -38,9 +38,15 @@ class TestTimeoutAndSwitch:
 
 class TestAstSymbolGuard:
     def test_syntax_error_degrades(self):
-        # 原始代码解析失败 → 无符号可比较 → 通过（保守）
+        # BH 轮（2026-10-21）口径改写：原断言为 passed is True（"解析失败 →
+        # 无符号可比较 → 通过（保守）"），那正是本轮收口的假干净——原文不可
+        # 解析时旧实现返回"AST 符号守卫通过（新增 1 个模块级定义…）"，与
+        # "比较过且没删符号"逐字同形。现按 fail-closed + 披露：status=error。
         result = _run_ast_symbol_guard("def f(:", "def g(): pass")
-        assert result["passed"] is True
+        assert result["passed"] is False
+        assert result["status"] == "error"
+        assert result["reason"] == "unparseable_original"
+        assert "不可测量" in result["detail"]
 
     def test_added_symbols_detail(self):
         result = _run_ast_symbol_guard("def f(): pass", "def f(): pass\ndef g(): pass")

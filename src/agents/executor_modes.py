@@ -16,7 +16,12 @@ import tempfile
 from typing import Any
 
 from src.agents.executor_imports import auto_fix_imports, extract_module_name_from_file
-from src.agents.executor_output import build_error_info, parse_coverage, parse_failed_cases
+from src.agents.executor_output import (
+    build_error_info,
+    build_no_effective_pass_info,
+    parse_coverage,
+    parse_failed_cases,
+)
 from src.agents.executor_runtime import (
     cleanup_sandbox,
     extract_execution_attempts,
@@ -25,6 +30,7 @@ from src.agents.executor_runtime import (
 from src.agents.kernel_sandbox import interpreter_sandbox_allowances, kernel_sandbox_enabled, sandbox_launch_failure
 from src.utils.credential_scrub import scrub_os_environ
 from src.utils.env_utils import env_flag, env_float, env_int
+from src.utils.pytest_output import run_has_effective_pass
 
 logger = logging.getLogger(__name__)
 
@@ -233,7 +239,8 @@ def execute_sandboxed(
         else:
             coverage = parse_coverage(output)
             failed_cases = parse_failed_cases(output)
-            passed = last_result is not None and last_result.returncode == 0
+            # BE（2026-10-21）：rc==0 + 有效通过才算 passed（全 skip 不计）。
+            passed = last_result is not None and run_has_effective_pass(last_result.returncode, output)
             result = {
                 "passed": passed,
                 "output": output,
@@ -250,6 +257,8 @@ def execute_sandboxed(
                 result["execution_attempts"] = _attempts
                 if observed_fail_then_pass(_attempts):
                     result["flaky_fail_then_pass"] = True
+            if last_result is not None and last_result.returncode == 0 and not passed:
+                result["error_info"] = build_no_effective_pass_info(last_result.returncode, output)
             if last_result is not None and last_result.returncode != 0:
                 result["error_info"] = build_error_info(last_result, output)
                 result["error_info"]["missing_dependencies"] = sorted(missing_modules)
@@ -546,7 +555,8 @@ def execute_docker(
             }
 
         output = result.stdout + result.stderr
-        passed = result.returncode == 0
+        # BE（2026-10-21）：容器内 rc==0 + 有效通过才算 passed。
+        passed = run_has_effective_pass(result.returncode, output)
         result_dict = {
             "passed": passed,
             "output": output,
@@ -557,6 +567,8 @@ def execute_docker(
         # P1 内核沙箱升级：网络出口管控配置观测层（纯观测，不改结果口径）
         if docker_network_obs.get("isolation_mode") != "false":
             result_dict["docker_network_obs"] = docker_network_obs
+        if result.returncode == 0 and not passed:
+            result_dict["error_info"] = build_no_effective_pass_info(result.returncode, output)
         if result.returncode != 0:
             # build_error_info 依赖 CompletedProcess.returncode，
             # 用鸭子类型对象适配（字段一致即可）

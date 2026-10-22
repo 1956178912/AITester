@@ -275,7 +275,10 @@ class TestExecutionSitesInterceptFinalEnv:
         from src.tools import patch_rollback
 
         _poison_host_env(monkeypatch)
-        calls = _capture_run_with_timeout(monkeypatch)
+        # BE（2026-10-21）：rc==0 的 P2P 裁决要求摘要含真实 passed；本用例
+        # 关注 env 截获，夹具给出真实 pytest 摘要（旧夹具空 stdout 在新口径
+        # 下属"无有效通过"）。
+        calls = _capture_run_with_timeout(monkeypatch, stdout="1 passed in 0.01s")
         result = patch_rollback.run_p2p_regression(
             "def add(a, b):\n    return a + b\n",
             "from module_under_test import add\n\ndef test_add():\n    assert add(1, 2) == 3\n",

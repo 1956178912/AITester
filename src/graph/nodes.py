@@ -1205,23 +1205,45 @@ def _run_generator_postchecks(state: AITesterState, generated_test: str) -> dict
         generated_test: Generator 原始产出。
 
     Returns:
-        含生成后代码、观测结果与再生成判定的字典（键集合固定）。
+        含生成后代码、观测结果与再生成判定的字典（键集合固定）。BJ 轮起额外含
+        ``oracle_check_status``（四值词表 worst-of 聚合）与 ``oracle_check_outcomes``
+        （逐腿 ``{check, status, reason}``）：``oracle_findings`` 为空只有在
+        status 为 ``ok`` 时才是"无疑点"证据。
     """
     # AST 级断言一致性检查（ORACLE_VALIDATE_ENABLE=true 时启用，默认关）：
     # 纯 AST 静态分析（零 LLM 成本），识别恒真断言 / 魔数断言 / 类型不一致
     # 三类疑点，写入 state["oracle_findings"] 供实验分析消费（观测层，不阻断
     # 主流程）。开关关闭 / 无生成内容时不执行（历史口径不变）。
+    # BJ 轮（2026-10-22）：此前"findings 为空"这四种成因（扫过无疑点 / 开关关 /
+    # 无生成内容 / 产物读不懂）在下方 tautological_count 与 O4 判定上完全不可
+    # 区分——读不懂的产物恒判"零恒真断言" ⇒ O4 强制重生成对这类产物永不触发。
+    # 现同向补披露（返回契约与判定方向逐字节不变）。
+    from src.utils.check_status import CHECK_DISABLED, CHECK_OK, record_check_outcome, worst_check_status
+
     oracle_findings: list[dict[str, Any]] = []
-    if _oracle_validate_enabled() and generated_test:
+    oracle_outcomes: list[dict[str, Any]] = []
+    if not _oracle_validate_enabled():
+        record_check_outcome(oracle_outcomes, "assertion_consistency", CHECK_DISABLED, "oracle_validate_disabled")
+    elif not generated_test:
+        record_check_outcome(oracle_outcomes, "assertion_consistency", CHECK_DISABLED, "no_generated_test")
+    else:
         from src.tools.oracle_validator import check_assertions
 
-        oracle_findings = check_assertions(generated_test, state["target_code"])
+        oracle_findings = check_assertions(generated_test, state["target_code"], outcome_sink=oracle_outcomes)
         if oracle_findings:
             logger.info(
                 "AST 断言一致性检查发现 %d 个疑点（类型=%s）",
                 len(oracle_findings),
                 [f.get("type") for f in oracle_findings],
             )
+    # 两条检查腿（断言一致性 + 被测侧类型推断）相互独立 ⇒ 最差者优先聚合。
+    oracle_status = worst_check_status(str(o.get("status", "")) for o in oracle_outcomes)
+    if oracle_status != CHECK_OK:
+        logger.warning(
+            "AST 断言一致性检查不可测量（status=%s）：疑点列表为空不构成无疑点证据（各腿=%s）",
+            oracle_status,
+            ", ".join(f"{o['check']}={o['status']}:{o['reason'] or '-'}" for o in oracle_outcomes),
+        )
     # O6（2026-09-29 审查 P1）：确定性守卫（DETERMINISTIC_GUARD_ENABLE=true 时启用，默认关）。
     # 对 LLM 生成的测试代码做非确定性静态扫描（random / time.sleep / wall_clock /
     # 外部副作用），含 finding 的测试文件标记为"非确定性"，供实验层决定是否
@@ -1274,6 +1296,8 @@ def _run_generator_postchecks(state: AITesterState, generated_test: str) -> dict
     return {
         "generated_test": generated_test,
         "oracle_findings": oracle_findings,
+        "oracle_check_status": oracle_status,
+        "oracle_check_outcomes": list(oracle_outcomes),
         "deterministic_guard_report": deterministic_guard_report,
         "tautological_count": _tautological_count,
         "o4_triggered": _o4_triggered,
@@ -1437,6 +1461,8 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
     _post = _run_generator_postchecks(state, generated_test)
     generated_test = _post["generated_test"]
     oracle_findings = _post["oracle_findings"]
+    oracle_check_status = _post["oracle_check_status"]
+    oracle_check_outcomes = _post["oracle_check_outcomes"]
     deterministic_guard_report = _post["deterministic_guard_report"]
     _tautological_count = _post["tautological_count"]
     _o4_triggered = _post["o4_triggered"]
@@ -1445,7 +1471,11 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
 
     _trace_node(
         "generator",
-        output_summary={"generated_test_len": len(generated_test)},
+        # BL 轮（2026-10-22）：把 oracle 腿的可测量性带进 trace——G4 的
+        # `check_unmeasurable` 模式是这些 status 键在判定侧的第一个读者，
+        # 但 trace 不带键时它对真实 JSONL 恒不命中（"没读到"≠"没发生"）。
+        # 纯观测，不改 decision。
+        output_summary={"generated_test_len": len(generated_test), "oracle_check_status": oracle_check_status},
         decision="regenerated"
         if state.get("iteration", 0) >= state.get("max_iterations", MAX_ITERATIONS)
         else "generated",
@@ -1486,6 +1516,12 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
     # AST 级断言一致性检查（ORACLE_VALIDATE_ENABLE=true 时非空，默认关时零变化）
     if oracle_findings:
         update["oracle_findings"] = oracle_findings
+    # BJ 轮（2026-10-22）：上面那条"非空才写键"的可测量性对偶——本轮新增两键恒写
+    # （开关关时为 disabled）。读法：``oracle_findings`` 为空且 status != ok ⇒
+    # "没读出疑点"而不是"没有疑点"，O4 强制重生成对这类产物恒不触发。
+    # 键已在 AITesterState 显式声明（state.py），不会被 LangGraph 白名单丢弃。
+    update["oracle_check_status"] = oracle_check_status
+    update["oracle_check_outcomes"] = oracle_check_outcomes
     # P2 一期（观测级压缩）：压缩反馈产物持久化（FEEDBACK_COMPRESSION_ENABLE
     # 默认关时恒 None，键集合同构；state 键已在 AITesterState 显式声明，
     # 不会被 LangGraph 白名单丢弃——O35 教训）。供实验层统计「压缩通道
@@ -2364,17 +2400,20 @@ def _check_patch_safety(
 
     Returns:
         ``(applied, new_code)``：拒绝时 applied=False 且 new_code 回退原文；
-        契约缺失符号经 state 临时键 ``_1_3_contract_missing`` 透传。
+        契约缺失符号经 state 临时键 ``_1_3_contract_missing`` 透传，BI 轮新增的
+        预检可测量性经 ``_bi_safety_outcomes`` 临时键透传（键本身不入 TypedDict，
+        通道键为 ``safety_check_status`` / ``safety_check_outcomes``）。
     """
     contract_missing: list[str] = []
     _dangerous_added: list[str] | None = None
+    _safety_outcomes: list[dict[str, Any]] = []
     if applied and new_code != original_code:
         from src.tools.patch_applier import check_naming_contract, dangerous_api_added
 
-        ok, missing = check_naming_contract(original_code, new_code)
+        ok, missing = check_naming_contract(original_code, new_code, outcome_sink=_safety_outcomes)
         # P0-4 性能（2026-10-01）：预计算 AST 危险差集，供下方 S2 双保险复用
         # （同一 (original, new) 输入只算一次，避免重复 ast.parse×2）
-        _dangerous_added = dangerous_api_added(original_code, new_code)
+        _dangerous_added = dangerous_api_added(original_code, new_code, outcome_sink=_safety_outcomes)
         if not ok:
             logger.warning("P0 1.3 命名契约检查失败，拒绝应用补丁：缺失符号 %s", missing)
             applied = False
@@ -2411,12 +2450,30 @@ def _check_patch_safety(
             # P0-4 性能（2026-10-01）：复用上方已算的 dangerous_api_added 结果，
             # 避免对同一 (original_code, new_code) 重复做 AST 差集（两遍
             # ast.parse×2）
-            _added = _dangerous_added if _dangerous_added is not None else dangerous_api_added(original_code, new_code)
+            _added = (
+                _dangerous_added
+                if _dangerous_added is not None
+                else dangerous_api_added(original_code, new_code, outcome_sink=_safety_outcomes)
+            )
             _hits = list(dict.fromkeys(_regex_hits + _added))  # 去重保序
             if _hits:
                 logger.warning("S2 危险操作拦截：补丁被拒绝（%s）", "、".join(_hits))
                 applied = False
                 new_code = original_code
+    if _safety_outcomes:
+        # BI 轮（2026-10-22）：两道预检相互独立 ⇒ 最差者优先。status != ok 时
+        # 空结果（missing=[] / 危险差集=[]）不构成"预检通过"的证据，点名披露。
+        from src.utils.check_status import CHECK_OK, worst_check_status
+
+        _safety_status = worst_check_status(str(o.get("status", "")) for o in _safety_outcomes)
+        if _safety_status != CHECK_OK:
+            logger.warning(
+                "写盘前静态预检可测量性降级（整体 status=%s）：%s",
+                _safety_status,
+                ", ".join(f"{o['check']}={o['status']}:{o['reason'] or '-'}" for o in _safety_outcomes),
+            )
+        # 临时键：本节点函数内写入、由 _patch_applier_node 末尾 pop 并入通道键。
+        cast("dict[str, Any]", state)["_bi_safety_outcomes"] = _safety_outcomes
     return applied, new_code
 
 
@@ -2525,6 +2582,15 @@ def _maybe_run_testless_validation(
                     logger.info(
                         "O6 testless 验证未通过（失败层: %s），标记为观测信号（不阻断主流程）",
                         testless_validation_result.get("failed_layers", []),
+                    )
+                elif testless_validation_result.get("validation_status", "ok") != "ok":
+                    # BH（2026-10-21）：passed=True 但整体不可测量——必须显式
+                    # 披露，否则下游把"没有一层报告缺陷"读成"四层都验证通过"。
+                    logger.info(
+                        "O6 testless 验证 passed=True 但可测量性降级（status=%s，降级层: %s）："
+                        "不构成'验证通过'的证据（不阻断主流程）",
+                        testless_validation_result.get("validation_status"),
+                        testless_validation_result.get("degraded_layers", []),
                     )
             except Exception:
                 logger.debug("O6 testless 验证执行异常（保守跳过，保持历史口径）", exc_info=True)
@@ -2782,6 +2848,23 @@ def _patch_applier_node(state: AITesterState) -> dict[str, Any]:
     _feedback_now = _state_pop.pop("_1_3_contract_feedback", None)
     if _feedback_now:
         feedback_update["contract_reject_feedback"] = _feedback_now
+    # BI 轮（2026-10-22）：写盘前静态预检的可测量性。两道预检相互独立 ⇒ 最差者
+    # 优先；``status != "ok"`` 时 contract_missing_symbols / 危险差集为空**不是**
+    # "预检通过"的证据（未启用本轮检查时两键保持 None = 本轮未执行）。
+    safety_update: dict[str, Any] = {}
+    _safety_now = _state_pop.pop("_bi_safety_outcomes", None)
+    if _safety_now:
+        from src.utils.check_status import status_for_check, worst_check_status
+
+        safety_update["safety_check_outcomes"] = list(_safety_now)
+        safety_update["safety_check_status"] = worst_check_status(
+            str(outcome.get("status", "")) for outcome in _safety_now
+        )
+        # BL 轮（2026-10-22）：把命名契约**这一腿**的可测量性单独落通道。上面
+        # 的 worst-of 聚合会把"危险 API 腿读不懂"记成契约也可疑；反之契约腿
+        # error 也可能被危险腿的 ok 拉平。恒写（该腿没记录 ⇒ None），不复用
+        # BJ 轮点名的"非空才写键"反例。
+        safety_update["contract_status"] = status_for_check(_safety_now, "naming_contract")
     # 2.2 重采样统计 + patch_syntax_invalid 标记（refine 消费）
     resample_update: dict[str, Any] = {}
     if resample_stats is not None:
@@ -2837,6 +2920,7 @@ def _patch_applier_node(state: AITesterState) -> dict[str, Any]:
         "iteration": state.get("iteration", 0) + 1,
         **multi_candidate_update,
         **contract_update,
+        **safety_update,
         **feedback_update,
         **resample_update,
         **postprocess_update,

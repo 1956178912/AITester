@@ -169,6 +169,8 @@ class TestDebugResultIsomorphism:
             "position_aware_focus",
             "type_repair_findings",
             "mypy_findings_count",
+            "static_check_status",
+            "static_check_outcomes",
         }
         assert set(result.keys()) == expected
         assert result["patch"].startswith("```python\n")

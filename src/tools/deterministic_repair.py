@@ -40,6 +40,15 @@ import logging
 import re
 from typing import Any
 
+from src.utils.check_status import (
+    AST_UNREADABLE_ERRORS,
+    CHECK_ERROR,
+    CHECK_OK,
+    parse_error_text,
+    parses_as_module,
+    record_check_outcome,
+    unparseable_shape,
+)
 from src.utils.env_utils import env_flag
 
 logger = logging.getLogger(__name__)
@@ -92,7 +101,7 @@ def _top_level_names(code: str) -> set[str]:
     """目标代码的顶层绑定名（def/class/赋值），供重命名嫌疑检测。"""
     try:
         tree = ast.parse(code)
-    except SyntaxError:
+    except AST_UNREADABLE_ERRORS:
         return set()
     names: set[str] = set()
     for node in tree.body:
@@ -116,7 +125,7 @@ def _insert_import(code: str, module: str) -> str:
         first = tree.body[0] if tree.body else None
         if isinstance(first, ast.Expr) and isinstance(first.value, ast.Constant) and isinstance(first.value.value, str):
             doc_end = first.end_lineno or 0
-    except SyntaxError:
+    except AST_UNREADABLE_ERRORS:
         pass
     for idx, line in enumerate(lines):
         if re.match(r"^(?:import |from )", line):
@@ -180,8 +189,16 @@ def attempt_deterministic_repair(
     target_code: str,
     test_output: str,
     error_category: str = "",
+    outcome_sink: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """确定性优先修复入口（类别路由 + 统一验证门）。
+
+    Args:
+        outcome_sink: BK 轮的可测量性侧信道（``list.append``，为 None 时零开销）。
+            返回契约与判定值逐字节不变，只多披露"目标代码读没读得懂"——旧口径下
+            读不懂的目标与"线索不匹配"共用 ``no_matching_transformer`` 一个 reason，
+            两者在归档里不可区分（三个变换器全部依赖 AST 或文本线索，目标读不懂时
+            它们并非"没找到修法"，而是"没法找"）。
 
     Returns:
         {"attempted": bool——是否有变换器匹配到修法线索；
@@ -200,7 +217,17 @@ def attempt_deterministic_repair(
     }
     if not target_code.strip():
         outcome["reason"] = "empty_target"
+        record_check_outcome(outcome_sink, "target_readability", CHECK_ERROR, "empty_target")
         return outcome
+    if not parses_as_module(target_code):
+        record_check_outcome(
+            outcome_sink,
+            "target_readability",
+            CHECK_ERROR,
+            f"unparseable_target:{unparseable_shape(target_code)}",
+        )
+    else:
+        record_check_outcome(outcome_sink, "target_readability", CHECK_OK, "target_parsed")
     for transformer in _TRANSFORMERS:
         hit = transformer(target_code, test_output)
         if hit is None:
@@ -210,10 +237,13 @@ def attempt_deterministic_repair(
         outcome["method"] = method
         try:
             ast.parse(new_code)
-        except SyntaxError as exc:
-            outcome["reason"] = f"validation_failed:{exc.msg}"
-            logger.warning("确定性修复候选（%s）未过 AST 门：%s", method, exc.msg)
+        except AST_UNREADABLE_ERRORS as exc:
+            detail = parse_error_text(exc)
+            outcome["reason"] = f"validation_failed:{detail}"
+            record_check_outcome(outcome_sink, "candidate_validation", CHECK_ERROR, f"unparseable_candidate:{detail}")
+            logger.warning("确定性修复候选（%s）未过 AST 门：%s", method, detail)
             return outcome
+        record_check_outcome(outcome_sink, "candidate_validation", CHECK_OK, "candidate_parsed")
         if new_code == target_code:
             outcome["reason"] = "validation_failed:no_change"
             return outcome
@@ -249,4 +279,8 @@ def build_deterministic_debug_result(
         "position_aware_focus": {"focused": False, "function_name": None, "line": None, "hint": ""},
         "type_repair_findings": [],
         "mypy_findings_count": 0,
+        # BG（2026-10-21）：确定性接管未执行类型修复层 → 状态 None（未运行，
+        # 不是"检查通过"）。键集合同构，供 _debugger_node 统一消费。
+        "static_check_status": None,
+        "static_check_outcomes": None,
     }

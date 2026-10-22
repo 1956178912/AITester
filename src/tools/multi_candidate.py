@@ -39,6 +39,14 @@ from dataclasses import dataclass
 from typing import Any
 
 from src.tools.patch_applier import _count_function_defs, apply_patch_to_code
+from src.utils.check_status import (
+    AST_UNREADABLE_ERRORS,
+    CHECK_ERROR,
+    CHECK_OK,
+    parse_error_text,
+    record_check_outcome,
+    unparseable_shape,
+)
 from src.utils.env_utils import env_flag
 
 logger = logging.getLogger(__name__)
@@ -75,7 +83,9 @@ def candidate_variant_prompt(index: int, num_candidates: int) -> str:
     return f"【多候选修复 {index + 1}/{num_candidates}】{variant}"
 
 
-def static_validate_patch(original_code: str, patch: str) -> tuple[bool, str, str]:
+def static_validate_patch(
+    original_code: str, patch: str, outcome_sink: list[dict[str, Any]] | None = None
+) -> tuple[bool, str, str]:
     """对候选补丁做静态筛选（3.1 的 cheap gate，不消耗 LLM 与执行成本）。
 
     校验项：
@@ -87,6 +97,9 @@ def static_validate_patch(original_code: str, patch: str) -> tuple[bool, str, st
     Args:
         original_code: 原始被测代码。
         patch: 候选补丁文本（可含 ```python 包裹）。
+        outcome_sink: BK 轮侧信道（None 时零开销）。"读不懂"与"确有语法错误"都
+            判 False（保守拒绝，判定方向不变），但含义不同：前者是**没测成**，
+            后者是**测出来不合格**。本参数把两者分开披露。
 
     Returns:
         (是否通过静态筛选, 拒绝原因, 应用后的完整代码)。
@@ -120,7 +133,15 @@ def static_validate_patch(original_code: str, patch: str) -> tuple[bool, str, st
     try:
         ast.parse(new_code)
     except SyntaxError as e:
+        record_check_outcome(outcome_sink, "patch_validation", CHECK_ERROR, f"syntax_error:{e.msg}")
         return False, f"语法错误（line {e.lineno}）: {e.msg}", ""
+    except ValueError as e:
+        # BK 轮：孤立代理位这类"读不懂"抛的是 ValueError 族（UnicodeEncodeError），
+        # 单腿守卫会从这里抛穿到 _debugger_node 让整个修复节点崩。折叠方向与语法
+        # 错误一致（保守拒绝，不新增放行），归因与 SyntaxError 分开写。
+        record_check_outcome(outcome_sink, "patch_validation", CHECK_ERROR, f"unreadable:{unparseable_shape(new_code)}")
+        return False, f"代码读不懂（{unparseable_shape(new_code)}）：{parse_error_text(e)}", ""
+    record_check_outcome(outcome_sink, "patch_validation", CHECK_OK, "patch_parsed")
 
     # 安全检查 4：函数定义数量不减少（防止误删其他函数）
     if new_defs < orig_defs:
@@ -562,7 +583,9 @@ def predict_candidate_rewards(
 # ─── 多解合成（PRISM 式：从多个部分正确的候选中合成更完整方案）────────────
 
 
-def _extract_modified_regions(original_code: str, new_code: str) -> set[str]:
+def _extract_modified_regions(
+    original_code: str, new_code: str, outcome_sink: list[dict[str, Any]] | None = None
+) -> set[str]:
     """提取候选补丁相对原代码的修改区域（函数级标签集合）。
 
     用 AST 级 diff 定位"哪个函数被修改了"（而非行级 diff，因为行号偏移
@@ -572,6 +595,10 @@ def _extract_modified_regions(original_code: str, new_code: str) -> set[str]:
     Args:
         original_code: 原始代码全文。
         new_code: 候选应用后的代码全文。
+        outcome_sink: BK 轮侧信道（None 时零开销）。候选代码读不懂 ⇒ 已收集的签名为空，
+            区域集合退化为"原代码全部顶层名"（实测方向是保守多报，两候选因此必判重叠
+            而拒绝合成），但 ``region_labels`` 会出现从未真读出来的区域名；旧口径既不
+            披露也没有接住 ``ValueError`` 族（单候选场景直接抛穿调用方）。
 
     Returns:
         被修改的函数名集合（如 {"add", "mul"}）；两文件函数签名完全一致
@@ -579,12 +606,21 @@ def _extract_modified_regions(original_code: str, new_code: str) -> set[str]:
     """
     import ast
 
-    def _func_signatures(code: str) -> dict[str, str]:
+    def _func_signatures(code: str, *, disclose_candidate: bool) -> dict[str, str]:
         """函数名 → 函数体 AST dump（用于比较是否被修改）。"""
         sigs: dict[str, str] = {}
         try:
             tree = ast.parse(code)
-        except SyntaxError:
+        except AST_UNREADABLE_ERRORS:
+            # 原代码侧的可读性由 synthesize_candidates 统一披露（每候选重复一次
+            # 没有信息量），这里只披露候选侧。
+            if disclose_candidate:
+                record_check_outcome(
+                    outcome_sink,
+                    "synthesis_input_readability",
+                    CHECK_ERROR,
+                    f"unparseable_candidate:{unparseable_shape(code)}",
+                )
             return sigs
         for node in tree.body:
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -596,8 +632,8 @@ def _extract_modified_regions(original_code: str, new_code: str) -> set[str]:
                         sigs[target.id] = ast.dump(node)
         return sigs
 
-    old_sigs = _func_signatures(original_code)
-    new_sigs = _func_signatures(new_code)
+    old_sigs = _func_signatures(original_code, disclose_candidate=False)
+    new_sigs = _func_signatures(new_code, disclose_candidate=True)
     modified: set[str] = set()
     for name in set(old_sigs.keys()) | set(new_sigs.keys()):
         old_v = old_sigs.get(name)
@@ -611,6 +647,7 @@ def synthesize_candidates(
     original_code: str,
     candidates: list[CandidateResult],
     static_ok: bool = True,
+    outcome_sink: list[dict[str, Any]] | None = None,
 ) -> tuple[str, list[str]]:
     """从多个部分正确的候选中合成一个更完整的方案（PRISM 式合成阶段）。
 
@@ -630,6 +667,9 @@ def synthesize_candidates(
         original_code: 原始被测代码全文。
         candidates: generate_candidates 的返回（候选列表）。
         static_ok: 是否仅取 static_passed=True 的候选参与合成（默认 True）。
+        outcome_sink: BK 轮侧信道（None 时零开销）。返回值里的空串有四种成因
+            （无候选 / 区域重叠 / 输入读不懂 / 合成结果读不懂），旧口径把后两种
+            折叠成与"按设计不合成"同形；本参数逐腿披露，两个返回值的取值不变。
 
     Returns:
         (synthesized_code, region_labels) 元组：
@@ -645,7 +685,7 @@ def synthesize_candidates(
     # 提取各候选的修改区域（函数名集合）
     regions: list[set[str]] = []
     for c in valid:
-        mod = _extract_modified_regions(original_code, c.new_code)  # type: ignore[arg-type]
+        mod = _extract_modified_regions(original_code, c.new_code, outcome_sink=outcome_sink)  # type: ignore[arg-type]
         regions.append(mod)
 
     # region_labels 统一口径：各候选实际修改的函数名（与 L715 正常路径一致），
@@ -673,8 +713,15 @@ def synthesize_candidates(
 
     try:
         ast.parse(original_code)
-    except SyntaxError:
+    except AST_UNREADABLE_ERRORS:
+        # BK 轮：读不懂 ⇒ 回落单候选（判定值不变），但必须与"按设计不合成"分开
         logger.warning("多解合成：原代码 AST 解析失败，无法合成")
+        record_check_outcome(
+            outcome_sink,
+            "synthesis_input_readability",
+            CHECK_ERROR,
+            f"unparseable_original:{unparseable_shape(original_code)}",
+        )
         return "", _labels()
 
     # 按修改区域从各候选提取函数体，替换到原代码树
@@ -702,7 +749,14 @@ def synthesize_candidates(
         other_code = valid[idx].new_code or ""
         try:
             other_tree = ast.parse(other_code)
-        except SyntaxError:
+        except AST_UNREADABLE_ERRORS:
+            # 读不懂的候选跳过合并（其修改区域不进合成结果）——BK 轮披露该降级
+            record_check_outcome(
+                outcome_sink,
+                "synthesis_input_readability",
+                CHECK_ERROR,
+                f"unparseable_merge_source:{unparseable_shape(other_code)}",
+            )
             continue
         base_lines = base_code.splitlines(keepends=True)
         for func_name in other_mods:
@@ -717,10 +771,13 @@ def synthesize_candidates(
     # 语法校验
     try:
         ast.parse(base_code)
-    except SyntaxError as e:
-        logger.warning("多解合成：合成后代码语法错误（%s），保守回退单候选", e)
+    except AST_UNREADABLE_ERRORS as exc:
+        detail = parse_error_text(exc)
+        logger.warning("多解合成：合成后代码语法错误（%s），保守回退单候选", detail)
+        record_check_outcome(outcome_sink, "synthesis_result_readability", CHECK_ERROR, f"unparseable_result:{detail}")
         return "", _labels()
 
+    record_check_outcome(outcome_sink, "synthesis_result_readability", CHECK_OK, "synthesized")
     return base_code, _labels()
 
 

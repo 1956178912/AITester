@@ -47,6 +47,7 @@ from src.agents.error_classifier import (
 from src.prompts.templates import DEBUGGER_SYSTEM_PROMPT
 from src.tools.patch_intent import edit_intent_enabled
 from src.tools.type_repair import type_repair_layer
+from src.utils.check_status import CHECK_OK
 from src.utils.env_utils import env_flag
 
 # T2（2026-10-11 独立评审落地）：对抗性意图假设的契约是顶层 JSON 数组，
@@ -680,8 +681,17 @@ class DebuggerAgent(BaseAgent):
 
             _intents = parse_edit_intents(result.get("edit_intents"))
             if _intents:
-                _intent_result = apply_edit_intents(target_code, _intents)
+                from src.utils.check_status import worst_check_status
+
+                _intent_legs: list[dict[str, Any]] = []
+                _intent_result = apply_edit_intents(target_code, _intents, outcome_sink=_intent_legs)
                 edit_intent_status = _intent_result
+                # BK 轮：ok=True 有两种成因（结果真的过了语法门 / 原文本就读不懂
+                # 故跳过该门），返回值同形——把可测量性单独披露，ok 判定不变。
+                edit_intent_status["check_status"] = worst_check_status(
+                    str(_leg.get("status", "")) for _leg in _intent_legs
+                )
+                edit_intent_status["check_outcomes"] = list(_intent_legs)
                 if _intent_result.get("ok"):
                     patch = f"```python\n{_intent_result['code']}\n```"
                     logger.info(
@@ -756,6 +766,8 @@ class DebuggerAgent(BaseAgent):
         # 疑点观测层（type_repair_findings），不影响历史实验口径。
         type_repair_findings: list[dict[str, Any]] = []
         mypy_findings_count: int = 0
+        static_check_status: str | None = None
+        static_check_outcomes: list[dict[str, Any]] | None = None
         if patch:
             # 先用 patch_applier 把补丁应用到原代码得到"补丁后代码"，再喂给
             # type_repair_layer（静态层需要两侧代码做对比识别；
@@ -766,6 +778,9 @@ class DebuggerAgent(BaseAgent):
             _type_repair = type_repair_layer(target_code, _patched if _applied else target_code)
             type_repair_findings = _type_repair.get("findings", [])
             mypy_findings_count = int(_type_repair.get("mypy_findings_count", 0))
+            # BG（2026-10-21）：检查器可测量状态（"error" 时 count=0 不是干净）
+            static_check_status = _type_repair.get("static_check_status")
+            static_check_outcomes = _type_repair.get("static_check_outcomes")
             if _type_repair.get("repaired"):
                 # LLM 层修订成功且通过契约回环 → 用修订代码替换 patch
                 _repaired = _type_repair.get("repaired_code") or _patched
@@ -775,6 +790,17 @@ class DebuggerAgent(BaseAgent):
                 logger.debug(
                     "2.1 类型疑点 %d 处（静态层记录，LLM 层未修订；mypy 层 %d 条）",
                     len(type_repair_findings),
+                    mypy_findings_count,
+                )
+            elif static_check_status not in (None, CHECK_OK):
+                # BL 轮（2026-10-22）：state.py 里"读 count 时必须结合
+                # static_check_status（ok 才是检查完成且零疑点）"这条口径注释
+                # 到这里才有实现。此前疑点为空时本分支整段静默，status=error
+                # （后端崩了 / 报告损坏）与"仓库真的干净"落进同一个读数；
+                # 只补披露，不改 patch / 路由。
+                logger.warning(
+                    "2.1 静态类型层不可测量（status=%s）：findings=[] 且 mypy 层 %d 条不构成「无类型问题」证据",
+                    static_check_status,
                     mypy_findings_count,
                 )
 
@@ -808,6 +834,10 @@ class DebuggerAgent(BaseAgent):
             "type_repair_findings": type_repair_findings,
             # 2.1 mypy 静态层观测：mypy 补充的类型疑点数（未启用/未安装时 0）
             "mypy_findings_count": mypy_findings_count,
+            # BG：检查器可测量状态（ok/disabled/unavailable/error + 逐条尝试）；
+            # error 时 mypy_findings_count=0 不得读作"无类型问题"
+            "static_check_status": static_check_status,
+            "static_check_outcomes": static_check_outcomes,
             # 1.3 分层压缩降级链：本轮是否因契约拒绝反馈而收紧了上下文
             # （contract_reject_feedback 非空时 True；实验分析"降级链触发率"消费）
             "downgrade_triggered": bool(contract_reject_feedback),

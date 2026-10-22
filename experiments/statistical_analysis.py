@@ -1452,13 +1452,23 @@ def contamination_view_summary(data: dict[str, list[dict]]) -> dict[str, dict[st
     contamination_risk_level（high/medium/low/unknown/not_applicable）。
     聚合：各档计数 + 含污染（high/medium）vs 干净（low）的 passed 率
     对照（not_applicable/unknown 不入两组分母，诚实披露）。
+
+    BP 轮（2026-10-22）：`or "unknown"` 是批次 IX 定下的历史口径——「这一行根本没
+    记录级别」与「检测跑了但判成 unknown」并计同一档。本轮**不动 counts 的任何
+    键与数值**（改了就是重写历史读数），只补一个平行披露 `unknown_of_which_absent`
+    （unknown 里有多少行属于前者），使本表与 `cross_analysis` 的 `unobserved_total`
+    恒可对账：`counts["unknown"] == 真 unknown 行数 + unknown_of_which_absent`。
     """
     summary: dict[str, dict[str, Any]] = {}
     for baseline in sorted(data):
         counts = {"high": 0, "medium": 0, "low": 0, "unknown": 0, "not_applicable": 0}
         cont_pass = cont_n = clean_pass = clean_n = 0
+        absent_rows = 0
         for row in data[baseline] or []:
-            level = row.get("contamination_risk_level") or "unknown"
+            recorded = row.get("contamination_risk_level")
+            level = recorded or "unknown"
+            if not recorded:
+                absent_rows += 1
             counts[level] = counts.get(level, 0) + 1
             if level in ("high", "medium"):
                 cont_n += 1
@@ -1470,6 +1480,7 @@ def contamination_view_summary(data: dict[str, list[dict]]) -> dict[str, dict[st
             "counts": counts,
             "contaminated_passed_rate": round(cont_pass / cont_n, 4) if cont_n else None,
             "clean_passed_rate": round(clean_pass / clean_n, 4) if clean_n else None,
+            "unknown_of_which_absent": absent_rows,
         }
     return summary
 
@@ -1488,6 +1499,14 @@ def _contamination_view_report_lines(summary: dict[str, dict[str, Any]]) -> list
             f"| {baseline} | {c.get('high', 0)} | {c.get('medium', 0)} | {c.get('low', 0)} "
             f"| {c.get('unknown', 0)} | {c.get('not_applicable', 0)} "
             f"| {cp if cp is not None else '—'} | {kp if kp is not None else '—'} |"
+        )
+    absent_rows = sum(int(s.get("unknown_of_which_absent", 0)) for s in summary.values())
+    if absent_rows:
+        # BP 轮：unknown 列不再是"检测判不了"单一含义——点名其中有多少行是"根本没记录"。
+        lines.append("")
+        lines.append(
+            f"> unknown 列含 {absent_rows} 行「行内未记录 contamination_risk_level」（批次 IX 口径并计本档）。"
+            "5.3 表把同一批行单独记作未入对照，两表 unknown 之差即该行数——不是两脚本判法不同。"
         )
     return lines
 

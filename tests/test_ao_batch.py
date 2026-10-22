@@ -106,11 +106,30 @@ class TestReadmeEnHeader:
         AZ 轮（2026-10-21）推进至 "AZ round"；BA 轮（2026-10-21）推进至 "BA round"；
         BB 轮（2026-10-21）与 BC 轮（2026-10-21）**未推进本锁**——BC 头部历史链
         含 "After the BA round…" / "Previously **BA round**:" 两处 "BA round"
-        字面，旧断言因此恒真（**误绿**）；本次文档收口把断言推进至 "BC round"，
+        字面，旧断言因此恒真（**误绿**）；BC 文档收口把断言推进至 "BC round"，
         并把 README.en 头部统一为 "**BC round:" 写法（行锁必须指向唯一最新批次
-        标记，不能指向会在历史链里反复出现的旧轮次名）。"""
-        assert "Last updated: 2026-10-21" in README_EN_HEAD
-        assert "BC round" in README_EN_HEAD
+        标记，不能指向会在历史链里反复出现的旧轮次名）；BD 轮（2026-10-21）
+        推进至 "**BD round:"；BE 轮（2026-10-21）推进至 "**BE round:"；
+        BF 轮（2026-10-21）推进至 "**BF round:"（带冒号的完整标记，历史链
+        中的 "Previously **BE round:" 不命中该字面）；BG 轮（2026-10-21）
+        推进至 "**BG round:"（同样带冒号；历史链中的 "Previously **BF
+        round:" 不命中该字面）；BH 轮（2026-10-21）推进至 "**BH round:"
+        （同一写法；历史链中的 "Previously **BG round:" 不命中该字面）；BI 轮
+        （2026-10-22，登记日随零点跨班后移）推进至 "**BI round:"，日期行同步
+        改为 2026-10-22（改写后前 10 行已不再出现 "Last updated: 2026-10-21"，
+        旧日期断言不会因残留文本误绿）；BJ 轮（2026-10-22）推进至 "**BJ round:"
+        （同一写法：历史链里 BI 的标记已改为 "Previously **BI round:"，不命中
+        带冒号的最新字面），日期行仍为 2026-10-22；BK 轮（2026-10-22）推进至
+        "**BK round:"（BJ 的标记随之改为 "Previously **BJ round:"，故带冒号的最新
+        字面在头部唯一命中），日期行仍为 2026-10-22；
+        BL 轮（2026-10-22）推进至 "**BL round:"（BK 的标记随之改为 "Previously **BK round:"，故带冒号的最新
+        字面在头部唯一命中），日期行仍为 2026-10-22；BM 轮（2026-10-22）推进至
+        "**BM round:"（同一写法：BL 的标记随之改为 "Previously **BL round:"，带冒号的
+        最新字面在头部唯一命中），日期行仍为 2026-10-22；BN 轮（2026-10-22）推进至
+        "**BN round:"（同一写法：BM 的标记随之改为 "Previously **BM round:"，带冒号的最新字面
+        在头部唯一命中），日期行仍为 2026-10-22；BO 轮（2026-10-22）推进至 "**BO round:"（同一写法：BN 的标记随之改为 "Previously **BN round:"，带冒号的最新字面在头部唯一命中），日期行仍为 2026-10-22；BP 轮（2026-10-22）推进至 "**BP round:"（同一写法：BO 的标记随之改为 "Previously **BO round:"，带冒号的最新字面在头部唯一命中；本轮头部叙述按 EN 惯例把轮次名加粗闭合，避免插入奇数个 `**` 打乱整行的粗体配对），日期行仍为 2026-10-22。"""
+        assert "Last updated: 2026-10-22" in README_EN_HEAD
+        assert "**BP round:" in README_EN_HEAD
 
 
 class TestDeprecationTimeline:

@@ -8,6 +8,12 @@
    F2P 第二段判据恒假，detection 恒 0）；
 3. test_cases 的 def test_ 计数 == total_tests（口径自洽）。
 
+BF（2026-10-21）：「全绿」与「至少一红」都以**有效通过**为证据——pytest 对
+全 skip / xfail / deselect 的套件同样返回 rc==0。判绿统一走
+`src.utils.pytest_output.run_has_effective_pass`（rc==0 且至少 1 个真实
+passed、0 failed）：buggy 侧 rc==0 但没有断言执行，同样不可检出；fixed 侧
+rc==0 但没有断言执行，则 gold 材料并未被证明自洽。
+
 背景：2026-10-05 独立审查 P0-5 扩容 20 模板时的验证发现 6/20 首版模板
 存在"buggy 不红 / fixed 不红 / 测试数漂移"问题（banker's rounding 临界、
 小整数缓存 is 判定、同秒 .pyc 陈旧字节码等陷阱）——模板正确性需要机制
@@ -30,6 +36,8 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
+
+from src.utils.pytest_output import run_has_effective_pass  # noqa: E402
 
 _POOLS = (
     "BUG_PATTERNS",
@@ -111,11 +119,19 @@ def verify_template(template: dict, *, is_cross_pool: bool = False) -> list[str]
                     (td_path / f"{mk.replace('_code', '')}.py").write_text(mc, encoding="utf-8")
             (td_path / "test_gold.py").write_text(test_text, encoding="utf-8")
             rc, out = _run_pytest(td_path)
+            effective = run_has_effective_pass(rc, out)
             if side == "buggy" and rc == 0:
-                problems.append("gold 测试在 buggy 代码上全绿（缺陷不可检出，模板无信息量）")
+                if effective:
+                    problems.append("gold 测试在 buggy 代码上全绿（缺陷不可检出，模板无信息量）")
+                else:
+                    problems.append("gold 测试在 buggy 代码上无有效通过（全 skip / xfail / deselect，缺陷不可检出）")
             if side == "fixed" and rc != 0:
                 tail = out.strip().splitlines()[-1] if out.strip() else "no output"
                 problems.append(f"gold 测试在 fixed 代码上失败（gold 材料不自洽）：{tail}")
+            elif side == "fixed" and not effective:
+                problems.append(
+                    "gold 测试在 fixed 代码上无有效通过（全 skip / xfail / deselect，gold 材料自洽未被证明）"
+                )
             # 同秒覆盖源文件时清 __pycache__（mtime 粒度会让 fixed 侧复用 buggy 字节码）
             shutil.rmtree(td_path / "__pycache__", ignore_errors=True)
     return problems

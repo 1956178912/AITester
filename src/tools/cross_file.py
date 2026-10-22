@@ -38,6 +38,14 @@ import threading
 from dataclasses import dataclass, field
 from typing import Any
 
+from src.utils.check_status import (
+    AST_UNREADABLE_ERRORS,
+    CHECK_DISABLED,
+    CHECK_ERROR,
+    CHECK_OK,
+    record_check_outcome,
+    unparseable_shape,
+)
 from src.utils.env_utils import env_flag
 
 logger = logging.getLogger(__name__)
@@ -159,6 +167,7 @@ def analyze_cross_file_deps(
     entry_module: str,
     source_files: dict[str, str],
     bidirectional: bool = False,
+    outcome_sink: list[dict[str, Any]] | None = None,
 ) -> list[CrossFileDependency]:
     """AST 分析入口模块与其他模块的依赖关系。
 
@@ -188,17 +197,31 @@ def analyze_cross_file_deps(
 
     Returns:
         跨文件依赖边列表；entry_module 不在 source_files 时返回空列表。
+
+    BK 轮披露（判定值不变）：空列表有两种成因——"确实没有项目内依赖"与
+    "入口模块读不懂，一条边都没法算"。下游据"依赖边为空"把跨文件计划降级为
+    None（单文件修复路径），故把两者混在一起等于让一次 AST 失败悄悄改掉了
+    修复策略。``outcome_sink`` 为 None 时零开销。
     """
     entry_code = source_files.get(entry_module)
     if not entry_code:
+        record_check_outcome(outcome_sink, "entry_readability", CHECK_DISABLED, "entry_not_in_source_files")
         return []
 
     deps: list[CrossFileDependency] = []
     try:
         tree = ast.parse(entry_code)
-    except SyntaxError:
-        # 入口模块语法错误时无法 AST 分析，保守返回空
+    except AST_UNREADABLE_ERRORS:
+        # 入口模块读不懂时无法 AST 分析，保守返回空（旧口径只捕 SyntaxError，
+        # ValueError 族会从这里抛穿到调用方）
+        record_check_outcome(
+            outcome_sink,
+            "entry_readability",
+            CHECK_ERROR,
+            f"unparseable_entry:{unparseable_shape(entry_code)}",
+        )
         return []
+    record_check_outcome(outcome_sink, "entry_readability", CHECK_OK, "entry_parsed")
 
     # 收集 entry 中所有 import 的项目内模块名及其符号（from X import Y / import X）
     imported_symbols = _collect_imported_symbols(tree, source_files)
@@ -227,7 +250,7 @@ def analyze_cross_file_deps(
     # 2.2 改进：双向依赖分析——扫描其他模块 import entry_module 的符号
     # （"谁调用了入口模块"视角，跨文件修复时调用方需同步更新）
     if bidirectional:
-        reverse_deps = _collect_reverse_deps(entry_module, source_files)
+        reverse_deps = _collect_reverse_deps(entry_module, source_files, outcome_sink=outcome_sink)
         deps.extend(reverse_deps)
 
     # 去重（同一 source/target/symbol 只保留一条）
@@ -244,6 +267,7 @@ def analyze_cross_file_deps(
 def _collect_reverse_deps(
     entry_module: str,
     source_files: dict[str, str],
+    outcome_sink: list[dict[str, Any]] | None = None,
 ) -> list[CrossFileDependency]:
     """2.2 改进：收集"其他模块 → entry_module"的反向依赖边（被调用方视角）。
 
@@ -255,6 +279,8 @@ def _collect_reverse_deps(
     Args:
         entry_module: 入口模块名（不含 .py）。
         source_files: 模块名 → 源码字符串的映射。
+        outcome_sink: BK 轮侧信道——读不懂的模块被 ``continue`` 跳过时逐模块披露
+            （旧口径下"某模块没算反向边"与"某模块根本没读进去"同样都是空列表）。
 
     Returns:
         反向依赖边列表（source_module=其他模块, target_module=entry_module）；
@@ -269,6 +295,7 @@ def _collect_reverse_deps(
     # 行缓存预置：entry_module 自身先缓存一次，后续符号查找与上下文切片
     # 直接复用，整个循环内 entry 源码只切分一次。
     _lines_cache: dict[str, list[str]] = {entry_module: source_files.get(entry_module, "").splitlines()}
+    scanned = 0
     for module_name, code in source_files.items():
         if module_name == entry_module:
             continue
@@ -276,8 +303,16 @@ def _collect_reverse_deps(
             continue
         try:
             tree = ast.parse(code)
-        except SyntaxError:
+        except AST_UNREADABLE_ERRORS:
+            # 读不懂的模块没有反向边（旧口径静默 continue，且 ValueError 族从这里抛穿）
+            record_check_outcome(
+                outcome_sink,
+                "reverse_dep_scan",
+                CHECK_ERROR,
+                f"unparseable_module:{module_name}:{unparseable_shape(code)}",
+            )
             continue
+        scanned += 1
         # 收集该模块 import 的 entry_module 符号
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom):
@@ -320,6 +355,10 @@ def _collect_reverse_deps(
                             context="",
                         )
                     )
+    if scanned:
+        record_check_outcome(outcome_sink, "reverse_dep_scan", CHECK_OK, f"modules_scanned:{scanned}")
+    else:
+        record_check_outcome(outcome_sink, "reverse_dep_scan", CHECK_DISABLED, "no_module_scanned")
     return reverse
 
 

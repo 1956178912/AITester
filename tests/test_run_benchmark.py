@@ -393,6 +393,19 @@ class TestDumpStateArtifactsObservationKeys:
             "testless_validation",
             "deterministic_guard_report",
             "m10_leaf_fallback",
+            # BN 轮（2026-10-22）：AITesterState 声明的 10 个 status/outcomes 通道
+            # 归位进白名单（此前 raw 工件里 0 出现 ⇒ 归档无法复核"检查崩了"与
+            # "按设计没跑"的区别）。逐键断言见 tests/test_bn_status_persistence.py。
+            "contract_status",
+            "static_check_status",
+            "static_check_outcomes",
+            "safety_check_status",
+            "safety_check_outcomes",
+            "oracle_check_status",
+            "oracle_check_outcomes",
+            "detection_first_status",
+            "edit_intent_status",
+            "deterministic_repair_status",
             "task_metadata",
         }
         assert set(self._dump(tmp_path, {})) == expected

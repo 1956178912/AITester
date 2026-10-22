@@ -30,6 +30,15 @@ import textwrap
 import threading
 from typing import Any
 
+from src.utils.check_status import (
+    CHECK_DISABLED,
+    CHECK_ERROR,
+    CHECK_OK,
+    UNPARSEABLE_ORIGINAL,
+    record_check_outcome,
+    status_for_check,
+    unparseable_side,
+)
 from src.utils.env_utils import env_flag
 from src.utils.helpers import extract_code_block
 
@@ -482,13 +491,29 @@ def safe_apply_patch(
     # 开关 PATCH_DANGEROUS_API_GUARD 默认 true；原代码已有的危险调用
     # 不在差集内，不拦截（避免误伤既有依赖 subprocess 的代码修复）。
     if _dangerous_api_guard_enabled():
-        added = dangerous_api_added(code, new_code)
+        _guard_outcomes: list[dict[str, Any]] = []
+        added = dangerous_api_added(code, new_code, outcome_sink=_guard_outcomes)
         if added:
             logger.warning(
                 "S2 危险 API 守卫：补丁新引入危险操作 %s，拒绝应用并回滚",
                 added,
             )
             return code, False
+        # BL 轮（2026-10-22）：BI 把守卫的可测量性写进了 sink，但本调用点没接
+        # sink（普查读数：patch_applier.py 里 dangerous_api_added 的关键字实参
+        # =[]），所以那条 error 记录从来没被生产出来过。现在接上并披露：
+        # 读不懂 ⇒ 差集恒空 ⇒ **放行**，判定方向不变（把 error 翻成拒绝需要
+        # A/B 数据与预注册判据），但"守卫没比成"必须在日志里看得见。
+        _guard_status = status_for_check(_guard_outcomes, "dangerous_api")
+        if _guard_status is not None and _guard_status != CHECK_OK:
+            logger.warning(
+                "S2 危险 API 守卫不可测量（status=%s）：added=[] 只表示没读出新危险，不是无新增危险调用的证据：%s",
+                _guard_status,
+                next(
+                    (str(o.get("reason") or "") for o in _guard_outcomes if o.get("status") != CHECK_OK),
+                    "-",
+                ),
+            )
     return new_code, True
 
 
@@ -992,25 +1017,46 @@ def _collect_dynamic_import_bypass(code: str) -> set[str]:
     return found
 
 
-def dangerous_api_added(original_code: str, patched_code: str) -> list[str]:
+def dangerous_api_added(
+    original_code: str,
+    patched_code: str,
+    outcome_sink: list[dict[str, Any]] | None = None,
+) -> list[str]:
     """S2 安全守卫：返回补丁**新引入**的危险 API 特征列表（差集口径）。
 
     新增 = patched_code 命中特征 - original_code 命中特征。
     原代码已有的危险调用不拦截（与命名契约"放行既有"对偶口径）；
-    空 / 解析失败返回 []（保守放行，由 safe_apply_patch 语法校验兜底）。
+    空 / 解析失败返回 []（保守放行，判定口径不变）。
+
+    BI 轮（2026-10-22）：旧 docstring 称"解析失败由 safe_apply_patch 的语法校验
+    兜底"——该前提**只在本地链路成立**（G 轮已就同一前提在 repo 片段链路修过一次
+    同型缺陷）。无语法闸门的调用方（如 testless 导入冒烟预检）会把"读不懂补丁"
+    直接读成"无新增危险 API"。现按 sink 披露：``status="error"`` +
+    ``reason=unparseable_patched``（**fail-open 侧**：补丁读不懂 ⇒ 差集恒空 ⇒
+    放行）或 ``reason=unparseable_original``（保守侧：基准读不懂 ⇒ 补丁的全部
+    危险命中都算"新增" ⇒ 过度拦截）。**返回值逐字节不变**，只补可测量性。
 
     Args:
         original_code: 补丁应用前原始代码。
         patched_code: 应用后的完整代码。
+        outcome_sink: 可选列表，逐条追加 ``{check, status, reason}``（None 零开销）。
 
     Returns:
-        新增危险特征列表（空 = 无新增危险 API，放行）。
+        新增危险特征列表（空 = 未读出新危险 API；**只在 sink 的 status 为
+        ``ok`` 时**才是"无新增危险 API"的证据）。
     """
     if not original_code or not patched_code:
+        record_check_outcome(outcome_sink, "dangerous_api", CHECK_DISABLED, "empty_input")
         return []
+    unparseable = unparseable_side(original_code, patched_code)
     before = _collect_dangerous_calls(original_code)
     after = _collect_dangerous_calls(patched_code)
-    return sorted(after - before)
+    added = sorted(after - before)
+    if unparseable is not None:
+        record_check_outcome(outcome_sink, "dangerous_api", CHECK_ERROR, unparseable)
+    else:
+        record_check_outcome(outcome_sink, "dangerous_api", CHECK_OK)
+    return added
 
 
 def _dangerous_api_guard_enabled() -> bool:
@@ -1086,6 +1132,7 @@ def _collect_module_level_symbols(source_code: str) -> set[str]:
 def check_naming_contract(
     original_code: str,
     patched_code: str,
+    outcome_sink: list[dict[str, Any]] | None = None,
 ) -> tuple[bool, list[str]]:
     """P0 1.3 命名契约检查：补丁不得删除原代码中的模块级符号。
 
@@ -1097,29 +1144,66 @@ def check_naming_contract(
     恒返回 (True, [])，由调用方（_patch_applier_node）直接跳过契约检查，
     保持历史单补丁口径（历史对照 / 合成集无契约场景）。
 
+    BI 轮（2026-10-22）：``(True, [])`` 此前是**四件事**共用的返回值——
+    "比较过且无符号被删"、"原始代码读不懂（基准符号集为空 ⇒ 从未比较，保守
+    放行）"、"补丁读不懂但原文零模块符号"、"开关关闭恒放行"。实测生产消费点
+    ``_check_patch_safety``：原文含当前解释器不接受的语法（如 py2 ``print``
+    语句、空字节）时，删除模块级符号的补丁会**通过契约守卫并写盘**，日志与
+    读数零披露（``contract_missing_symbols`` 保持 ``null``）。补丁侧读不懂时
+    更糟：旧实现把"无法确认仍存在"报成"补丁删除了 N 个模块级符号"，误归因经
+    ``contract_missing_symbols`` / 1.3 降级链反馈进读数。现按 sink 三态披露
+    （``ok`` / ``disabled`` / ``error`` + reason），**返回值与判定方向逐字节不
+    变**（本守卫纯标准库 AST，无外部依赖 ⇒ 不产生 ``unavailable`` 通道）。
+
     Args:
         original_code: 原始代码。
         patched_code: 应用补丁后的代码。
+        outcome_sink: 可选列表，逐条追加 ``{check, status, reason}``（None 零开销）。
 
     Returns:
-        (通过?, 缺失符号列表)。解析失败或开关关闭时通过（不阻断，保守降级）。
+        (通过?, 缺失符号列表)。**解析失败或开关关闭时的"通过"不构成契约证据**——
+        必须与 sink 中 ``status == "ok"`` 配对读取（补丁读不懂时缺失列表按旧口径
+        仍为"无法确认存在"的原符号全集）。
     """
     if not env_flag("PATCH_CONTRACT_CHECK", True):
+        record_check_outcome(outcome_sink, "naming_contract", CHECK_DISABLED, "patch_contract_check_disabled")
         return True, []
     if not original_code or not patched_code:
+        record_check_outcome(outcome_sink, "naming_contract", CHECK_DISABLED, "empty_input")
         return True, []
+    unparseable = unparseable_side(original_code, patched_code)
     original_symbols = _collect_module_level_symbols(original_code)
     patched_symbols = _collect_module_level_symbols(patched_code)
+    if unparseable == UNPARSEABLE_ORIGINAL:
+        # 基准读不懂 ⇒ 没有可比对的符号集：保守放行口径不变，但不得记成"契约通过"。
+        record_check_outcome(outcome_sink, "naming_contract", CHECK_ERROR, unparseable)
+        logger.warning("命名契约检查不可测量（原始代码无法解析，未做任何符号比较，保守放行）")
+        return True, []
     if not original_symbols:
+        if unparseable is not None:
+            record_check_outcome(outcome_sink, "naming_contract", CHECK_ERROR, unparseable)
+            logger.warning("命名契约检查不可测量（补丁代码无法解析，且原始代码无模块级符号，保守放行）")
+            return True, []
+        record_check_outcome(outcome_sink, "naming_contract", CHECK_OK, "no_module_level_symbols")
         return True, []
     missing = sorted(original_symbols - patched_symbols)
     if missing:
-        logger.warning(
-            "命名契约检查失败：补丁删除了 %d 个模块级符号 %s（P0 1.3）",
-            len(missing),
-            missing,
-        )
+        status = CHECK_ERROR if unparseable is not None else CHECK_OK
+        record_check_outcome(outcome_sink, "naming_contract", status, unparseable or "")
+        if unparseable is not None:
+            # 误归因收口：补丁从未被解析成 AST，"缺失"实为"无法确认仍存在"。
+            logger.warning(
+                "命名契约检查不可测量（补丁代码无法解析）：%d 个模块级符号无法确认仍存在，拒绝应用（未做任何符号比较）",
+                len(missing),
+            )
+        else:
+            logger.warning(
+                "命名契约检查失败：补丁删除了 %d 个模块级符号 %s（P0 1.3）",
+                len(missing),
+                missing,
+            )
         return False, missing
+    record_check_outcome(outcome_sink, "naming_contract", CHECK_OK)
     return True, []
 
 

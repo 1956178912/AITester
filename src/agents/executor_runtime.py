@@ -35,6 +35,7 @@ from src.utils.env_utils import env_int
 # 2026-10-10：模块级导入（而非函数内局部导入），使测试可用
 # `@patch("src.agents.executor_runtime.run_with_timeout")` 稳定替换该调用点。
 from src.utils.process_utils import run_with_timeout
+from src.utils.pytest_output import run_has_effective_pass
 
 try:
     import resource  # POSIX only; Windows 下 import 失败 → 静默降级
@@ -163,13 +164,22 @@ def _execution_attempt_record(
     *,
     timed_out: bool = False,
     error_type: str | None = None,
+    output: str = "",
 ) -> dict[str, Any]:
-    """构造单次执行尝试记录（纯数据，JSON 可序列化）。"""
+    """构造单次执行尝试记录（纯数据，JSON 可序列化）。
+
+    BE（2026-10-21）：``passed`` 保持执行层语义（rc==0 且未超时，历史字段
+    不变）；新增 ``effective_pass`` = 执行层通过 **且** 摘要含真实 passed
+    （F03）。flaky 的 fail→pass 证据只认 ``effective_pass``——"首败、次
+    全 skip"不是同一测试的通过，而是"第二次没跑起来"。
+    """
+    _exec_passed = returncode == 0 and not timed_out
     record: dict[str, Any] = {
         "attempt": attempt,
         "returncode": returncode,
         "timed_out": bool(timed_out),
-        "passed": returncode == 0 and not timed_out,
+        "passed": _exec_passed,
+        "effective_pass": _exec_passed and run_has_effective_pass(0, output),
     }
     if error_type:
         record["error_type"] = error_type
@@ -193,18 +203,27 @@ def extract_execution_attempts(last_result: Any) -> list[dict[str, Any]]:
     return [dict(item) for item in raw if isinstance(item, dict)]
 
 
+def _attempt_effective_pass(attempt: dict[str, Any]) -> bool:
+    """尝试是否构成有效通过：有 ``effective_pass`` 用它，旧记录回退 ``passed``。"""
+    if "effective_pass" in attempt:
+        return bool(attempt.get("effective_pass"))
+    return bool(attempt.get("passed"))
+
+
 def observed_fail_then_pass(attempts: list[dict[str, Any]] | None) -> bool:
     """是否观察到"先失败、后通过"的尝试序列（同一测试同代码重试）。
 
-    判定口径：按执行顺序扫描，任一**之前出现过失败**的尝试 passed=True
-    即为 fail→pass（与重试层"仅非零 rc 才继续"的控制流一致；记录缺失 /
-    顺序不可用时保守返回 False，不臆测）。
+    判定口径：按执行顺序扫描，任一**之前出现过失败**的尝试构成有效通过
+    （BE：``effective_pass``，旧记录无该键时回退 ``passed``）即为
+    fail→pass。仅 rc==0 但全 skip 的后续尝试不算通过——把它记成 flaky
+    会把"测试没跑起来"误诊为"测试不稳定"（与重试层"仅非零 rc 才继续"
+    的控制流一致；记录缺失 / 顺序不可用时保守返回 False，不臆测）。
     """
     saw_failure = False
     for attempt in attempts or []:
         if not isinstance(attempt, dict):
             continue
-        if attempt.get("passed"):
+        if _attempt_effective_pass(attempt):
             if saw_failure:
                 return True
         else:
@@ -526,13 +545,18 @@ def run_pytest_with_retry(self, cmd: list[str], env: dict[str, str], project_roo
             # A16：记录本次尝试（rc / timed_out / passed）。run_with_timeout 在
             # raise_on_timeout=True 下超时走 TimeoutExpired，故此处 timed_out
             # 恒 False（保留 getattr 以兼容未来返回契约变化）。
+            # BE：附带本次输出供 effective_pass 判定（全 skip 的 rc==0 不算通过）。
             attempts.append(
                 _execution_attempt_record(
                     attempt + 1,
                     result.returncode,
                     timed_out=bool(getattr(result, "timed_out", False)),
+                    output=last_output,
                 )
             )
+            # 重试层按执行层 rc 收敛：rc==0 即停止（all-skip 重跑不会变成
+            # 有效通过，重复执行只会制造 flaky 噪声）；有效通过判定由调用方
+            # 按 effective_pass / 共享谓词做终态裁决。
             if result.returncode == 0:
                 break
             logger.warning("第 %d 次执行失败，尝试重试...", attempt + 1)

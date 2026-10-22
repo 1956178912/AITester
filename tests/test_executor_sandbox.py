@@ -48,7 +48,7 @@ class TestSandboxRouting:
         EXECUTOR_USE_VENV 默认 true → 缺省 ExecutorAgent() 走 venv 沙箱
         （fail-closed：不再默认在宿主环境直跑 LLM 生成代码）。"""
         target = _make_target_file(tmp_path)
-        mock_run.return_value = type("P", (), {"returncode": 0, "stdout": "ok", "stderr": ""})
+        mock_run.return_value = type("P", (), {"returncode": 0, "stdout": "1 passed in 0.01s", "stderr": ""})
         agent = ExecutorAgent(timeout=30)  # use_venv 缺省 → config 默认 true
         result = agent.execute("def test_add():\n    assert add(1, 2) == 3\n", target)
         assert result["passed"] is True
@@ -60,7 +60,7 @@ class TestSandboxRouting:
         """显式 use_venv=False 可退回本地执行（调试 / 无 venv 权限环境）。"""
         monkeypatch.delenv("EXECUTOR_USE_VENV", raising=False)
         target = _make_target_file(tmp_path)
-        mock_run.return_value = type("P", (), {"returncode": 0, "stdout": "ok", "stderr": ""})
+        mock_run.return_value = type("P", (), {"returncode": 0, "stdout": "1 passed in 0.01s", "stderr": ""})
         agent = ExecutorAgent(timeout=30, use_venv=False)
         result = agent.execute("def test_add():\n    assert add(1, 2) == 3\n", target)
         assert result["passed"] is True

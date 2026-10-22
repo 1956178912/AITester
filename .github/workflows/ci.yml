@@ -310,6 +310,23 @@ jobs:
         if: matrix.python-version == '3.14'
         run: python scripts/gates/check_zero_assert_tests.py
 
+      - name: Check ast.parse guard capture surface (BK 捕获面棘轮)
+        # BK（2026-10-22）：含 ast.parse 的 try 站点必须能接住整个 ValueError 族
+        #（孤立代理位抛 UnicodeEncodeError，会从只捕 SyntaxError 的单腿守卫抛穿到
+        # 调用方）。存量以"文件::函数 → (站点数, 折叠形态)"登记豁免额度，新增单腿
+        # 守卫、超出额度、失效条目或条目偏大都阻断；experiments/ + scripts/ 仅报告。
+        if: matrix.python-version == '3.14'
+        run: python scripts/gates/check_ast_parse_guards.py
+
+      - name: Check status channel persistence (BN 落盘可达性棘轮)
+        # BN（2026-10-22）：AITesterState 里声明的 *_status / *_outcomes 通道必须在
+        # experiments/run_benchmark.py 的两道落盘边界（_dump_state_artifacts 白名单 +
+        # _build_task_result 每个 return 分支）登记。声明了却不落盘 ⇒ 归档里该键 0 次
+        # 出现，"检查完成且零疑点"与"检查崩了 / 按设计没跑"事后不可复核（实测三通道
+        # 5 种运行时态折成 1 种落盘形状）。豁免清单为空：新通道不落盘直接阻断。
+        if: matrix.python-version == '3.14'
+        run: python scripts/gates/check_status_persistence.py
+
       - name: Check env budget (X3 开关预算守卫)
         # X3（2026-10-05 审查 P0-5）：环境变量开关冻结棘轮——产品开关面
         #（src/ + config.py）新环境变量须先本地运行 check_env_budget.py

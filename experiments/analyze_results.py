@@ -949,25 +949,42 @@ def render_markdown(analysis: dict[str, Any], source_file: str) -> str:
         lines.append("")
 
     # 5.3 失败分析 × 污染检测交叉（验证污染效应）
-    contam_cross_rows = [
-        (b, m["contamination_cross_analysis"])
-        for b, m in per.items()
-        if m.get("contamination_cross_analysis", {}).get("available")
+    contam_cross = {b: m.get("contamination_cross_analysis", {}) for b, m in per.items()}
+    contam_cross_rows = [(b, cc) for b, cc in contam_cross.items() if cc.get("available")]
+    # BP 轮：改前 available=False 的臂被 filter 直接丢掉 ⇒ 整节从报告里消失，
+    # 「这批 30 行全都没记录级别」与「这一节没跑」同形。现在按名留下。
+    silent_cross_arms = [
+        (b, cc) for b, cc in contam_cross.items() if cc and not cc.get("available") and cc.get("n_details")
     ]
-    if contam_cross_rows:
+    if contam_cross_rows or silent_cross_arms:
         lines.append("## 失败分析 × 污染检测交叉（5.3）")
         lines.append("")
-        lines.append("| 基线 | 高污染任务 | 高污染成功率 | 低污染任务 | 低污染成功率 | 成功率差（高-低） |")
-        lines.append("|------|----------|------------|----------|------------|----------------|")
+    if contam_cross_rows:
+        lines.append(
+            "| 基线 | 高污染任务 | 高污染成功率 | 低污染任务 | 低污染成功率 | 成功率差（高-低） | 未入对照任务 |"
+        )
+        lines.append("|------|----------|------------|----------|------------|----------------|------------|")
+        delta_computable = False
         for baseline, cc in contam_cross_rows:
             by_level = cc.get("by_risk_level", {})
             high = by_level.get("high", {})
             low = by_level.get("low", {})
             delta = cc.get("high_vs_low_success_delta")
-            delta_text = f"{delta:.4f}" if delta is not None else "N/A"
+            if delta is not None:
+                delta_computable = True
+                delta_text = f"{delta:.4f}"
+            else:
+                # BP 轮：改前两档不齐时返回的是「键不存在」，渲染出的 N/A 与「检测整腿没跑」
+                # 同形，读者无从知道缺的是哪一档。判定不变（仍不是数值），只点名缺失档。
+                missing_buckets = "、".join(cc.get("delta_missing_buckets") or [])
+                delta_text = f"N/A（{missing_buckets} 档无行）" if missing_buckets else "N/A"
+            excluded = sum(int(s.get("tasks", 0)) for lv, s in by_level.items() if lv not in ("high", "low"))
+            # BP 轮：改前 `if not level: continue` 丢掉的未记录行既不在桶里也不在本列，
+            # 表内合计小于行数却无人点名；它们同样"未入对照"，现在计入本列。
+            excluded += int(cc.get("unobserved_total", 0))
             lines.append(
                 f"| {baseline} | {high.get('tasks', 0)} | {high.get('success_rate', 0.0)} "
-                f"| {low.get('tasks', 0)} | {low.get('success_rate', 0.0)} | {delta_text} |"
+                f"| {low.get('tasks', 0)} | {low.get('success_rate', 0.0)} | {delta_text} | {excluded} |"
             )
         lines.append("")
         lines.append(
@@ -975,6 +992,36 @@ def render_markdown(analysis: dict[str, Any], source_file: str) -> str:
             '成功率异常偏高——系统可能在"背出"黄金补丁而非真正修复，论文中应'
             "单独标注含污染样本并补充 SWE-rebench 交叉验证；若差异 ≤0.2，"
             "说明污染效应不显著，结果可信度较高。"
+        )
+        lines.append("")
+        if not delta_computable:
+            # ≥0.2 / ≤0.2 判据需要一个算得出的差；全表 N/A 时它既不被满足也不被否证，
+            # 不能顺着上面那句读成「差异 ≤0.2 ⇒ 结果可信度较高」。
+            lines.append(
+                "> 本表全部臂的「成功率差（高-低）」都是 N/A：没有一个臂同时具备 high 档与 low"
+                " 档的行。上面那句 ≥0.2 / ≤0.2 判据在这批数据上无从应用——读不出「污染效应显著」，"
+                "也读不出「污染效应不显著、结果可信度较高」。（BP 轮）"
+            )
+            lines.append("")
+        lines.append(
+            "> 「未入对照任务」= medium/unknown/not_applicable 三档合计，再加行内未记录该字段的行数"
+            "（BM 轮，2026-10-22 起显式列示，此前这些行在本表里完全不可见；BP 轮把改前被 "
+            "`if not level: continue` 静默丢弃的未记录行也计入本列）。unknown 表示这条检测腿没测成"
+            "（补丁非文本、依赖导入失败等），not_applicable 表示无黄金补丁材料，未记录表示这一行根本没有"
+            "该字段——改前脚注把「未记录」也写成 unknown，本表实际并不这样计。批次 IX 的按臂聚合表仍按历史"
+            "口径把未记录行并计进 unknown，两表 unknown 之差即未记录行数；三者都不进入高/低污染对照，"
+            "既不算污染证据也不算干净证据。"
+        )
+        lines.append("")
+    if silent_cross_arms:
+        detail = "；".join(
+            f"`{b}`（{int(cc.get('n_details', 0))} 行全部未记录，原因 {cc.get('reason') or '未记录'}）"
+            for b, cc in silent_cross_arms
+        )
+        lines.append(f"> 本节未列出 {len(silent_cross_arms)} 个基线：{detail}。")
+        lines.append(
+            "> 「未列出」= 这些臂的 details 里没有任何一行记录过 contamination_risk_level，"
+            "**不是「检测干净」，也不是「没有任务」**——上表只对有记录的臂给出对照。（BP 轮）"
         )
         lines.append("")
 
