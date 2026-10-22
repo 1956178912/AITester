@@ -35,9 +35,16 @@
 
 **两个口径（分母不同，禁止混用）**：
 
-- **边际口径** = ff=1 行数 / **可测行数**（`passed is not None` 的行）；
-- **条件口径** = ff=1 行数 / **passed ∧ 可测行数**（`passed is True` 的行）；
+- **边际口径** = ff=1 行数 / **被度量指标可测的行数**（`false_fix_rate is not None`）；
+- **条件口径** = ff=1 行数 / passed ∧ 指标可测行数（`passed is True` ∧ `false_fix_rate is not None`）；
 - 无可测行时两口径均记 None（不假报 0）。
+
+> **F19 更正（2026-10-22，第三方集中复审 P1）**：本节此前把"可测"写成
+> `passed is not None`（=261 行），与下方定案表（143/240）和代码
+> `false_fix_caliber()`（`n_measurable = false_fix_rate is not None`）矛盾。
+> 两者差 4.79pp（143/261=54.79% vs 143/240=59.58%）。**权威口径以代码与定案表
+> 为准**：R-P0-2 有 21 行 `error_category='error'`（整任务死亡、iterations=0），
+> 其 `false_fix_rate` 为 None——既不是"无假修复"也不是"有假修复"，不得进分母。
 
 | # | 人群 | n_rows | n_passed | n_measurable | n_ff1 | 边际口径 | 条件口径 |
 |---|------|--------|----------|--------------|-------|----------|----------|

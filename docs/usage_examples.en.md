@@ -556,10 +556,13 @@ generator = GeneratorAgent()
 test_code = generator.generate(plan, target_code, "calculator")
 
 # Step 3: Execute tests
+# F20 correction (2026-10-22): execute() requires target_file (positional), and the
+# returned dict has no "status" key — check passed / coverage instead.
+target_file = "examples/calculator.py"
 executor = ExecutorAgent()
-result = executor.execute(test_code)
+result = executor.execute(test_code, target_file)
 
-print(f"Test result: {result['status']}")
+print(f"Passed: {result['passed']}")
 print(f"Coverage: {result['coverage']}%")
 ```
 

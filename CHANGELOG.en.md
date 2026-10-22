@@ -7,6 +7,25 @@
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased] — 2026-10-22 BP round: the statistical comparison side folded "this row never recorded a contamination level" into silence - and the same absence went two ways in two consumers (zero LLM, $0)
+## [Unreleased] — 2026-10-22 BR round: all 27 items of the third-party central review confirmed and closed (zero LLM, $0)
+
+> Report HEAD `53bbbbd4`, closure HEAD `f49959b2`; P1=14 / P2=13, P0=0, every item re-checked at the closure HEAD, **zero false positives**. See `docs/reviews/BR_ROUND_CENTRAL_REVIEW_2026-10-22.md`.
+
+### What changed
+
+- **Isolation / execution**: `capture_failure_snapshot` gains a `backend` gate (only local/venv allowed; docker/kernel/refused/unknown never start a host subprocess) and `nodes._runtime_probe_backend` derives the level from `error_info.type` plus executor state (N01); the probe runner keeps the full exception chain and the parent selects frames by the real target_file (N09).
+- **Budget / accounting**: `budget_effective()` (env or per-task cap), `mark_budget_exceeded()` and `BudgetAccountingError(BudgetExceededError)`; both retry chains treat budget errors as non-retryable and the broad `except` re-raises them (N02).
+- **Statistics / ledger**: E7 validates candidate-to-task identity before merging (including sheet C, validate-then-compute; N03); rows without model attribution block the full amount and expose a clearly scoped attributed subtotal, with per-row closure in the extension path (N04); `paired_contrast` uses `latest_rows_by_task` (N05); non-0.5 binomial uses log-domain relative tolerance (N06); zero-baseline MDE bisects on a valid interior point (N07).
+- **Executor / loading**: unified diff recognizes adjacent `---/+++` headers and normalizes a//b/ prefixes, with the difflib fallback updated (N08); `sys.path` injection now lands after docstring/`__future__` (F04); P2P baseline is measured before the patch and post-patch P2P only drives regression (F05); pass@k groups by `task_metadata.fixed` identity, falling back to per-batch task_id (F06); batch loading stages everything before committing (F07); `--json` emits an error line for crashed tasks (F11).
+- **Release**: ci-green queries `actions/workflows/ci.yml/runs?head_sha=`, requires completed+success with all jobs green, excludes its own in-progress run, and grants `actions: read` (F08).
+- **Docs / citations**: ICST'26 unit pp→relative % vs HITS (F09), ADR0030 drops the field-level extrapolation (F10), redistribution scope stated field by field (F14), df ratio 6.2x (F15), n=41 bounds 7.3/8.6/12.6% and 56.9% (F16), replication note aligned to 87 tasks (F17), CANDOR v7 >=21.1pp (F18), false_fix measurable definition (F19), bilingual API/examples matched to real signatures (F20), ineffective `ALLOW_UNSANDBOXED` recovery hint removed from `.env.example` (F12).
+
+### Tests
+
+- 5 new BR test files, **77 cases**; 2 existing contracts rewritten with reasons (AM "missing attribution not blocked" → blocked + subtotal; BK site reading 78→79).
+- Full suite: collected **12069** = passed **12064** + skipped 5 + failed 0 (canonical); sandbox confirmation run **12050 passed / 19 skipped / 0 failed, 537.77s, rc=0** (19 = 5 + 14 environment-capability skips).
+- Gates: baseline / doc-links / bilingual / citations / artifact-consistency / zero-assert / env-budget / ast-guards all green.
+
 ## [Unreleased] — 2026-10-22 BQ round: the report read side treated the four status channels as if they did not exist - the four result-row keys persisted by BN had zero row readers (zero LLM, $0)
 
 > Defect family (10th face of the BH-to-BP series). BM wired `contract_status` on the production side and BN persisted the four channels into both result-row branches and the raw allowlist, but the report faces had **zero row readers** for the four keys.

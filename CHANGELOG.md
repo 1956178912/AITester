@@ -7,6 +7,25 @@
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
 ## [Unreleased] — 2026-10-22 BP 轮：统计对照面把「这一行没记录污染级别」折成沉默——两种缺席在两个消费者手里去向不同（零 LLM，$0）
+## [Unreleased] — 2026-10-22 BR 轮：第三方集中复审 27 项全部确认并收口（零 LLM，$0）
+
+> 报告 HEAD `53bbbbd4`，收口 HEAD `f49959b2`；P1=14 / P2=13、P0=0，逐项在收口 HEAD 复核，**零误报**。详见 `docs/reviews/BR_ROUND_CENTRAL_REVIEW_2026-10-22.md`。
+
+### 改了什么
+
+- **隔离/执行**：`capture_failure_snapshot` 新增 `backend` 门（仅 local/venv 放行；docker/kernel/refused/unknown 不启动宿主子进程），`nodes._runtime_probe_backend` 从 `error_info.type` 与执行器实态定档（N01）；探针 runner 保留完整异常链、父进程按真实 target_file 选帧（N09）。
+- **预算/记账**：`budget_effective()`（env 或实例 cap）+ `mark_budget_exceeded()` + `BudgetAccountingError(BudgetExceededError)`；两条重试链把预算异常列入不可重试，外层宽 `except` 显式放行（N02）。
+- **统计/账本**：E7 `identity_conflicts` 前置校验（含 C 表先验后算，N03）；成本缺归因行阻断全额并给标注范围的可归因小计、扩展路径逐行闭合（N04）；`paired_contrast` 改用 `latest_rows_by_task`（N05）；非 0.5 二项改对数域相对容差（N06）；零基线 MDE 在有效内部点二分（N07）。
+- **执行器/加载**：unified diff 识别相邻 `---/+++` 头并规范 a//b/ 前缀，difflib fallback 同步（N08）；`sys.path` 前缀插到 docstring/`__future__` 之后（F04）；P2P 基线改为补丁前测量、补丁后只判回归（F05）；pass@k 按 `task_metadata.fixed` 身份分组、缺失时退回同批 task_id（F06）；批次加载先装配后提交（F07）；`--json` 异常任务输出错误行（F11）。
+- **发布**：ci-green 改查 `actions/workflows/ci.yml/runs?head_sha=`，要求 completed+success 且作业全绿，排除自身 in_progress；补 `actions: read`（F08）。
+- **文档/引用**：ICST'26 量纲 pp→相对 HITS%（F09）、ADR0030 收回领域级外推（F10）、分发范围按字段说明（F14）、df 6.2×（F15）、n41 7.3/8.6/12.6% 与 56.9%（F16）、复现说明 87 任务口径（F17）、CANDOR v7 ≥21.1pp（F18）、false_fix 可测定义（F19）、双语 API/示例按真实签名（F20）、`.env.example` 删除无效的 `ALLOW_UNSANDBOXED` 恢复指引（F12）。
+
+### 测试
+
+- 新增 5 个 BR 测试文件 **77 例**；另改写 2 处既有契约（AM「缺归因不阻断」→ 阻断+小计、BK 站点读数 78→79 附理由）。
+- 全量：collected **12069** = passed **12064** + skipped 5 + failed 0（规范口径）；本会话沙箱确认跑 **12050 passed / 19 skipped / 0 failed、537.77s / rc=0**（19 = 5 + 14 环境能力 skip）。
+- 门禁：baseline / doc-links / bilingual / citations / artifact-consistency / zero-assert / env-budget / ast-guards 全绿。
+
 ## [Unreleased] — 2026-10-22 BQ 轮：报告读侧把四个 status 通道当作不存在——BN 落盘的结果行四键零行读者（零 LLM，$0）
 
 > 缺陷族（BH→BP 系列第 10 面）。BM 给 `contract_status` 接的是生产侧透传、BN 把四通道写进结果行两分支与 raw 白名单，但报告面对四键**零行读者**。
