@@ -7,6 +7,7 @@ executor.py 仅保留执行编排逻辑。函数均为纯函数，签名与返�
 
 from __future__ import annotations
 
+import ast
 import logging
 import os
 import re
@@ -15,6 +16,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from src.tools.dependency import extract_import_module_names, is_standard_library
+from src.utils.check_status import AST_UNREADABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -118,9 +120,59 @@ def auto_fix_imports(test_code: str, target_file: str, project_root: str) -> str
     fixed_code = apply_import_replacements(test_code, imports, actual_module_name, needs_replacement)
 
     if sys_path_code:
-        fixed_code = f"{sys_path_code}\n\n{fixed_code}\n"
+        # F04（2026-10-22 第三方复审 P1）：sys.path 前缀不得插在模块 docstring /
+        # `from __future__` 之前。历史实现直接前置 → 合法测试若首行是 future
+        # 导入，注入后立刻 SyntaxError（"future imports must occur at the
+        # beginning of the file"），整次执行变成编译失败而非真实判定。
+        fixed_code = _insert_sys_path_prefix(fixed_code, sys_path_code)
 
     return fixed_code
+
+
+def _insert_sys_path_prefix(code: str, sys_path_code: str) -> str:
+    """把 sys.path 注入块插到 docstring 与 `__future__` 导入之后。
+
+    Python 语法要求 `from __future__ import ...` 只能出现在模块 docstring
+    之后、其他语句之前；因此前缀必须让位，而不是简单拼在文件头。
+
+    Args:
+        code: 已做导入替换的测试代码。
+        sys_path_code: 待插入的 sys.path 语句块。
+
+    Returns:
+        插入后的代码。无法解析（语法错误）时退回文件头插入——此时真正的
+        编译错误由执行器如实报告，不在前缀位置制造第二个假错误。
+    """
+    lines = code.splitlines(keepends=True)
+    insert_after = 0
+    try:
+        body = ast.parse(code).body
+    except AST_UNREADABLE_ERRORS:
+        # BK（2026-10-22）：``ast.parse`` 不只抛 SyntaxError（孤立代理位 →
+        # UnicodeEncodeError/ValueError 族）；单腿捕获会让它抛穿"读不懂 ⇒ 降级"
+        # 分支。捕获面收敛到共享常量，门禁 ``check_ast_parse_guards`` 棘轮锁定。
+        body = []
+    idx = 0
+    if (
+        body
+        and isinstance(body[0], ast.Expr)
+        and isinstance(body[0].value, ast.Constant)
+        and isinstance(body[0].value.value, str)
+    ):
+        insert_after = body[0].end_lineno or 0
+        idx = 1
+    while idx < len(body):
+        node = body[idx]
+        if not (isinstance(node, ast.ImportFrom) and node.module == "__future__"):
+            break
+        insert_after = node.end_lineno or insert_after
+        idx += 1
+
+    head = "".join(lines[:insert_after])
+    tail = "".join(lines[insert_after:])
+    if head and not head.endswith("\n"):
+        head += "\n"
+    return f"{head}{sys_path_code}\n\n{tail}"
 
 
 def extract_imports(test_code: str) -> list[str]:

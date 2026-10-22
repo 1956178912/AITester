@@ -176,6 +176,13 @@ def record_usage(input_tokens: Any, output_tokens: Any, model: str = "") -> list
             elif model and "model_not_str" not in _warned_model_issues:
                 _warned_model_issues.add("model_not_str")
                 warn_model = True
+        # N11：调用作用域只累计**本线程**本次调用的真实消耗；拒绝时打标记，
+        # 缓存层据此把 tokens 记 null（部分和不得冒充全额）。
+        if getattr(_call_scope, "tokens", None) is not None:
+            if reasons:
+                _call_scope.rejected = True
+            else:
+                _call_scope.tokens += input_tokens + output_tokens
     for code in warn_codes:
         logger.warning("token 写入被拒绝（同类机制只告警一次）: %s", code)
     if warn_model:
@@ -235,6 +242,40 @@ def write_rejection_count() -> int:
     usage = _current_usage()
     with _usage_lock:
         return sum(usage.token_write_reasons.values()) + sum(usage.cache_write_reasons.values())
+
+
+# ─── 单次调用计量作用域（N11，2026-10-22 第三方复审）─────────────────────────
+# 背景：专家池 worker 经 attach_usage 共享**任务级**累计器，缓存层却用
+# "调用前后 total_tokens 差值"当本次调用消耗——并发下会把别的线程的消耗
+# 算进本次（real=30 时两条命中可记 avoided=40）。差值口径无法通过加锁修好
+# （缺的是隔离性，不是原子性），故记录侧按调用线程维护独立作用域：
+#   begin_call_scope() → record_usage 累加到本线程 scope → call_scope_tokens()
+# 任务总账仍是同一个 TokenUsage（响应同时汇入），缓存只取调用作用域的真实消耗。
+_call_scope = threading.local()
+
+
+def begin_call_scope() -> None:
+    """开始一次"单次 LLM 调用"的计量作用域（本线程）。"""
+    _call_scope.tokens = 0
+    _call_scope.rejected = False
+
+
+def call_scope_tokens() -> int | None:
+    """本线程当前调用作用域内的真实消耗；无作用域时返回 None。"""
+    tokens = getattr(_call_scope, "tokens", None)
+    return None if tokens is None else int(tokens)
+
+
+def call_scope_had_rejection() -> bool:
+    """本线程当前调用作用域内是否发生 token 写拒绝（部分和不得冒充全额）。"""
+    return bool(getattr(_call_scope, "rejected", False))
+
+
+def end_call_scope() -> None:
+    """结束调用作用域（清理线程局部状态，避免跨调用残留）。"""
+    for attr in ("tokens", "rejected"):
+        if hasattr(_call_scope, attr):
+            delattr(_call_scope, attr)
 
 
 def get_usage() -> TokenUsage:

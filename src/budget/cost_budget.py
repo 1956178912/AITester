@@ -147,7 +147,15 @@ def _log_bad_budget_value(name: str, raw: str, reason: str) -> None:
 
 
 class BudgetExceededError(RuntimeError):
-    """单任务 LLM 预算耗尽（BaseAgent._call_llm 前置守卫抛出）。"""
+    """单任务 LLM 预算耗尽（BaseAgent._call_llm 前置守卫抛出）。
+
+    字段类型显式声明为可空：`BudgetAccountingError`（记账被拒绝）没有可报的
+    "已消耗 / 上限"（不是 0，是未知），子类据此写 `None`；真实超限仍填数值。
+    """
+
+    consumed: int | float | None
+    limit: int | float | None
+    unit: str
 
     def __init__(self, consumed: int | float, limit: int | float, unit: str) -> None:
         # D1（N-5）：USD 与 token 两通道共用本异常；单位必须与数值同口径，
@@ -161,6 +169,29 @@ class BudgetExceededError(RuntimeError):
         self.consumed = consumed
         self.limit = limit
         self.unit = unit
+
+
+class BudgetAccountingError(BudgetExceededError):
+    """token 记账不可判定且存在有效预算（N02，2026-10-22 第三方复审）。
+
+    语义：**不是**真实超限，而是"本次响应消耗无法判定"——若继续放行，后续
+    重试/故障转移会在无法计量的前提下持续付费。故与 BudgetExceededError
+    同类处理（不可重试、不进入故障转移、`budget.exceeded` 已锁存），但保留
+    独立的异常类型与原因列表，便于工件区分"真超限"与"记账拒绝"。
+
+    继承 BudgetExceededError 是刻意的：既有 `except BudgetExceededError`
+    消费点（base_agent 外层层、工作流停止通道）无需改动即可捕获。
+    """
+
+    def __init__(self, reasons: tuple[str, ...] | list[str]) -> None:
+        RuntimeError.__init__(
+            self,
+            "token 记账被拒绝（无法判定消耗，按有效预算 fail-closed 停止）: " + ",".join(reasons),
+        )
+        self.reasons = tuple(reasons)
+        self.consumed = None
+        self.limit = None
+        self.unit = "unknown"
 
 
 @dataclass
@@ -418,3 +449,38 @@ def set_task_token_cap(cap: int) -> None:
 def is_budget_exceeded() -> bool:
     """当前线程预算是否已超限（工作流节点判断"是否继续迭代"用）。"""
     return _current_budget().exceeded
+
+
+def budget_effective() -> bool:
+    """当前任务是否存在**有效**预算约束（N02，2026-10-22 第三方复审）。
+
+    历史实现只看 COST_BUDGET_ENABLE 开关，导致 `set_task_token_cap()` 注入的
+    实例级 cap（AM1：cap 自足生效、无需 env 开关）在"记账被拒绝"分支被忽略
+    ——坏 usage 既不累计也不锁死，重试后继续付费调用。判定口径与
+    `check_budget()` 的前置守卫逐字一致：env 开关 **或** 实例 cap 覆盖 > 0。
+
+    Returns:
+        True = 有效预算存在（记账不可判定时必须 fail-closed 停止）。
+    """
+    return _budget_enabled() or getattr(_current_budget(), "token_cap_override", 0) > 0
+
+
+def mark_budget_exceeded(reason: str = "") -> None:
+    """把当前任务预算锁存为"已超限"（N02：记账不可判定时的停止信号）。
+
+    调用方在 token 写入被拒绝且存在有效预算时调用：锁存后 `is_budget_exceeded()`
+    恒 True——后续 `_call_llm` 前置守卫与重试前复查都会抛 BudgetExceededError，
+    不再产生无法计量的付费请求。与 `check_budget()` 的 `budget.exceeded` 同
+    一标志位（C8 锁口径一致）。
+
+    Args:
+        reason: 锁存原因（仅日志诊断用，不参与判定）。
+    """
+    budget = _current_budget()
+    _was_exceeded = budget.exceeded
+    with _lock:
+        budget.exceeded = True
+        if not _was_exceeded:
+            _process_stats["tasks_capped"] += 1
+    if not _was_exceeded:
+        logger.warning("预算已锁存为超限（记账不可判定，fail-closed 停止后续调用）: %s", reason or "未提供原因")

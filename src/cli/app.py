@@ -195,8 +195,33 @@ def _make_task_error_result(file_path: str, func: str | None, error: BaseExcepti
     }
 
 
+def _append_task_error(
+    file_path: str,
+    func: str | None,
+    error: BaseException | None,
+    results: list[dict[str, Any]],
+    json_output: bool,
+) -> dict[str, Any]:
+    """F11（2026-10-22 第三方复审 P2）：异常任务也必须在 JSON 流里出现。
+
+    历史实现只把错误结果追加进内存 ``results``：``--json`` 模式下逐任务的 JSON
+    行来自 ``_run_single_task`` 内部 echo，异常路径绕过了它 → 该任务在 stdout
+    里**完全缺失**（既没有成功行也没有失败行），调度层无法区分"没跑"和"崩了"。
+    现在与成功路径同构：追加 + （JSON 模式）输出一行错误 JSON。
+    """
+    result = _make_task_error_result(file_path, func, error)
+    results.append(result)
+    if json_output:
+        click.echo(json.dumps(result, ensure_ascii=False, indent=2))
+    return result
+
+
 def _handle_task_exception(
-    future: Future, future_to_file: dict[Future, str], func: str | None, results: list[dict[str, Any]]
+    future: Future,
+    future_to_file: dict[Future, str],
+    func: str | None,
+    results: list[dict[str, Any]],
+    json_output: bool = False,
 ) -> None:
     """
     统一处理并行任务执行中的异常，记录日志并追加错误结果。
@@ -206,11 +231,12 @@ def _handle_task_exception(
         future_to_file: future -> 文件路径的映射字典。
         func: 被测函数名（用于结果字典）。
         results: 结果列表，异常结果将被追加到此列表。
+        json_output: JSON 模式时同步输出错误结果行（F11）。
     """
     file_path = future_to_file[future]
     task_error = future.exception()  # 只调用一次，避免重复取异常
     logger.error("任务执行异常：file=%s, error=%s", file_path, task_error)
-    results.append(_make_task_error_result(file_path, func, task_error))
+    _append_task_error(file_path, func, task_error, results, json_output)
 
 
 def _dispatch_parallel_tasks(
@@ -267,7 +293,7 @@ def _dispatch_parallel_tasks(
                 if on_success:
                     on_success(os.path.basename(future_to_file[future]))
             except Exception:
-                _handle_task_exception(future, future_to_file, func, results)
+                _handle_task_exception(future, future_to_file, func, results, json_output)
             finally:
                 if on_progress:
                     on_progress(future)
@@ -672,7 +698,7 @@ def run(
                     results.append(result)
                 except Exception as e:
                     logger.error("任务执行异常：file=%s, error=%s", target_file, e)
-                    results.append(_make_task_error_result(target_file, func, e))
+                    _append_task_error(target_file, func, e, results, json_output)
 
         elapsed_time = time.time() - start_time
 

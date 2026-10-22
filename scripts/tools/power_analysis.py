@@ -61,12 +61,20 @@ def power_paired(
     p11: float,
     alpha: float = 0.05,
 ) -> float:
-    """给定样本量 n 与真实 (p_a, p_b, p11)，双侧水平 α 下的检验功效。"""
+    """给定样本量 n 与真实 (p_a, p_b, p11)，双侧水平 α 下的检验功效。
+
+    N07（2026-10-22 第三方复审 P2）：δ≠0 但 σ_d²≤0 属**退化组合**（如
+    p_b=0、p11=0 且 δ 取到上界 1），不是"无差异"，返回 0.0（检不出），
+    不再回落 α——否则调用方会把"公式在该点无定义"读成"任何差异都检不出"。
+    δ=0 仍返回 α（弃真率水平，历史口径）。
+    """
     _validate_p11(p_a, p_b, p11)
     delta = p_a - p_b
     var = _var_paired_diff(p_a, p_b, p11)
-    if n <= 0 or var <= 0 or delta == 0:
+    if n <= 0 or delta == 0:
         return alpha  # 无差异时"功效"退化为弃真率水平（仅当 δ>0 才有意义）
+    if var <= 0:
+        return 0.0  # 退化方差：该点公式无定义，功效记 0（不冒充 α）
     z_crit = _NORM.inv_cdf(1.0 - alpha / 2.0)
     z_effect = delta * math.sqrt(n) / math.sqrt(var)
     return _NORM.cdf(z_effect - z_crit) + _NORM.cdf(-z_effect - z_crit)
@@ -120,9 +128,14 @@ def detectable_delta_paired(
     hi = min(1.0 - p_b, 1.0 - 2.0 * p_b + p11)
     if hi <= lo:
         raise ValueError(f"p11={p11} 在 p_b={p_b} 下无可行 δ 区间（p11 过小）——请从历史批次不一致对结构重新估计 p11")
-    # 上端功效仍不足：该 n 连可行域内最大差异都检不出（样本量极小）
+    # 上端功效仍不足：该 n 连可行域内最大差异都检不出（样本量极小）。
+    # N07：上界 δ=1−p_b 本身是退化端点（p_a=1 → σ_d²=0，公式无定义），
+    # 不能凭端点值判"检不出"。先在**有效内部点**复核，再据此建二分区间。
     if power_paired(n, p_b + hi, p_b, p11, alpha) < power:
-        return float("nan")
+        hi_interior = lo + (hi - lo) * (1.0 - 1e-9)
+        if power_paired(n, p_b + hi_interior, p_b, p11, alpha) < power:
+            return float("nan")
+        hi = hi_interior
     for _ in range(200):  # 二分至机器精度量级
         mid = (lo + hi) / 2.0
         if power_paired(n, p_b + mid, p_b, p11, alpha) >= power:

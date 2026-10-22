@@ -69,6 +69,10 @@ _MAX_PROBE_VARS_PER_FRAME = 20  # 每帧最多捕获的局部变量数（按值�
 # 毫秒级完成，20s 内未完成即判定挂起，静默降级）
 _PROBE_SUBPROCESS_TIMEOUT = 20
 
+# N01：探针只能在宿主解释器复现的隔离级别。docker/kernel/refused 一律拒绝
+# 重放（宁缺不降级）；unknown 也按不安全处理（fail-closed）。
+_PROBE_HOST_BACKENDS = frozenset({"local", "venv"})
+
 
 def runtime_probe_enabled() -> bool:
     """运行时探针开关（RUNTIME_PROBE_ENABLE=true 时启用，默认 false）。"""
@@ -210,28 +214,32 @@ def _loc(fr):
 
 
 def _cap(exc):
-    # 取最内层异常帧（抛出点，即异常发生处的函数体/顶层帧）——与历史
-    # _exception_frames(exc, ...) 的 reversed(chain) 口径一致（历史实现
-    # 保留 probe_file 帧 = 抛出点 + exec 顶层帧；runner 内 exec 的帧
-    # co_filename 同为 probe 文件，由父进程 target_module 过滤统一口径）。
+    # N09（2026-10-22 第三方复审 P2）：保留**完整异常链**（最内层 → 外层），
+    # 不再只取最内层一帧。历史实现只留最内层帧：当测试在库/被测模块内部抛出
+    # （如 foo.py 的 ValueError），唯一有效帧属于 foo.py，父进程按探针文件过滤
+    # 后即为空 → 快照恒 None，探针形同虚设。
+    # 链序：__traceback__ 自抛出点向外；快照口径为"最内层在前"，故反转。
+    chain = []
     tb = exc.__traceback__
-    inner = None
     while tb is not None:
-        inner = tb
+        chain.append(tb)
         tb = tb.tb_next
-    if inner is None:
-        return None
-    f = inner.tb_frame
-    try:
-        fn = f.f_code.co_name
-        fl = f.f_code.co_filename or ""
-    except Exception:
-        fn, fl = "?", _probe_file
-    try:
-        loc = _loc(f.f_locals)
-    except Exception:
-        loc = {}
-    return {"function": fn, "file": fl, "line": inner.tb_lineno, "locals": loc}
+    out = []
+    for tb in reversed(chain):
+        f = tb.tb_frame
+        try:
+            fn = f.f_code.co_name
+            fl = f.f_code.co_filename or ""
+        except Exception:
+            fn, fl = "?", _probe_file
+        try:
+            loc = _loc(f.f_locals)
+        except Exception:
+            loc = {}
+        out.append({"function": fn, "file": fl, "line": tb.tb_lineno, "locals": loc})
+        if len(out) >= _MAX_FRAMES:
+            break
+    return out
 
 
 def main():
@@ -250,11 +258,9 @@ def main():
         _ns = {"__name__": "_aitester_probe_module"}
         exec(compile(_src, _probe_file, "exec"), _ns)
     except BaseException as _top:
-        # exec 阶段顶层异常（顶层 assert / import 失败）：记最内层抛出帧
+        # exec 阶段顶层异常（顶层 assert / import 失败）：记完整异常链
         _toplevel = True
-        _fr = _cap(_top)
-        if _fr:
-            frames.append(_fr)
+        frames.extend(_cap(_top))
     if not _toplevel:
         # exec 成功（含顶层 test_* 调用未触发的场景）：逐个调用 test_*，
         # 单用例异常 = 失败时刻观测点
@@ -263,9 +269,7 @@ def main():
                 try:
                     _o()
                 except BaseException as _e:
-                    _fr = _cap(_e)
-                    if _fr:
-                        frames.append(_fr)
+                    frames.extend(_cap(_e))
     # 截帧：保留最内层 _MAX_FRAMES 帧（frames 按 append 序 = 最内层在前，
     # 与历史 _exception_frames 的 reversed 语义对齐）
     frames = frames[:_MAX_FRAMES]
@@ -294,6 +298,8 @@ def _probe_runner_source() -> str:
 def capture_failure_snapshot(
     test_code: str,
     target_module: str | None = None,
+    target_file: str | None = None,
+    backend: str = "local",
 ) -> dict[str, Any] | None:
     """一次性探针：在**子进程**中执行 test_code，捕获异常抛出时刻的栈帧局部变量快照。
 
@@ -309,13 +315,28 @@ def capture_failure_snapshot(
       时超时真正 kill（threading.join 不可 kill 线程的历史口径已由
       subprocess 超时 + 进程回收替代）；超时/环境故障静默降级 None。
 
+    N01（2026-10-22 第三方复审 P1）——**隔离不降级契约**：本探针只能在宿主
+    解释器（sys.executable）里跑。若主执行用的是 Docker / 内核沙箱，或主执行
+    本身因隔离不可用被拒绝（docker_unavailable / kernel_sandbox_unavailable），
+    在此重放等于把已拒绝/已隔离的执行降级为无隔离宿主执行（威胁模型 T4 承诺
+    "隔离不可用即拒绝"）。故 backend 非 local/venv 时直接返回 None，不启动
+    子进程——宁可没有快照，也不跨隔离级别重执行 LLM 生成的测试代码。
+
     Args:
         test_code: 要执行的 pytest 测试代码字符串（已含 import 与 sys.path 注入）。
         target_module: 被测模块名（用于过滤快照仅保留目标模块相关帧，可选）。
+        target_file: 被测文件路径（N09：目标模块帧按真实路径/文件名保留）。
+        backend: 主执行实际使用的后端（local / venv / docker / kernel / refused）。
 
     Returns:
-        运行时快照字典；执行成功 / 探针失败 / 无异常帧时返回 None。
+        运行时快照字典；执行成功 / 探针失败 / 无异常帧 / 隔离级别不匹配时返回 None。
     """
+    if backend not in _PROBE_HOST_BACKENDS:
+        logger.debug(
+            "运行时探针拒绝执行：主执行后端 %s 的隔离级别无法在宿主子进程复现（N01，宁缺不降级）",
+            backend,
+        )
+        return None
     # 把 test_code 写入临时文件执行（与 executor_sandboxed 同口径），
     # 以便探针拿到真实帧（直接 exec 字符串代码的帧 locals 不可靠）
     tmp_dir = tempfile.mkdtemp(prefix="aitester_probe_")
@@ -387,11 +408,23 @@ def capture_failure_snapshot(
         except (OSError, json.JSONDecodeError, TypeError):
             frames = []
 
-        # target_module 过滤（历史口径：探针文件即被测代码载体，按 probe
-        # 文件绝对路径匹配帧；与子线程实现保持一致）
-        if target_module:
+        # target_module / target_file 过滤（N09）：保留探针文件帧 + **真实目标
+        # 模块帧**。历史实现只按 probe 文件匹配——测试在 foo.py 内部抛出时，
+        # 唯一有效帧属于 foo.py，被整批清掉后快照恒 None。
+        if target_module or target_file:
             probe_abs = os.path.abspath(probe_file)
-            frames = [fr for fr in frames if os.path.abspath(fr.get("file") or "") == probe_abs]
+            target_abs = os.path.abspath(target_file) if target_file else ""
+            target_base = os.path.basename(target_file) if target_file else f"{target_module}.py"
+            kept: list[dict[str, Any]] = []
+            for fr in frames:
+                fpath = os.path.abspath(fr.get("file") or "")
+                if (
+                    fpath == probe_abs
+                    or (target_abs and fpath == target_abs)
+                    or (target_base and os.path.basename(fpath) == target_base)
+                ):
+                    kept.append(fr)
+            frames = kept
 
         if not frames:
             # 无异常帧（测试全过 / 探针降级）→ 返回 None

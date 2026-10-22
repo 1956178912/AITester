@@ -3121,7 +3121,12 @@ def _diff_codes(original: str, fixed: str, fromfile: str, tofile: str) -> str:
 
     old_lines = original.splitlines(keepends=True)
     new_lines = fixed.splitlines(keepends=True)
-    return "".join(difflib.unified_diff(old_lines, new_lines, fromfile=fromfile, tofile=tofile, n=3))
+    # N08（2026-10-22 第三方复审 P2）：difflib 回退必须产出与 git 头同形的
+    # a/ b/ 前缀。历史实现直接传裸路径 → "--- src/pkg.py"，git apply 默认
+    # -p1 剥掉首段后找不到文件，回退路径的补丁 100% 被拒。
+    _from = fromfile if fromfile.startswith(("a/", "b/")) else f"a/{fromfile}"
+    _to = tofile if tofile.startswith(("a/", "b/")) else f"b/{tofile}"
+    return "".join(difflib.unified_diff(old_lines, new_lines, fromfile=_from, tofile=_to, n=3))
 
 
 def _normalize_llm_patch(raw: str) -> str:

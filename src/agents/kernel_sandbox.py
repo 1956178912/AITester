@@ -481,9 +481,12 @@ def build_sandbox_command(
         "allow_unsandboxed": _allow_unsandboxed,
     }
     if not _allow_unsandboxed:
+        # F12（2026-10-22 第三方复审）：不再把 ALLOW_UNSANDBOXED 宣传成"恢复本地
+        # 执行"的开关——ExecutorAgent 只认 obs["supported"]，设了该开关仍拒绝
+        # （同批已把 .env.example 与执行器提示改为补齐后端 / 走 Docker）。
         raise SandboxUnavailable(
             f"内核沙箱不支持当前平台（{_HOST_PLATFORM}），fail-closed 拒绝执行；"
-            "如需无隔离调试请显式设 ALLOW_UNSANDBOXED=true（工件须记录该档位）"
+            "请安装 bubblewrap / 启用 macOS Seatbelt，或改用 EXECUTOR_USE_DOCKER=true"
         )
     logger.warning("内核沙箱不支持当前平台（%s），ALLOW_UNSANDBOXED=true 容忍无隔离", _HOST_PLATFORM)
     return list(args), obs_unsupported

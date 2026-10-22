@@ -142,11 +142,32 @@ def binom_exact_two_sided(k: int, n: int, p: float = 0.5) -> float:
         cutoff = weights[k]
         return min(1.0, sum(w for w in weights if w <= cutoff) / 2**n)
 
-    def pmf(i: int) -> float:
-        return math.comb(n, i) * (p**i) * ((1 - p) ** (n - i))
+    # N06（2026-10-22 第三方复审 P2）：非 0.5 分支不得用裸浮点比较 pmf。
+    # 反例 k=0/n=4/p=.2：x0 与 x1 的精确质量都是 256/625（并列），但浮点
+    # pmf0=.4096000000000001 < pmf1=.40960000000000013，`<=` 把并列结局排除，
+    # 返回 .5904 而不是 1.0。
+    # 处置：对数域 + **相对**容差（log 差 1e-12 ≈ 比值 1+1e-12）。相对口径
+    # 与量级无关——不会像绝对 1e-12 那样把 1e-34 量级的整条尾部收进来
+    # （113/0 的 1.926e-34 必须保持），也能吸收"p=.2 不可二进制精确表示"
+    # 造成的末位差。用 logsumexp 累加，避免极小三尾直接下溢成 0。
+    if p <= 0.0 or p >= 1.0:
+        return 1.0
+    log_p, log_q = math.log(p), math.log1p(-p)
 
-    prob_k = pmf(k)
-    return min(1.0, sum(pmf(i) for i in range(n + 1) if pmf(i) <= prob_k))
+    def _logpmf(i: int) -> float:
+        return math.lgamma(n + 1) - math.lgamma(i + 1) - math.lgamma(n - i + 1) + i * log_p + (n - i) * log_q
+
+    log_cutoff = _logpmf(k)
+    included = [lp for lp in (_logpmf(i) for i in range(n + 1)) if lp <= log_cutoff + 1e-12]
+    if not included:
+        return 0.0
+    if len(included) == n + 1:
+        # 全部结局都不比观测值更可能（典型：观测到众数）→ 概率序双侧 p = 1。
+        # 直接返回常量，避免 logsumexp 的末位误差给出 0.9999999999999993。
+        return 1.0
+    peak = max(included)
+    total = math.exp(peak) * sum(math.exp(lp - peak) for lp in included)
+    return min(1.0, total)
 
 
 def paired_bootstrap_diff_ci(
@@ -343,15 +364,29 @@ def _read_tokens(files: list[str], arm: str) -> dict[str, Any]:
             if not isinstance(by_model, dict):
                 reading["model_reasons"].append(f"by_model_not_object:{type(by_model).__name__}")
                 continue
+            row_total = counts[0] if counts is not None else None
+            row_attributed = 0
+            row_valid = True
             for model, tokens in by_model.items():
                 if not isinstance(model, str):
                     reading["model_reasons"].append(f"by_model_key_not_string:{type(model).__name__}")
+                    row_valid = False
                     continue
                 reason = token_count_reason(tokens, "by_model")
                 if reason is not None:
                     reading["model_reasons"].append(reason)
+                    row_valid = False
                     continue
                 reading["by_model"][model] = reading["by_model"].get(model, 0) + tokens
+                row_attributed += tokens
+            # N04（2026-10-22 第三方复审 P1，路径 B）：归因闭合必须**逐行**检查。
+            # 历史实现只比整臂合计：两行都 100 tokens、by_model 分别 m:200 与 m:0，
+            # 逐行都不闭合但整臂 200=200 仍然通过，$0.0001 无任何行级错误。
+            # 相抵/混合组合不得靠整臂求和过关。
+            # 空 by_model（{}）不归入"逐行不闭合"：它属于"没有归因"，由臂级
+            # `no_model_attribution` 统一披露（两种事实不混为一谈）。
+            if row_valid and by_model and row_total is not None and row_attributed != row_total:
+                reading["model_reasons"].append(f"row_attribution_mismatch:{row_attributed}/{row_total}")
     reading["cache"] = cache_totals(usages)
     return reading
 

@@ -51,10 +51,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import math
 from typing import Any
 
 from src.budget.token_usage import count_reason, token_write_rejection_reasons
+
+logger = logging.getLogger(__name__)
 
 _TOKEN_ATTRIBUTES = (
     ("input_tokens", "gen_ai.usage.input_tokens"),
@@ -307,15 +310,28 @@ def export_trace_jsonl(path: str) -> list[dict[str, Any]]:
         lines = f.readlines()
 
     records: list[dict[str, Any]] = []
-    for raw_line in lines:
+    for lineno, raw_line in enumerate(lines, 1):
         line = raw_line.strip()
         if not line:
             continue
         try:
-            records.append(json.loads(line))
+            record = json.loads(line)
         except json.JSONDecodeError:
             # 损坏行跳过（不阻断整文件导出，与 trace.py 的 JSONL 追加式口径一致）
+            logger.warning("OTel 导出：跳过第 %d 行（JSON 损坏）", lineno)
             continue
+        # N10（2026-10-22 第三方复审 P2）：JSON 合法 ≠ 记录是对象。`null` /
+        # `[]` / `0` / `false` / 字符串都能被 json.loads 接受，随后
+        # `_file_trace_id` 对 None 调 `.get` 抛 AttributeError，整文件导出崩溃。
+        # 现按行隔离：非对象记录跳过并披露行号与类型，其余记录照常导出。
+        if not isinstance(record, dict):
+            logger.warning(
+                "OTel 导出：跳过第 %d 行（记录不是 JSON 对象，实为 %s）",
+                lineno,
+                type(record).__name__,
+            )
+            continue
+        records.append(record)
 
     # 一个文件一个 trace：所有 span 共用同一 trace_id（含 task_start/task_end）
     trace_id = _file_trace_id(records, path)

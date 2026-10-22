@@ -317,6 +317,44 @@ def _disagreement_rows(rows_a: list[dict[str, str]], rows_b: list[dict[str, str]
     return out
 
 
+def _identity_map(rows: list[dict[str, str]]) -> dict[str, str]:
+    """candidate_no → task_id（去空白）。"""
+    out: dict[str, str] = {}
+    for row in rows:
+        no = str(row.get("candidate_no") or "").strip()
+        if no:
+            out[no] = str(row.get("task_id") or "").strip()
+    return out
+
+
+def identity_conflicts(
+    rows_a: list[dict[str, str]],
+    rows_b: list[dict[str, str]],
+    tag_a: str = "A",
+    tag_b: str = "B",
+) -> list[str]:
+    """N03（2026-10-22 第三方复审 P1）：合并前核对"同一候选号是否同一任务"。
+
+    历史实现只比较 candidate_no 集合，不比较同编号的 task_id：A=(1,t1)/
+    B=(1,t2) 这类身份互换会被按编号配对，两个完全相反的量表能算出 κ=1.0。
+    候选号只是抽样序号，**任务身份才是配对键**；冲突必须先于任何统计量
+    被拒绝（协议 §6：核身份、合并前校验）。
+
+    Returns:
+        冲突描述列表（空 = 身份一致）。缺 task_id 的行也算冲突——无法证明
+        同一性时不得进入信度统计。
+    """
+    map_a, map_b = _identity_map(rows_a), _identity_map(rows_b)
+    conflicts: list[str] = []
+    for no in sorted(set(map_a) & set(map_b), key=lambda x: int(x) if x.isdigit() else 0):
+        tid_a, tid_b = map_a[no], map_b[no]
+        if not tid_a or not tid_b:
+            conflicts.append(f"候选 {no} 缺 task_id（{tag_a}={tid_a!r}, {tag_b}={tid_b!r}）")
+        elif tid_a != tid_b:
+            conflicts.append(f"候选 {no} 的任务身份不一致（{tag_a}={tid_a!r}, {tag_b}={tid_b!r}）")
+    return conflicts
+
+
 def merge_sheets(
     path_a: str | Path,
     path_b: str | Path,
@@ -324,13 +362,22 @@ def merge_sheets(
     *,
     n_resamples: int = BOOTSTRAP_N_RESAMPLES,
     seed: int = BOOTSTRAP_SEED,
+    candidates: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """首轮（未讨论）合并：主口径 = A vs B；C 在场时仅作附加两两 κ（次要分析）。"""
+    """首轮（未讨论）合并：主口径 = A vs B；C 在场时仅作附加两两 κ（次要分析）。
+
+    N03：合并前必须绑定任务身份。`candidates`（抽样清单）给出时按清单逐行校验
+    candidate_no→task_id；未给出时仍跨表核对同编号的 task_id。任一冲突即抛
+    ValueError（与候选集不一致同属结构性错误），不产出信度数字。
+    """
     rows_a, rows_b = load_entry_sheet(path_a), load_entry_sheet(path_b)
     for tag, rows in (("A", rows_a), ("B", rows_b)):
-        errors = validate_entry_rows(rows)
+        errors = validate_entry_rows(rows, candidates)
         if errors:
             raise ValueError(f"表 {tag} 未通过校验（先 validate 再 merge）：{errors[:5]}")
+    conflicts = identity_conflicts(rows_a, rows_b, "A", "B")
+    if conflicts:
+        raise ValueError(f"合并前身份校验失败（不得按候选号跨任务配对）：{conflicts[:5]}")
     pairs, excluded = align_pairs(rows_a, rows_b)
     primary = cohen_kappa(pairs)
     report: dict[str, Any] = {
@@ -353,12 +400,21 @@ def merge_sheets(
     }
     if path_c is not None:
         rows_c = load_entry_sheet(path_c)
+        # N03 同根因附例：C 表此前"先算 κ、后登记校验错误"——坏表也能产出
+        # 数字。现先校验（含身份），再计算两两 κ；冲突即拒绝。
+        errors_c = validate_entry_rows(rows_c, candidates)
+        if errors_c:
+            raise ValueError(f"表 C 未通过校验（先 validate 再 merge）：{errors_c[:5]}")
+        for tag, rows_other in (("A", rows_a), ("B", rows_b)):
+            c_conflicts = identity_conflicts(rows_other, rows_c, tag, "C")
+            if c_conflicts:
+                raise ValueError(f"表 {tag}/C 身份校验失败：{c_conflicts[:5]}")
         pairs_ac, excluded_ac = align_pairs(rows_a, rows_c)
         pairs_bc, excluded_bc = align_pairs(rows_b, rows_c)
         report["secondary_pairwise"] = {
             "A_C": cohen_kappa(pairs_ac)["kappa"],
             "B_C": cohen_kappa(pairs_bc)["kappa"],
-            "c_validation_errors": validate_entry_rows(rows_c),
+            "c_validation_errors": errors_c,
             "c_excluded_rows": {"A_C": excluded_ac, "B_C": excluded_bc},
             "note": "协议 §6 第 5 条：主口径仍是 A vs B；C 仅附加，不得替换主统计量",
         }

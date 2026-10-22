@@ -14,14 +14,17 @@
 """
 
 from src.budget.cost_budget import (
+    BudgetAccountingError,
     BudgetExceededError,
     BudgetSnapshot,
     attach_budget,
+    budget_effective,
     check_budget,
     current_budget,
     get_budget_stats,
     get_process_budget_stats,
     is_budget_exceeded,
+    mark_budget_exceeded,
     record_usage_and_check,
     reset_budget,
 )
@@ -35,11 +38,13 @@ from src.budget.token_usage import (
 )
 
 __all__ = [
+    "BudgetAccountingError",
     "BudgetExceededError",
     "BudgetSnapshot",
     "TokenUsage",
     "attach_budget",
     "attach_usage",
+    "budget_effective",
     "check_budget",
     "current_budget",
     "get_budget_stats",
@@ -47,6 +52,7 @@ __all__ = [
     "get_usage",
     "global_usage",
     "is_budget_exceeded",
+    "mark_budget_exceeded",
     "record_usage",
     "record_usage_and_check",
     "reset",

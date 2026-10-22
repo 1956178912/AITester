@@ -804,15 +804,14 @@ class BaseAgent:
         from src.agents.llm_client import record_cache_hit
 
         record_cache_hit(False)  # 15. 多进程缓存协调观测：文件缓存未命中
-        # P0 止血（缓存记账缺口）：记录本次真实调用的 token 增量，写入缓存
-        # 文件，供下次命中时还原"避免的 token"。token 已在 _call_llm 内部经
-        # _record_response_usage 累加到线程局部，此处取调用前后 total 差值
-        # （含内部重试/故障转移的全部真实消耗，正是缓存命中省下的量）。
-        from src.budget.token_usage import get_usage as _get_usage
-        from src.budget.token_usage import write_rejection_count as _write_rejection_count
+        # N11（2026-10-22 第三方复审 P2）：本次调用消耗改用**调用作用域**计量。
+        # 历史实现取任务级 total_tokens 前后差值——专家池并发时共享同一累计器，
+        # 差值会把其他线程的消耗算进本次（real=30，两条命中合计 avoided=40）。
+        # 加锁只能防丢更新，不能给整次调用差分以隔离性；记录侧按线程维护
+        # 作用域（token_usage.begin_call_scope），任务总账仍照常累加。
+        from src.budget.token_usage import begin_call_scope, call_scope_had_rejection, call_scope_tokens
 
-        _before_total = _get_usage().total_tokens
-        _before_rejections = _write_rejection_count()
+        begin_call_scope()
         # A10：清空"最近成功请求"记录后再调用——故障转移场景下真正返回响应的
         # 端点可能不是请求链首选；_call_llm 成功时会记录真实配置供下方 payload
         # 写入 response_identity（provenance/cache 标签取真实请求身份）。
@@ -828,13 +827,9 @@ class BaseAgent:
             response = self._call_llm(user_message, max_retries, temperature=temperature, **_jm_kwargs)
         else:
             response = self._call_llm(user_message, max_retries, **_jm_kwargs)
-        # AT（2026-10-21）：本次调用若发生 token 写拒绝，差值只是部分和 → 缓存
+        # AT（2026-10-21）：本次调用若发生 token 写拒绝，作用域只是部分和 → 缓存
         # tokens 记 null（未知），不得把部分和当"避免的 token"全额复用。
-        _call_tokens: Any = (
-            None
-            if _write_rejection_count() != _before_rejections
-            else max(0, _get_usage().total_tokens - _before_total)
-        )
+        _call_tokens: Any = None if call_scope_had_rejection() else call_scope_tokens()
         # A10：真实响应来源（故障转移后可能 ≠ 请求链首选）。仅内存配置，写入
         # payload 时只保留脱敏端点 + 模型名（api_key 绝不落盘）。
         _actual_config = get_last_request_config()
@@ -1127,6 +1122,10 @@ class BaseAgent:
                             _invoke_openai,
                             max_retries,
                             base_wait=1,
+                            # N02（2026-10-22 第三方复审 P1）：预算类异常是控制流
+                            # 信号（真超限 / 记账不可判定锁存），不得被退避重试
+                            # 吞掉——每次重试都是一次无法计量或已越预算的付费请求。
+                            non_retryable_exceptions=(BudgetExceededError,),
                             pre_retry_check=_raise_if_budget_exceeded,
                         )
 

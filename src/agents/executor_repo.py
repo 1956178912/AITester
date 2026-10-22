@@ -795,6 +795,15 @@ class RepoExecutor:
                 baseline_failures = self._run_fail_to_pass(repo_dir, fail_to_pass, repo_url=repo_url)
                 # 基线全过 = 任务数据有问题（缺陷已修）或 test_patch 未覆盖缺陷，如实记录
                 base_not_failing = len(baseline_failures["failed_cases"]) == 0
+                # F05（2026-10-22 第三方复审 P1）：PASS_TO_PASS 必须在**应用
+                # llm_patch 之前**测基线。历史实现只在补丁后测一次，却把它当
+                # "基线通过率"喂 M3 门禁——补丁本身打坏 P2P（基线 2/2、补丁后
+                # 1/2）时被误判 harness_invalid 剔除，等于把有效回归洗成环境噪声。
+                p2p_baseline = (
+                    self._run_pass_to_pass(repo_dir, pass_to_pass, repo_url=repo_url)
+                    if pass_to_pass
+                    else {"expected": 0, "passed": 0, "failed_cases": []}
+                )
 
                 # 3. 应用 llm_patch 后重跑。test_patch 全程留在工作区（不 stash，
                 # 避免带走 untracked 新建测试文件）；llm_patch 经
@@ -824,7 +833,8 @@ class RepoExecutor:
 
                 output = f"[FAIL_TO_PASS baseline] {baseline_failures['expected'] - len(baseline_failures['failed_cases'])}/{baseline_failures['expected']} passed\n"
                 output += f"[FAIL_TO_PASS after-llm-patch] {after['expected'] - len(after['failed_cases'])}/{after['expected']} passed\n"
-                output += f"[PASS_TO_PASS] {p2p['passed']}/{p2p['expected']} passed"
+                output += f"[PASS_TO_PASS baseline] {p2p_baseline['passed']}/{p2p_baseline['expected']} passed\n"
+                output += f"[PASS_TO_PASS after-llm-patch] {p2p['passed']}/{p2p['expected']} passed"
                 if not llm_applied:
                     output += "\n[llm_patch_apply_failed] 补丁未成功应用（判定按 FAIL_TO_PASS 实测）"
                 base_result["passed"] = passed
@@ -837,6 +847,10 @@ class RepoExecutor:
                     "baseline_passed": baseline_failures["expected"] - len(baseline_failures["failed_cases"]),
                 }
                 base_result["pass_to_pass"] = {"expected": p2p["expected"], "passed": p2p["passed"]}
+                base_result["pass_to_pass_baseline"] = {
+                    "expected": p2p_baseline["expected"],
+                    "passed": p2p_baseline["passed"],
+                }
                 base_result["llm_patch_applied"] = llm_applied
                 # M3（2026-09-29 审查 P0）：基线 PASS_TO_PASS 硬前置门禁。
                 # 历史口径：P2P 通过率无检查，基线环境本身损坏（如 click 版本
@@ -854,8 +868,10 @@ class RepoExecutor:
                 # 姊妹门禁 config.SWE_BENCH_P2P_GATE_THRESHOLD（_parse_float_env 同范围）对齐。
                 _p2p_gate_threshold = env_float("P2P_GATE_THRESHOLD", 0.95, lo=0.0, hi=1.0)
                 _harness_invalid = False
-                if _p2p_gate_enabled and p2p["expected"] > 0:
-                    _p2p_baseline_rate = p2p["passed"] / p2p["expected"]
+                if _p2p_gate_enabled and p2p_baseline["expected"] > 0:
+                    # F05：门禁只看**补丁前**基线；补丁后的 P2P 失败已计入
+                    # passed（回归），不得再被改写成 harness_invalid。
+                    _p2p_baseline_rate = p2p_baseline["passed"] / p2p_baseline["expected"]
                     base_result["p2p_baseline_rate"] = round(_p2p_baseline_rate, 4)
                     if _p2p_baseline_rate < _p2p_gate_threshold:
                         _harness_invalid = True
@@ -864,15 +880,15 @@ class RepoExecutor:
                             "type": "harness_invalid",
                             "message": (
                                 f"M3 基线 P2P 门禁：P2P 通过率 {_p2p_baseline_rate:.2%} "
-                                f"低于阈值 {_p2p_gate_threshold:.2%}（期望 {p2p['expected']}，"
-                                f"通过 {p2p['passed']}），harness 环境本身损坏，"
+                                f"低于阈值 {_p2p_gate_threshold:.2%}（期望 {p2p_baseline['expected']}，"
+                                f"通过 {p2p_baseline['passed']}），harness 环境本身损坏，"
                                 "实验结果不可信（应剔除本任务）"
                             ),
                         }
                         logger.warning(
                             "M3 基线 P2P 门禁未通过：P2P %d/%d（%.2f%% < %.2f%%），harness_invalid=True",
-                            p2p["passed"],
-                            p2p["expected"],
+                            p2p_baseline["passed"],
+                            p2p_baseline["expected"],
                             _p2p_baseline_rate * 100,
                             _p2p_gate_threshold * 100,
                         )
@@ -1471,6 +1487,64 @@ class RepoExecutor:
                     return norm
         return None
 
+    @staticmethod
+    def _looks_like_unified_diff(patch_text: str) -> bool:
+        """N08（2026-10-22 第三方复审 P2）：识别 unified diff 的三种合法开头。
+
+        历史判据只认 "diff --git" 或 "@@"，于是标准单文件 diff
+        （``--- a/pkg.py`` / ``+++ b/pkg.py`` / ``@@``）被当成"完整源码"拒绝，
+        合法修复被记 llm_patch_applied=False，实际验证的是未修复版本。
+
+        判据要求 ``--- `` 与 ``+++ `` **相邻成对**出现（标准 diff 文件头），
+        避免把 Python 注释 / docstring 里的单行误判为补丁。
+        """
+        text = (patch_text or "").lstrip()
+        if text.startswith(("diff --git", "@@")):
+            return True
+        lines = text.splitlines()
+        for i in range(min(len(lines) - 1, 4)):
+            if lines[i].startswith("--- ") and lines[i + 1].startswith("+++ "):
+                return True
+        return False
+
+    @staticmethod
+    def _normalize_unified_headers(patch_text: str) -> str:
+        """给 ``---`` / ``+++`` 文件头的裸路径补 ``a/`` / ``b/`` 前缀。
+
+        git apply 默认 ``-p1``：``--- src/pkg.py`` 会被剥掉首段路径后找不到
+        文件，补丁必然被拒。difflib 回退产出的正是这种裸路径（N08 同根因），
+        因此识别放宽后**必须同时规范化路径**才算闭环。
+
+        - 已带 a/ b/ 前缀的行原样保留（逐字不变，避免二次加前缀）；
+        - ``/dev/null``（新增/删除文件）不加前缀；
+        - 只改文件头两行，hunk 正文（可能以 --- 开头的内容行）不动。
+        """
+        lines = (patch_text or "").splitlines()
+        out: list[str] = []
+        i = 0
+        while i < len(lines):
+            line = lines[i]
+            nxt = lines[i + 1] if i + 1 < len(lines) else ""
+            # 只把**相邻成对**的 ---/+++ 当文件头（标准 unified diff 文件头）。
+            # 逐行匹配会把 hunk 内以 "--- " 开头的删除行误当文件头改写。
+            if line.startswith("--- ") and nxt.startswith("+++ "):
+                out.append(RepoExecutor._prefix_header_path(line, "a/"))
+                out.append(RepoExecutor._prefix_header_path(nxt, "b/"))
+                i += 2
+                continue
+            out.append(line)
+            i += 1
+        return "\n".join(out) + ("\n" if patch_text.endswith("\n") else "")
+
+    @staticmethod
+    def _prefix_header_path(line: str, prefix: str) -> str:
+        """给单行文件头补前缀；已带前缀 / /dev/null 原样返回。"""
+        marker, _, path = line.partition(" ")
+        path = path.strip()
+        if not path or path in ("/dev/null", "/dev/zero") or path.startswith(("a/", "b/")):
+            return line
+        return f"{marker} {prefix}{path}"
+
     def _apply_llm_patch(self, repo_dir: str, llm_patch: str) -> bool:
         """把 LLM 补丁应用到仓库工作区。
 
@@ -1485,16 +1559,20 @@ class RepoExecutor:
         if not llm_patch or not llm_patch.strip():
             return False
         stripped = llm_patch.lstrip()
-        # LLM 补丁 unified diff 判定："diff --git"（git diff 输出）或
-        # 以 hunk 头 "@@" 开头（纯 unified diff，无 git 头）。完整文件代码
-        # （Python 源码）不以这些开头，落入 else 分支保守处理。
-        is_unified = stripped.startswith(("diff --git", "@@"))
-        if not is_unified:
+        # LLM 补丁 unified diff 判定（N08）："diff --git"（git diff 输出）、
+        # 以 hunk 头 "@@" 开头（纯 unified diff，无文件头），或标准文件头
+        # "--- <path>" + "+++ <path>" 成对开头（git diff --no-index / difflib
+        # 的常规产物）。完整文件代码（Python 源码）不以这些开头，落入 else
+        # 分支保守处理。
+        if not self._looks_like_unified_diff(stripped):
             # 完整文件代码形态：LLM 写的是"任务模块名.py"（如 sqlfluff_4764.py），
             # 与仓库内真实文件路径（src/sqlfluff/cli/commands.py）对不上，
             # 无法直接应用 → 保守 False（FAIL_TO_PASS 实测裁决，不误判）
             logger.info("LLM 补丁为非 unified diff 形态（完整文件代码），仓库级无法映射路径，按无补丁实测")
             return False
+        # N08：裸路径（无 a/ b/ 前缀）在 git apply -p1 下必然找不到文件。
+        # 识别放宽后同步规范化文件头，否则"识别通过但应用仍被拒"，等于没修。
+        llm_patch = self._normalize_unified_headers(llm_patch)
         # M2（2026-09-29 审查 P0）：测试文件保护。解析 unified diff 的所有
         # 目标路径（`+++ b/<p>` / `--- a/<p>` / `diff --git a/<p> b/<p>`），
         # 若命中测试目录（tests/ / testing/ / test_*.py / *_test.py / conftest.py）
