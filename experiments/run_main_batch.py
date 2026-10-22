@@ -53,6 +53,12 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from experiments.analysis_parts.check_leg_analysis import (  # noqa: E402
+    CHECK_LEG_CHANNELS,
+    CHECK_LEG_LABELS,
+    _check_leg_measurability,
+)
+
 DEFAULT_TASK_COUNT = 50
 DEFAULT_SEED = 42
 DEFAULT_BASELINES = "aitester,plain_llm,single_agent"
@@ -510,6 +516,24 @@ def _print_r4_summary(batch_path: Path) -> None:
         print(
             f"    R4 regression_rate={regr_text}（可测 {regr_k}/{n}） / N1 test_error_rate={te_text}（可测 {te_k}/{n}）"
         )
+        # BQ 轮（2026-10-22）：四个 status 通道的可测量性披露（与 R4/N1 同风格）。
+        # 改前摘要块对四键零读者：归档/新批次里"四腿跑过且干净"与"崩了 / 按设计
+        # 没跑 / 没记录"在批次摘要里同形。只加分档计数，不改任何判定——四键不
+        # 进入通过/拒绝，recorded=0 时明写"未记录"而非 0（0 会被读成"干净"）。
+        leg = _check_leg_measurability(det)
+        if leg["recorded_rows"]:
+            parts = [
+                f"{CHECK_LEG_LABELS[channel]} ok={ch['ok']} 没测成={ch['error'] + ch['unavailable']}"
+                f" 没跑={ch['disabled']} 未记录={ch['null'] + ch['absent']}"
+                for channel in CHECK_LEG_CHANNELS
+                for ch in [leg["channels"][channel]]
+            ]
+            print(
+                f"    BQ 检查腿（记录 {leg['recorded_rows']}/{n} 行，任一腿没测成"
+                f" {leg['rows_any_unmeasurable']} 行）: {'；'.join(parts)}"
+            )
+        else:
+            print("    BQ 检查腿: 未记录（早于 BN 轮落盘，不可读作「干净」）")
         if fl1_meas:
             print(f"    R8 FL@1 命中率: {fl1_hit}/{fl1_meas} ({round(fl1_hit / fl1_meas * 100, 1)}%)")
 

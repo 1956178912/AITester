@@ -59,6 +59,11 @@ sys.path.insert(0, PROJECT_ROOT)
 # 历史 import 路径（experiments.analyze_results._xxx）不变，默认行为零变化。
 # re-export 符号供外部测试（tests/test_smell_detection_v2.py 等）与同包脚本
 # import，本文件内部不直接调用 → 各 import 行标 noqa F401
+from experiments.analysis_parts.check_leg_analysis import (  # noqa: E402
+    CHECK_LEG_CHANNELS,
+    CHECK_LEG_LABELS,
+    _check_leg_measurability,
+)
 from experiments.analysis_parts.convergence_analysis import (  # noqa: E402,F401
     _assertion_counts_from_row,
     _assertion_strength_proxy,
@@ -195,6 +200,12 @@ def build_analysis(data: dict[str, Any], golden_patches: dict[str, str] | None =
             "failure_root_cause_trend": _failure_root_cause_trend(details),
             # 5.3 失败分析 × 污染检测交叉（验证"高污染风险任务是否成功率更高"）
             "contamination_cross_analysis": _contamination_cross_analysis(details),
+            # BQ 轮（2026-10-22）：四个 status 通道的报告面读侧。BN/BL 把四键
+            # 写进结果行两分支与 raw 白名单，但报告面零读者——归档与新批次里
+            # "这条腿跑过且干净（ok）"与"崩了 / 按设计没跑 / 没记录"在所有
+            # 报告面同形。本助手只加分档计数与恒等式，判定值与判定方向一处
+            # 不动（四键不进入任何判定，既不被翻成通过也不被翻成拒绝）。
+            "check_leg_measurability": _check_leg_measurability(details),
             # 2.1 数据污染检测（details 携带 patch + task_metadata.golden_patch 时计算重叠度）
             "contamination_report": detect_contamination(details, golden_patches),
             # 1.3 边界用例覆盖（generated_test 含边界值时统计，旧 JSON 无该字段时全 0）
@@ -1022,6 +1033,71 @@ def render_markdown(analysis: dict[str, Any], source_file: str) -> str:
         lines.append(
             "> 「未列出」= 这些臂的 details 里没有任何一行记录过 contamination_risk_level，"
             "**不是「检测干净」，也不是「没有任务」**——上表只对有记录的臂给出对照。（BP 轮）"
+        )
+        lines.append("")
+
+    # BQ 轮（2026-10-22）：四个 status 通道的报告面读侧披露。改前报告面对这
+    # 四个键零读者——BN/BL 落盘的字节没有任何消费面看，"这条腿跑过且干净
+    # （ok）"与"崩了（error）/ 按设计没跑（disabled）/ 没记录（null/absent）"
+    # 在所有报告面同形。本节只让分档可见：四键不进入任何判定，既不被翻成
+    # 通过也不被翻成拒绝。
+    leg_map = {b: m.get("check_leg_measurability", {}) for b, m in per.items()}
+    leg_rows = [(b, lg) for b, lg in leg_map.items() if lg.get("available")]
+    # 全行四键缺席的臂（BN 之前的历史批次）按名留下：改前的对应形态是整节
+    # 不渲染（读者无从知道"没读过"与"没有数据"的差别）；全零表更坏——会被
+    # 读成"四腿都干净"（BP 轮同款判据）。
+    silent_leg_arms = [(b, lg) for b, lg in leg_map.items() if lg and not lg.get("available") and lg.get("n_rows")]
+    if leg_rows or silent_leg_arms:
+        lines.append("## 检查腿可测量性（BQ：结果行四通道的读侧）")
+        lines.append("")
+    if leg_rows:
+        lines.append(
+            "| 基线 | 通道 | ok | 没测成(error/unavailable) | 按设计没跑(disabled) | 未记录(值为 null) | 未记录(键缺席) | 行数 |"
+        )
+        lines.append(
+            "|------|------|----|--------------------------|---------------------|------------------|----------------|------|"
+        )
+        for baseline, lg in leg_rows:
+            for channel in CHECK_LEG_CHANNELS:
+                ch = lg["channels"].get(channel, {})
+                lines.append(
+                    f"| {baseline} | {CHECK_LEG_LABELS[channel]} | {ch.get('ok', 0)} "
+                    f"| {ch.get('error', 0) + ch.get('unavailable', 0)} | {ch.get('disabled', 0)} "
+                    f"| {ch.get('null', 0)} | {ch.get('absent', 0)} | {lg.get('n_rows', 0)} |"
+                )
+        lines.append("")
+        unm_total = sum(int(lg.get("rows_any_unmeasurable", 0)) for _, lg in leg_rows)
+        lines.append(f"> 上表各臂至少一条检查腿没测成的行合计 **{unm_total}**（error/unavailable 两档）。")
+        # 词表外取值单列点名：防 "OK"/1 这类值被静默算进 ok（BP 轮词表外判据的同族）
+        other_notes = [
+            f"`{b}` 臂 `{channel}` 出现词表外取值 {ch['other_values']} ×{ch['other']}"
+            for b, lg in leg_rows
+            for channel in CHECK_LEG_CHANNELS
+            for ch in [lg["channels"].get(channel, {})]
+            if ch.get("other")
+        ]
+        if other_notes:
+            lines.append("")
+            lines.append(f"> 词表外取值（不进 ok 也不进任何否定档）：{'；'.join(other_notes)}。")
+        lines.append("")
+        lines.append(
+            "> 口径：四值词汇（ok / disabled / unavailable / error）来自 `src/utils/check_status.py`"
+            " 单一事实源；`ok` 才是「检查完成且零疑点」；`没测成` = error/unavailable；"
+            "`按设计没跑` = disabled；`未记录(值为 null)` = 该任务该腿没记录（失败分支占位或腿未跑）；"
+            "`未记录(键缺席)` = 批次早于 BN 轮（2026-10-22）落盘。**四个键不进入任何判定**——"
+            "本节只让「没测 / 没记录」在报告面可见，不把没测翻成通过，也不翻成拒绝；"
+            "行级读数以原始工件（raw/ 白名单）为准。"
+        )
+        lines.append("")
+    if silent_leg_arms:
+        detail = "；".join(
+            f"`{b}`（{int(lg.get('n_rows', 0))} 行四通道全部未记录，原因 {lg.get('reason') or '未记录'}）"
+            for b, lg in silent_leg_arms
+        )
+        lines.append(f"> 本节未列出 {len(silent_leg_arms)} 个基线：{detail}。")
+        lines.append(
+            "> 「未列出」= 这些臂的结果行里四个键一个都没落盘（批次早于 BN 轮 2026-10-22），"
+            "**不是「四腿都干净」，也不是「没有任务」**——上表只对有记录的臂给分档。（BQ 轮）"
         )
         lines.append("")
 

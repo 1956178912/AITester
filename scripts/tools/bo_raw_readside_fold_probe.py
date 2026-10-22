@@ -195,7 +195,12 @@ def probe_b2_state_key_presence() -> None:
 def _write_state(out_dir: Path, task_id: str, payload: dict[str, Any]) -> None:
     p = out_dir / "raw" / task_id
     p.mkdir(parents=True, exist_ok=True)
-    (p / "aitester.json").write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    # BQ 轮（2026-10-22）：补 allow_nan=False——AF 轮严格 JSON 门禁的写入点口径。
+    # 该文件随 BD→BP 批次（b44a1aad）入库时带着两个宽松 json.dumps 写点，而门禁
+    # 按 git ls-files 只扫**已跟踪**文件：入库前的门禁跑看不到它，BP 收口的
+    # 「门禁全绿」声明因此与实际工件分裂（BQ 手册 §6 登记）。载荷是合成字典，
+    # 补旗标对现存输入零行为变化。
+    (p / "aitester.json").write_text(json.dumps(payload, ensure_ascii=False, allow_nan=False), encoding="utf-8")
 
 
 def probe_c_locate_fold() -> None:
@@ -305,7 +310,7 @@ def probe_d_compare_failures() -> None:
         # 单臂缺失（full 有 / base 无）
         _write_state(tdp, "t1", {"test_plan": {"n": 1}, "generated_test": "def t():\n  pass", "patch": "p" * 40})
         (tdp / "raw" / "t1" / "plain_llm.json").write_text(
-            json.dumps({"generated_test": "def b():\n  pass"}), encoding="utf-8"
+            json.dumps({"generated_test": "def b():\n  pass"}, allow_nan=False), encoding="utf-8"
         )
         os.remove(tdp / "raw" / "t1" / "plain_llm.json")
         single = build_report(inverted, "aitester", "plain_llm", str(tdp / "raw"))
