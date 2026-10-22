@@ -147,9 +147,11 @@ valid_apis, harness}`。因此：
   `fixed` / gold `test_cases` 三件套；实例化仅追加噪声注释
   （`# noise_seed=<0-9999>`）并做 task_id 中性化（`task_0000..`，P1-4 泄漏
   修复……），gold 测试 import 同步重写（`_neutralize_gold_imports`）"；
-- `docs/DATA_CARD.md:21` 状态列：合成缺陷模板库为"主批次在用（n=50 任务；
-  参数化 87/120 变体用于确认性/校准批次）"（原文以勾选符号标注状态，此处按
-  纯文本转述）。
+- `docs/DATA_CARD.md:21` 状态列：合成缺陷模板库为"多批次在用（模板库 **50 个唯一
+  pattern**；当前确认性主批 = **87 任务 × 3 seeds** × 3 臂；n=50/seed42 为**历史
+  主批**）"（原文以勾选符号标注状态，此处按纯文本转述）。**F17 更正（2026-10-22）**：
+  "n=50"与"87 任务"不是矛盾口径——前者是 pattern 数/历史主批规模，后者是当前主批
+  实例化规模；同一说明已在数据卡给出。
 
 **原始任务定义位置**（读取源码核实）：`src/datasets/synthetic_dataset.py`
 内定义 8 个 pattern 池 —— `BUG_PATTERNS`（第 32 行）、`BUG_PATTERNS_LEVEL2`
@@ -346,10 +348,10 @@ reproduce.sh --dataset synthetic --full`），故需将 `.env.local` 只读挂�
    `environment.platform = "macOS-27.0.1-arm64-arm-64bit-Mach-O"`、
    `in_docker_repro = false`，而 `Dockerfile.repro:32` 基准为
    `python:3.12-slim` —— 主批次并非在复现容器内执行。
-4. **任务数口径待对账**：`benchmark_synthetic_20261006_140906.json` 的
-   `total_tasks = 87`，而 `docs/DATA_CARD.md:21` 记载合成基准"主批次在用
-   （n=50 任务；参数化 87/120 变体用于确认性/校准批次）"。
-   `[待补充：确认该 87 任务工件与数据卡"主批次 n=50"的口径对应关系]`
+4. **任务数口径（已对账，F17 更正 2026-10-22）**：`benchmark_synthetic_20261006_140906.json`
+   的 `total_tasks = 87`，与 `docs/DATA_CARD.md:21` 的"50 个唯一 pattern / 当前主批
+   87 任务"是**两个不同量**（模板数与实例数），不存在待补充的对应关系；n=50/seed42
+   是历史主批。
 5. **校验和文件的生成/校验入口（A17/A18 修复后口径）**：仓库提供
    `python scripts/gates/checksum_results.py --write`（生成/刷新，排除
    `__pycache__` 等非分发文件，只写规范名 `SHA256SUMS`）与 `--verify`
@@ -397,5 +399,4 @@ reproduce.sh --dataset synthetic --full`），故需将 `.env.local` 只读挂�
 - **主批次代码树状态不可重建**（`git_dirty = true`）：引用主批次数字时应同时
   声明该偏差与"无模型指纹"两条限制。
 - 后续补充项：`[待补充：Zenodo DOI / 归档计划]`、
-  `[待补充：原始 LLM 响应归档方案（当前不入库）]`、
-  `[待补充：主批次 87 任务与数据卡 n=50 口径对账]`。
+  `[待补充：原始 LLM 响应归档方案（当前不入库）]`。

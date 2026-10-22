@@ -105,11 +105,13 @@ ADR-0021 机制性回答——gold 裁决并非"过严低估"，而是**从未�
 | 路径 | 做法 | 可执行命令 | 代价 / 风险 |
 |------|------|------------|-------------|
 | A（保真，推荐先做） | 先用**预注册的 8 行**完成一轮完整流程（双人独立 + Kappa），把 ≥40 作为**增补审计样本**另行登记 | 同 §2 复现命令（`--fraction 0.10 --seed 42`） | 8 行的 Kappa 置信区间极宽（算术上：1 行的分歧即改变 p_o 达 0.125），只能作为流程演练与定性线索，**不足以**支撑"残余语义等价占比"的定量结论 |
-| B（按 ≥40 修订） | 抽样框**不变**（仍为 `patch_plausible=1` 的 72 行、单层 `sbfl`），仅放大抽样比例至覆盖 ≥40 行：`ceil(72 × 0.56) = 41` | `.venv/bin/python experiments/repair_sample_selection.py --results-dir experiments/results/main_batch --batches benchmark_synthetic_20261006_140906.json,benchmark_synthetic_20261006_151907.json,benchmark_synthetic_20261006_164357.json --fraction 0.56 --seed 42 --output experiments/results/main_batch/e7_repair_sample_candidates_n41.md` | 与预注册的 10% **不一致**，须在 `docs/preregistration.md` 执行记录中作为"样本量修订（取数前）"登记并说明理由；抽样比例从 10% 提升到 56% 意味着 61% 的抽样框被复核，审计成本上升（预注册成本估计为人工约 1 天、零 LLM） |
+| B（按 ≥40 修订） | 抽样框**不变**（仍为 `patch_plausible=1` 的 72 行、单层 `sbfl`），仅放大抽样比例至覆盖 ≥40 行：`ceil(72 × 0.56) = 41` | `.venv/bin/python experiments/repair_sample_selection.py --results-dir experiments/results/main_batch --batches benchmark_synthetic_20261006_140906.json,benchmark_synthetic_20261006_151907.json,benchmark_synthetic_20261006_164357.json --fraction 0.56 --seed 42 --output experiments/results/main_batch/e7_repair_sample_candidates_n41.md` | 与预注册的 10% **不一致**，须在 `docs/preregistration.md` 执行记录中作为"样本量修订（取数前）"登记并说明理由；抽样比例从 10% 提升到 56% 意味着 **56.9%（41/72）** 的抽样框被复核（F16 更正：原文误写 61%），审计成本上升（预注册成本估计为人工约 1 天、零 LLM） |
 | C（不建议） | 把抽样框扩到全部 145 条带补丁行 | 需改脚本参数语义（`patch_plausible` 过滤） | **改变了预注册抽样框**（从"合理补丁行"变为"全部补丁行"），会引入与 `patch_plausible` 定义纠缠的偏倚，须作为**设计修订**而非样本量修订登记 |
 
 **推荐**：先做路径 A 把流程跑通并产出 Kappa（如实报告其不可判性），再按路径 B 登记
 增补样本量后重跑；两条路径的候选清单**都保留**，不得用后者覆盖前者的登记记录。
+（F16 更正 2026-10-22：41/72 = **56.9%**，原文误写 61%；原表的 n=41 界限实为
+n=40 的舍入结果，正确值见 §7 表。）
 
 **备料状态（2026-10-19 Y4 补 n=72，零 LLM）**：三条路径的候选清单与工作表**均已生成**，
 可直接开工、无需再等一轮备料：
@@ -146,7 +148,7 @@ E7 判定规则对"残余语义等价占比 > 0"敏感（触发 repair 口径勘
 | 样本量 | 0 observed 上界（rule of 3） | 0 observed 上界（Wilson） | 1 observed 上界（Wilson） | 人工成本量级 |
 |---|---|---|---|---|
 | n=8（路径 A） | 37.5% | 32.4% | 47.1% | ~1 小时 |
-| n=41（路径 B） | 7.5% | 8.8% | 12.9% | ~4-7 小时 |
+| n=41（路径 B） | 7.3% | 8.6% | 12.6% | ~4-7 小时 |
 | n=72（全框普查） | 4.2% | 5.1% | 7.5% | ~6-12 小时 |
 
 **解读**：论文"repair=0 为真零"的论断强度直接取决于样本量——n=8 的 0 观察只能把

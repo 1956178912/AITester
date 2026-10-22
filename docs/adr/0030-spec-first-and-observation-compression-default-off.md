@@ -24,14 +24,22 @@
    层级多 agent 胜单 agent 与手工多 agent）；ICST'26 复现研究（Konstantinou,
    Degiovanni, Papadakis，*How well LLM-based test generation techniques perform
    with newer LLM versions?*，ICST 2026，DOI 10.1109/ICST69053.2026.00040，
-   arXiv:2601.09695v2——393 类 / 3,657 方法上 plain LLM 在 line/branch/mutation
-   全面胜 HITS/SymPrompt/TestSpark/CoverUp 四工具 +17.72/+19.80/+20.92pp）。
-   两条**独立同向**证据（F7）——"手工编排"已不被前沿视为价值来源；
+   arXiv:2601.09695v2——393 类 / 3,657 方法上 plain LLM(M) 的 line/branch/mutation
+   总计 49.95/35.33/33.82，对比 HITS 42.43/29.49/27.97：**相对提升**
+   17.72%/19.80%/20.92%，折合绝对差 +7.52/+5.84/+5.85pp。原文摘要写 "by X%"，
+   是相对量而非百分点，引用时不得写成 "pp"（F09 更正，2026-10-22）。
+   两条外部研究提供了与本项目阴性结果**同向**的参考，但各自只支持其设定的比较：
+   BOAD 说明自动搜索的层级 agent 在 SWE-bench-Verified 上可胜手工多 agent；
+   ICST'26 复现说明 plain LLM(M) 在该 Java 复现设定下可胜四个工程化工具。
+   **不构成"手工编排已不被前沿视为价值来源"的领域级判断**（见
+   `docs/EVALUATION_SCOPE.md` C10：证据只支持本系统设定下的编排净负）；
 2. **"逻辑驱动"内核薄弱**（F3）：spec_compile_rate 仅 0.205–0.219，
    约 79% 的规约子句不可机器化，根因在**文法表达力**而非提示
    （§3.3 行 3）；
 3. **观测通道信噪比低**：aitester 臂 token 26.1k/任务 vs df 臂 4.2k/任务
-   （8.1×），全量 trace 注入是主要低信噪比通道（§4.1 C11 / §6 P4）。
+   （**6.2×** = 26,115/4,223；F15 更正：历史笔误写 8.1×，该倍数对应
+   plain_llm 的 ≈3,209 tok/任务，不是 df），全量 trace 注入是主要低信噪比
+   通道（§4.1 C11 / §6 P4）。
 
 评审 §6 给出七条超越前沿路径（P1–P8）。本批次落地其中六条的
 **第一阶段原语**（均遵循 ADR-0003 默认关口径，历史行为逐字节零变化）：

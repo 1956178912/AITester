@@ -449,15 +449,16 @@ Third-party dependency detection and cached venv management (P1: execution isola
 ```python
 from src.tools.dependency import find_missing_modules, venv_cache_dir, create_venv, install_packages
 
-missing = find_missing_modules("import pandas\ndef f(): ...")
-# → {"pandas"} (the standard library and non-import statements are filtered out)
+# F20 correction (2026-10-22): takes a SET OF MODULE NAMES, not source code.
+missing = find_missing_modules({"pandas"})
+# → {"pandas"} if pandas is not importable here
 
 venv_dir = venv_cache_dir(
     ["pandas"]
 )  # disk cache directory keyed by dependency combo + current Python version (4.4 multi-version)
 venv_dir_310 = venv_cache_dir(["pandas"], python_version="3.10")  # explicit Python version (py3.10 prefix isolates)
 venv_python = create_venv(venv_dir, timeout=120)
-install_packages(venv_python, ["pandas"], timeout=120)
+ok, detail = install_packages(venv_python, ["pandas"], timeout=120)  # returns (bool, str)
 ```
 
 **Key functions:**
@@ -466,11 +467,11 @@ install_packages(venv_python, ["pandas"], timeout=120)
 |------|------|--------|------|
 | `extract_imported_modules()` | `code: str` | `set[str]` | Extracts the top-level module names imported by the code |
 | `is_standard_library()` | `module_name: str` | `bool` | Determines whether it is a standard library module |
-| `find_missing_modules()` | `code: str` | `set[str]` | Third-party modules imported by the code but unavailable in the current environment |
+| `find_missing_modules()` | `module_names: set[str]`, `extra_search_files: list[str] \| None = None` | `set[str]` | Third-party modules (by name, not source text) unavailable in the current environment |
 | `suggest_package_names()` | `module_names: set[str]` | `list[str]` | Module name → suggested pip package name (handles underscore/alias mapping) |
 | `venv_cache_dir()` | `required_packages: list[str]`, `python_version: str \| None = None` | `str` | 4.4 multi-version cache: compute the cache directory by dependency combo + Python version (when `python_version` is None, uses the first two digits of `sys.version_info`; different versions are isolated in separate directories to avoid cross-reuse) |
 | `create_venv()` | `venv_dir: str`, `timeout: int` | `str` | Creates a venv and returns the python interpreter path (reuses disk cache) |
-| `install_packages()` | `venv_python`, `packages`, `timeout` | `bool` | Runs pip install inside the venv (returns False on failure, does not raise) |
+| `install_packages()` | `venv_interpreter`, `package_names: list[str]`, `timeout: int = 120` | `tuple[bool, str]` | Runs pip install inside the venv; returns `(success, detail)` and does not raise (F20 correction: was documented as `bool` / `venv_python`) |
 | `get_venv_cache_stats()` | none | `dict` | 4.4 Dependency cache hit-rate statistics: accumulates in-process hit/create events + on-disk JSON cross-process aggregation, returns `hit_rate = hits/(hits+creates)` |
 | `list_venv_cache()` | none | `list[dict]` | 4.4 Lists all cached venvs in the cache directory (name / path / size_mb / created_at) |
 | `clear_venv_cache()` | `max_age_days: int \| None`, `max_size_mb: int \| None` | `dict` | 4.4 Clears the cache filtered by age / size; when both are None, clears everything |
@@ -720,7 +721,7 @@ from src.graph import token_usage
 token_usage.record_usage(1200, 300, model="gpt-4o")
 usage = token_usage.get_usage()
 print(usage.total_tokens)  # 1500
-usage.reset()  # Single-thread reset (called before a baseline run)
+token_usage.reset()  # F20 correction: reset is module-level; TokenUsage instances have no reset()
 ```
 
 **Key functions:**
@@ -819,8 +820,9 @@ dataset = load_dataset("swe_bench_pro", data_dir="/path/to/pro_data")
 ```python
 # Iterate over tasks
 for task in dataset:
-    target_code = task["target_code"]
-    function_name = task["function_name"]
+    task_id = task.task_id
+    target_code = task.instance_code
+    gold_tests = task.test_code
     # ...
 
 # Look up by task_id (O(1) table lookup; 2026-09-26 full-review round: the

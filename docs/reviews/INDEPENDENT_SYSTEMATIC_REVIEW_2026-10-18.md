@@ -166,7 +166,7 @@ AITester/                              # HEAD=cffe991，工作树干净；main �
 | **SPARC**（Chowdhury, Fu, Jabbarvand；UIUC/VT） | line/branch/mutation vs vanilla prompt | **+31.36 / +26.01 / +20.78 pp**；匹配或超 KLEE；94.3% 测试经迭代修复保留 | 59 个真实+算法 **C** 项目；neuro-symbolic（CFG→场景→合成→自愈） | arXiv:2602.16671 | 2026-02, arXiv | B | 单源；C 语言口径 |
 | **NexuSym**（ICST 2026） | coverage vs vanilla LLM | **+34.9pp**（HumanEval Python）；收敛更快 | neuro-symbolic 符号+神经协同 | arXiv:2604.05919 | 2026, ICST | B | 单源摘要 |
 | **Ockhamareto**（Huang, Harman 等；NUS/UCL） | mutation score @N=5 | **49.9% vs 31.3%**（MIST-RL）；4B→27B +30~35pp；Pareto 最小套件 | ULT + HumanEval+/MBPP+/CodeContests/TestGenEval-Lite；GRPO RL | arXiv:2608.24473 | 2026, arXiv（TOSEM 版面记录） | B | RL 路线，与提示工程不同轴 |
-| **CANDOR**（Xu, Wang, Briand, Liu） | oracle correctness | 超 TOGLL **+15.8~25.1pp**；HumanEvalJava line/branch/mutation 0.991/0.970/0.980 | 多 agent 共识 + 双 LLM 管线 | TOSEM 2026-03（DOI 10.1145/3803418） | 2026, TOSEM | B（作者页条目） | 多 agent JUnit 直接同类 |
+| **CANDOR**（Xu, Wang, Briand, Liu） | oracle correctness | 相对 **TOGLL 至少 +21.1pp**（v7 摘要原文 "at least 21.1 percentage points"）；HumanEvalJava line/branch/mutation 0.991/0.970/0.980 | 多 agent 共识 + 双 LLM 管线 | TOSEM 2026-03（DOI 10.1145/3803418）；arXiv:2506.02943v7 | 2026, TOSEM | B（作者页条目） | 多 agent JUnit 直接同类。**F18 勘误（2026-10-22）**：原写"超 TOGLL +15.8~25.1pp"系版本/对照混接——15.8–25.1 是 **v3** 相对 **LLM-Empirical** 的区间，不是 TOGLL |
 | **Konstantinou, Degiovanni & Papadakis**（ICST 2026 复现研究） | line/branch/mutation | Plain-LLM **49.95/35.33/33.82** 全面优于 HITS/SymPrompt/CoverUp/TestSpark；请求数不高于 CoverUp | 6 个完整 Java 仓库 / 393 类 / 3,657 方法 | arXiv:2601.09695（编号经项目 README 转引，**本次未直取全文**） | 2026, ICST | **C（项目引用，未独立核验）** | 方向与 BOAD/Multi-Agent 阴性证据互证 |
 | **Agent 自写测试对 issue resolution 无效**（arXiv:2602.07900） | resolution | 自写测试不显著提升解决率 | agentic coding 设定 | arXiv:2602.07900 | 2026-02 | B | 单源；与项目 false_fix 发现互证 |
 | **STADA**（arXiv:2504.06130） | path constraint solving | ~**60%**（GPT-4o） | 8 Python 库 150 函数 | arXiv:2504.06130 | 2025 | B | 逻辑驱动测试生成的约束求解参照 |
@@ -387,7 +387,7 @@ AITester/                              # HEAD=cffe991，工作树干净；main �
 | 逻辑规格 | SpecExpr 白名单 AST + BNF 单一事实源 + 8 类拒绝归因 + v4 护栏；spec_expr_coverage 0.61-0.72（B） | TSC2CARLA（时序逻辑，A）；LogiCase（CCFG，A）；COMBA（Alloy+SAT，A）；Tratto（公理预言 73% acc，A） | **规格表达工程完整性在已检索文献中无同类；但增益未证（三连阴性）；规格可编译率 0.59-0.72 低于形式化方法路线 100%（后者靠人工写规约）** |
 | 约束求解 | spec_smt z3 见证层（T 轮机制 pass：witness_rate 0.125、timeout 0，B）；默认关 | COMBA 增量 SAT（A）；ESBMC-AI counterexample 引导（A）；LLM 路径约束 ~60%（B） | 有种子能力，未启用、未评估；P6 路线依据充分 |
 | 测试覆盖准则 | F2P 三段判定 + 特异性门 + 变异得分 + 分支覆盖注入 + 误导三分（M 轮落地） | ULT accuracy/mutation（A）；Zhao ISSTA'26 语境限定（A） | 准则齐全且**自建了前沿缺失的误导维度**；外部标定缺（G1） |
-| 测试预言 | spec_oracle 确定性注入 + 独立判读（N-3）+ 示例通道（correct 0→8 探索性） | Tratto 73% acc/72% P/61% F1（A）；CANDOR +15.8~25.1pp（B） | 确定性路线与 Tratto 神经符号路线可互引；oracle 正确率未系统度量（correct 仍 0） |
+| 测试预言 | spec_oracle 确定性注入 + 独立判读（N-3）+ 示例通道（correct 0→8 探索性） | Tratto 73% acc/72% P/61% F1（A）；CANDOR ≥21.1pp vs TOGLL（v7，B） | 确定性路线与 Tratto 神经符号路线可互引；oracle 正确率未系统度量（correct 仍 0） |
 | 多智能体 | LangGraph 状态机 + 事件总线 + 专家池/辩论（默认关）+ 编排净负（A） | AgentCoder/TraceCoder/TwinMem/LatentMAS/BOAD（A/B） | **落后（已降级）；MAST 失败分类学（A）支持项目"验证环节主导失败"的设计取向** |
 | 通信机制 | 文本 prompt + 语义缓存；无 KV-cache | LaMAR token −78~93%（A）；LatentMAS −83.7%（A） | 落后；API 架构下短期无解（P7 探索） |
 | 自修复 | 快照回滚 schema（T 轮落地）+ 红回归门 + 弃权门 + 防测试黑客门 + 停滞检测（A-19 修复） | STRATUS 1.5×（A）；ESBMC-AI 90.4%（A）；VIGIL 设计（A）；FTDI 预算感知（A） | **安全机制设计有特色；缺形式化规约驱动修复（P6）与仓库级运行时接口（P4）** |

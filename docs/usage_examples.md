@@ -546,10 +546,13 @@ generator = GeneratorAgent()
 test_code = generator.generate(plan, target_code, "calculator")
 
 # Step 3: 执行测试
+# F20 更正（2026-10-22）：execute 需要 target_file（位置参数），返回字典没有
+# "status" 键——判分看 passed，覆盖率看 coverage。
+target_file = "examples/calculator.py"
 executor = ExecutorAgent()
-result = executor.execute(test_code)
+result = executor.execute(test_code, target_file)
 
-print(f"测试结果: {result['status']}")
+print(f"测试通过: {result['passed']}")
 print(f"覆盖率: {result['coverage']}%")
 ```
 

@@ -215,7 +215,8 @@ this document, and must be labeled as such when reported.
 ## E6: Budget-Matched Four Arms (Orchestration vs Compute Attribution; pre-registered by AL, run pending budget)
 
 - **Motivation (R4/AL7)**: in R-P0-2, aitester used 26,115 tokens/task vs
-  plain_llm_df 4,223 (8.1×); the −28pp admits two explanations —
+  plain_llm_df 4,223 (**6.2×** = 26,115/4,223; F15 correction: the historical
+  8.1× corresponds to plain_llm at ≈3,209 tokens/task); the −28pp admits two explanations —
   orchestration structure vs budget confounding (long-loop context
   bloat/attrition). The 2026 cost consensus ($/resolved spanning $0.46–$74
   across six frontier models at score parity) requires attribution

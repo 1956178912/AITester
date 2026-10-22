@@ -557,11 +557,11 @@ install_packages(venv_python, ["pandas"], timeout=120)
 |------|------|--------|------|
 | `extract_imported_modules()` | `code: str` | `set[str]` | 提取代码中 import 的顶层模块名 |
 | `is_standard_library()` | `module_name: str` | `bool` | 判断是否标准库 |
-| `find_missing_modules()` | `code: str` | `set[str]` | 代码中导入但当前环境不可用的第三方模块 |
+| `find_missing_modules()` | `module_names: set[str]`, `extra_search_files: list[str] \| None = None` | `set[str]` | 传入**模块名集合**（不是源码字符串），返回当前环境不可用的第三方模块 |
 | `suggest_package_names()` | `module_names: set[str]` | `list[str]` | 模块名 → 建议的 pip 包名（处理下划线/别名映射） |
 | `venv_cache_dir()` | `required_packages: list[str]`, `python_version: str \| None = None` | `str` | 4.4 多版本缓存：按依赖组合 + Python 版本计算缓存目录（`python_version` 为 None 时取 `sys.version_info` 前两位；不同版本目录隔离存放，避免交叉复用） |
 | `create_venv()` | `venv_dir: str`, `timeout: int` | `str` | 创建 venv 并返回 python 解释器路径（磁盘缓存复用） |
-| `install_packages()` | `venv_python`, `packages`, `timeout` | `bool` | 在 venv 内 pip install（失败返回 False，不抛异常） |
+| `install_packages()` | `venv_interpreter`, `package_names: list[str]`, `timeout: int = 120` | `tuple[bool, str]` | 在 venv 内 pip install；返回 `(成功, 摘要/错误详情)`，不抛异常（F20 更正：原文档把返回写成 `bool`、参数名写成 `venv_python`） |
 | `get_venv_cache_stats()` | 无 | `dict` | 4.4 依赖缓存命中率统计：进程内累计 hit/create 事件 + 落盘 JSON 跨进程聚合，返回 `hit_rate = hits/(hits+creates)` |
 | `list_venv_cache()` | 无 | `list[dict]` | 4.4 列出缓存目录所有 venv（name / path / size_mb / created_at） |
 | `clear_venv_cache()` | `max_age_days: int \| None`, `max_size_mb: int \| None` | `dict` | 4.4 按年龄 / 大小过滤清理缓存，两者均 None 时清空 |
@@ -809,7 +809,7 @@ from src.graph import token_usage
 token_usage.record_usage(1200, 300, model="gpt-4o")
 usage = token_usage.get_usage()
 print(usage.total_tokens)  # 1500
-usage.reset()  # 单线程重置（基线运行前调用）
+token_usage.reset()  # F20 更正：reset 是模块级函数；TokenUsage 实例没有 reset()
 ```
 
 **关键函数：**
@@ -905,10 +905,11 @@ dataset = load_dataset("swe_bench_pro", data_dir="/path/to/pro_data")
 **数据集接口：**
 
 ```python
-# 遍历任务
+# 遍历任务（F20 更正：BenchmarkTask 是 dataclass，用属性访问，不能当 dict 下标）
 for task in dataset:
-    target_code = task["target_code"]
-    function_name = task["function_name"]
+    task_id = task.task_id
+    target_code = task.instance_code
+    gold_tests = task.test_code
     # ...
 
 # 按 task_id 查找（O(1) 查表，2026-09-26 全面审查：原 O(n) 线性扫描在
