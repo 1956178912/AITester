@@ -290,6 +290,16 @@ module = [
 ]
 ignore_missing_imports = true
 
+[tool.coverage.run]
+# 覆盖率口径唯一（BR+，2026-10-22 实测）：branch 必须写进配置，不能只靠
+# `--cov-branch` CLI 开关。理由：xdist 控制器 / 子进程等非 CLI 入口拿不到该
+# 开关，会按默认语句口径写数据；`pytest --cov=src --cov-branch -n 4` 实测
+# 报 `Can't combine branch coverage data with statement data`（主进程 .coverage
+# 为 lines-only，四个 worker 为 arc 数据），整轮覆盖率不可得。
+# 写死 branch=true 后所有入口同口径；未加 --cov-branch 的旧命令也会得到分支
+# 数据（只多不少），与 CI 口径一致。
+branch = true
+
 [tool.pytest.ini_options]
 # pytest 配置
 testpaths = ["tests"]

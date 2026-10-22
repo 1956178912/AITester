@@ -7,6 +7,21 @@
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased] — 2026-10-22 BP round: the statistical comparison side folded "this row never recorded a contamination level" into silence - and the same absence went two ways in two consumers (zero LLM, $0)
+## [Unreleased] — 2026-10-22 BS round: coverage caliber pinned in config (branch=true) + baseline recomputation (zero LLM, $0)
+
+> Finding: `pytest --cov=src --cov-branch -n 4` crashed at combine - `.coverage` (controller) had 1 line / 0 arcs while the four workers had 2.4k-23k arcs: one command line, two calibers. See `docs/reviews/COVERAGE_CONFIG_BS_2026-10-22.md`.
+
+### What changed
+
+- `pyproject.toml` gains `[tool.coverage.run] branch = true`: the branch caliber no longer depends on a CLI flag, so xdist controllers / subprocesses write the same format (CI already passed `--cov-branch`, readings unchanged).
+- `tests/test_packaging.py::test_coverage_branch_mode_is_pinned_in_config` parses the TOML and fails if the pin disappears (message states that non-CLI entry points would write statement data and coverage could not combine).
+- `BASELINE.yaml` coverage section recomputed from this round's `coverage.xml`: lines **19526/20040 = 97.4351%** (97.44; +133/+136 lines, misses 511->514), branches **7148/7582 = 94.2759%** (94.28; +45/+50 arcs, misses 429->434); per-module changes only in base_agent 98.52 (399/405), graph_nodes 99.88 (864/865), graph_state 100.00 (126/126).
+
+### Tests
+
+- collected **12070** = passed **12065** + skipped 5 + failed 0 (canonical); sandbox confirmation run **12051 passed / 19 skipped / 0 failed, 202.70s, rc=0**.
+- Ratchet: lines 97.44 >= 96.40 (1.04pp headroom), branches 94.28 >= 92.50 (1.78pp headroom), `rc=0`; `check_branch_coverage` passes; water levels are **not** raised (AA-4: only the CI ubuntu caliber may raise them).
+
 ## [Unreleased] — 2026-10-22 BR round: all 27 items of the third-party central review confirmed and closed (zero LLM, $0)
 
 > Report HEAD `53bbbbd4`, closure HEAD `f49959b2`; P1=14 / P2=13, P0=0, every item re-checked at the closure HEAD, **zero false positives**. See `docs/reviews/BR_ROUND_CENTRAL_REVIEW_2026-10-22.md`.
