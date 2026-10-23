@@ -102,7 +102,11 @@ jobs:
   test:
     runs-on: ubuntu-latest
     # 显式超时上限：防止卡在 pip 网络 / 诊断重跑等步骤最长挂到 GitHub 默认 360 分钟
-    timeout-minutes: 30
+    # BZ 轮（2026-10-23）：30 → 60。run 39905189493 的 3.14 档撞 30min 帽被
+    # cancel——失败后的"测试失败诊断"步骤会重跑整轮套件（--tb=no -rf），与
+    # "Run tests with coverage" 串联后慢 runner 上可超帽；本轮修复后失败路径
+    # 不再触发，但诊断重跑的存在本身要求上限覆盖"失败 + 重跑"的最长路径。
+    timeout-minutes: 60
     strategy:
       # 2026-10-18（U 轮首次真实 CI）：关闭 fail-fast——此前一档失败会 cancel
       # 其余档，导致无法获得完整跨版本失败清单（3.12 的失败在 #126 被 cancel，
