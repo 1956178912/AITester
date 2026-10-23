@@ -32,6 +32,7 @@ import pytest
 
 from experiments.mast_trace_analysis import analyze_traces, parse_trace_file
 from experiments.mast_trace_analysis import render_markdown as render_mast_md
+from tests._corpus_guard import require_full_corpus
 
 _ROOT = Path(__file__).resolve().parents[1]
 _MAIN_TRACES = _ROOT / "experiments/results/main_batch/traces"
@@ -266,6 +267,10 @@ class TestRealPathInvariants:
 
     def test_repo_wide_non_object_census_is_zero_and_instrument_covered(self) -> None:
         """全仓普查读数 0 实例 + 覆盖面自证（漏扫的探针只报 783 个文件，见册 §1）。"""
+        # BZ 轮：扫描面下界（138 个 traces* 目录 / 8539 个 trace 文件）以全归档
+        # 校准——fresh clone 只有入库子集，前提不成立时显式 skip 并带实测读数
+        # （tests/_corpus_guard.py），不把"没扫到"折成"扫过且干净"。
+        require_full_corpus()
         trace_dirs = sorted({p for p in _ROOT.glob("experiments/results/**/traces*") if p.is_dir()})
         assert len(trace_dirs) >= 138, f"扫描面回落：{len(trace_dirs)} 个 traces* 目录"
         files = 0

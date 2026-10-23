@@ -1,0 +1,6 @@
+{"event": "task_start", "task": "<REDACTED_KEY>", "ts": 1790669842.063308, "meta": {"dataset_task_id": "synthetic__hard_nested_iter_mixed_0012", "baseline": "aitester", "target_function": "collect"}}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "planner", "ts": 1790669842.081506, "output": {"function_name": "collect", "test_cases": 6}, "decision": "plan_complete", "duration_ms": 0.59}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "generator", "ts": 1790669842.0822022, "output": {"generated_test_len": 1101}, "decision": "generated"}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "executor", "ts": 1790669842.604944, "output": {"passed": true, "coverage": 64.0, "failed_cases": 0}, "decision": "PASS", "duration_ms": 522.55, "iteration": 0}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "_should_debug", "ts": 1790669842.605371, "output": {"reason": "test_passed"}, "decision": "done"}
+{"event": "task_end", "task": "<REDACTED_KEY>", "ts": 1790669842.6058419, "passed": true, "duration_s": 0.54, "token_usage": {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0, "llm_calls": 0, "by_model": {}}}

@@ -1,0 +1,6 @@
+{"event": "task_start", "task": "<REDACTED_KEY>", "ts": 1790650612.970622, "meta": {"dataset_task_id": "synthetic__hard_iter_over_none_0035", "baseline": "aitester", "target_function": "expand_regions"}}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "planner", "ts": 1790650624.210283, "output": {"function_name": "expand_regions", "test_cases": 0}, "decision": "plan_complete", "duration_ms": 11220.35}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "generator", "ts": 1790650645.6540108, "output": {"generated_test_len": 2500}, "decision": "generated"}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "executor", "ts": 1790650646.200396, "output": {"passed": true, "coverage": 80.0, "failed_cases": 0}, "decision": "PASS", "duration_ms": 544.72, "iteration": 0}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "_should_debug", "ts": 1790650646.260829, "output": {"reason": "test_passed"}, "decision": "done"}
+{"event": "task_end", "task": "<REDACTED_KEY>", "ts": 1790650646.2612832, "passed": true, "duration_s": 33.29, "token_usage": {"input_tokens": 2400, "output_tokens": 1385, "total_tokens": 3785, "llm_calls": 2, "by_model": {"agnes-3.0-flash": 3785}}}

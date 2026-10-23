@@ -1,0 +1,2735 @@
+{
+  "timestamp": "2026-09-29T11:13:35.767502",
+  "dataset": "synthetic",
+  "subset": null,
+  "seed": 42,
+  "total_tasks": 40,
+  "baselines": [
+    "aitester"
+  ],
+  "enable_planner": true,
+  "enable_debugger": true,
+  "enable_rag": false,
+  "parallelism": 2,
+  "valid_apis": 22,
+  "results": {
+    "aitester": {
+      "total_functions": 40,
+      "passed_count": 35,
+      "failure_count": 5,
+      "success_rate": 87.5,
+      "avg_coverage": 65.2,
+      "avg_iterations": 0.6,
+      "avg_elapsed_seconds": 39.77,
+      "total_time": 1590.75,
+      "failure_category_distribution": {
+        "patch_validation_failed": 3,
+        "assertion": 1
+      },
+      "token_metrics": {
+        "total_input_tokens": 43585,
+        "total_output_tokens": 18746,
+        "total_tokens": 62331,
+        "total_llm_calls": 35,
+        "avg_tokens_per_task": 1558.28
+      },
+      "rag_metrics": {
+        "retrievals": 0,
+        "hits": 0,
+        "hit_rate": 0.0,
+        "avg_max_similarity": null
+      },
+      "details": [
+        {
+          "task_id": "synthetic__hard_chained_dict_lookup_0000",
+          "repo": "synthetic/hard_chained_dict_lookup",
+          "passed": true,
+          "coverage": 57.0,
+          "iterations": 1,
+          "diagnosis": null,
+          "error_category": "",
+          "elapsed_seconds": 56.14,
+          "token_usage": {
+            "input_tokens": 2061,
+            "output_tokens": 1116,
+            "total_tokens": 3177,
+            "llm_calls": 2,
+            "by_model": {
+              "agnes-2.5-flash": 1674,
+              "agnes-3.0-flash": 1503
+            }
+          },
+          "rag_stats": null,
+          "patch": "python\ndef lookup_metric(metrics: dict, layer_name: str, key: str):\n    try:\n        layers = metrics[layer_name]\n        return layers[key]\n    except (KeyError, TypeError):\n        return None\n\ndef summarize(metrics: dict, layer_name: str):\n    total = 0\n    for key in metrics[layer_name]:\n        total += lookup_metric(metrics, layer_name, key)\n    return total\n\ndef rank(metrics: dict, layer_name: str, k: int):\n    keys = sorted(metrics[layer_name], key=lambda s: -lookup_metric(metrics, layer_name, s))\n    return keys[:k]\n",
+          "generated_test": "import pytest\n\nfrom hard_chained_dict_lookup_0000 import lookup_metric, summarize, rank\n\n\nclass TestLookupMetric:\n    \"\"\"Test cases for lookup_metric function.\"\"\"\n\n    def test_lookup_metric_returns_value_when_key_exists(self):\n        \"\"\"Given a valid layer and key, lookup_metric returns the associated value.\"\"\"\n        metrics = {\"layer1\": {\"metric_a\": 10, \"metric_b\": 20}}\n        assert lookup_metric(metrics, \"layer1\", \"metric_a\") == 10\n\n    def test_lookup_metric_returns_none_when_layer_missing(self):\n        \"\"\"Given a non-existent layer, lookup_metric returns None.\"\"\"\n        metrics = {\"layer1\": {\"metric_a\": 10}}\n        assert lookup_metric(metrics, \"layer2\", \"metric_a\") is None\n\n    def test_lookup_metric_returns_none_when_key_missing(self):\n        \"\"\"Given a valid layer but missing key, lookup_metric returns None.\"\"\"\n        metrics = {\"layer1\": {\"metric_a\": 10}}\n        assert lookup_metric(metrics, \"layer1\", \"metric_b\") is None\n\n    def test_lookup_metric_returns_none_when_layer_value_not_dict(self):\n        \"\"\"Given a layer value that is not a dict, lookup_metric returns None.\"\"\"\n        metrics = {\"layer1\": \"not_a_dict\"}\n        assert lookup_metric(metrics, \"layer1\", \"metric_a\") is None\n\n    def test_lookup_metric_returns_none_for_empty_metrics(self):\n        \"\"\"Given an empty metrics dict, lookup_metric returns None.\"\"\"\n        assert lookup_metric({}, \"layer1\", \"metric_a\") is None\n\n\nclass TestSummarize:\n    \"\"\"Test cases for summarize function.\"\"\"\n\n    def test_summarize_returns_total_of_all_metrics(self):\n        \"\"\"Given valid metrics, summarize returns the sum of all metric values.\"\"\"\n        metrics = {\"layer1\": {\"a\": 1, \"b\": 2, \"c\": 3}}\n        assert summarize(metrics, \"layer1\") == 6\n\n    def test_summarize_returns_zero_for_empty_layer(self):\n        \"\"\"Given an empty layer, summarize returns 0.\"\"\"\n        metrics = {\"layer1\": {}}\n        assert summarize(metrics, \"layer1\") == 0\n\n    def test_summarize_raises_keyerror_when_layer_missing(self):\n        \"\"\"Given a missing layer, summarize raises KeyError.\"\"\"\n        with pytest.raises(KeyError):\n            summarize({\"layer1\": {}}, \"layer2\")\n\n\nclass TestRank:\n    \"\"\"Test cases for rank function.\"\"\"\n\n    def test_rank_returns_top_k_keys_in_descending_order(self):\n        \"\"\"Given metrics and k, rank returns top-k keys sorted by value descending.\"\"\"\n        metrics = {\"layer1\": {\"a\": 5, \"b\": 10, \"c\": 1, \"d\": 7}}\n        result = rank(metrics, \"layer1\", 2)\n        assert result == [\"b\", \"d\"]\n\n    def test_rank_returns_empty_list_when_k_is_zero(self):\n        \"\"\"Given k=0, rank returns an empty list.\"\"\"\n        metrics = {\"layer1\": {\"a\": 5, \"b\": 10}}\n        assert rank(metrics, \"layer1\", 0) == []\n\n    def test_rank_returns_all_keys_when_k_exceeds_count(self):\n        \"\"\"Given k greater than number of keys, rank returns all keys sorted descending.\"\"\"\n        metrics = {\"layer1\": {\"a\": 5, \"b\": 10}}\n        result = rank(metrics, \"layer1\", 10)\n        assert result == [\"b\", \"a\"]\n\n    def test_rank_raises_keyerror_when_layer_missing(self):\n        \"\"\"Given a missing layer, rank raises KeyError.\"\"\"\n        with pytest.raises(KeyError):\n            rank({\"layer1\": {}}, \"layer2\", 1)",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 45.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 1.1,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.963,
+                "simplicity": 0.982
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 43.0,
+              "coverage_delta": -2.0,
+              "elapsed_seconds": 0.83,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.972,
+                "simplicity": 0.986
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": true,
+              "coverage": 57.0,
+              "coverage_delta": 14.0,
+              "elapsed_seconds": 0.45,
+              "reward_signals": {
+                "correctness": 1.0,
+                "efficiency": 0.985,
+                "simplicity": 0.993
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "low",
+          "repo_verification": null,
+          "task_metadata": {
+            "bug_type": "runtime",
+            "pattern_name": "hard_chained_dict_lookup",
+            "source": "synthetic",
+            "noise_seed": 409,
+            "difficulty": 26,
+            "is_cross_file": false,
+            "trigger_exception": "KeyError",
+            "suggested_function": "lookup_metric"
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": []
+          }
+        },
+        {
+          "task_id": "synthetic__hard_iter_over_none_0002",
+          "repo": "synthetic/hard_iter_over_none",
+          "passed": true,
+          "coverage": 80.0,
+          "iterations": 0,
+          "diagnosis": null,
+          "error_category": "",
+          "elapsed_seconds": 0.51,
+          "token_usage": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "llm_calls": 0,
+            "by_model": {}
+          },
+          "rag_stats": null,
+          "patch": null,
+          "generated_test": "from hard_iter_over_none_0002 import expand_regions, region_count, contains\n\ndef test_expand_regions_empty_list():\n    \"\"\"\n    Test expand_regions with an empty list of regions.\n    \"\"\"\n    assert expand_regions([]) == []\n\ndef test_expand_regions_single_region():\n    \"\"\"\n    Test expand_regions with a single region.\n    \"\"\"\n    assert expand_regions([[1, 2], [3, 4]]) == [1, 2, 3, 4]\n\ndef test_expand_regions_multiple_regions():\n    \"\"\"\n    Test expand_regions with multiple regions.\n    \"\"\"\n    assert expand_regions([[1, 2], [3, 4], [5, 6]]) == [1, 2, 3, 4, 5, 6]\n\ndef test_region_count_empty_list():\n    \"\"\"\n    Test region_count with an empty list of regions.\n    \"\"\"\n    assert region_count([]) == 0\n\ndef test_region_count_single_region():\n    \"\"\"\n    Test region_count with a single region.\n    \"\"\"\n    assert region_count([[1, 2], [3, 4]]) == 1\n\ndef test_region_count_multiple_regions():\n    \"\"\"\n    Test region_count with multiple regions.\n    \"\"\"\n    assert region_count([[1, 2], [3, 4], [5, 6]]) == 3\n\ndef test_contains_in_region():\n    \"\"\"\n    Test contains with a coordinate that is in a region.\n    \"\"\"\n    assert contains([[1, 2], [3, 4]], 3) == True\n\ndef test_contains_not_in_region():\n    \"\"\"\n    Test contains with a coordinate that is not in any region.\n    \"\"\"\n    assert contains([[1, 2], [3, 4]], 5) == False",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": true,
+              "coverage": 80.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.49,
+              "reward_signals": {
+                "correctness": 1.0,
+                "efficiency": 0.984,
+                "simplicity": 0.992
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "low",
+          "repo_verification": null,
+          "task_metadata": {
+            "bug_type": "runtime",
+            "pattern_name": "hard_iter_over_none",
+            "source": "synthetic",
+            "noise_seed": 2286,
+            "difficulty": 26,
+            "is_cross_file": false,
+            "trigger_exception": "TypeError",
+            "suggested_function": "expand_regions"
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": []
+          }
+        },
+        {
+          "task_id": "synthetic__hard_chained_dict_lookup_0003",
+          "repo": "synthetic/hard_chained_dict_lookup",
+          "passed": true,
+          "coverage": 41.0,
+          "iterations": 1,
+          "diagnosis": "The functions `lookup_metric`, `summarize`, and `rank` in the code under test do not validate whether `layer_name` or `key` exist in the `metrics` dictionary before accessing them. Consequently, when a test passes an invalid layer or key (e.g., `metrics['invalid_layer']` or `layers['invalid_key']`), a `KeyError` is raised. The failing tests (`test_lookup_metric_with_invalid_layer` and `test_lookup_metric_with_invalid_key`) expect the function to handle these cases gracefully (likely by returning `None` or `0`), but the direct dictionary access causes a runtime exception.",
+          "error_category": "runtime",
+          "elapsed_seconds": 39.85,
+          "token_usage": {
+            "input_tokens": 1414,
+            "output_tokens": 537,
+            "total_tokens": 1951,
+            "llm_calls": 1,
+            "by_model": {
+              "agnes-3.0-flash": 1951
+            }
+          },
+          "rag_stats": null,
+          "patch": "python\ndef lookup_metric(metrics: dict, layer_name: str, key: str):\n    if layer_name not in metrics:\n        return None\n    layers = metrics[layer_name]\n    if key not in layers:\n        return None\n    return layers[key]\n\ndef summarize(metrics: dict, layer_name: str):\n    total = 0\n    if layer_name not in metrics:\n        return total\n    for key in metrics[layer_name]:\n        value = lookup_metric(metrics, layer_name, key)\n        if value is not None:\n            total += value\n    return total\n\ndef rank(metrics: dict, layer_name: str, k: int):\n    if layer_name not in metrics:\n        return []\n    # Filter out keys that don't exist or have None values\n    valid_keys = [s for s in metrics[layer_name] if lookup_metric(metrics, layer_name, s) is not None]\n    keys = sorted(valid_keys, key=lambda s: -lookup_metric(metrics, layer_name, s))\n    return keys[:k]\n# noise_seed=8935\n",
+          "generated_test": "from hard_chained_dict_lookup_0003 import lookup_metric, summarize, rank\n\ndef test_lookup_metric_with_valid_input():\n    \"\"\"\n    Test lookup_metric with valid input.\n    \"\"\"\n    metrics = {\n        'layer1': {\n            'metric1': 10,\n            'metric2': 20\n        }\n    }\n    assert lookup_metric(metrics, 'layer1', 'metric1') == 10\n    assert lookup_metric(metrics, 'layer1', 'metric2') == 20\n\ndef test_lookup_metric_with_invalid_layer():\n    \"\"\"\n    Test lookup_metric with invalid layer name.\n    \"\"\"\n    metrics = {\n        'layer1': {\n            'metric1': 10,\n            'metric2': 20\n        }\n    }\n    assert lookup_metric(metrics, 'layer2', 'metric1') == None\n\ndef test_lookup_metric_with_invalid_key():\n    \"\"\"\n    Test lookup_metric with invalid key.\n    \"\"\"\n    metrics = {\n        'layer1': {\n            'metric1': 10,\n            'metric2': 20\n        }\n    }\n    assert lookup_metric(metrics, 'layer1', 'invalid_key') == None\n\ndef test_summarize_with_valid_input():\n    \"\"\"\n    Test summarize with valid input.\n    \"\"\"\n    metrics = {\n        'layer1': {\n            'metric1': 10,\n            'metric2': 20\n        }\n    }\n    assert summarize(metrics, 'layer1') == 30\n\ndef test_summarize_with_invalid_layer():\n    \"\"\"\n    Test summarize with invalid layer name.\n    \"\"\"\n    metrics = {\n        'layer1': {\n            'metric1': 10,\n            'metric2': 20\n        }\n    }\n    assert summarize(metrics, 'layer2') == 0\n\ndef test_rank_with_valid_input():\n    \"\"\"\n    Test rank with valid input.\n    \"\"\"\n    metrics = {\n        'layer1': {\n            'metric1': 10,\n            'metric2': 20,\n            'metric3': 30\n        }\n    }\n    assert rank(metrics, 'layer1', 2) == ['metric3', 'metric2']\n\ndef test_rank_with_invalid_layer():\n    \"\"\"\n    Test rank with invalid layer name.\n    \"\"\"\n    metrics = {\n        'layer1': {\n            'metric1': 10,\n            'metric2': 20,\n            'metric3': 30\n        }\n    }\n    assert rank(metrics, 'layer2', 2) == []\n\ndef test_rank_with_invalid_k():\n    \"\"\"\n    Test rank with invalid k value.\n    \"\"\"\n    metrics = {\n        'layer1': {\n            'metric1': 10,\n            'metric2': 20,\n            'metric3': 30\n        }\n    }\n    assert rank(metrics, 'layer1', 5) == []",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 45.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.9,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.97,
+                "simplicity": 0.985
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": true,
+              "coverage": 41.0,
+              "coverage_delta": -4.0,
+              "elapsed_seconds": 0.43,
+              "reward_signals": {
+                "correctness": 1.0,
+                "efficiency": 0.986,
+                "simplicity": 0.993
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "low",
+          "repo_verification": null,
+          "task_metadata": {
+            "bug_type": "runtime",
+            "pattern_name": "hard_chained_dict_lookup",
+            "source": "synthetic",
+            "noise_seed": 8935,
+            "difficulty": 26,
+            "is_cross_file": false,
+            "trigger_exception": "KeyError",
+            "suggested_function": "lookup_metric"
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": []
+          }
+        },
+        {
+          "task_id": "synthetic__hard_chained_dict_lookup_0004",
+          "repo": "synthetic/hard_chained_dict_lookup",
+          "passed": true,
+          "coverage": 45.0,
+          "iterations": 0,
+          "diagnosis": null,
+          "error_category": "",
+          "elapsed_seconds": 0.51,
+          "token_usage": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "llm_calls": 0,
+            "by_model": {}
+          },
+          "rag_stats": null,
+          "patch": null,
+          "generated_test": "import pytest\nfrom hard_chained_dict_lookup_0004 import lookup_metric\n\n@pytest.fixture\ndef sample_metrics():\n    \"\"\"提供示例指标字典\"\"\"\n    return {\n        \"a\": {\n            \"x\": 10,\n            \"y\": 20\n        }\n    }\n\n@pytest.mark.parametrize(\"metrics,layer_name,key,expected\", [\n    ({\"a\": {\"x\": 10, \"y\": 20}}, \"a\", \"x\", 10),\n])\ndef test_lookup_metric_normal_query(metrics, layer_name, key, expected):\n    \"\"\"测试正常查询场景\"\"\"\n    assert lookup_metric(metrics, layer_name, key) == expected\n\n@pytest.mark.parametrize(\"metrics,layer_name,key,expected_exception\", [\n    ({\"a\": {\"x\": 10}}, \"b\", \"x\", KeyError),\n])\ndef test_lookup_metric_layer_not_found(metrics, layer_name, key, expected_exception):\n    \"\"\"测试层不存在时的异常路径\"\"\"\n    with pytest.raises(expected_exception):\n        lookup_metric(metrics, layer_name, key)\n\n@pytest.mark.parametrize(\"metrics,layer_name,key,expected_exception\", [\n    ({\"a\": {\"x\": 10}}, \"a\", \"y\", KeyError),\n])\ndef test_lookup_metric_key_not_found(metrics, layer_name, key, expected_exception):\n    \"\"\"测试键不存在时的异常路径\"\"\"\n    with pytest.raises(expected_exception):\n        lookup_metric(metrics, layer_name, key)",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": true,
+              "coverage": 45.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.49,
+              "reward_signals": {
+                "correctness": 1.0,
+                "efficiency": 0.984,
+                "simplicity": 0.992
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "low",
+          "repo_verification": null,
+          "task_metadata": {
+            "bug_type": "runtime",
+            "pattern_name": "hard_chained_dict_lookup",
+            "source": "synthetic",
+            "noise_seed": 9674,
+            "difficulty": 26,
+            "is_cross_file": false,
+            "trigger_exception": "KeyError",
+            "suggested_function": "lookup_metric"
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": []
+          }
+        },
+        {
+          "task_id": "synthetic__hard_nested_iter_mixed_0001",
+          "repo": "synthetic/hard_nested_iter_mixed",
+          "passed": true,
+          "coverage": 71.0,
+          "iterations": 1,
+          "diagnosis": null,
+          "error_category": "",
+          "elapsed_seconds": 132.29,
+          "token_usage": {
+            "input_tokens": 2656,
+            "output_tokens": 1602,
+            "total_tokens": 4258,
+            "llm_calls": 3,
+            "by_model": {
+              "agnes-2.5-flash": 1661,
+              "agnes-3.0-flash": 2597
+            }
+          },
+          "rag_stats": null,
+          "patch": "python\ndef collect(items):\n    out = []\n    for item in items:\n        if isinstance(item, list):\n            out.extend(collect(item))\n        else:\n            out.append(item)\n    return out\n\ndef collect_depth(items):\n    return len(collect(items))\n\ndef first_leaf(items):\n    for x in collect(items):\n        if not isinstance(x, list):\n            return x\n    return None\n# noise_seed=4012\n",
+          "generated_test": "import pytest\nfrom hard_nested_iter_mixed_0001 import collect, collect_depth, first_leaf\n\ndef test_collect_empty_list():\n    \"\"\"测试 collect 函数处理空列表的情况\"\"\"\n    assert collect([]) == []\n\ndef test_collect_flat_list():\n    \"\"\"测试 collect 函数处理扁平列表的情况\"\"\"\n    assert collect([1, 2, 3]) == [1, 2, 3]\n\ndef test_collect_nested_list():\n    \"\"\"测试 collect 函数处理嵌套列表的情况\"\"\"\n    assert collect([1, [2, 3], [4, 5]]) == [1, 2, 3, 4, 5]\n\ndef test_collect_deeply_nested_list():\n    \"\"\"测试 collect 函数处理深层嵌套列表的情况\"\"\"\n    assert collect([[[[1, 2], [3, 4]], [5, 6]]]) == [1, 2, 3, 4, 5, 6]\n\ndef test_collect_mixed_types():\n    \"\"\"测试 collect 函数处理混合类型列表的情况\"\"\"\n    assert collect([1, \"a\", [2, \"b\"], 3]) == [1, \"a\", 2, \"b\", 3]\n\ndef test_collect_only_nested():\n    \"\"\"测试 collect 函数处理仅包含嵌套列表的情况\"\"\"\n    assert collect([[1, 2], [3, 4]]) == [1, 2, 3, 4]\n\ndef test_collect_with_empty_sublists():\n    \"\"\"测试 collect 函数处理包含空子列表的情况\"\"\"\n    assert collect([1, [], [2, []], 3]) == [1, 2, 3]\n\ndef test_collect_depth_empty_list():\n    \"\"\"测试 collect_depth 函数处理空列表的情况\"\"\"\n    assert collect_depth([]) == 0\n\ndef test_collect_depth_flat_list():\n    \"\"\"测试 collect_depth 函数处理扁平列表的情况\"\"\"\n    assert collect_depth([1, 2, 3]) == 3\n\ndef test_collect_depth_nested_list():\n    \"\"\"测试 collect_depth 函数处理嵌套列表的情况\"\"\"\n    assert collect_depth([1, [2, 3], [4, 5]]) == 5\n\ndef test_first_leaf_empty_list():\n    \"\"\"测试 first_leaf 函数处理空列表的情况\"\"\"\n    assert first_leaf([]) is None\n\ndef test_first_leaf_flat_list():\n    \"\"\"测试 first_leaf 函数处理扁平列表的情况\"\"\"\n    assert first_leaf([1, 2, 3]) == 1\n\ndef test_first_leaf_nested_list():\n    \"\"\"测试 first_leaf 函数处理嵌套列表的情况\"\"\"\n    assert first_leaf([1, [2, 3]]) == 1\n\ndef test_first_leaf_only_nested():\n    \"\"\"测试 first_leaf 函数处理仅包含嵌套列表的情况\"\"\"\n    assert first_leaf([[1, 2], [3, 4]]) == 1\n\ndef test_first_leaf_with_none_values():\n    \"\"\"测试 first_leaf 函数处理包含 None 值的情况\"\"\"\n    assert first_leaf([None, 1, 2]) is None\n\ndef test_first_leaf_no_leaf_values():\n    \"\"\"测试 first_leaf 函数处理无叶子值（全为嵌套）的情况\"\"\"\n    # 由于 collect 会展开所有嵌套，所以总会有叶子值\n    # 除非列表为空\n    assert first_leaf([]) is None",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 1.1,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.963,
+                "simplicity": 0.982
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 71.0,
+              "coverage_delta": 71.0,
+              "elapsed_seconds": 0.83,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.972,
+                "simplicity": 0.986
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": true,
+              "coverage": 71.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.44,
+              "reward_signals": {
+                "correctness": 1.0,
+                "efficiency": 0.985,
+                "simplicity": 0.993
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "low",
+          "repo_verification": null,
+          "task_metadata": {
+            "bug_type": "runtime",
+            "pattern_name": "hard_nested_iter_mixed",
+            "source": "synthetic",
+            "noise_seed": 4012,
+            "difficulty": 26,
+            "is_cross_file": false,
+            "trigger_exception": "TypeError",
+            "suggested_function": "collect"
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": []
+          }
+        },
+        {
+          "task_id": "synthetic__hard_depth_blind_nested_0006",
+          "repo": "synthetic/hard_depth_blind_nested",
+          "passed": true,
+          "coverage": 77.0,
+          "iterations": 0,
+          "diagnosis": null,
+          "error_category": "",
+          "elapsed_seconds": 0.52,
+          "token_usage": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "llm_calls": 0,
+            "by_model": {}
+          },
+          "rag_stats": null,
+          "patch": null,
+          "generated_test": "from hard_depth_blind_nested_0006 import count_items\n\ndef test_count_items_with_valid_list():\n    \"\"\"Test that count_items counts integers correctly in a list.\"\"\"\n    assert count_items([1, 2, 3]) == 3\n\ndef test_count_items_with_mixed_types():\n    \"\"\"Test that count_items only counts integers, ignoring other types.\"\"\"\n    assert count_items([1, 'a', 2.5, 3, None, 4]) == 3\n\ndef test_count_items_with_empty_list():\n    \"\"\"Test that count_items returns 0 for an empty list.\"\"\"\n    assert count_items([]) == 0\n\ndef test_count_items_with_non_list_input():\n    \"\"\"Test that count_items returns 0 for inputs that are not lists.\"\"\"\n    assert count_items(\"hello\") == 0\n    assert count_items(None) == 0\n    assert count_items(123) == 0\n\ndef test_count_items_with_floats_and_strings():\n    \"\"\"Test that count_items does not count floats or strings.\"\"\"\n    assert count_items([1.1, 'two', 3.3, 'four', 5.5]) == 0\n\ndef test_count_items_with_booleans():\n    \"\"\"Test that count_items counts booleans as they are subclasses of int.\"\"\"\n    # In Python, True and False are instances of int\n    assert count_items([True, False, 1, 2]) == 4\n\ndef test_count_items_with_negative_integers():\n    \"\"\"Test that count_items counts negative integers.\"\"\"\n    assert count_items([-1, -2, -3, 4]) == 4",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": true,
+              "coverage": 77.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.5,
+              "reward_signals": {
+                "correctness": 1.0,
+                "efficiency": 0.983,
+                "simplicity": 0.992
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "low",
+          "repo_verification": null,
+          "task_metadata": {
+            "bug_type": "runtime",
+            "pattern_name": "hard_depth_blind_nested",
+            "source": "synthetic",
+            "noise_seed": 1535,
+            "difficulty": 26,
+            "is_cross_file": false,
+            "trigger_exception": "AssertionError",
+            "suggested_function": "count_items"
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": []
+          }
+        },
+        {
+          "task_id": "synthetic__hard_iter_over_none_0007",
+          "repo": "synthetic/hard_iter_over_none",
+          "passed": true,
+          "coverage": 80.0,
+          "iterations": 0,
+          "diagnosis": null,
+          "error_category": "",
+          "elapsed_seconds": 0.51,
+          "token_usage": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "llm_calls": 0,
+            "by_model": {}
+          },
+          "rag_stats": null,
+          "patch": null,
+          "generated_test": "import pytest\nfrom hard_iter_over_none_0007 import expand_regions\n\nclass TestExpandRegions:\n    def test_expand_regions_empty_list(self):\n        \"\"\"测试空列表输入的情况\"\"\"\n        assert expand_regions([]) == []\n\n    def test_expand_regions_single_region(self):\n        \"\"\"测试单个区域的情况\"\"\"\n        regions = [[(0, 0), (1, 1)]]\n        assert expand_regions(regions) == [(0, 0), (1, 1)]\n\n    def test_expand_regions_multiple_regions(self):\n        \"\"\"测试多个区域的情况\"\"\"\n        regions = [[(0, 0), (1, 1)], [(2, 2), (3, 3)]]\n        assert expand_regions(regions) == [(0, 0), (1, 1), (2, 2), (3, 3)]\n\n    def test_expand_regions_empty_inner_regions(self):\n        \"\"\"测试包含空子区域的情况\"\"\"\n        regions = [[], [(0, 0)]]\n        assert expand_regions(regions) == [(0, 0)]\n\n    @pytest.mark.parametrize(\n        \"regions,expected\",\n        [\n            ([[(0, 0)]], [(0, 0)]),\n            ([[(0, 0), (1, 1)]], [(0, 0), (1, 1)]),\n            ([[], []], []),\n        ],\n    )\n    def test_expand_regions_parametrized(self, regions, expected):\n        \"\"\"参数化测试各种输入场景\"\"\"\n        assert expand_regions(regions) == expected",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": true,
+              "coverage": 80.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.49,
+              "reward_signals": {
+                "correctness": 1.0,
+                "efficiency": 0.984,
+                "simplicity": 0.992
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "low",
+          "repo_verification": null,
+          "task_metadata": {
+            "bug_type": "runtime",
+            "pattern_name": "hard_iter_over_none",
+            "source": "synthetic",
+            "noise_seed": 3811,
+            "difficulty": 26,
+            "is_cross_file": false,
+            "trigger_exception": "TypeError",
+            "suggested_function": "expand_regions"
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": []
+          }
+        },
+        {
+          "task_id": "synthetic__hard_depth_blind_nested_0008",
+          "repo": "synthetic/hard_depth_blind_nested",
+          "passed": true,
+          "coverage": 85.0,
+          "iterations": 0,
+          "diagnosis": null,
+          "error_category": "",
+          "elapsed_seconds": 0.52,
+          "token_usage": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "llm_calls": 0,
+            "by_model": {}
+          },
+          "rag_stats": null,
+          "patch": null,
+          "generated_test": "import pytest\nfrom hard_depth_blind_nested_0008 import count_items, stats_of, describe\n\nclass TestCountItems:\n    \"\"\"Tests for count_items function.\"\"\"\n\n    def test_count_items_empty_list(self):\n        \"\"\"Test that count_items returns 0 for an empty list.\"\"\"\n        assert count_items([]) == 0\n\n    def test_count_items_all_integers(self):\n        \"\"\"Test that count_items counts all integers in a list of integers.\"\"\"\n        data = [1, 2, 3, 4, 5]\n        assert count_items(data) == 5\n\n    def test_count_items_mixed_types(self):\n        \"\"\"Test that count_items only counts int types, excluding floats and other types.\"\"\"\n        data = [1, 2.0, \"three\", 4, None, 5]\n        # Only 1, 4, 5 are int; 2.0 is float, \"three\" is str, None is NoneType\n        assert count_items(data) == 3\n\n    def test_count_items_non_list_input(self):\n        \"\"\"Test that count_items returns 0 for non-list inputs.\"\"\"\n        assert count_items(\"hello\") == 0\n        assert count_items(123) == 0\n        assert count_items(None) == 0\n        assert count_items(3.14) == 0\n\n    def test_count_items_empty_string(self):\n        \"\"\"Test that count_items returns 0 for empty string.\"\"\"\n        assert count_items(\"\") == 0\n\n    def test_count_items_bool_values(self):\n        \"\"\"Test that boolean values are not counted as integers by count_items.\"\"\"\n        # In Python, bool is a subclass of int, so isinstance(True, int) is True\n        # The function uses isinstance(x, int), which will count booleans\n        data = [True, False, 1, 2]\n        # True and False are instances of int in Python\n        assert count_items(data) == 4\n\n    def test_count_items_nested_list(self):\n        \"\"\"Test that count_items does not recurse into nested lists.\"\"\"\n        data = [[1, 2], [3, 4], 5]\n        # Nested lists are not int, so only 5 is counted\n        assert count_items(data) == 1\n\n    def test_count_items_tuple_input(self):\n        \"\"\"Test that count_items returns 0 for tuple input.\"\"\"\n        data = (1, 2, 3)\n        assert count_items(data) == 0\n\n    def test_count_items_large_list(self):\n        \"\"\"Test that count_items handles a large list of integers correctly.\"\"\"\n        data = list(range(1000))\n        assert count_items(data) == 1000\n\nclass TestStatsOf:\n    \"\"\"Tests for stats_of function.\"\"\"\n\n    def test_stats_of_delegates_to_count_items(self):\n        \"\"\"Test that stats_of returns the same result as count_items.\"\"\"\n        data = [1, 2, \"a\", 3.0, 4]\n        assert stats_of(data) == count_items(data)\n\n    def test_stats_of_empty_list(self):\n        \"\"\"Test that stats_of returns 0 for an empty list.\"\"\"\n        assert stats_of([]) == 0\n\n    def test_stats_of_non_list_input(self):\n        \"\"\"Test that stats_of returns 0 for non-list input.\"\"\"\n        assert stats_of(\"test\") == 0\n        assert stats_of(42) == 0\n\nclass TestDescribe:\n    \"\"\"Tests for describe function.\"\"\"\n\n    def test_describe_with_integers(self):\n        \"\"\"Test that describe formats the count of integers correctly.\"\"\"\n        data = [1, 2, 3]\n        assert describe(data) == \"items=3\"\n\n    def test_describe_with_mixed_types(self):\n        \"\"\"Test that describe only counts int types in mixed data.\"\"\"\n        data = [1, 2.0, \"three\", 4]\n        assert describe(data) == \"items=2\"\n\n    def test_describe_empty_list(self):\n        \"\"\"Test that describe returns items=0 for empty list.\"\"\"\n        assert describe([]) == \"items=0\"\n\n    def test_describe_non_list_input(self):\n        \"\"\"Test that describe returns items=0 for non-list input.\"\"\"\n        assert describe(\"hello\") == \"items=0\"\n        assert describe(None) == \"items=0\"\n\n    def test_describe_nested_list(self):\n        \"\"\"Test that describe does not recurse into nested lists.\"\"\"\n        data = [[1, 2], 3]\n        assert describe(data) == \"items=1\"\n\n    def test_describe_all_non_integers(self):\n        \"\"\"Test that describe returns items=0 when list has no integers.\"\"\"\n        data = [\"a\", \"b\", 1.1, 2.2]\n        assert describe(data) == \"items=0\"\n\n    def test_describe_bool_values(self):\n        \"\"\"Test that describe counts boolean values as integers.\"\"\"\n        data = [True, False, 1]\n        assert describe(data) == \"items=3\"",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": true,
+              "coverage": 85.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.5,
+              "reward_signals": {
+                "correctness": 1.0,
+                "efficiency": 0.983,
+                "simplicity": 0.992
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "low",
+          "repo_verification": null,
+          "task_metadata": {
+            "bug_type": "runtime",
+            "pattern_name": "hard_depth_blind_nested",
+            "source": "synthetic",
+            "noise_seed": 9195,
+            "difficulty": 26,
+            "is_cross_file": false,
+            "trigger_exception": "AssertionError",
+            "suggested_function": "count_items"
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": []
+          }
+        },
+        {
+          "task_id": "synthetic__hard_attribute_chain_guard_0005",
+          "repo": "synthetic/hard_attribute_chain_guard",
+          "passed": false,
+          "coverage": 83.0,
+          "iterations": 2,
+          "diagnosis": "Config.resolve_option 在第 7 行 self.settings.get(...) 及第 10 行 key in self.settings 中直接调用 dict 方法，但 self.settings 初始值为 None，导致测试传入 settings=None 场景时触发 TypeError: 'NoneType' object has no attribute 'get'；此外当 key 为非字符串类型（如 int）且 settings 为 None 时，in 操作同样因 NoneType 无 __contains__ 而引发 TypeError。",
+          "error_category": "patch_validation_failed",
+          "elapsed_seconds": 46.56,
+          "token_usage": {
+            "input_tokens": 2795,
+            "output_tokens": 708,
+            "total_tokens": 3503,
+            "llm_calls": 2,
+            "by_model": {
+              "agnes-3.0-flash": 1798,
+              "agnes-2.5-flash": 1705
+            }
+          },
+          "rag_stats": null,
+          "patch": "python\nclass Config:\n    def __init__(self):\n        self.settings = None\n        self.override = {}\n\n    def resolve_option(self, key):\n        if key in self.override:\n            return self.override[key]\n        return (self.settings or {}).get(key, \"\")\n\n    def has_option(self, key):\n        return key in (self.settings or {})\n\n    def dump(self):\n        return dict(self.settings or {})\n# noise_seed=520\n",
+          "generated_test": "import pytest\nfrom hard_attribute_chain_guard_0005 import Config\n\n\n@pytest.fixture\ndef config():\n    \"\"\"Create a new Config instance with default settings.\"\"\"\n    return Config()\n\n\n@pytest.fixture\ndef config_with_settings():\n    \"\"\"Create a Config instance with settings and override dicts.\"\"\"\n    c = Config()\n    c.settings = {\"timeout\": \"60\", \"retries\": 3}\n    c.override = {\"timeout\": \"120\"}\n    return c\n\n\nclass TestResolveOptionNormalCases:\n    \"\"\"Test normal cases for resolve_option.\"\"\"\n\n    def test_resolve_option_normal_override_hit(self, config_with_settings):\n        \"\"\"Verify that when key exists in override, the override value is returned.\"\"\"\n        result = config_with_settings.resolve_option(\"timeout\")\n        assert result == \"120\"\n\n    def test_resolve_option_normal_settings_hit(self, config):\n        \"\"\"Verify that when key is not in override but in settings, settings value is returned.\"\"\"\n        config.settings = {\"timeout\": \"60\", \"retries\": 3}\n        config.override = {}\n        result = config.resolve_option(\"timeout\")\n        assert result == \"60\"\n\n    def test_resolve_option_normal_settings_miss(self, config):\n        \"\"\"Verify that when key is in neither override nor settings, empty string is returned.\"\"\"\n        config.settings = {\"timeout\": \"60\", \"retries\": 3}\n        config.override = {}\n        result = config.resolve_option(\"unknown_key\")\n        assert result == \"\"\n\n\nclass TestResolveOptionBoundaryCases:\n    \"\"\"Test boundary cases for resolve_option.\"\"\"\n\n    def test_resolve_option_settings_none(self, config):\n        \"\"\"Verify that when settings is None, empty string is returned instead of raising AttributeError.\"\"\"\n        config.settings = None\n        config.override = {}\n        result = config.resolve_option(\"timeout\")\n        assert result == \"\"\n\n    def test_resolve_option_boundary_empty_key(self, config):\n        \"\"\"Verify behavior when key is an empty string.\"\"\"\n        config.settings = {\"\": \"empty_key_value\", \"timeout\": \"60\"}\n        config.override = {}\n        result = config.resolve_option(\"\")\n        assert result == \"empty_key_value\"\n\n    def test_resolve_option_boundary_empty_key_no_settings(self, config):\n        \"\"\"Verify that empty string key with no matching entry returns empty string.\"\"\"\n        config.settings = {\"timeout\": \"60\"}\n        config.override = {}\n        result = config.resolve_option(\"\")\n        assert result == \"\"\n\n    def test_resolve_option_boundary_special_char(self, config):\n        \"\"\"Verify that special character keys are handled correctly.\"\"\"\n        config.settings = {\"!@#$%^&*()\": \"default_value\"}\n        config.override = {}\n        result = config.resolve_option(\"!@#$%^&*()\")\n        assert result == \"default_value\"\n\n    def test_resolve_option_boundary_special_char_not_found(self, config):\n        \"\"\"Verify that special character key not in settings returns empty string.\"\"\"\n        config.settings = {\"other_key\": \"value\"}\n        config.override = {}\n        result = config.resolve_option(\"!@#$%^&*()\")\n        assert result == \"\"\n\n    def test_resolve_option_boundary_space_key(self, config):\n        \"\"\"Verify that a key consisting of spaces is handled.\"\"\"\n        config.settings = {\" \": \"space_value\", \"timeout\": \"60\"}\n        config.override = {}\n        result = config.resolve_option(\" \")\n        assert result == \"space_value\"\n\n    def test_resolve_option_boundary_override_empty_string_value(self, config):\n        \"\"\"Verify that when override contains key with empty string value, empty string is returned.\"\"\"\n        config.settings = {\"timeout\": \"60\"}\n        config.override = {\"timeout\": \"\"}\n        result = config.resolve_option(\"timeout\")\n        assert result == \"\"\n\n\nclass TestResolveOptionErrorCases:\n    \"\"\"Test error cases for resolve_option.\"\"\"\n\n    def test_resolve_option_error_key_type_mismatch(self, config):\n        \"\"\"Verify that passing a non-string key (integer) raises TypeError.\"\"\"\n        config.settings = {\"timeout\": \"60\"}\n        config.override = {}\n        with pytest.raises(TypeError):\n            config.resolve_option(123)",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 83.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.9,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.97,
+                "simplicity": 0.985
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 39.0,
+              "coverage_delta": -44.0,
+              "elapsed_seconds": 0.87,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.971,
+                "simplicity": 0.986
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 39.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.93,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.969,
+                "simplicity": 0.985
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 83.0,
+              "coverage_delta": 44.0,
+              "elapsed_seconds": 0.84,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.972,
+                "simplicity": 0.986
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "low",
+          "repo_verification": null,
+          "task_metadata": {
+            "bug_type": "runtime",
+            "pattern_name": "hard_attribute_chain_guard",
+            "source": "synthetic",
+            "noise_seed": 520,
+            "difficulty": 26,
+            "is_cross_file": false,
+            "trigger_exception": "AttributeError",
+            "suggested_function": "resolve_option"
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": []
+          }
+        },
+        {
+          "task_id": "synthetic__hard_attribute_chain_guard_0010",
+          "repo": "synthetic/hard_attribute_chain_guard",
+          "passed": true,
+          "coverage": 83.0,
+          "iterations": 0,
+          "diagnosis": null,
+          "error_category": "",
+          "elapsed_seconds": 0.52,
+          "token_usage": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "llm_calls": 0,
+            "by_model": {}
+          },
+          "rag_stats": null,
+          "patch": null,
+          "generated_test": "import pytest\nfrom hard_attribute_chain_guard_0010 import Config\n\n@pytest.fixture\ndef config():\n    \"\"\"创建默认的Config实例用于测试\"\"\"\n    cfg = Config()\n    cfg.settings = {\"a\": 1, \"b\": 2}\n    return cfg\n\ndef test_resolve_option_returns_override_value(config):\n    \"\"\"测试resolve_option在override中存在key时返回override的值\"\"\"\n    config.override[\"a\"] = 100\n    assert config.resolve_option(\"a\") == 100\n\ndef test_resolve_option_falls_back_to_settings(config):\n    \"\"\"测试resolve_option在override中不存在key时返回settings中的值\"\"\"\n    assert config.resolve_option(\"b\") == 2\n\ndef test_resolve_option_returns_empty_string_when_key_missing(config):\n    \"\"\"测试resolve_option在key不存在于override和settings中时返回空字符串\"\"\"\n    assert config.resolve_option(\"c\") == \"\"\n\ndef test_resolve_option_with_none_settings(config):\n    \"\"\"测试resolve_option当settings为None时抛出异常（因为None没有get方法）\"\"\"\n    config.settings = None\n    with pytest.raises(AttributeError):\n        config.resolve_option(\"a\")\n\ndef test_resolve_option_override_takes_priority(config):\n    \"\"\"测试override优先级高于settings\"\"\"\n    config.override[\"a\"] = 999\n    assert config.resolve_option(\"a\") == 999",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": true,
+              "coverage": 83.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.5,
+              "reward_signals": {
+                "correctness": 1.0,
+                "efficiency": 0.983,
+                "simplicity": 0.992
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "low",
+          "repo_verification": null,
+          "task_metadata": {
+            "bug_type": "runtime",
+            "pattern_name": "hard_attribute_chain_guard",
+            "source": "synthetic",
+            "noise_seed": 3611,
+            "difficulty": 26,
+            "is_cross_file": false,
+            "trigger_exception": "AttributeError",
+            "suggested_function": "resolve_option"
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": []
+          }
+        },
+        {
+          "task_id": "synthetic__hard_slice_contract_0011",
+          "repo": "synthetic/hard_slice_contract",
+          "passed": true,
+          "coverage": 40.0,
+          "iterations": 0,
+          "diagnosis": null,
+          "error_category": "",
+          "elapsed_seconds": 0.51,
+          "token_usage": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "llm_calls": 0,
+            "by_model": {}
+          },
+          "rag_stats": null,
+          "patch": null,
+          "generated_test": "import pytest\n\nfrom hard_slice_contract_0011 import split_entry, count_flags, entry_names\n\n\ndef test_split_entry_valid_input():\n    \"\"\"Test that split_entry correctly splits a 4-element entry into a dictionary.\"\"\"\n    entry = [\"head_value\", \"body_value\", \"tail_value\", \"flag_value\"]\n    result = split_entry(entry)\n    assert result == {\"head\": \"head_value\", \"body\": \"body_value\", \"tail\": \"tail_value\", \"flag\": \"flag_value\"}\n\n\ndef test_split_entry_with_numeric_flag():\n    \"\"\"Test split_entry with numeric flag value to verify dictionary structure.\"\"\"\n    entry = [1, 2, 3, 0]\n    result = split_entry(entry)\n    assert result == {\"head\": 1, \"body\": 2, \"tail\": 3, \"flag\": 0}\n\n\ndef test_split_entry_with_boolean_flag():\n    \"\"\"Test split_entry with boolean flag value.\"\"\"\n    entry = [\"a\", \"b\", \"c\", True]\n    result = split_entry(entry)\n    assert result == {\"head\": \"a\", \"body\": \"b\", \"tail\": \"c\", \"flag\": True}\n\n\ndef test_split_entry_insufficient_length():\n    \"\"\"Test that split_entry raises IndexError when entry has fewer than 4 elements.\"\"\"\n    entry = [1, 2, 3]\n    with pytest.raises(IndexError):\n        split_entry(entry)\n\n\ndef test_split_entry_empty_entry():\n    \"\"\"Test that split_entry raises IndexError when entry is empty.\"\"\"\n    entry = []\n    with pytest.raises(IndexError):\n        split_entry(entry)\n\n\ndef test_count_flags_no_entries():\n    \"\"\"Test that count_flags returns 0 for an empty list of entries.\"\"\"\n    result = count_flags([])\n    assert result == 0\n\n\ndef test_count_flags_all_flags_true():\n    \"\"\"Test that count_flags counts all entries when all flags are true.\"\"\"\n    entries = [\n        [\"a\", \"b\", \"c\", True],\n        [\"d\", \"e\", \"f\", 1],\n        [\"g\", \"h\", \"i\", \"yes\"],\n    ]\n    result = count_flags(entries)\n    assert result == 3\n\n\ndef test_count_flags_all_flags_false():\n    \"\"\"Test that count_flags returns 0 when all flags are falsy.\"\"\"\n    entries = [\n        [\"a\", \"b\", \"c\", False],\n        [\"d\", \"e\", \"f\", 0],\n        [\"g\", \"h\", \"i\", \"\"],\n    ]\n    result = count_flags(entries)\n    assert result == 0\n\n\ndef test_count_flags_mixed_flags():\n    \"\"\"Test that count_flags correctly counts mixed truthy and falsy flags.\"\"\"\n    entries = [\n        [\"a\", \"b\", \"c\", True],\n        [\"d\", \"e\", \"f\", 0],\n        [\"g\", \"h\", \"i\", \"value\"],\n        [\"j\", \"k\", \"l\", None],\n    ]\n    result = count_flags(entries)\n    assert result == 2\n\n\ndef test_entry_names_empty_list():\n    \"\"\"Test that entry_names returns an empty list when given no entries.\"\"\"\n    result = entry_names([])\n    assert result == []\n\n\ndef test_entry_names_single_entry():\n    \"\"\"Test that entry_names correctly extracts the first element from a single entry.\"\"\"\n    entries = [[\"head1\", \"body1\", \"tail1\", True]]\n    result = entry_names(entries)\n    assert result == [\"head1\"]\n\n\ndef test_entry_names_multiple_entries():\n    \"\"\"Test that entry_names correctly extracts the first element from multiple entries.\"\"\"\n    entries = [\n        [\"alpha\", \"b\", \"c\", True],\n        [\"beta\", \"d\", \"e\", False],\n        [\"gamma\", \"f\", \"g\", 1],\n    ]\n    result = entry_names(entries)\n    assert result == [\"alpha\", \"beta\", \"gamma\"]",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": true,
+              "coverage": 40.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.49,
+              "reward_signals": {
+                "correctness": 1.0,
+                "efficiency": 0.984,
+                "simplicity": 0.992
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "low",
+          "repo_verification": null,
+          "task_metadata": {
+            "bug_type": "runtime",
+            "pattern_name": "hard_slice_contract",
+            "source": "synthetic",
+            "noise_seed": 9654,
+            "difficulty": 26,
+            "is_cross_file": false,
+            "trigger_exception": "IndexError",
+            "suggested_function": "split_entry"
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": []
+          }
+        },
+        {
+          "task_id": "synthetic__hard_nested_iter_mixed_0012",
+          "repo": "synthetic/hard_nested_iter_mixed",
+          "passed": true,
+          "coverage": 64.0,
+          "iterations": 0,
+          "diagnosis": null,
+          "error_category": "",
+          "elapsed_seconds": 0.52,
+          "token_usage": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "llm_calls": 0,
+            "by_model": {}
+          },
+          "rag_stats": null,
+          "patch": null,
+          "generated_test": "import pytest\nfrom hard_nested_iter_mixed_0012 import collect\n\ndef test_collect_empty_list():\n    \"\"\"验证空输入返回空列表\"\"\"\n    assert collect([]) == []\n\ndef test_collect_flat_list():\n    \"\"\"验证无嵌套列表（全为原子）时直接返回相同列表\"\"\"\n    assert collect([1, 2, 3]) == [1, 2, 3]\n\ndef test_collect_single_level_nesting():\n    \"\"\"验证单层嵌套列表被展平\"\"\"\n    assert collect([[1, 2], 3, [4]]) == [1, 2, 3, 4]\n\ndef test_collect_multi_level_nesting():\n    \"\"\"验证多层嵌套只展平一层，子列表内部仍保持为列表\"\"\"\n    assert collect([[1, [2, 3]], 4]) == [1, [2, 3], 4]\n\ndef test_collect_empty_sublists():\n    \"\"\"验证空子列表被扩展但不影响结果\"\"\"\n    assert collect([[], 1, []]) == [1]\n\ndef test_collect_mixed_types():\n    \"\"\"验证混合原子元素与列表的类型处理\"\"\"\n    assert collect([1, \"a\", [2, \"b\"], [3], \"c\"]) == [1, \"a\", 2, \"b\", 3, \"c\"]\n\n@pytest.mark.parametrize(\"items, expected\", [\n    ([], []),\n    ([1, 2, 3], [1, 2, 3]),\n    ([[1, 2], 3, [4]], [1, 2, 3, 4]),\n    ([[1, [2, 3]], 4], [1, [2, 3], 4]),\n    ([[], 1, []], [1]),\n    ([1, \"a\", [2, \"b\"], [3], \"c\"], [1, \"a\", 2, \"b\", 3, \"c\"]),\n])\ndef test_collect_parametrized(items, expected):\n    \"\"\"参数化测试覆盖所有核心场景\"\"\"\n    assert collect(items) == expected",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": true,
+              "coverage": 64.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.5,
+              "reward_signals": {
+                "correctness": 1.0,
+                "efficiency": 0.983,
+                "simplicity": 0.992
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "low",
+          "repo_verification": null,
+          "task_metadata": {
+            "bug_type": "runtime",
+            "pattern_name": "hard_nested_iter_mixed",
+            "source": "synthetic",
+            "noise_seed": 106,
+            "difficulty": 26,
+            "is_cross_file": false,
+            "trigger_exception": "TypeError",
+            "suggested_function": "collect"
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": []
+          }
+        },
+        {
+          "task_id": "synthetic__hard_polluted_entry_guard_0013",
+          "repo": "synthetic/hard_polluted_entry_guard",
+          "passed": true,
+          "coverage": 54.0,
+          "iterations": 0,
+          "diagnosis": null,
+          "error_category": "",
+          "elapsed_seconds": 0.52,
+          "token_usage": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "llm_calls": 0,
+            "by_model": {}
+          },
+          "rag_stats": null,
+          "patch": null,
+          "generated_test": "import pytest\nfrom hard_polluted_entry_guard_0013 import pool_status\n\nclass TestPoolStatus:\n    \"\"\"Test class for pool_status function.\"\"\"\n    \n    def test_pool_status_normal_case_with_multiple_sublists(self):\n        \"\"\"Test the function with a list of multiple sublists with varying lengths.\"\"\"\n        entries = [[1, 2], [3, 4, 5], [6]]\n        expected = {\"total\": 6, \"count\": 3}\n        assert pool_status(entries) == expected\n    \n    def test_pool_status_empty_list(self):\n        \"\"\"Test the function with an empty list.\"\"\"\n        entries = []\n        expected = {\"total\": 0, \"count\": 0}\n        assert pool_status(entries) == expected\n    \n    def test_pool_status_list_with_one_empty_sublist(self):\n        \"\"\"Test the function with a list that contains one empty sublist.\"\"\"\n        entries = [[], [1, 2, 3]]\n        expected = {\"total\": 3, \"count\": 2}\n        assert pool_status(entries) == expected\n    \n    def test_pool_status_list_with_all_empty_sublists(self):\n        \"\"\"Test the function with a list that contains all empty sublists.\"\"\"\n        entries = [[], [], []]\n        expected = {\"total\": 0, \"count\": 3}\n        assert pool_status(entries) == expected\n    \n    def test_pool_status_list_with_one_element(self):\n        \"\"\"Test the function with a list that contains only one element.\"\"\"\n        entries = [[1]]\n        expected = {\"total\": 1, \"count\": 1}\n        assert pool_status(entries) == expected\n    \n    def test_pool_status_list_with_all_elements_being_the_same(self):\n        \"\"\"Test the function with a list where all sublists have the same elements.\"\"\"\n        entries = [[1, 1, 1], [1, 1, 1], [1, 1, 1]]\n        expected = {\"total\": 9, \"count\": 3}\n        assert pool_status(entries) == expected\n    \n    def test_pool_status_list_with_varying_lengths(self):\n        \"\"\"Test the function with a list that contains sublists with varying lengths.\"\"\"\n        entries = [[1], [2, 3], [4, 5, 6, 7]]\n        expected = {\"total\": 7, \"count\": 3}\n        assert pool_status(entries) == expected",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": true,
+              "coverage": 54.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.5,
+              "reward_signals": {
+                "correctness": 1.0,
+                "efficiency": 0.983,
+                "simplicity": 0.992
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "low",
+          "repo_verification": null,
+          "task_metadata": {
+            "bug_type": "runtime",
+            "pattern_name": "hard_polluted_entry_guard",
+            "source": "synthetic",
+            "noise_seed": 6924,
+            "difficulty": 26,
+            "is_cross_file": false,
+            "trigger_exception": "TypeError",
+            "suggested_function": "pool_status"
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": []
+          }
+        },
+        {
+          "task_id": "synthetic__hard_mixed_numeric_agg_0014",
+          "repo": "synthetic/hard_mixed_numeric_agg",
+          "passed": true,
+          "coverage": 57.0,
+          "iterations": 0,
+          "diagnosis": null,
+          "error_category": "",
+          "elapsed_seconds": 0.51,
+          "token_usage": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "llm_calls": 0,
+            "by_model": {}
+          },
+          "rag_stats": null,
+          "patch": null,
+          "generated_test": "\"\"\"\nPytest test cases for the 'total' function in the module hard_mixed_numeric_agg_0014.\n\"\"\"\nimport pytest\n\nfrom hard_mixed_numeric_agg_0014 import total\n\n\ndef test_total_normal_sum_of_integers():\n    \"\"\"\n    Verify that summing a list of integers returns the correct float result.\n    Input: [1, 2, 3]\n    Expected Output: 6.0\n    \"\"\"\n    assert total([1, 2, 3]) == 6.0\n\n\ndef test_total_empty_list_returns_zero():\n    \"\"\"\n    Verify boundary case: summing an empty list returns 0.0.\n    Input: []\n    Expected Output: 0.0\n    \"\"\"\n    assert total([]) == 0.0\n\n\ndef test_total_single_element_list():\n    \"\"\"\n    Verify boundary case: summing a single-element list returns the element as float.\n    Input: [5]\n    Expected Output: 5.0\n    \"\"\"\n    assert total([5]) == 5.0\n\n\ndef test_total_mixed_types_and_negative_numbers():\n    \"\"\"\n    Verify that summing a list containing floats, integers, and negative numbers works correctly.\n    Input: [1.5, -2.5, 10]\n    Expected Output: 9.0\n    \"\"\"\n    assert total([1.5, -2.5, 10]) == 9.0\n\n\ndef test_total_invalid_input_raises_typeerror():\n    \"\"\"\n    Verify that passing a non-iterable/non-summable input raises a TypeError.\n    Input: \"abc\"\n    Expected Output: TypeError\n    \"\"\"\n    with pytest.raises(TypeError):\n        total(\"abc\")",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": true,
+              "coverage": 57.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.5,
+              "reward_signals": {
+                "correctness": 1.0,
+                "efficiency": 0.983,
+                "simplicity": 0.992
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "low",
+          "repo_verification": null,
+          "task_metadata": {
+            "bug_type": "runtime",
+            "pattern_name": "hard_mixed_numeric_agg",
+            "source": "synthetic",
+            "noise_seed": 4552,
+            "difficulty": 26,
+            "is_cross_file": false,
+            "trigger_exception": "TypeError",
+            "suggested_function": "total"
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": []
+          }
+        },
+        {
+          "task_id": "synthetic__hard_iter_over_none_0009",
+          "repo": "synthetic/hard_iter_over_none",
+          "passed": true,
+          "coverage": 82.0,
+          "iterations": 1,
+          "diagnosis": null,
+          "error_category": "",
+          "elapsed_seconds": 45.17,
+          "token_usage": {
+            "input_tokens": 2748,
+            "output_tokens": 1002,
+            "total_tokens": 3750,
+            "llm_calls": 2,
+            "by_model": {
+              "agnes-2.5-flash": 1658,
+              "agnes-3.0-flash": 2092
+            }
+          },
+          "rag_stats": null,
+          "patch": "python\ndef expand_regions(regions):\n    flat = []\n    for region in regions:\n        if hasattr(region, '__iter__') and not isinstance(region, (str, bytes)):\n            for coord in region:\n                flat.append(coord)\n    return flat\n\ndef region_count(regions):\n    return len(expand_regions(regions))\n\ndef contains(regions, coord):\n    return coord in expand_regions(regions)\n# noise_seed=8928\n",
+          "generated_test": "import pytest\nfrom hard_iter_over_none_0009 import expand_regions, region_count, contains\n\n\ndef test_expand_regions_standard_nested_list():\n    \"\"\"验证多个非空区域的正常展平逻辑\"\"\"\n    regions = [[1, 2], [3, 4], [5]]\n    result = expand_regions(regions)\n    assert result == [1, 2, 3, 4, 5]\n\n\ndef test_expand_regions_empty_list():\n    \"\"\"验证输入为空列表时，循环不执行，返回空列表\"\"\"\n    regions = []\n    result = expand_regions(regions)\n    assert result == []\n\n\ndef test_expand_regions_with_empty_inner_regions():\n    \"\"\"验证内部存在空列表时，内层循环不执行，正确跳过\"\"\"\n    regions = [[1, 2], [], [3]]\n    result = expand_regions(regions)\n    assert result == [1, 2, 3]\n\n\ndef test_expand_regions_single_region_single_coord():\n    \"\"\"验证最小有效输入结构\"\"\"\n    regions = [[10]]\n    result = expand_regions(regions)\n    assert result == [10]\n\n\ndef test_expand_regions_empty_input():\n    \"\"\"验证无元素输入边界\"\"\"\n    regions = []\n    result = expand_regions(regions)\n    assert result == []\n\n\ndef test_expand_regions_non_iterable_region():\n    \"\"\"验证当 region 不是可迭代对象时不会抛出异常，而是被过滤\"\"\"\n    regions = [1, 2, 3]\n    result = expand_regions(regions)\n    assert result == []\n\n\ndef test_region_count_standard():\n    \"\"\"验证 region_count 函数正确计算坐标数量\"\"\"\n    regions = [[1, 2], [3, 4], [5]]\n    result = region_count(regions)\n    assert result == 5\n\n\ndef test_region_count_empty():\n    \"\"\"验证 region_count 函数在空列表时返回 0\"\"\"\n    regions = []\n    result = region_count(regions)\n    assert result == 0\n\n\ndef test_contains_standard():\n    \"\"\"验证 contains 函数正确判断坐标存在\"\"\"\n    regions = [[1, 2], [3, 4], [5]]\n    assert contains(regions, 3) is True\n    assert contains(regions, 6) is False\n\n\ndef test_contains_empty():\n    \"\"\"验证 contains 函数在空列表时返回 False\"\"\"\n    regions = []\n    assert contains(regions, 1) is False\n\n\n@pytest.mark.parametrize(\n    \"regions, expected\",\n    [\n        ([[1, 2], [3, 4], [5]], [1, 2, 3, 4, 5]),\n        ([], []),\n        ([[1, 2], [], [3]], [1, 2, 3]),\n        ([[10]], [10]),\n        ([1, 2, 3], []),\n        ([[], [], []], []),\n    ],\n)\ndef test_expand_regions_parametrized(regions, expected):\n    \"\"\"参数化测试 expand_regions 的各种输入情况\"\"\"\n    result = expand_regions(regions)\n    assert result == expected",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 80.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.93,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.969,
+                "simplicity": 0.985
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 82.0,
+              "coverage_delta": 2.0,
+              "elapsed_seconds": 0.83,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.972,
+                "simplicity": 0.986
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": true,
+              "coverage": 82.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.44,
+              "reward_signals": {
+                "correctness": 1.0,
+                "efficiency": 0.985,
+                "simplicity": 0.993
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "low",
+          "repo_verification": null,
+          "task_metadata": {
+            "bug_type": "runtime",
+            "pattern_name": "hard_iter_over_none",
+            "source": "synthetic",
+            "noise_seed": 8928,
+            "difficulty": 26,
+            "is_cross_file": false,
+            "trigger_exception": "TypeError",
+            "suggested_function": "expand_regions"
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": []
+          }
+        },
+        {
+          "task_id": "synthetic__hard_polluted_entry_guard_0015",
+          "repo": "synthetic/hard_polluted_entry_guard",
+          "passed": true,
+          "coverage": 48.0,
+          "iterations": 1,
+          "diagnosis": null,
+          "error_category": "",
+          "elapsed_seconds": 57.32,
+          "token_usage": {
+            "input_tokens": 3071,
+            "output_tokens": 1842,
+            "total_tokens": 4913,
+            "llm_calls": 2,
+            "by_model": {
+              "agnes-3.0-flash": 4913
+            }
+          },
+          "rag_stats": null,
+          "patch": "python\nimport collections.abc\n\ndef pool_status(entries: list) -> dict:\n    total = 0\n    for e in entries:\n        # 检查元素是否支持 len 协议，避免对 int/None 等抛出 TypeError\n        if isinstance(e, collections.abc.Sized):\n            total += len(e)\n        else:\n            # 对于不支持 len 的原子类型（如 int, float, None），视为 1 个单位\n            total += 1\n    return {\"total\": total, \"count\": len(entries)}\n\ndef merge(a: list, b: list) -> list:\n    out = list(a)\n    for item in b:\n        if item not in out:\n            out.append(item)\n    return out\n\ndef largest(entries: list):\n    # 同样修复 largest 以应对非序列元素，防止潜在的类型错误\n    lengths = []\n    for e in entries:\n        if isinstance(e, collections.abc.Sized):\n            lengths.append(len(e))\n        else:\n            lengths.append(1)\n    return max(lengths, default=0)\n# noise_seed=3527\n",
+          "generated_test": "import pytest\nfrom hard_polluted_entry_guard_0015 import pool_status\n\n\ndef test_pool_status_normal_mixed_lengths():\n    \"\"\"测试包含不同长度子列表的普通情况。\"\"\"\n    entries = [[1, 2, 3], [4, 5], [\"a\", \"b\", \"c\", \"d\"]]\n    result = pool_status(entries)\n    assert result == {\"total\": 9, \"count\": 3}\n\n\ndef test_pool_status_empty_entries():\n    \"\"\"测试 entries 为空列表的边界情况。\"\"\"\n    entries = []\n    result = pool_status(entries)\n    assert result == {\"total\": 0, \"count\": 0}\n\n\ndef test_pool_status_entries_with_empty_elements():\n    \"\"\"测试 entries 中包含空列表元素的情况。\"\"\"\n    entries = [[], [], [1]]\n    result = pool_status(entries)\n    assert result == {\"total\": 1, \"count\": 3}\n\n\ndef test_pool_status_single_element_entries():\n    \"\"\"测试 entries 仅包含一个单元素列表的情况。\"\"\"\n    entries = [[42]]\n    result = pool_status(entries)\n    assert result == {\"total\": 1, \"count\": 1}\n\n\ndef test_pool_status_error_non_list_element():\n    \"\"\"测试 entries 中包含非可迭代/无长度对象（如整数）导致异常的情况。\n    \n    根据目标代码逻辑，对于不支持 len 的原子类型（如 int, float, None），\n    视为 1 个单位，不会抛出异常。因此此测试验证元素为字符串或整数时的行为。\n    \"\"\"\n    # 字符串支持 len，长度为 6\n    entries = [\"abcdef\"]\n    result = pool_status(entries)\n    assert result == {\"total\": 6, \"count\": 1}\n    \n    # 整数不支持 len，视为 1 个单位\n    entries = [42]\n    result = pool_status(entries)\n    assert result == {\"total\": 1, \"count\": 1}",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 54.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.89,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.97,
+                "simplicity": 0.985
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 43.0,
+              "coverage_delta": -11.0,
+              "elapsed_seconds": 0.8,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.973,
+                "simplicity": 0.987
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": true,
+              "coverage": 48.0,
+              "coverage_delta": 5.0,
+              "elapsed_seconds": 0.44,
+              "reward_signals": {
+                "correctness": 1.0,
+                "efficiency": 0.985,
+                "simplicity": 0.993
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "low",
+          "repo_verification": null,
+          "task_metadata": {
+            "bug_type": "runtime",
+            "pattern_name": "hard_polluted_entry_guard",
+            "source": "synthetic",
+            "noise_seed": 3527,
+            "difficulty": 26,
+            "is_cross_file": false,
+            "trigger_exception": "TypeError",
+            "suggested_function": "pool_status"
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": []
+          }
+        },
+        {
+          "task_id": "synthetic__hard_chained_dict_lookup_0017",
+          "repo": "synthetic/hard_chained_dict_lookup",
+          "passed": true,
+          "coverage": 45.0,
+          "iterations": 0,
+          "diagnosis": null,
+          "error_category": "",
+          "elapsed_seconds": 0.51,
+          "token_usage": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "llm_calls": 0,
+            "by_model": {}
+          },
+          "rag_stats": null,
+          "patch": null,
+          "generated_test": "import pytest\nfrom hard_chained_dict_lookup_0017 import lookup_metric\n\n\n@pytest.mark.parametrize(\n    \"metrics, layer_name, key, expected\",\n    [\n        ({\"layer1\": {\"a\": 1, \"b\": 2}}, \"layer1\", \"a\", 1),\n        ({\"layer1\": {\"a\": 1, \"b\": 2}}, \"layer1\", \"b\", 2),\n        ({\"layer1\": {\"a\": 1, \"b\": 2}, \"layer2\": {\"c\": 3}}, \"layer2\", \"c\", 3),\n    ],\n)\ndef test_lookup_metric_returns_value(metrics, layer_name, key, expected):\n    \"\"\"Test that lookup_metric returns the correct value for valid input.\"\"\"\n    assert lookup_metric(metrics, layer_name, key) == expected\n\n\ndef test_lookup_metric_missing_layer():\n    \"\"\"Test that lookup_metric raises KeyError when layer_name is missing.\"\"\"\n    metrics = {\"layer1\": {\"a\": 1}}\n    with pytest.raises(KeyError):\n        lookup_metric(metrics, \"layer2\", \"a\")\n\n\ndef test_lookup_metric_missing_key():\n    \"\"\"Test that lookup_metric raises KeyError when key is missing in layer.\"\"\"\n    metrics = {\"layer1\": {\"a\": 1}}\n    with pytest.raises(KeyError):\n        lookup_metric(metrics, \"layer1\", \"b\")\n\n\ndef test_lookup_metric_empty_dict():\n    \"\"\"Test that lookup_metric raises KeyError when metrics is an empty dict.\"\"\"\n    with pytest.raises(KeyError):\n        lookup_metric({}, \"layer1\", \"a\")",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": true,
+              "coverage": 45.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.49,
+              "reward_signals": {
+                "correctness": 1.0,
+                "efficiency": 0.984,
+                "simplicity": 0.992
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "low",
+          "repo_verification": null,
+          "task_metadata": {
+            "bug_type": "runtime",
+            "pattern_name": "hard_chained_dict_lookup",
+            "source": "synthetic",
+            "noise_seed": 6224,
+            "difficulty": 26,
+            "is_cross_file": false,
+            "trigger_exception": "KeyError",
+            "suggested_function": "lookup_metric"
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": []
+          }
+        },
+        {
+          "task_id": "synthetic__hard_chained_dict_lookup_0018",
+          "repo": "synthetic/hard_chained_dict_lookup",
+          "passed": true,
+          "coverage": 45.0,
+          "iterations": 0,
+          "diagnosis": null,
+          "error_category": "",
+          "elapsed_seconds": 0.51,
+          "token_usage": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "llm_calls": 0,
+            "by_model": {}
+          },
+          "rag_stats": null,
+          "patch": null,
+          "generated_test": "import pytest\nfrom hard_chained_dict_lookup_0018 import lookup_metric\n\n\ndef test_lookup_metric_normal_existing_layer_and_key():\n    \"\"\"验证在层级和键都存在时能正确返回值\"\"\"\n    metrics = {\"layer1\": {\"a\": 10, \"b\": 20}}\n    assert lookup_metric(metrics, \"layer1\", \"a\") == 10\n\n\ndef test_lookup_metric_normal_different_layer_and_key():\n    \"\"\"验证不同层和不同键的正常查找\"\"\"\n    metrics = {\"layer2\": {\"x\": 100, \"y\": 200}}\n    assert lookup_metric(metrics, \"layer2\", \"y\") == 200\n\n\ndef test_lookup_metric_missing_layer_name_raises_key_error():\n    \"\"\"验证当 layer_name 不在 metrics 中时抛出 KeyError\"\"\"\n    metrics = {\"layer1\": {\"a\": 10}}\n    with pytest.raises(KeyError):\n        lookup_metric(metrics, \"nonexistent_layer\", \"a\")\n\n\ndef test_lookup_metric_missing_key_in_layer_raises_key_error():\n    \"\"\"验证当 key 不在 metrics[layer_name] 中时抛出 KeyError\"\"\"\n    metrics = {\"layer1\": {\"a\": 10}}\n    with pytest.raises(KeyError):\n        lookup_metric(metrics, \"layer1\", \"missing_key\")\n\n\ndef test_lookup_metric_empty_layer_dict_raises_key_error():\n    \"\"\"验证当 metrics[layer_name] 为空字典时，任意 key 访问均失败\"\"\"\n    metrics = {\"empty_layer\": {}}\n    with pytest.raises(KeyError):\n        lookup_metric(metrics, \"empty_layer\", \"any_key\")\n\n\ndef test_lookup_metric_zero_value_boundary():\n    \"\"\"验证返回值为边界数值（如0）时能正确返回\"\"\"\n    metrics = {\"layer\": {\"val\": 0}}\n    assert lookup_metric(metrics, \"layer\", \"val\") == 0",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": true,
+              "coverage": 45.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.49,
+              "reward_signals": {
+                "correctness": 1.0,
+                "efficiency": 0.984,
+                "simplicity": 0.992
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "low",
+          "repo_verification": null,
+          "task_metadata": {
+            "bug_type": "runtime",
+            "pattern_name": "hard_chained_dict_lookup",
+            "source": "synthetic",
+            "noise_seed": 5881,
+            "difficulty": 26,
+            "is_cross_file": false,
+            "trigger_exception": "KeyError",
+            "suggested_function": "lookup_metric"
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": []
+          }
+        },
+        {
+          "task_id": "synthetic__hard_mixed_numeric_agg_0016",
+          "repo": "synthetic/hard_mixed_numeric_agg",
+          "passed": true,
+          "coverage": 86.0,
+          "iterations": 0,
+          "diagnosis": null,
+          "error_category": "",
+          "elapsed_seconds": 28.07,
+          "token_usage": {
+            "input_tokens": 613,
+            "output_tokens": 1155,
+            "total_tokens": 1768,
+            "llm_calls": 1,
+            "by_model": {
+              "agnes-3.0-flash": 1768
+            }
+          },
+          "rag_stats": null,
+          "patch": null,
+          "generated_test": "import pytest\nfrom hard_mixed_numeric_agg_0016 import total, max_value, percent_share\n\n\nclass TestTotal:\n    \"\"\"Tests for the total function.\"\"\"\n\n    def test_total_with_positive_numbers(self):\n        \"\"\"Verify total sums positive integers correctly.\"\"\"\n        assert total([1, 2, 3]) == 6\n\n    def test_total_with_negative_numbers(self):\n        \"\"\"Verify total sums negative numbers correctly.\"\"\"\n        assert total([-1, -2, -3]) == -6\n\n    def test_total_with_mixed_signs(self):\n        \"\"\"Verify total handles a mix of positive and negative numbers.\"\"\"\n        assert total([10, -3, 2]) == 9\n\n    def test_total_with_floats(self):\n        \"\"\"Verify total sums floating point numbers correctly.\"\"\"\n        result = total([0.1, 0.2, 0.3])\n        assert abs(result - 0.6) < 1e-9\n\n    def test_total_with_empty_list(self):\n        \"\"\"Verify total returns 0 for an empty list.\"\"\"\n        assert total([]) == 0\n\n    def test_total_with_single_element(self):\n        \"\"\"Verify total returns the element itself for a single-item list.\"\"\"\n        assert total([42]) == 42\n\n    def test_total_with_zeros(self):\n        \"\"\"Verify total returns 0 when all elements are zero.\"\"\"\n        assert total([0, 0, 0]) == 0\n\n\nclass TestMaxValue:\n    \"\"\"Tests for the max_value function.\"\"\"\n\n    def test_max_value_with_positive_numbers(self):\n        \"\"\"Verify max_value returns the largest positive number.\"\"\"\n        assert max_value([1, 5, 3]) == 5\n\n    def test_max_value_with_negative_numbers(self):\n        \"\"\"Verify max_value returns the largest (closest to zero) negative number.\"\"\"\n        assert max_value([-5, -1, -3]) == -1\n\n    def test_max_value_with_mixed_signs(self):\n        \"\"\"Verify max_value returns the largest number across mixed signs.\"\"\"\n        assert max_value([-2, 0, 7]) == 7\n\n    def test_max_value_with_floats(self):\n        \"\"\"Verify max_value works with floating point numbers.\"\"\"\n        assert max_value([1.5, 3.2, 2.7]) == 3.2\n\n    def test_max_value_with_single_element(self):\n        \"\"\"Verify max_value returns the sole element for a single-item list.\"\"\"\n        assert max_value([99]) == 99\n\n    def test_max_value_with_empty_list_raises(self):\n        \"\"\"Verify max_value raises ValueError for an empty list.\"\"\"\n        with pytest.raises(ValueError):\n            max_value([])\n\n    def test_max_value_with_duplicates(self):\n        \"\"\"Verify max_value handles duplicate values correctly.\"\"\"\n        assert max_value([5, 5, 5]) == 5\n\n\nclass TestPercentShare:\n    \"\"\"Tests for the percent_share function.\"\"\"\n\n    def test_percent_share_basic(self):\n        \"\"\"Verify percent_share computes correct percentage for a basic case.\"\"\"\n        # value=1, values=[1,2,3] => total=6 => 1/6*100 ≈ 16.666...\n        result = percent_share(1, [1, 2, 3])\n        assert abs(result - (1 / 6 * 100.0)) < 1e-9\n\n    def test_percent_share_equal_values(self):\n        \"\"\"Verify percent_share returns equal shares when all values are equal.\"\"\"\n        result = percent_share(5, [5, 5, 5, 5])\n        assert abs(result - 25.0) < 1e-9\n\n    def test_percent_share_with_negative_values(self):\n        \"\"\"Verify percent_share handles negative values in the list.\"\"\"\n        # values=[-1, -3], total=-4, value=-1 => -1/-4*100 = 25.0\n        result = percent_share(-1, [-1, -3])\n        assert abs(result - 25.0) < 1e-9\n\n    def test_percent_share_single_value(self):\n        \"\"\"Verify percent_share returns 100.0 when the list has one element.\"\"\"\n        result = percent_share(10, [10])\n        assert abs(result - 100.0) < 1e-9\n\n    def test_percent_share_zero_value(self):\n        \"\"\"Verify percent_share returns 0.0 when value is zero.\"\"\"\n        result = percent_share(0, [1, 2, 3])\n        assert abs(result) < 1e-12\n\n    def test_percent_share_zero_total_raises(self):\n        \"\"\"Verify percent_share raises ZeroDivisionError when total is zero.\"\"\"\n        with pytest.raises(ZeroDivisionError):\n            percent_share(1, [0, 0, 0])\n\n    def test_percent_share_with_floats(self):\n        \"\"\"Verify percent_share works with floating point values.\"\"\"\n        result = percent_share(1.0, [1.0, 2.0, 3.0])\n        assert abs(result - (1.0 / 6.0 * 100.0)) < 1e-9",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": true,
+              "coverage": 86.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.52,
+              "reward_signals": {
+                "correctness": 1.0,
+                "efficiency": 0.983,
+                "simplicity": 0.991
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "low",
+          "repo_verification": null,
+          "task_metadata": {
+            "bug_type": "runtime",
+            "pattern_name": "hard_mixed_numeric_agg",
+            "source": "synthetic",
+            "noise_seed": 1674,
+            "difficulty": 26,
+            "is_cross_file": false,
+            "trigger_exception": "TypeError",
+            "suggested_function": "total"
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": []
+          }
+        },
+        {
+          "task_id": "synthetic__hard_mixed_numeric_agg_0019",
+          "repo": "synthetic/hard_mixed_numeric_agg",
+          "passed": false,
+          "coverage": 38.0,
+          "iterations": 3,
+          "diagnosis": null,
+          "error_category": "",
+          "elapsed_seconds": 379.88,
+          "token_usage": {
+            "input_tokens": 5692,
+            "output_tokens": 1767,
+            "total_tokens": 7459,
+            "llm_calls": 4,
+            "by_model": {
+              "agnes-3.0-flash": 4156,
+              "agnes-2.5-flash": 1762,
+              "glm-4-flash": 1541
+            }
+          },
+          "rag_stats": null,
+          "patch": "python\ndef total(values) -> float:\n    # 允许任意可迭代对象，不再强制 list/tuple\n    if not isinstance(values, (list, tuple)):\n        raise TypeError(\"values must be a list or tuple\")\n    return sum(values)\n\ndef max_value(values) -> float:\n    if not values:\n        raise ValueError(\"max_value requires a non-empty list\")\n    return max(values)\n\ndef percent_share(value, values) -> float:\n    t = total(values)\n    if t == 0:\n        raise ZeroDivisionError(\"total of values is zero, cannot compute percent_share\")\n    return value / t * 100.0\n# noise_seed=9891\n",
+          "generated_test": "from hard_mixed_numeric_agg_0019 import total\n\ndef test_total_normal_mixed_integers():\n    \"\"\"\n    Test the total function with a mixed list of positive, negative, and zero integers.\n    \"\"\"\n    assert total([1, 2, 3, -1, 0]) == 5.0\n\ndef test_total_normal_floats():\n    \"\"\"\n    Test the total function with a list of floats to check for precision.\n    \"\"\"\n    assert total([1.5, 2.5, 0.1]) == 4.1\n\ndef test_total_boundary_empty_list():\n    \"\"\"\n    Test the total function with an empty list.\n    \"\"\"\n    assert total([]) == 0.0\n\ndef test_total_boundary_single_element_list():\n    \"\"\"\n    Test the total function with a single-element list.\n    \"\"\"\n    assert total([42]) == 42.0\n\ndef test_total_error_non_numeric_list():\n    \"\"\"\n    Test the total function with a non-numeric list to check for TypeError.\n    \"\"\"\n    with pytest.raises(TypeError):\n        total([\"a\", \"b\"])\n\ndef test_total_error_non_iterable_input():\n    \"\"\"\n    Test the total function with non-iterable input to check for TypeError.\n    \"\"\"\n    with pytest.raises(TypeError):\n        total(\"abc\")",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 57.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.89,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.97,
+                "simplicity": 0.985
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 28.0,
+              "coverage_delta": -29.0,
+              "elapsed_seconds": 0.81,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.973,
+                "simplicity": 0.987
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 36.0,
+              "coverage_delta": 8.0,
+              "elapsed_seconds": 0.83,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.972,
+                "simplicity": 0.986
+              }
+            },
+            {
+              "iteration": 3,
+              "passed": false,
+              "coverage": 38.0,
+              "coverage_delta": 2.0,
+              "elapsed_seconds": 0.92,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.969,
+                "simplicity": 0.985
+              }
+            },
+            {
+              "iteration": 3,
+              "passed": false,
+              "coverage": 38.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.83,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.972,
+                "simplicity": 0.986
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "low",
+          "repo_verification": null,
+          "task_metadata": {
+            "bug_type": "runtime",
+            "pattern_name": "hard_mixed_numeric_agg",
+            "source": "synthetic",
+            "noise_seed": 9891,
+            "difficulty": 26,
+            "is_cross_file": false,
+            "trigger_exception": "TypeError",
+            "suggested_function": "total"
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": []
+          }
+        },
+        {
+          "task_id": "synthetic__hard_nested_iter_mixed_0020",
+          "repo": "synthetic/hard_nested_iter_mixed",
+          "passed": false,
+          "coverage": 74.0,
+          "iterations": 3,
+          "diagnosis": "未知",
+          "error_category": "patch_validation_failed",
+          "elapsed_seconds": 433.1,
+          "token_usage": {
+            "input_tokens": 5181,
+            "output_tokens": 948,
+            "total_tokens": 6129,
+            "llm_calls": 4,
+            "by_model": {
+              "agnes-3.0-flash": 3037,
+              "agnes-2.5-flash": 1527,
+              "glm-4-flash": 1565
+            }
+          },
+          "rag_stats": null,
+          "patch": "",
+          "generated_test": "from hard_nested_iter_mixed_0020 import collect\n\n\nclass TestCollect:\n    \"\"\"测试 collect 函数的展开嵌套列表功能\"\"\"\n\n    def test_collect_normal_nested_list(self):\n        \"\"\"正常情况：包含嵌套列表的输入\"\"\"\n        items = [1, [2, 3], 4]\n        assert collect(items) == [1, 2, 3, 4]\n\n    def test_collect_empty_list(self):\n        \"\"\"边界情况：空列表\"\"\"\n        items = []\n        assert collect(items) == []\n\n    def test_collect_contains_empty_list(self):\n        \"\"\"边界情况：包含空列表的元素\"\"\"\n        items = [1, [], [2]]\n        assert collect(items) == [1, 2]\n\n    def test_collect_deeply_nested_list(self):\n        \"\"\"边界情况：深度嵌套列表\"\"\"\n        items = [1, [2, [3, [4, [5]]]], 6]\n        assert collect(items) == [1, 2, 3, 4, 5, 6]\n\n    def test_collect_non_list_types(self):\n        \"\"\"边界情况：列表中包含非列表类型元素\"\"\"\n        items = [1, \"hello\", [2.5, True], None, [3]]\n        assert collect(items) == [1, \"hello\", 2.5, True, None, 3]\n\n    def test_collect_not_iterable_raises_error(self):\n        \"\"\"错误情况：输入不是可迭代对象\"\"\"\n        with pytest.raises(ValueError):\n            collect(\"not_a_list\")\n\n    def test_collect_not_iterable_raises_error_for_int(self):\n        \"\"\"错误情况：输入为整数\"\"\"\n        with pytest.raises(ValueError):\n            collect(123)",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 64.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.89,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.97,
+                "simplicity": 0.985
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 64.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.85,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.972,
+                "simplicity": 0.986
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 62.0,
+              "coverage_delta": -2.0,
+              "elapsed_seconds": 0.84,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.972,
+                "simplicity": 0.986
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 62.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.84,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.972,
+                "simplicity": 0.986
+              }
+            },
+            {
+              "iteration": 3,
+              "passed": false,
+              "coverage": 74.0,
+              "coverage_delta": 12.0,
+              "elapsed_seconds": 0.88,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.971,
+                "simplicity": 0.985
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "low",
+          "repo_verification": null,
+          "task_metadata": {
+            "bug_type": "runtime",
+            "pattern_name": "hard_nested_iter_mixed",
+            "source": "synthetic",
+            "noise_seed": 711,
+            "difficulty": 26,
+            "is_cross_file": false,
+            "trigger_exception": "TypeError",
+            "suggested_function": "collect"
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": []
+          }
+        },
+        {
+          "task_id": "synthetic__hard_chained_dict_lookup_0022",
+          "repo": "synthetic/hard_chained_dict_lookup",
+          "passed": true,
+          "coverage": 45.0,
+          "iterations": 0,
+          "diagnosis": null,
+          "error_category": "",
+          "elapsed_seconds": 0.54,
+          "token_usage": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "llm_calls": 0,
+            "by_model": {}
+          },
+          "rag_stats": null,
+          "patch": null,
+          "generated_test": "import pytest\n\nfrom hard_chained_dict_lookup_0022 import lookup_metric\n\n\ndef test_lookup_metric_normal_get():\n    \"\"\"验证正常路径下从嵌套字典中获取指标值\"\"\"\n    metrics = {\"layer1\": {\"metric1\": 100}}\n    assert lookup_metric(metrics, \"layer1\", \"metric1\") == 100\n\n\ndef test_lookup_metric_layer_name_not_found():\n    \"\"\"验证访问不存在的层名时抛出 KeyError\"\"\"\n    metrics = {\"layer1\": {\"metric1\": 100}}\n    with pytest.raises(KeyError):\n        lookup_metric(metrics, \"non_existent_layer\", \"metric1\")\n\n\ndef test_lookup_metric_key_not_found():\n    \"\"\"验证访问不存在的键时抛出 KeyError\"\"\"\n    metrics = {\"layer1\": {\"metric1\": 100}}\n    with pytest.raises(KeyError):\n        lookup_metric(metrics, \"layer1\", \"non_existent_key\")\n\n\ndef test_lookup_metric_value_zero():\n    \"\"\"验证返回值为 0 时的正确性\"\"\"\n    metrics = {\"layer1\": {\"metric1\": 0}}\n    assert lookup_metric(metrics, \"layer1\", \"metric1\") == 0\n\n\ndef test_lookup_metric_value_negative():\n    \"\"\"验证返回值为负数时的正确性\"\"\"\n    metrics = {\"layer1\": {\"metric1\": -5}}\n    assert lookup_metric(metrics, \"layer1\", \"metric1\") == -5",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": true,
+              "coverage": 45.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.52,
+              "reward_signals": {
+                "correctness": 1.0,
+                "efficiency": 0.983,
+                "simplicity": 0.991
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "low",
+          "repo_verification": null,
+          "task_metadata": {
+            "bug_type": "runtime",
+            "pattern_name": "hard_chained_dict_lookup",
+            "source": "synthetic",
+            "noise_seed": 6201,
+            "difficulty": 26,
+            "is_cross_file": false,
+            "trigger_exception": "KeyError",
+            "suggested_function": "lookup_metric"
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": []
+          }
+        },
+        {
+          "task_id": "synthetic__hard_chained_dict_lookup_0023",
+          "repo": "synthetic/hard_chained_dict_lookup",
+          "passed": true,
+          "coverage": 45.0,
+          "iterations": 0,
+          "diagnosis": null,
+          "error_category": "",
+          "elapsed_seconds": 0.52,
+          "token_usage": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "llm_calls": 0,
+            "by_model": {}
+          },
+          "rag_stats": null,
+          "patch": null,
+          "generated_test": "import pytest\nfrom hard_chained_dict_lookup_0023 import lookup_metric\n\ndef test_lookup_metric_normal():\n    \"\"\"测试正常查找存在的指标值\"\"\"\n    metrics = {\n        \"layer1\": {\n            \"key1\": 100\n        }\n    }\n    assert lookup_metric(metrics, \"layer1\", \"key1\") == 100\n\ndef test_lookup_metric_missing_layer():\n    \"\"\"测试访问不存在的层名\"\"\"\n    metrics = {\n        \"layer1\": {\n            \"key1\": 100\n        }\n    }\n    with pytest.raises(KeyError):\n        lookup_metric(metrics, \"layer2\", \"key1\")\n\ndef test_lookup_metric_missing_key():\n    \"\"\"测试访问不存在的键\"\"\"\n    metrics = {\n        \"layer1\": {\n            \"key1\": 100\n        }\n    }\n    with pytest.raises(KeyError):\n        lookup_metric(metrics, \"layer1\", \"key2\")\n\ndef test_lookup_metric_empty_dict():\n    \"\"\"测试空字典结构访问\"\"\"\n    metrics = {}\n    with pytest.raises(KeyError):\n        lookup_metric(metrics, \"layer1\", \"key1\")\n\ndef test_lookup_metric_zero_value():\n    \"\"\"测试正常查找值为0的指标\"\"\"\n    metrics = {\n        \"layer1\": {\n            \"key1\": 0\n        }\n    }\n    assert lookup_metric(metrics, \"layer1\", \"key1\") == 0\n\ndef test_lookup_metric_non_numeric_value():\n    \"\"\"测试查找非数值类型指标\"\"\"\n    metrics = {\n        \"layer1\": {\n            \"key1\": \"value\"\n        }\n    }\n    assert lookup_metric(metrics, \"layer1\", \"key1\") == \"value\"",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": true,
+              "coverage": 45.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.5,
+              "reward_signals": {
+                "correctness": 1.0,
+                "efficiency": 0.983,
+                "simplicity": 0.992
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "low",
+          "repo_verification": null,
+          "task_metadata": {
+            "bug_type": "runtime",
+            "pattern_name": "hard_chained_dict_lookup",
+            "source": "synthetic",
+            "noise_seed": 9044,
+            "difficulty": 26,
+            "is_cross_file": false,
+            "trigger_exception": "KeyError",
+            "suggested_function": "lookup_metric"
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": []
+          }
+        },
+        {
+          "task_id": "synthetic__hard_nested_iter_mixed_0024",
+          "repo": "synthetic/hard_nested_iter_mixed",
+          "passed": true,
+          "coverage": 71.0,
+          "iterations": 0,
+          "diagnosis": null,
+          "error_category": "",
+          "elapsed_seconds": 0.52,
+          "token_usage": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "llm_calls": 0,
+            "by_model": {}
+          },
+          "rag_stats": null,
+          "patch": null,
+          "generated_test": "import pytest\nfrom hard_nested_iter_mixed_0024 import collect, collect_depth, first_leaf\n\n\nclass TestCollect:\n    \"\"\"Tests for the collect function.\"\"\"\n\n    def test_collect_flat_list(self):\n        \"\"\"Test collect with a flat list of non-list items.\"\"\"\n        assert collect([1, 2, 3]) == [1, 2, 3]\n\n    def test_collect_with_nested_lists(self):\n        \"\"\"Test collect with nested lists.\"\"\"\n        assert collect([1, [2, 3], 4]) == [1, 2, 3, 4]\n\n    def test_collect_with_multiple_nested_lists(self):\n        \"\"\"Test collect with multiple nested lists.\"\"\"\n        assert collect([[1, 2], [3, 4], 5]) == [1, 2, 3, 4, 5]\n\n    def test_collect_empty_list(self):\n        \"\"\"Test collect with an empty list.\"\"\"\n        assert collect([]) == []\n\n    def test_collect_with_empty_nested_list(self):\n        \"\"\"Test collect with an empty nested list.\"\"\"\n        assert collect([[], 1, 2]) == [1, 2]\n\n    def test_collect_with_mixed_types(self):\n        \"\"\"Test collect with mixed types including lists.\"\"\"\n        assert collect([1, \"a\", [2, \"b\"], 3]) == [1, \"a\", 2, \"b\", 3]\n\n    def test_collect_with_single_element_list(self):\n        \"\"\"Test collect with a single element list.\"\"\"\n        assert collect([[1]]) == [1]\n\n    def test_collect_preserves_order(self):\n        \"\"\"Test that collect preserves the order of elements.\"\"\"\n        assert collect([1, [2, 3], 4, [5, 6]]) == [1, 2, 3, 4, 5, 6]\n\n    def test_collect_with_none_items(self):\n        \"\"\"Test collect with None items.\"\"\"\n        assert collect([None, 1, [2, None]]) == [None, 1, 2, None]\n\n\nclass TestCollectDepth:\n    \"\"\"Tests for the collect_depth function.\"\"\"\n\n    def test_collect_depth_flat_list(self):\n        \"\"\"Test collect_depth with a flat list.\"\"\"\n        assert collect_depth([1, 2, 3]) == 3\n\n    def test_collect_depth_with_nested_lists(self):\n        \"\"\"Test collect_depth with nested lists.\"\"\"\n        assert collect_depth([1, [2, 3], 4]) == 4\n\n    def test_collect_depth_empty_list(self):\n        \"\"\"Test collect_depth with an empty list.\"\"\"\n        assert collect_depth([]) == 0\n\n    def test_collect_depth_with_multiple_nested_lists(self):\n        \"\"\"Test collect_depth with multiple nested lists.\"\"\"\n        assert collect_depth([[1, 2], [3, 4], 5]) == 5\n\n\nclass TestFirstLeaf:\n    \"\"\"Tests for the first_leaf function.\"\"\"\n\n    def test_first_leaf_flat_list(self):\n        \"\"\"Test first_leaf with a flat list.\"\"\"\n        assert first_leaf([1, 2, 3]) == 1\n\n    def test_first_leaf_with_nested_lists(self):\n        \"\"\"Test first_leaf with nested lists.\"\"\"\n        assert first_leaf([1, [2, 3], 4]) == 1\n\n    def test_first_leaf_starts_with_nested_list(self):\n        \"\"\"Test first_leaf when the first element is a nested list.\"\"\"\n        assert first_leaf([[1, 2], 3, 4]) == 1\n\n    def test_first_leaf_empty_list(self):\n        \"\"\"Test first_leaf with an empty list.\"\"\"\n        assert first_leaf([]) is None\n\n    def test_first_leaf_with_empty_nested_lists(self):\n        \"\"\"Test first_leaf with empty nested lists.\"\"\"\n        assert first_leaf([[], 1, 2]) == 1\n\n    def test_first_leaf_all_empty_nested(self):\n        \"\"\"Test first_leaf when all nested lists are empty.\"\"\"\n        assert first_leaf([[], []]) is None\n\n    def test_first_leaf_with_mixed_content(self):\n        \"\"\"Test first_leaf with mixed content.\"\"\"\n        assert first_leaf([[], [1, 2], 3]) == 1\n\n    def test_first_leaf_single_element_nested(self):\n        \"\"\"Test first_leaf with a single element nested list.\"\"\"\n        assert first_leaf([[], [42], 3]) == 42",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": true,
+              "coverage": 71.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.5,
+              "reward_signals": {
+                "correctness": 1.0,
+                "efficiency": 0.983,
+                "simplicity": 0.992
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "low",
+          "repo_verification": null,
+          "task_metadata": {
+            "bug_type": "runtime",
+            "pattern_name": "hard_nested_iter_mixed",
+            "source": "synthetic",
+            "noise_seed": 5925,
+            "difficulty": 26,
+            "is_cross_file": false,
+            "trigger_exception": "TypeError",
+            "suggested_function": "collect"
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": []
+          }
+        },
+        {
+          "task_id": "synthetic__hard_iter_over_none_0025",
+          "repo": "synthetic/hard_iter_over_none",
+          "passed": true,
+          "coverage": 80.0,
+          "iterations": 0,
+          "diagnosis": null,
+          "error_category": "",
+          "elapsed_seconds": 0.52,
+          "token_usage": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "llm_calls": 0,
+            "by_model": {}
+          },
+          "rag_stats": null,
+          "patch": null,
+          "generated_test": "import pytest\n\nfrom hard_iter_over_none_0025 import expand_regions, region_count, contains\n\n\ndef test_expand_regions_single_region_with_coords():\n    \"\"\"Test that expand_regions flattens a list containing one region with multiple coordinates.\"\"\"\n    regions = [[(1, 2), (3, 4), (5, 6)]]\n    result = expand_regions(regions)\n    assert result == [(1, 2), (3, 4), (5, 6)]\n\n\ndef test_expand_regions_multiple_regions():\n    \"\"\"Test that expand_regions flattens multiple regions into a single list.\"\"\"\n    regions = [[(1, 2), (3, 4)], [(5, 6), (7, 8)], [(9, 10)]]\n    result = expand_regions(regions)\n    assert result == [(1, 2), (3, 4), (5, 6), (7, 8), (9, 10)]\n\n\ndef test_expand_regions_empty_input():\n    \"\"\"Test that expand_regions returns an empty list when input is empty.\"\"\"\n    result = expand_regions([])\n    assert result == []\n\n\ndef test_expand_regions_region_with_empty_coords():\n    \"\"\"Test that expand_regions handles regions with no coordinates.\"\"\"\n    regions = [[], [(1, 2)], []]\n    result = expand_regions(regions)\n    assert result == [(1, 2)]\n\n\ndef test_region_count_single_region():\n    \"\"\"Test that region_count returns the total number of coordinates in one region.\"\"\"\n    regions = [[(1, 2), (3, 4), (5, 6)]]\n    result = region_count(regions)\n    assert result == 3\n\n\ndef test_region_count_multiple_regions():\n    \"\"\"Test that region_count returns the total number of coordinates across multiple regions.\"\"\"\n    regions = [[(1, 2), (3, 4)], [(5, 6), (7, 8)]]\n    result = region_count(regions)\n    assert result == 4\n\n\ndef test_region_count_empty_input():\n    \"\"\"Test that region_count returns 0 for empty input.\"\"\"\n    result = region_count([])\n    assert result == 0\n\n\ndef test_region_count_regions_with_no_coords():\n    \"\"\"Test that region_count returns 0 when regions contain no coordinates.\"\"\"\n    regions = [[], []]\n    result = region_count(regions)\n    assert result == 0\n\n\ndef test_contains_coordinate_present():\n    \"\"\"Test that contains returns True when coordinate exists in regions.\"\"\"\n    regions = [[(1, 2), (3, 4)]]\n    result = contains(regions, (3, 4))\n    assert result is True\n\n\ndef test_contains_coordinate_absent():\n    \"\"\"Test that contains returns False when coordinate does not exist in regions.\"\"\"\n    regions = [[(1, 2), (3, 4)]]\n    result = contains(regions, (5, 6))\n    assert result is False\n\n\ndef test_contains_empty_regions():\n    \"\"\"Test that contains returns False when regions are empty.\"\"\"\n    result = contains([], (1, 2))\n    assert result is False\n\n\ndef test_contains_single_region_single_coord():\n    \"\"\"Test that contains returns True for the only coordinate in a single region.\"\"\"\n    regions = [[(99, 100)]]\n    result = contains(regions, (99, 100))\n    assert result is True",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": true,
+              "coverage": 80.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.5,
+              "reward_signals": {
+                "correctness": 1.0,
+                "efficiency": 0.983,
+                "simplicity": 0.992
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "low",
+          "repo_verification": null,
+          "task_metadata": {
+            "bug_type": "runtime",
+            "pattern_name": "hard_iter_over_none",
+            "source": "synthetic",
+            "noise_seed": 1139,
+            "difficulty": 26,
+            "is_cross_file": false,
+            "trigger_exception": "TypeError",
+            "suggested_function": "expand_regions"
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": []
+          }
+        },
+        {
+          "task_id": "synthetic__hard_depth_blind_nested_0026",
+          "repo": "synthetic/hard_depth_blind_nested",
+          "passed": true,
+          "coverage": 77.0,
+          "iterations": 1,
+          "diagnosis": null,
+          "error_category": "",
+          "elapsed_seconds": 49.42,
+          "token_usage": {
+            "input_tokens": 1986,
+            "output_tokens": 748,
+            "total_tokens": 2734,
+            "llm_calls": 2,
+            "by_model": {
+              "agnes-2.5-flash": 2734
+            }
+          },
+          "rag_stats": null,
+          "patch": "python\ndef stats_of(data):\n    return count_items(data)\n\ndef count_items(data):\n    if isinstance(data, list):\n        total = 0\n        for x in data:\n            # 只统计纯整数，排除bool类型（因为bool是int的子类）\n            if isinstance(x, int) and not isinstance(x, bool):\n                total += 1\n        return total\n    return 0\n\ndef describe(data):\n    n = count_items(data)\n    return f'items={n}'\n\n# noise_seed=3733\n",
+          "generated_test": "from hard_depth_blind_nested_0026 import count_items\n\n\ndef test_count_items_empty_list():\n    \"\"\"测试空列表返回0\"\"\"\n    assert count_items([]) == 0\n\n\ndef test_count_items_mixed_list_with_integers():\n    \"\"\"测试包含整数和其他类型的列表\"\"\"\n    data = [1, \"hello\", 2, True, 3, None, 4.5, 4]\n    assert count_items(data) == 4\n\n\ndef test_count_items_only_integers():\n    \"\"\"测试全整数列表\"\"\"\n    data = [1, 2, 3, 4, 5]\n    assert count_items(data) == 5\n\n\ndef test_count_items_no_integers():\n    \"\"\"测试不包含整数的列表\"\"\"\n    data = [\"a\", \"b\", None, 3.14, True]\n    assert count_items(data) == 0\n\n\ndef test_count_items_with_bools():\n    \"\"\"测试bool类型不被统计（bool是int的子类但应排除）\"\"\"\n    data = [True, False, 1, 0]\n    # True和False是bool，不被统计；1和0是纯int，被统计\n    assert count_items(data) == 2\n\n\ndef test_count_items_with_nested_structure():\n    \"\"\"测试非列表输入返回0\"\"\"\n    assert count_items(\"string\") == 0\n    assert count_items(123) == 0\n    assert count_items(None) == 0\n    assert count_items({\"a\": 1}) == 0\n\n\ndef test_count_items_all_booleans():\n    \"\"\"测试全bool列表返回0\"\"\"\n    data = [True, False, True]\n    assert count_items(data) == 0\n\n\ndef test_count_items_mixed_negative_and_positive_integers():\n    \"\"\"测试包含负数和正数的列表\"\"\"\n    data = [-1, 0, 1, -100, 100]\n    assert count_items(data) == 5",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 77.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.9,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.97,
+                "simplicity": 0.985
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 77.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.85,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.972,
+                "simplicity": 0.986
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": true,
+              "coverage": 77.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.44,
+              "reward_signals": {
+                "correctness": 1.0,
+                "efficiency": 0.985,
+                "simplicity": 0.993
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "low",
+          "repo_verification": null,
+          "task_metadata": {
+            "bug_type": "runtime",
+            "pattern_name": "hard_depth_blind_nested",
+            "source": "synthetic",
+            "noise_seed": 3733,
+            "difficulty": 26,
+            "is_cross_file": false,
+            "trigger_exception": "AssertionError",
+            "suggested_function": "count_items"
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": []
+          }
+        },
+        {
+          "task_id": "synthetic__hard_nested_iter_mixed_0027",
+          "repo": "synthetic/hard_nested_iter_mixed",
+          "passed": true,
+          "coverage": 83.0,
+          "iterations": 1,
+          "diagnosis": "代码逻辑错误。`collect` 函数仅做扁平化处理，未实现 `collect_depth` 所需的递归/嵌套结构深度计算。测试 `test_collect_depth_nested_list` 期望 `collect_depth` 返回嵌套列表的“深度”或“展开后的总元素层级数量”，但当前实现 `return len(collect(items))` 只返回扁平化后的元素总数，而非嵌套结构的深度。根据函数名 `collect_depth` 和典型测试语义，它应计算嵌套列表的最大递归深度（例如 `[[1,2],[[3]]]` 的深度为 3）。当前实现混淆了“扁平化长度”与“嵌套深度”。",
+          "error_category": "assertion",
+          "elapsed_seconds": 9.86,
+          "token_usage": {
+            "input_tokens": 1396,
+            "output_tokens": 394,
+            "total_tokens": 1790,
+            "llm_calls": 1,
+            "by_model": {
+              "agnes-3.0-flash": 1790
+            }
+          },
+          "rag_stats": null,
+          "patch": "python\ndef collect(items):\n    out = []\n    for item in items:\n        if isinstance(item, list):\n            out.extend(item)\n        else:\n            out.append(item)\n    return out\n\ndef collect_depth(items):\n    if not items:\n        return 0\n    max_depth = 0\n    for item in items:\n        if isinstance(item, list):\n            current_depth = 1 + collect_depth(item)\n            if current_depth > max_depth:\n                max_depth = current_depth\n        else:\n            if 1 > max_depth:\n                max_depth = 1\n    return max_depth\n\ndef first_leaf(items):\n    for x in collect(items):\n        if not isinstance(x, list):\n            return x\n    return None\n# noise_seed=1307\n",
+          "generated_test": "from hard_nested_iter_mixed_0027 import collect, collect_depth, first_leaf\n\ndef test_collect_empty_list():\n    \"\"\"Test collect function with an empty list.\"\"\"\n    assert collect([]) == []\n\ndef test_collect_single_item():\n    \"\"\"Test collect function with a single non-list item.\"\"\"\n    assert collect([1]) == [1]\n\ndef test_collect_multiple_items():\n    \"\"\"Test collect function with multiple non-list items.\"\"\"\n    assert collect([1, 2, 3]) == [1, 2, 3]\n\ndef test_collect_nested_list():\n    \"\"\"Test collect function with nested lists.\"\"\"\n    assert collect([1, [2, 3], 4]) == [1, 2, 3, 4]\n\ndef test_collect_depth_empty_list():\n    \"\"\"Test collect_depth function with an empty list.\"\"\"\n    assert collect_depth([]) == 0\n\ndef test_collect_depth_single_item():\n    \"\"\"Test collect_depth function with a single non-list item.\"\"\"\n    assert collect_depth([1]) == 1\n\ndef test_collect_depth_nested_list():\n    \"\"\"Test collect_depth function with nested lists.\"\"\"\n    assert collect_depth([1, [2, [3, [4]]]]) == 4\n\ndef test_first_leaf_single_item():\n    \"\"\"Test first_leaf function with a single non-list item.\"\"\"\n    assert first_leaf([1]) == 1\n\ndef test_first_leaf_nested_list():\n    \"\"\"Test first_leaf function with nested lists.\"\"\"\n    assert first_leaf([1, [2, [3, [4]]]]) == 4\n\ndef test_first_leaf_empty_list():\n    \"\"\"Test first_leaf function with an empty list.\"\"\"\n    assert first_leaf([]) is None",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 71.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.94,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.969,
+                "simplicity": 0.984
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": true,
+              "coverage": 83.0,
+              "coverage_delta": 12.0,
+              "elapsed_seconds": 0.44,
+              "reward_signals": {
+                "correctness": 1.0,
+                "efficiency": 0.985,
+                "simplicity": 0.993
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "low",
+          "repo_verification": null,
+          "task_metadata": {
+            "bug_type": "runtime",
+            "pattern_name": "hard_nested_iter_mixed",
+            "source": "synthetic",
+            "noise_seed": 1307,
+            "difficulty": 26,
+            "is_cross_file": false,
+            "trigger_exception": "TypeError",
+            "suggested_function": "collect"
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": []
+          }
+        },
+        {
+          "task_id": "synthetic__hard_iter_over_none_0028",
+          "repo": "synthetic/hard_iter_over_none",
+          "passed": true,
+          "coverage": 80.0,
+          "iterations": 0,
+          "diagnosis": null,
+          "error_category": "",
+          "elapsed_seconds": 0.52,
+          "token_usage": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "llm_calls": 0,
+            "by_model": {}
+          },
+          "rag_stats": null,
+          "patch": null,
+          "generated_test": "from hard_iter_over_none_0028 import expand_regions, region_count, contains\n\ndef test_expand_regions_empty_input():\n    \"\"\"\n    Test expand_regions with empty input list.\n    \"\"\"\n    assert expand_regions([]) == []\n\ndef test_expand_regions_single_region():\n    \"\"\"\n    Test expand_regions with a single region.\n    \"\"\"\n    assert expand_regions([[1, 2, 3]]) == [1, 2, 3]\n\ndef test_expand_regions_multiple_regions():\n    \"\"\"\n    Test expand_regions with multiple regions.\n    \"\"\"\n    assert expand_regions([[1, 2, 3], [4, 5, 6]]) == [1, 2, 3, 4, 5, 6]\n\ndef test_region_count_empty_input():\n    \"\"\"\n    Test region_count with empty input list.\n    \"\"\"\n    assert region_count([]) == 0\n\ndef test_region_count_single_region():\n    \"\"\"\n    Test region_count with a single region.\n    \"\"\"\n    assert region_count([[1, 2, 3]]) == 1\n\ndef test_region_count_multiple_regions():\n    \"\"\"\n    Test region_count with multiple regions.\n    \"\"\"\n    assert region_count([[1, 2, 3], [4, 5, 6]]) == 2\n\ndef test_contains_region():\n    \"\"\"\n    Test contains with a coordinate that is in the regions.\n    \"\"\"\n    assert contains([[1, 2, 3], [4, 5, 6]], 4) == True\n\ndef test_contains_not_region():\n    \"\"\"\n    Test contains with a coordinate that is not in the regions.\n    \"\"\"\n    assert contains([[1, 2, 3], [4, 5, 6]], 7) == False",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": true,
+              "coverage": 80.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.5,
+              "reward_signals": {
+                "correctness": 1.0,
+                "efficiency": 0.983,
+                "simplicity": 0.992
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "low",
+          "repo_verification": null,
+          "task_metadata": {
+            "bug_type": "runtime",
+            "pattern_name": "hard_iter_over_none",
+            "source": "synthetic",
+            "noise_seed": 1654,
+            "difficulty": 26,
+            "is_cross_file": false,
+            "trigger_exception": "TypeError",
+            "suggested_function": "expand_regions"
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": []
+          }
+        },
+        {
+          "task_id": "synthetic__hard_attribute_chain_guard_0029",
+          "repo": "synthetic/hard_attribute_chain_guard",
+          "passed": false,
+          "coverage": 83.0,
+          "iterations": 2,
+          "diagnosis": "在 `resolve_option` 方法中，当 `key` 不在 `self.override` 中时，代码尝试执行 `self.settings.get(key, \"\")`。然而，在 `__init__` 中 `self.settings` 被初始化为 `None`。当测试调用 `resolve_option` 且该 key 未被 override 时，若 `self.settings` 仍为 `None`，则会抛出 `AttributeError: 'NoneType' object has no attribute 'get'`。同理，`has_option` 和 `dump` 方法在 `self.settings` 为 `None` 时也会抛出异常。因此，需要在调用 `get`、`in`、`dict` 等操作前确保 `self.settings` 不为 `None`，或者在 `__init__` 中将其初始化为空字典 `{}`，或在相关方法中增加判空逻辑。考虑到测试预期默认值行为，最合理的修复是将 `self.settings` 初始化为 `{}`，或在方法中处理 `None` 情况。",
+          "error_category": "patch_validation_failed",
+          "elapsed_seconds": 36.2,
+          "token_usage": {
+            "input_tokens": 2616,
+            "output_tokens": 831,
+            "total_tokens": 3447,
+            "llm_calls": 2,
+            "by_model": {
+              "agnes-2.5-flash": 1569,
+              "agnes-3.0-flash": 1878
+            }
+          },
+          "rag_stats": null,
+          "patch": "python\nclass Config:\n    def __init__(self):\n        # 修复：将 self.settings 初始化为空字典，避免 None 导致的 AttributeError\n        self.settings = {}\n        self.override = {}\n\n    def resolve_option(self, key):\n        if key in self.override:\n            return self.override[key]\n        # 修复：确保 self.settings 不是 None，如果为 None 则视为空字典\n        if self.settings is None:\n            return \"\"\n        return self.settings.get(key, \"\")\n\n    def has_option(self, key):\n        # 修复：确保 self.settings 不是 None\n        if self.settings is None:\n            return False\n        return key in self.settings\n\n    def dump(self):\n        # 修复：确保 self.settings 不是 None\n        if self.settings is None:\n            return {}\n        return dict(self.settings)\n# noise_seed=4554\n\n",
+          "generated_test": "from hard_attribute_chain_guard_0029 import Config\n\ndef test_resolve_option_default():\n    \"\"\"\n    Test resolve_option with default settings.\n    \"\"\"\n    config = Config()\n    assert config.resolve_option(\"test_key\") == \"\"\n\ndef test_resolve_option_override():\n    \"\"\"\n    Test resolve_option with override settings.\n    \"\"\"\n    config = Config()\n    config.override[\"test_key\"] = \"override_value\"\n    assert config.resolve_option(\"test_key\") == \"override_value\"\n\ndef test_has_option_exists():\n    \"\"\"\n    Test has_option with a key that exists.\n    \"\"\"\n    config = Config()\n    config.settings = {\"test_key\": \"value\"}\n    assert config.has_option(\"test_key\") == True\n\ndef test_has_option_not_exists():\n    \"\"\"\n    Test has_option with a key that does not exist.\n    \"\"\"\n    config = Config()\n    assert config.has_option(\"test_key\") == False",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 83.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.89,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.97,
+                "simplicity": 0.985
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 83.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.84,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.972,
+                "simplicity": 0.986
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 83.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.79,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.974,
+                "simplicity": 0.987
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 83.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.84,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.972,
+                "simplicity": 0.986
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "low",
+          "repo_verification": null,
+          "task_metadata": {
+            "bug_type": "runtime",
+            "pattern_name": "hard_attribute_chain_guard",
+            "source": "synthetic",
+            "noise_seed": 4554,
+            "difficulty": 26,
+            "is_cross_file": false,
+            "trigger_exception": "AttributeError",
+            "suggested_function": "resolve_option"
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": []
+          }
+        },
+        {
+          "task_id": "synthetic__hard_slice_contract_0021",
+          "repo": "synthetic/hard_slice_contract",
+          "passed": true,
+          "coverage": 57.0,
+          "iterations": 3,
+          "diagnosis": null,
+          "error_category": "",
+          "elapsed_seconds": 154.17,
+          "token_usage": {
+            "input_tokens": 5753,
+            "output_tokens": 4451,
+            "total_tokens": 10204,
+            "llm_calls": 5,
+            "by_model": {
+              "agnes-3.0-flash": 8377,
+              "glm-4.7-flash": 1827
+            }
+          },
+          "rag_stats": null,
+          "patch": "python\ndef split_entry(entry):\n    # 确保访问索引不超过entry长度，缺失项默认为None\n    head = entry[0] if len(entry) > 0 else None\n    body = entry[1] if len(entry) > 1 else None\n    tail = entry[2] if len(entry) > 2 else None\n    flag = entry[3] if len(entry) > 3 else None\n    return {\"head\": head, \"body\": body, \"tail\": tail, \"flag\": flag}\n\ndef count_flags(entries):\n    n = 0\n    for e in entries:\n        if split_entry(e)[\"flag\"]:\n            n += 1\n    return n\n\ndef entry_names(entries):\n    # 修复：增加对 entry 长度的判断，防止索引越界\n    return [e[0] for e in entries if len(e) > 0]\n# noise_seed=8785\n",
+          "generated_test": "import pytest\nfrom hard_slice_contract_0021 import split_entry\n\n\ndef test_split_entry_empty_entry():\n    \"\"\"Test split_entry with an empty entry returns all None.\"\"\"\n    result = split_entry([])\n    assert result == {\"head\": None, \"body\": None, \"tail\": None, \"flag\": None}\n\n\ndef test_split_entry_one_element():\n    \"\"\"Test split_entry with a one-element entry.\"\"\"\n    result = split_entry([\"a\"])\n    assert result == {\"head\": \"a\", \"body\": None, \"tail\": None, \"flag\": None}\n\n\ndef test_split_entry_two_elements():\n    \"\"\"Test split_entry with a two-element entry.\"\"\"\n    result = split_entry([\"a\", \"b\"])\n    assert result == {\"head\": \"a\", \"body\": \"b\", \"tail\": None, \"flag\": None}\n\n\ndef test_split_entry_three_elements():\n    \"\"\"Test split_entry with a three-element entry.\"\"\"\n    result = split_entry([\"a\", \"b\", \"c\"])\n    assert result == {\"head\": \"a\", \"body\": \"b\", \"tail\": \"c\", \"flag\": None}\n\n\ndef test_split_entry_four_elements():\n    \"\"\"Test split_entry with a four-element entry.\"\"\"\n    result = split_entry([\"a\", \"b\", \"c\", \"d\"])\n    assert result == {\"head\": \"a\", \"body\": \"b\", \"tail\": \"c\", \"flag\": \"d\"}\n\n\ndef test_split_entry_more_than_four_elements():\n    \"\"\"Test split_entry with more than four elements ignores the rest.\"\"\"\n    result = split_entry([\"a\", \"b\", \"c\", \"d\", \"e\", \"f\"])\n    assert result == {\"head\": \"a\", \"body\": \"b\", \"tail\": \"c\", \"flag\": \"d\"}\n\n\n@pytest.mark.parametrize(\n    \"entry,expected\",\n    [\n        ([], {\"head\": None, \"body\": None, \"tail\": None, \"flag\": None}),\n        ([\"h\"], {\"head\": \"h\", \"body\": None, \"tail\": None, \"flag\": None}),\n        ([\"h\", \"b\"], {\"head\": \"h\", \"body\": \"b\", \"tail\": None, \"flag\": None}),\n        ([\"h\", \"b\", \"t\"], {\"head\": \"h\", \"body\": \"b\", \"tail\": \"t\", \"flag\": None}),\n        ([\"h\", \"b\", \"t\", \"f\"], {\"head\": \"h\", \"body\": \"b\", \"tail\": \"t\", \"flag\": \"f\"}),\n        ([\"h\", \"b\", \"t\", \"f\", \"extra\"], {\"head\": \"h\", \"body\": \"b\", \"tail\": \"t\", \"flag\": \"f\"}),\n    ],\n)\ndef test_split_entry_parametrized(entry, expected):\n    \"\"\"Test split_entry with various input lengths via parametrize.\"\"\"\n    assert split_entry(entry) == expected",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 40.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.9,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.97,
+                "simplicity": 0.985
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 40.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.84,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.972,
+                "simplicity": 0.986
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 33.0,
+              "coverage_delta": -7.0,
+              "elapsed_seconds": 0.89,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.97,
+                "simplicity": 0.985
+              }
+            },
+            {
+              "iteration": 3,
+              "passed": false,
+              "coverage": 59.0,
+              "coverage_delta": 26.0,
+              "elapsed_seconds": 0.9,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.97,
+                "simplicity": 0.985
+              }
+            },
+            {
+              "iteration": 3,
+              "passed": true,
+              "coverage": 57.0,
+              "coverage_delta": -2.0,
+              "elapsed_seconds": 0.43,
+              "reward_signals": {
+                "correctness": 1.0,
+                "efficiency": 0.986,
+                "simplicity": 0.993
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "low",
+          "repo_verification": null,
+          "task_metadata": {
+            "bug_type": "runtime",
+            "pattern_name": "hard_slice_contract",
+            "source": "synthetic",
+            "noise_seed": 8785,
+            "difficulty": 26,
+            "is_cross_file": false,
+            "trigger_exception": "IndexError",
+            "suggested_function": "split_entry"
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": []
+          }
+        },
+        {
+          "task_id": "synthetic__hard_slice_contract_0030",
+          "repo": "synthetic/hard_slice_contract",
+          "passed": true,
+          "coverage": 40.0,
+          "iterations": 0,
+          "diagnosis": null,
+          "error_category": "",
+          "elapsed_seconds": 0.56,
+          "token_usage": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "llm_calls": 0,
+            "by_model": {}
+          },
+          "rag_stats": null,
+          "patch": null,
+          "generated_test": "import pytest\nfrom hard_slice_contract_0030 import split_entry, count_flags, entry_names\n\ndef test_split_entry_basic():\n    \"\"\"Test split_entry with a normal 4-element list\"\"\"\n    entry = [\"alpha\", \"beta\", \"gamma\", True]\n    result = split_entry(entry)\n    assert result == {\"head\": \"alpha\", \"body\": \"beta\", \"tail\": \"gamma\", \"flag\": True}\n\ndef test_split_entry_all_zeros():\n    \"\"\"Test split_entry when all elements are zero/empty\"\"\"\n    entry = [0, 0, 0, False]\n    result = split_entry(entry)\n    assert result == {\"head\": 0, \"body\": 0, \"tail\": 0, \"flag\": False}\n\ndef test_split_entry_flag_true():\n    \"\"\"Test split_entry with flag set to True\"\"\"\n    entry = [\"x\", \"y\", \"z\", True]\n    result = split_entry(entry)\n    assert result[\"flag\"] is True\n\ndef test_split_entry_flag_false():\n    \"\"\"Test split_entry with flag set to False\"\"\"\n    entry = [\"x\", \"y\", \"z\", False]\n    result = split_entry(entry)\n    assert result[\"flag\"] is False\n\ndef test_count_flags_empty_list():\n    \"\"\"Test count_flags with an empty list of entries\"\"\"\n    result = count_flags([])\n    assert result == 0\n\ndef test_count_flags_all_true():\n    \"\"\"Test count_flags when all entries have flag True\"\"\"\n    entries = [\n        [\"a\", \"b\", \"c\", True],\n        [\"d\", \"e\", \"f\", True],\n        [\"g\", \"h\", \"i\", True],\n    ]\n    result = count_flags(entries)\n    assert result == 3\n\ndef test_count_flags_all_false():\n    \"\"\"Test count_flags when all entries have flag False\"\"\"\n    entries = [\n        [\"a\", \"b\", \"c\", False],\n        [\"d\", \"e\", \"f\", False],\n    ]\n    result = count_flags(entries)\n    assert result == 0\n\ndef test_count_flags_mixed():\n    \"\"\"Test count_flags with a mix of True and False flags\"\"\"\n    entries = [\n        [\"a\", \"b\", \"c\", True],\n        [\"d\", \"e\", \"f\", False],\n        [\"g\", \"h\", \"i\", True],\n        [\"j\", \"k\", \"l\", False],\n        [\"m\", \"n\", \"o\", True],\n    ]\n    result = count_flags(entries)\n    assert result == 3\n\ndef test_count_flags_single_entry_flag_true():\n    \"\"\"Test count_flags with a single entry having flag True\"\"\"\n    entries = [[\"a\", \"b\", \"c\", True]]\n    result = count_flags(entries)\n    assert result == 1\n\ndef test_count_flags_single_entry_flag_false():\n    \"\"\"Test count_flags with a single entry having flag False\"\"\"\n    entries = [[\"a\", \"b\", \"c\", False]]\n    result = count_flags(entries)\n    assert result == 0\n\ndef test_entry_names_empty_list():\n    \"\"\"Test entry_names with an empty list\"\"\"\n    result = entry_names([])\n    assert result == []\n\ndef test_entry_names_single_entry():\n    \"\"\"Test entry_names with a single entry\"\"\"\n    entries = [[\"first\", \"body\", \"tail\", True]]\n    result = entry_names(entries)\n    assert result == [\"first\"]\n\ndef test_entry_names_multiple_entries():\n    \"\"\"Test entry_names with multiple entries\"\"\"\n    entries = [\n        [\"one\", \"b\", \"c\", True],\n        [\"two\", \"d\", \"e\", False],\n        [\"three\", \"f\", \"g\", True],\n    ]\n    result = entry_names(entries)\n    assert result == [\"one\", \"two\", \"three\"]\n\ndef test_entry_names_preserves_order():\n    \"\"\"Test entry_names preserves the order of entries\"\"\"\n    entries = [\n        [\"zeta\", \"b\", \"c\", False],\n        [\"alpha\", \"d\", \"e\", True],\n        [\"mid\", \"f\", \"g\", False],\n    ]\n    result = entry_names(entries)\n    assert result == [\"zeta\", \"alpha\", \"mid\"]\n\ndef test_split_entry_numeric_values():\n    \"\"\"Test split_entry with numeric values in body and tail\"\"\"\n    entry = [\"head_val\", 42, 99, False]\n    result = split_entry(entry)\n    assert result[\"head\"] == \"head_val\"\n    assert result[\"body\"] == 42\n    assert result[\"tail\"] == 99\n    assert result[\"flag\"] is False\n\ndef test_split_entry_mixed_types():\n    \"\"\"Test split_entry with mixed types across fields\"\"\"\n    entry = [None, [1, 2], {\"k\": \"v\"}, True]\n    result = split_entry(entry)\n    assert result[\"head\"] is None\n    assert result[\"body\"] == [1, 2]\n    assert result[\"tail\"] == {\"k\": \"v\"}\n    assert result[\"flag\"] is True",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": true,
+              "coverage": 40.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.54,
+              "reward_signals": {
+                "correctness": 1.0,
+                "efficiency": 0.982,
+                "simplicity": 0.991
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "low",
+          "repo_verification": null,
+          "task_metadata": {
+            "bug_type": "runtime",
+            "pattern_name": "hard_slice_contract",
+            "source": "synthetic",
+            "noise_seed": 5977,
+            "difficulty": 26,
+            "is_cross_file": false,
+            "trigger_exception": "IndexError",
+            "suggested_function": "split_entry"
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": []
+          }
+        },
+        {
+          "task_id": "synthetic__hard_polluted_entry_guard_0031",
+          "repo": "synthetic/hard_polluted_entry_guard",
+          "passed": true,
+          "coverage": 54.0,
+          "iterations": 0,
+          "diagnosis": null,
+          "error_category": "",
+          "elapsed_seconds": 0.56,
+          "token_usage": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "llm_calls": 0,
+            "by_model": {}
+          },
+          "rag_stats": null,
+          "patch": null,
+          "generated_test": "import pytest\nfrom hard_polluted_entry_guard_0031 import pool_status\n\ndef test_pool_status_normal_input():\n    \"\"\"测试正常输入列表，验证总长度和元素数量计算正确\"\"\"\n    result = pool_status([\"ab\", \"cd\", \"ef\"])\n    assert result == {\"total\": 6, \"count\": 3}\n\ndef test_pool_status_empty_list():\n    \"\"\"测试空列表输入，验证总长度和元素数量为0\"\"\"\n    result = pool_status([])\n    assert result == {\"total\": 0, \"count\": 0}\n\ndef test_pool_status_contains_empty_list():\n    \"\"\"测试包含空列表的输入，验证总长度计算正确\"\"\"\n    result = pool_status([[], [1, 2], [3, 4, 5]])\n    assert result == {\"total\": 5, \"count\": 3}\n\ndef test_pool_status_non_len_element_raises():\n    \"\"\"测试包含不支持len()操作的元素时，应抛出异常\"\"\"\n    with pytest.raises(TypeError):\n        pool_status([\"abc\", \"def\", 456])",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": true,
+              "coverage": 54.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.54,
+              "reward_signals": {
+                "correctness": 1.0,
+                "efficiency": 0.982,
+                "simplicity": 0.991
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "low",
+          "repo_verification": null,
+          "task_metadata": {
+            "bug_type": "runtime",
+            "pattern_name": "hard_polluted_entry_guard",
+            "source": "synthetic",
+            "noise_seed": 6065,
+            "difficulty": 26,
+            "is_cross_file": false,
+            "trigger_exception": "TypeError",
+            "suggested_function": "pool_status"
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": []
+          }
+        },
+        {
+          "task_id": "synthetic__hard_mixed_numeric_agg_0032",
+          "repo": "synthetic/hard_mixed_numeric_agg",
+          "passed": true,
+          "coverage": 86.0,
+          "iterations": 0,
+          "diagnosis": null,
+          "error_category": "",
+          "elapsed_seconds": 0.57,
+          "token_usage": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "llm_calls": 0,
+            "by_model": {}
+          },
+          "rag_stats": null,
+          "patch": null,
+          "generated_test": "\"\"\"Tests for the hard_mixed_numeric_agg_0032 module.\"\"\"\nimport pytest\n\nfrom hard_mixed_numeric_agg_0032 import total, max_value, percent_share\n\n\ndef test_total_with_positive_numbers():\n    \"\"\"Test that total sums positive numbers correctly.\"\"\"\n    assert total([1, 2, 3]) == 6\n\n\ndef test_total_with_negative_numbers():\n    \"\"\"Test that total sums negative numbers correctly.\"\"\"\n    assert total([-1, -2, -3]) == -6\n\n\ndef test_total_with_mixed_numbers():\n    \"\"\"Test that total sums a mix of positive and negative numbers.\"\"\"\n    assert total([-1, 1, -2, 2]) == 0\n\n\ndef test_total_with_floats():\n    \"\"\"Test that total sums floating-point numbers correctly.\"\"\"\n    assert total([1.5, 2.5, 3.0]) == 7.0\n\n\ndef test_total_with_empty_list():\n    \"\"\"Test that total of an empty list returns 0.\"\"\"\n    assert total([]) == 0\n\n\ndef test_total_with_single_element():\n    \"\"\"Test that total with a single element returns that element.\"\"\"\n    assert total([42]) == 42\n\n\ndef test_max_value_with_positive_numbers():\n    \"\"\"Test that max_value returns the largest positive number.\"\"\"\n    assert max_value([1, 2, 3, 4, 5]) == 5\n\n\ndef test_max_value_with_negative_numbers():\n    \"\"\"Test that max_value returns the largest (least negative) number among negatives.\"\"\"\n    assert max_value([-5, -3, -1]) == -1\n\n\ndef test_max_value_with_mixed_numbers():\n    \"\"\"Test that max_value returns the largest number in a mixed list.\"\"\"\n    assert max_value([-1, 0, 5, -3]) == 5\n\n\ndef test_max_value_with_floats():\n    \"\"\"Test that max_value works with floating-point numbers.\"\"\"\n    assert max_value([1.1, 2.2, 3.3]) == 3.3\n\n\ndef test_max_value_with_single_element():\n    \"\"\"Test that max_value with a single element returns that element.\"\"\"\n    assert max_value([99]) == 99\n\n\ndef test_max_value_with_empty_list():\n    \"\"\"Test that max_value raises ValueError on an empty list.\"\"\"\n    with pytest.raises(ValueError):\n        max_value([])\n\n\ndef test_percent_share_basic():\n    \"\"\"Test percent_share for a simple case: value=2, values=[1,2,3,4].\"\"\"\n    # total = 10, so 2/10*100 = 20.0\n    assert percent_share(2, [1, 2, 3, 4]) == 20.0\n\n\ndef test_percent_share_full_value():\n    \"\"\"Test percent_share when value equals the total of values.\"\"\"\n    assert percent_share(10, [1, 2, 3, 4]) == 100.0\n\n\ndef test_percent_share_single_element():\n    \"\"\"Test percent_share when values has a single element.\"\"\"\n    # value=5, values=[5] -> total=5 -> 5/5*100 = 100.0\n    assert percent_share(5, [5]) == 100.0\n\n\ndef test_percent_share_zero_value():\n    \"\"\"Test percent_share when value is 0.\"\"\"\n    assert percent_share(0, [1, 2, 3]) == 0.0\n\n\ndef test_percent_share_with_floats():\n    \"\"\"Test percent_share with floating-point values.\"\"\"\n    # values=[1.0, 3.0], total=4.0, value=1.0 -> 1.0/4.0*100 = 25.0\n    assert percent_share(1.0, [1.0, 3.0]) == 25.0\n\n\ndef test_percent_share_zero_total():\n    \"\"\"Test that percent_share raises ZeroDivisionError when total is zero.\"\"\"\n    with pytest.raises(ZeroDivisionError):\n        percent_share(1, [0, 0, 0])",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": true,
+              "coverage": 86.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.55,
+              "reward_signals": {
+                "correctness": 1.0,
+                "efficiency": 0.982,
+                "simplicity": 0.991
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "low",
+          "repo_verification": null,
+          "task_metadata": {
+            "bug_type": "runtime",
+            "pattern_name": "hard_mixed_numeric_agg",
+            "source": "synthetic",
+            "noise_seed": 3432,
+            "difficulty": 26,
+            "is_cross_file": false,
+            "trigger_exception": "TypeError",
+            "suggested_function": "total"
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": []
+          }
+        },
+        {
+          "task_id": "synthetic__hard_nested_iter_mixed_0033",
+          "repo": "synthetic/hard_nested_iter_mixed",
+          "passed": true,
+          "coverage": 71.0,
+          "iterations": 0,
+          "diagnosis": null,
+          "error_category": "",
+          "elapsed_seconds": 0.63,
+          "token_usage": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "llm_calls": 0,
+            "by_model": {}
+          },
+          "rag_stats": null,
+          "patch": null,
+          "generated_test": "import pytest\nfrom hard_nested_iter_mixed_0033 import collect, collect_depth, first_leaf\n\n\ndef test_collect_flat_list():\n    \"\"\"Test collect on a flat list of non-list items.\"\"\"\n    result = collect([1, 2, 3])\n    assert result == [1, 2, 3]\n\n\ndef test_collect_with_nested_lists():\n    \"\"\"Test collect on a list containing sublists.\"\"\"\n    result = collect([1, [2, 3], 4])\n    assert result == [1, 2, 3, 4]\n\n\ndef test_collect_with_empty_sublist():\n    \"\"\"Test collect with an empty sublist.\"\"\"\n    result = collect([1, [], 2])\n    assert result == [1, 2]\n\n\ndef test_collect_multiple_sublists():\n    \"\"\"Test collect with multiple sublists.\"\"\"\n    result = collect([[1, 2], [3, 4], 5])\n    assert result == [1, 2, 3, 4, 5]\n\n\ndef test_collect_empty_input():\n    \"\"\"Test collect with an empty input list.\"\"\"\n    result = collect([])\n    assert result == []\n\n\ndef test_collect_depth_empty():\n    \"\"\"Test collect_depth on an empty input.\"\"\"\n    result = collect_depth([])\n    assert result == 0\n\n\ndef test_collect_depth_flat():\n    \"\"\"Test collect_depth on a flat list.\"\"\"\n    result = collect_depth([1, 2, 3])\n    assert result == 3\n\n\ndef test_collect_depth_nested():\n    \"\"\"Test collect_depth with nested lists.\"\"\"\n    result = collect_depth([1, [2, 3], 4])\n    assert result == 4\n\n\ndef test_first_leaf_flat():\n    \"\"\"Test first_leaf on a flat list.\"\"\"\n    result = first_leaf([1, 2, 3])\n    assert result == 1\n\n\ndef test_first_leaf_with_sublist():\n    \"\"\"Test first_leaf where first item is a sublist.\"\"\"\n    result = first_leaf([[1, 2], 3, 4])\n    assert result == 1\n\n\ndef test_first_leaf_all_sublists():\n    \"\"\"Test first_leaf where all items are sublists.\"\"\"\n    result = first_leaf([[1], [2], [3]])\n    assert result == 1\n\n\ndef test_first_leaf_empty():\n    \"\"\"Test first_leaf with empty input.\"\"\"\n    result = first_leaf([])\n    assert result is None\n\n\ndef test_first_leaf_only_empty_sublists():\n    \"\"\"Test first_leaf with only empty sublists.\"\"\"\n    result = first_leaf([[], []])\n    assert result is None",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": true,
+              "coverage": 71.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.55,
+              "reward_signals": {
+                "correctness": 1.0,
+                "efficiency": 0.982,
+                "simplicity": 0.991
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "low",
+          "repo_verification": null,
+          "task_metadata": {
+            "bug_type": "runtime",
+            "pattern_name": "hard_nested_iter_mixed",
+            "source": "synthetic",
+            "noise_seed": 1169,
+            "difficulty": 26,
+            "is_cross_file": false,
+            "trigger_exception": "TypeError",
+            "suggested_function": "collect"
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": []
+          }
+        },
+        {
+          "task_id": "synthetic__hard_polluted_entry_guard_0034",
+          "repo": "synthetic/hard_polluted_entry_guard",
+          "passed": true,
+          "coverage": 54.0,
+          "iterations": 0,
+          "diagnosis": null,
+          "error_category": "",
+          "elapsed_seconds": 0.56,
+          "token_usage": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "llm_calls": 0,
+            "by_model": {}
+          },
+          "rag_stats": null,
+          "patch": null,
+          "generated_test": "import pytest\nfrom hard_polluted_entry_guard_0034 import pool_status\n\n\ndef test_pool_status_normal_list_input():\n    \"\"\"验证基本功能\"\"\"\n    result = pool_status([\"abc\", \"de\"])\n    assert result == {\"total\": 5, \"count\": 2}\n\n\ndef test_pool_status_empty_list_input():\n    \"\"\"测试边界条件\"\"\"\n    result = pool_status([])\n    assert result == {\"total\": 0, \"count\": 0}\n\n\ndef test_pool_status_contains_empty_string_elements():\n    \"\"\"测试元素长度为0\"\"\"\n    result = pool_status([\"\", \"\"])\n    assert result == {\"total\": 0, \"count\": 2}\n\n\ndef test_pool_status_single_element():\n    \"\"\"测试最小输入\"\"\"\n    result = pool_status([\"a\"])\n    assert result == {\"total\": 1, \"count\": 1}\n\n\ndef test_pool_status_non_string_elements():\n    \"\"\"测试可求长度的元素\"\"\"\n    result = pool_status([[1, 2, 3], [4]])\n    assert result == {\"total\": 4, \"count\": 2}",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": true,
+              "coverage": 54.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.54,
+              "reward_signals": {
+                "correctness": 1.0,
+                "efficiency": 0.982,
+                "simplicity": 0.991
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "low",
+          "repo_verification": null,
+          "task_metadata": {
+            "bug_type": "runtime",
+            "pattern_name": "hard_polluted_entry_guard",
+            "source": "synthetic",
+            "noise_seed": 8751,
+            "difficulty": 26,
+            "is_cross_file": false,
+            "trigger_exception": "TypeError",
+            "suggested_function": "pool_status"
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": []
+          }
+        },
+        {
+          "task_id": "synthetic__hard_iter_over_none_0035",
+          "repo": "synthetic/hard_iter_over_none",
+          "passed": true,
+          "coverage": 80.0,
+          "iterations": 0,
+          "diagnosis": null,
+          "error_category": "",
+          "elapsed_seconds": 0.57,
+          "token_usage": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "llm_calls": 0,
+            "by_model": {}
+          },
+          "rag_stats": null,
+          "patch": null,
+          "generated_test": "import pytest\nfrom hard_iter_over_none_0035 import expand_regions, region_count, contains\n\nclass TestExpandRegions:\n    \"\"\"Tests for the expand_regions function.\"\"\"\n    \n    def test_expand_regions_empty_input(self):\n        \"\"\"Test expand_regions with an empty list returns an empty list.\"\"\"\n        assert expand_regions([]) == []\n        \n    def test_expand_regions_single_region_single_element(self):\n        \"\"\"Test expand_regions with one region containing one element.\"\"\"\n        assert expand_regions([[1]]) == [1]\n        \n    def test_expand_regions_multiple_regions(self):\n        \"\"\"Test expand_regions flattens multiple regions correctly.\"\"\"\n        regions = [[1, 2], [3, 4], [5]]\n        assert expand_regions(regions) == [1, 2, 3, 4, 5]\n        \n    def test_expand_regions_with_empty_inner_lists(self):\n        \"\"\"Test expand_regions handles inner empty lists.\"\"\"\n        regions = [[], [1, 2], []]\n        assert expand_regions(regions) == [1, 2]\n        \n    @pytest.mark.parametrize(\"regions, expected\", [\n        ([[[1]]], [[1]]),  # Note: expand_regions does not recursively flatten nested lists beyond one level of 'region'\n        ([[None, None]], [None, None])\n    ])\n    def test_expand_regions_various_inputs(self, regions, expected):\n        \"\"\"Test expand_regions with various input structures.\"\"\"\n        assert expand_regions(regions) == expected\n\nclass TestRegionCount:\n    \"\"\"Tests for the region_count function.\"\"\"\n    \n    def test_region_count_empty(self):\n        \"\"\"Test region_count returns 0 for empty input.\"\"\"\n        assert region_count([]) == 0\n        \n    def test_region_count_single_element(self):\n        \"\"\"Test region_count returns 1 for single element.\"\"\"\n        assert region_count([[1]]) == 1\n        \n    def test_region_count_multiple_elements(self):\n        \"\"\"Test region_count returns correct count for multiple elements.\"\"\"\n        regions = [[1, 2], [3, 4, 5]]\n        assert region_count(regions) == 5\n        \n    def test_region_count_with_empty_inner_lists(self):\n        \"\"\"Test region_count ignores empty inner lists.\"\"\"\n        regions = [[], [1], []]\n        assert region_count(regions) == 1\n\nclass TestContains:\n    \"\"\"Tests for the contains function.\"\"\"\n    \n    def test_contains_true_case(self):\n        \"\"\"Test contains returns True when coordinate is present.\"\"\"\n        regions = [[1, 2], [3]]\n        assert contains(regions, 2) is True\n        \n    def test_contains_false_case(self):\n        \"\"\"Test contains returns False when coordinate is not present.\"\"\"\n        regions = [[1, 2], [3]]\n        assert contains(regions, 4) is False\n        \n    def test_contains_empty_regions(self):\n        \"\"\"Test contains returns False for empty regions.\"\"\"\n        assert contains([], 1) is False\n        \n    def test_contains_none_regions(self):\n        \"\"\"Test handling of None input might raise TypeError, checking standard behavior.\"\"\"\n        # The function iterates over regions. If regions is None, it raises TypeError.\n        with pytest.raises(TypeError):\n            contains(None, 1)",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": true,
+              "coverage": 80.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.54,
+              "reward_signals": {
+                "correctness": 1.0,
+                "efficiency": 0.982,
+                "simplicity": 0.991
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "low",
+          "repo_verification": null,
+          "task_metadata": {
+            "bug_type": "runtime",
+            "pattern_name": "hard_iter_over_none",
+            "source": "synthetic",
+            "noise_seed": 2677,
+            "difficulty": 26,
+            "is_cross_file": false,
+            "trigger_exception": "TypeError",
+            "suggested_function": "expand_regions"
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": []
+          }
+        },
+        {
+          "task_id": "synthetic__hard_slice_contract_0036",
+          "repo": "synthetic/hard_slice_contract",
+          "passed": true,
+          "coverage": 40.0,
+          "iterations": 0,
+          "diagnosis": null,
+          "error_category": "",
+          "elapsed_seconds": 0.56,
+          "token_usage": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "llm_calls": 0,
+            "by_model": {}
+          },
+          "rag_stats": null,
+          "patch": null,
+          "generated_test": "import pytest\nfrom hard_slice_contract_0036 import split_entry, count_flags, entry_names\n\n\nclass TestSplitEntry:\n    \"\"\"Test suite for split_entry function.\"\"\"\n\n    def test_split_entry_normal_sequence(self, sample_entry):\n        \"\"\"\n        Test standard list input for normal splitting.\n        Logic Coverage: C1\n        \"\"\"\n        result = split_entry(sample_entry)\n        assert result[\"head\"] == \"h\"\n        assert result[\"body\"] == \"b\"\n        assert result[\"tail\"] == \"t\"\n        assert result[\"flag\"] is True\n\n    def test_split_entry_error_short_index(self):\n        \"\"\"\n        Test IndexError for sequence with length less than 4.\n        Logic Coverage: E1\n        \"\"\"\n        short_entry = [1, 2]\n        with pytest.raises(IndexError):\n            split_entry(short_entry)\n\n\nclass TestCountFlags:\n    \"\"\"Test suite for count_flags function.\"\"\"\n\n    @pytest.mark.parametrize(\n        \"entries, expected\",\n        [\n            (\n                [\n                    [\"h\", \"b\", \"t\", True],\n                    [\"h\", \"b\", \"t\", False],\n                    [\"h\", \"b\", \"t\", True],\n                ],\n                2,\n            ),\n            (\n                [\n                    [\"h\", \"b\", \"t\", False],\n                    [\"h\", \"b\", \"t\", False],\n                    [\"h\", \"b\", \"t\", False],\n                ],\n                0,\n            ),\n            (\n                [\n                    [\"h\", \"b\", \"t\", True],\n                    [\"h\", \"b\", \"t\", True],\n                    [\"h\", \"b\", \"t\", True],\n                ],\n                3,\n            ),\n        ],\n    )\n    def test_count_flags(self, entries, expected):\n        \"\"\"\n        Test counting flags in various entry lists.\n        \"\"\"\n        assert count_flags(entries) == expected\n\n\nclass TestEntryNames:\n    \"\"\"Test suite for entry_names function.\"\"\"\n\n    @pytest.mark.parametrize(\n        \"entries, expected\",\n        [\n            (\n                [\n                    [\"h\", \"b\", \"t\", True],\n                    [\"h\", \"b\", \"t\", False],\n                    [\"h\", \"b\", \"t\", True],\n                ],\n                [\"h\", \"h\", \"h\"],\n            ),\n            (\n                [\n                    [\"a\", \"b\", \"c\", True],\n                    [\"d\", \"e\", \"f\", False],\n                ],\n                [\"a\", \"d\"],\n            ),\n        ],\n    )\n    def test_entry_names(self, entries, expected):\n        \"\"\"\n        Test extracting the first element from each entry.\n        \"\"\"\n        assert entry_names(entries) == expected\n\n\n# Fixtures\n@pytest.fixture\ndef sample_entry():\n    \"\"\"\n    Fixture providing a standard 4-element list for split_entry tests.\n    \"\"\"\n    return [\"h\", \"b\", \"t\", True]",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": true,
+              "coverage": 40.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.54,
+              "reward_signals": {
+                "correctness": 1.0,
+                "efficiency": 0.982,
+                "simplicity": 0.991
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "low",
+          "repo_verification": null,
+          "task_metadata": {
+            "bug_type": "runtime",
+            "pattern_name": "hard_slice_contract",
+            "source": "synthetic",
+            "noise_seed": 6216,
+            "difficulty": 26,
+            "is_cross_file": false,
+            "trigger_exception": "IndexError",
+            "suggested_function": "split_entry"
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": []
+          }
+        },
+        {
+          "task_id": "synthetic__hard_nested_iter_mixed_0037",
+          "repo": "synthetic/hard_nested_iter_mixed",
+          "passed": true,
+          "coverage": 71.0,
+          "iterations": 0,
+          "diagnosis": null,
+          "error_category": "",
+          "elapsed_seconds": 0.56,
+          "token_usage": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "llm_calls": 0,
+            "by_model": {}
+          },
+          "rag_stats": null,
+          "patch": null,
+          "generated_test": "import pytest\nfrom hard_nested_iter_mixed_0037 import collect, collect_depth, first_leaf\n\n\nclass TestCollect:\n    \"\"\"Tests for the collect function.\"\"\"\n\n    def test_collect_flattens_one_level(self):\n        \"\"\"Test that collect flattens one level of nesting.\"\"\"\n        result = collect([1, [2, 3], 4])\n        assert result == [1, 2, 3, 4]\n\n    def test_collect_with_empty_list(self):\n        \"\"\"Test that collect handles an empty list input.\"\"\"\n        result = collect([])\n        assert result == []\n\n    def test_collect_with_no_nested_lists(self):\n        \"\"\"Test that collect returns items as-is when no nesting exists.\"\"\"\n        result = collect([1, 2, 3])\n        assert result == [1, 2, 3]\n\n    def test_collect_with_multiple_nested_lists(self):\n        \"\"\"Test that collect flattens multiple nested lists.\"\"\"\n        result = collect([[1, 2], [3, 4], [5]])\n        assert result == [1, 2, 3, 4, 5]\n\n    def test_collect_with_mixed_types(self):\n        \"\"\"Test that collect preserves mixed types in output.\"\"\"\n        result = collect([1, [\"a\", \"b\"], 2.5])\n        assert result == [1, \"a\", \"b\", 2.5]\n\n    def test_collect_with_single_element_list(self):\n        \"\"\"Test that collect handles a single nested list correctly.\"\"\"\n        result = collect([[42]])\n        assert result == [42]\n\n    def test_collect_with_nested_list_at_start(self):\n        \"\"\"Test collect with a nested list at the beginning.\"\"\"\n        result = collect([[1, 2], 3])\n        assert result == [1, 2, 3]\n\n    def test_collect_with_nested_list_at_end(self):\n        \"\"\"Test collect with a nested list at the end.\"\"\"\n        result = collect([1, [2, 3]])\n        assert result == [1, 2, 3]\n\n\nclass TestCollectDepth:\n    \"\"\"Tests for the collect_depth function.\"\"\"\n\n    def test_collect_depth_basic(self):\n        \"\"\"Test collect_depth returns the length of flattened list.\"\"\"\n        result = collect_depth([1, [2, 3], 4])\n        assert result == 4\n\n    def test_collect_depth_empty(self):\n        \"\"\"Test collect_depth with empty list.\"\"\"\n        result = collect_depth([])\n        assert result == 0\n\n    def test_collect_depth_no_nesting(self):\n        \"\"\"Test collect_depth with no nested lists.\"\"\"\n        result = collect_depth([1, 2, 3])\n        assert result == 3\n\n    def test_collect_depth_multiple_nests(self):\n        \"\"\"Test collect_depth with multiple nested lists.\"\"\"\n        result = collect_depth([[1, 2], [3, 4]])\n        assert result == 4\n\n\nclass TestFirstLeaf:\n    \"\"\"Tests for the first_leaf function.\"\"\"\n\n    def test_first_leaf_returns_first_non_list(self):\n        \"\"\"Test that first_leaf returns the first non-list element.\"\"\"\n        result = first_leaf([1, [2, 3]])\n        assert result == 1\n\n    def test_first_leaf_with_nested_first(self):\n        \"\"\"Test first_leaf skips nested list at the start.\"\"\"\n        result = first_leaf([[1, 2], 3])\n        assert result == 3\n\n    def test_first_leaf_empty_list(self):\n        \"\"\"Test first_leaf returns None for empty list.\"\"\"\n        result = first_leaf([])\n        assert result is None\n\n    def test_first_leaf_all_nested(self):\n        \"\"\"Test first_leaf returns None when all elements are lists.\"\"\"\n        result = first_leaf([[1, 2], [3, 4]])\n        assert result is None\n\n    def test_first_leaf_string_element(self):\n        \"\"\"Test first_leaf returns string when it is the first non-list.\"\"\"\n        result = first_leaf([\"hello\", [1, 2]])\n        assert result == \"hello\"\n\n    def test_first_leaf_mixed_types(self):\n        \"\"\"Test first_leaf handles mixed types correctly.\"\"\"\n        result = first_leaf([[1, 2], \"foo\", 3.14])\n        assert result == \"foo\"",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": true,
+              "coverage": 71.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.54,
+              "reward_signals": {
+                "correctness": 1.0,
+                "efficiency": 0.982,
+                "simplicity": 0.991
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "low",
+          "repo_verification": null,
+          "task_metadata": {
+            "bug_type": "runtime",
+            "pattern_name": "hard_nested_iter_mixed",
+            "source": "synthetic",
+            "noise_seed": 9125,
+            "difficulty": 26,
+            "is_cross_file": false,
+            "trigger_exception": "TypeError",
+            "suggested_function": "collect"
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": []
+          }
+        },
+        {
+          "task_id": "synthetic__hard_iter_over_none_0038",
+          "repo": "synthetic/hard_iter_over_none",
+          "passed": true,
+          "coverage": 83.0,
+          "iterations": 1,
+          "diagnosis": "函数 `expand_regions` 仅处理了一层列表（`for region in regions: for coord in region`），假设输入是二维列表（区域列表中的坐标列表）。但测试用例 `test_expand_regions_nested` 暗示输入可能是更深层次的嵌套结构（例如区域本身包含子区域，形成三维或动态深度嵌套），或者输入中包含非可迭代元素导致逻辑不匹配。根据命名契约，`expand_regions` 必须保留签名，但内部逻辑需支持任意深度的嵌套展开，或者更可能是：当前代码假设每个 `region` 是坐标的扁平列表，但如果 `region` 是嵌套列表（如 `[[1,2],[3,4]]` 作为单个 region 的描述），当前代码会将其作为整体 append 或错误遍历。结合常见测试命名 `nested`，最可能的 bug 是：函数没有递归处理嵌套结构，导致对于嵌套过深的输入无法正确展平为一维坐标列表。另一种常见情况是：测试期望 `expand_regions` 能处理任意嵌套深度的列表，将其完全展平。当前代码只能处理两层。例如输入 `[[1, [2,3]], 4]` 这种混合嵌套时，当前代码行为不确定。最稳妥的修复是实现一个递归展平算法，以支持任意深度嵌套，从而通过嵌套测试。",
+          "error_category": "assertion",
+          "elapsed_seconds": 19.83,
+          "token_usage": {
+            "input_tokens": 1372,
+            "output_tokens": 528,
+            "total_tokens": 1900,
+            "llm_calls": 1,
+            "by_model": {
+              "agnes-3.0-flash": 1900
+            }
+          },
+          "rag_stats": null,
+          "patch": "python\nimport itertools\n\ndef _flatten(iterable):\n    for x in iterable:\n        if isinstance(x, (list, tuple)):\n            yield from _flatten(x)\n        else:\n            yield x\n\ndef expand_regions(regions):\n    \"\"\"Recursively flatten nested regions into a flat list of coordinates.\"\"\"\n    return list(_flatten(regions))\n\ndef region_count(regions):\n    return len(expand_regions(regions))\n\ndef contains(regions, coord):\n    return coord in expand_regions(regions)\n# noise_seed=5313\n",
+          "generated_test": "import pytest\nfrom hard_iter_over_none_0038 import expand_regions, region_count, contains\n\n\nclass TestExpandRegions:\n    \"\"\"测试 expand_regions 函数\"\"\"\n\n    def test_expand_regions_basic(self):\n        \"\"\"测试基本功能：将嵌套列表展平\"\"\"\n        regions = [[1, 2], [3, 4]]\n        result = expand_regions(regions)\n        assert result == [1, 2, 3, 4]\n\n    def test_expand_regions_empty(self):\n        \"\"\"测试空输入：返回空列表\"\"\"\n        regions = []\n        result = expand_regions(regions)\n        assert result == []\n\n    def test_expand_regions_single_region(self):\n        \"\"\"测试单区域输入\"\"\"\n        regions = [[5, 6, 7]]\n        result = expand_regions(regions)\n        assert result == [5, 6, 7]\n\n    def test_expand_regions_multiple_regions(self):\n        \"\"\"测试多区域输入\"\"\"\n        regions = [[1, 2], [3, 4], [5, 6]]\n        result = expand_regions(regions)\n        assert result == [1, 2, 3, 4, 5, 6]\n\n    def test_expand_regions_nested(self):\n        \"\"\"测试深层嵌套结构\"\"\"\n        regions = [[[1, 2]], [[3, 4]]]\n        result = expand_regions(regions)\n        assert result == [1, 2, 3, 4]\n\n\nclass TestRegionCount:\n    \"\"\"测试 region_count 函数\"\"\"\n\n    def test_region_count_basic(self):\n        \"\"\"测试基本计数功能\"\"\"\n        regions = [[1, 2], [3, 4]]\n        result = region_count(regions)\n        assert result == 4\n\n    def test_region_count_empty(self):\n        \"\"\"测试空输入计数\"\"\"\n        regions = []\n        result = region_count(regions)\n        assert result == 0\n\n    def test_region_count_single(self):\n        \"\"\"测试单元素计数\"\"\"\n        regions = [[1]]\n        result = region_count(regions)\n        assert result == 1\n\n    def test_region_count_three_regions(self):\n        \"\"\"测试三个区域的计数\"\"\"\n        regions = [[1], [2], [3]]\n        result = region_count(regions)\n        assert result == 3\n\n\nclass TestContains:\n    \"\"\"测试 contains 函数\"\"\"\n\n    def test_contains_basic(self):\n        \"\"\"测试基本存在性检查\"\"\"\n        regions = [[1, 2], [3, 4]]\n        assert contains(regions, 3) is True\n        assert contains(regions, 5) is False\n\n    def test_contains_empty(self):\n        \"\"\"测试空输入\"\"\"\n        regions = []\n        assert contains(regions, 1) is False\n\n    def test_contains_single_region(self):\n        \"\"\"测试单区域\"\"\"\n        regions = [[1, 2]]\n        assert contains(regions, 1) is True\n        assert contains(regions, 3) is False\n\n    def test_contains_boundary(self):\n        \"\"\"测试边界值检查\"\"\"\n        regions = [[0, 10]]\n        assert contains(regions, 0) is True\n        assert contains(regions, 10) is True",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 83.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.97,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.968,
+                "simplicity": 0.984
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": true,
+              "coverage": 83.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.43,
+              "reward_signals": {
+                "correctness": 1.0,
+                "efficiency": 0.986,
+                "simplicity": 0.993
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "low",
+          "repo_verification": null,
+          "task_metadata": {
+            "bug_type": "runtime",
+            "pattern_name": "hard_iter_over_none",
+            "source": "synthetic",
+            "noise_seed": 5313,
+            "difficulty": 26,
+            "is_cross_file": false,
+            "trigger_exception": "TypeError",
+            "suggested_function": "expand_regions"
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": []
+          }
+        },
+        {
+          "task_id": "synthetic__hard_depth_blind_nested_0039",
+          "repo": "synthetic/hard_depth_blind_nested",
+          "passed": false,
+          "coverage": 75.0,
+          "iterations": 3,
+          "diagnosis": "逻辑错误：count_items 中 isinstance(x, (int, float)) 没有处理 bool。虽然 Python 中 bool 是 int 子类，但当前代码先用 isinstance(x, bool): continue 显式跳过布尔值，导致像 [True, False, 1, 2] 这样的列表中 1 和 2 被统计、True/False 被排除，结果应为 2；而 test_count_items_no_integers 期望类似 [None, 'a', b'']（全为非数值）返回 0，也符合。问题在于部分测试假设布尔值应被计入（例如期望 4），与实现策略矛盾。",
+          "error_category": "assertion",
+          "elapsed_seconds": 89.53,
+          "token_usage": {
+            "input_tokens": 4231,
+            "output_tokens": 1117,
+            "total_tokens": 5348,
+            "llm_calls": 3,
+            "by_model": {
+              "agnes-3.0-flash": 3423,
+              "agnes-2.5-flash": 1925
+            }
+          },
+          "rag_stats": null,
+          "patch": "python\ndef stats_of(data):\n    return count_items(data)\n\ndef count_items(data):\n    if isinstance(data, list):\n        total = 0\n        for x in data:\n            # 布尔是 int 的子类，且语义上可作为 0/1 数值，直接计入\n            if isinstance(x, bool):\n                total += 1\n                continue\n            if isinstance(x, (int, float)):\n                total += 1\n        return total\n    return 0\n\ndef describe(data):\n    n = count_items(data)\n    return f'items={n}'\n\n# noise_seed=3752\n",
+          "generated_test": "import pytest\nfrom hard_depth_blind_nested_0039 import count_items, stats_of, describe\n\n\n@pytest.mark.parametrize(\n    \"input_data, expected\",\n    [\n        ([1, 2, 3], 3),\n        ([], 0),\n        ([1, \"a\", 3.0, None], 2),\n        ([[1, 2], [3]], 0),\n        ((1, 2, 3), 0),\n    ],\n)\ndef test_count_items_various_inputs(input_data, expected):\n    \"\"\"Verify count_items returns correct counts for various input types\"\"\"\n    assert count_items(input_data) == expected\n\n\ndef test_count_items_empty_list():\n    \"\"\"Test count_items with an empty list returns 0\"\"\"\n    assert count_items([]) == 0\n\n\ndef test_count_items_non_list_input():\n    \"\"\"Test count_items with non-list input returns 0\"\"\"\n    assert count_items(\"not a list\") == 0\n    assert count_items(42) == 0\n    assert count_items(None) == 0\n\n\ndef test_count_items_all_integers():\n    \"\"\"Test count_items with a list of all integers\"\"\"\n    assert count_items([1, 2, 3, 4, 5]) == 5\n\n\ndef test_count_items_mixed_types():\n    \"\"\"Test count_items with a list of mixed types counts only ints\"\"\"\n    assert count_items([1, \"a\", 2.0, 3, None, [4]]) == 2\n\n\ndef test_count_items_no_integers():\n    \"\"\"Test count_items with a list containing no integers returns 0\"\"\"\n    assert count_items([\"a\", \"b\", 3.0, None, [1]]) == 0\n\n\ndef test_stats_of_delegates_to_count_items():\n    \"\"\"Test that stats_of correctly delegates to count_items\"\"\"\n    assert stats_of([1, 2, 3]) == 3\n    assert stats_of([]) == 0\n    assert stats_of(\"not a list\") == 0\n\n\ndef test_describe_returns_formatted_string():\n    \"\"\"Test that describe returns a formatted string with item count\"\"\"\n    assert describe([1, 2, 3]) == \"items=3\"\n    assert describe([]) == \"items=0\"\n    assert describe(\"not a list\") == \"items=0\"\n\n\ndef test_count_items_with_negative_integers():\n    \"\"\"Test count_items counts negative integers correctly\"\"\"\n    assert count_items([-1, -2, -3]) == 3\n\n\ndef test_count_items_with_zero():\n    \"\"\"Test count_items counts zero as an integer\"\"\"\n    assert count_items([0, 0, 0]) == 3",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 85.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.95,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.968,
+                "simplicity": 0.984
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 85.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.86,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.971,
+                "simplicity": 0.986
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 80.0,
+              "coverage_delta": -5.0,
+              "elapsed_seconds": 0.82,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.973,
+                "simplicity": 0.986
+              }
+            },
+            {
+              "iteration": 3,
+              "passed": false,
+              "coverage": 75.0,
+              "coverage_delta": -5.0,
+              "elapsed_seconds": 0.84,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.972,
+                "simplicity": 0.986
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "low",
+          "repo_verification": null,
+          "task_metadata": {
+            "bug_type": "runtime",
+            "pattern_name": "hard_depth_blind_nested",
+            "source": "synthetic",
+            "noise_seed": 3752,
+            "difficulty": 26,
+            "is_cross_file": false,
+            "trigger_exception": "AssertionError",
+            "suggested_function": "count_items"
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": []
+          }
+        }
+      ]
+    }
+  }
+}

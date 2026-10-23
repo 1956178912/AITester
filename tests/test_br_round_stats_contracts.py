@@ -176,7 +176,13 @@ class TestBinomialTies:
 
     def test_non_tied_case_matches_exact_enumeration(self):
         # k=0,n=10,p=.3：单侧 .7^10=.0282475，另一尾 .009002+.001447+... → .0388396
-        assert binom_exact_two_sided(0, 10, p=0.3) == pytest.approx(0.03883960329999999, abs=0.0)
+        # BZ 轮：abs=0.0 逐位相等在跨平台 libm 上不成立——非 0.5 分支走
+        # lgamma/log/exp 的 logsumexp，macOS Accelerate 与 Linux glibc 的
+        # 末位可差 1-2 ULP（CI 3.12/3.13 实测红）。改 rel=1e-12：与同文件
+        # 族里 test_emse_stats_extensions.py:109（p=0.1 非并列）同口径；
+        # p=0.5 整数权重分支与全并列早退（1.0）仍保持 abs=0.0——那些值
+        # 是精确可表示的，不承担 libm 敏感性。
+        assert binom_exact_two_sided(0, 10, p=0.3) == pytest.approx(0.03883960329999999, rel=1e-12)
 
     def test_half_p_integer_branch_unchanged(self):
         """McNemar 唯一生产实参 p=.5 走整数权重分支，尾部数值不得漂移。"""

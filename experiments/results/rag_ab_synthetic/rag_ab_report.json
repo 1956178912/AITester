@@ -1,0 +1,82 @@
+{
+  "paired_tasks": 20,
+  "rag_on": {
+    "success_rate": 0.9,
+    "avg_tokens": 4345.6,
+    "std_tokens": 3918.2,
+    "avg_iterations": 0.65,
+    "avg_duration_s": 107.2,
+    "failure_distribution": {
+      "none": 13,
+      "assertion": 4,
+      "patch_validation_failed": 2,
+      "runtime": 1
+    },
+    "rag_retrieval_empty_count": 0,
+    "rag_effective_rate": 1.0
+  },
+  "rag_off": {
+    "success_rate": 0.9,
+    "avg_tokens": 3088.3,
+    "std_tokens": 3621.9,
+    "avg_iterations": 0.7,
+    "avg_duration_s": 131.9,
+    "failure_distribution": {
+      "none": 15,
+      "assertion": 4,
+      "patch_validation_failed": 1
+    }
+  },
+  "token_saving": {
+    "delta_avg": -1257.3,
+    "delta_pct": -40.71,
+    "t_stat": 1.0538,
+    "p_value_welch": 0.29198,
+    "u_stat": 113.5,
+    "p_value_mann_whitney": 1.0,
+    "cohens_d": 0.3332
+  },
+  "iteration_saving": {
+    "delta_avg": 0.05,
+    "t_stat": -0.1396,
+    "p_value_welch": 0.888979,
+    "u_stat": 195.5,
+    "p_value_mann_whitney": 1.0,
+    "cohens_d": -0.0441
+  },
+  "error_category_shift": {
+    "none": {
+      "rag_on_count": 13,
+      "rag_off_count": 15,
+      "rag_on_rate": 0.65,
+      "rag_off_rate": 0.75,
+      "delta": 0.1
+    },
+    "patch_validation_failed": {
+      "rag_on_count": 2,
+      "rag_off_count": 1,
+      "rag_on_rate": 0.1,
+      "rag_off_rate": 0.05,
+      "delta": -0.05
+    },
+    "runtime": {
+      "rag_on_count": 1,
+      "rag_off_count": 0,
+      "rag_on_rate": 0.05,
+      "rag_off_rate": 0.0,
+      "delta": -0.05
+    },
+    "assertion": {
+      "rag_on_count": 4,
+      "rag_off_count": 4,
+      "rag_on_rate": 0.2,
+      "rag_off_rate": 0.2,
+      "delta": 0.0
+    }
+  },
+  "interpretation": {
+    "token": "RAG ON token 消耗与 RAG OFF 无显著差异（p=0.2920）",
+    "iteration": "RAG ON 迭代轮次与 RAG OFF 无显著差异（p=0.8890）",
+    "error_reduction": "RAG 显著减少的错误类型：['none']"
+  }
+}

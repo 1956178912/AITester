@@ -1,0 +1,6 @@
+{"event": "task_start", "task": "<REDACTED_KEY>", "ts": 1790669841.523133, "meta": {"dataset_task_id": "synthetic__hard_slice_contract_0011", "baseline": "aitester", "target_function": "split_entry"}}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "planner", "ts": 1790669841.5414999, "output": {"function_name": "split_entry", "test_cases": 0}, "decision": "plan_complete", "duration_ms": 0.57}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "generator", "ts": 1790669841.542337, "output": {"generated_test_len": 3115}, "decision": "generated"}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "executor", "ts": 1790669842.0614872, "output": {"passed": true, "coverage": 40.0, "failed_cases": 0}, "decision": "PASS", "duration_ms": 518.89, "iteration": 0}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "_should_debug", "ts": 1790669842.061907, "output": {"reason": "test_passed"}, "decision": "done"}
+{"event": "task_end", "task": "<REDACTED_KEY>", "ts": 1790669842.0623128, "passed": true, "duration_s": 0.54, "token_usage": {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0, "llm_calls": 0, "by_model": {}}}

@@ -1,0 +1,6 @@
+{"event": "task_start", "task": "<REDACTED_KEY>", "ts": 1790596218.5553951, "meta": {"dataset_task_id": "synthetic__boundary_and_exception_0018", "baseline": "aitester", "target_function": null}}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "planner", "ts": 1790596218.5719419, "output": {"function_name": "parse_date", "test_cases": 4}, "decision": "plan_complete", "duration_ms": 0.53}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "generator", "ts": 1790596218.613641, "output": {"generated_test_len": 703}, "decision": "generated"}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "executor", "ts": 1790596219.131083, "output": {"passed": true, "coverage": 56.0, "failed_cases": 0}, "decision": "PASS", "duration_ms": 517.09, "iteration": 0}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "_should_debug", "ts": 1790596219.187187, "output": {"reason": "test_passed"}, "decision": "done"}
+{"event": "task_end", "task": "<REDACTED_KEY>", "ts": 1790596219.187698, "passed": true, "duration_s": 0.63, "token_usage": {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0, "llm_calls": 0, "by_model": {}}}

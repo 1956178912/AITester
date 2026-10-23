@@ -1,0 +1,6 @@
+{"event": "task_start", "task": "<REDACTED_KEY>", "ts": 1790596565.84693, "meta": {"dataset_task_id": "synthetic__clamp_range_error_0006", "baseline": "aitester", "target_function": null}}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "planner", "ts": 1790596565.862473, "output": {"function_name": "clamp", "test_cases": 7}, "decision": "plan_complete", "duration_ms": 0.27}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "generator", "ts": 1790596595.599797, "output": {"generated_test_len": 1093}, "decision": "generated"}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "executor", "ts": 1790596596.126689, "output": {"passed": true, "coverage": 100.0, "failed_cases": 0}, "decision": "PASS", "duration_ms": 525.41, "iteration": 0}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "_should_debug", "ts": 1790596596.127203, "output": {"reason": "test_passed"}, "decision": "done"}
+{"event": "task_end", "task": "<REDACTED_KEY>", "ts": 1790596596.127639, "passed": true, "duration_s": 30.28, "token_usage": {"input_tokens": 1404, "output_tokens": 403, "total_tokens": 1807, "llm_calls": 1, "by_model": {"agnes-2.5-flash": 1807}}}

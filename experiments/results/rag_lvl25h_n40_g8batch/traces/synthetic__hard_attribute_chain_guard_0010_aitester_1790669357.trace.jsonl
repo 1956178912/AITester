@@ -1,0 +1,6 @@
+{"event": "task_start", "task": "<REDACTED_KEY>", "ts": 1790669357.261694, "meta": {"dataset_task_id": "<REDACTED_KEY>", "baseline": "aitester", "target_function": "resolve_option"}}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "planner", "ts": 1790669357.280511, "output": {"function_name": "resolve_option", "test_cases": 0}, "decision": "plan_complete", "duration_ms": 0.3}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "generator", "ts": 1790669357.320523, "output": {"generated_test_len": 1098}, "decision": "generated"}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "executor", "ts": 1790669357.839364, "output": {"passed": true, "coverage": 83.0, "failed_cases": 0}, "decision": "PASS", "duration_ms": 518.52, "iteration": 0}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "_should_debug", "ts": 1790669357.9040792, "output": {"reason": "test_passed"}, "decision": "done"}
+{"event": "task_end", "task": "<REDACTED_KEY>", "ts": 1790669357.9045289, "passed": true, "duration_s": 0.64, "token_usage": {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0, "llm_calls": 0, "by_model": {}}}

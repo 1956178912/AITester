@@ -1,0 +1,6 @@
+{"event": "task_start", "task": "<REDACTED_KEY>", "ts": 1790649468.574906, "meta": {"dataset_task_id": "<REDACTED_KEY>", "baseline": "aitester", "target_function": "lookup_metric"}}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "planner", "ts": 1790649478.686391, "output": {"function_name": "lookup_metric", "test_cases": 6}, "decision": "plan_complete", "duration_ms": 10093.03}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "generator", "ts": 1790649503.22867, "output": {"generated_test_len": 1260}, "decision": "generated"}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "executor", "ts": 1790649503.759933, "output": {"passed": true, "coverage": 45.0, "failed_cases": 0}, "decision": "PASS", "duration_ms": 529.82, "iteration": 0}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "_should_debug", "ts": 1790649503.820679, "output": {"reason": "test_passed"}, "decision": "done"}
+{"event": "task_end", "task": "<REDACTED_KEY>", "ts": 1790649503.821099, "passed": true, "duration_s": 35.25, "token_usage": {"input_tokens": 1977, "output_tokens": 857, "total_tokens": 2834, "llm_calls": 2, "by_model": {"agnes-3.0-flash": 994, "agnes-2.5-flash": 1840}}}
