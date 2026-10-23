@@ -279,9 +279,18 @@ class TestJudgmentValuesDidNotMove:
         }
         return ar_mod.build_analysis(data)
 
-    def test_per_baseline_key_set_is_ratcheted_by_exactly_one_key(self) -> None:
+    def test_per_baseline_key_set_is_ratcheted_by_registered_keys(self) -> None:
         keys = set(self._analysis()["per_baseline"]["aitester"])
-        assert keys == _EXPECTED_PER_BASELINE_KEYS | {"check_leg_measurability"}
+        # BQ 断言的形态是"恰好 +1 键"；BT 轮（2026-10-22）再 +1：
+        # `oracle_provenance`（验收 oracle 来源与可见性的读侧对账）；
+        # BU 轮（2026-10-22）再 +1：`self_repair_trap_domain`
+        # （Self-Repair Trap 判定核输入可达域的读侧分档）。键集棘轮
+        # 只增不删，新增键必须在此显式登记（不放行任意新键）。
+        assert keys == _EXPECTED_PER_BASELINE_KEYS | {
+            "check_leg_measurability",
+            "oracle_provenance",
+            "self_repair_trap_domain",
+        }
 
     def test_existing_values_unchanged_by_the_new_key(self) -> None:
         per = self._analysis()["per_baseline"]["aitester"]

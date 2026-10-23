@@ -77,6 +77,11 @@ from config import (  # noqa: E402
     SWE_BENCH_P2P_GATE_THRESHOLD,
     SWE_REPO_SETUP_TIMEOUT,
 )
+from experiments._oracle_provenance import (  # noqa: E402
+    ORACLE_TYPE_ENHANCED,
+    ORACLE_TYPE_GENERATED,
+    ORACLE_TYPE_REPO_GOLD,
+)
 from experiments.postprocess_wall import (  # noqa: E402
     StageTimer,
     build_postprocess_wall,
@@ -1081,10 +1086,42 @@ def _oracle_type_label(final_state: dict[str, Any] | None) -> str:
 
         enhanced = _os.getenv("ORACLE_ENHANCE_ENABLE", "false").lower() in ("true", "1", "on")
         if final_state is not None and enhanced and bool(final_state.get("oracle_enhanced")):
-            return "enhanced_generated_test"
+            return ORACLE_TYPE_ENHANCED
     except Exception:
         pass
-    return "generated_test"
+    return ORACLE_TYPE_GENERATED
+
+
+def _oracle_descriptor(
+    task: Any,
+    baseline: str,
+    final_state: dict[str, Any] | None = None,
+) -> tuple[str, bool]:
+    """返回 `(oracle_type, test_visible_to_system)`（BT 轮）。
+
+    APR 严谨性检查点：读者需要知道"验收信号是什么来源、系统是否看得见它"。
+    - 仓库级验收（`baseline=aitester` 且 `REPO_LEVEL_EXECUTION` 开启、任务带
+      SWE-bench 仓库材料）→ `gold_fail_to_pass` + **不可见**（gold 测试由
+      harness 在仓库内执行，不进入任何 agent prompt）；
+    - 其余（本地生成测试验收）→ `generated_test` / `enhanced_generated_test`
+      + 可见。
+
+    判定只看"这条基线是否走仓库级验收路径"的静态条件，不依赖 final_state
+    是否成功——运行崩溃的行同样应声明它**本该**使用的 oracle，而不是把
+    崩溃折成"生成测试验收"。
+    """
+    metadata = getattr(task, "metadata", None) or {}
+    repo_gold = (
+        baseline == "aitester"
+        and bool(REPO_LEVEL_EXECUTION)
+        and metadata.get("source") == "swe_bench"
+        and bool(metadata.get("fail_to_pass"))
+        and bool(metadata.get("repo_url"))
+        and bool(metadata.get("base_commit"))
+    )
+    if repo_gold:
+        return ORACLE_TYPE_REPO_GOLD, False
+    return _oracle_type_label(final_state), True
 
 
 def _patch_plausible(final_state: dict[str, Any] | None) -> int:
@@ -1818,6 +1855,7 @@ def _build_task_result(
     error_category: str = "",
     golden_patches: dict[str, str] | None = None,
     harness_invalid: bool = False,
+    oracle: tuple[str, bool] | None = None,
 ) -> dict[str, Any]:
     """构建单基线运行的结果字典（单一构造点，供成功/限流重试/异常三分支复用）。
 
@@ -1834,10 +1872,14 @@ def _build_task_result(
         diagnosis: 失败分支的诊断说明（如 "执行异常: …"）。
         error_category: 失败分支的错误类别（"rate_limit" / "error"）。
         harness_invalid: M3 门禁：基线 P2P 不达标标记（不计入"0 解出"统计）。
+        oracle: BT 轮：`(oracle_type, test_visible_to_system)`；调用方按基线是否
+            走仓库级验收计算（见 `_oracle_descriptor`）。None 时回落到历史口径
+            （生成测试 / 可见），仅供直接调用本函数的旧测试与旧路径。
 
     Returns:
         结果字典（结构见 run_single_task 各分支的原始实现，字段完全一致）。
     """
+    oracle_type, oracle_visible = oracle if oracle is not None else (_oracle_type_label(final_state), True)
     if final_state is not None:
         # 1.1 状态细化：失败任务按 repair_history / rag_stats 信号补两类
         # 专属失败类别（补丁被安全守卫拒绝 / RAG 检索全空），供失败分布
@@ -2049,8 +2091,8 @@ def _build_task_result(
             #     执行并通过性作为验收信号——系统"看见"了测试）。
             #   repair_rate / false_fix_rate 为 gold 材料独立裁决通道（自动化 oracle），
             #   与自生成验收并行产出，不改变 passed 的历史口径。
-            "oracle_type": _oracle_type_label(final_state),
-            "test_visible_to_system": True,
+            "oracle_type": oracle_type,
+            "test_visible_to_system": oracle_visible,
             # 2026-09-30 独立审查 R53（P0）：补丁精确率框架
             # （"plausible 精确率 = correct / plausible" 是信息量最大的
             # 修正指标）。口径：
@@ -2289,8 +2331,8 @@ def _build_task_result(
         "test_error_rate": None,
         # 2026-09-30 独立审查 R52/R53：失败分支无 final_state，
         # oracle 类型声明 / 补丁精确率框架以保守占位保持键集合同构
-        "oracle_type": "generated_test",
-        "test_visible_to_system": True,
+        "oracle_type": oracle_type,
+        "test_visible_to_system": oracle_visible,
         "patch_plausible": 0,
         # P0-2：键集合同构占位（失败分支无 final_state，因此无可落盘历史）
         "repair_history": [],
@@ -2661,6 +2703,7 @@ def run_single_task(
                     error_category="harness_invalid",
                     golden_patches=golden_patches,
                     harness_invalid=True,
+                    oracle=_oracle_descriptor(task, baseline, None),
                 )
             return results
         # 写入 instance_code 到临时文件
@@ -2971,6 +3014,7 @@ def run_single_task(
                     final_state=final_state,
                     golden_patches=golden_patches,
                     harness_invalid=_harness_invalid,
+                    oracle=_oracle_descriptor(task, baseline, final_state),
                 )
                 if save_state:
                     _dump_state_artifacts(output_dir, task, baseline, final_state)
@@ -3000,6 +3044,7 @@ def run_single_task(
                         final_state=final_state,
                         golden_patches=golden_patches,
                         harness_invalid=_harness_invalid,
+                        oracle=_oracle_descriptor(task, baseline, final_state),
                     )
                     if save_state:
                         _dump_state_artifacts(output_dir, task, baseline, final_state)
@@ -3014,6 +3059,7 @@ def run_single_task(
                         error_category="rate_limit",
                         golden_patches=golden_patches,
                         harness_invalid=_harness_invalid,
+                        oracle=_oracle_descriptor(task, baseline, None),
                     )
                     end_task_trace(False, token_snapshot=token_usage.get_usage().as_dict())
             except Exception as e:
@@ -3026,6 +3072,7 @@ def run_single_task(
                     error_category="error",
                     golden_patches=golden_patches,
                     harness_invalid=_harness_invalid,
+                    oracle=_oracle_descriptor(task, baseline, None),
                 )
                 end_task_trace(False, token_snapshot=token_usage.get_usage().as_dict())
 
