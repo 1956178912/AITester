@@ -32,6 +32,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from tests._corpus_guard import require_full_corpus
 
 from experiments import run_benchmark as rb
 from experiments import run_full_stack_swe_bench_pro as fs
@@ -226,6 +227,10 @@ class TestRealCorpusCleanPath:
     """真语料独立复算：干净路径的均值逐位不变。"""
 
     def test_top_level_benchmark_means_reproduce(self) -> None:
+        # BZ 轮：块数（34）以 results 顶层全部 benchmark_examples_*.json 为
+        # 扫描面——fresh clone 只有入库子集 ⇒ require_full_corpus 显式 skip
+        # 并带实测读数（tests/_corpus_guard.py）。
+        require_full_corpus()
         files = sorted(_RESULTS.glob("benchmark_*.json"))
         assert files
         expected: dict[str, list[float]] = defaultdict(list)

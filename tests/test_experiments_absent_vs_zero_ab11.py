@@ -51,8 +51,10 @@ _AUG_BATCH = _AUG_DIR / "benchmark_quixbugs_20261017_221735.json"
 _AUG_REPORT = _AUG_DIR / "DF_AUG_REPORT.json"
 _AUG_REPORT_MD = _AUG_DIR / "DF_AUG_REPORT.md"
 _T1_REPORT = _ROOT / "experiments/results/t_round_b2_main_batch_20261018/ANALYSIS_REPORT.json"
-_OLD_REV = "b533cff1c316e8e80db635a1b2946610b211a5b6"
-_NEW_REV = "a93c1f60ee31b9582e0146f73e3038e6ce0f01a1"
+# BZ 轮（2026-10-23）：两个历史切点改从生产模块导入（原为手抄字面量）——
+# 报告生成、ab11 对账锁、ab12 复现锁与 require_history 守卫共用单一事实源。
+_OLD_REV = t1_mod.PROFILE_DRIFT_OLD_REV
+_NEW_REV = t1_mod.PROFILE_DRIFT_NEW_REV
 _MAIN_TRACES = _ROOT / "experiments/results/main_batch/traces"
 _MAST_REPORT = _ROOT / "experiments/results/main_batch/mast_distribution_report.md"
 # AB-11a 普查里"含损坏 trace"的 5 个入库目录（各 1 个坏行文件；值 = 坏行前已解析记录数）

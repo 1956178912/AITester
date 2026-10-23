@@ -60,6 +60,12 @@ ARMS = ("aitester", "plain_llm", "plain_llm_df")
 BOOTSTRAP_N = 5000
 BOOTSTRAP_SEED = 20261018
 
+# BZ 轮（2026-10-23）：profile 预设漂移对账的两个历史切点（R-P0-2 切点 →
+# 本批切点）。提为模块常量——报告生成、ab11 对账锁、ab12 复现锁与 shallow
+# clone 的 require_history 守卫共用同一字面量，避免四处手抄漂移。
+PROFILE_DRIFT_OLD_REV = "b533cff1c316e8e80db635a1b2946610b211a5b6"
+PROFILE_DRIFT_NEW_REV = "a93c1f60ee31b9582e0146f73e3038e6ce0f01a1"
+
 
 def _load_json(path: Path) -> dict[str, Any]:
     """读 JSON（失败抛异常，供调用方定位）。"""
@@ -868,8 +874,12 @@ def build_report(
             drift["provenance_flags_seed"] = flags_seed
     report["provenance_drift"] = drift
     # profile 预设漂移（logic 档新增 5 个行为开关等）——env_snapshot 固定键集看不到
+    # BZ 轮（2026-10-23）：两个切点 rev 提为模块常量——报告的复现锁
+    # （tests/test_experiments_absent_vs_zero_ab12.py）与 ab11 的对账锁共用
+    # 同一字面量，且 shallow clone 的 require_history 守卫按常量判定在场性，
+    # 避免三处手抄漂移。
     report["profile_preset_drift"] = _profile_drift(
-        "b533cff1c316e8e80db635a1b2946610b211a5b6", "a93c1f60ee31b9582e0146f73e3038e6ce0f01a1"
+        PROFILE_DRIFT_OLD_REV, PROFILE_DRIFT_NEW_REV
     )
 
     # ── 成本 ────────────────────────────────────────────────────────────────

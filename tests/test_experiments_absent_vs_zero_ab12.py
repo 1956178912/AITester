@@ -40,6 +40,7 @@ from experiments.analyze_t1_b2_main_batch import (
     render_baseline_fragment,
     render_readme,
 )
+from tests._corpus_guard import require_history
 
 _ROOT = Path(__file__).resolve().parents[1]
 _OUT = _ROOT / "experiments/results/t_round_b2_main_batch_20261018"
@@ -477,6 +478,11 @@ def repo_cwd(monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path]:
 class TestRealPathInvariants:
     def test_committed_analysis_report_reproduces_byte_identically(self, repo_cwd: tuple[Path, Path]) -> None:
         """改动后重算 ⇒ 与入库 ANALYSIS_REPORT.json 逐字节相同（披露键在真输入上全部不写）。"""
+        # BZ 轮：报告内嵌 profile 预设漂移，对账输入是两个历史切点 rev 的
+        # `git show <rev>:config.py`——shallow clone（fetch-depth=1）里必败，
+        # 重算结果与入库快照的差异是环境事实而不是被测行为 ⇒ require_history
+        # 显式 skip 并点名缺哪个 rev（tests/_corpus_guard.py）。
+        require_history(t1.PROFILE_DRIFT_OLD_REV, t1.PROFILE_DRIFT_NEW_REV)
         out, orig_dir = repo_cwd
         report = build_report(_require(out), _require(orig_dir), _real_price())
         fresh = json.dumps(report, ensure_ascii=False, indent=2)
@@ -485,6 +491,9 @@ class TestRealPathInvariants:
     def test_generated_readme_is_exact_prefix_of_archived(self, repo_cwd: tuple[Path, Path]) -> None:
         """生成段逐字节相同；入库 README 尾部的手工块由 X 轮保留机制原样带出（其头部差异登记在
         评审文档，非本轮改动引入）。"""
+        # BZ 轮：同 test_committed_analysis_report_reproduces_byte_identically——
+        # README 生成段同样内嵌历史切点对账，shallow clone 下显式 skip。
+        require_history(t1.PROFILE_DRIFT_OLD_REV, t1.PROFILE_DRIFT_NEW_REV)
         out, orig_dir = repo_cwd
         report = build_report(_require(out), _require(orig_dir), _real_price())
         assert _require(_README).read_text(encoding="utf-8").startswith(render_readme(report))
