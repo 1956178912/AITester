@@ -6,6 +6,37 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [Unreleased] — 2026-10-23 BV 轮：批次 VIII / XIV 两份判定核的「沉默」从未披露——20 行 test-hacking 判 True 与 4442 行 FL 未求值在任何报告面都不出现（零 LLM，$0）
+
+> 归档实测（257 批次 / 11197 行）：批次 VIII（ADR-0022）的 `test_hacking_suspected` / `_signals` 与批次 XIV（ADR-0028）的 `fl_constraint_verdict` / `_hit_rank` / `_changed_functions` 自写入起报告面读端 **0**，而两者的沉默都是「多成因、同取值」——判定核四种早退（无原码 / 无补丁 / 两侧解析失败）与「三信号都跑过且零命中」返回同一个 `{"suspected": False, "signals": []}`（5915 行分不清判干净还是没看），FL 六种早退 + 异常共用一个 `not_evaluable`（4442/5935）。详见 `docs/reviews/DETECTOR_SILENCE_BV_2026-10-23.md`。
+
+### 改了什么
+
+- **判定核（写侧增量）**：`src/tools/patch_test_hacking.detect_test_hacking` 增返 `status`（`ok` / `empty_original` / `empty_patch` / `parse_error_original` / `parse_error_patched`，两侧解析拆成两个 `try`），判定值语义零变化——`ok` 之外仍是 `suspected=False, signals=[]`。
+- **单一事实源** `experiments/_verdict_silence.py`：键名常量、`HACK_STATUS_VOCAB` / `HACK_SIGNAL_NAMES` / `FL_VERDICTS` / `FL_REASON_VOCAB`（写侧七档 + `ok`）/ `FL_INFERRED_VOCAB`（读侧推断四档、**下界**）、读侧原语（`hack_status` / `hack_evaluated` / `fl_verdict` / `infer_fl_reason` / `fl_reason` 返回 `(成因, 来源)` / `fl_reason_mismatch`）。
+- **写侧（结果行增量）**：行落 `test_hacking_status`；FL 六种早退各带独立 `reason` 并落 `fl_constraint_reason`；顺带把判定核在结果行的**两次重复调用收成一次**（AST 差集只跑一遍）。
+- **读端** `statistical_analysis.detector_silence_stats` / `detector_silence_summary`：hack 侧四档（已求值 / 没看 / 状态未记录 / 判定未记录）+ 恒等式 + 信号分布与词表外点名 + `n_suspected_without_evaluation`；FL 侧判定值三档 + 成因按**记录 / 推断 / 不适用 / 无判定键**四来源分列 + 恒等式 + hit 比（分母只含已求值）+ hit_rank + 变更函数分档。
+- **报告面**：`analyze_results` 新章节「批次 VIII/XIV 判定核的沉默分档（BV）」——hack 9 列 / FL 11 列两张表 + 每臂行 + `**合计**` 行 + 沉默臂注 + 判 True 行点名（样例封顶 10 个 task_id）+ **约束门判别力注**（按 3+ 档占比二选一：高则与 ADR-0028 登记成因一致，低则明写「该成因不足以解释这个比值」）+ 成因不一致注 + 两条口径脚注；`run_main_batch._print_r4_summary` 增一行摘要。**不进入任何判定，不改 passed / repair / 分母，判定值与方向一处不动**。
+- BQ 的读者数棘轮键集新增 `detector_silence`（只增不删）。
+
+- **收口补全（本提交）**：`da457e5a` 的文档面漏项按 BU 轮模板补齐——双语 README 头部、CHANGELOG BV 段、登记册 §1 / §3.2 / §5、测量廉洁头行、`BASELINE.yaml` `last_verified`、AO3 行锁（不改则 README 头轮换后 AO3 必红）；并按分册 §5 登记边界删除 `docs/INDEX*` 分册表里**误加的重复行**（中文 4 行 = BR / BS / BT / BU 重复；英文 4 行 = BU 重复 + BR / BS / BT 未登记的代补），另修 `scripts/tools/bv_verdict_silence_census.py` docstring 的 B 段期望（9 键 → 6 键，与代码实况一致）；中文索引 §2.2 补 BV 分册条目（#15）。
+
+### 测试
+
+- 新增 **87 例锁**（`tests/test_verdict_silence_bv.py`：75 个测试方法 + 参数化展开）；**2 处旧契约改写**——`tests/test_batch_viii.py` 与 `tests/test_patch_test_hacking.py` 原断言用整字典相等把「没看」锁成「判干净」，改为「判定值不变 + 另钉求值状态」。
+- 变异 **58 锚点全红 + 中性对照 N01 0 红**（`scripts/tools/bv_mutation_verify.py`：干净树先全绿且 collected 逐锚点恒 **227**、逐锚点读原字节、`compile()`、收集数核对、sha256 原字节还原）。首轮 **3 项存活**全部就地处置：V04 常量改名 ⇒ 字面量契约锁；P11 对称夹具（1:1）⇒ 不对称夹具；S03 按构造恒真的「恒等式为真」标记 ⇒ 删字段、恒等式改由测试直接断言。
+- 确认跑（本会话**沙箱口径**）**12257 passed / 19 skipped / 0 failed、218.94s / rc=0**（19 = 5 + 14 项环境能力 skip：sandbox_apply 4 / ps 8 / Seatbelt 1 / 内核沙箱 1；正常口径 **12271 passed / 5 skipped / 0 failed**、collected **12276**，由该差导出、非本会话直接实测——两口径不混用）。
+- 覆盖率（CI 口径 `coverage.xml` root）：行 **19538/20052 = 97.4367%**、弧 **7150/7584 = 94.2774%**；相对 BU（19526/20040、7150/7582）**+12 行 / +12 分母、弧分母 +2**，全部来自本轮唯一 `src/` 改动（`patch_test_hacking.py` 五状态拆分 + 两侧独立 `try`）；未覆盖行 511 → **514**。棘轮 96.40 / 92.50 绿（余量 1.04 / 1.78pp；AA-4 不在本地 macOS 抬水位）。
+- 门禁（干净树全绿）：`ruff check` All checks passed / `ruff format --check .` **1020 文件已格式化** / `mypy src/ config.py` **137 文件 0 错** + 15 项 gate（双语文档 / 文档链接 / env 预算 / BASELINE 结构 + 数字 / 状态契约 / env 快照 / 模型指纹 / 工具版本 / JSON 契约计数 / 严格 JSON / 报告→工件对账 / 零断言 / ast 守卫棘轮 / 状态落盘可达性）全过。
+- 只读普查三段（`scripts/tools/bv_verdict_silence_census.py --segment a|b|c`）：A 段 257 批次 / 11197 行与实测逐位一致（hack 恒等式 0 + 0 + 5935 + 5262 = 11197、FL 成因恒等式 recorded 0 + inferred 4442 = not_evaluable 4442）；B 段键池复核 **6 键 / 34943 行**（11 键 − 5 键；64618 − 5 × 5935 = 34943，与期望**同时**对上）；C 段四个具名冻结批次 4/4 OK、零 DRIFT。
+
+### 边界（按名登记）
+
+- **不回填历史行**：5935 行仍无 `test_hacking_status` / `fl_constraint_reason`；报告面 hack 侧显示「状态未记录」、FL 侧显示「成因推断（下界）」，不折成任何一档。
+- **推断不是全集**：「无原码 / 无候选 / 异常」三支在历史行里没有痕迹，落 `inferred_unattributed`；本语料该档为 0，但这是**下界**，不是「没有这三支」。
+- **键池其余 6 项未动**（`risk_summary` 8864 行、`patch_precision` 8012、`patch_abstain_signals` 5935、`patch_plausible_evidence` / `patch_plausible_invariant_violation` / `mdo_crash_rate` 各 4044）⇒ BW 轮候选池。
+- **未跑真实批次**：本轮零 LLM、$0；新批次才会真正产出两列，归档里这两列将始终是「未记录」——这是设计，不是缺陷。
+
 ## [Unreleased] — 2026-10-23 BU 轮：Self-Repair Trap 判定核的输入可达域从未披露——5935 行恒判「不怀疑」，其中两个信号在全归档拿到过 0 行输入（零 LLM，$0）
 
 > 归档实测：`self_repair_trap_suspected` / `self_repair_trap_signals` 自批次 XIV（ADR-0028）写入 **5935** 行，取值恒 `False` / `[]`，报告面读端 **0**。判定核 `src/tools/self_repair_trap.py:104/:106/:113` 的三个信号各带最少点数门槛（**3 / 2 / 2**），而门槛从不写进报告 ⇒「**3200** 行只有 1 个点、进不了任何门」「**2723** 行进得了 collapse 门且确实判干净」「declining 与 score 两个信号**全域 0 行输入**」三种事实在报告面上是同一个读数。详见 `docs/reviews/TRAP_INPUT_DOMAIN_BU_2026-10-23.md`。

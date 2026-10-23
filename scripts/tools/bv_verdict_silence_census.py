@@ -11,7 +11,7 @@ FL 侧判定值 × 成因来源（记录 / 推断下界）。
 三段（全部只读；仓库零写入、零 LLM）：
     A 段  全归档跑 `detector_silence_stats`：hack 四档 + 信号分布 + True 行点名，
           FL 判定值 / 成因来源 / hit 比 / 变更函数分档 / 恒等式。
-    B 段  键池复核：跑 BU 的普查器，确认这两族接入读端后池子应剩 9 键 / 34943 行。
+    B 段  键池复核：跑 BU 的普查器，确认这两族接入读端后池子应剩 6 键 / 34943 行。
     C 段  具名批次核对：与 `tests/test_verdict_silence_bv.py` 的 PINNED_BATCHES 对照。
 
 用法：.venv/bin/python scripts/tools/bv_verdict_silence_census.py [--segment a|b|c|all]
