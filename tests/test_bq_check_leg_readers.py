@@ -286,13 +286,19 @@ class TestJudgmentValuesDidNotMove:
         # BU 轮（2026-10-22）再 +1：`self_repair_trap_domain`
         # （Self-Repair Trap 判定核输入可达域的读侧分档）。
         # BV 轮（2026-10-23）再 +1：`detector_silence`（批次 VIII/XIV
-        # 两份判定核的沉默分档读侧）。键集棘轮只增不删，新增键必须在此
-        # 显式登记（不放行任意新键）。
+        # 两份判定核的沉默分档读侧）。
+        # BW 轮（2026-10-23）再 +1：`patch_acceptance`（补丁接收链的
+        # `patch_precision` / 证据 / 弃权 / 验证读侧）。
+        # BX 轮（2026-10-23）再 +1：`residual_keys`（写而不读键池最后两键
+        # `risk_summary` / `mdo_crash_rate` 的读侧分档）。
+        # 键集棘轮只增不删，新增键必须在此显式登记（不放行任意新键）。
         assert keys == _EXPECTED_PER_BASELINE_KEYS | {
             "check_leg_measurability",
             "oracle_provenance",
             "self_repair_trap_domain",
             "detector_silence",
+            "patch_acceptance",
+            "residual_keys",
         }
 
     def test_existing_values_unchanged_by_the_new_key(self) -> None:

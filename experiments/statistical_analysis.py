@@ -82,6 +82,7 @@ if str(PROJECT_ROOT) not in sys.path:
 # Z9（2026-10-06 审查落地）：贝叶斯配对分析（Dirichlet 后验，纯 stdlib）。
 # 与 NHST 并列呈现、不替换——详见 bayesian_paired.py 模块 docstring
 # （方法学依据：Furia et al., TSE 2019 对 SE 实验 NHST 的批评）。
+from experiments import _analysis_flow  # noqa: E402
 from experiments._row_pairing import latest_binary_by_task, latest_rows_by_task  # noqa: E402
 from experiments.bayesian_paired import bayesian_paired_analysis, interpret_bayes  # noqa: E402
 
@@ -382,6 +383,51 @@ def _load_batch_file(
     except Exception as e:
         print(f"警告：加载 {json_file} 失败: {e}")
         return False
+
+
+def analysis_flow_stats(
+    results: dict[str, list[dict]],
+    results_dir: str,
+    batch_files: list[str] | None = None,
+    allow_schema_mixed: bool = False,
+) -> dict:
+    """BY（2026-10-23）：分析集流量账——文件级剔除、行级折叠、字段 None。
+
+    背景：报告 `## 数据来源` 只列**纳入**的批次文件；到达该清单之前的
+    数据集白名单剔除、schema 剔除、未登记基线丢弃，以及载入后的重复
+    task_id 折叠与字段 None 剔除，此前均不在报告面出现。外部口径
+    （PRISMA 2020 流程图：逐阶段数量 + 排除理由；Hurlbert 1984 伪重复：
+    n 只数独立观测单元）要求这些分层可核对。
+
+    只记账：在加载器产出 `results` **之后**读取同一扫描面重新分类，
+    不改变 `_load_batch_file` 的任何判定，也不回填归档行。三层对账
+    （扫描 − 剔除 = 载入；载入 tracked 行 = 实际 results 行；行 = 唯一
+    + 重复 + 缺 task_id）任一不闭合时 `reconciles=False`，报告直书
+    "对账未闭合"，不把差额藏进脚注。
+    """
+    flow = _analysis_flow.flow_stats(
+        results_dir,
+        supported_datasets=_SUPPORTED_DATASETS,
+        tracked_baselines=_BASELINES,
+        batch_files=batch_files,
+        allow_schema_mixed=allow_schema_mixed,
+    )
+    loaded = _analysis_flow.loaded_flow(results)
+    flow["loaded"] = loaded
+    flow["archive"] = _analysis_flow.archive_universe(results_dir) if batch_files is None else None
+    status = flow["status"]
+    excluded_rows = (
+        status["unsupported_dataset"]["rows"]
+        + status["schema_incomplete"]["rows"]
+        + status["read_error"]["rows"]
+        + status["load_error"]["rows"]
+    )
+    flow["reconciles"] = (
+        flow["scan"]["rows"] - excluded_rows == flow["included"]["rows_all"]
+        and flow["included"]["rows_tracked"] == loaded["rows"]
+        and loaded["rows"] == loaded["unique"] + loaded["duplicates"] + loaded["no_task_id"]
+    )
+    return flow
 
 
 def _pair_by_task(
@@ -1807,6 +1853,435 @@ def detector_silence_summary(data: dict[str, list[dict]]) -> dict[str, dict[str,
     return {baseline: detector_silence_stats(data.get(baseline) or []) for baseline in sorted(data)}
 
 
+def patch_acceptance_stats(rows: list[dict]) -> dict[str, Any]:
+    """统计一组结果行的**补丁接收链**（BW 轮，2026-10-23）。
+
+    背景：`patch_precision`（R53，预注册 E3 要求的指标）、
+    `patch_plausible_evidence` / `patch_plausible_invariant_violation`（P0-2）、
+    `patch_abstain_signals`（批次 V）自写入起报告面零读者；`patch_validated`
+    只有测试读者。判定值本身忠实，但没有报告面能看到它们的**分母与输入可达域**：
+
+    - 精确率的接受集是 `plausible=1`，错误集是 `correct=0`；`correct=1 ∧
+      plausible=0` 的 139 行让两者不是包含关系，必须另列并集口径；
+    - `correct=0` 要拆成「gold 判错」/「无 gold 材料」；`precision=None` 只
+      表示分母为 0，不得读成 0，也不得读成「无 gold」；
+    - 弃权门要按可抑制对象分档：失败且无补丁的行没有可抑制对象，
+      与真正的抑制同记 `abstained=True`；
+    - 验证门按输入域分档：两个最强输入（`repo_verification` /
+      `deterministic_repair_status`）在整个归档里可达域为空，`validated`
+      全部来自最弱的 `patch_evidence_level` 一档。
+
+    本助手只做读侧分档与对账，不改判定核、不改任何行的值与方向；四档/四桶
+    的求和恒等式由 `tests/test_patch_acceptance_bw.py` 直接断言（不在函数内
+    设「恒等式为真」标记——同一循环赋值的布尔按构造恒真，变异无法区分）。
+
+    Args:
+        rows: 单个基线的结果行列表。
+
+    Returns:
+        统计 dict；空臂返回零计数（不是「没有这个臂」）。
+    """
+    from experiments._patch_acceptance import (
+        ABSTAINED_KEY,
+        ABSTAIN_BUCKETS,
+        CORRECT_GOLD_INCORRECT,
+        CORRECT_KEY,
+        CORRECT_NO_GOLD,
+        CORRECT_UNRECORDED,
+        EVIDENCE_UNRECORDED,
+        INVARIANT_KEY,
+        PASSED_KEY,
+        PLAUSIBLE_KEY,
+        PRECISION_KEY,
+        VALIDATED_KEY,
+        abstain_applicable,
+        abstain_bucket,
+        abstain_signal_names,
+        abstain_signals,
+        correct,
+        correct_status,
+        evidence_basis,
+        evidence_mismatch,
+        evidence_plausible,
+        filtered_success,
+        flag,
+        invariant_flag,
+        invariant_recomputed,
+        plausible,
+        precision_mismatch,
+        recompute_abstention,
+        recompute_validation,
+        validation_inputs,
+        validation_verdict,
+    )
+
+    plausible_counts: Counter[str] = Counter()
+    correct_counts: Counter[str] = Counter()
+    cross: Counter[str] = Counter()
+    correct_status_counts: Counter[str] = Counter()
+    invariant: Counter[str] = Counter()
+    evidence_counts: Counter[str] = Counter()
+    signal_counts: Counter[str] = Counter()
+    bucket_counts: dict[str, Counter[str]] = {bucket: Counter() for bucket in ABSTAIN_BUCKETS}
+    suppressed_status: Counter[str] = Counter()
+    verdict_counts: Counter[str] = Counter()
+    validation_input_counts: Counter[str] = Counter()
+    evidence_level_values: Counter[str] = Counter()
+    signal_names = abstain_signal_names()
+    signal_domain: dict[str, Counter[str]] = {name: Counter() for name in signal_names}
+
+    n_acceptance_recorded = 0
+    n_plausible = 0
+    n_correct = 0
+    n_plausible_correct = 0
+    n_plausible_incorrect = 0
+    n_implausible_correct = 0
+    n_implausible_incorrect = 0
+    n_plausible_gold = 0
+    n_plausible_no_gold = 0
+    n_gold_correct = 0
+    n_gold_incorrect = 0
+    n_precision_mismatch = 0
+    n_correct_rate_mismatch = 0
+    n_plausible_missing_evidence = 0
+    n_evidence_mismatch = 0
+    n_evidence_recorded = 0
+    n_evidence_implied_plausible = 0
+
+    n_abstain_recorded = 0
+    n_abstained = 0
+    n_not_abstained = 0
+    n_abstain_other = 0
+    n_signal_nonempty = 0
+    n_multi_signal = 0
+    n_no_effect = 0
+    n_actionable = 0
+    n_abstain_mismatch = 0
+    n_signal_mismatch = 0
+    n_suppressed = 0
+
+    n_validation_recorded = 0
+    n_validated = 0
+    n_unvalidated = 0
+    n_validation_other = 0
+    n_no_input = 0
+    n_unvalidated_without_input = 0
+    n_verdict_mismatch = 0
+    n_validated_mismatch = 0
+    n_passed = 0
+    n_passed_abstained = 0
+    n_passed_not_abstained = 0
+    n_filtered_success = 0
+
+    for row in rows:
+        # —— 接收链（plausible / correct / precision）——
+        if all(key in row for key in (PLAUSIBLE_KEY, CORRECT_KEY, PRECISION_KEY)):
+            n_acceptance_recorded += 1
+            value_p = plausible(row)
+            value_c = correct(row)
+            plausible_counts["1" if value_p == 1 else "0" if value_p == 0 else "other"] += 1
+            correct_counts["1" if value_c == 1 else "0" if value_c == 0 else "other"] += 1
+            if value_p == 1:
+                n_plausible += 1
+            if value_c == 1:
+                n_correct += 1
+            if value_p == 1 and value_c == 1:
+                n_plausible_correct += 1
+                cross["plausible_correct"] += 1
+            elif value_p == 1 and value_c == 0:
+                n_plausible_incorrect += 1
+                cross["plausible_incorrect"] += 1
+            elif value_p == 0 and value_c == 1:
+                n_implausible_correct += 1
+                cross["implausible_correct"] += 1
+            elif value_p == 0 and value_c == 0:
+                n_implausible_incorrect += 1
+                cross["implausible_incorrect"] += 1
+            else:
+                cross["other"] += 1
+            status = correct_status(row)
+            correct_status_counts[status] += 1
+            if value_p == 1:
+                if status == CORRECT_NO_GOLD:
+                    n_plausible_no_gold += 1
+                else:
+                    n_plausible_gold += 1
+                    if value_c == 1:
+                        n_gold_correct += 1
+                    else:
+                        n_gold_incorrect += 1
+            if precision_mismatch(row):
+                n_precision_mismatch += 1
+            rate = row.get("repair_rate")
+            if (value_c == 1 and rate != 1.0) or (value_c == 0 and rate == 1.0):
+                n_correct_rate_mismatch += 1
+            recomputed = invariant_recomputed(row)
+            flag_value = invariant_flag(row)
+            if recomputed is None:
+                invariant["uncomputable"] += 1
+            elif recomputed:
+                invariant["violation"] += 1
+                if flag_value is None:
+                    invariant["flag_missing"] += 1
+                elif flag_value == 1:
+                    invariant["flag_true"] += 1
+                else:
+                    invariant["flag_false"] += 1
+            elif flag_value == 1:
+                invariant["flag_true_not_violation"] += 1
+            if INVARIANT_KEY not in row:
+                invariant["flag_unrecorded"] += 1
+
+        # —— plausible 证据档（可复核依据）——
+        basis = evidence_basis(row)
+        evidence_counts[basis] += 1
+        if basis != EVIDENCE_UNRECORDED and not basis.startswith("other:"):
+            n_evidence_recorded += 1
+            implied = evidence_plausible(basis)
+            if implied == 1:
+                n_evidence_implied_plausible += 1
+        if plausible(row) == 1 and basis == EVIDENCE_UNRECORDED:
+            n_plausible_missing_evidence += 1
+        if evidence_mismatch(row):
+            n_evidence_mismatch += 1
+
+        # —— 弃权门（信号 / 可抑制对象 / 对账）——
+        if ABSTAINED_KEY in row:
+            n_abstain_recorded += 1
+            abstained_flag = flag(row.get(ABSTAINED_KEY))
+            if abstained_flag == 1:
+                n_abstained += 1
+            elif abstained_flag == 0:
+                n_not_abstained += 1
+            else:
+                n_abstain_other += 1
+            signals = abstain_signals(row)
+            if signals:
+                n_signal_nonempty += 1
+                for name in signals:
+                    signal_counts[name] += 1
+                if len(signals) >= 2:
+                    n_multi_signal += 1
+            for name in signal_names:
+                if name not in row:
+                    signal_domain[name]["missing"] += 1
+                elif row.get(name) is None:
+                    signal_domain[name]["null"] += 1
+                else:
+                    signal_domain[name]["recorded"] += 1
+            bucket = abstain_bucket(row)
+            bucket_counts[bucket]["abstained" if abstained_flag == 1 else "not_abstained"] += 1
+            if abstained_flag == 1:
+                if not abstain_applicable(row):
+                    n_no_effect += 1
+                else:
+                    n_actionable += 1
+                if flag(row.get(PASSED_KEY)) == 1:
+                    n_suppressed += 1
+                    suppressed_status[correct_status(row)] += 1
+            recomputed = recompute_abstention(row)
+            if bool(recomputed.get("abstain")) != (abstained_flag == 1):
+                n_abstain_mismatch += 1
+            if list(recomputed.get("signals") or []) != signals:
+                n_signal_mismatch += 1
+
+        # —— 验证门（verdict / 输入域 / filtered success）——
+        if VALIDATED_KEY in row:
+            n_validation_recorded += 1
+            validated_flag = flag(row.get(VALIDATED_KEY))
+            if validated_flag == 1:
+                n_validated += 1
+            elif validated_flag == 0:
+                n_unvalidated += 1
+            else:
+                n_validation_other += 1
+            verdict = validation_verdict(row)
+            verdict_counts[verdict] += 1
+            inputs = validation_inputs(row)
+            for name in inputs:
+                validation_input_counts[name] += 1
+            level = row.get("patch_evidence_level")
+            evidence_level_values["null" if level is None else str(level)] += 1
+            if not inputs:
+                n_no_input += 1
+            if validated_flag == 0 and not inputs:
+                n_unvalidated_without_input += 1
+            recomputed = recompute_validation(row)
+            if bool(recomputed.get("validated")) != (validated_flag == 1):
+                n_validated_mismatch += 1
+            if verdict != "not_applicable" and recomputed.get("verdict") != verdict:
+                n_verdict_mismatch += 1
+            if flag(row.get(PASSED_KEY)) == 1:
+                n_passed += 1
+                if flag(row.get(ABSTAINED_KEY)) == 1:
+                    n_passed_abstained += 1
+                else:
+                    n_passed_not_abstained += 1
+                if filtered_success(row):
+                    n_filtered_success += 1
+
+    n_acceptance_unrecorded = len(rows) - n_acceptance_recorded
+    n_abstain_unrecorded = len(rows) - n_abstain_recorded
+    n_validation_unrecorded = len(rows) - n_validation_recorded
+    n_gold_suppressed = (
+        n_suppressed - suppressed_status.get(CORRECT_NO_GOLD, 0) - suppressed_status.get(CORRECT_UNRECORDED, 0)
+    )
+    n_unknown_signals = sum(count for name, count in signal_counts.items() if name not in signal_names)
+    n_other_evidence = sum(count for basis, count in evidence_counts.items() if basis.startswith("other:"))
+    n_other_verdict = sum(
+        count
+        for verdict, count in verdict_counts.items()
+        if verdict not in {"gold", "deterministic", "evidence", "unvalidated", "not_applicable", "unrecorded"}
+    )
+
+    return {
+        "n_rows": len(rows),
+        "acceptance": {
+            "n_recorded": n_acceptance_recorded,
+            "n_unrecorded": n_acceptance_unrecorded,
+            "plausible": dict(plausible_counts),
+            "correct": dict(correct_counts),
+            "cross": dict(cross),
+            "n_plausible": n_plausible,
+            "n_correct": n_correct,
+            "n_plausible_correct": n_plausible_correct,
+            "n_plausible_incorrect": n_plausible_incorrect,
+            "n_implausible_correct": n_implausible_correct,
+            "n_implausible_incorrect": n_implausible_incorrect,
+            "correct_status": dict(correct_status_counts),
+            "n_plausible_gold": n_plausible_gold,
+            "n_plausible_no_gold": n_plausible_no_gold,
+            "n_gold_correct": n_gold_correct,
+            "n_gold_incorrect": n_gold_incorrect,
+            "precision": {
+                "numerator": n_plausible_correct,
+                "denominator": n_plausible,
+                "value": (n_plausible_correct / n_plausible) if n_plausible else None,
+                "union_denominator": n_plausible + n_implausible_correct,
+                "union_value": (
+                    n_correct / (n_plausible + n_implausible_correct) if (n_plausible + n_implausible_correct) else None
+                ),
+                "gold_denominator": n_plausible_gold,
+                "gold_value": (n_gold_correct / n_plausible_gold) if n_plausible_gold else None,
+            },
+            "coverage": {
+                "numerator": n_plausible,
+                "denominator": n_acceptance_recorded,
+                "value": (n_plausible / n_acceptance_recorded) if n_acceptance_recorded else None,
+            },
+            "selective_risk": {
+                "numerator": n_plausible_incorrect,
+                "denominator": n_plausible,
+                "value": (n_plausible_incorrect / n_plausible) if n_plausible else None,
+                "gold_denominator": n_plausible_gold,
+                "gold_value": (n_gold_incorrect / n_plausible_gold) if n_plausible_gold else None,
+            },
+            "precision_mismatch": n_precision_mismatch,
+            "correct_rate_mismatch": n_correct_rate_mismatch,
+            "invariant": dict(invariant),
+        },
+        "evidence": {
+            "n_recorded": n_evidence_recorded,
+            "n_unrecorded": len(rows) - n_evidence_recorded,
+            "basis": dict(evidence_counts),
+            "n_other": n_other_evidence,
+            "n_implied_plausible": n_evidence_implied_plausible,
+            "n_plausible_without_evidence": n_plausible_missing_evidence,
+            "n_mismatch": n_evidence_mismatch,
+        },
+        "abstain": {
+            "n_recorded": n_abstain_recorded,
+            "n_unrecorded": n_abstain_unrecorded,
+            "n_abstained": n_abstained,
+            "n_not_abstained": n_not_abstained,
+            "n_other": n_abstain_other,
+            "signals": dict(signal_counts),
+            "n_signal_nonempty": n_signal_nonempty,
+            "n_multi_signal": n_multi_signal,
+            "n_unknown_signals": n_unknown_signals,
+            "signal_domain": {name: dict(counter) for name, counter in signal_domain.items()},
+            "buckets": {bucket: dict(counter) for bucket, counter in bucket_counts.items()},
+            "n_no_effect": n_no_effect,
+            "n_actionable": n_actionable,
+            "n_suppressed": n_suppressed,
+            "suppressed_status": dict(suppressed_status),
+            "suppressed_precision": {
+                "numerator": suppressed_status.get(CORRECT_GOLD_INCORRECT, 0),
+                "denominator": n_gold_suppressed,
+                "value": (
+                    suppressed_status.get(CORRECT_GOLD_INCORRECT, 0) / n_gold_suppressed if n_gold_suppressed else None
+                ),
+                "all_denominator": n_suppressed,
+                "all_value": (
+                    suppressed_status.get(CORRECT_GOLD_INCORRECT, 0) / n_suppressed if n_suppressed else None
+                ),
+            },
+            "n_abstain_mismatch": n_abstain_mismatch,
+            "n_signal_mismatch": n_signal_mismatch,
+        },
+        "validate": {
+            "n_recorded": n_validation_recorded,
+            "n_unrecorded": n_validation_unrecorded,
+            "n_validated": n_validated,
+            "n_unvalidated": n_unvalidated,
+            "n_other": n_validation_other,
+            "verdict": dict(verdict_counts),
+            "n_other_verdict": n_other_verdict,
+            "n_no_input": n_no_input,
+            "n_unvalidated_without_input": n_unvalidated_without_input,
+            "input_counts": dict(validation_input_counts),
+            "evidence_level_values": dict(evidence_level_values),
+            "n_verdict_mismatch": n_verdict_mismatch,
+            "n_validated_mismatch": n_validated_mismatch,
+            "n_passed": n_passed,
+            "n_passed_abstained": n_passed_abstained,
+            "n_passed_not_abstained": n_passed_not_abstained,
+            "n_filtered_success": n_filtered_success,
+            "filtered_coverage_passed": (n_filtered_success / n_passed) if n_passed else None,
+            "filtered_coverage_passed_not_abstained": (
+                n_filtered_success / n_passed_not_abstained if n_passed_not_abstained else None
+            ),
+        },
+    }
+
+
+def patch_acceptance_summary(data: dict[str, list[dict]]) -> dict[str, dict[str, Any]]:
+    """按臂统计补丁接收链（`patch_acceptance_stats` 的臂级包装）。"""
+    return {baseline: patch_acceptance_stats(data.get(baseline) or []) for baseline in sorted(data)}
+
+
+def residual_keys_stats(rows: list[dict]) -> dict[str, Any]:
+    """统计**写而不读键池最后两键**（BX 轮，2026-10-23）。
+
+    `risk_summary`（8,864 行）与 `mdo_crash_rate`（4,044 行）是 BU 普查 13 键池
+    在 BV/BW 收口后的剩余；两者报告面零读者，输入域与分母在行里被折叠：
+
+    - `risk_summary` 全归档 `enabled=False` 占位——`risk_level=None` 不是 `low`，
+      `pause_requested=False` 不是「判定无需暂停」；键缺席的行也不是低风险；
+    - `mdo_crash_rate` 有五层可达域（未跑 / 材料缺 / 不可测 / 暂定池 / 实测），
+      `mdo_pool_floor_ok=False` 同时是暂定池与不可测的默认值；
+    - crash 率分母是**全池 n**，与 MTR/MDR 的可评估分母不同，且四个可评估计数
+      未落盘 ⇒ 可评估分母不可从归档复算。
+
+    只读分档，不改写入端、不改任何行的值与方向。分档恒等式由
+    `tests/test_residual_keys_bx.py` 直接断言（不在函数内设「恒等式为真」标记）。
+
+    Args:
+        rows: 单个基线的结果行列表。
+
+    Returns:
+        两键分档 dict；空臂返回零计数（不是「没有这个键」）。
+    """
+    from experiments._residual_keys import residual_keys_stats as _stats
+
+    return _stats(rows)
+
+
+def residual_keys_summary(data: dict[str, list[dict]]) -> dict[str, dict[str, Any]]:
+    """按臂统计两键的读侧分档（`residual_keys_stats` 的臂级包装）。"""
+    return {baseline: residual_keys_stats(data.get(baseline) or []) for baseline in sorted(data)}
+
+
 def pass_at_k_summary(data: dict[str, list[dict]], field: str = "patch_correct") -> dict[str, dict[str, Any]]:
     """批次 IX（ADR-0023）：按臂的 pass@k（多轮采样并集解决率）。
 
@@ -2456,6 +2931,12 @@ def run_all_statistics(
     for _src in source_files:
         print(f"  - {_src}")
 
+    # BY（2026-10-23）：分析集流量账——把"扫描面 → 逐层剔除 → 载入 →
+    # 去重 → 唯一 task 行 → 字段 None"整条链打一行到控制台并落进报告。
+    # 只记账：不改变上面的加载结果。
+    _flow = analysis_flow_stats(data, results_dir, batch_files, allow_schema_mixed=allow_schema_mixed)
+    print(_analysis_flow.flow_console_line(_flow))
+
     # AE2（2026-10-06 第十一轮审查 N8）：$/task 成本口径（价目表驱动，
     # 价目缺失时诚实降级；None 参数 → "价目未登记"口径）
     _effective_price_table = price_table if price_table is not None else {"models": {}}
@@ -2762,6 +3243,10 @@ def run_all_statistics(
             "",
         ]
         report_lines.extend(f"- `{src}`" for src in source_files)
+
+        # BY（2026-10-23）：数据来源节补分析集流量——PRISMA 式逐层剔除 +
+        # 去重折叠 + 字段 None，读者可核对"110 份 / n=187"之前的取舍。
+        report_lines.extend(_analysis_flow.render_analysis_flow_lines(_flow))
 
         # 2026-10-05 P0：可复算声明——排序主键为文件名内嵌时间戳（实验
         # 属性），报告数值可用如下命令从入库工件逐位复现
