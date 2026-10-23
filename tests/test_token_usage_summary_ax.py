@@ -32,11 +32,11 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from tests._corpus_guard import require_full_corpus
 
 from experiments import run_benchmark as rb
 from experiments import run_full_stack_swe_bench_pro as fs
 from experiments import summarize_full_stack as sf
+from tests._corpus_guard import require_full_corpus
 
 _ROOT = Path(__file__).resolve().parents[1]
 _RESULTS = _ROOT / "experiments/results"

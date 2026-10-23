@@ -878,9 +878,7 @@ def build_report(
     # （tests/test_experiments_absent_vs_zero_ab12.py）与 ab11 的对账锁共用
     # 同一字面量，且 shallow clone 的 require_history 守卫按常量判定在场性，
     # 避免三处手抄漂移。
-    report["profile_preset_drift"] = _profile_drift(
-        PROFILE_DRIFT_OLD_REV, PROFILE_DRIFT_NEW_REV
-    )
+    report["profile_preset_drift"] = _profile_drift(PROFILE_DRIFT_OLD_REV, PROFILE_DRIFT_NEW_REV)
 
     # ── 成本 ────────────────────────────────────────────────────────────────
     # AB-15b：只要有一臂没算出钱，整批的"实测估算成本"就不是一个金额（部分和冒充全额

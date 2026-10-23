@@ -31,7 +31,6 @@ import pytest
 import experiments.analyze_t1_b2_main_batch as t1_mod
 import experiments.emse_docstring_augment_analysis as aug_mod
 from experiments.analyze_t1_b2_main_batch import _profile_drift, _profile_presets
-from tests._corpus_guard import require_history
 from experiments.emse_docstring_augment_analysis import (
     AUDIT_KEY_ABSENT,
     AUDIT_UNREADABLE,
@@ -43,6 +42,7 @@ from experiments.emse_docstring_augment_analysis import (
 from experiments.emse_docstring_augment_analysis import render_markdown as render_aug_md
 from experiments.mast_trace_analysis import analyze_traces, parse_trace_file
 from experiments.mast_trace_analysis import render_markdown as render_mast_md
+from tests._corpus_guard import require_history
 
 _ROOT = Path(__file__).resolve().parents[1]
 _AUG_DIR = _ROOT / "experiments/results/emse_docstring_augment_20261017"

@@ -25,7 +25,6 @@ import math
 from pathlib import Path
 
 import pytest
-from tests._corpus_guard import require_full_corpus
 
 from src.observability.otel_export import (
     _VALUE_REASONS_ATTRIBUTE,
@@ -35,6 +34,7 @@ from src.observability.otel_export import (
     _token_attributes,
     export_trace_jsonl,
 )
+from tests._corpus_guard import require_full_corpus
 
 TRACE = "t" * 32
 BASE = {"event": "node", "node": "n1", "ts": 1.5, "duration_ms": 2.0, "span_id": "b" * 16}
