@@ -137,9 +137,13 @@ class TestReadmeEnHeader:
         推进至 "**BU round:"（同一写法：BT 的标记随之改为 "Previously **BT round:"，带冒号的最新字面
         在头部唯一命中；中文侧同步推进至 "**BU 轮："，历史链首项为 "此前 **BT 轮："；
         单逻辑行剔除行内代码后 `**` 中文 472 / 英文 498，均为偶），日期行同步改为 2026-10-23
-        （改写后头部前 10 行已不再出现 "Last updated: 2026-10-22"，旧日期断言不会因残留文本误绿）。"""
+        （改写后头部前 10 行已不再出现 "Last updated: 2026-10-22"，旧日期断言不会因残留文本误绿）。
+        BV 轮（2026-10-23）推进至 "**BV round:"（同一写法：BU 的标记随之改为
+        "Previously **BU round:"，带冒号的最新字面在头部唯一命中；中文侧同步推进至
+        "**BV 轮："，历史链首项为 "此前 **BU 轮："；单逻辑行剔除行内代码后 `**` 中文 498 /
+        英文 524，均为偶）。"""
         assert "Last updated: 2026-10-23" in README_EN_HEAD
-        assert "**BU round:" in README_EN_HEAD
+        assert "**BV round:" in README_EN_HEAD
 
 
 class TestDeprecationTimeline:
