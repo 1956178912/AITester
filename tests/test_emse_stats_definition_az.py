@@ -174,8 +174,7 @@ class TestCitationPropagation:
         skeleton = REPO / "docs" / "emse" / "EMSE_SUBMISSION_SKELETON_2026-10-16.md"
         if not skeleton.exists():
             pytest.skip(
-                "EMSE_SUBMISSION_SKELETON_2026-10-16.md 不入库（.gitignore:124 学术文件纪律）"
-                "——本锁仅在骨架在场环境执行"
+                "EMSE_SUBMISSION_SKELETON_2026-10-16.md 不入库（.gitignore:124 学术文件纪律）——本锁仅在骨架在场环境执行"
             )
         text = skeleton.read_text(encoding="utf-8")
         assert "g=0.370" in text

@@ -35,7 +35,6 @@ import re
 from pathlib import Path
 
 import pytest
-from tests._corpus_guard import require_full_corpus
 
 from src.observability.otel_export import (
     _VALUE_REASONS_ATTRIBUTE,
@@ -45,6 +44,7 @@ from src.observability.otel_export import (
     _record_to_span,
     export_trace_jsonl,
 )
+from tests._corpus_guard import require_full_corpus
 
 TRACE_HEX = re.compile(r"[0-9a-f]{32}")
 SPAN_HEX = re.compile(r"[0-9a-f]{16}")

@@ -55,11 +55,7 @@ def require_full_corpus() -> None:
     skip，CI 的 skipped 计数与理由均可见。
     """
     bench, dirs, files = _measure_corpus()
-    if (
-        bench < _FULL_CORPUS_BENCHMARK_FILES
-        or dirs < _FULL_CORPUS_TRACE_DIRS
-        or files < _FULL_CORPUS_TRACE_FILES
-    ):
+    if bench < _FULL_CORPUS_BENCHMARK_FILES or dirs < _FULL_CORPUS_TRACE_DIRS or files < _FULL_CORPUS_TRACE_FILES:
         pytest.skip(
             f"全归档语料不在场（benchmark_*.json {bench}/{_FULL_CORPUS_BENCHMARK_FILES}、"
             f"traces* 目录 {dirs}/{_FULL_CORPUS_TRACE_DIRS}、"

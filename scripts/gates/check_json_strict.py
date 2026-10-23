@@ -55,9 +55,7 @@ _ALLOWLIST: dict[str, str] = {
         "AB-11 损坏通道语料（测试契约锁定；归档工件不重写）"
     ),
     "experiments/results/spec_ab_scale87_20261012/ult_lite46_off/traces/"
-    "ult__string_contrast_aitester_1791811390.trace.jsonl": (
-        "AB-11 损坏通道语料（测试契约锁定；归档工件不重写）"
-    ),
+    "ult__string_contrast_aitester_1791811390.trace.jsonl": ("AB-11 损坏通道语料（测试契约锁定；归档工件不重写）"),
 }
 
 _EXCLUDE_PARTS = {
