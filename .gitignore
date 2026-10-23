@@ -245,6 +245,9 @@ experiments/results/llm_logic_ab_20261010_202129/**
 !experiments/results/llm_logic_ab_20261010_202129/c3/
 experiments/results/llm_logic_ab_20261010_202129/c3/**
 !experiments/results/llm_logic_ab_20261010_202129/c3/benchmark_quixbugs_20261010_210638.json
+!experiments/results/llm_logic_ab_20261010_202129/c1/
+experiments/results/llm_logic_ab_20261010_202129/c1/**
+!experiments/results/llm_logic_ab_20261010_202129/c1/benchmark_quixbugs_20261010_203713.json
 !experiments/results/pilot_mdo_full50/
 experiments/results/pilot_mdo_full50/**
 !experiments/results/pilot_mdo_full50/benchmark_quixbugs_20261011_122633.json

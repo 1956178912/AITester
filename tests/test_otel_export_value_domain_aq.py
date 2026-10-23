@@ -25,6 +25,7 @@ import math
 from pathlib import Path
 
 import pytest
+from tests._corpus_guard import require_full_corpus
 
 from src.observability.otel_export import (
     _VALUE_REASONS_ATTRIBUTE,
@@ -370,6 +371,10 @@ class TestExportEndToEnd:
         assert all(_VALUE_REASONS_ATTRIBUTE not in s["attributes"] for s in spans)
 
     def test_real_traces_have_zero_disclosures_and_clean_types(self):
+        # BZ 轮：spans 总数（129058）与零披露结论以全归档 trace 语料为扫描面
+        # ——fresh clone 只有入库子集 ⇒ require_full_corpus 显式 skip 并带
+        # 实测读数（tests/_corpus_guard.py）。
+        require_full_corpus()
         root = Path(__file__).resolve().parents[1]
         files = sorted(root.rglob("*.trace.jsonl"))
         assert files, "真实 trace 语料缺失"
@@ -393,6 +398,9 @@ class TestExportEndToEnd:
         assert token_attrs == 27135
 
     def test_real_token_attributes_match_raw_task_end_records(self):
+        # BZ 轮：checked 下界（27000）以全归档 trace 语料为扫描面——同
+        # test_real_traces_have_zero_disclosures_and_clean_types 的显式 skip 口径。
+        require_full_corpus()
         root = Path(__file__).resolve().parents[1]
         checked = 0
         for path in sorted(root.rglob("*.trace.jsonl")):

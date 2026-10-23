@@ -35,6 +35,7 @@ import re
 from pathlib import Path
 
 import pytest
+from tests._corpus_guard import require_full_corpus
 
 from src.observability.otel_export import (
     _VALUE_REASONS_ATTRIBUTE,
@@ -396,6 +397,10 @@ class TestExportEndToEnd:
 
 class TestRealCorpus:
     def test_corpus_shape_links_and_zero_disclosures(self):
+        # BZ 轮：trace 文件数（9086）与 span 总数（129058）以全归档为扫描面
+        # ——fresh clone 只有入库子集 ⇒ require_full_corpus 显式 skip 并带
+        # 实测读数（tests/_corpus_guard.py）。
+        require_full_corpus()
         root = Path(__file__).resolve().parents[1]
         files = sorted(root.rglob("*.trace.jsonl"))
         assert len(files) == 9086, "真实 trace 语料文件数变化，先复测再改锁"
