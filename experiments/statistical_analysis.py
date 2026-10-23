@@ -1431,6 +1431,212 @@ def _pass_at_k_identity(row: Mapping[str, Any]) -> tuple[str, str]:
     return f"id:{tag}:{tid}", "batch_scoped"
 
 
+def oracle_provenance_stats(rows: list[dict]) -> dict[str, Any]:
+    """统计一组结果行里验收 oracle 的来源与可见性（BT 轮，2026-10-22）。
+
+    背景：`oracle_type` / `test_visible_to_system` 自 R52 起写入结果行，但全仓
+    没有读端——报告无法回答"这批数字的验收信号是生成测试还是 gold F2P、
+    系统是否看得见测试"。更严重的是写入端把可见性硬编码 `True`：SWE-bench
+    仓库级验收实际用 gold FAIL_TO_PASS（对系统不可见），却被标成
+    `generated_test` + 可见。
+
+    本助手只做**读侧对账**，不改任何判定：
+    - `by_type`：词表内计数 + `not_recorded`（键缺席/值为 null，即批次早于
+      R52 或失败分支未记录）+ `other`（词表外取值，单列 `other_values`）；
+    - `visibility`：`visible` / `hidden` / `not_recorded`；
+    - `repo_rows`：确有 `repo_verification` 字典的行数；
+    - `repo_rows_unrecorded`：其中**两个键都未记录**的行（批次早于 R52）——缺键
+      不是错标，不计入 `n_violations`；
+    - `violations`：其余不满足「`gold_fail_to_pass` + `False`」的 repo 行
+      （含只记录了一个键的不完整声明；BT 修复前的形态会让这里全红）；
+    - 恒等式：`repo_rows_unrecorded + len(violations) + repo_rows_consistent == repo_rows`。
+
+    Args:
+        rows: 单个基线的结果行列表。
+
+    Returns:
+        统计 dict；空臂返回零计数（不是"没有这个臂"）。
+    """
+    from experiments._oracle_provenance import ORACLE_TYPES, ORACLE_TYPE_REPO_GOLD
+
+    rows = [r for r in (rows or []) if isinstance(r, dict)]
+    by_type: Counter[str] = Counter()
+    visibility: Counter[str] = Counter()
+    other_values: Counter[str] = Counter()
+    repo_rows = 0
+    repo_unrecorded = 0
+    repo_consistent = 0
+    recorded = 0
+    violations: list[str] = []
+    for row in rows:
+        if "oracle_type" in row or "test_visible_to_system" in row:
+            recorded += 1
+        oracle_type = row.get("oracle_type")
+        if isinstance(oracle_type, str) and oracle_type in ORACLE_TYPES:
+            by_type[oracle_type] += 1
+        else:
+            by_type["not_recorded" if oracle_type is None else "other"] += 1
+            if oracle_type is not None and not isinstance(oracle_type, str):
+                other_values[type(oracle_type).__name__] += 1
+            elif isinstance(oracle_type, str):
+                other_values[oracle_type] += 1
+        visible = row.get("test_visible_to_system")
+        if visible is True:
+            visibility["visible"] += 1
+        elif visible is False:
+            visibility["hidden"] += 1
+        else:
+            visibility["not_recorded"] += 1
+        repo_verification = row.get("repo_verification")
+        if isinstance(repo_verification, dict) and repo_verification:
+            repo_rows += 1
+            if oracle_type is None and visible is None:
+                # 两键都未记录：缺键 ≠ 错标（归档 50 行 repo 记录即此档）
+                repo_unrecorded += 1
+            elif oracle_type == ORACLE_TYPE_REPO_GOLD and visible is False:
+                repo_consistent += 1
+            else:
+                violations.append(str(row.get("task_id", "")))
+    return {
+        "n_rows": len(rows),
+        "recorded_rows": recorded,
+        "by_type": dict(by_type),
+        "visibility": dict(visibility),
+        "repo_rows": repo_rows,
+        "repo_rows_unrecorded": repo_unrecorded,
+        "repo_rows_consistent": repo_consistent,
+        "n_violations": len(violations),
+        "violations": violations[:20],
+        "consistent": not violations,
+        "other_values": dict(other_values),
+    }
+
+
+def oracle_provenance_summary(data: dict[str, list[dict]]) -> dict[str, dict[str, Any]]:
+    """按臂统计验收 oracle 的来源与可见性（`oracle_provenance_stats` 的臂级包装）。"""
+    return {baseline: oracle_provenance_stats(data.get(baseline) or []) for baseline in sorted(data)}
+
+
+def self_repair_trap_domain_stats(rows: list[dict]) -> dict[str, Any]:
+    """统计一组结果行里 Self-Repair Trap 判定的**输入可达域**（BU 轮，2026-10-22）。
+
+    背景：`self_repair_trap_suspected` / `self_repair_trap_signals` 自批次 XIV（ADR-0028）
+    写入结果行，全树只有写入点、零读者（BU 普查：13 个只写不读键之一）。归档实测
+    5935 行判定恒 `False`、信号恒空——但"恒不怀疑"里混着三种事实：输入点数不足
+    （判定核根本没看）、输入形状不符（历史键值为 `null`）、输入够且判干净。
+    三个信号还各有最少点数门槛，报告面此前从不披露门槛落在哪里。
+
+    本助手只做**读侧分档与对账**，不改判定核、不改任何行的值：
+    - 四档 `not_recorded` / `history_malformed` / `below_min_floor` / `min_floor_reached`
+      互斥，求和 = `n_rows`（缺判定键 = 批次早于 ADR-0028 观测层，**不是**"干净"）；
+    - `signal_domain`：各信号输入够的行数（回答"能不能判"，不回答"判出什么"）；
+    - `n_decline2_outside_domain`：历史里确有 2 点连续下降、但因点数 <3 进不了
+      `assert_count_declining` 的行数（证据存在、判据看不见）；
+    - `n_suspected_mismatch` / `n_signals_mismatch`：同进程把 `detect_self_repair_trap`
+      重跑在归档历史上、与行内已写值按值对照的不一致行数；
+    - `n_rerun_error` 单列（重跑抛异常**不算**一致——一批同样的抛错是调用方 bug 信号）；
+    - `n_unmeasurable` 单列：快照里的 `assert_count` 非数值 ⇒ 读侧与判定核同一条
+      `int()` 路径、同样抛错（写入端 `run_benchmark._self_repair_trap_result` 把它折成
+      "不怀疑"），本函数只点名不折进任何可达域档。
+
+    Args:
+        rows: 单个基线的结果行列表。
+
+    Returns:
+        统计 dict；空臂返回零计数（不是"没有这个臂"）。
+    """
+    from experiments._trap_input_domain import (
+        BUCKET_BELOW_FLOOR,
+        BUCKET_FLOOR_REACHED,
+        BUCKET_MALFORMED,
+        BUCKET_NOT_RECORDED,
+        SIGNAL_MIN_POINTS,
+        TRAP_HISTORY_KEY,
+        TRAP_SIGNALS_KEY,
+        TRAP_VERDICT_KEY,
+        input_bucket,
+        signal_domains,
+        two_point_decline_outside_domain,
+    )
+
+    rows = [r for r in (rows or []) if isinstance(r, dict)]
+    buckets: Counter[str] = Counter()
+    domain: Counter[str] = Counter({name: 0 for name in SIGNAL_MIN_POINTS})
+    n_verdict_true = 0
+    n_signals_nonempty = 0
+    n_decline2 = 0
+    n_unmeasurable = 0
+    n_suspected_mismatch = 0
+    n_signals_mismatch = 0
+    n_rerun_error = 0
+    mismatches: list[str] = []
+    try:
+        from src.tools.self_repair_trap import detect_self_repair_trap
+    except Exception:  # —— 判定核不可导入 ⇒ 对账整臂不可用，绝不折成"一致"
+        detect_self_repair_trap = None  # type: ignore[assignment]
+
+    for row in rows:
+        bucket = input_bucket(row)
+        buckets[bucket] += 1
+        if bucket == BUCKET_NOT_RECORDED:
+            continue
+        history = row.get(TRAP_HISTORY_KEY)
+        try:
+            for name, in_domain in signal_domains(history).items():
+                if in_domain:
+                    domain[name] += 1
+            if two_point_decline_outside_domain(row):
+                n_decline2 += 1
+        except Exception:  # —— 输入读不懂 ⇒ 单列，不折进任何可达域档
+            n_unmeasurable += 1
+        if bool(row.get(TRAP_VERDICT_KEY)):
+            n_verdict_true += 1
+        if row.get(TRAP_SIGNALS_KEY):
+            n_signals_nonempty += 1
+        if detect_self_repair_trap is None:
+            n_rerun_error += 1
+            continue
+        try:
+            rerun = detect_self_repair_trap(history if isinstance(history, list) else None)
+        except Exception:  # —— 判定核抛错 ≠ 与归档一致（同批抛错是调用方 bug 信号）
+            n_rerun_error += 1
+            continue
+        task_id = str(row.get("task_id", ""))
+        flagged = False
+        if bool(rerun.get("suspected")) != bool(row.get(TRAP_VERDICT_KEY)):
+            n_suspected_mismatch += 1
+            flagged = True
+        if list(rerun.get("signals") or []) != list(row.get(TRAP_SIGNALS_KEY) or []):
+            n_signals_mismatch += 1
+            flagged = True
+        # 同一行的两类漂移只点名一次；封顶在返回处（明细是给人定位用的，不是计数器）
+        if flagged:
+            mismatches.append(task_id)
+    return {
+        "n_rows": len(rows),
+        "n_with_verdict": len(rows) - buckets[BUCKET_NOT_RECORDED],
+        "not_recorded": buckets[BUCKET_NOT_RECORDED],
+        "history_malformed": buckets[BUCKET_MALFORMED],
+        "below_min_floor": buckets[BUCKET_BELOW_FLOOR],
+        "min_floor_reached": buckets[BUCKET_FLOOR_REACHED],
+        "signal_domain": dict(domain),
+        "n_verdict_true": n_verdict_true,
+        "n_signals_nonempty": n_signals_nonempty,
+        "n_decline2_outside_domain": n_decline2,
+        "n_unmeasurable": n_unmeasurable,
+        "n_suspected_mismatch": n_suspected_mismatch,
+        "n_signals_mismatch": n_signals_mismatch,
+        "n_rerun_error": n_rerun_error,
+        "mismatches": mismatches[:20],
+        "reconciled": detect_self_repair_trap is not None and not n_rerun_error and not n_unmeasurable,
+    }
+
+
+def self_repair_trap_domain_summary(data: dict[str, list[dict]]) -> dict[str, dict[str, Any]]:
+    """按臂统计 Self-Repair Trap 的输入可达域（`self_repair_trap_domain_stats` 的臂级包装）。"""
+    return {baseline: self_repair_trap_domain_stats(data.get(baseline) or []) for baseline in sorted(data)}
+
+
 def pass_at_k_summary(data: dict[str, list[dict]], field: str = "patch_correct") -> dict[str, dict[str, Any]]:
     """批次 IX（ADR-0023）：按臂的 pass@k（多轮采样并集解决率）。
 

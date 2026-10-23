@@ -59,6 +59,7 @@ sys.path.insert(0, PROJECT_ROOT)
 # 历史 import 路径（experiments.analyze_results._xxx）不变，默认行为零变化。
 # re-export 符号供外部测试（tests/test_smell_detection_v2.py 等）与同包脚本
 # import，本文件内部不直接调用 → 各 import 行标 noqa F401
+from experiments._trap_input_domain import SIGNAL_MIN_POINTS  # noqa: E402
 from experiments.analysis_parts.check_leg_analysis import (  # noqa: E402
     CHECK_LEG_CHANNELS,
     CHECK_LEG_LABELS,
@@ -104,6 +105,12 @@ from experiments.contamination_check import (  # noqa: E402
     render_resistant_benchmark_section,
 )
 from experiments.difficulty_stratification import render_stratification_section  # noqa: E402
+from experiments.statistical_analysis import (  # noqa: E402
+    oracle_provenance_stats as _oracle_provenance,
+)
+from experiments.statistical_analysis import (  # noqa: E402
+    self_repair_trap_domain_stats as _trap_domain,
+)
 from src.budget.token_usage import token_metric_reading  # noqa: E402
 
 
@@ -206,6 +213,14 @@ def build_analysis(data: dict[str, Any], golden_patches: dict[str, str] | None =
             # 报告面同形。本助手只加分档计数与恒等式，判定值与判定方向一处
             # 不动（四键不进入任何判定，既不被翻成通过也不被翻成拒绝）。
             "check_leg_measurability": _check_leg_measurability(details),
+            # BT 轮（2026-10-22）：验收 oracle 来源与可见性的读侧对账。
+            # 两键自 R52 起只写不读，且仓库级验收被标成 generated_test + 可见；
+            # 本键只统计，不进入任何判定。
+            "oracle_provenance": _oracle_provenance(details),
+            # BU 轮（2026-10-22）：Self-Repair Trap 判定核输入可达域的读侧。
+            # 两键自批次 XIV（ADR-0028）起只写不读，归档 5935 行恒判"不怀疑"；
+            # 本键只分档与对账，判定值与判定方向一处不动。
+            "self_repair_trap_domain": _trap_domain(details),
             # 2.1 数据污染检测（details 携带 patch + task_metadata.golden_patch 时计算重叠度）
             "contamination_report": detect_contamination(details, golden_patches),
             # 1.3 边界用例覆盖（generated_test 含边界值时统计，旧 JSON 无该字段时全 0）
@@ -1101,7 +1116,140 @@ def render_markdown(analysis: dict[str, Any], source_file: str) -> str:
         )
         lines.append("")
 
-    # 4.4 依赖缓存命中统计（ExecutorAgent venv 磁盘缓存，无缓存事件时跳过）
+    # BT 轮（2026-10-22）：验收 oracle 来源与可见性的报告面读侧。改前两键
+    # 自 R52 起只写不读，仓库级验收还被标成 generated_test + 可见；本节只统计
+    # 与对账，不进入任何判定（不改 passed / repair / 分母）。
+    prov = {b: m.get("oracle_provenance", {}) for b, m in per.items()}
+    prov_rows = [(b, pv) for b, pv in prov.items() if pv.get("n_rows")]
+    if prov_rows:
+        lines.append("## 验收 oracle 来源与可见性（BT：`oracle_type` / `test_visible_to_system` 的读侧）")
+        lines.append("")
+        lines.append(
+            "| 基线 | 生成测试（可见） | 增强测试（可见） | gold F2P（不可见） | 未记录 | 词表外 | 行数 | repo 行 | repo 缺声明 | repo 声明一致 | repo 不一致 |"
+        )
+        lines.append(
+            "|------|------------------|------------------|--------------------|--------|--------|------|---------|-------------|----------------|-------------|"
+        )
+        for baseline, pv in prov_rows:
+            by = pv.get("by_type", {})
+            lines.append(
+                f"| {baseline} | {by.get('generated_test', 0)} | {by.get('enhanced_generated_test', 0)} "
+                f"| {by.get('gold_fail_to_pass', 0)} | {by.get('not_recorded', 0)} | {by.get('other', 0)} "
+                f"| {pv.get('n_rows', 0)} | {pv.get('repo_rows', 0)} | {pv.get('repo_rows_unrecorded', 0)} "
+                f"| {pv.get('repo_rows_consistent', 0)} | {pv.get('n_violations', 0)} |"
+            )
+        lines.append("")
+        bad = [(b, pv) for b, pv in prov_rows if pv.get("n_violations")]
+        if bad:
+            detail = "；".join(
+                f"`{b}` {pv['n_violations']} 行（样例 task_id: {', '.join(pv.get('violations', [])[:5]) or '—'}）"
+                for b, pv in bad
+            )
+            lines.append(f"> **不一致（repo 行必须 gold + 不可见）**：{detail}。")
+            lines.append("")
+        other_notes = [f"`{b}` 出现词表外取值 {pv['other_values']}" for b, pv in prov_rows if pv.get("other_values")]
+        if other_notes:
+            lines.append(f"> 词表外取值（单列，不并入任何档）：{'；'.join(other_notes)}。")
+            lines.append("")
+        lines.append(
+            "> 口径：`generated_test` / `enhanced_generated_test` 为本地生成测试验收（测试对系统可见）；"
+            "`gold_fail_to_pass` 为仓库级验收（gold FAIL_TO_PASS/PASS_TO_PASS，测试**对系统不可见**）；"
+            "`未记录` = 该行没有这两个键（批次早于 R52，**不等于**「生成测试验收」）。"
+            "repo 行（有 `repo_verification`）必须同时满足 `gold_fail_to_pass` 与 `False`，否则计入「不一致」。"
+        )
+        lines.append(
+            "> `repo 缺声明` = 有仓库级验收但**两个键都未记录**（早于 R52 的历史批次）——"
+            "缺键读作未记录，**不计入不一致**；只记录了一个键属不完整声明，仍计入不一致。"
+        )
+        lines.append("")
+
+    # BU 轮（2026-10-22）：Self-Repair Trap 判定核输入可达域的报告面读侧。改前
+    # `self_repair_trap_suspected` / `_signals` 自批次 XIV（ADR-0028）起只写不读，
+    # 归档 5935 行恒判"不怀疑"——输入不足、形状不符与"判干净"三种事实在报告面
+    # 同形，且三个信号各自的最少点数门槛从不披露。本节只分档与对账，
+    # 不改判定核、不改任何行的值与方向。
+    trap = {b: m.get("self_repair_trap_domain", {}) for b, m in per.items()}
+    trap_rows = [(b, t) for b, t in trap.items() if t.get("n_rows")]
+    if trap_rows:
+        lines.append("## Self-Repair Trap 判定核的输入可达域（BU：`self_repair_trap_*` 的读侧）")
+        lines.append("")
+        lines.append(
+            "| 基线 | 行数 | 有判定 | 未记录 | 历史 null | <2 点 | ≥2 点 | declining 可达 | collapse 可达 | score 可达 | 域外下降 | 开火 | 不一致（判定/信号） |"
+        )
+        lines.append(
+            "|------|------|--------|--------|-----------|-------|-------|----------------|-------------|------------|----------|------|--------------------|"
+        )
+        totals = Counter()
+        for baseline, t in trap_rows:
+            dom = t.get("signal_domain", {})
+            totals.update(
+                {
+                    "n_rows": t.get("n_rows", 0),
+                    "n_with_verdict": t.get("n_with_verdict", 0),
+                    "not_recorded": t.get("not_recorded", 0),
+                    "history_malformed": t.get("history_malformed", 0),
+                    "below_min_floor": t.get("below_min_floor", 0),
+                    "min_floor_reached": t.get("min_floor_reached", 0),
+                    "assert_count_declining": dom.get("assert_count_declining", 0),
+                    "assertion_collapse": dom.get("assertion_collapse", 0),
+                    "mutation_score_declining": dom.get("mutation_score_declining", 0),
+                    "n_decline2_outside_domain": t.get("n_decline2_outside_domain", 0),
+                    "n_verdict_true": t.get("n_verdict_true", 0),
+                    "n_suspected_mismatch": t.get("n_suspected_mismatch", 0),
+                    "n_signals_mismatch": t.get("n_signals_mismatch", 0),
+                    "n_rerun_error": t.get("n_rerun_error", 0),
+                }
+            )
+            lines.append(
+                f"| {baseline} | {t.get('n_rows', 0)} | {t.get('n_with_verdict', 0)} "
+                f"| {t.get('not_recorded', 0)} | {t.get('history_malformed', 0)} "
+                f"| {t.get('below_min_floor', 0)} | {t.get('min_floor_reached', 0)} "
+                f"| {dom.get('assert_count_declining', 0)} | {dom.get('assertion_collapse', 0)} "
+                f"| {dom.get('mutation_score_declining', 0)} | {t.get('n_decline2_outside_domain', 0)} "
+                f"| {t.get('n_verdict_true', 0)} "
+                f"| {t.get('n_suspected_mismatch', 0)}/{t.get('n_signals_mismatch', 0)} |"
+            )
+        lines.append(
+            f"| **合计** | {totals['n_rows']} | {totals['n_with_verdict']} | {totals['not_recorded']} "
+            f"| {totals['history_malformed']} | {totals['below_min_floor']} | {totals['min_floor_reached']} "
+            f"| {totals['assert_count_declining']} | {totals['assertion_collapse']} "
+            f"| {totals['mutation_score_declining']} | {totals['n_decline2_outside_domain']} "
+            f"| {totals['n_verdict_true']} | {totals['n_suspected_mismatch']}/{totals['n_signals_mismatch']} |"
+        )
+        lines.append("")
+        silent_arms = [b for b, t in trap_rows if not t.get("n_with_verdict")]
+        if silent_arms:
+            lines.append(
+                f"> 本节 {len(silent_arms)} 个臂的结果行两个键都没落盘："
+                f"{'、'.join(f'`{b}`' for b in silent_arms)}——**不是「都判过且不怀疑」**，"
+                "是批次早于 ADR-0028 观测层（`未记录` 一档）。"
+            )
+            lines.append("")
+        if not totals["assert_count_declining"]:
+            lines.append(
+                f"> **`assert_count_declining` 的输入域在本语料是空集**：{totals['n_with_verdict']} 行里"
+                f"没有任何一行给出 ≥{SIGNAL_MIN_POINTS['assert_count_declining']} 个可解析断言计数"
+                "（归档历史最长 2 点）——该信号「从未开火」与「从未被给过判定机会」在判定值上同形。"
+            )
+            lines.append("")
+        if totals["n_rerun_error"]:
+            lines.append(f"> 对账异常（同进程重跑判定核抛错）= {totals['n_rerun_error']} 行，单列不折成「一致」。")
+            lines.append("")
+        lines.append(
+            "> 口径：`未记录` = 行内没有 `self_repair_trap_suspected` 键（批次早于 ADR-0028），"
+            "**不等于**「这条腿干净」；`历史 null` = 键在但 `oracle_quality_history` 不是列表，"
+            "判定核走「结构异常 ⇒ 不怀疑」分支；`<2 点` / `≥2 点` = 历史快照点数。"
+        )
+        lines.append(
+            "> 三个「可达」列回答的是**输入够不够**，不是判没判出来："
+            f"`declining 可达` 需 ≥{SIGNAL_MIN_POINTS['assert_count_declining']} 个可解析点、"
+            f"`collapse 可达` 需 ≥{SIGNAL_MIN_POINTS['assertion_collapse']} 个可解析点、"
+            f"`score 可达` 需 ≥{SIGNAL_MIN_POINTS['mutation_score_declining']} 个非 `None` 变异分数。"
+            "`域外下降` = 历史确有连续下降但点数低于 declining 门槛（证据存在、判据看不见）。"
+            "`不一致` = 同进程把判定核重跑在归档历史上与行内已写值按值对照的差异行数（不改写任何值）。"
+        )
+        lines.append("")
+
     # 4.4 改进：total=0 时快照仍含容量信息（_venv_cache_stats_snapshot 不再返回 None），
     # 命中统计章节只在 total>0 时渲染；容量告警在 exceeded=True 时额外渲染
     cache_stats = analysis.get("venv_cache_stats")
