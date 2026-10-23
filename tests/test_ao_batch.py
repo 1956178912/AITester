@@ -153,9 +153,14 @@ class TestReadmeEnHeader:
         BY 轮（2026-10-23）推进至 "**BY round:"（同一写法：BX 的标记随之改为
         "Previously **BX round:"，带冒号的最新字面在头部唯一命中；中文侧同步推进至
         "**BY 轮："，历史链首项为 "此前 **BX 轮："；单逻辑行剔除行内代码后 `**` 中文 510 /
-        英文 536，均为偶）。"""
+        英文 536，均为偶）。
+        BZ 轮（2026-10-23）推进至 "**BZ round:"（同一写法：BY 的标记随之改为
+        "Previously **BY round:"，带冒号的最新字面在头部唯一命中；中文侧同步推进至
+        "**BZ 轮："，历史链首项为 "此前 **BY 轮："；本轮轮换后在
+        tests/test_ao_batch.py 同款方法（全文件剔除行内代码后 `**` 出现次数）下实测
+        中文 986 / 英文 920，均为偶）。"""
         assert "Last updated: 2026-10-23" in README_EN_HEAD
-        assert "**BY round:" in README_EN_HEAD
+        assert "**BZ round:" in README_EN_HEAD
 
 
 class TestDeprecationTimeline:
