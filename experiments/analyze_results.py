@@ -106,6 +106,9 @@ from experiments.contamination_check import (  # noqa: E402
 )
 from experiments.difficulty_stratification import render_stratification_section  # noqa: E402
 from experiments.statistical_analysis import (  # noqa: E402
+    detector_silence_stats as _detector_silence,
+)
+from experiments.statistical_analysis import (  # noqa: E402
     oracle_provenance_stats as _oracle_provenance,
 )
 from experiments.statistical_analysis import (  # noqa: E402
@@ -221,6 +224,11 @@ def build_analysis(data: dict[str, Any], golden_patches: dict[str, str] | None =
             # 两键自批次 XIV（ADR-0028）起只写不读，归档 5935 行恒判"不怀疑"；
             # 本键只分档与对账，判定值与判定方向一处不动。
             "self_repair_trap_domain": _trap_domain(details),
+            # BV 轮（2026-10-23）：批次 VIII / XIV 两份判定核的沉默分档读侧。
+            # 两组键（test_hacking_* / fl_constraint_*）自写入起报告面零读者，
+            # 且「没看」与「看过且干净」在结果行里同形；本键只分档与对账，
+            # 判定值与判定方向一处不动。
+            "detector_silence": _detector_silence(details),
             # 2.1 数据污染检测（details 携带 patch + task_metadata.golden_patch 时计算重叠度）
             "contamination_report": detect_contamination(details, golden_patches),
             # 1.3 边界用例覆盖（generated_test 含边界值时统计，旧 JSON 无该字段时全 0）
@@ -1247,6 +1255,158 @@ def render_markdown(analysis: dict[str, Any], source_file: str) -> str:
             f"`score 可达` 需 ≥{SIGNAL_MIN_POINTS['mutation_score_declining']} 个非 `None` 变异分数。"
             "`域外下降` = 历史确有连续下降但点数低于 declining 门槛（证据存在、判据看不见）。"
             "`不一致` = 同进程把判定核重跑在归档历史上与行内已写值按值对照的差异行数（不改写任何值）。"
+        )
+        lines.append("")
+
+    # BV 轮（2026-10-23）：批次 VIII / XIV 两份判定核的沉默分档报告面读侧。改前
+    # `test_hacking_*`（批次 VIII，ADR-0022）与 `fl_constraint_*`（批次 XIV，
+    # ADR-0028）只写不读，而两者的「没看」与「看过且干净」在结果行里同形：
+    # 判定核在无原码 / 无补丁 / 解析失败时返回 suspected=False + signals=[]，
+    # 约束门的六种早退共用一个 not_evaluable。本节只分档与对账，判定值与
+    # 判定方向一处不动（两组键不进入任何判定）。
+    silence = {b: m.get("detector_silence", {}) for b, m in per.items()}
+    silence_rows = [(b, s) for b, s in silence.items() if s.get("n_rows")]
+    if silence_rows:
+        lines.append("## 批次 VIII/XIV 判定核的沉默分档（BV：`test_hacking_*` / `fl_constraint_*` 的读侧）")
+        lines.append("")
+        lines.append(
+            "| 基线 | 行数 | hack 有判定 | 状态已记录 | 已求值（ok） | 没看 | 状态未记录 | 判 True | 信号非空 |"
+        )
+        lines.append(
+            "|------|------|-------------|-------------|---------------|------|-------------|---------|----------|"
+        )
+        hack_totals = Counter()
+        for baseline, s in silence_rows:
+            h = s.get("hack", {})
+            hack_totals.update(
+                {
+                    "n_rows": s.get("n_rows", 0),
+                    "n_verdict_recorded": h.get("n_verdict_recorded", 0),
+                    "n_status_recorded": h.get("n_status_recorded", 0),
+                    "n_evaluated": h.get("n_evaluated", 0),
+                    "n_silent": h.get("n_silent", 0),
+                    "n_status_unrecorded": h.get("n_status_unrecorded", 0),
+                    "n_suspected": h.get("n_suspected", 0),
+                    "n_signal_nonempty": h.get("n_signal_nonempty", 0),
+                }
+            )
+            lines.append(
+                f"| {baseline} | {s.get('n_rows', 0)} | {h.get('n_verdict_recorded', 0)} "
+                f"| {h.get('n_status_recorded', 0)} | {h.get('n_evaluated', 0)} | {h.get('n_silent', 0)} "
+                f"| {h.get('n_status_unrecorded', 0)} | {h.get('n_suspected', 0)} | {h.get('n_signal_nonempty', 0)} |"
+            )
+        lines.append(
+            f"| **合计** | {hack_totals['n_rows']} | {hack_totals['n_verdict_recorded']} "
+            f"| {hack_totals['n_status_recorded']} | {hack_totals['n_evaluated']} | {hack_totals['n_silent']} "
+            f"| {hack_totals['n_status_unrecorded']} | {hack_totals['n_suspected']} "
+            f"| {hack_totals['n_signal_nonempty']} |"
+        )
+        lines.append("")
+        lines.append(
+            "| 基线 | FL 有判定 | hit | miss | not_evaluable | 已求值 | hit 比 | 成因已记录 | 成因推断（下界） | 成因不一致 | 变更函数 0/1/2/3+ |"
+        )
+        lines.append("|---|---|---|---|---|---|---|---|---|---|---|")
+        fl_totals = Counter()
+        for baseline, s in silence_rows:
+            f = s.get("fl", {})
+            changed = f.get("changed_len", {})
+            fl_totals.update(
+                {
+                    "n_verdict_recorded": f.get("n_verdict_recorded", 0),
+                    "n_hit": f.get("n_hit", 0),
+                    "n_miss": f.get("n_miss", 0),
+                    "n_not_evaluable": f.get("n_not_evaluable", 0),
+                    "n_evaluated": f.get("n_evaluated", 0),
+                    "n_recorded": sum(f.get("reason_recorded", {}).values()),
+                    "n_inferred": sum(f.get("reason_inferred", {}).values()),
+                    "n_reason_mismatch": f.get("n_reason_mismatch", 0),
+                    "changed_0": changed.get("0", 0),
+                    "changed_1": changed.get("1", 0),
+                    "changed_2": changed.get("2", 0),
+                    "changed_3": changed.get("3+", 0),
+                }
+            )
+            ratio = f.get("hit_ratio")
+            lines.append(
+                f"| {baseline} | {f.get('n_verdict_recorded', 0)} | {f.get('n_hit', 0)} | {f.get('n_miss', 0)} "
+                f"| {f.get('n_not_evaluable', 0)} | {f.get('n_evaluated', 0)} "
+                f"| {f'{ratio:.1%}' if ratio is not None else '—'} "
+                f"| {sum(f.get('reason_recorded', {}).values())} | {sum(f.get('reason_inferred', {}).values())} "
+                f"| {f.get('n_reason_mismatch', 0)} "
+                f"| {changed.get('0', 0)}/{changed.get('1', 0)}/{changed.get('2', 0)}/{changed.get('3+', 0)} |"
+            )
+        total_ratio = (fl_totals["n_hit"] / fl_totals["n_evaluated"]) if fl_totals["n_evaluated"] else None
+        lines.append(
+            f"| **合计** | {fl_totals['n_verdict_recorded']} | {fl_totals['n_hit']} | {fl_totals['n_miss']} "
+            f"| {fl_totals['n_not_evaluable']} | {fl_totals['n_evaluated']} "
+            f"| {f'{total_ratio:.1%}' if total_ratio is not None else '—'} "
+            f"| {fl_totals['n_recorded']} | {fl_totals['n_inferred']} | {fl_totals['n_reason_mismatch']} "
+            f"| {fl_totals['changed_0']}/{fl_totals['changed_1']}/{fl_totals['changed_2']}/{fl_totals['changed_3']} |"
+        )
+        lines.append("")
+        silent_arms = [b for b, s in silence_rows if not s.get("hack", {}).get("n_verdict_recorded")]
+        if silent_arms:
+            lines.append(
+                f"> {len(silent_arms)} 个臂的结果行没有 `test_hacking_*` 判定键："
+                f"{'、'.join(f'`{b}`' for b in silent_arms)}——**不是「都判过且干净」**，"
+                "是批次早于批次 VIII 观测层（`hack 有判定` = 0）。"
+            )
+            lines.append("")
+        if hack_totals["n_suspected"]:
+            samples = []
+            for _, s in silence_rows:
+                samples.extend(s.get("hack", {}).get("suspected_samples", []))
+            lines.append(
+                f"> **test-hacking 判定为 True 的行 = {hack_totals['n_suspected']}**"
+                f"（样例 task_id: {', '.join(samples[:10]) or '—'}）——这批行此前在任何报告面都不出现。"
+                "判定值为 True 只说明**补丁里出现了三类结构信号之一**（硬编码输入分支 / 断言弱化 / "
+                "新增吞异常），它不进入 passed，也不是「作弊已被确认」。"
+            )
+            lines.append("")
+        if hack_totals["n_silent"]:
+            lines.append(
+                f"> **`没看` = {hack_totals['n_silent']} 行**：判定核在这批行上根本没跑"
+                "（无原码 / 无补丁 / 两侧之一解析失败）——它们的 `suspected=False` 与"
+                "「三信号都跑过且零命中」在判定值上同形，`没看` 一列就是这两者的分界。"
+            )
+            lines.append("")
+        if total_ratio is not None and fl_totals["n_evaluated"] and total_ratio >= 0.99:
+            share3 = fl_totals["changed_3"] / fl_totals["n_evaluated"]
+            if share3 > 0.5:
+                reading = (
+                    f"其中变更函数 3+ 档占 {share3:.1%}——与 ADR-0028 登记的「整文件重写 ⇒ 变更集合 ≈ 全文件函数 ⇒ "
+                    "近乎恒 hit」一致，此时 hit 比几乎不含定位质量信息。"
+                )
+            else:
+                reading = (
+                    f"变更函数 3+ 档只占 {share3:.1%}，**ADR-0028 登记的整文件重写成因不足以解释这个比值**——"
+                    f"高 hit 比的直接含义是「补丁改的函数几乎总落在 Top-k 候选里」，而 miss 仅 "
+                    f"{fl_totals['n_miss']} 行 ⇒ 该门在本语料几乎不区分。"
+                )
+            lines.append(
+                f"> **约束门的判别力读数**：已求值 {fl_totals['n_evaluated']} 行里 hit {fl_totals['n_hit']} / "
+                f"miss {fl_totals['n_miss']}（hit 比 {total_ratio:.1%}）。{reading}"
+                "hit 比不得读作「定位质量好」。"
+            )
+            lines.append("")
+        if fl_totals["n_reason_mismatch"]:
+            lines.append(
+                f"> 成因键与判定值自相矛盾 = {fl_totals['n_reason_mismatch']} 行（写侧缺陷信号，单列不修正）。"
+            )
+            lines.append("")
+        lines.append(
+            "> 口径：`hack 有判定` = 行内有 `test_hacking_suspected` 键（批次早于 VIII 则缺席，**不等于**"
+            "「判过且干净」）；`状态已记录` = 有 `test_hacking_status`（BV 起落盘）；`状态未记录` = "
+            "有判定但状态键缺席（早于 BV）——**不得读作 ok**；`没看` = 状态词表里 `ok` 之外的任何一档"
+            "（无原码 / 无补丁 / 原码解析失败 / 补丁解析失败 / 调用点异常）。"
+        )
+        lines.append(
+            "> FL 侧：`not_evaluable` 的成因分两列——`成因已记录` 来自 `fl_constraint_reason`（BV 起落盘），"
+            "`成因推断（下界）` 是按行内材料（`patch` / `llm_localization` / "
+            "`fl_constraint_changed_functions`）反推的历史行，只能看到「无补丁 / 无定位 / 变更集合为空」"
+            "三支，「无原码 / 无候选 / 异常」落 `inferred_unattributed`——**推断是下界，不等于全集**。"
+            "`hit 比` 的分母是 `已求值`（hit + miss），`not_evaluable` 不进分母；"
+            "判定值为 `null`（失败分支的显式占位）按 `not_evaluable` 读，成因取 `no_state`。"
         )
         lines.append("")
 

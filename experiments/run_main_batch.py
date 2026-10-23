@@ -58,6 +58,7 @@ from experiments.analysis_parts.check_leg_analysis import (  # noqa: E402
     CHECK_LEG_LABELS,
     _check_leg_measurability,
 )
+from experiments.statistical_analysis import detector_silence_stats  # noqa: E402
 
 DEFAULT_TASK_COUNT = 50
 DEFAULT_SEED = 42
@@ -534,6 +535,20 @@ def _print_r4_summary(batch_path: Path) -> None:
             )
         else:
             print("    BQ 检查腿: 未记录（早于 BN 轮落盘，不可读作「干净」）")
+        # BV 轮（2026-10-23）：批次 VIII / XIV 两份判定核的沉默分档（与 BQ 检查腿
+        # 同风格）。改前两组键在批次摘要里零读者：hack 判定核的「没看」（无原码 /
+        # 无补丁 / 解析失败）与「看过且干净」同为 suspected=False，约束门的六种
+        # 早退共用一个 not_evaluable。只加分档计数，不改任何判定。
+        sil = detector_silence_stats(det)
+        hack, flc = sil["hack"], sil["fl"]
+        if sil["n_rows"]:
+            ratio = "—" if flc["hit_ratio"] is None else f"{flc['hit_ratio']:.1%}"
+            print(
+                f"    BV 判定核沉默: hack 已求值 {hack['n_evaluated']}/{hack['n_verdict_recorded']}"
+                f"（没看 {hack['n_silent']}、状态未记录 {hack['n_status_unrecorded']}）判 True {hack['n_suspected']}；"
+                f"FL 已求值 {flc['n_evaluated']}（hit {flc['n_hit']}/miss {flc['n_miss']}，hit 比 {ratio}）"
+                f"not_evaluable {flc['n_not_evaluable']}（成因已记录 {sum(flc['reason_recorded'].values())}）"
+            )
         if fl1_meas:
             print(f"    R8 FL@1 命中率: {fl1_hit}/{fl1_meas} ({round(fl1_hit / fl1_meas * 100, 1)}%)")
 

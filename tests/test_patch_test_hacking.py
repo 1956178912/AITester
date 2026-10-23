@@ -141,11 +141,21 @@ class TestNodeSignatures:
 
 
 class TestDetectTestHacking:
-    def test_empty_code_returns_clean(self):
-        assert detect_test_hacking("", "def f(): pass") == {"suspected": False, "signals": []}
+    # BV 轮（2026-10-23）：原断言用整字典相等锁住「不可评估 == 干净」——正是本轮
+    # 收口的假干净。判定值语义不变（suspected=False / signals=[]），另钉求值状态。
+    def test_empty_code_returns_clean_but_status_says_empty_original(self):
+        assert detect_test_hacking("", "def f(): pass") == {
+            "suspected": False,
+            "signals": [],
+            "status": "empty_original",
+        }
 
-    def test_syntax_error_returns_clean(self):
-        assert detect_test_hacking("def f(:", "def f(): pass") == {"suspected": False, "signals": []}
+    def test_syntax_error_returns_clean_but_status_names_the_side(self):
+        assert detect_test_hacking("def f(:", "def f(): pass") == {
+            "suspected": False,
+            "signals": [],
+            "status": "parse_error_original",
+        }
 
     def test_hardcoded_branch_detected(self):
         original = "def f(x):\n    return x * 2\n"

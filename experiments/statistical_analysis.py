@@ -1637,6 +1637,176 @@ def self_repair_trap_domain_summary(data: dict[str, list[dict]]) -> dict[str, di
     return {baseline: self_repair_trap_domain_stats(data.get(baseline) or []) for baseline in sorted(data)}
 
 
+def _changed_len_bucket(n: int) -> str:
+    """变更函数个数分档（0 / 1 / 2 / 3+）：整文件重写的约束力披露用。"""
+    if n <= 0:
+        return "0"
+    if n >= 3:
+        return "3+"
+    return str(n)
+
+
+def detector_silence_stats(rows: list[dict]) -> dict[str, Any]:
+    """统计一组结果行里两份**判定核的沉默**（BV 轮，2026-10-23）。
+
+    背景：两组判定键自写入起在报告面**零读者**（BU 普查 11 键池里的两项），
+    而两者的「没看」与「看过且干净」在结果行里同形：
+
+    - `test_hacking_suspected` / `test_hacking_signals`（批次 VIII，ADR-0022）：
+      判定核在无原码 / 无补丁 / 原码解析失败 / 补丁解析失败时返回
+      `suspected=False, signals=[]`——与「三信号都跑过且零命中」完全同形；
+    - `fl_constraint_verdict` 等三键（批次 XIV，ADR-0028）：六种早退成因共用
+      `verdict="not_evaluable"` 一个标签，报告面连这个标签都不读。
+
+    本助手只做**读侧分档与对账**，不改判定核、不改任何行的值与方向：
+
+    - hack 侧四档：`no_verdict`（批次早于 VIII）/ `status_unrecorded`
+      （早于 BV，状态没落盘）/ `ok`（三信号都跑过）/ 其余词表档（没看）；
+      `n_suspected_without_evaluation` 点名「判了 True 却没 ok」的行——
+      写侧缺陷信号，单列不折进任何一档；
+    - FL 侧：判定值三档 + 成因**按来源分列**（`recorded` 新批次 /
+      `inferred` 历史行按行内材料推断（下界）/ `not_applicable` 已求值 /
+      `unrecorded_verdict` 早于 XIV）；`n_not_evaluable` 必须等于
+      `recorded + inferred` 两侧之和——这条恒等式由测试直接断言（函数内不设
+      「恒等式为真」标记：四档／两支都由同一循环分支赋值，按构造恒真，任何变异
+      都无法区分它，BV §6① 已按 BU U18 同族处理）；
+    - `hit_ratio` = hit / (hit + miss)——`not_evaluable` 不进分母；
+    - `changed_len`：变更函数个数分档（0 / 1 / 2 / 3+）——ADR-0028 登记的
+      「整文件重写 ⇒ 变更集合≈全文件 ⇒ 判定近乎恒 hit」在报告面可见之前，
+      这组分布是唯一能自证约束力的读数。
+
+    Args:
+        rows: 单个基线的结果行列表。
+
+    Returns:
+        统计 dict；空臂返回零计数（不是「没有这个臂」）。
+    """
+    from experiments._verdict_silence import (
+        FL_BASIS_INFERRED,
+        FL_BASIS_RECORDED,
+        FL_HIT_RANK_KEY,
+        FL_VERDICT_KEY,
+        HACK_SIGNAL_NAMES,
+        HACK_STATUS_DETECTOR_ERROR,
+        HACK_STATUS_OK,
+        HACK_STATUS_UNRECORDED,
+        HACK_STATUS_VOCAB,
+        HACK_SUSPECTED_KEY,
+        fl_changed_functions,
+        fl_reason,
+        fl_reason_mismatch,
+        fl_verdict,
+        hack_signals,
+        hack_status,
+    )
+
+    hack_status_counts: Counter[str] = Counter()
+    hack_signal_counts: Counter[str] = Counter()
+    fl_verdict_counts: Counter[str] = Counter()
+    fl_basis_counts: Counter[str] = Counter()
+    fl_reason_recorded: Counter[str] = Counter()
+    fl_reason_inferred: Counter[str] = Counter()
+    fl_hit_rank: Counter[str] = Counter()
+    fl_changed_len: Counter[str] = Counter()
+    n_hack_suspected = 0
+    n_hack_signal_nonempty = 0
+    n_hack_suspected_without_evaluation = 0
+    n_fl_mismatch = 0
+    suspected_samples: list[str] = []
+
+    for row in rows:
+        status = hack_status(row)
+        hack_status_counts[status] += 1
+        if HACK_SUSPECTED_KEY in row and row.get(HACK_SUSPECTED_KEY) is True:
+            n_hack_suspected += 1
+            # 只有「状态已落盘且不是 ok」才算写侧矛盾；历史行状态未记录，
+            # 无法判断——不得把它们点名成缺陷。
+            if status not in {HACK_STATUS_OK, HACK_STATUS_UNRECORDED}:
+                n_hack_suspected_without_evaluation += 1
+            if len(suspected_samples) < 20:
+                suspected_samples.append(str(row.get("task_id") or "—"))
+        signals = hack_signals(row)
+        if signals:
+            n_hack_signal_nonempty += 1
+            for signal in signals:
+                hack_signal_counts[signal] += 1
+
+        verdict = fl_verdict(row)
+        fl_verdict_counts[verdict] += 1
+        reason, basis = fl_reason(row)
+        fl_basis_counts[basis] += 1
+        if basis == FL_BASIS_RECORDED and FL_VERDICT_KEY in row:
+            fl_reason_recorded[reason] += 1
+        elif basis == FL_BASIS_INFERRED:
+            fl_reason_inferred[reason] += 1
+        if fl_reason_mismatch(row):
+            n_fl_mismatch += 1
+        if verdict == "hit":
+            rank = row.get(FL_HIT_RANK_KEY)
+            fl_hit_rank[f"rank_{rank}" if isinstance(rank, int) else "none"] += 1
+        if verdict in {"hit", "miss", "not_evaluable"}:
+            fl_changed_len[_changed_len_bucket(len(fl_changed_functions(row)))] += 1
+
+    # hack 侧：四档归类（`other:*` 单列，不并进「没看」）
+    n_hack_other = sum(c for k, c in hack_status_counts.items() if k.startswith("other:"))
+    n_hack_silent = sum(hack_status_counts.get(k, 0) for k in HACK_STATUS_VOCAB if k != HACK_STATUS_OK)
+    n_hack_silent += hack_status_counts.get(HACK_STATUS_DETECTOR_ERROR, 0) + n_hack_other
+    n_hack_evaluated = hack_status_counts.get(HACK_STATUS_OK, 0)
+    n_hack_not_recorded = hack_status_counts.get("no_verdict", 0)
+    n_hack_status_unrecorded = hack_status_counts.get(HACK_STATUS_UNRECORDED, 0)
+
+    n_fl_not_evaluable = fl_verdict_counts.get("not_evaluable", 0)
+    n_fl_evaluated = fl_verdict_counts.get("hit", 0) + fl_verdict_counts.get("miss", 0)
+    unknown_signals = sorted(s for s in hack_signal_counts if s not in HACK_SIGNAL_NAMES)
+
+    return {
+        "n_rows": len(rows),
+        # —— test-hacking（批次 VIII）——
+        "hack": {
+            "n_verdict_recorded": len(rows) - n_hack_not_recorded,
+            "n_not_recorded": n_hack_not_recorded,
+            "n_status_recorded": len(rows) - n_hack_not_recorded - n_hack_status_unrecorded,
+            "n_status_unrecorded": n_hack_status_unrecorded,
+            "n_evaluated": n_hack_evaluated,
+            "n_silent": n_hack_silent,
+            "n_suspected": n_hack_suspected,
+            "suspected_samples": suspected_samples,
+            "n_signal_nonempty": n_hack_signal_nonempty,
+            "n_suspected_without_evaluation": n_hack_suspected_without_evaluation,
+            "status": dict(hack_status_counts),
+            "signals": dict(hack_signal_counts),
+            "unknown_signals": unknown_signals,
+            # BV 自纠（2026-10-23）：这里曾放 `partition_ok`（四档求和 == 行数），
+            # 但四档都由同一循环内的分支赋值 ⇒ 恒等式按构造恒真，任何变异（含把
+            # 它硬编码成 True）都无法被区分——BU U18 同型的「恒等替换」。已删；
+            # 四档求和 == 行数 由 `tests/test_verdict_silence_bv.py` 直接断言。
+        },
+        # —— FL Top-k 约束门（批次 XIV）——
+        "fl": {
+            "n_verdict_recorded": sum(fl_verdict_counts.get(k, 0) for k in ("hit", "miss", "not_evaluable")),
+            "n_not_recorded": fl_verdict_counts.get("no_verdict", 0),
+            "n_hit": fl_verdict_counts.get("hit", 0),
+            "n_miss": fl_verdict_counts.get("miss", 0),
+            "n_not_evaluable": n_fl_not_evaluable,
+            "n_evaluated": n_fl_evaluated,
+            "hit_ratio": (fl_verdict_counts.get("hit", 0) / n_fl_evaluated) if n_fl_evaluated else None,
+            "verdict": dict(fl_verdict_counts),
+            "basis": dict(fl_basis_counts),
+            "reason_recorded": dict(fl_reason_recorded),
+            "reason_inferred": dict(fl_reason_inferred),
+            "n_reason_mismatch": n_fl_mismatch,
+            "hit_rank": dict(fl_hit_rank),
+            "changed_len": dict(fl_changed_len),
+            "other_values": sorted(k for k in fl_verdict_counts if k.startswith("other:")),
+        },
+    }
+
+
+def detector_silence_summary(data: dict[str, list[dict]]) -> dict[str, dict[str, Any]]:
+    """按臂统计两组判定核的沉默分档（`detector_silence_stats` 的臂级包装）。"""
+    return {baseline: detector_silence_stats(data.get(baseline) or []) for baseline in sorted(data)}
+
+
 def pass_at_k_summary(data: dict[str, list[dict]], field: str = "patch_correct") -> dict[str, dict[str, Any]]:
     """批次 IX（ADR-0023）：按臂的 pass@k（多轮采样并集解决率）。
 
