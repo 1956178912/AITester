@@ -58,7 +58,11 @@ from experiments.analysis_parts.check_leg_analysis import (  # noqa: E402
     CHECK_LEG_LABELS,
     _check_leg_measurability,
 )
-from experiments.statistical_analysis import detector_silence_stats  # noqa: E402
+from experiments.statistical_analysis import (  # noqa: E402
+    detector_silence_stats,
+    patch_acceptance_stats,
+    residual_keys_stats,
+)
 
 DEFAULT_TASK_COUNT = 50
 DEFAULT_SEED = 42
@@ -548,6 +552,49 @@ def _print_r4_summary(batch_path: Path) -> None:
                 f"（没看 {hack['n_silent']}、状态未记录 {hack['n_status_unrecorded']}）判 True {hack['n_suspected']}；"
                 f"FL 已求值 {flc['n_evaluated']}（hit {flc['n_hit']}/miss {flc['n_miss']}，hit 比 {ratio}）"
                 f"not_evaluable {flc['n_not_evaluable']}（成因已记录 {sum(flc['reason_recorded'].values())}）"
+            )
+        # BW 轮（2026-10-23）：补丁接收链的覆盖率/分母（与 BQ/BV 同风格）。
+        # 改前 `patch_precision` / 证据 / 弃权信号 / 验证在批次摘要里零读者：
+        # `precision=None` 与 0、`unvalidated` 与「验证过且失败」同形。只加分档。
+        acc = patch_acceptance_stats(det)
+        acc_a, acc_ab, acc_va = acc["acceptance"], acc["abstain"], acc["validate"]
+        if acc_a["n_recorded"]:
+            prec = "—" if acc_a["precision"]["value"] is None else f"{acc_a['precision']['value']:.1%}"
+            gold = "—" if acc_a["precision"]["gold_value"] is None else f"{acc_a['precision']['gold_value']:.1%}"
+            cov = "—" if acc_a["coverage"]["value"] is None else f"{acc_a['coverage']['value']:.1%}"
+            print(
+                f"    BW 补丁接收链: 已记录 {acc_a['n_recorded']}/{acc['n_rows']}，"
+                f"plausible {acc_a['n_plausible']}（无 gold {acc_a['n_plausible_no_gold']}）"
+                f" correct {acc_a['n_correct']}（交 {acc_a['n_plausible_correct']}、"
+                f"排除集判对 {acc_a['n_implausible_correct']}）；精确率 {prec} / gold {gold}，覆盖率 {cov}"
+            )
+        if acc_ab["n_recorded"]:
+            sp = acc_ab["suppressed_precision"]
+            sp_text = "—" if sp["value"] is None else f"{sp['value']:.1%}"
+            print(
+                f"    BW 弃权/验证: abstained {acc_ab['n_abstained']}/{acc_ab['n_recorded']}"
+                f"（无可抑制对象 {acc_ab['n_no_effect']}），抑制 passed {acc_ab['n_suppressed']}、"
+                f"精确率 {sp_text}；validated {acc_va['n_validated']}/{acc_va['n_recorded']}，"
+                f"无输入且未验证 {acc_va['n_unvalidated_without_input']}，"
+                f"filtered success {acc_va['n_filtered_success']}/{acc_va['n_passed']}"
+            )
+        # BX 轮（2026-10-23）：写而不读键池最后两键（与 BQ/BV/BW 同风格）。
+        # 改前 `risk_summary` 全归档 enabled=False 占位、`mdo_crash_rate` 五层输入域
+        # 与全池分母在摘要里零读者；`level=None` 与 low、`None` 与 0 同形。只加分档。
+        res = residual_keys_stats(det)
+        rk, mc = res["risk_summary"], res["mdo_crash"]
+        if res["n_rows"]:
+            layers = mc["layers"]
+            pooled = mc["pooled"]
+            rate = "—" if pooled["rate"] is None else f"{pooled['rate']:.2%}"
+            print(
+                f"    BX 残池: risk 通道开启 {rk['enabled']['enabled_true']}/{rk['n_key_present']}"
+                f"（键缺席 {rk['n_key_absent']}，level 可读 {rk['level_nonnull']}）；"
+                f"mdo_crash 实测 {layers['measured']}（值 {mc['n_value_nonnull']}、零 {mc['n_zero']}，"
+                f"池化 {pooled['n_crash']}/{pooled['n_pool']} = {rate}）"
+                f"＋暂定池 {layers['provisional_pool']}（raw {mc['provisional_raw']['n_present']}）；"
+                f"未跑 {layers['not_run']} / 材料缺 {layers['material_absent']} / "
+                f"不可测 {layers['not_measurable']}；键缺席 {mc['n_key_absent']}"
             )
         if fl1_meas:
             print(f"    R8 FL@1 命中率: {fl1_hit}/{fl1_meas} ({round(fl1_hit / fl1_meas * 100, 1)}%)")

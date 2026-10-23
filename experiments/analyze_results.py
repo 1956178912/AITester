@@ -59,6 +59,11 @@ sys.path.insert(0, PROJECT_ROOT)
 # 历史 import 路径（experiments.analyze_results._xxx）不变，默认行为零变化。
 # re-export 符号供外部测试（tests/test_smell_detection_v2.py 等）与同包脚本
 # import，本文件内部不直接调用 → 各 import 行标 noqa F401
+from experiments._patch_acceptance import (  # noqa: E402
+    CORRECT_GOLD_INCORRECT,
+    CORRECT_NO_GOLD,
+    abstain_signal_names,
+)
 from experiments._trap_input_domain import SIGNAL_MIN_POINTS  # noqa: E402
 from experiments.analysis_parts.check_leg_analysis import (  # noqa: E402
     CHECK_LEG_CHANNELS,
@@ -110,6 +115,12 @@ from experiments.statistical_analysis import (  # noqa: E402
 )
 from experiments.statistical_analysis import (  # noqa: E402
     oracle_provenance_stats as _oracle_provenance,
+)
+from experiments.statistical_analysis import (  # noqa: E402
+    patch_acceptance_stats as _patch_acceptance,
+)
+from experiments.statistical_analysis import (  # noqa: E402
+    residual_keys_stats as _residual_keys,
 )
 from experiments.statistical_analysis import (  # noqa: E402
     self_repair_trap_domain_stats as _trap_domain,
@@ -229,6 +240,17 @@ def build_analysis(data: dict[str, Any], golden_patches: dict[str, str] | None =
             # 且「没看」与「看过且干净」在结果行里同形；本键只分档与对账，
             # 判定值与判定方向一处不动。
             "detector_silence": _detector_silence(details),
+            # BW 轮（2026-10-23）：补丁接收链的覆盖率/分母读侧。
+            # `patch_precision`（预注册 E3 指标）、`patch_plausible_evidence`、
+            # `patch_plausible_invariant_violation`、`patch_abstain_signals` 自写入起
+            # 报告面零读者；`patch_validated` 只有测试读者。本键只分档与对账，
+            # 判定值与判定方向一处不动。
+            "patch_acceptance": _patch_acceptance(details),
+            # BX 轮（2026-10-23）：写而不读键池最后两键的读侧。
+            # `risk_summary`（8,864 行全 `enabled=False` 占位）与 `mdo_crash_rate`
+            # （五层输入域、分母=全池 n）自写入起报告面零读者；本键只分档与对账，
+            # 判定值与判定方向一处不动。
+            "residual_keys": _residual_keys(details),
             # 2.1 数据污染检测（details 携带 patch + task_metadata.golden_patch 时计算重叠度）
             "contamination_report": detect_contamination(details, golden_patches),
             # 1.3 边界用例覆盖（generated_test 含边界值时统计，旧 JSON 无该字段时全 0）
@@ -281,6 +303,16 @@ def build_analysis(data: dict[str, Any], golden_patches: dict[str, str] | None =
         # 2.2 跨文件修复失败案例分析（失败类别分布 + import 相关信号占比）
         "cross_file_failure_analysis": cross_file_failure,
     }
+
+
+def _ratio_text(numerator: int, denominator: int) -> str:
+    """比例文本；分母为 0 时 `—`（不是 0%，也不是 100%）。"""
+    return f"{numerator / denominator:.1%}" if denominator else "—"
+
+
+def _ratio_text2(numerator: int, denominator: int) -> str:
+    """两位小数比例文本（BX：crash 率在千分之几量级，一位小数会失真）。"""
+    return f"{numerator / denominator:.2%}" if denominator else "—"
 
 
 def render_markdown(analysis: dict[str, Any], source_file: str) -> str:
@@ -1407,6 +1439,474 @@ def render_markdown(analysis: dict[str, Any], source_file: str) -> str:
             "三支，「无原码 / 无候选 / 异常」落 `inferred_unattributed`——**推断是下界，不等于全集**。"
             "`hit 比` 的分母是 `已求值`（hit + miss），`not_evaluable` 不进分母；"
             "判定值为 `null`（失败分支的显式占位）按 `not_evaluable` 读，成因取 `no_state`。"
+        )
+        lines.append("")
+
+    # BW 轮（2026-10-23）：补丁接收链的覆盖率/分母报告面读侧。改前
+    # `patch_precision`（预注册 E3）、`patch_plausible_evidence` /
+    # `patch_plausible_invariant_violation`（P0-2）、`patch_abstain_signals`
+    # 自写入起报告面零读者，`patch_validated` 只有测试读者。判定值本身忠实，
+    # 没有读者的是它们的分母与输入可达域。本节只分档与对账，判定值与方向
+    # 一处不动。
+    acceptance = {b: m.get("patch_acceptance", {}) for b, m in per.items()}
+    acceptance_rows = [(b, s) for b, s in acceptance.items() if s.get("n_rows")]
+    if acceptance_rows:
+        lines.append("## 补丁接收链的覆盖率与分母（BW：`patch_precision` / 证据 / 弃权 / 验证的读侧）")
+        lines.append("")
+        lines.append(
+            "| 基线 | 行数 | 接收链已记录 | plausible | correct | 交 | 接受集判错 | 排除集判对 | 接受集无 gold | 精确率 | 并集精确率 | gold 精确率 | 覆盖率 | 选择性风险 |"
+        )
+        lines.append("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|")
+        acc_totals = Counter()
+        for baseline, s in acceptance_rows:
+            a = s.get("acceptance", {})
+            n_rec = a.get("n_recorded", 0)
+            n_p = a.get("n_plausible", 0)
+            n_c = a.get("n_correct", 0)
+            n_pc = a.get("n_plausible_correct", 0)
+            n_ic = a.get("n_implausible_correct", 0)
+            acc_totals.update(
+                {
+                    "n_rows": s.get("n_rows", 0),
+                    "n_recorded": n_rec,
+                    "n_plausible": n_p,
+                    "n_correct": n_c,
+                    "n_plausible_correct": n_pc,
+                    "n_plausible_incorrect": a.get("n_plausible_incorrect", 0),
+                    "n_implausible_correct": n_ic,
+                    "n_implausible_incorrect": a.get("n_implausible_incorrect", 0),
+                    "n_plausible_no_gold": a.get("n_plausible_no_gold", 0),
+                    "n_plausible_gold": a.get("n_plausible_gold", 0),
+                    "n_gold_correct": a.get("n_gold_correct", 0),
+                    "n_gold_incorrect": a.get("n_gold_incorrect", 0),
+                    "n_status_gold_incorrect": a.get("correct_status", {}).get(CORRECT_GOLD_INCORRECT, 0),
+                    "n_status_no_gold": a.get("correct_status", {}).get(CORRECT_NO_GOLD, 0),
+                }
+            )
+            lines.append(
+                f"| {baseline} | {s.get('n_rows', 0)} | {n_rec} | {n_p} | {n_c} | {n_pc} "
+                f"| {a.get('n_plausible_incorrect', 0)} | {n_ic} | {a.get('n_plausible_no_gold', 0)} "
+                f"| {_ratio_text(n_pc, n_p)} | {_ratio_text(n_c, n_p + n_ic)} "
+                f"| {_ratio_text(a.get('n_gold_correct', 0), a.get('n_plausible_gold', 0))} "
+                f"| {_ratio_text(n_p, n_rec)} "
+                f"| {_ratio_text(a.get('n_plausible_incorrect', 0), n_p)} |"
+            )
+        lines.append(
+            f"| **合计** | {acc_totals['n_rows']} | {acc_totals['n_recorded']} | {acc_totals['n_plausible']} "
+            f"| {acc_totals['n_correct']} | {acc_totals['n_plausible_correct']} "
+            f"| {acc_totals['n_plausible_incorrect']} | {acc_totals['n_implausible_correct']} "
+            f"| {acc_totals['n_plausible_no_gold']} "
+            f"| {_ratio_text(acc_totals['n_plausible_correct'], acc_totals['n_plausible'])} "
+            f"| {_ratio_text(acc_totals['n_correct'], acc_totals['n_plausible'] + acc_totals['n_implausible_correct'])} "
+            f"| {_ratio_text(acc_totals['n_gold_correct'], acc_totals['n_plausible_gold'])} "
+            f"| {_ratio_text(acc_totals['n_plausible'], acc_totals['n_recorded'])} "
+            f"| {_ratio_text(acc_totals['n_plausible_incorrect'], acc_totals['n_plausible'])} |"
+        )
+        lines.append("")
+        lines.append(
+            "> 三个精确率是三个分母，不是三个估计：`精确率` = 交 / plausible（存储的 `patch_precision` 口径）；"
+            "`并集精确率` = correct / (plausible ∪ correct)——"
+            f"{acc_totals['n_implausible_correct']} 行 `correct=1 ∧ plausible=0` 让两集合不是包含关系；"
+            "`gold 精确率` 在接收集里剔除 "
+            f"{acc_totals['n_plausible_no_gold']} 行「无 gold 材料」（`repair_rate` 缺席或 `None`），"
+            "是预注册 E3 的可比口径。`覆盖率` = plausible / 接收链已记录；"
+            "`选择性风险` = 接受集判错 / plausible（同一分母，二者互补）。"
+            "`patch_precision=None` 当且仅当 `plausible=0`（无分母），**不得读作 0，也不得读作「无 gold」**。"
+        )
+        lines.append(
+            f"> `correct=0` 分两档：gold 判错 {acc_totals['n_status_gold_incorrect']} 行 / 无 gold 材料 "
+            f"{acc_totals['n_status_no_gold']} 行——"
+            "后者是写侧在无 gold 时的保守取值，**不是判错**。`correct=1 ∧ plausible=0` 的 "
+            f"{acc_totals['n_implausible_correct']} 行是接收门与 gold 判定的方向分歧，单列不修正。"
+        )
+        inv = Counter()
+        for _, s in acceptance_rows:
+            inv.update(s.get("acceptance", {}).get("invariant", {}))
+        lines.append(
+            f"> `patch_plausible_invariant_violation` 的读侧：按行内材料复算违反不变量 "
+            f"{inv['violation']} 行，其中布尔键为真 {inv['flag_true']} 行、**键缺席 "
+            f"{inv['flag_missing']} 行**；键未落盘的历史行另有 {inv['flag_unrecorded']} 行。"
+            "缺席不得读作「未违反」——该布尔键不能当完整性信号用。"
+        )
+        lines.append(
+            f"> 键组早于落盘的臂：接收链未记录 {acc_totals['n_rows'] - acc_totals['n_recorded']} 行"
+            "（早于 R53），**不等于**「plausible=0」；弃权/证据/验证三组各自的未记录数见下表。"
+        )
+        lines.append(
+            "> 工件注记（ADR-0021）：早于 2026-10-07 的归档行里 `patch` 文本可能仍带 "
+            "`python\\n`/围栏前缀，`patch_present` 与证据档在个别行上会低估；本表按归档原值读，"
+            "修正口径以 `make repair-replay` 的回放为准（本轮**未重跑**回放，不改写任何行）。"
+        )
+        lines.append("")
+        lines.append(
+            "| 基线 | 证据已记录 | applied | applied_then_rejected | rejected | no_patch | no_state | 其它 | 未记录 | 隐含 plausible | plausible 无证据 | 不一致 |"
+        )
+        lines.append("|---|---|---|---|---|---|---|---|---|---|---|---|")
+        ev_totals = Counter()
+        for baseline, s in acceptance_rows:
+            ev = s.get("evidence", {})
+            basis = ev.get("basis", {})
+            ev_totals.update(
+                {
+                    "n_recorded": ev.get("n_recorded", 0),
+                    "applied": basis.get("applied", 0),
+                    "applied_then_rejected": basis.get("applied_then_rejected", 0),
+                    "rejected": basis.get("rejected", 0),
+                    "no_patch": basis.get("no_patch", 0),
+                    "no_state": basis.get("no_state", 0),
+                    "n_other": ev.get("n_other", 0),
+                    "n_unrecorded": ev.get("n_unrecorded", 0),
+                    "n_implied_plausible": ev.get("n_implied_plausible", 0),
+                    "n_plausible_without_evidence": ev.get("n_plausible_without_evidence", 0),
+                    "n_mismatch": ev.get("n_mismatch", 0),
+                }
+            )
+            lines.append(
+                f"| {baseline} | {ev.get('n_recorded', 0)} | {basis.get('applied', 0)} "
+                f"| {basis.get('applied_then_rejected', 0)} | {basis.get('rejected', 0)} "
+                f"| {basis.get('no_patch', 0)} | {basis.get('no_state', 0)} | {ev.get('n_other', 0)} "
+                f"| {ev.get('n_unrecorded', 0)} | {ev.get('n_implied_plausible', 0)} "
+                f"| {ev.get('n_plausible_without_evidence', 0)} | {ev.get('n_mismatch', 0)} |"
+            )
+        lines.append(
+            f"| **合计** | {ev_totals['n_recorded']} | {ev_totals['applied']} "
+            f"| {ev_totals['applied_then_rejected']} | {ev_totals['rejected']} "
+            f"| {ev_totals['no_patch']} | {ev_totals['no_state']} | {ev_totals['n_other']} "
+            f"| {ev_totals['n_unrecorded']} | {ev_totals['n_implied_plausible']} "
+            f"| {ev_totals['n_plausible_without_evidence']} | {ev_totals['n_mismatch']} |"
+        )
+        lines.append("")
+        lines.append(
+            f"> 证据档与 `plausible` 的恒等：`applied` / `applied_then_rejected` ⇔ `plausible=1`，"
+            f"不一致 {ev_totals['n_mismatch']} 行。`未记录` = 键缺席（早于 P0-2），"
+            "**不等于「没有证据」**；后者看 `no_patch` / `no_state` / `rejected`。"
+            f"`plausible=1` 却缺席证据键的 {ev_totals['n_plausible_without_evidence']} 行是历史行，"
+            "其接受资格没有可复核依据。"
+        )
+        lines.append("")
+        lines.append(
+            "| 基线 | 弃权已记录 | abstained | 可抑制 | 无可抑制对象 | 抑制 passed | 抑制 gold 判错 | 抑制精确率 | 信号非空 | ≥2 信号 | 无效信号 | 判定不一致 | 信号不一致 |"
+        )
+        lines.append("|---|---|---|---|---|---|---|---|---|---|---|---|---|")
+        ab_totals = Counter()
+        sig_counts = Counter()
+        sig_domain = {name: Counter() for name in abstain_signal_names()}
+        for baseline, s in acceptance_rows:
+            ab = s.get("abstain", {})
+            sp = ab.get("suppressed_precision", {})
+            ab_totals.update(
+                {
+                    "n_recorded": ab.get("n_recorded", 0),
+                    "n_abstained": ab.get("n_abstained", 0),
+                    "n_actionable": ab.get("n_actionable", 0),
+                    "n_no_effect": ab.get("n_no_effect", 0),
+                    "n_suppressed": ab.get("n_suppressed", 0),
+                    "suppressed_denominator": sp.get("denominator", 0),
+                    "suppressed_numerator": sp.get("numerator", 0),
+                    "n_signal_nonempty": ab.get("n_signal_nonempty", 0),
+                    "n_multi_signal": ab.get("n_multi_signal", 0),
+                    "n_unknown_signals": ab.get("n_unknown_signals", 0),
+                    "n_abstain_mismatch": ab.get("n_abstain_mismatch", 0),
+                    "n_signal_mismatch": ab.get("n_signal_mismatch", 0),
+                }
+            )
+            sig_counts.update(ab.get("signals", {}))
+            for name, counts in ab.get("signal_domain", {}).items():
+                sig_domain.setdefault(name, Counter()).update(counts)
+            lines.append(
+                f"| {baseline} | {ab.get('n_recorded', 0)} | {ab.get('n_abstained', 0)} "
+                f"| {ab.get('n_actionable', 0)} | {ab.get('n_no_effect', 0)} "
+                f"| {ab.get('n_suppressed', 0)} | {sp.get('numerator', 0)} "
+                f"| {_ratio_text(sp.get('numerator', 0), sp.get('denominator', 0))} "
+                f"| {ab.get('n_signal_nonempty', 0)} | {ab.get('n_multi_signal', 0)} "
+                f"| {ab.get('n_unknown_signals', 0)} | {ab.get('n_abstain_mismatch', 0)} "
+                f"| {ab.get('n_signal_mismatch', 0)} |"
+            )
+        lines.append(
+            f"| **合计** | {ab_totals['n_recorded']} | {ab_totals['n_abstained']} "
+            f"| {ab_totals['n_actionable']} | {ab_totals['n_no_effect']} "
+            f"| {ab_totals['n_suppressed']} | {ab_totals['suppressed_numerator']} "
+            f"| {_ratio_text(ab_totals['suppressed_numerator'], ab_totals['suppressed_denominator'])} "
+            f"| {ab_totals['n_signal_nonempty']} | {ab_totals['n_multi_signal']} "
+            f"| {ab_totals['n_unknown_signals']} | {ab_totals['n_abstain_mismatch']} "
+            f"| {ab_totals['n_signal_mismatch']} |"
+        )
+        lines.append("")
+        lines.append(
+            f"> 弃权的分母有两层：`abstained` {ab_totals['n_abstained']} 行里 "
+            f"{ab_totals['n_no_effect']} 行是「失败且无补丁」——**没有可抑制对象**，"
+            f"与真正的抑制同记 `True`；`可抑制` = {ab_totals['n_actionable']} 行。"
+            f"`抑制精确率` = 被抑制的 passed 中 gold 判错 / 有 gold 裁决的被抑制行"
+            f"（{ab_totals['suppressed_numerator']}/{ab_totals['suppressed_denominator']}）；"
+            f"分母含全部被抑制行时为 {_ratio_text(ab_totals['suppressed_numerator'], ab_totals['n_suppressed'])}"
+            "——两个数都要报，后者把 18 行无 gold 材料记为「非错误」。"
+        )
+        lines.append(
+            "> 信号计数（可多选）："
+            + "、".join(f"`{name}` {sig_counts.get(name, 0)}" for name in sig_domain)
+            + f"；{ab_totals['n_multi_signal']} 行同时 ≥2 个信号，未知信号名 "
+            f"{ab_totals['n_unknown_signals']} 个。信号域（已记录行的键状态）："
+            + "；".join(
+                f"`{name}` 记录 {counter.get('recorded', 0)}/null {counter.get('null', 0)}"
+                f"/缺席 {counter.get('missing', 0)}"
+                for name, counter in sig_domain.items()
+            )
+            + "。"
+        )
+        lines.append("")
+        lines.append(
+            "| 基线 | 验证已记录 | validated | unvalidated | 无输入 | 未验证且无输入 | passed | 抑制中 passed | 未抑制 passed | filtered success | filtered/passed | filtered/(passed∧¬abstain) | 判定不一致 | 验证不一致 |"
+        )
+        lines.append("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|")
+        va_totals = Counter()
+        verdict_counts: Counter[str] = Counter()
+        input_counts: Counter[str] = Counter()
+        level_counts: Counter[str] = Counter()
+        for baseline, s in acceptance_rows:
+            va = s.get("validate", {})
+            va_totals.update(
+                {
+                    "n_recorded": va.get("n_recorded", 0),
+                    "n_validated": va.get("n_validated", 0),
+                    "n_unvalidated": va.get("n_unvalidated", 0),
+                    "n_no_input": va.get("n_no_input", 0),
+                    "n_unvalidated_without_input": va.get("n_unvalidated_without_input", 0),
+                    "n_passed": va.get("n_passed", 0),
+                    "n_passed_abstained": va.get("n_passed_abstained", 0),
+                    "n_passed_not_abstained": va.get("n_passed_not_abstained", 0),
+                    "n_filtered_success": va.get("n_filtered_success", 0),
+                    "n_verdict_mismatch": va.get("n_verdict_mismatch", 0),
+                    "n_validated_mismatch": va.get("n_validated_mismatch", 0),
+                }
+            )
+            verdict_counts.update(va.get("verdict", {}))
+            input_counts.update(va.get("input_counts", {}))
+            level_counts.update(va.get("evidence_level_values", {}))
+            lines.append(
+                f"| {baseline} | {va.get('n_recorded', 0)} | {va.get('n_validated', 0)} "
+                f"| {va.get('n_unvalidated', 0)} | {va.get('n_no_input', 0)} "
+                f"| {va.get('n_unvalidated_without_input', 0)} | {va.get('n_passed', 0)} "
+                f"| {va.get('n_passed_abstained', 0)} | {va.get('n_passed_not_abstained', 0)} "
+                f"| {va.get('n_filtered_success', 0)} "
+                f"| {_ratio_text(va.get('n_filtered_success', 0), va.get('n_passed', 0))} "
+                f"| {_ratio_text(va.get('n_filtered_success', 0), va.get('n_passed_not_abstained', 0))} "
+                f"| {va.get('n_verdict_mismatch', 0)} | {va.get('n_validated_mismatch', 0)} |"
+            )
+        lines.append(
+            f"| **合计** | {va_totals['n_recorded']} | {va_totals['n_validated']} "
+            f"| {va_totals['n_unvalidated']} | {va_totals['n_no_input']} "
+            f"| {va_totals['n_unvalidated_without_input']} | {va_totals['n_passed']} "
+            f"| {va_totals['n_passed_abstained']} | {va_totals['n_passed_not_abstained']} "
+            f"| {va_totals['n_filtered_success']} "
+            f"| {_ratio_text(va_totals['n_filtered_success'], va_totals['n_passed'])} "
+            f"| {_ratio_text(va_totals['n_filtered_success'], va_totals['n_passed_not_abstained'])} "
+            f"| {va_totals['n_verdict_mismatch']} | {va_totals['n_validated_mismatch']} |"
+        )
+        lines.append("")
+        lines.append(
+            f"> 验证表的分母是 `patch_validated` **已记录**的 {va_totals['n_recorded']} 行"
+            f"（早于批次 XVI 的 {acc_totals['n_rows'] - va_totals['n_recorded']} 行不在表内，"
+            "不得读作「未验证」）。`unvalidated` ≠ 「验证过且失败」：其中 "
+            f"{va_totals['n_unvalidated_without_input']} 行**根本没有可用的验证输入**。"
+            f"`filtered success` = passed ∧ ¬abstained ∧ validated；两个分母分别回答"
+            "「验证门在全部 passed 上保留了多少」与「在未被弃权的 passed 上保留了多少」。"
+        )
+        lines.append(
+            "> 输入可达域："
+            + "、".join(
+                f"`{name}` {input_counts.get(name, 0)} 行"
+                for name in ("repo_verification", "deterministic_repair_status", "patch_evidence_level")
+            )
+            + "——两个最强输入在整个归档里**可达域为空**，`validated=True` 全部来自最弱的证据档。"
+            "`patch_evidence_level` 取值："
+            + "、".join(f"`{level}` {count}" for level, count in sorted(level_counts.items()))
+            + "。判定词表："
+            + "、".join(f"`{name}` {count}" for name, count in sorted(verdict_counts.items()))
+            + "。与判定核重跑的不一致：判定 "
+            f"{va_totals['n_verdict_mismatch']} 行 / validated {va_totals['n_validated_mismatch']} 行。"
+        )
+        lines.append(
+            "> 外部口径（BW 联网核对）：覆盖率与选择性风险按 selective prediction 的"
+            "风险–覆盖曲线定义（coverage = 接受数 / 可测数，selective risk = 接受中错误数 / 接受数）；"
+            "覆盖率为 0 时风险是**未定义**，不得写成 0。弃权精确率按「弃权决策中确实该弃权的占比」读，"
+            "分母必须随值一起报。本节的四个已记录集各自成表：接收链、证据、弃权、验证。"
+        )
+        lines.append("")
+
+    # BX 轮（2026-10-23）：写而不读键池最后两键的报告面读侧。改前 `risk_summary`
+    # （8,864 行全 `enabled=False` 占位）与 `mdo_crash_rate`（五层输入域、分母=
+    # 全池 n）在报告面零读者：通道没开与「全部低风险」同形，「未跑 / 材料缺 /
+    # 不可测 / 暂定池 / 实测」同记 None。本节只分档与对账，判定值与方向一处不动。
+    residual = {b: m.get("residual_keys", {}) for b, m in per.items()}
+    residual_rows = sorted(((b, s) for b, s in residual.items() if s.get("n_rows")), key=lambda t: t[0])
+    if residual_rows:
+        lines.append("## 写而不读键池的收口（BX：`risk_summary` 与 `mdo_crash_rate` 的读侧）")
+        lines.append("")
+        lines.append(
+            "| 基线 | 行数 | risk 在场 | 键缺席 | enabled=True | enabled=False | 7 键形状 | 6 键形状 | 其它形状 "
+            "| level 非空 | pause=False | pause 缺席 | contract_status 在场 |"
+        )
+        lines.append("|---|---|---|---|---|---|---|---|---|---|---|---|---|")
+        risk_totals: Counter = Counter()
+        risk_shapes: Counter = Counter()
+        shape7 = "approval_action|enabled|factors|pause_requested|reasons|risk_level|risk_score"
+        shape6 = "approval_action|enabled|factors|reasons|risk_level|risk_score"
+        for baseline, s in residual_rows:
+            risk = s.get("risk_summary", {})
+            shapes = risk.get("schema_shapes", {})
+            risk_shapes.update(shapes)
+            enabled = risk.get("enabled", {})
+            pause = risk.get("pause", {})
+            contract = risk.get("contract_status", {})
+            risk_totals.update(
+                {
+                    "n_rows": risk.get("n_rows", 0),
+                    "n_key_present": risk.get("n_key_present", 0),
+                    "n_key_absent": risk.get("n_key_absent", 0),
+                    "enabled_true": enabled.get("enabled_true", 0),
+                    "enabled_false": enabled.get("enabled_false", 0),
+                    "shape7": shapes.get(shape7, 0),
+                    "shape6": shapes.get(shape6, 0),
+                    "shape_other": sum(shapes.values()) - shapes.get(shape7, 0) - shapes.get(shape6, 0),
+                    "level_nonnull": risk.get("level_nonnull", 0),
+                    "pause_false": pause.get("false", 0),
+                    "pause_absent": pause.get("absent", 0),
+                    "contract_present": contract.get("present", 0),
+                }
+            )
+            lines.append(
+                f"| {baseline} | {risk.get('n_rows', 0)} | {risk.get('n_key_present', 0)} "
+                f"| {risk.get('n_key_absent', 0)} | {enabled.get('enabled_true', 0)} "
+                f"| {enabled.get('enabled_false', 0)} | {shapes.get(shape7, 0)} | {shapes.get(shape6, 0)} "
+                f"| {sum(shapes.values()) - shapes.get(shape7, 0) - shapes.get(shape6, 0)} "
+                f"| {risk.get('level_nonnull', 0)} | {pause.get('false', 0)} | {pause.get('absent', 0)} "
+                f"| {contract.get('present', 0)} |"
+            )
+        lines.append(
+            f"| **合计** | {risk_totals['n_rows']} | {risk_totals['n_key_present']} "
+            f"| {risk_totals['n_key_absent']} | {risk_totals['enabled_true']} "
+            f"| {risk_totals['enabled_false']} | {risk_totals['shape7']} | {risk_totals['shape6']} "
+            f"| {risk_totals['shape_other']} | {risk_totals['level_nonnull']} "
+            f"| {risk_totals['pause_false']} | {risk_totals['pause_absent']} | {risk_totals['contract_present']} |"
+        )
+        lines.append("")
+        lines.append(
+            f"> `risk_summary` 的读法：`enabled=False` 是**通道关闭**的占位——全归档 "
+            f"{risk_totals['enabled_false']}/{risk_totals['n_key_present']} 行关闭、"
+            f"`enabled=True` {risk_totals['enabled_true']} 行；`risk_level` 非空 "
+            f"{risk_totals['level_nonnull']} 行。**`level=None` 不是 `low`**，"
+            "`pause_requested=False` 也不是「判定无需暂停」（通道关闭时它恒为 False）。"
+            "外部口径（BX 联网核对）：NIST SP 800-30 的风险等级是半定量分箱映射出的"
+            "定性/序数标签，不是概率——没有开启记录就没有可读级别。"
+            f"键缺席 {risk_totals['n_key_absent']} 行（早于该键落盘）不等于低风险；"
+            f"`contract_status`（BL 起才写入）在 {risk_totals['n_key_present']} 行在场记录里 "
+            f"{risk_totals['contract_present']} 行出现 ⇒「缺失符号为空可不可信」在归档上无证据。"
+        )
+        lines.append("")
+        lines.append(
+            "| 基线 | 行数 | 未跑 | 材料缺 | 不可测 | 暂定池 | 实测 | 值非空 | 值=0 | 值≠0 "
+            "| floor=False | 其中非暂定 | 池化 crash（反推） | 行均值 |"
+        )
+        lines.append("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|")
+        mdo_totals: Counter = Counter()
+        reason_counts: Counter = Counter()
+        weighted_sum = 0.0
+        for baseline, s in residual_rows:
+            mdo = s.get("mdo_crash", {})
+            layers = mdo.get("layers", {})
+            value = mdo.get("value", {})
+            pooled = mdo.get("pooled", {})
+            mdo_totals.update(
+                {
+                    "n_rows": mdo.get("n_rows", 0),
+                    "n_key_present": mdo.get("n_key_present", 0),
+                    "n_key_absent": mdo.get("n_key_absent", 0),
+                    "not_run": layers.get("not_run", 0),
+                    "material_absent": layers.get("material_absent", 0),
+                    "not_measurable": layers.get("not_measurable", 0),
+                    "provisional": layers.get("provisional_pool", 0),
+                    "measured": layers.get("measured", 0),
+                    "value_nonnull": mdo.get("n_value_nonnull", 0),
+                    "value_null": mdo.get("n_value_null", 0),
+                    "zero": mdo.get("n_zero", 0),
+                    "nonzero": mdo.get("n_nonzero", 0),
+                    "floor_false": mdo.get("floor_false", 0),
+                    "floor_false_other": mdo.get("floor_false_other", 0),
+                    "pooled_crash": pooled.get("n_crash", 0),
+                    "pooled_pool": pooled.get("n_pool", 0),
+                    "pooled_ambiguous": pooled.get("n_ambiguous", 0),
+                    "pooled_failed": pooled.get("n_failed", 0),
+                    "evaluability": mdo.get("n_evaluability_recorded", 0),
+                    "raw_present": mdo.get("provisional_raw", {}).get("n_present", 0),
+                    "raw_zero": mdo.get("provisional_raw", {}).get("n_zero", 0),
+                    "raw_nonzero": mdo.get("provisional_raw", {}).get("n_nonzero", 0),
+                    "raw_crash": mdo.get("provisional_raw", {}).get("pooled", {}).get("n_crash", 0),
+                    "raw_pool": mdo.get("provisional_raw", {}).get("pooled", {}).get("n_pool", 0),
+                }
+            )
+            reason_counts.update(mdo.get("unmeasured_reasons", {}))
+            if value.get("mean") is not None:
+                weighted_sum += float(value["mean"]) * int(value.get("n", 0))
+            mean_text = "—" if value.get("mean") is None else f"{value['mean']:.2%}"
+            lines.append(
+                f"| {baseline} | {mdo.get('n_rows', 0)} | {layers.get('not_run', 0)} "
+                f"| {layers.get('material_absent', 0)} | {layers.get('not_measurable', 0)} "
+                f"| {layers.get('provisional_pool', 0)} | {layers.get('measured', 0)} "
+                f"| {mdo.get('n_value_nonnull', 0)} | {mdo.get('n_zero', 0)} | {mdo.get('n_nonzero', 0)} "
+                f"| {mdo.get('floor_false', 0)} | {mdo.get('floor_false_other', 0)} "
+                f"| {_ratio_text2(pooled.get('n_crash', 0), pooled.get('n_pool', 0))} | {mean_text} |"
+            )
+        mean_total = weighted_sum / mdo_totals["value_nonnull"] if mdo_totals["value_nonnull"] else None
+        lines.append(
+            f"| **合计** | {mdo_totals['n_rows']} | {mdo_totals['not_run']} "
+            f"| {mdo_totals['material_absent']} | {mdo_totals['not_measurable']} "
+            f"| {mdo_totals['provisional']} | {mdo_totals['measured']} "
+            f"| {mdo_totals['value_nonnull']} | {mdo_totals['zero']} | {mdo_totals['nonzero']} "
+            f"| {mdo_totals['floor_false']} | {mdo_totals['floor_false_other']} "
+            f"| {_ratio_text2(mdo_totals['pooled_crash'], mdo_totals['pooled_pool'])} "
+            f"| {'—' if mean_total is None else f'{mean_total:.2%}'} |"
+        )
+        lines.append("")
+        lines.append(
+            f"> `mdo_crash_rate` 的五层输入域：未跑 {mdo_totals['not_run']} / 材料缺 "
+            f"{mdo_totals['material_absent']}（`mdo_available` 仍为 `None`，只有 `reason` 说明写侧早退）"
+            f"/ 不可测 {mdo_totals['not_measurable']} / 暂定池 {mdo_totals['provisional']} / 实测 "
+            f"{mdo_totals['measured']}，合计 = 键在场 {mdo_totals['n_key_present']}"
+            f"；键缺席 {mdo_totals['n_key_absent']}"
+            "（早于 MDO 落盘）。未给出规范值三层的成因："
+            + "、".join(f"`{reason}` {count}" for reason, count in sorted(reason_counts.items()))
+            + "。"
+        )
+        lines.append(
+            f"> `mdo_pool_floor_ok=False` 是**两义键**：{mdo_totals['floor_false']} 行 = 暂定池 "
+            f"{mdo_totals['provisional']} + 不可测 {mdo_totals['floor_false_other']}；后者是 "
+            "`MDOResult` 的默认值，**不是池不足**——直接按该键筛「池不足」会多算 "
+            f"{mdo_totals['floor_false_other']} 行。"
+        )
+        lines.append(
+            "> 分母口径：crash 率 = `crashed / 全池 n`（`src/measurement/mdo.py` 的 CRASH 行；"
+            "含 `non_terminating` / `probe_invalid` / `no_effective_pass`），与 MTR/MDR 的"
+            "**可评估**分母不同。`mdo_status` / `mdo_evaluable` / `mdo_non_terminating` / "
+            "`mdo_probe_invalid` / `mdo_no_effective_pass` 在归档 "
+            f"{mdo_totals['evaluability']} 行在场 ⇒ 可评估分母**无法从归档复算**；"
+            "crash 率不得与 MDR 相除或相减。"
+        )
+        lines.append(
+            f"> 值域：规范值非空 {mdo_totals['value_nonnull']} 行（`0.0` {mdo_totals['zero']} 行 = "
+            f"实测零崩溃；≠0 {mdo_totals['nonzero']} 行），空 {mdo_totals['value_null']} 行 = "
+            "未测或被出口拦截——**`None` 不是 0**。同一批的逐行均值 "
+            f"{'—' if mean_total is None else f'{mean_total:.2%}'} 与池化 "
+            f"{mdo_totals['pooled_crash']}/{mdo_totals['pooled_pool']} = "
+            f"{_ratio_text2(mdo_totals['pooled_crash'], mdo_totals['pooled_pool'])} 是两个口径"
+            "（前者每行等权）。暂定池 "
+            f"{mdo_totals['raw_present']} 行的原始值在 `mdo_raw`（`0.0` {mdo_totals['raw_zero']} / "
+            f"≠0 {mdo_totals['raw_nonzero']}，池化 {mdo_totals['raw_crash']}/{mdo_totals['raw_pool']} = "
+            f"{_ratio_text2(mdo_totals['raw_crash'], mdo_totals['raw_pool'])}），**不与实测合并**。"
+            "反推：规范值已四舍五入到 4 位，分子按 `round(c/n,4)==rate` 在 `0..n` 内唯一整数解重建"
+            f"（歧义 {mdo_totals['pooled_ambiguous']} 行 / 失败 {mdo_totals['pooled_failed']} 行）。"
+            "外部口径（BX 联网核对）：Google Play `vitals.crashrate` 以去重用户数归一化并明确"
+            "禁止再聚合该计数；同一分子换分母（per-session vs per-request）会得到不同读数 ⇒ "
+            "crash 率必须带分母，且两个分母的读数不得相减。"
         )
         lines.append("")
 
