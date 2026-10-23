@@ -33,6 +33,7 @@ from typing import Any
 import pytest
 
 from experiments.emse_df_spec_analysis import MissingArtifactError, defect_program_ids, load_arm_rows
+from tests._corpus_guard import require_full_corpus
 
 _ROOT = Path(__file__).resolve().parents[1]
 _BENCH_GLOB = "experiments/results/**/benchmark_*.json"
@@ -344,6 +345,10 @@ class TestRealPathInvariants:
         ), "分桶等式在四桶全非空时也必须平"
 
     def test_no_real_batch_collapses_any_row(self, capsys: pytest.CaptureFixture[str]) -> None:
+        # BZ 轮：扫描面下界以全归档（246 份 / 300 臂 / 10,659 行）校准——
+        # fresh clone 只有入库子集，前提不成立时显式 skip 并带实测读数
+        # （tests/_corpus_guard.py），不把"没扫到"折成"扫过且干净"。
+        require_full_corpus()
         c = self._census()
         assert c["glob"] >= _CENSUS_MIN_FILES, f"扫描面回落：glob 只命中 {c['glob']} 份批次"
         assert c["judged_files"] >= _CENSUS_MIN_JUDGED_FILES, f"真正核到行的文件回落：{c['judged_files']} 份"
@@ -361,6 +366,9 @@ class TestRealPathInvariants:
 
     def test_non_arm_batches_are_admitted_by_name_not_dropped(self) -> None:
         """核不到行的批次只能以"看得出的形状"承认出局，且形状本身要能被复核。"""
+        # BZ 轮：两类出局文件（.mdo.json / 空 details）的存在性以全归档为
+        # 前提——同 test_no_real_batch_collapses_any_row 的显式 skip 口径。
+        require_full_corpus()
         c = self._census()
         for p in c["other_schema"]:
             assert p.name.endswith(".mdo.json"), f"意外的非臂批次形状：{p}——需先撤销覆盖面登记"

@@ -1,0 +1,6 @@
+{"event": "task_start", "task": "<REDACTED_KEY>", "ts": 1790669445.4931881, "meta": {"dataset_task_id": "synthetic__hard_slice_contract_0021", "baseline": "aitester", "target_function": "split_entry"}}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "planner", "ts": 1790669445.512445, "output": {"function_name": "split_entry", "test_cases": 0}, "decision": "plan_complete", "duration_ms": 0.62}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "generator", "ts": 1790669486.832437, "output": {"generated_test_len": 6447}, "decision": "generated"}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "executor", "ts": 1790669487.40942, "output": {"passed": true, "coverage": 44.0, "failed_cases": 0}, "decision": "PASS", "duration_ms": 575.69, "iteration": 0}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "_should_debug", "ts": 1790669487.4731069, "output": {"reason": "test_passed"}, "decision": "done"}
+{"event": "task_end", "task": "<REDACTED_KEY>", "ts": 1790669487.473485, "passed": true, "duration_s": 41.98, "token_usage": {"input_tokens": 4600, "output_tokens": 1679, "total_tokens": 6279, "llm_calls": 1, "by_model": {"kimi-k2.5": 6279}}}

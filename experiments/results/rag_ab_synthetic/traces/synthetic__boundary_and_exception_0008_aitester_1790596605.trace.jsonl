@@ -1,0 +1,14 @@
+{"event": "task_start", "task": "<REDACTED_KEY>", "ts": 1790596605.7824068, "meta": {"dataset_task_id": "synthetic__boundary_and_exception_0008", "baseline": "aitester", "target_function": null}}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "planner", "ts": 1790596605.7978969, "output": {"function_name": "is_expired", "test_cases": 4}, "decision": "plan_complete", "duration_ms": 0.3}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "generator", "ts": 1790596605.798263, "output": {"generated_test_len": 645}, "decision": "generated"}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "executor", "ts": 1790596606.735832, "output": {"passed": false, "coverage": 100.0, "failed_cases": 1}, "decision": "FAIL", "duration_ms": 937.4, "iteration": 0}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "_should_debug", "ts": 1790596606.736307, "output": {"iteration": 0}, "decision": "debug"}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "debugger", "ts": 1790597254.053975, "output": {"error_category": "runtime", "root_cause": "未知", "patch_len": 0, "adversarial_check": {"scenarios_checked": 0, "all_passed": false}, "defect_type": "implementation_defect"}, "decision": "runtime", "duration_ms": 647317.14, "iteration": 0}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "patch_applier", "ts": 1790597254.054731, "output": {"patch_applied": false, "new_code_len": 332}, "decision": "rejected", "iteration": 0}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "executor", "ts": 1790597254.874717, "output": {"passed": false, "coverage": 100.0, "failed_cases": 1}, "decision": "FAIL", "duration_ms": 819.76, "iteration": 1}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "_should_debug", "ts": 1790597254.875124, "output": {"iteration": 1}, "decision": "debug"}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "debugger", "ts": 1790597619.012106, "output": {"error_category": "runtime", "root_cause": "未知", "patch_len": 0, "adversarial_check": {"scenarios_checked": 0, "all_passed": false}, "defect_type": "implementation_defect"}, "decision": "runtime", "duration_ms": 364136.52, "iteration": 1}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "patch_applier", "ts": 1790597619.013074, "output": {"patch_applied": false, "new_code_len": 332}, "decision": "rejected", "iteration": 1}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "executor", "ts": 1790597619.84907, "output": {"passed": false, "coverage": 100.0, "failed_cases": 1}, "decision": "FAIL", "duration_ms": 835.51, "iteration": 2}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "_should_debug", "ts": 1790597619.849515, "output": {"reason": "skip_debugger_repair_invalid"}, "decision": "done"}
+{"event": "task_end", "task": "<REDACTED_KEY>", "ts": 1790597619.84993, "passed": false, "duration_s": 1014.07, "token_usage": {"input_tokens": 3747, "output_tokens": 1254, "total_tokens": 5001, "llm_calls": 3, "by_model": {"glm-4-flash": 5001}}}

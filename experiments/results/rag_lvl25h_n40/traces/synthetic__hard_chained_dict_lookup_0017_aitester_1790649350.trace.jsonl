@@ -1,0 +1,6 @@
+{"event": "task_start", "task": "<REDACTED_KEY>", "ts": 1790649350.546984, "meta": {"dataset_task_id": "<REDACTED_KEY>", "baseline": "aitester", "target_function": "lookup_metric"}}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "planner", "ts": 1790649350.565156, "output": {"function_name": "lookup_metric", "test_cases": 0}, "decision": "plan_complete", "duration_ms": 0.39}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "generator", "ts": 1790649350.607262, "output": {"generated_test_len": 1227}, "decision": "generated"}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "executor", "ts": 1790649351.116572, "output": {"passed": true, "coverage": 45.0, "failed_cases": 0}, "decision": "PASS", "duration_ms": 508.96, "iteration": 0}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "_should_debug", "ts": 1790649351.174881, "output": {"reason": "test_passed"}, "decision": "done"}
+{"event": "task_end", "task": "<REDACTED_KEY>", "ts": 1790649351.175402, "passed": true, "duration_s": 0.63, "token_usage": {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0, "llm_calls": 0, "by_model": {}}}

@@ -33,6 +33,7 @@ from typing import Any, ClassVar
 import experiments._m1_metrics as m1
 from experiments.mutation_detection import mutation_detection_rate
 from experiments.repair_replay import replay_row
+from tests._corpus_guard import require_full_corpus
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -379,6 +380,11 @@ class TestRealCorpusApplicability:
 
     def test_corpus_counts_are_stable(self):
         """全仓静态扫：114 条非 oracle 标记行 / 12 条 detection=1.0。"""
+        # BZ 轮：246 份 / 114 条 / 12 条三个数以全归档为扫描面——fresh clone
+        # 只有入库子集（BZ 轮放行 406 个契约工件后仍远小于 246 份），前提
+        # 不成立时显式 skip 并带实测读数（tests/_corpus_guard.py），不把
+        # "没扫到"折成"扫过且干净"。
+        require_full_corpus()
         files = sorted(glob.glob(str(ROOT / "experiments" / "results" / "**" / "benchmark_*.json"), recursive=True))
         assert len(files) == 246
         marked = 0

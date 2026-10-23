@@ -31,6 +31,7 @@ import pytest
 import experiments.analyze_t1_b2_main_batch as t1_mod
 import experiments.emse_docstring_augment_analysis as aug_mod
 from experiments.analyze_t1_b2_main_batch import _profile_drift, _profile_presets
+from tests._corpus_guard import require_history
 from experiments.emse_docstring_augment_analysis import (
     AUDIT_KEY_ABSENT,
     AUDIT_UNREADABLE,
@@ -112,6 +113,11 @@ class TestProfilePresetReturnDomain:
 
     def test_absent_profile_name_is_not_read_as_no_drift(self) -> None:
         """档名在两侧预设表里都不存在 ⇒ 无法核验，而不是"该档无漂移"。"""
+        # BZ 轮：两个历史切点 rev 必须在 git 对象库里——shallow clone
+        # （actions/checkout 默认 fetch-depth=1）里 `git show <rev>` 必败，
+        # 此时"读不到预设"是环境事实而不是被测行为 ⇒ 显式 skip 并点名缺哪个
+        # rev（tests/_corpus_guard.require_history）。
+        require_history(_OLD_REV, _NEW_REV)
         out = _profile_drift(_OLD_REV, _NEW_REV, "no_such_profile")
         assert out["available"] is False
         assert "档名缺席不等于该档无漂移" in out["reason"]
@@ -124,6 +130,9 @@ class TestProfilePresetReturnDomain:
         assert "不得当作无漂移" in out["reason"]
 
     def test_real_revs_still_report_drift(self) -> None:
+        # BZ 轮：同 test_absent_profile_name_is_not_read_as_no_drift——历史
+        # 切点不在对象库（shallow clone）时显式 skip，不把"读不到"折成漂移读数。
+        require_history(_OLD_REV, _NEW_REV)
         out = _profile_drift(_OLD_REV, _NEW_REV)
         assert out["available"] is True and out["added"], "R-P0-2 切点起 logic 档确有新增开关"
 

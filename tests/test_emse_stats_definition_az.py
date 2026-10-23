@@ -158,12 +158,26 @@ class TestCitationPropagation:
     """2g 旧值不得继续出现在论文 / 投稿骨架；历史复核要有日期化勘误。"""
 
     def test_paper_uses_standard_g(self) -> None:
-        text = (REPO / "paper" / "draft.typ").read_text(encoding="utf-8")
+        # BZ 轮：paper/ 与 *.typ 按 .gitignore:119-120 双盲纪律不入库
+        # （公开 clone 无论文稿）——本锁只能在论文在场的环境执行；缺席时
+        # 显式 skip 并点名原因，不折叠成通过，也不折叠成失败。
+        paper = REPO / "paper" / "draft.typ"
+        if not paper.exists():
+            pytest.skip("paper/draft.typ 不入库（.gitignore:119 双盲纪律）——本锁仅在论文在场环境执行")
+        text = paper.read_text(encoding="utf-8")
         assert "g = 0.370" in text
         assert "g = 0.739" not in text
 
     def test_submission_skeleton_uses_standard_g(self) -> None:
-        text = (REPO / "docs" / "emse" / "EMSE_SUBMISSION_SKELETON_2026-10-16.md").read_text(encoding="utf-8")
+        # BZ 轮：投稿骨架按 .gitignore:124（学术文件，local use only）不入库；
+        # 同 paper 的口径——缺席显式 skip 并点名原因。
+        skeleton = REPO / "docs" / "emse" / "EMSE_SUBMISSION_SKELETON_2026-10-16.md"
+        if not skeleton.exists():
+            pytest.skip(
+                "EMSE_SUBMISSION_SKELETON_2026-10-16.md 不入库（.gitignore:124 学术文件纪律）"
+                "——本锁仅在骨架在场环境执行"
+            )
+        text = skeleton.read_text(encoding="utf-8")
         assert "g=0.370" in text
         assert "g=0.37–0.50" in text
         assert "g=0.739" not in text

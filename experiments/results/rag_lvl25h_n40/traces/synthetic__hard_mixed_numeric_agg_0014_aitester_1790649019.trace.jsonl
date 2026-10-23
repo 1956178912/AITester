@@ -1,0 +1,6 @@
+{"event": "task_start", "task": "<REDACTED_KEY>", "ts": 1790649019.0176508, "meta": {"dataset_task_id": "synthetic__hard_mixed_numeric_agg_0014", "baseline": "aitester", "target_function": "total"}}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "planner", "ts": 1790649019.034475, "output": {"function_name": "total", "test_cases": 5}, "decision": "plan_complete", "duration_ms": 0.24}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "generator", "ts": 1790649019.0815191, "output": {"generated_test_len": 1279}, "decision": "generated"}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "executor", "ts": 1790649019.60867, "output": {"passed": true, "coverage": 57.0, "failed_cases": 0}, "decision": "PASS", "duration_ms": 526.83, "iteration": 0}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "_should_debug", "ts": 1790649019.667188, "output": {"reason": "test_passed"}, "decision": "done"}
+{"event": "task_end", "task": "<REDACTED_KEY>", "ts": 1790649019.667645, "passed": true, "duration_s": 0.65, "token_usage": {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0, "llm_calls": 0, "by_model": {}}}

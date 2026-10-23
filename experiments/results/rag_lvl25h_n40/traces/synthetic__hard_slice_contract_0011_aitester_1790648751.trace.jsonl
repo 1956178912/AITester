@@ -1,0 +1,6 @@
+{"event": "task_start", "task": "<REDACTED_KEY>", "ts": 1790648751.910858, "meta": {"dataset_task_id": "synthetic__hard_slice_contract_0011", "baseline": "aitester", "target_function": "split_entry"}}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "planner", "ts": 1790648776.112968, "output": {"function_name": "split_entry", "test_cases": 0}, "decision": "plan_complete", "duration_ms": 24183.99}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "generator", "ts": 1790648789.58747, "output": {"generated_test_len": 3115}, "decision": "generated"}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "executor", "ts": 1790648790.112412, "output": {"passed": true, "coverage": 40.0, "failed_cases": 0}, "decision": "PASS", "duration_ms": 524.25, "iteration": 0}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "_should_debug", "ts": 1790648790.170918, "output": {"reason": "test_passed"}, "decision": "done"}
+{"event": "task_end", "task": "<REDACTED_KEY>", "ts": 1790648790.171384, "passed": true, "duration_s": 38.26, "token_usage": {"input_tokens": 1113, "output_tokens": 1514, "total_tokens": 2627, "llm_calls": 2, "by_model": {"agnes-2.5-flash": 1121, "agnes-3.0-flash": 1506}}}

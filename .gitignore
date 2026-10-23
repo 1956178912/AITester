@@ -151,7 +151,12 @@ experiments/emse_compile_rate_calib.py
 experiments/emse_t08_gates_recompute.py
 experiments/emse_quixbugs_mutk.py
 experiments/emse_batch5_orchestrator.py
-experiments/results/emse_*/
+# BZ 轮（2026-10-23）：`emse_*/`（目录排除）改为 `emse_*/**`（内容排除）——
+# 与上方 U1 注释同一 gitignore 规范：父目录被排除时其内文件不可 re-include，
+# 导致"测试契约锁定的 emse 工件"永远无法按名放行（只能 git add -f 强跟踪，
+# 之后的改动不显示在 git status）。内容排除保持忽略集合不变，只是让 negation
+# 可达。已跟踪文件不受影响（gitignore 对已跟踪路径无效）。
+experiments/results/emse_*/**
 
 # Private data and experiments
 # 实验输出（本地数据，不提交）
@@ -205,6 +210,63 @@ experiments/results/main_batch/**
 # 内容，否则父目录被排除时其内文件不可 re-include。
 !experiments/results/e6_a1_batches/
 !experiments/results/e6_a1_batches/**
+# BZ 轮（2026-10-23）：测试契约锁定的归档工件入库放行。背景——29 例测试把
+# 具体归档文件/目录写进契约（pinned 批次、损坏 trace 目录、逐位复现的报告），
+# 但工件被本通配块排除 ⇒ fresh clone（CI）里 FileNotFoundError 全红，本地因
+# 工件在盘而不可见（"逻辑有测试、工件没入库"的镜像面；AK3 门只覆盖报告引用
+# 的证据工件，不覆盖测试契约）。处置与 main_batch / r4_batches / e6_a1_batches
+# 同口径：只放行被 tests/ 契约锁定的具体路径，共 406 个文件 / 4.2 MB；
+# 重产物主体（246 份批次 JSON 共 92.6 MB）仍走 Zenodo，不入库。
+# 语料面普查类测试（要全归档 246 份 / 8539 个 trace 的）不在本放行范围——
+# 它们按 tests/conftest.py 的 require_full_corpus 显式 skip 并带实测读数。
+# 逐层放行 idiom（同 main_batch）：`results/**` 连中间目录一起排除，父目录
+# 被排除时其内文件不可 re-include ⇒ 每条路径都要先 `!dir/` 放行目录、再
+# `dir/**` 压回内容、最后按名放行目标（gitignore 规范，见上方 U1 注释）。
+!experiments/results/benchmark_examples_20260813_125502.json
+!experiments/results/benchmark_examples_20261012_160629.json
+!experiments/results/cross_file_ab_level3/
+experiments/results/cross_file_ab_level3/**
+!experiments/results/cross_file_ab_level3/cross_file_off/
+experiments/results/cross_file_ab_level3/cross_file_off/**
+!experiments/results/cross_file_ab_level3/cross_file_off/traces/
+!experiments/results/cross_file_ab_level3/cross_file_off/traces/**
+!experiments/results/emse_stats_2026-10-15/
+experiments/results/emse_stats_2026-10-15/**
+!experiments/results/emse_stats_2026-10-15/emse_stats_report.json
+!experiments/results/emse_stats_2026-10-15/emse_stats_report.md
+!experiments/results/emse_t08_gates_20261013/
+experiments/results/emse_t08_gates_20261013/**
+!experiments/results/emse_t08_gates_20261013/benchmark_synthetic_20261013_200729.json
+!experiments/results/emse_ult_dfsmoke_20261017/
+experiments/results/emse_ult_dfsmoke_20261017/**
+!experiments/results/emse_ult_dfsmoke_20261017/benchmark_ult_20261017_100932.json
+!experiments/results/llm_logic_ab_20261010_202129/
+experiments/results/llm_logic_ab_20261010_202129/**
+!experiments/results/llm_logic_ab_20261010_202129/c3/
+experiments/results/llm_logic_ab_20261010_202129/c3/**
+!experiments/results/llm_logic_ab_20261010_202129/c3/benchmark_quixbugs_20261010_210638.json
+!experiments/results/pilot_mdo_full50/
+experiments/results/pilot_mdo_full50/**
+!experiments/results/pilot_mdo_full50/benchmark_quixbugs_20261011_122633.json
+!experiments/results/rag_ab_synthetic/
+!experiments/results/rag_ab_synthetic/**
+!experiments/results/rag_lvl25h_n40/
+!experiments/results/rag_lvl25h_n40/**
+!experiments/results/rag_lvl25h_n40_g8batch/
+experiments/results/rag_lvl25h_n40_g8batch/**
+!experiments/results/rag_lvl25h_n40_g8batch/traces/
+!experiments/results/rag_lvl25h_n40_g8batch/traces/**
+!experiments/results/spec_ab_quixbugs_20261012/
+experiments/results/spec_ab_quixbugs_20261012/**
+!experiments/results/spec_ab_quixbugs_20261012/replace/
+experiments/results/spec_ab_quixbugs_20261012/replace/**
+!experiments/results/spec_ab_quixbugs_20261012/replace/benchmark_quixbugs_20261012_190733.json
+!experiments/results/spec_ab_scale87_20261012/
+experiments/results/spec_ab_scale87_20261012/**
+!experiments/results/spec_ab_scale87_20261012/ult_lite46_off/
+experiments/results/spec_ab_scale87_20261012/ult_lite46_off/**
+!experiments/results/spec_ab_scale87_20261012/ult_lite46_off/traces/
+!experiments/results/spec_ab_scale87_20261012/ult_lite46_off/traces/**
 data/
 /results/
 

@@ -1,0 +1,89 @@
+{
+  "paired_tasks": 40,
+  "rag_on": {
+    "success_rate": 0.875,
+    "avg_tokens": 4197.4,
+    "std_tokens": 3074.6,
+    "avg_iterations": 0.38,
+    "avg_duration_s": 141.0,
+    "failure_distribution": {
+      "none": 35,
+      "patch_validation_failed": 5
+    },
+    "rag_retrieval_empty_count": 0,
+    "rag_effective_rate": 1.0
+  },
+  "rag_off": {
+    "success_rate": 0.875,
+    "avg_tokens": 1558.3,
+    "std_tokens": 2483.8,
+    "avg_iterations": 0.6,
+    "avg_duration_s": 39.8,
+    "failure_distribution": {
+      "none": 32,
+      "runtime": 1,
+      "patch_validation_failed": 3,
+      "unknown": 1,
+      "assertion": 3
+    }
+  },
+  "token_saving": {
+    "delta_avg": -2639.1,
+    "delta_pct": -169.36,
+    "t_stat": 4.2229,
+    "p_value_welch": 2.4e-05,
+    "u_stat": 364.5,
+    "p_value_mann_whitney": 1.0,
+    "cohens_d": 0.9443
+  },
+  "iteration_saving": {
+    "delta_avg": 0.22,
+    "t_stat": -1.0549,
+    "p_value_welch": 0.291492,
+    "u_stat": 661.0,
+    "p_value_mann_whitney": 1.0,
+    "cohens_d": -0.2359
+  },
+  "error_category_shift": {
+    "runtime": {
+      "rag_on_count": 0,
+      "rag_off_count": 1,
+      "rag_on_rate": 0.0,
+      "rag_off_rate": 0.025,
+      "delta": 0.025
+    },
+    "assertion": {
+      "rag_on_count": 0,
+      "rag_off_count": 3,
+      "rag_on_rate": 0.0,
+      "rag_off_rate": 0.075,
+      "delta": 0.075
+    },
+    "none": {
+      "rag_on_count": 35,
+      "rag_off_count": 32,
+      "rag_on_rate": 0.875,
+      "rag_off_rate": 0.8,
+      "delta": -0.075
+    },
+    "unknown": {
+      "rag_on_count": 0,
+      "rag_off_count": 1,
+      "rag_on_rate": 0.0,
+      "rag_off_rate": 0.025,
+      "delta": 0.025
+    },
+    "patch_validation_failed": {
+      "rag_on_count": 5,
+      "rag_off_count": 3,
+      "rag_on_rate": 0.125,
+      "rag_off_rate": 0.075,
+      "delta": -0.05
+    }
+  },
+  "interpretation": {
+    "token": "RAG ON 平均节省 -2639.1 tokens (-169.36%)，p=0.0000（显著）",
+    "iteration": "RAG ON 迭代轮次与 RAG OFF 无显著差异（p=0.2915）",
+    "error_reduction": "RAG 显著减少的错误类型：['assertion']"
+  }
+}
