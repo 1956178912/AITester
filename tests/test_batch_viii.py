@@ -99,13 +99,16 @@ class TestExceptionSwallow:
 
 
 class TestDegradationAndContracts:
+    # BV 轮（2026-10-23）：判定值不变（不标记），求值状态单列——原断言用整字典
+    # 相等把「没看」与「看过且干净」锁成同一结果，正是本轮收口的对象。
     def test_unparseable_input_not_flagged(self) -> None:
         result = detect_test_hacking("def f(:\n", "def f(x):\n    return x\n")
-        assert result == {"suspected": False, "signals": []}
+        assert result["suspected"] is False and result["signals"] == []
+        assert result["status"] == "parse_error_original"
 
     def test_empty_inputs_not_flagged(self) -> None:
-        assert detect_test_hacking("", "") == {"suspected": False, "signals": []}
-        assert detect_test_hacking(None, None) == {"suspected": False, "signals": []}
+        assert detect_test_hacking("", "") == {"suspected": False, "signals": [], "status": "empty_original"}
+        assert detect_test_hacking(None, None) == {"suspected": False, "signals": [], "status": "empty_original"}
 
     def test_signal_names_contract(self) -> None:
         assert hacking_signal_names() == (
@@ -126,9 +129,9 @@ class TestBenchmarkWiring:
         from experiments.run_benchmark import _test_hacking_result
 
         result = _test_hacking_result(None, {"patch": ""})
-        assert result == {"suspected": False, "signals": []}
+        assert result == {"suspected": False, "signals": [], "status": "empty_patch"}
         result2 = _test_hacking_result(None, None)
-        assert result2 == {"suspected": False, "signals": []}
+        assert result2 == {"suspected": False, "signals": [], "status": "empty_patch"}
 
     def test_helper_detects_via_state_patch(self) -> None:
         from experiments.run_benchmark import _test_hacking_result

@@ -82,6 +82,15 @@ from experiments._oracle_provenance import (  # noqa: E402
     ORACLE_TYPE_GENERATED,
     ORACLE_TYPE_REPO_GOLD,
 )
+from experiments._verdict_silence import (  # noqa: E402
+    FL_REASON_ERROR,
+    FL_REASON_NO_CANDIDATES,
+    FL_REASON_NO_CHANGED_FUNCTIONS,
+    FL_REASON_NO_LOCALIZATION,
+    FL_REASON_NO_ORIGINAL_CODE,
+    FL_REASON_NO_PATCH,
+    FL_REASON_NO_STATE,
+)
 from experiments.postprocess_wall import (  # noqa: E402
     StageTimer,
     build_postprocess_wall,
@@ -1264,10 +1273,14 @@ def _test_hacking_result(task: Any, final_state: dict[str, Any] | None) -> dict[
 
     补丁后代码经 _target_code_after_patch（批次 VII 修正口径）与原码做
     AST 差集——只看补丁新引入的硬编码输入分支 / 断言删除 / 吞异常。
-    无补丁 / 无原码 / 解析失败 → {"suspected": False, "signals": []}
-    （保守降级，与弃权门口径一致）。
+
+    BV 轮（2026-10-23）：判定核增返 `status`（求值状态），本函数原样透出并由
+    结果行落 `test_hacking_status`。此前无补丁 / 无原码 / 解析失败与「三信号
+    都跑过且干净」返回同一个 `suspected=False, signals=[]`，报告面无从区分
+    **没看**与**判干净**。判定值语义零变化：`ok` 之外仍是 `suspected=False`。
     """
-    empty = {"suspected": False, "signals": []}
+    # 无终局状态 = 没有补丁可看：与「有状态但补丁为空」同档，都是 empty_patch。
+    empty = {"suspected": False, "signals": [], "status": "empty_patch"}
     if final_state is None:
         return empty
     patch = final_state.get("patch") or ""
@@ -1275,7 +1288,7 @@ def _test_hacking_result(task: Any, final_state: dict[str, Any] | None) -> dict[
         return empty
     original_code = str(getattr(task, "instance_code", "") or "")
     if not original_code.strip():
-        return empty
+        return {"suspected": False, "signals": [], "status": "empty_original"}
     try:
         from experiments._m1_metrics import _target_code_after_patch
         from src.tools.patch_test_hacking import detect_test_hacking
@@ -1283,7 +1296,7 @@ def _test_hacking_result(task: Any, final_state: dict[str, Any] | None) -> dict[
         patched = _target_code_after_patch(original_code, patch)
         return detect_test_hacking(original_code, patched)
     except Exception:  # —— 检测异常不阻断结果行组装
-        return empty
+        return {"suspected": False, "signals": [], "status": "detector_error"}
 
 
 def _fl_at_k(final_state: dict[str, Any] | None, task: Any = None) -> dict[str, Any] | None:
@@ -1416,31 +1429,43 @@ def _fl_constraint_result(task: Any, final_state: dict[str, Any] | None) -> dict
     判定近乎恒 hit（无约束力）——约束力集中在局部编辑通道
     （EDIT_INTENT / 函数级补丁）。观测层零行为影响（passed 历史口径
     不变）；阻断档转正判据见 ADR-0028。
+
+    BV 轮（2026-10-23）：`not_evaluable` 的六种成因（无终局状态 / 无补丁 /
+    无定位 / 无原码 / 变更集合为空 / 无候选）+ 异常，过去共用一个标签且不落盘。
+    现按 `experiments._verdict_silence.FL_REASON_*` 逐档透出 `reason`，结果行
+    落 `fl_constraint_reason`；判定值与 hit_rank 口径零变化。
     """
-    empty: dict[str, Any] = {"verdict": "not_evaluable", "hit_rank": None, "changed_functions": []}
+
+    def _empty(reason: str) -> dict[str, Any]:
+        return {"verdict": "not_evaluable", "hit_rank": None, "changed_functions": [], "reason": reason}
+
     if final_state is None:
-        return empty
+        return _empty(FL_REASON_NO_STATE)
     patch = str(final_state.get("patch") or "")
     if not patch.strip():
-        return empty
+        return _empty(FL_REASON_NO_PATCH)
     loc = final_state.get("llm_localization")
     if not loc:
-        return empty
+        return _empty(FL_REASON_NO_LOCALIZATION)
     original_code = str(getattr(task, "instance_code", "") or "")
     if not original_code.strip():
-        return empty
+        return _empty(FL_REASON_NO_ORIGINAL_CODE)
     try:
         from experiments._m1_metrics import _target_code_after_patch
         from src.agents.fault_localizer import fl_constraint_verdict, patch_changed_functions
 
         patched = _target_code_after_patch(original_code, patch)
         changed = patch_changed_functions(original_code, patched)
+        if not changed:
+            # 补丁未改变任何函数 = 变更集合为空（与「无候选」分档：这里连
+            # 求交的集合都没有）。
+            return _empty(FL_REASON_NO_CHANGED_FUNCTIONS)
         verdict = fl_constraint_verdict(loc, changed)
         if verdict is None:
-            return empty
-        return verdict
+            return _empty(FL_REASON_NO_CANDIDATES)
+        return {**verdict, "reason": "ok"}
     except Exception:  # —— 观测异常不阻断结果行组装
-        return empty
+        return _empty(FL_REASON_ERROR)
 
 
 def _self_repair_trap_result(final_state: dict[str, Any] | None) -> dict[str, Any]:
@@ -1894,6 +1919,9 @@ def _build_task_result(
         # 下方结果行共享（观测异常在 helper 内降级，不阻断组装）
         _fl_constraint = _fl_constraint_result(task, final_state)
         _trap = _self_repair_trap_result(final_state)
+        # BV 轮（2026-10-23）：test-hacking 判定单次计算——结果行三键共享
+        # （此前两次调用把 AST 差集跑了两遍）。
+        _hack = _test_hacking_result(task, final_state)
         # I1（2026-10-16）：终局失效归因单次计算，下方结果行四键共享
         _attribution = _failure_attribution_for_result(final_state)
         # N-3（2026-10-17，A-05 后续修复）：独立判读两键**单次计算**——
@@ -2176,16 +2204,22 @@ def _build_task_result(
             # 零 LLM）；补丁后代码经 _target_code_after_patch（批次 VII 修正
             # 口径，与写盘对齐清理）。历史口径零变化（passed 不受影响），
             # 供误伤率/富集度 A/B 消费（阻断档转正判据见 ADR-0022）。
-            "test_hacking_suspected": _test_hacking_result(task, final_state)["suspected"],
-            "test_hacking_signals": _test_hacking_result(task, final_state)["signals"],
+            # BV 轮：`test_hacking_status` 落求值状态——「没看」（无原码 /
+            # 无补丁 / 解析失败）与「三信号都跑过且干净」不再同形。
+            "test_hacking_suspected": _hack["suspected"],
+            "test_hacking_signals": _hack["signals"],
+            "test_hacking_status": _hack["status"],
             # 修复引擎批次 XIV（ADR-0028 观测层）：FL Top-k 约束门——
             # "补丁是否真的修改了定位候选位置之一"（定位命中但补丁改在
             # 别处 = 定位信号被合成侧浪费，ADR-0024 生成侧主导的行级
             # 验证器）；hit_rank = 首个命中候选序数。观测层 passed 历史
             # 口径零变化，阻断档转正判据见 ADR-0028。
+            # BV 轮：`fl_constraint_reason` 落 `not_evaluable` 的成因（六种
+            # 早退 + 异常），此前六种成因共用一个标签且不落盘。
             "fl_constraint_verdict": _fl_constraint["verdict"],
             "fl_constraint_hit_rank": _fl_constraint["hit_rank"],
             "fl_constraint_changed_functions": _fl_constraint["changed_functions"],
+            "fl_constraint_reason": _fl_constraint["reason"],
             # 修复引擎批次 XIV（ADR-0028 观测层）：Self-Repair Trap——
             # 迭代自修复是否驱使断言退化（三信号判定核，DCAware 风险
             # 口径）；oracle_quality_history 一并透出供离线复算。
@@ -2379,14 +2413,18 @@ def _build_task_result(
         "patch_validated": False,
         "patch_validate_verdict": "not_applicable",
         # 修复引擎批次 VIII（ADR-0022）：失败分支无补丁可检测，
-        # False/[] 占位（键集合同构）
+        # False/[] 占位（键集合同构）；BV 轮补 status = `empty_patch`
+        # （判定核确实没看——与「看过且干净」区分开）。
         "test_hacking_suspected": False,
         "test_hacking_signals": [],
+        "test_hacking_status": "empty_patch",
         # 修复引擎批次 XIV（ADR-0028）：失败分支无 final_state，约束门 /
-        # 陷阱观测以 None/False/[] 占位（键集合同构）
+        # 陷阱观测以 None/False/[] 占位（键集合同构）；BV 轮补
+        # reason = `no_state`（成因单列，不折进「不可评估」）。
         "fl_constraint_verdict": None,
         "fl_constraint_hit_rank": None,
         "fl_constraint_changed_functions": [],
+        "fl_constraint_reason": FL_REASON_NO_STATE,
         "oracle_quality_history": None,
         "self_repair_trap_suspected": False,
         "self_repair_trap_signals": [],

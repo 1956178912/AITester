@@ -284,12 +284,15 @@ class TestJudgmentValuesDidNotMove:
         # BQ 断言的形态是"恰好 +1 键"；BT 轮（2026-10-22）再 +1：
         # `oracle_provenance`（验收 oracle 来源与可见性的读侧对账）；
         # BU 轮（2026-10-22）再 +1：`self_repair_trap_domain`
-        # （Self-Repair Trap 判定核输入可达域的读侧分档）。键集棘轮
-        # 只增不删，新增键必须在此显式登记（不放行任意新键）。
+        # （Self-Repair Trap 判定核输入可达域的读侧分档）。
+        # BV 轮（2026-10-23）再 +1：`detector_silence`（批次 VIII/XIV
+        # 两份判定核的沉默分档读侧）。键集棘轮只增不删，新增键必须在此
+        # 显式登记（不放行任意新键）。
         assert keys == _EXPECTED_PER_BASELINE_KEYS | {
             "check_leg_measurability",
             "oracle_provenance",
             "self_repair_trap_domain",
+            "detector_silence",
         }
 
     def test_existing_values_unchanged_by_the_new_key(self) -> None:

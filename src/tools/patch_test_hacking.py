@@ -21,6 +21,10 @@
     - 观测层（本批）：结果行透出 test_hacking_suspected /
       test_hacking_signals，主终点/passed 历史口径零变化
       （AN2 呈现性增补先例；纯检测零行为影响，不设开关）；
+    - BV 轮（2026-10-23）：判定核增返 `status`（求值状态，见
+      `hacking_evaluation_status_names`），结果行另落 `test_hacking_status`。
+      此前「无原码 / 无补丁 / 两侧解析失败」与「三信号都跑过且干净」返回
+      同一个 `suspected=False, signals=[]`，报告面无从区分**没看**与**判干净**；
     - 阻断档（待 A/B 后转正）：命中即拒绝补丁——转正判据 =
       观测层出数后「误伤率（gold correct 补丁被标记占比）≤ 预注册
       阈值 ∧ 命中行的 false_fix 富集度显著」。
@@ -29,6 +33,31 @@
 from __future__ import annotations
 
 import ast
+
+#: 判定核的求值状态词表（BV 轮，2026-10-23）。`ok` 是唯一一种「判定核真的看过
+#: 这份补丁」的状态；其余四种都是「**没看**」——它们此前与「看过且干净」一样
+#: 返回 `suspected=False, signals=[]`，在结果行里完全同形（ADR-0022 观测层的
+#: 沉默被读成阴性）。词表只增不改：`ok` 的语义是「两侧都解析成功且三信号都跑过」。
+STATUS_OK = "ok"
+STATUS_EMPTY_ORIGINAL = "empty_original"
+STATUS_EMPTY_PATCH = "empty_patch"
+STATUS_PARSE_ERROR_ORIGINAL = "parse_error_original"
+STATUS_PARSE_ERROR_PATCHED = "parse_error_patched"
+
+
+def hacking_evaluation_status_names() -> tuple[str, ...]:
+    """求值状态清单（测试与文档对齐用，防口径漂移）。
+
+    与 `hacking_signal_names` 同样的命名纪律：不以 `test_` 开头——测试文件
+    import 该函数会创建匹配 `python_functions = test_*` 的模块级属性。
+    """
+    return (
+        STATUS_OK,
+        STATUS_EMPTY_ORIGINAL,
+        STATUS_EMPTY_PATCH,
+        STATUS_PARSE_ERROR_ORIGINAL,
+        STATUS_PARSE_ERROR_PATCHED,
+    )
 
 
 def _node_signatures(code: str) -> tuple[set[str], int, set[str]]:
@@ -111,17 +140,26 @@ def detect_test_hacking(original_code: str, patched_code: str) -> dict[str, obje
         patched_code: 补丁后代码全文（调用方保证已与写盘口径对齐清理）。
 
     Returns:
-        {"suspected": bool, "signals": [str, ...]}——signals 为命中信号
-        名列表（诊断/统计分层用）；任一侧解析失败 → {"suspected": False,
-        "signals": []}（保守：不可评估 = 不标记，与弃权门降级口径一致）。
+        {"suspected": bool, "signals": [str, ...], "status": str}——signals 为
+        命中信号名列表（诊断/统计分层用）；status 取自
+        `hacking_evaluation_status_names()`，`ok` 之外一律「没看」——判定值
+        仍为 `False`（保守：不可评估 = 不标记，与弃权门降级口径一致），但
+        调用方现在能把「没看」与「看过且干净」分开落盘（BV 轮）。
     """
-    if not (original_code or "").strip() or not (patched_code or "").strip():
-        return {"suspected": False, "signals": []}
+    if not (original_code or "").strip():
+        return {"suspected": False, "signals": [], "status": STATUS_EMPTY_ORIGINAL}
+    if not (patched_code or "").strip():
+        return {"suspected": False, "signals": [], "status": STATUS_EMPTY_PATCH}
+    # 两侧**分别**解析：解析失败要能归属到原码侧还是补丁侧（此前两侧共用一个
+    # try，失败原因在返回处已被折成同一个空结果）。
     try:
         orig_sigs, orig_asserts, orig_swallows = _node_signatures(original_code)
+    except (SyntaxError, ValueError):
+        return {"suspected": False, "signals": [], "status": STATUS_PARSE_ERROR_ORIGINAL}
+    try:
         new_sigs, new_asserts, new_swallows = _node_signatures(patched_code)
     except (SyntaxError, ValueError):
-        return {"suspected": False, "signals": []}
+        return {"suspected": False, "signals": [], "status": STATUS_PARSE_ERROR_PATCHED}
     signals: list[str] = []
     # 1. 硬编码输入分支：新增 If 节点签名中匹配后门形态
     added = new_sigs - orig_sigs
@@ -142,7 +180,7 @@ def detect_test_hacking(original_code: str, patched_code: str) -> dict[str, obje
     # 3. 吞异常：新增的「吞异常形态」ExceptHandler
     if new_swallows - orig_swallows:
         signals.append("exception_swallow_added")
-    return {"suspected": bool(signals), "signals": signals}
+    return {"suspected": bool(signals), "signals": signals, "status": STATUS_OK}
 
 
 def hacking_signal_names() -> tuple[str, ...]:
