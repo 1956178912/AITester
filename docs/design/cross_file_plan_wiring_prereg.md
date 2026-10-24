@@ -224,7 +224,7 @@ Step B 多模块协同与 D3b-AB1 跑批仍未执行），实现修正见 §1.5�
 
 ## 6. 参考
 
-- O 轮证据：`experiments/results/o_round_cross_file_20261017/`（O3_EVIDENCE.json D3b、
+- O 轮证据：`（工件已清除）`（O3_EVIDENCE.json D3b、
   preflight_zero_llm.json orphan_plan_builder、run2 组件级整体回滚）。
 - 相关代码：`src/tools/cross_file.py`（builder/cached/apply_multi_file_patch）、
   `src/graph/nodes.py::_cross_file_analyzer_node` / `_patch_applier_node`、

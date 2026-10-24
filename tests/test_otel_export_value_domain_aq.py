@@ -371,9 +371,11 @@ class TestExportEndToEnd:
         assert all(_VALUE_REASONS_ATTRIBUTE not in s["attributes"] for s in spans)
 
     def test_real_traces_have_zero_disclosures_and_clean_types(self):
-        # BZ 轮：spans 总数（129058）与零披露结论以全归档 trace 语料为扫描面
+        # BZ 轮：spans 总数与零披露结论以全归档 trace 语料为扫描面
         # ——fresh clone 只有入库子集 ⇒ require_full_corpus 显式 skip 并带
         # 实测读数（tests/_corpus_guard.py）。
+        # 2026-10-23 provider 清理后复测：span 129058 → 126408、
+        # token 属性 27135 → 26166（文件面 9086 → 8763，见 AR 同批锁定）。
         require_full_corpus()
         root = Path(__file__).resolve().parents[1]
         files = sorted(root.rglob("*.trace.jsonl"))
@@ -394,12 +396,13 @@ class TestExportEndToEnd:
                 assert span["start_time_unix_nano"] >= 0, path
                 assert type(span["duration_unix_nano"]) is int, path
                 assert span["duration_unix_nano"] >= 0, path
-        assert spans == 129058
-        assert token_attrs == 27135
+        assert spans == 126408
+        assert token_attrs == 26166
 
     def test_real_token_attributes_match_raw_task_end_records(self):
-        # BZ 轮：checked 下界（27000）以全归档 trace 语料为扫描面——同
+        # BZ 轮：checked 下界以全归档 trace 语料为扫描面——同
         # test_real_traces_have_zero_disclosures_and_clean_types 的显式 skip 口径。
+        # 2026-10-23 provider 清理后复测：checked 27135 → 26166，下界同步下调。
         require_full_corpus()
         root = Path(__file__).resolve().parents[1]
         checked = 0
@@ -420,4 +423,4 @@ class TestExportEndToEnd:
                 if field in raw_tokens:
                     assert end_span["attributes"][key] == raw_tokens[field], (path, field)
                     checked += 1
-        assert checked >= 27000
+        assert checked >= 26000

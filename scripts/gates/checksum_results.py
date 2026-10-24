@@ -287,7 +287,12 @@ def main(argv: list[str] | None = None) -> int:
     excludes = tuple(args.exclude)
     if args.write:
         return write_manifest(results_dir, excludes)
-    return verify_manifest(results_dir, strict_bytes=args.strict_bytes, excludes=excludes)
+    if args.verify:
+        return verify_manifest(results_dir, strict_bytes=args.strict_bytes, excludes=excludes)
+    # 互斥组声明为 required=True，正常走不到这里；留着是因为「模式由开关自己选」才是这条判据的
+    # 保证来源——若有人摘掉 required= 或往组里加第三个模式，缺分支时要报错退出，而不是静默校验。
+    print("[FAIL] 未选择模式：--write 与 --verify 必须显式给出一个")
+    return 2
 
 
 if __name__ == "__main__":

@@ -1,4 +1,0 @@
-{"event": "task_start", "task": "<REDACTED_KEY>", "ts": 1791868747.181331, "meta": {"dataset_task_id": "quixbugs__kheapsort", "baseline": "plain_llm", "target_function": "kheapsort"}}
-{"event": "node", "task": "<REDACTED_KEY>", "node": "generator", "ts": 1791868752.770849, "run_id": "31145b177eba4f6d", "span_id": "8ba3331b7342", "output": {"generated_test_len": 3083}, "decision": "generated"}
-{"event": "node", "task": "<REDACTED_KEY>", "node": "executor", "ts": 1791868754.106242, "run_id": "31145b177eba4f6d", "span_id": "4126a1293a32", "output": {"passed": false, "coverage": 97.0, "failed_cases": 1}, "decision": "FAIL", "duration_ms": 1328.73, "iteration": 0}
-{"event": "task_end", "task": "<REDACTED_KEY>", "ts": 1791868762.253508, "passed": false, "duration_s": 15.07, "token_usage": {"input_tokens": 680, "output_tokens": 1346, "total_tokens": 2026, "llm_calls": 1, "cache_hits": 0, "cache_avoided_tokens": 0, "by_model": {"deepseek-flash": 2026}}}

@@ -14,9 +14,9 @@
   "部分 skip 可以与有效断言通过并存"）——只拒绝 ``passed==0``；
 - 干净 rc==0（全 passed）行为逐位不变。
 
-真实语料：全仓 246 份 benchmark 归档、9358 条含生成测试的行中，
-非 oracle 且含 skip/xfail 标记的 114 条、其中 detection_rate==1.0 的 12 条；
-全仓 736 份唯一 gold 套件中 2 份含 skip 标记、0 份模块级全 skip。
+真实语料（2026-10-23 provider 清理后重算）：全仓 239 份 benchmark 归档、8792 条含生成
+测试的行中，非 oracle 且含 skip/xfail 标记的 111 条、其中 detection_rate==1.0 的 12 条；
+全仓 724 份唯一 gold 套件中 2 份含 skip 标记、0 份模块级全 skip。
 静态适用不等于已证实假阳性（标记可能是条件性 skip）；机制由本文件锁证明。
 """
 
@@ -379,14 +379,13 @@ class TestRealCorpusApplicability:
                 assert not self.MODULE_WIDE_SKIP.search(text), f"{rel} :: {task_id} 出现模块级全 skip"
 
     def test_corpus_counts_are_stable(self):
-        """全仓静态扫：114 条非 oracle 标记行 / 12 条 detection=1.0。"""
-        # BZ 轮：246 份 / 114 条 / 12 条三个数以全归档为扫描面——fresh clone
-        # 只有入库子集（BZ 轮放行 406 个契约工件后仍远小于 246 份），前提
-        # 不成立时显式 skip 并带实测读数（tests/_corpus_guard.py），不把
-        # "没扫到"折成"扫过且干净"。
+        """全仓静态扫：111 条非 oracle 标记行 / 12 条 detection=1.0。"""
+        # BZ 轮：239 份 / 111 条 / 12 条三个数（2026-10-23 provider 清理后重算）
+        # 以全归档为扫描面——fresh clone 只有入库子集，前提不成立时显式 skip
+        # 并带实测读数（tests/_corpus_guard.py），不把"没扫到"折成"扫过且干净"。
         require_full_corpus()
         files = sorted(glob.glob(str(ROOT / "experiments" / "results" / "**" / "benchmark_*.json"), recursive=True))
-        assert len(files) == 246
+        assert len(files) == 239
         marked = 0
         det1 = 0
         for path in files:
@@ -410,5 +409,5 @@ class TestRealCorpusApplicability:
                         marked += 1
                         if row.get("detection_rate") == 1.0:
                             det1 += 1
-        assert marked == 114
+        assert marked == 111
         assert det1 == 12

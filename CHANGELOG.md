@@ -1,10 +1,511 @@
 > **语言 / Language**：[English](CHANGELOG.en.md) | 简体中文（本文）
 >
-> Last updated: 2026-10-23（**BZ 轮：CI 历史三族红的归因与修复——29 例测试引用的归档工件被 gitignore 排除致 fresh clone 全红、45 个传递依赖漏洞升级清零、跨平台 libm 末位容差**。fresh clone 模拟复现 31 例（本地全量绿只因工件在盘被忽略）；处置：契约工件入库 408 个 / 5.9 MB、三类前提缺失显式具名 skip、pillow / aiohttp / certifi / otel 四族升级（lock 132 → 133）、test 作业超时 30 → 60。验证：fresh clone 三轮闭环 31 红 → 9 红 → **0 红**、pip-audit「No known vulnerabilities found, 5 ignored」。此前 **BY 轮：报告的「分析集流量」从未披露——载入行数不是 n，整份剔除与行内折叠是两种剔除，`## 数据来源` 只列纳入文件**。归档实测（扫描面 246 份 / 10,659 行）：数据集白名单剔除 **77 份 / 886 行**、schema 不完备剔除 **59 份 / 2,463 行**、未登记基线 **300 行**，载入 **110 份 / 7,010 行**；随后按 `task_id` 折叠 **6,449 行（91.997%）**，唯一 task 行 **561**；字段 None：`passed` 0 / `detection_rate` 45 / `repair_rate` 52。全归档带 `results` 的 JSON **257 份 / 11,197 行**，其中非 `benchmark_*` 命名 **13 份 / 538 行**不进扫描面；混批口径 **169 份 / 9,473 行**、重复 8,494、唯一 979，与默认口径之差恰为 schema 层 2,463 行。处置纯读侧：单一事实源 `experiments/_analysis_flow.py` + `statistical_analysis.analysis_flow_stats` + `## 数据来源` 新子章节（流量表 + 三层对账 + 外部口径脚注）+ 控制台一行，判定值与方向一处不动、`src/` 零改动；**27 例新锁 + 变异 46 锚点 = 45 变异全红 / 对照 0 红**。此前 **BX 轮：写而不读键池最后两键的读侧从未披露——`risk_summary` 全归档 `enabled=False` 占位（`enabled=True` 0、level 非空 0、键缺席 2,333、`contract_status` 在场 0），`mdo_crash_rate` 五层共用一个 `None`，`mdo_pool_floor_ok=False` 1,516 行是两义键**。归档 257 批次 / 11197 行：risk 在场 8,864；crash 五层 2,312 / 122 / 986 / 530 / 94（值 94：79 零 / 15 非零，池化 0.46875%；暂定池 12/7,190 分列）。读侧收口 + 102 例新锁 + 变异 44 锚点；键池闭合 76,488，零读者池为空。此前 **BW 轮：补丁接收链的覆盖率与分母从未披露——`patch_precision`（预注册 E3）、`patch_plausible_evidence` / `patch_plausible_invariant_violation`、`patch_abstain_signals`、`patch_validated` / `patch_validate_verdict` 自写入起报告面 0 读者（弃权与验证两族只有测试读者），`None`「算不出」与 `0.0`「算出零」同形**。归档 257 批次 / 11197 行：接受集 1331（16.61%）、存储精确率 45.60% vs 并集 50.75% vs gold 57.92%、选择性风险 54.40%（gold 42.08%）、抑制精确率 93.98%（gold 分母）/ 93.11%（全部分母）、验证输入仅 `patch_evidence_level` 1007 行可达（`repo_verification` / `deterministic_repair_status` 全归档为空）。处置纯读侧：单一事实源 `experiments/_patch_acceptance.py` + 报告四表新章节 + 批次摘要两行，判定值与方向一处不动；**94 例新锁 + 变异 68 锚点全红 / 对照 0 红**。此前 **BV 轮：批次 VIII / XIV 两份判定核的「沉默」从未披露——归档 5935 行里 20 行 test-hacking 判 True（12 硬编码输入分支 + 8 新增吞异常）在任何报告面都不出现，而 FL 约束门的六种早退共用一个 `not_evaluable`**。`test_hacking_suspected` / `_signals`（批次 VIII，ADR-0022）与 `fl_constraint_verdict` / `_hit_rank` / `_changed_functions`（批次 XIV，ADR-0028）自写入起报告面读端 **0**；判定核在「无原码 / 无补丁 / 两侧之一解析失败」时返回 `suspected=False, signals=[]`——与「三信号都跑过且零命中」**完全同形**，5915 行的「不怀疑」分不清判干净还是没看；FL 侧 `not_evaluable` 4442/5935（74.8%）、已求值 1493 行里 hit **1487** / miss **6**（hit 比 99.60%），而变更函数 3+ 档只占 1.9% ⇒ **ADR-0028 登记的「整文件重写 ⇒ 近乎恒 hit」不足以解释这个比值**，该门在本语料几乎不区分。处置：判定核增返 `status`（两侧解析分开归属，`ok` 之外仍是 `suspected=False`）、结果行落 `test_hacking_status` / `fl_constraint_reason`（判定值与方向一处不动）、单一事实源 `experiments/_verdict_silence.py`、`statistical_analysis.detector_silence_stats` 读侧（成因按「记录 / 推断 / 不适用 / 无判定键」分列，推断明写为下界）、`analyze_results` 新章节（hack 9 列 + FL 11 列两张表 + 判别力注 + 两条口径脚注）、`run_main_batch` 摘要一行；顺带把判定核在结果行的两次重复调用收成一次。**87 例新锁 + 变异 58 锚点全红、中性对照 N01 0 红**（collected 逐锚点恒 227）；首轮 3 项存活全部就地处置：V04 常量改名 ⇒ 补字面量契约锁、P11 对称夹具（记录:推断 = 1:1）⇒ 换不对称夹具、S03 按构造恒真的「恒等式为真」标记 ⇒ **删字段改由测试断言**。collected **12276** = 12271 passed + 5 skipped（正常口径）；本会话沙箱确认跑实测 **12257 passed / 19 skipped / 0 failed、218.94s / rc=0**（19 = 正常口径 5 + 14 项环境能力缺失 skip〔sandbox_apply 4 / ps 8 / Seatbelt 1 / 内核沙箱 1〕，两口径 collected 同为 12276，不混用）。覆盖率（CI 口径，`coverage.xml` root）：行 **19538/20052 = 97.4367%**（97.44）、弧 **7150/7584 = 94.2774%**（94.28）——相对 BU 的 19526/20040 与 7150/7582，+12 行 / +12 分母全部来自本轮唯一 `src/` 改动 `src/tools/patch_test_hacking.py`（五状态拆分 + 两侧独立 try），未覆盖行 511 → 514；棘轮 96.40 / 92.50 绿。此前 **BU 轮：Self-Repair Trap 判定核的输入可达域从未披露——归档 5935 行恒判「不怀疑」，而其中 3200 行只有 1 个点、declining 与 score 两个信号全域 0 行输入**。三个信号各自的最少点数门槛（3 / 2 / 2）从不写进报告，于是「进不了任何门」「进了域且确实判干净」「信号从没拿到输入」三种事实在报告面上是同一个读数；同进程重跑判定核 **0 处不一致** ⇒ 判定核与任何行的值一处不动，只加单一事实源 `experiments/_trap_input_domain.py` + `self_repair_trap_domain_stats` 读侧 + 13 列报告章节。**79 例新锁 + 变异 61 锚点全红 / 对照 U63 0 红**（collected 逐锚点恒 339、`# mutation: ` 残留 0、rc=0），首轮 U18 / U30 / U54 三项存活与 U49 / U50 / U53 三处 SYNTAX-ERROR 全部就地处置。预登记跑 collected **12189** = 12183 + 5 + 1（唯一红 = 基线守卫）、200.51s / 墙钟 202s；确认跑 **12184 / 5 / 0、194.81s / rc=0**（墙钟 196s）；覆盖率行 19526/20040 = 97.4351%、弧 7150/7582 = 94.3023% 与 BT 逐位相同（`src/` 零改动）。〔存量漂移：**BR / BS / BT 三轮未推进本 `Last updated` 行**，本行历史链从 BU 直接接到 BQ——那三轮的 H2 正文在下方序列里齐全；登记册 §1 快照三行同样停在 BQ，本轮按实测刷新、不追改历史文本。〕详见 `docs/reviews/TRAP_INPUT_DOMAIN_BU_2026-10-23.md`。此前 **BQ 轮：报告读侧把四个 status 通道当作不存在——BN 落盘的结果行四键零行读者**。BM 给 `contract_status` 接的是生产侧透传（`final_state→结果行`），报告面（`build_analysis` 30 个指标助手 / `run_main_batch` 摘要块 / `statistical_analysis`）对四键**一个都不读**（探针实测：`experiments/`+`scripts/` 184 个 .py 里行读 = 0；对照组 `contract_missing_symbols` 有 1 个真实行读者 `refresh_patch_field.py:201`，其 `or []` 把 null / 缺席折成空列表、同族折叠登记不修）。后果：「这条腿跑过且干净（ok）」与「崩了（error）/ 按设计没跑（disabled）/ 材料缺失（unavailable）/ 没记录（null / absent）」在所有报告面同形——BG→BN 七轮披露链断在最后一步。归档 1702 份 JSON 四键出现 **0**（BN 之后无批次；`contract_missing_symbols` 8865 处为 BL 之前历史行）。处置纯读侧披露、**判定值与方向一处不动**：新助手 `experiments/analysis_parts/check_leg_analysis._check_leg_measurability`（四通道 × 七档计数 + 三条恒等式）+ `analyze_results` 新章节「检查腿可测量性」（沉默臂按名列入「**不是「四腿都干净」**」而非渲染全零表）+ `run_main_batch` 摘要行（未记录明写「不可读作干净」）。**65 例新锁 + 既有 0 例改写**（五套件合跑 219 passed / 0 failed）；变异 **16 锚点全红** + 中性对照 0 红（采集面恒 219）；未新增门禁。**顺带收口存量红**：BD→BP 批次（b44a1aad）入库的 `scripts/tools/bo_raw_readside_fold_probe.py` 两个宽松 `json.dumps` 写点使严格 JSON 门禁在 HEAD 即红（门禁按 `git ls-files` 只扫**已跟踪**文件 ⇒ 入库前的门禁跑盲区；BP 收口「门禁全绿」声明与工件分裂，登记不追改）——补 `allow_nan=False` 两处（合成载荷、零行为变化）后门禁转绿，干净树上门禁链 19 步 rc=0、总墙钟 233s。collected **11992** = passed 11987 + skipped 5（本会话沙箱确认跑实测 11973 / 19 / 0、198.25s / rc=0；沙箱与正常口径不混用）。`src/` 零改动 ⇒ 行覆盖与 BP 逐位相同（19393/19904 = 97.4327%）；弧覆盖 7103/7532 = 94.3043%（较 BP −2，三路归因：沙箱 skip 集 + xdist 重排，均非 `src/` 改动）。详见 `docs/reviews/CHECK_LEG_READERS_BQ_2026-10-22.md`。此前 **BP 轮：统计对照面把「这一行没记录污染级别」折成沉默——同一种缺席在两个消费者手里去向不同**。BO 收的是 raw 落盘面的读侧，本轮收同一批 `details` 行在**统计对照面**的读法：`analysis_parts/cross_analysis` 的 `if not level: continue` 对未记录行**一个都不记**，`statistical_analysis.contamination_view_summary` 的 `recorded or "unknown"` 却把它们**并计进 `unknown`**（与「检测跑了但判不了」同一个数），渲染层 5.3 的「未入对照任务」按前者加、脚注却按后一种口径解释前一种。归档实测 **159** 份含键批次文件 / **320** 臂：`key_absent` **2093** 行、值为 null **0** 行、精确空串 **0** 行；**122** 臂整臂无字段 ⇒ `available=False` ⇒ **5.3 节从报告里整节消失，与「这一节没跑」同形**；`high_vs_low_success_delta` 在两档不齐时**键直接缺席**，读者无从分辨「没算」与「算出 0」。处置只加平行披露、**判定值与判定方向一处不动**：缺席分 `key_absent` / `value_null` / `value_blank` / `other_falsy` 四档并给 `n_details` / `unobserved_total`，`available=False` 分 `no_rows` / `no_level_recorded`，delta 落成**显式 `None`** 并由 `delta_missing_buckets` 点名缺哪一档（归档 **198** 个可对照臂 **0** 个有差值：157 双缺、41 缺 high），5.3 表补未记录行数、沉默臂按名点名、`N/A` 单元格写明缺哪一档、全表算不出差时追加「≥0.2 / ≤0.2 判据在这批数据上无从应用」，②侧加 `unknown_of_which_absent`；两消费者恒等式 `view.unknown` = 真 unknown 行数 + `cross.unobserved_total` 在 **320/320** 臂成立。口径修正一处：`value_blank` 只收**精确空串**——空白串在批次 IX 侧是真值、自成一档，划进缺席会让恒等式在含空白串的语料上差 1，而归档恰好 **0** 行空白串，**探针与真归档同盲区、都测不出来**。**62 例新锁**（逐类例数取自 `--collect-only` 实测）+ 既有 92 例 **0 例改写**（四套件合跑 1415 passed / 3 skipped / 0 failed）+ **变异 18 锚点全红、采集面逐锚点恒 collected=154、中性对照 0 红、`# mutation:` 残留 0**；本轮未新增门禁；`src/` 与 `config.py` 写入面命中 **0** ⇒ 覆盖率与 BO/BN/BM 逐位相同（⚠️ 相同读数不证明 `src/` 零改动，依据是写入面普查）。确认跑 **11922 passed / 5 skipped / 0 failed、195.48s / rc=0**（collected **11927**）。详见 [BP 手册](docs/reviews/CONTAMINATION_ABSENT_BUCKET_DISCLOSURE_BP_2026-10-22.md)。此前 **BO 轮：raw 落盘面的读侧把「没落盘 / 键不在 / 值是 null / 件读坏了」折成实测——而落盘开关态自己也不落盘**。BN 把四值 `status` 落到了盘，本轮量的是消费这些工件的 `experiments/` 读侧五处站点，它们共同的写法是 `x = state.get(key) or []` 再 `len(x) == 0`——「读到空」与「没读到」在同一个 `if` 里。① `--save-state` 决定 raw 存不存在，可实测 **246 份批次 JSON 里该值 0 出现**、provenance 15 个键里没有它，而磁盘 **34** 个 `raw/` 目录只有 **88** 份文件入库、只覆盖 **6** 个批次目录（`.gitignore:172` 忽略 `experiments/results/**`）⇒「没开 / 开了但没随归档留存 / 开了且留存」三种世界事后同一个观察，处置是 provenance 补 `"save_state": bool(save_state)`（只对新批次生效，**不改默认值**）；② `cross_file_root_cause` 把三种缺席折成「实测 0 条依赖边」的 `DEP_GRAPH_INCOMPLETE`——真实批次两臂复放（9 臂 29 例多文件失败）**改前 14 例判定随 raw 目录给不给翻转**、本轮分档后 **18 例**（多出的 4 例是改前两臂同折、翻不出来的键级缺席），`level1` 两臂恒 0 例；现分 `RAW_UNAVAILABLE` / `DEP_INPUT_ABSENT` / `DEP_INPUT_NULL` 三档、`dep_edges` 由 `0` 回 `null`，报告再加 `raw_coverage` / `rule_evidence` / `unreachable_rules` 自证：可达性按**值非 null** 判（BN 起白名单恒写键，「键在场」不再是证据），`ROLLBACK_CONSERVATIVE` / `TOPOLOGICAL_ORDER` 按构造零证据、由报告点名而不是从分布里被读成「没有这种根因」；③ `position_aware_ab` 的四条不可计算腿（raw 目录缺席 / 任务件缺席 / `position_aware_focus` 键缺席 / `details` 不可用）改前与「实测定位全未命中」**数值同形 = True、文本同形 = True**（都是 `0.0`、都印 `0.0%`）——`0.0` 不是保守值，是缺席造出来的读数；现按十档 grade 点名（`-1.0` 沿用既有「不可计算」数值档，不新增取值域），另收一条更窄的折档：`focus=null` 且该行**确有**修复轮次或补丁时，改前会进分母记一次实测未命中；④ `compare_failures` 改前只有**两臂都缺**才有一行披露、损坏 JSON 直接掀翻整份报告、空产物 `{}` 与「件不存在」同一句，现逐臂点名缺席形态、坏件记 `unreadable` 不抛穿、空产物自成一档；⑤ `cross_file_ab` 跑批后提示的根因命令不带 `--raw-dir`，**照抄一次就把 14 例折进结构档**，本轮补上该参数。**判定值与判定方向不变**（缺席只披露，不归因、不拒绝）；真语料零影响实测：八臂定位读数现场复算与归档**逐位相同**（21.43 / 0.0 / 0.0 / 0.0 / 25.0 / 0.0 / −1.0 / −1.0）、236 条 details 形态 = 键在且为空 **156** / 键在且有内容 **80** / 键不存在 **0**、311 份 `aitester.json` 的 `cross_file_deps` = 键不存在 **216** / 非空列表 **95** / 值为 null **0** ⇒ `DEP_INPUT_NULL` 在归档里 0 实例（该腿为 BN 之后的新批次而准备）。**70 例新锁**（逐类例数取自 `--collect-only` 实测）+ 既有 2 例按新口径改写（「保守 `0.0`」→ `-1.0` + grade，用例数不变）+ **变异 23 锚点全红、采集面逐锚点恒 collected=70、中性对照 0 红、`# mutation:` 残留 0**；本轮未新增门禁；`src/` 与 `config.py` 写入面命中 **0** ⇒ 覆盖率与 BN/BM 逐位相同。详见 [BO 手册](docs/reviews/RAW_READSIDE_DISCLOSURE_BO_2026-10-22.md)。此前 **BN 轮：状态通道运行时披露、归档工件里 0 出现——「检查崩了 / 没跑」在字节层与「检查干净」同形**。BH→BM 五轮建立的四值 `status` 只活在内存里：只读探针实测 `experiments/run_benchmark._dump_state_artifacts` 的 raw 白名单把 5 种运行时状态（`ok` / `error` / `unavailable` / `disabled` / 键不存在）折成 1 种 558 字节形状，而 `_build_task_result` 的「5 态 → 5 形状」全靠 BM 刚接上的 `contract_status` 一条腿撑住——**逐通道拆开测**才见 static / safety / oracle 三对通道在两道边界同样折档；存量归档普查（1700 份 JSON〔raw 1121〕+ 9096 行 JSONL）里这 7 个键 **0 命中 / 0 文件**。处置纯归位：白名单 +10 键、结果行两分支各 +6 键（失败分支 `None` 占位保持键集合同构），另加 BK 同族但**豁免额度为空**的新门 `scripts/gates/check_status_persistence.py`（`AITesterState` 声明的 10 个 `_status`/`_outcomes` 通道 ⊆ 每一个落盘面；`**helper(...)` 解析不出就不计入——宁可假红、不可假绿），已接 `make gates` 与 CI 独立阻断步骤。**判定值与判定方向逐字节不变**，历史工件一个字节不改（归档里 0 出现仍是 0 出现，本轮只买新批次的可复核性）。**54 例新锁 + 变异 24 锚点全红（采集面逐锚点恒 collected=54）+ 中性对照仅改注释措辞 0 红、`# mutation:` 残留 0**；确认跑零失败（读数见 BASELINE.yaml）；本轮 `src/` 零改动 ⇒ 覆盖率与 BM 逐位相同（⚠️ 相同读数不证明 `src/` 零改动，该主张的依据是改动面清单）。详见 [BN 手册](docs/reviews/STATUS_PERSISTENCE_BN_2026-10-22.md)。此前 **BM 轮：实验/报告读侧把「检测没发生 / 检测崩了」折成取值域最有利一档——崩溃记进「干净组」、未测记进「零回归」**。BL 把双读口径收在 `src/`，登记边界明写 `experiments/` 未做——本轮就是那块：`run_benchmark._compute_contamination_risk_level` 的崩溃腿 `return "low"` 返回的正是取值域里**最有利**的一档，而 `low` 在下游**就是干净组**（`statistical_analysis.contamination_view_summary.clean_n` 与 `analysis_parts/cross_analysis.high_vs_low_success_delta` 的对照基线）；`contract_status` 被 BL 写到实验侧结果行却没人读，`contract_unmeasurable(...)` 披露在实验产出的 `risk_summary` 里恒不出现；`run_main_batch._print_r4_summary` 的 R4/N1 分子只数 `== 1.0`、分母却是**全部行**，未测行按「没回归 / 没测试错误」计分，而 `0.0%` 恰好好读成「零回归」。四处处置全落在「披露 / 归位」侧：崩溃腿 → `unknown`（**修漏不是新设计**——同仓内层 `_combined_risk_level` 早在 O22 就为同一件事引入 `unknown` 并写明「异常时一律 fail-open 归 low」，本轮补的是漏改的包装器）、`contract_status` 透传给 `build_risk_summary`（分数 / 级别 / 因子逐位不变）、R4/N1 分母换成可测行数并印「可测 k/n」（`k=0` 时打印不可测而非 `0.0%`）、5.3 对照表补「未入对照任务」列。**判定值与判定方向不变**：`unknown` 不触发拒绝、不改 `passed`，只是离开干净组；③的分子仍是 `== 1.0` 的行数。真语料三组：崩溃腿可达性栅格 15 条改前 `{'high': 1, 'medium': 2, 'low': 12, 'unknown': 0}`、崩溃腿 5/15 命中且 5/5 折成 `low`，改后 `{'high': 1, 'medium': 2, 'low': 7, 'unknown': 5}`；归档 **8865** 处 `contamination_risk_level` = `not_applicable` 7843 + `low` 1022、非 str 补丁 **0** 行 ⇒ 崩溃腿在归档里 0 实例，①②对历史读数零影响；`regression_rate` 在 11197 行里可测 **0** 行（8012 `None` + 3185 缺键），`test_error_rate` 可测 7206/11197 ⇒ 现口径 7.3% vs 可测口径 **11.3%**（`single_agent` 一行 6.7% vs **94.0%**——换分母读出的新数，不得与历史值相减）。**32 例新锁 + 变异 9 锚点全红（红数 8/3/1/2/2/1/2/1/1）+ 中性对照 M10 0 红**；确认跑 11736 passed / 5 skipped / 0 failed、209.76s / rc=0（37 warnings；collected 11741）；`src/` 本轮零改动 ⇒ 覆盖率与 BL 逐位相同（19393/19904 行 = 97.4327% / 7105/7532 弧 = 94.3309%，未覆盖 511、缺弧 427）。教训：红数必须与产生它的采集面一起登记（M1=83 / M2=91，「恒 32」那句已被复测否证）、同一个打印块里两套分母正是本轮缺陷的形状学来源、`94.0%` 这类换分母的新数与历史值相减即口径错配。详见 [BM 手册](docs/reviews/EXPERIMENT_READSIDE_FAVORABLE_FOLD_BM_2026-10-22.md)。此前 **BL 轮：发布侧已经带 status、判定侧仍按空值判定——“写了没人读”这一面的收口**。BH→BK 四轮把「读不懂」写进了观测键，但判定侧读不读从未验过：本轮普查实测 `assess_task_risk` 的形参表里没有 `contract_status`，四个 status 通道的**键名判定读点改前全为 0**。处置分三层：按腿取 status（新原语 `status_for_check(outcomes, check)`，`safety_check_status` 是两道独立预检的 worst-of 聚合、不能冒充契约腿；该腿没记录 ⇒ `None`）、消费侧双读（`risk_approval` 四处 + `graph/debugger.py:918` 调用点 + `agents/debugger.py:795` 静态层 + `patch_applier.py:507` S2 —— **只把文本追加进 note，`factor` 与 G2 判定逐字节不动**）、观测侧把 status≠ok 认成失败模式（第 **12** 条 `check_unmeasurable`：5 个 status 通道 × `error`/`unavailable` → MAST `Inadequate verification`，`_flatten_record` 同步抬平 trace 的 `output` 内层键）。发布面四处补齐（`nodes.py` per-leg 通道与 trace 载荷、`run_benchmark.py` 行、`state.py` 声明）。**`None` 与 `error` 必须分读**：归档 1702 文件里 `contract_missing_symbols` 出现 8865 次、其中 **8853 是 `None`**，把「没记录」当「没测成」会整批改判历史行；五个 status 键在归档中出现 **0** 次 ⇒ 历史读数零影响。**32 例新锁 + 变异 22 锚点全红（红数 2/3/1/2/1/3/1/1/1/1/1/3/2/1/1/1/1/1/1/1/1/1）+ 中性对照 0 红**（墙钟 86s、基线 collected=32 全绿、sha256 原字节还原、`# mutation:` 残留 0）；确认跑 11704 passed / 5 skipped / 0 failed、209.29s / rc=0（39 warnings；collected 11709）；覆盖率 **19393/19904 行 = 97.4327%** / **7105/7532 弧 = 94.3309%**，未覆盖 511 与缺弧 427 与 BK 登记**逐位相同**（本轮只回收自己新增的行与弧）。**`make gates` 全链 rc=0**（回填前首跑、回填后终跑，各自单独执行：两跑 rc=0、18 步命令全绿，墙钟 **213s / 214s**；链内 pytest 为 xdist `-n 4 --dist loadfile` 且**不带 `--cov`**：两跑同判 **11704 passed / 5 skipped / 0 failed**（用时 207.16s / 208.34s、warnings 54 / 46，collected 11709），链尾分步读数两跑逐字节相同；链首 ruff 974 文件已格式化、mypy 137 源文件 0 错；`ast-guards` 链内读数 136/78/20/0/20/19 与 BK 轮链外自测逐位相同）。教训：量具中途换口径会让改前/改后差值掺入仪器变更（只登记现值或重跑改前）、用被测集合自身遍历的锁是自证循环（删键跟着变短而不是变红，M11 存活）、不可达的语料组合会让变异假存活（“契约 ok + 危险 API error”在 `safe_apply_patch` 的 `ast.parse` 硬闸下根本触发不了，M17 存活；可达形状是 `disabled` + 聚合 `error`）、继承来的四位小数要重算（BK 的 97.4300% / 94.3200% 除得值实为 97.4288% / 94.3218%，两位小数判读不变）。详见 [BL 手册](docs/reviews/CONSUMER_SIDE_STATUS_READERS_BL_2026-10-22.md)。此前 **BK 轮**：**`ast.parse` 守卫的捕获面棘轮——"读不懂"有两种异常，逐点收敛永远收不完，于是把口径交给门禁**。`src/` 78 个含 `ast.parse` 的 `try` 站点里改前有 **35 个只捕 `SyntaxError`**，而 Python 3.14.6 对**孤立代理位**文本抛的是 `UnicodeEncodeError`（`ValueError` 子类；null 字节抛的仍是 `SyntaxError` 本体，不算新腿）——单腿守卫让这条腿从"读不懂 ⇒ 降级"分支里**抛穿到调用方**（最直白的一处是 `static_validate_patch`：含代理位的候选补丁把整个 `_debugger_node` 抛崩）；已经降级的分支又把"读不懂"折进**带判定含义**的空结果（`[]` / `set()` / 原码 / `ok=True`）。处置：5 个模块 **13 处**站点收敛到共享常量 `AST_UNREADABLE_ERRORS`，形态归因走 `unparseable_shape()`（fenced_block / git_diff / undecodable / syntax），13 处经 `outcome_sink` 侧信道逐腿披露、三个发布点写 `check_status` / `check_outcomes`（`graph/debugger.py` 确定性分支与专家池分支、`agents/debugger.py` 编辑意图）；**判定值逐字节不变**：11 个判定面 × 14607 条输入 = 160677 项对账，`identical=160636 / escape_fixed=41 / both_raised=0 / UNEXPECTED=0`，41 条抛穿腿全部来自人工形态栅格（归档 14596 条贡献 0 实例）；并新增 CI 阻断门禁 `scripts/gates/check_ast_parse_guards.py`（`make gates` 新目标 `ast-guards`）——同一把尺子复测 HEAD 树得 79 站点 / 35 单腿 / 违规 **15**（恰为 BK 13 + BJ 2），现树 136 文件 / 78 站点 / 20 未覆盖 / 违规 **0**，20 处存量按 `(站点数, 折叠形态)` 计额度且**只允许变短**。**55 例新锁 + 变异 13 锚点全击杀（24/15/1/2/1/5/2/2/1/1/1/5/1）+ 中性对照 0 红、`# bk-mutation` 残留 0**；全量确认跑 11672 passed / 5 skipped / 0 failed、191.76s / rc=0（collected 11677，无 `--cov`）；`make gates` 全链 **rc=0**（首跑墙钟 **242s**、`date +%s` 成对采集；链内 pytest **11672 passed / 5 skipped / 0 failed、193.90s**、47 warnings、collected 11677 与确认跑同一采集面；本轮新门 `ast-guards` 链内读数 136 文件 / 78 站点 / 未覆盖 20 / 违规 0 / 豁免命中 20 / EXEMPT 19，与链外自测逐位相同）；终跑（上述门禁句回填后再单独跑一次）**rc=0**、墙钟 198s（同为 `date +%s` 成对采集）、链内 **192.95s**、44 warnings、`4 workers [11677 items]` 与首跑同一采集面，**链尾 47 行分步读数两跑逐字节相同（diff 0 行）**。教训：开工普查的两套分母（125 站点 / 64 与 60 单腿）不可复现，登记以守卫自测为准；HEAD 不等于"本轮之前"（其下压着七轮未提交栈），基线归因要逐文件核；本轮自己的 +19 行打断 Prompt Card——改带 prompt 的源文件必须同批重跑生成器。详见 [BK 手册](docs/reviews/AST_PARSE_GUARD_CAPTURE_BK_2026-10-22.md)。此前 **BJ 轮**：**AST 断言一致性检查的「读不懂 ⇒ 无疑点」收口——`check_assertions` 两腿各带 status、消费侧取最差者优先，`findings=[]` 不再单独算"扫过且干净"的证据**。把 HEAD 版本接到真实消费点复现即知可达：**围栏整块产物、真语法错误产物、空产物三行与一次真实干净扫描逐字节相同**（`oracle_findings=[] / tautological_count=0 / o4_triggered=False`），而 O4（恒真断言 ⇒ 标 `test_defect` ⇒ 路由回 Generator 重生成）是 generator 侧唯一的写侧路径、对读不懂的产物**恒不触发**；被测代码读不懂时类型推断通道哑火却与"类型都一致"同值；含孤立代理位的产物在旧口径下让 `ast.parse` 抛 `UnicodeEncodeError`（`ValueError` 子类而非 `SyntaxError`）**抛穿观测层**。处置：`check_assertions` 新增可选 `outcome_sink`，逐腿追加 `{check, status, reason}`——`assertion_consistency` 与 `target_type_inference` 两腿，四值词表沿用 BI 上收的 `src/utils/check_status.py` 单一事实源（本轮是第 4 个消费点）；三条实现口径各上有向锁：**盲区早退不记第二腿**、**围栏归因判据 = 剥前导空白后以三反引号开头**（与"正文出现过围栏"在真语料上差 1 条，由不 import `src/` 的 `scripts/tools/bj_discriminator_crosscheck.py` 独立复核）、**解析面收敛到 `parses_as_module`**（本轮唯一披露的行为变化）；消费点两腿相互独立 ⇒ **worst-of** 聚合，发布 `oracle_check_status` / `oracle_check_outcomes`（TypedDict 显式声明 + 默认 `None`；键名经 grep 实测避开 `experiments/oracle_quality_replay.py:1254` 已占用的规约 oracle `oracle_status`）。**判定值与判定方向逐字节不变**——不剥围栏、不把"读不懂 ⇒ 零疑点"翻成拒绝：语料 10855 条产物 HEAD-vs-现版 `repr(findings)` 逐条比对 **0 差异**（`crashes_old=0 / crashes_new=0`），变异面专设三条"判定翻转"锚点守住这一点。**63 例新锁 + 变异 23 锚点全红（9/2/9/1/11/5/3/3/3/1/2/8/8/2/1/2/50/8/1/1/7/20/1）+ 中性对照 0 红**（collected 全程 501）；真语料：`generated_test` 站点 **10855** 条 = 真扫过 10671 + 空输入 77 + 围栏块 72 + 无断言 31 + 语法错误 4（76 条"读不懂"旧口径与真扫过逐字节相同），第二腿只记 `disabled:target_not_provided = 10702` = 10855 − 153 ⇒ `error:unparseable_target` 语料 **0 实例**；开关开启的 57 份归档中盲区站点恰 1 个；`oracle_findings` / `tautological_count` / `o4_triggered` 在 1594 份可解析归档中出现 **0** 次 ⇒ 零回填；登记前一跑 **11616 passed / 1 failed / 5 skipped、197.48s**（collected 11622）；行 **19272/19793 = 97.3678%** / 弧 **7072/7504 = 94.2431%**；mypy **137** 源文件零问题；`make gates` 全链 **rc=0**（首跑墙钟 198s、链内 **11617 passed / 5 skipped / 0 failed、192.51s**、54 warnings、collected 11622；复验跑墙钟 198s、链内 192.46s、13 warnings；两跑各 90 行分步读数在归一化用时与 warnings 计数后 `diff` 为空；终跑（上述全部登记文本回填之后再单独跑一次）rc=0、墙钟 **197s**、链内 **192.06s**、66 warnings，其 88 行门禁分步读数（不含 pytest 警告噪声行）与前两跑逐行相同；此前另有一次在 0s 处停在 lint 步转 `rc=2`，那次没有门禁读数可引）。详见 [BJ 手册](docs/reviews/ORACLE_VALIDATOR_MEASURABILITY_BJ_2026-10-22.md)。此前 **BI 轮**：**写盘前两道静态预检的「读不懂 → 通过」收口——`check_naming_contract` 与 `dangerous_api_added` 各带 status、消费侧取最差者优先，空结果不再单独算"预检通过"的证据**。把 HEAD 版本接到真实消费点复现即知可达：**补丁前原文是当前解释器不接受的语法（py2 `print`）时，删除模块级常量 `CONST` 的补丁 `applied=True` 直通写盘、零条 warning**，`contract_missing_symbols` 保持 `null`，与一次真实干净比较逐字节相同；补丁侧读不懂时报"补丁删除了 2 个模块级符号"——一句关于从未发生的比较的假陈述。处置：两守卫新增可选 `outcome_sink`（`{check, status, reason}`，四值词表沿用 BG 并上收单一事实源 `src/utils/check_status.py`）；`_check_patch_safety` 按 **worst-of** 聚合（两道守卫相互独立 ⇒ 方向与 BG 的"任一后端 ok ⇒ ok"相反），`_patch_applier_node` 发布通道键 `safety_check_status` / `safety_check_outcomes`（TypedDict 显式声明 + 默认 `None`，未声明键会被 LangGraph 静默丢弃）；`type_repair_layer` 的 `contract_ok` 补配 `contract_status` / `contract_reason` / `contract_outcomes`。**判定值与判定方向逐字节不变**——本轮只把沉默翻成披露，没把"读不懂 ⇒ 保守放行"翻成拒绝，变异面专设两个"判定翻转"锚点守住这一点。**50 例新锁 + 变异 19 锚点全红（4/2/1/5/1/5/1/1/4/4/1/2/1/1/1/2/1/4/7）+ 中性对照 0 红**（collected 全程 452）；真语料：`contract_missing_symbols` 在 **172** 份归档 JSON 的 **8865** 处取值中有 **8853** 处 `null`（四义折叠在记录里正是不可见的），归档不存补丁前原文（`target_code` **1** 处 / `patch` **11101** 处）⇒ 零回填；登记前一跑 **11553 passed / 1 failed / 5 skipped、213.52s**（collected 11559）；行 **19247/19770 = 97.3546%** / 弧 **7064/7496 = 94.2369%**；mypy **137** 源文件零问题。详见 [BI 手册](docs/reviews/STATIC_PRECHECK_MEASURABILITY_BI_2026-10-22.md)。此前 **BH 轮**：**G5 testless 验证四层的「不可测量 → 验证通过」收口——每层返回 `{passed,status,reason,detail}`、顶层 `validation_status` 取最差层，`passed=True` 不再单独算“验证通过”的证据**。`src/tools/testless_validation.py` 的四层（AST 符号守卫 / mypy / 命名契约 / 导入冒烟）把“这层根本没测成”与“这层测完且零缺陷”折成同一个 `passed=True`，顶层只在 `not passed` 时记 `failed_layers`。**根因实测坐实**：mypy 层长期传 `--silent-imports`，mypy 1.15.0 已无此旗标（实跑 rc=2 + `unrecognized arguments`），干净补丁 / 类型错误 / 语法错误三种输入返回逐字节相同的“mypy 发现 1 处问题”，该层从未完成过一次真实类型检查；本轮改传 `--follow-imports=silent`，并以 argv 断言 + 真 mypy 端到端 3 例上锁。处置：每层 `status` 四值 `ok / disabled / unavailable / error`（词表沿用 BG），顶层 `validation_status` **最差层胜出**（error > unavailable > disabled > ok，与 BG 的“任一 ok ⇒ ok”方向相反——四层是彼此独立的校验层，不是同一检查的两个可替换后端） + `degraded_layers`，非 ok 时 warning 点名 `层=status:reason`；**只把未披露的假干净翻成 fail-closed**（mypy `rc ∉ {0,1}`、`rc=1` 却解析不出疑点行、AST / 命名契约输入无法解析），已披露降级（层开关关 / mypy 未安装 / 超时 / OSError）的 `passed` 一律不动；导入冒烟的危险 API 拒跑记 `disabled`；`nodes.py` 消费点在 `passed=True` 而 `validation_status != ok` 时显式记“不构成验证通过的证据”。真语料（本轮重测）：`TESTLESS_VALIDATION_ENABLE` 在 **100** 份归档 JSON 的 **107** 处取值全为 `null`、`testless_validation` 载荷键仅 **2** 份且均为 `null`、四个状态键在 **1702** 份归档出现 **0** 次 ⇒ 历史读数零影响、零回填。**52 例新锁 + 1 条旧断言按新口径改写 + 变异 11 锚点全红（7/4/1/5/2/1/8/2/1/1/1）+ 中性对照 0 红**；登记前一跑 **11503 passed / 1 failed / 5 skipped、218.93s**（collected 11509；唯一失败 = 基线守卫）；确认跑 **11504 passed / 5 skipped / 0 failed、212.17s、rc=0**；行 97.32%（19151/19678）/ 分支 94.17%（7027/7462）。详见 [BH 手册](docs/reviews/TESTLESS_VALIDATION_STATUS_BH_2026-10-21.md)。此前 **BG 轮**：**静态类型检查的「不可测量 → 假干净」收口——mypy / pyright outcome 四值化，空 findings 不再是免费证据**。`_run_mypy_findings` / `_run_pyright_findings` 旧实现对开关关 / 未安装 / 超时 / 崩溃 / 退出码异常 / 报告损坏一律返回 `[]`，与“检查完成且确实零疑点”不可区分，`mypy_findings_count=0` 把四种状态折成一个 0。每次尝试经 `outcome_sink` 记录 `{backend,status,reason}`（`ok / disabled / unavailable / error`），静态层聚合为 `static_check_status` / `static_check_outcomes`（任一 ok ⇒ ok，否则 error > unavailable > disabled），error 时 warning 点名后端与原因；两键随 debugger 写入图状态并在 TypedDict 声明。pyright 空 stdout / JSON 损坏 / 缺 `generalDiagnostics` / 超时 / rc 非 0/1 均判 error；已解析疑点保留但文本兜底不升级为 ok。真语料 `TYPE_CHECK_ENABLE` 默认关、170/170 份归档均为 `null` ⇒ 历史读数零影响、零回填。**25 例新锁 + 变异 8 锚点全红（1/3/1/2/1/1/3/2）+ 中性对照 0 红**；登记前一跑 **11449 passed / 3 failed / 5 skipped、202.57s**（collected 11457；失败 = 基线守卫 + 键集合契约 + prompt card，后两者已修正）；行 97.32%（19111/19637）/ 分支 94.14%（7006/7442）。详见 [BG 手册](docs/reviews/STATIC_CHECK_OUTCOME_BG_2026-10-21.md)。此前 **BF 轮**：**脚本工具链 rc==0 判绿收口——self-mutation 与模板验证器接“有效通过”，空套件不再记成存活 / 自洽**。BA–BE 逐层收口 M1 / experiments / MDO / 生产路径后，`scripts/tools/` 仍有两处以裸 `rc==0` 判绿：`self_mutation.py` 的 preflight 基线门（全 skip 基线记绿，其后的变异体不可能被真实杀死）与变异体分类（全 skip / xfail / deselect 的变异体记 `survived`，无证据压低 mutation score），`verify_synthetic_templates.py` 的 buggy / fixed 两侧（全 skip 的 fixed 侧记“gold 自洽”，模板带假证据进检测率分母）。修法：四处统一走 `run_has_effective_pass`（`src/utils/pytest_output.py`）；基线无有效通过记 `baseline_no_effective_pass` 并默认阻断（`--allow-red-baseline` 才继续并标 `measurement_valid=false`），变异体 `classify_result(rc, timed_out, output)` 记 `invalid` + `no_effective_pass:<counts>`（不进 mutation score 分母），模板 buggy / fixed 两侧各报“无有效通过”；超时仍优先判非绿。真语料 self-mutation 80 变异体行逐行相等（score 0.7467 不变）、模板 50/50 通过 ⇒ 历史读数零影响、零回填。**20 例新锁 + 变异 8 锚点全红（2/2/5/1/1/1/2/42）+ 中性对照 0 红**；登记前一跑 **11426 passed / 1 failed / 5 skipped、201.04s**（collected 11432；唯一失败 = 基线守卫）；行 97.31%（19055/19581）/ 分支 94.12%（6982/7418，`src/` 除共享谓词只读引用外零改动，与 BE 逐位相同）。详见 [BF 手册](docs/reviews/TOOLCHAIN_EFFECTIVE_GREEN_BF_2026-10-21.md)。此前 **BE 轮**：**生产路径 rc==0 判绿收口——六处判绿点接“有效通过”，空套件不再记成修复正确**。BA–BD 逐层收口 M1 / experiments / MDO 后，生产路径仍有六处以裸 `rc==0` 判绿：检测门 `_run_test_against_code`、本地执行器、venv 沙箱、Docker、仓库节点、P2P 回归。全 skip / xfail / deselect 的套件 rc 同样是 0，旧实现把它们记成“修复正确 / 补丁安全”：检测门误判缺陷特异、执行器带假 passed 进入下一轮、`failed_cases` 为空骗过 F2P/P2P、P2P 在 fail-closed 下也不回滚。修法：新增 `run_has_effective_pass(rc, output)`（`src/utils/pytest_output.py`）作为执行级唯一判绿入口（`rc==0` 且至少 1 个真实 passed、0 failed；部分 skip 仍有效；摘要不可解析 fail-closed），六处接入；检测门记 `unavailable`、执行器新增 `error_info.type=no_effective_pass`、仓库节点记 failed case、P2P 记 `regression_error`（fail-closed 时 `regression_failed`）；A16 尝试记录新增 `effective_pass`，fail→pass 只认有效通过。真语料 11197 行 / 5884 passed / 静态全 skip 0 / 50 条 repo_verification 全 failed / P2P 归档无 verdict ⇒ 历史读数零影响、零回填。**40 例新锁 + 变异 8 锚点全红（3/1/1/1/2/2/1/33）+ 中性对照 0 红**；确认跑 **11407 passed / 5 skipped / 0 failed、199.06s、rc=0**（collected 11412）；行 97.31%（19055/19581）/ 分支 94.12%（6982/7418）。详见 [BE 手册](docs/reviews/PRODUCTION_EFFECTIVE_GREEN_BE_2026-10-21.md)；`make gates` 全链 rc=0（见文末收口批注）。此前 **BD 轮**：**测量模块自己的 rc==0 判绿收口——MDO 基线与变异体接“有效通过”，谓词上移单一事实源**。BA–BC 逐层收口 experiments 侧后，`src/measurement/mdo.py` 仍以裸 rc==0 判绿：基线全 skip / xfail / deselect 时同样 rc==0，若不短路则每个变异体也以 rc==0 收场 → measured 且 **MDR=0**（把“没跑起来”记成判别力）；变异体侧 rc==0 但无有效通过被记成“未判别”，无证据地压低 MDR。修法：基线在 rc!=0 与执行错误判据之后、探针之前短路为 not_measurable（`test_not_green_on_base(no_effective_pass)`）；变异体无有效通过单列 `no_effective_pass` 并排除出 MTR/MDR 分母（披露 `mdo_no_effective_pass`；全部排除 ⇒ `mutant_runs_no_effective_pass`）；计数解析与谓词上移 `src/utils/pytest_output.py` 单一事实源，`_m1_metrics` 以同一对象别名保持约 20 个消费点与既有锁零改动。真语料 4044 条含 MDO 行 / 624 条 available / MDR=0 的 available 行 **0** / 模块级全 skip **0** ⇒ 历史读数零影响。**15 例新锁 + 变异 6 锚点全红（8/2/24/21/2/1）+ 中性对照 0 红**；确认跑 **11367 passed / 5 skipped / 0 failed、222.87s、rc=0**（collected 11372）；行 97.31%（19025/19551）/ 分支 94.11%（6968/7404）。详见 [BD 手册](docs/reviews/MDO_EFFECTIVE_GREEN_BD_2026-10-21.md)；`make gates` 全链 rc=0（墙钟 230s；链内 pytest 11367 passed / 222.38s）。此前 **BC 轮**：**重放对账工具的 rc==0 判绿收口——misguided_metrics 三处任务级判据接“有效通过”**。本模块逐测试四分类早已把 skip 单列为“无 pass/fail 信号”，任务级重放判绿却只看 rc（内部不一致）：`replay_detection` 的 fixed 侧无有效通过 ⇒ `None`（判据顺序与 `_m1_metrics` 对齐）、`replay_fixed_green` 无有效通过 ⇒ 保持 `None`（未演示 green 不是 False）、`_verdict_agreement` 无有效通过 ⇒ `not_applicable`（不记 mismatch 冤枉归档）；新增 `_side_has_effective_pass`（outcomes 优先 + 摘要行回退 + fail-closed）。真语料 350 任务行 / 700 侧零 all-skip-at-runtime ⇒ 历史读数零影响。**35 例新锁 + 变异 5 锚点全红（5/3/4/14/1）+ 中性对照 0 红**；确认跑 **11352 passed / 5 skipped / 0 failed、195.47s、rc=0**（collected 11357）；`make gates` 全链 rc=0。详见 [BC 手册](docs/reviews/MISGUIDED_REPLAY_EFFECTIVE_GREEN_BC_2026-10-21.md)。此前 **BB 轮：rc==0 判绿消费点的剩余收口——experiments 侧 11 处接共享有效通过谓词**。BA 轮建立 `_suite_has_effective_pass` 后，本轮将同一判据传播到 `experiments/` 全部剩余的 pytest 套件判绿点（全仓普查 11 处）：gold 自洽性审计 / 过红 P4 复跑（P5 新模式）/ GCP 块剪枝 / testlevel 任务级判据 / ULT gold 诊断归因 / SRP 见证安全门 / 四个健全性门 / mutation_testing 基线诊断——全 skip / xfail / deselect 的套件（rc==0 但 passed==0）不再计成有效 green，一律 fail-closed。`misguided_metrics` 三处对账与 `src/` 生产路径保留原口径待专门轮次。真语料 246 份归档零模块级全 skip ⇒ 历史读数零影响。**60 例新锁 + 11 变异锚点全红（2/2/2/1/2/2/2/2/2/2/1）+ 中性对照 0 红**；确认跑 **11317 passed / 5 skipped / 0 failed、243.69s、rc=0**（collected 11322）；`make gates` 全链 rc=0。详见 [BB 手册](docs/reviews/EFFECTIVE_GREEN_CONSUMERS_BB_2026-10-21.md)。此前 **BA 轮**：**rc==0 不是有效通过——全 skip / xfail 的套件没有断言执行**。pytest 对没有任何断言执行的套件同样返回 `rc==0`，旧实现只看 `rc`：detection 的 fixed 侧与 repair 的 gold 侧各有一条假阳性通道（全 skip 也记 **1.0**），重放工具给出 `correct`，变异检测把"测试没跑"误报成"测试没有检出力"（`rate=0.0`）。修法：新增共享谓词 `_suite_has_effective_pass`（至少 1 个 `passed` 且 0 个 `failed`；部分 skip 与真实 passed 并存仍有效；摘要不可解析判 `False`），四处消费点接入，无有效通过一律 fail-closed（`None` / `unverifiable` / `skipped`）。真语料 246 份 benchmark / 9358 条生成测试 / 114 条带 skip·xfail 标记 / 12 条 `detection=1.0`（均为条件性标记，无模块级全 skip）、736 份 gold 套件 / 2 份含标记 / 0 份全 skip、4895 条 mutation 行 / 1376 条已测 / 132 条含标记；**35 例新锁 + 变异 6 锚点全红（红数 14/1/3/3/1/2）+ 中性对照 0 红**；登记前 11256 passed / 1 failed / 5 skipped（唯一失败 = 基线守卫）、覆盖率 19002/19528 = 97.3064% / 6960/7396 = 94.1049%（`src/` 零改动）；确认跑 **11257 passed / 5 skipped / 0 failed、204.07s、rc=0**。详见 [BA 手册](reviews/EFFECTIVE_GREEN_BA_2026-10-21.md)。此前 **AZ 轮**：**量纲与尾部不得被实现悄悄改写——Cohen's g 是 0–0.5，不是 2g；精确 p 不得被 epsilon 抬高**。`emse_stats_extensions.cohens_g` 返回 `abs(n10−n01)/(n10+n01)`（**2g**，0–1），与函数名和论文引用声称的 Cohen's g（0–0.5）量纲错位；`binom_exact_two_sided` 对 `p=0.5` 用 `pmf <= prob_k + 1e-12` 浮点比较，把 113/0 的 **1.926e-34** 抬成 ~1.93e-12（22 个数量级）。修法：g 改 effectsize 口径 `abs(n10−n01)/(2*(n10+n01))`；精确尾改整数权重 `math.comb` 精确比较，`p≠0.5` 分支按概率序双侧。真批次：R-P0-2 aitester vs df **g 0.370 / p 1.716e-13**（原 0.739 / 1.073e-12）、df vs plain LLM **g 0.500 / p 1.926e-34**（原 1.000 / 1.931e-12）、E6 **g 0.423**（原 0.846）、E4 **g 0.500**。受保护归档 20261016 零改写（sha256 复验 OK），修正值重发 20261021；论文 / EMSE 骨架 / 复现包 / X 轮勘误同批改引；**21 例新锁 + 变异 M1 11 红 / M2 4 红**；确认跑 **11222 passed / 5 skipped / 0 failed、187.56s、rc=0**。此前 **AY 轮**：**读取层保真，判定层收口——run_b8 载荷形状不得被 `or {}` 改写，假值非对象不是免费**。`run_b8_injection` 的 `_load_arm` 与 `_load_harness_smoke` 仍用 `rd.get("token_metrics") or {}`：`[]` / `""` / `0` / `False` 被改写成 `{}`，`_arm_summary` 把"载荷坏了"读成"没有 metrics"，成本报 `$0.0` 且无机制名，入库 `REPORT.json` 丢失原始坏形状；冒烟行成本虽在改写前算出，载荷证据已丢。修法：两处读取层原样搬运 `token_metrics`（缺席 / null 保持 `None`，非对象保持原值），金额判定只在 `_cost_usd`——假值非对象同样 `None` + `token_metrics_not_object:<T>`，不折历史 0；干净 dict 与历史 0 口径不变。真批次 14 份 JSON / 12 个 `token_metrics` 键全为 dict、零坏形状；`REPORT.json` 两臂成本 0.046531 / 0.060761 与四行冒烟 0.007456 / 0.008501 / 0.007356 / 0.009719 及载荷逐位复现，受保护工件零改动；**27 例新锁 + 6/6 变异锚点转红**；确认跑 **11201 passed / 5 skipped / 0 failed、177.62s、rc=0**。此前 **AX 轮**：**基准/全栈汇总的呈现与聚合读点也有值域——呈现可以折历史 0，均值不可以**。AW 收口逐臂统计后，`run_benchmark` 终端 Token 效率两行仍以 `%d` / `%.2f` 直出聚合对象：AN/AT 合法写 `None` 时，一次完整基准在收尾抛 `TypeError`；全栈 G8 表 `bl.get("token_metrics", {})` 兜不住 `null` / 非对象，坏值原样印出；`summarize_full_stack` 用 `or {}` + `float()` 求均值，真值非对象中止整份汇总、假值非对象静默跳过、bool / 字符串 / 负数 / 非有限值进均值。修法：三处统一接共享 `token_metric_reading`——呈现层缺席 / null 仍是 AE2 历史 0、在场坏值落 `不可读` + 机制名（终端另发 warning，不中止）；均值缺席块沿历史跳过，任一在场块不可读 ⇒ 该基线 `None` + `avg_total_tokens_reason`，不给部分均值、不连坐其他基线与成功率。真语料 64 份顶层 benchmark / 递归 324 个 `token_metrics` 键（246 个 `results.<baseline>` 汇总块 + 78 个嵌套形状）零坏值，246 个汇总块终端文本、全栈干净行与四基线均值逐位不变（6 个 PREFLIGHT 嵌套块缺 `avg_tokens_per_task`，不参与终端对照）；**48 例新锁 + 8/8 变异锚点转红**；确认跑 **11174 passed / 5 skipped / 0 failed、177.06s、rc=0**。此前 **AW 轮**：**T1/B2 逐臂统计的 `token_metrics` 形状与事件计数同样有值域——坏形状不中止分析，事件计数不是免检通道**。AV 收口 `add_cost` 后，`arm_stats` 仍以 `res.get("token_metrics") or {}` 兜底：真值非对象（`"abc"` / `True`）留给 `.get` 抛 `AttributeError` 中止整批分析，假值非对象（`[]` / `""` / `0`）被静默改写成 `{}`——"载荷坏了"冒充"没有 metrics"；`"calls": tm.get("total_llm_calls")` 把事件计数原值直出，bool / 数字字符串 / 小数 / 负数与池化列（`sum_token_metric_values` 会拒绝同一份值）在同一报告里互斥。修法：整份 `token_metrics` 原样保留交下游共享读取器判定；`calls` 过 `token_metric_reading`——缺席 / null metrics / 字段缺席按 AE2 历史 0，字段在场却读不动 ⇒ `None` + `calls_reason`（去重后以竖线拼接，仅非空写入），事件计数与 token 金额互不连坐。真语料 324/324 逐臂读数干净；T1/B2 入库报告 18/18 逐位复现、原始批次新臂 9/9 复现，重算 `ANALYSIS_REPORT.json` 逐字节相同（35542 字节），受保护工件零改动；**22 例新锁 + 6/6 变异锚点转红**（0 逃逸）；登记前一跑 11125 passed / 1 failed / 5 skipped（180.28s，collected 11131，唯一失败 = 基线守卫）、刷新后确认跑 11126 passed / 5 skipped / 0 failed、179.21s、rc=0；行 19002/19528 = 97.3064% / 弧 6960/7396 = 94.1049%（`src/` 零改动，与 AV 逐位相同）；零 LLM、$0。此前 **AV 轮**：**T1/B2 分析侧的成本入口同样有值域——单侧未知不是部分和，未知金额不是字符串 `None`**。AU 收口实验侧三个聚合器后，`analyze_t1_b2_main_batch.add_cost` 仍用 `tm.get(...) or 0` 直接计价：`token_metrics=None` 折 0、`input=None` 仍按输出侧给部分和、`True` 当 1、小数直接相乘、负数编出负金额、`nan`/`inf` 进报告、字符串抛 `TypeError`、非对象抛 `AttributeError`；片段渲染把未知金额印成 YAML 字符串 `None`。修法：两个 token 字段过共享 `token_metric_reading`，整份 metrics 缺席 / `null` / `{}` 仍是历史 0（AE2），字段在场却读不动 ⇒ `cost_usd=None` + 去重后以 `|` 拼接的机制名，不给部分和；YAML 未知金额一律 `null`，未知 token 落 `不可读`。真实批次 18/18 逐 seed 成本逐位一致、入库片段逐字节相同；**19 例新锁 + 6/6 变异锚点转红**；确认跑 11104 passed / 5 skipped / 0 failed；行 97.31% / 分支 94.10%。此前 **AU 轮**：**实验侧的未知不是零——读不动不给数字、部分和不冒充全额、AT 写拒绝标记不得丢失**。AI–AT 把共享读取器与报告侧读端逐层收口后，实验侧仍有三个活聚合器自折数：`estimate_cost_usd` 对 usage 直接 `float(... or 0)`（`input_tokens=None` + 100 万输出 token 只按输出侧计价 **$1.2**、`True` 当 1、`"12"` 当 12、负数编出负数金额、`nan` 产出非有限金额）；`generation_summary` / `usage_totals` 用 `int(... or 0)` 求和，AT 的写拒绝标记在汇总里消失；`run_b8._cost_usd` 把 `None` 折 0，总额可把一侧未知与另一侧金额相加，README 印 `$None`。修法：金额与计数统一走共享值域，缺席才是历史 0、读不动给 `None` + 机制名，任一字段不可读整笔阻断；事件计数独立；命中列只依赖本列；`cost_total_usd` 与含冒烟总额任一侧未知即 `None` + 合并披露；README 统一「不可读 / 无法估算（机制）」。真语料 1701 份 JSON 零坏值，37/37 b8 成本与 6/6 generation 成本只读复算一致；**62 例新锁 + 7/7 变异锚点转红**；确认跑 11085 passed / 5 skipped / 0 failed；行 97.31% / 分支 94.10%。此前 **AT 轮**：**写入侧的 token 计数同样有值域——被拒绝的写入不是零，且必须可追溯**。读端在 AI–AS 各轮把「零 / 缺席 / 读不动」逐层分开后，写入端仍在用 `int(... or 0)` 静默转计数：bool 记 1、float 截断、数字字符串收下、负数进入累计、`nan`/`inf` 与不可解析字符串崩溃；缓存文件的坏 `tokens` 还可能把一次真实缓存命中变成一次真实 LLM 调用。修法：`record_usage` / `record_cache_hit_usage` 统一走共享谓词 `count_reason`，拒绝写入不写计数但 `llm_calls` / `cache_hits` 事件仍 +1，机制名只在非空时写入 `token_write_reasons` / `cache_write_reasons`；读端以 `token_write_rejected:<mech>` / `cache_write_rejected:<mech>` 把整行判为不可读，`otel_export` 不导出 token 属性；`write_rejection_count` 让缓存 `tokens: null` 的「未知」区别于历史缺席。真语料 1701 个 trace 文件 / 10629 条 `token_usage` 零坏值、存量读数逐位不变；**62 例新锁 + 19/19 变异锚点转红**；确认跑 11023 passed / 5 skipped / 0 failed；行 97.31% / 分支 94.10%。此前 **AS 轮**：生产端标识先写对——`TraceSession` 写 16 位 `run_id`、12 位 `span_id`，`task_start`/`task_end` 无标识，`parent_span_id` 从未出现；真语料 9086 文件 / 110926 条 node：61188 条带 16/12 位标识、49738 条无标识（全部早于 O7）、905 条 task 首尾事件全无标识、parent 0 次。修法：32 位 `run_id`、16 位 root / 子 span，`task_start` 在文件与内存两种模式都写 root，node/task_end 的 parent 指向 root，结构标识按字段名 + 形状精确豁免通用 32+ hex 脱敏；**10 例新锁 + 18/18 变异锚点转红**；收口 10961 passed / 5 skipped / 0 failed；行 97.29% / 分支 94.06%。此前 **AR 轮**：OTel 导出标识与字符串值域——`run_id` 原样当 trace_id（真实 16 位 hex）、`span_id` 原样导出（真实 12 位 hex）都不符合 OTel（trace_id 32 位 / span_id 16 位）；缺失标识每次导出随机 uuid，node 又拿 run_id 覆盖文件级 trace，实测 **8002 个文件出现两个 trace、61188 条 parent 断链、9086/9086 文件重复导出标识不一致**。修法：标识规范化为 32/16 位小写 hex（短 hex 左补零、大小写归一；非字符串/空串/非 hex/超宽/全零不可导出），一个文件一个 trace_id，缺失/非法按 SHA-256 确定性派生，同 trace 内 span_id 冲突改派生并披露 `span_id_duplicate`，字符串属性只导出 `str`；真实语料 9086 文件 / 129058 span 全部单 trace、标识合规、parent 闭合、零披露、重复导出逐字相同；**48 例新锁 + 16/16 变异锚点转红**；收口 10951 passed / 5 skipped / 0 failed；行 97.29% / 分支 94.06%。此前 **AQ 轮**：OTel 导出边界数值值域——token 属性不再泄漏 bool/str/小数/负数/NaN/Inf/容器，坏时间戳不再炸整份文件，非对象 `token_usage` 的静默丢弃改为 `aitester.export_value_reasons` 披露。token 计数复用共享 `count_reason`；时间/duration/budget 只收有限非负数；真实语料 9086 文件 / 129058 span 零披露，18 份稳定文件逐字不变；61 例新锁 + 12/12 变异转红；收口 10903 passed / 5 skipped / 0 failed；行 97.29% / 分支 94.05%。此前 **AP 轮**：五处报告侧聚合 token 汇总也各算一遍——t1_b2 池化、b8 README、rag_ab 解析/统计、RAG 分组均值、成本表。字段在场 `None` 被 `or 0` 折 0、`True` 记 1、`"100"` 被 `int()`/`_safe_float` 收下、负数拉低总量、nan/inf 传播或崩、非对象崩；`None` 进 `_mean` 崩溃，nan 让 `p<0.05` 为假并报"无显著差异"。修法：新增聚合 metric 口径共享读取器 `token_metric_reading` + `sum_token_metric_values`（缺席历史 0、在场 `None` 是上游拒绝、计数走 `count_reason`、派生均值 `allow_float`），五处接线；不可读不给部分和，表格/README/解读渲染「不可读」。真工件读数逐位不变；67 例新锁 + 33/33 变异锚点转红；收口 10842 passed / 5 skipped / 0 failed；行 97.28% / 分支 93.98%。此前 **AO 轮**：三个报告级 token 汇总读端也持有宽松折叠——档位 / 翻转对比 / 收敛曲线各算一遍。`model_gradient` 的 `int(... or 0)` 把 bool 记 1、float 截断、str 收下、负数得负总量、nan/inf 崩实验；`compare_failures` 的 `(row.get("token_usage") or {}).get(...)` 遇 truthy 非对象崩、str 总量求和崩、坏值折进合计；`convergence_analysis` 的 `_safe_float(... or 0)` 收下 str/bool/负数/nan。处置：新增总量口径共享读取器 `row_total_token_reading` + `aggregate_row_token_totals`，三个消费端接入；读不动不给部分和，total-only 旧 schema 仍可读，拆分矛盾只披露。真批次 10659 行 / 322 臂零实例、9 臂新旧差 0。52 例新锁 + 16/16 变异锚点转红。此前 **AN 轮**：三个 token 聚合读端也持有 `or 0` 折叠——读不动不是零，部分和不是总量。`run_benchmark._aggregate_token_metrics`（落盘 `token_metrics` 的写侧）、`trusted_verification.arm_trusted_metrics`（离线报告/CLI）、`rag_analysis._token_metrics_from_details`（旧 JSON 回退）改前各自把行级 `token_usage` 读成数字：真值非对象抛 `AttributeError`、假值非对象静默 0、`True` 当 1、字符串抛 `TypeError`、负数产负总量、nan 产 nan，`cache_hits=-3` 编出 −300% 命中率；`total_tokens=999` 与 `in+out=110` 一个取 110、一个取 999；缺 `total_tokens` 在可信报告里读成 0；旧 CLI 的分母是字面文本。修法：AM 的行级策略迁入 `src/budget/token_usage.row_token_reading`，新增 `aggregate_row_token_usage` 一处聚合——缺席/null ⇒ 历史 0 并计 `n_absent_rows`；在场坏值/正 token 缺项 ⇒ 三元组全 `None` + 机制名；`llm_calls` 独立判定；拆分矛盾只披露；缓存整批旧 schema ⇒ 历史 0、半套/坏值 ⇒ `None`；`statistical_analysis._row_cost_tokens` 改别名。真批次 783 行 / 9 臂逐位不变，全仓 11197 行 / 337 臂中 1218 行缺席、0 坏值；**38 例新锁 + 15/15 变异锚点转红**；收口 10723 passed / 5 skipped / 0 failed；行 97.27% / 分支 93.93%。此前 **AM 轮**：成本表聚合的行级 token 读取也有值域——`or 0` 把在场坏值折成可计价数字（false $0、坏归因漏行、S11 非计数证据）。`cost_analysis` 改走共享 `row_token_counts`，两级阻断（读不动 ⇒ 整臂 token/金额 `None`；拆分/归因矛盾 ⇒ 只废金额），归因谓词迁入 `src/budget/token_usage.by_model_reason`，S11 证据改走 `count_reason`；真批次 783 行全部干净 ⇒ 三臂读数与返回域逐位不变；**64 例新锁 + 10/10 变异锚点转红**；收口 10685 passed / 5 skipped / 0 failed；行 97.26% / 分支 93.90%。此前 **AL 轮**：报告侧逐行 token 算术也有值域——一行读不动不是零。`emse_stats_report.cost_effectiveness_block` 改前自持第二套行级算术：`usage.get("input_tokens") or 0` 把缺席/null/字符串/bool/负数/nan/inf 折成可计价数字；`token_usage` 缺席或非对象的行在检出计数之前 `continue`，`n_detections` 随 token 可读性缩水；正 token 行缺 `by_model` 归因、`in+out ≠ total`、`Σby_model ≠ total` 时金额静默漏行或按矛盾数字计价；缓存命中解释的零消耗被计入 AK 下界。修法：`row_token_counts` 迁入 `src/budget/token_usage.py`（ext 保留别名，AI 既有锁零改动），报告改读共享读取器——读不动 ⇒ token 总量、总 $ 与两个比值一律 `None` + `token_reading_reasons`；拆分/归因不一致 ⇒ 只废金额（token 总量与 `tokens/detection` 仍可读，`token_money_reasons`）；检出计数与 token 可读性解耦；缓存零行不计入 AK 下界。真批次 783 行全部干净 ⇒ 三臂总金额 6.755979 / 0.876692 / 1.185783 逐位不变，受保护工件不重写；57 例锁 + 6/6 变异锚点；全量 10621 passed / 5 skipped / 0 failed，读数见 BASELINE.yaml。此前 **AK 轮**：**少数无记账行不是免费，也不是精确值——成本读数是已记录花费的下界**。`plain_llm_df` 35/261 行（13.4%）token 三元组全 0、`llm_calls=0`、`generated_test` 非空（其中 3 行 `detection_rate=1.0`），S11 因零占比 < 50% 判 `computable=True`，这些行以 0 进金额分子、却仍占任务分母，`$/task = 1.1857833/261 = 0.004543231034482759` 与 `$/solved` 被按精确值渲染。修法：S11 新增 `n_zero_output_rows` 子集（仅 >0 写入；`_row_has_generated_test` 只认非空字符串；AJ 缓存证据行不算零记账行）；`cost_analysis` 仅在成本非 None、`computable`、无记账行 >0 时写 `token_zero_output_rows` 与 `cost_caliber="recorded_lower_bound"`；三层呈现同源（成本报告「**成本口径下界（AK）**」节 + `$/solved` 后缀 / `emse_stats_report` §4 子集注 + §4.1「**零 token 行的成本口径（AK）**」块 / ext `_zero_token_note` 四条返回路径）；行级数学口径（AE2）与 S11 阈值不变，全记账臂与旧批次返回域/文本逐字不变，受保护归档未重写。**21 例新锁 + 4/4 变异锚点逐处转红**（红 3/5/3/1，中性对照 0 红、collected 恒 89、sha256 原字节还原）；AJ 两处旧锁按新口径改写（净 0 例）。登记前一跑 10563 passed / 1 failed / 5 skipped（173s；唯一失败 = 基线守卫），刷新后确认跑 **10564 passed / 5 skipped / 0 failed、177.85s、rc=0**；覆盖率行 **18554/19077 = 97.26%** / 分支 **6708/7144 = 93.90%**（较 AJ +1 行 / +1 弧，落抖动域；`src/` 零改动，佐证为改动面清单）；零 LLM、$0。此前 **AJ 轮**：**缓存命中是第三种记账状态——不是记账断裂，也不是免费**。生产者 `record_cache_hit_usage` 一直写 `cache_hits` / `cache_avoided_tokens`，但所有成本读端只看真实 token：缓存密集臂因"真实 token 为 0 的行 ≥ 50%"被 S11 判 `NOT_COMPUTABLE`（QuixBugs df 臂 50/50 行命中、64 命中 / 123644 avoided，改前 `n_without_accounting=50`），纯缓存臂的成本行只剩无因「（缺: ）」（ULT df 臂 20 行命中、39 / 89249），examples df 臂（2 / 3387）同被拒。现在共享读取器收口到生产者模块 `src/budget/token_usage.py`（`cache_caliber` 判单行、`cache_totals` 判一臂；`count_reason` 自 ext 迁入，成为 token 三元组与缓存字段共用的值域谓词），S11 / `cost_analysis` / `emse_stats_report` 两个成本块与章节 / ext `_cost_per_task` 四处同源：合法且正向的缓存证据算「有记账」；命中行真实消耗记 0 是对的，但 0 不等于免费；坏值 / 半套 schema / 非对象 ⇒ `hits` / `avoided` 均 `None`，按 `token_field_absent:<field>` / `token_not_count:<field>:<T>` / `token_not_finite:<field>` / `token_negative:<field>` 逐条点名，不留部分和；纯缓存臂成因 `cache_hit_no_api_spend`；避免 token 不写 `by_model`，无法折算金额，只披露 token。旧 schema 批次（主批 261 行/臂、E6、E4 无缓存键）返回域、note 与受保护工件逐字节不变——三臂 ext 读数 `26114.854406130267 / 0.025884977011494247`、`3209.44061302682 / 0.003358973563218391`、`4223.103448275862 / 0.004543231034482759` 逐位相同，归档 `STATS_EXTENSIONS.json` 逐字段相等。68 例新锁 + **19/19 变异锚点转红**（红 38/10/10/11/6/6/10/4/2/3/1/3/1/3/1/2/2/1/1，中性对照 0 红、collected 恒 298、sha256 原字节还原）。登记前一跑 **10542 passed / 1 failed / 5 skipped**（collected 10548，175.54s 带 `--cov`；唯一失败 = 基线守卫自身）；收口确认跑 **10543 passed / 5 skipped / 0 failed、179.94s、rc=0**；覆盖率行 **18553/19077 = 97.25%** / 分支 **6707/7144 = 93.88%**（较预登记 −1 行 / −1 弧，落抖动域；`src/budget/token_usage.py` 131 条语句执行 130 条；10 项核心模块逐位不变）；零 LLM、$0。此前 **AI 轮**：**token 计数也有值域——不完整的 token 和不是 token 读数**。AH §7 第 1~3 条处置：`emse_stats_extensions` 的读入侧改前在 `_cost_per_task` 与 `_bootstrap_cost_ci` 各写一遍 `sum += value or 0`——`"100"` 抛 `TypeError`、真值非对象 `token_usage` 在 `.get` 上抛 `AttributeError`、`True` 当 1、`-5` 让 tokens/task 与金额同时为负、`inf` 让占比成 `nan`（且 `inf != inf` 为假，AH 的闭合检查恰好放行）、`token_usage` 缺席或 `{}` 但 in/out 有数被 `or {}` 折成 0、`by_model: []` / `"x"` 直接崩、`{5: 100}` 非字符串键不拦截、`{"m": "100"}` 在 `+=` 上抛 `TypeError`、行级 `in+out != total` 无判定、零任务分母仍印 0.0。现在一行 token 记账是**三个非负整数**：形状/缺席/类型/负数/非有限任一不成立 ⇒ 整臂 `tokens/task` 与 `$/task` 均 `None` 并逐条点名机制（`token_usage_absent` / `token_usage_not_object:<T>` / `token_field_absent:<field>` / `token_not_count:<field>:<T>` / `token_not_finite:<field>` / `token_negative:<field>`）；行级 split 与 `by_model` 形状/键/值域只废金额（token 总数仍可读），且 `by_model` 在场读不动时不再同时报 `no_model_attribution`。`tokens_per_task` 改 `float | None`、bootstrap CI 改 `tuple | None`，渲染 `—（无 token 读数）` / `—`。真批次三臂读数逐位不变（`26114.854406130267 / 3209.44061302682 / 4223.103448275862`；`$/task` `0.025884977011494247 / 0.003358973563218391 / 0.004543231034482759`），受保护归档一字未动。63 例新锁 + **18/18 变异锚点转红**（红 4/7/11/3/2/8/3/3/3/1/6/14/2/3/3/9/4/1，中性对照 0 红、collected 恒 78、sha256 原字节还原）；AH 旧锁改写 1 例（净 0 例）。收口全量 **10475 passed / 5 skipped / 0 failed**（collected 10480，177.44s），行 **18491/19015 = 97.24%** / 分支 **6675/7112 = 93.86%**（`src/` + `config.py` 零改动，读数与 AH 逐位相同）；零 LLM、$0。此前 **AH 轮**：**不完整的和不是金额——覆盖、归因与分母，缺一项就没有 $/task**。AE 评审 §5.2 候选 B 处置：`emse_stats_extensions._cost_per_task` 改前对「价目表缺该模型」只记 `unpriced` 并继续累加，把部分和当 `$/task`；对 `by_model` 缺席却 `tok>0`、`by_model` 合计 ≠ `total_tokens`、零任务分母同样给出金额（0.0）。现在 `usd_per_task` 仅在价目覆盖全部 `by_model` token、合计 = `total_tokens`、`n_tasks > 0` 时给出；否则 `None` + note 点名 `model_unregistered←<models>` / `no_model_attribution` / `token_attribution_mismatch:<a>/<b>` / `无任务 ⇒ $/task 无金额（不是 0）`，与 AB-15 的 `计价被拒` 并存；`tok==0` 仍是真实 0.0。真批次三臂 `by_model` 合计恰好闭合（6815977 / 837664 / 1102230），读数 0 行改变。15 例新锁 + **6/6 变异锚点转红**（中性对照 0 红、collected 恒 298、sha256 原字节还原）；AB-15 / AB-16 / AB-17 三处旧锁按新口径改写净 0 例。收口全量 **10412 passed / 5 skipped / 0 failed**（collected 10417，177.80s），行 **18491/19015 = 97.24%** / 分支 **6675/7112 = 93.86%**（`src/` 零改动，读数与 AG 逐位相同）；零 LLM、$0。此前 **AG 轮**：**归因不是措辞——不同机制不得共用一句话，照错提示去修不会变绿**。AE 评审 §5.2 候选 C 处置：`cost_analysis` 改前把「表里没登记」与「价格域坏值」同塞 `missing_models`、把条目形状码塞进名为「币种」的桶、行级混算只剩 `（缺: ）`，全未计价分支统一教人补价目字段。新增共享谓词 `src.budget.pricing.model_entry_reason`（键缺席 → `model_unregistered`，其余交 `entry_block_reason`；`allow_non_usd=True` 只放行**可判定的非 USD**，不可判定币种仍拒），`run_b8_injection._price_entry_reason` 改纯委托；`cost_analysis` 三桶互斥（`missing_models` 只留真键缺席 / `unpriced_currency_models` 保持 AB-14 词汇 / `unpriced_model_reasons` 全机制图）+ 行级 `mixed_currencies:*` / `mixed_price_pairs`，披露键只非空写入；呈现层按机制给建议（`**成本不可计算**` + `**未计价机制**`），纯未登记 / 无 token 观测旧文本逐行不变。真批次 **522 行 0 行改变**（成本单元格与未计价注逐字节相同）。46 例新锁 + **15/15 变异锚点转红**（red 1–25，collected 恒 365，中性对照 0 红）；AB-14 / AB-16 / AB-17 旧锁按新口径改写净 0 例。收口全量 **10397 passed / 5 skipped / 0 failed**（collected 10402，178.78s 带 `--cov`），行 **18491/19015 = 97.24%** / 分支 **6675/7112 = 93.86%**；零 LLM、$0。此前 **AF 轮**：**落盘即契约——RFC 8259 之外的 token 不得从任何受控写入口流出**。AE 评审 §5.6/§5.7 合并处置：`json.dumps` 默认 `allow_nan=True` 把 `nan`/`±inf` 写成裸 `NaN`/`Infinity`，Python 自己能读回而 jq / Go / Rust serde / JS `JSON.parse` 一律拒绝，形成"生产端静默写出、消费端读不动"；新增 `src/utils/json_strict.py`（`strict_json_dumps` + `nonfinite_pointers` 递归点名 JSON 路径、`NonFiniteJSONError` fail-closed、`allow_nan=False` 第二道防线、**不静默转 null**），四条中心写盘路径接线（`atomic_write_json` 失败发生在临时文件创建之前；`run_b8._write_json`；`_Injection._record` 不留半行；`trace` 三处保持"少记不误记"——坏记录整条丢弃、文件仍逐行严格可解析），另为 39 份源码的 41 个直写点补 `allow_nan=False`（src 8/8、experiments 17/19、scripts 14/14）；新增全仓门禁 `scripts/gates/check_json_strict.py`（`git ls-files` 全部 `.json`/`.jsonl` 严格解析 + `src|experiments|scripts` AST 写入点扫描；空集合与"豁免文件变得可严格解析"的漂移均 fail-closed），实测 **工件 7273 份 = 严格 7271 + 2 份 A20 历史截断行逐路径豁免 + 违规 0；源码 300 份写入点违规 0**，接 `make gates` + CI。**AE §5.6「`experiments/results/` 下 68 份 JSON 含裸 `NaN`」复测为文本 grep 假阳性**——69 份 worktree 文件（其中 42 份 tracked）只在**字符串值内部**含 `NaN`/`Infinity` 字样（测试名、诊断文本），严格解析器全部接受；真正成立的缺口是 §5.7 的写入路径，以日期化勘误登记、不改写 AE 原文。28 例新锁 + **9/9 变异锚点转红**（M1–M9，含门禁四路；collected 恒 28、写盘前 `compile()`、sha256 还原）；收口全量 **10351 passed / 5 skipped / 0 failed**（collected 10356，191.66s 带 `--cov`），行 **18486/19009 = 97.25%** / 分支 **6674/7110 = 93.87%**（分母 +46 行 / +20 弧，新增部分 100% 被锁执行，未覆盖行 523 与偏弧 436）；登记前一跑 10349 passed / 2 failed / 5 skipped——失败②是**本轮新引入的真实缺陷**：CI 步骤 `name` 含未加引号的 `AF: ` 触发 YAML ScannerError，被 `test_ci_yaml_parses` 当场抓住，加引号后转绿（自纠如实登记）；零 LLM、$0。此前 **AE 轮**：`run_b8_injection.aggregate` 的价目**条目级**准入接共享谓词——自持 `isinstance((int, float))` 数字门（`bool`/`nan`/`inf`/负价全收、`nan`/`inf` 写非 RFC-8259 裸 `NaN`/`Infinity`）+ 币种盲（CNY 记成 USD）+ 读不出价静默退回内置价，全部收口为「共享谓词判定 + 内置价兜底 + 机制码披露」；测试侧价目 schema 的域同步收口；AB-15/AB-16 登记的入库 e2 报告陈旧差值 86/88 按当前树重算为 94/100（canonical 110→122，增量 100% 来自 AD-1 渲染），只更新登记不重写受保护工件；新增回归锁 23 例、10/10 变异锚点全红；零 LLM、$0。此前 **AD 轮**：统计量渲染量级保持 + 正态尾部补集模式消除 + 数值精度丢失模式全仓普查。此前 **Z→AB 收口轮**：2026-10-19 傍晚起滞留工作区的约 18 轮（Z / AA / 工程质量 / AB-1~17）一次提交收口 + README 双语「最新优化」行轮换补做（全批只维护了 CHANGELOG/BASELINE/INDEX/登记册，README 停留在 Y 轮——该约定第 4 次复发，AO3 行锁同步推进至 2026-10-20）+ E7 裁决录入表"被 .gitignore 忽略 = 永远不可能入库"缺口修复（6 份空白表已进 SHA256SUMS 却被通配排除压掉、MANIFEST 亦未登记——双静默缺口；narrow 放行 + 登记 179→185 + 入库，2040 项清单条目全部可在 fresh clone 检出）；零 LLM、$0。此前 **AB-17 轮**：**"这个文件读出来算不算一张表"一处写一遍**——AB-16 把"什么算一张合格条目"收成一遍后，两者共同的上游（文件 → `models` 层）仍在七个读点各写一套：`src` 缓存包装七种不同坏（顶层 list / null / 空对象 / 缺键 / `models` 为 list·str·null）全读同一句「结构不符（缺 models dict）」；`emse_stats_extensions` 七种坏**全部直接崩**（FileNotFoundError / JSONDecodeError / TypeError ×2 / KeyError ×2 / AttributeError ×3）；`emse_stats_report` 六个中文短语只在 stderr、归因全落 `model_unregistered`；`spec_examples_generator` 文件级只进日志、`models` 层 pass-through；`statistical_analysis` 文件路径全程无痕而参数路径另一套短语；`run_b8_injection` 的 `is_file()` 前置守卫静默退回内置价；检索层 `.get(model)` 的 `is None` 让"键缺席"与"值 null"共用一句 `model_unregistered`。处置为 `src.budget.pricing` 四个共享助手：`table_read_reason`（`price_table_file_missing` / `price_table_json_invalid:<T>`〔含 UnicodeDecodeError〕/ `price_table_file_unreadable:<T>` 三族）、`load_table_json`（`(None, None)` 是合法读数——文件内容就是 `null`）、`models_layer`（顶层非对象 `price_table_not_object:<T>`；非空对象缺键 `models_key_absent`；键在值非对象**真假一律** `models_not_object:<T>`；`{}` / `{"models": {}}` 静默"空对象没有形状可说"；可用则原样交出、非对象条目不再被静默过滤）、`load_table_models`（一步到位）；七处读点全部接线（缓存包装 / spec / report / ext / statistical / analyze / run_b8，run_b8 `table_reason` 只在真不可用时写入、②自持数字门登记不修只加 `isinstance(row, dict)`）；检索层 `.get` 改 `not in`（值 null → `entry_not_object:NoneType`、键缺席 → `model_unregistered`，spec / report / ext / analyze 四处）；两处 `isinstance(v, dict)` 静默过滤删除（src + statistical）。**真批次读数零改变**（池化 `1.447277 / 0.260967 / 0.541408`、总额 `2.249652`、ext 三臂 `$/task` 六个读数逐位不变；run_b8 真表 `price` 元数据与受保护 `REPORT.json` 逐字段相等、聚合在 tmp 副本上跑；归档 P-1 README 未重生成）。`tests/test_experiments_table_admission_ab17.py` **26 例** + **8 处锚点逐处转红**（红数 `14/7/5/1/1/3/1/4`、collected 恒 484、sha256 字节还原）；5 个既有锁文件按新口径改写词汇接线断言（净 0 例）；两处设计性读法差异（spec 加载器 models 层 pass-through、ext `is_file()` 守卫目录读"缺失"）记录在案；收口全量 **10283 passed / 5 skipped / 0 failed / collected 10288**（登记前一跑 10282 passed / 1 failed / 5 skipped、181.15s 带 `--cov`，唯一失败 = 基线守卫本身；确认跑 185.04s、rc=0，`coverage.xml` 复算两次同值），行 **97.24%**（18439/18963 = 97.2367%）/ 分支 **93.84%**（6653/7090 = 93.8364%），较 AB-16 +20 行 / +15 弧且新增部分 100% 被锁执行、未覆盖行 524 与偏弧 437（差额由 pricing.py 一项对账）；同族九项边界只登记不修见分册 §5；零 LLM、$0。此前 **AB-16 轮**：**"什么算一个价格数字、什么算一张合格条目"一处写一遍**——AB-15 把判定与归因收成一遍后，准入域本身仍在仓内写了五套：生产 `_as_non_negative_float` 收下 `nan`/`inf`；spec/report 用 `float()` 直收（`True` 当 1 得金额 `3.0`、`"1.0"` 收下、`-1.0` 编出负数金额、`[1.0]` 抛 `TypeError`、`nan`/`inf` 乘成非有限金额）；ext 拦 `bool` 但对空条目/`null` 价折成 0.0 部分和；analyze 的本地 `_price_reject_reason` 不管非有限；statistical 的 `p >= 0` 收下 `inf`——同一张条目在一处计价、在第二处被拒、在第三处崩溃：非对象条目 `5` 在 spec/ext/analyze 读 `currency_unreachable:int`、在 report 读 `entry_not_object:int`，空条目 `{}` 四处读三种结论，spec 真值非对象 `models` 还在 `models.get` 上抛 `AttributeError`。处置为 `src/budget/pricing.price_block_reason`（缺席 > 类型 > 负数 > 非有限；`bool` 单列一档；`-inf` 仍 `price_negative`，AB-15b 既有码逐条保持）+ `entry_block_reason`（形状 → 空 → 币种 → 数字）两谓词收口，六处消费点全部接过去（删 `_as_non_negative_float` 与 `_price_reject_reason`；spec 真值非对象改点名 `models_not_object:<T>`；非对象条目与 report 统一读 `entry_not_object:<T>`；ext 空条目/`null` 价从"未计价"改归"拒绝"，任一份额被拒即 `usd_per_task=None`）。**真批次读数零改变**（真表仅 deepseek-flash 一条目可计价——`USD 0.3/1.2`，agnes 价 `null`、qwen 为 CNY；池化 `1.447277 / 0.260967 / 0.541408`、总额 `2.249652`、ext 三臂六个读数逐位相同、载荷不新增披露键）。`tests/test_experiments_price_admission_ab16.py` **148 例** + **21 处锚点逐处转红**（红例 7/12/13/21/1/29/8/6/5/1/10/3/12/11/1/11/10/10/9/3/12、collected 恒 148、中性对照 2 处 0 红、sha256 字节还原）；收口全量 **10257 passed / 5 skipped / 0 failed / collected 10262**（登记前一跑 10256 passed / 1 failed / 5 skipped、173.05s，唯一失败 = 基线守卫本身；确认跑 176.35s、rc=0），行 **97.23%**（18419/18944 = 97.2287%）/ 分支 **93.81%**（6638/7076 = 93.8101%），较 AB-15 +16 行 / +12 弧且新增部分 100% 被锁执行、未覆盖 525 行与偏弧 438 逐位不变；statistical 唯一读数变化 = `inf` 从"已计价"改"不计价"；十一项边界只登记不修见分册 §5；零 LLM。**此前 AB-15 轮**：**被拒绝的金额不得披着金额的形状出现；"为什么没有金额"必须与判定同源**——AB-14 把判定收成一遍后，下游仍留着三种"拒绝穿金额衣服"的通道与三套归因词汇：`oracle_examples_replay.render_readme` 把未登记模型与 CNY 模型都印成 `**$None**`、真零印成 `**$0.0**`（同一个美元前缀、无机制）；`analyze_t1_b2_main_batch` 的池化用 `or 0.0` 把逐 seed 的 `None` 折回金额形状，整臂"没能计价"与"确实没花钱"同为 `$0.0`；`emse_stats_extensions._cost_per_task` 是 AB-14 漏掉的**第六处**币种盲点（把真表模型改标 `CNY`，`usd_per_task` 逐位不变，实测 `0.025884977011494247`）；拒绝的原因又各写各的（report 自派 if/elif、`statistical_analysis` 另一套桶名、oracle 连名字都没有、spec 的判定与归因是两段可漂移代码）。处置为 `src/budget/pricing.currency_block_reason` + `CURRENCY_UNDETERMINED_STATUSES` 单一机制词汇（`usd→None`、缺席/`null`/空白→`currency_absent`、非 USD→`currency_not_usd:<NORM>`、非字符串→`currency_not_usd:not_string:<T>`、其余→`currency_unreachable:<T>`）+ `spec_examples_generator._price_admission` 让"算不算得出钱"与"为什么算不出"同源 + 六处全部接过去（共享词汇 + 五个消费站点）；**拒绝一律不落 `$`、不折 `0.0`、部分和不得冒充全额**（池化/批次/ext 任一份额被拒即 `None`），披露键只在真拒绝时写入。**真批次读数零改变**（池化 `1.447277 / 0.260967 / 0.541408`、总额 `2.249652`、ext 三臂 `0.025884977011494247 / 0.003358973563218391 / 0.004543231034482759` 逐位相同、载荷不新增披露键、归档 P-1 README 未重生成、入库统计报告仍差改前即存在的 86 / 88 行）。`tests/test_experiments_cost_rejection_ab15.py` **109 例** + **27 处锚点逐处转红**（红例 5/19/6/2/5/2/6/12/3/3/3/6/2/6/3/4/3/1/3/1/4/2/4/5/1/3/3、collected 恒 109、中性对照 0 红、sha256 字节还原）；收口全量 **10109 passed / 5 skipped / 0 failed / collected 10114**（登记前一跑 10108 passed / 1 failed / 5 skipped、181.66s，唯一失败 = 基线守卫本身；确认跑 180.55s、rc=0），行 **97.23%**（18403/18928 = 97.2263%）/ 分支 **93.80%**（6626/7064 = 93.7995%），较 AB-14 +12 行 / +8 弧且新增部分 100% 被锁执行、未覆盖 525 行与偏弧 438 逐位不变；十项边界只登记不修见分册 §5；零 LLM。**此前 AB-14**：**判定只写一遍；缺席不得默认成任何单位；"看起来多余"的 term 也要有观测面**——AB-13 留下一句"仓内另有口径、本轮不统一"，本轮前置普查把那句话展开成表：**同一个"这笔钱是不是美元"的判断仓内写了四遍且四遍互不相同，第五遍根本没写**（`pricing.py` 键缺席默认成美元并计价、同站点值为 `null` 却不计价 ⇒ 两种缺席相反结论；`statistical_analysis.py` 的 `or "USD"` 把"缺席 / null / 空串"三种事实一律印成 `USD`，报告里的单位是代码编的不是价目登记的；`spec_examples_generator` 与 `emse_stats_report` 反而一律剔除、`" USD "` 也被剔；币种集合大小写敏感 ⇒ `USD` 与 `usd` 并存让整臂成本降为 `None` 而 `missing_models` 为空、报告落一行"未计价——（缺: ）"**没有任何归因**；币种为 `["USD"]` 让集合推导抛 `TypeError`、实测 CLI 退出码 1、整份统计报告不产出；第五处 `analyze_t1_b2_main_batch.add_cost` **一行都不读 `currency`**，把人民币原样累加进名为 `cost_usd` 的字段）。处置为 `src/budget.pricing.currency_status` 单一事实源（值域七族、13 个输入落 **9 个互不相同读数**，锁用集合相等断言）+ **计价准入与可呈现标签分开**（`currency_label` 只在 `usd` / `other:<NORM>` 时给标签 ⇒ 缺席不得被渲染成任何单位名，尤其不得渲染成 `USD`）+ 五站点全部接过去、不留本地写法；**站点差异只允许出现在"有没有地方把单位写出来"**：带币种列的 `cost_analysis` 可对 `other:CNY` 计价但标签必须是归一化的 `CNY` 并追加单位提醒，单一美元列的 `total_usd` / `cost_usd` 对非 USD 一律剔除——判定同一份、处置分两种，这是设计不是漂移。**产品侧行为变化（AB-8 起连续五轮 `src/` 零改动后首次）**：币种键缺席的条目不再当成美元，改走 `COST_USD_PER_1K` 回退或如实记"未计价"；真表每条目都登记了币种 ⇒ 存量读数不变，这条同时是本轮一份受保护工件也不重写的依据（三份 `statistical_report_e2*.md` 改前/改后/终态快照逐字节相同、`SHA256SUMS` 2040 条全 OK、归档 21 条 `cost_usd` 逐位相等）。`tests/test_experiments_currency_caliber_ab14.py` **124 例** + **19 处锚点变异逐处转红**（21 / 25 / 26 / 21 / 22 / 1 / 1 / 1 / 29 / 1 / 9 / 1 / 1 / 1 / 21 / 5 / 3 / 12 / 5；行为中性对照 0 红、基线 collected **709** 全程不变、五文件 sha256 字节还原）。一处自纠是本轮方法学产出：`not currency_blocked` 第一版 **0 红**（币种不可判定同时让 `labels` 变空、被 `len(labels) == 1` 先挡），**没有据此判它冗余**，而是逐条推演出唯一能单独触发它的输入（一模型登记 `USD`、另一模型没写单位、两者价目数字一字相同）补锁后才算锁，基线由 708 变 709；反向也登记一条——`_currency_cell` 去掉 `str()` 后 0 红且**没有观测面**，故它不是锁、只是"变异脚本本身没坏"的对照。既有断言撞新口径时按 AB-13 先例改输入不放宽断言（`test_experiments_absent_vs_zero_ab12.py` 的合成条目补 `currency: USD`），而 `test_ae_batch.py:125` 的测试侧 `get("currency", "USD")` 兜底**登记不修**。收口全量 **10000 passed / collected 10005 / 0 failed**（登记前一跑 9999 passed / 1 failed / 5 skipped、176.76s，唯一失败 = 基线守卫本身；确认跑 176.33s、rc=0），行 **97.22%**（18391/18916 = 97.2246%）/ 分支 **93.79%**（6618/7056 = 93.7925%），较 AB-13 **+20 行 / +12 弧且新增部分 100% 被锁执行**、未覆盖 525 行与偏弧 438 **逐位不变**、十项逐模块行覆盖全部不变——**本轮覆盖率换了性质**，§14 口径反向同样成立：读数**变化**也不是缺陷的证据，佐证仍是改动面清单；水位 96.40/92.50 不动；`（缺: ）` 空归因、`spec_examples_generator` 的 `models` 非对象崩溃通道、入库报告"逐位可复现"自述失效（改前即差 86 / 88 行）等**六处站点未处置**转 AB-15；教训入 `docs/MEASUREMENT_INTEGRITY.md` §17；零 LLM。**此前 AB-13 轮**：**字段名里的单位不是实现约束，直到实现参与判定**——`emse_stats_report.py` 的 `total_usd` / `usd_per_detection` / `$/task` 把单位写死在名字里，实现里却**没有一行读 `currency`**：前置探针用一条 `qwen-long`（盘上真表登记 CNY 0.5 / 2.0，出处为官方价目页）的合成行实测得 `total_usd=2.5`、`n_priced_rows=1` 并印在"总 $"列，分母非空、单价非空、无任何不可计价披露，**账面完全正常**。处置为只有 `currency` 大写等于 `USD` 的条目进入 `total_usd`、键缺席记 `currency_absent`（**缺席不默认成任何一种单位**）、不可计价机制七桶互斥且披露键只在真剔除时出现；同时处置 AB-12 转来的两处（六种合法非对象顶层原样返回把崩溃留给调用方 `.get` 而 docstring 写"缺失/损坏 → 空表"、`price_table=None` 与省略形参给出同一金额），改为按机制点名 + `_UnsetPriceTable` 三态，**返回域一字不动**。真批次三臂 783 行只用 USD 已登记的 `deepseek-flash`、`n_unpriceable` 全 0 ⇒ **闸门对入库读数改变 0 行**，`$/task` 与 `usd_per_detection` 六个受保护读数逐位复现、`SHA256SUMS` 目录一份未重写，而同一个 0 也正是"闸门可能从未执行"的嫌疑来源，故覆盖面下界与 CNY/null 两模型对照写进断言。**既有断言撞新口径时先裁决旧期望、改后必须仍测它声称的东西**（`test_zero_detection_no_division` 补 `currency` 后仍须加 `n_priced_rows == 1 and total_usd > 0`，否则分子为 0 时该例根本没走到除零守卫）。`tests/test_experiments_price_table_ab13.py` **51 例** + 改写既有 2 例（净增 51，collected 9830 → 9881）+ **15 处锚点变异逐处转红**（7 / 2 / 10 / 2 / 1 / 9 / 7 / 4 / 2 / 1 / 1 / 2 / 4 / 9 / 5，对照 0 红、收集数 78 不变、sha256 字节还原）；收口全量 **9876 passed / collected 9881 / 0 failed**（登记前一跑 9875 passed / 1 failed / 5 skipped、177.56s 带 `--cov`，唯一失败 = 基线守卫本身；刷新后确认跑 179.05s、rc=0），行 97.22%（18371/18896）/ 分支 93.78%（6606/7044）与前五轮同值（**同值不作佐证**，佐证是改动面清单）；**两套币种口径并存未统一**（`statistical_analysis.py:991` 缺省视为 USD），水位 96.40/92.50 不动；教训入 `docs/MEASUREMENT_INTEGRITY.md` §16；零 LLM。**此前 AB-12 轮**（该轮分节当时已入库、本摘要行未回写，属存量漂移，本轮一并补齐）：**竞态改锁执行与五处登记一次收口**——站点 d 的 `process_utils.py:638-642` `killpg(SIGKILL)` 兜底竞态分支补 5 例确定性锁（**`src/` 一行未改**、不补 pragma，四锚 5 / 1 / 1 / 5 红 + 只改文案对照 0 红），AB-11 量到的 18371 → 18369 → 18371 行读数抖动改由锁执行；站点 a 三件缺席机制（`(x or {})` 塌缩、`GATES.json` 缺席报 `FAIL`、宽 `except` 无痕摘批次）53 例锁；站点 c 的非对象 trace 行撤出"有效文件数"分母 32 例锁；共享 loader 同 `task_id` 后写覆盖前写改命名 WARN + 五桶互斥 26 例锁；价目表非对象顶层与 `None` 哨兵 26 例锁。共 **142 例新锁**、五组变异各带一条行为中性对照，入库工件一份未重写，同族两处与 `--write` 幂等分叉转 AB-13。**此前 AB-11 轮**：**「键缺席」不等于「值为 null」，也不等于「读不动」**——AB-10 余下 3 处登记全部处置，三处都是**归因塌缩**而非丢数据：`spec_augment_applied` 把"生产者写下 `null`（真的没触发）/ 详情行没这个键 / 第二遍读不动"塞进同一个 `none` 桶（还挂 `# pragma: no cover` 藏掉唯一会说真话的分支），改为值域三态 + 命名 WARN + 三数披露，实测盘上 df 臂 50/50 行为"键在值为 `null`" ⇒ 入库桶读数与 Markdown 逐字节不变、新桶 0 实例；`_profile_presets` 四种失败机制全返回同一个 `{}` 而调用方把原因**写死**成"git show 失败"（形对内容假），且 `old.get(profile) or {}` 让"档位不存在"与"两边一致"同形报"无漂移"，改为原因由机制拼 + 新增档名缺席分支，实测 `_profile_drift(b533cff…, a93c1f60…)` 与归档 `profile_preset_drift` 逐字段相等；`parse_trace_file` 损坏即返回 `None` 并把明写臂名的文件整体归入 `unknown`、坏行前记录无痕作废（全仓普查 148 目录 / 9086 文件 / 5 损坏 / **44 条作废记录**），改为归臂口径同完好文件 + 作废量披露，5 目录"改前 vs 改后"复刻证明判定分母不变。另登记一条**因输入增长而失效的入库声明**（`mast_distribution_report.md` 自称 963 个文件可逐位复算，同目录今天 2007 个），只锁不改写。`tests/test_experiments_absent_vs_zero_ab11.py` **31 例** + 改写 2 例（净增 33，collected 9655 → 9688）+ **18 处锚点变异逐处转红**，其中一条方法学自纠值得记住：c4 锚点第一版留下孤儿缩进导致整文件 `ImportError`、收集数 86→41，**"有红"不等于"有锁"**，靠"收集数相等"前置检查识破。如实登记**四件**未处置（站点 a 那行原文的三件：`(x or {})` 降空对象、`GATES.json` 缺席报 `FAIL`、宽 `except Exception` 静默摘掉一对种子；站点 c 那行的一件：非对象行计入分母——四处收口后实测均 0 实例；且本轮改的 profile 预设属同文件另一站点、不在这三件之内，原"部分由 AB-11 处置"记法系归因错位、已撤销）与一件未动的共享 loader。收口全量 **9683 passed / collected 9688 / 0 failed**（登记前一跑 9682 passed / 1 failed / 5 skipped、170.11s 带 `--cov`，唯一失败 = 基线守卫本身），行 **97.22%**（18371/18896）/ 分支 **93.78%**（6606/7044）与前两轮同值，但 `make gates` 的 `format` 门抓到本轮 reason 字符串写成两段隐式拼接、须 `ruff format`，格式化后**同一条树**连跑两次实测 **18369 行 / 6605 弧**再回到 **18371 / 6606**，逐行比对唯一变动是 `src/utils/process_utils.py` 的 641-642（638-642 是 `killpg(SIGKILL)` 失败后回退 `proc.kill()` 的负载相关竞态分支、无确定性锁），故**同值不作 `src/` 零改动佐证**、佐证改用改动面清单；18 处变异锚点格式化后全部重跑仍逐处转红（收集数 86 保持）；水位 96.40/92.50 维持不动；教训入 `docs/MEASUREMENT_INTEGRITY.md` §13 与 §14；零 LLM。**此前 AB-10 轮**：**「缺席 / 读不动」不得报成「零命中 / 一致 / 未要求」**——从 AB-9 剩下的 5 处登记里处置 2 处（`emse_ult_gold_diagnosis.py`），三条读数全部实测坐实：上游读不到时把本地 gold 包装后与本地 gold 归一比对，`upstream_bodies_equal` **恒真**（此时零份上游数据被读到，AB-9 那句推测由复算确认）；`_load_json_array` 顶层非列表静默返回空列表被 4 个调用点读成"上游没有该行"；README 4c / 4d 节按"工件在不在输出目录"整段消失不留消息。处置为 `_load_upstream_array`（缺失 `FileNotFoundError`、零对象行 `ValueError`，口径对齐同文件 `_load_project_tasks` 先例）、`_official_tests_for`（一致性扩成含"无法核验"的三态）、`_load_supplement` + 两节渲染器（就地写明"本节未渲染 = 工件缺席"），非对象行照旧跳过但向 stderr 报丢弃数与余下数；**改前实测真路径**（200 / 3909 行全保留丢 0、71/71 命中上游分支、0 条走包装分支）是入库报告能**逐字节复现**（两次成立）的前提，复现须同时给 `--supplement` 且把 `SUPPLEMENT_GENERATED_MUTK.json` 放进输出目录、且 `--from-json` 会就地重写输入的坑已登记；`tests/test_experiments_absent_vs_zero_ab10.py` **35 例**（全 `tmp_path`、不读缓存、无新增 skip）+ **10 处锚点变异逐处转红**；AB-9 余下 3 处继续登记；收口全量 **9650 passed / collected 9655 / 0 failed**（登记前一跑 9649 passed / 1 failed / 5 skipped、168.76s 带 `--cov`，唯一失败 = 基线守卫本身），行 **97.22%**（18371/18896）/ 分支 **93.78%**（6606/7044）与前两轮同值（当时写作"逐位相同即 `src/` 零改动佐证"，该推断已由 AB-11 轮撤销，见 `docs/MEASUREMENT_INTEGRITY.md` §14）；水位 96.40/92.50 维持不动；教训入 `docs/MEASUREMENT_INTEGRITY.md` §12；零 LLM。**此前 AB-9 轮**：**`experiments/` 层 68 处 `json.loads` 按解析器返回域普查 + 一处"静默缩分母"改为计数披露**——AB-8 登记的"`experiments/` 层未普查"边界本轮撤销：95 个文件扫出 42 个含调用点、共 68 处，逐处读数分入 **42 响亮崩溃 / 9 已 fail-closed / 5 崩溃被上层吞掉但留痕 / 12 静默丢数据**；**判据换了一层就重述一遍**——分析层响亮崩溃可接受（宁可非零退出也不要看起来正常的错数字），所以 42 处崩溃点刻意不改，给 68 处补 `isinstance` 等于把崩溃换成静默；12 处里"已有显式 `isinstance` 且带计数或原因码"的刻意静默 6 处不改，其余 6 处处置 1 处（`target_quality_replay.py`，入口 `make target-quality`、产物在 `SHA256SUMS` 保护目录且数字进 `BASELINE.target_quality`）：按 AB-8 `enrichment_stats` 先例**只增不改**——新增 `skipped` 两类分开计数、报告仅在真有跳过时追加披露节并写明引用纪律、CLI 打 `[WARN]` 而**退出码一律不变**，`tests/test_experiments_json_domain_ab9.py` **14 例**、6 处锚点变异逐处转红、入库报告对盘上 10 份批次（实测跳过 0 份）**逐字节复现**且先断言输入存在；顺带照出 `experiments/price_table.json`（顶层两份人写 JSON 中唯一"多消费者"的一份，两份都无哈希保护；五种非对象返回在 5 处读取/消费点实测全部响亮崩溃，其一崩在整轮付费 LLM 重放之后；另一份 `injection_benchmark_samples.json` 单消费者、五种形状实测同样响亮崩溃）与"`.jsonl` 不等于逐行 JSON"两条同族读数，本册两处推断被实测否证（"带 `except` 的读取点把 `[]` 降级为空表"错、改 `_PRICE_TABLE_PATH` 注入不生效因默认参数在定义时绑定）；收口全量 **9615 passed / collected 9620 / 0 failed**（登记前一跑 9614 passed / 1 failed / 5 skipped、169.40s 带 `--cov`，唯一失败 = 基线守卫本身），行 **97.22%**（18371/18896）/ 分支 **93.78%**（6606/7044）与 AB-8 同值（当时写作"逐位相同即 `src/` 零改动佐证"，该推断已由 AB-11 轮撤销，见 `docs/MEASUREMENT_INTEGRITY.md` §14）；水位 96.40/92.50 维持不动；教训入 `docs/MEASUREMENT_INTEGRITY.md` §11；零 LLM。**此前 AB-8 轮**：**`json.loads` 返回域里的非对象行与主键域六处收口**——AB-5 那句"坏行只作废那一行、不中止整批"当时只对**已测的两类形状**成立；本轮按解析器返回域（六种合法值）重测，五种非对象行让产品侧四处读取器与门禁两处整批崩溃（`AttributeError`），而 int/bool 主键一侧**静默存活**（补充文件日志照写"已加载 N 条"、整份零生效），G8 门禁的崩溃码恰好也是 1，于是阻塞看起来生效、调用方只拿到一段 traceback；六处一律**对齐仓内既有口径**（`dataset_ult.py` 的 `isinstance(raw_row, dict)` 过滤、门禁自身 `unparsed_` 分支的 fail-closed 先例）而非新设计，留痕按"这份文本谁写的"分两类（人手写的补充文件汇总三条 warning / 官方主数据逐行含路径与行号）；主键域中途**改判一次**（两侧一起丢弃等于让补充"配了但零生效、只是丢得有声有色"，终口径为标量 `str()` 归一、容器主键跳过留痕、falsy 沿用 AB-5 计数，且 **AB-5 的 24 例锁一条未改口径**）；门禁报表**只新增** `enrichment_stats`、既有键一个没动；新增 `tests/test_jsonl_non_object_row_tolerance.py` **47 例**并逐处变异验证七处守卫必红；本轮两处自我捕获如实登记——一次性探测**否证**了我对 `dataset_ult._iter_records` 的路径推断（`[]` 根本走不到 JSONL 分支），第一轮变异验证脚本因 `-k` 匹配零条而报"七处全红"、实为**空转**；收口全量 **9601 passed / collected 9606 / 0 failed**、行 **97.22%**（18371/18896）/ 分支 **93.78%**（6606/7044）（10 项逐模块 1 项变动 = `dataset_loader` 97.12 → 97.28），登记前一跑 9600 passed / 1 failed 的唯一失败即基线守卫本身；水位 96.40/92.50 维持不动；教训入 `docs/MEASUREMENT_INTEGRITY.md` §10；零 LLM。**此前 AB 轮**：**真实语料否证合成枚举前提 + 文档判据变成可执行工件 + 数据集适配层容错补口 + 表格静默丢格修复与全仓判定锁 + 覆盖率证据化收口**——`helpers.py` 首对象修复档（档 2）的"恒不可达"结论换成观测+机制：7,565 条真实 LLM 响应重放得"到达 692 / 取到片段 667 / 分歧 1 / 真会触发 **0**"，并**否证**了 AA-5 的推理前提（存在档 1 返回 `None` 的真实分歧样本，档 2 在该类输入上是首个也是唯一产出片段的档），改由"分歧片段必含串外裸 `\`、5 个候选都不删 `\`"的机制论证支撑（定向枚举分歧类 716 例、可返回 0 例），处置仍为**保留**（决定不变、依据变）；AA-8 发布的进程级状态判据从散文升级为**测试当场执行的工件**（文档与锁同一件东西，第 5 个读者出现即同时转红）；ROUND3 点名的数据集适配层 47 行**前提被否证**——没有一行真的需要数据集，用 `tmp_path` 写真实坏文件即可走到，24 例锁补 36 行、9 行按机制登记，顺带修掉 `_load_enrichment` 无主键行**静默丢弃**的真实缺口（返回值语义未变），并把判据收紧为"删掉守卫必红才算锁"；撤销 ROUND3 ② 一处陈旧"待补"判断；**表格静默丢格**一类：活文档 6 行把裸竖线写进行内代码（shell 管道 / 正则交替 / 绝对值），而 GFM 切格不认行内代码且「行格数 > 表头列数 ⇒ 尾格直接丢弃」，于是源码齐全、渲染少一整列——逐行转义修复并新增 29 例判定锁；判定器按 **GitHub cmark-gfm 的奇偶反斜杠口径**实现（第一轮用 markdown-it 判"已修好"是错的，同一文本两个参考实现结论相反，该分歧已钉成语义锁，教训入 `docs/MEASUREMENT_INTEGRITY.md` §9）；冻结面 `docs/history/` 5 行 + `experiments/results/` 4 行按逐文件清单与棘轮**只登记不修**（两处受 SHA256SUMS 保护），故口径只能写"活文档零丢格"；草稿的 12 行 / 27 例经现算纠正为 **9 行 / 29 例**，`docs/INDEX` 双语"四起伪影"同步更正为五起；AB 轮收口全量 **9525 passed / collected 9530 / 0 failed**（170.34s）、AB-7 后全量 **9554 passed / collected 9559 / 0 failed**、行 **97.22%**（18349/18874）/ 分支 **93.76%**（6591/7030）（`src/` 零改动故读数逐位不变），刷新前对账跑的 2 例失败是文档↔工件门如实报出 §1 覆盖率滞后（非守卫、非顺序依赖）；棘轮水位 96.40/92.50 维持不动待 CI 校准；零 LLM）；此前 2026-10-19 **AA 轮**（**棘轮跨平台误上调处置 + 静默回退收口 + 覆盖率证据化登记 + D3b Step B 边界锁定 + E7 裁决执行面 + 跨文件顺序依赖修复**——覆盖率棘轮的本地自动上调改为须显式 `--allow-bump`（本机 macOS 读数抬水位会让 CI ubuntu 阻断档必红，且失败看起来像"覆盖率退化"）；`analyze_results.load_latest_benchmark` 的"无 benchmark 文件则回退全部 JSON"静默降级改 fail-closed；撤销状态登记册一处与同册自相矛盾的陈旧登记、纠正 `ci.yml` 漏改的 ±0.10pp 容差注释；新增 9 例确定性回归锁并对 9 处"构造上不可达"防御线给出可复现证据登记，明确不加 `# pragma: no cover`、不删已被上游吞并的修复档；D3b Step B 判**不实施**——四件前置件逐条对代码定位 + 3 例反面锁定（实装即红）；E7 人工裁决从"协议文档"落到**可执行面**（6 份 CSV 录入表 + 五档量表校验 + 未加权 Cohen's κ 合并 + 10,000 次 bootstrap CI / seed=42）并加 3 例"E7 未执行、尚无 κ 工件"反向锁；收口全量抓到并修掉一例跨文件进程级哨兵顺序依赖（AA-8：autouse 复位 fixture + 1 例污染重放锁，删 fixture 必红），教训入 `docs/MEASUREMENT_INTEGRITY.md` §8；全量 **9485 passed / collected 9490 / 0 failed**（178.62s）、行 96.98% / 分支 93.51%；水位 96.40/92.50 维持不动待 CI 校准；零 LLM）；此前 工程质量轮：**三节点复杂度拆分 + 四模块可达分支补口**——`src/graph/nodes.py` 的 generator / executor / patch-applier 三节点按职责拆为可测单元，净增 75 例（13 例行为契约 + 1 例源码接线锁 + 61 例分支补口），全量 9413 passed / collected 9418、行 96.95% / 分支 93.48%（本机口径，CI 校准另计）；此前 Z 轮：**第四轮第三方全量静态审查 20 项修复收口**（Windows 环境，报告审 `55bb711`，P0=0 / P1=14 / P2=6，20 项全部静态确认并修复；标准 BH q + 全量重算、配对分母、rlimit/DB/共享 venv/官方 harness、MDO 断言分类与 Windows 探针、负 rc 守卫、配置与绘图来源、严格 JSON、协议/效度/数据卡文档；新增回归锁 5 文件 138 例；零 LLM）；此前 Y5 轮：**E7 三路径备料齐备 + 嵌套性回归锁**——补齐 n=72 全框普查的候选清单与工作表，三条路径用户选定即可开工；修正协议中「n=8 ⊆ n=41 零返工」的过度承诺（实测 150 组合成参数上 13% 集合不嵌套，该性质非算法保证而是当前参数下的事实），并加回归锁守护。此前 Y4 轮：第三轮评审八项待澄清回应（5 已闭合 / 2 待裁定 / 1 未做）；Y3 轮：审计收尾与全仓未覆盖地图；Y2 轮：审计收口与 experiments 首审；Y 轮：修复覆盖率缺口审计；X 轮：论文复现性闭环；W/V 轮：第二/第一轮第三方评审修复；U/T/S/R/Q/P/O/N/M/L/K 轮同日登记
+> Last updated: 2026-10-24（**CI 轮：收口声明与树分裂——「12749 passed 收口实测」先于收口跑被写下，而那次跑只会显示 4 红**——对 CA–CH 未提交批次全量回归实测 **12,745 passed / 5 skipped / 4 failed**（collected 12754、224.78s），而 BASELINE 与 §1 声称的「CH 轮收口实测 12749 / 0 failed」从未发生（`suite_seconds: 221` 注仍明写「本键取 CG 轮终跑」、CH 分册 §3 明写「之后回填」且无回填、无 date 成对指纹）；四条 CG 真树锁硬编码 CG 轮分母（31/17/71/9/28-30-29-30/15 条），CH 移动全部分母（32/18/73/8/29-31-30-31/14 条）后只刷 BASELINE 与 §1、没刷锁，期间门禁链全程绿——**门禁绿 ≠ 测试绿**，全量 pytest 是测试锁唯一读者；「七红随登记落盘消失」对动态读者 3 例成立、对硬编码 4 例不可能成立。处置 = 四锁期望值单一事实源化到 BASELINE（`gates`/`invocation` 两节、经 CG 门 `load_baseline_yaml`；r01 保留 CF/CG 双实现相遇断言）+ 性质锁字面量保留 + r05 登记表总数字面量删除换「flag-diff 条数 == `invocation.flag_diffs`」互证 + BASELINE 注释链与 §1 追加勘误（历史不回溯改写）；验证 = `pytest tests/test_invocation_caliber_cg.py` **66 passed** + CG 变异 **70 锚点全红 + 对照 0 红**；零门禁改动、零 `src/` 改动、零 LLM、$0；详见 CLOSING_TREE_SPLIT_CI_2026-10-24（分册已删除）。此前 **CH 轮：命令行上传了的开关，有两个从来没被读过——「判据档无读者 0」是真绿但误导**——新增 `scripts/gates/check_flag_effect.py`（553 行 / 23 个顶层函数）判 **dest 活性**：CG 判「有没有人传这个开关」（读者活性），本门判「这个开关在源码里接没接线」，同一个 `(门禁, 开关)` 分母、两条独立实现各自复算再对账；四态互斥完备 `活 / 代理 / 死 / 不可判` + 恒等式 `声明 = 活 + 代理 + 死 + 不可判`。改前树（= 工作树移除本轮四个新文件并回退接线）实测 31 道在盘 / 24 道有 argparse / 声明 **71** 个实例里 dest 从不被读 **2** 条 = 死 1（`check_docs_history_drift --warn-only`，调度只读 `args.strict`）+ 代理 1（`checksum_results --verify`，调度只读 `args.write`），两条**都是判据档**且**都被 ci.yml 真实传入**（改前 744 / 298 行）；代理那条的等价性由 `required=True` 的互斥组担保、不由开关自己担保（全仓这样的组只有 **1** 个），摘掉 `required=` 或加第三个模式它就静默失效；同名开关跨门一边活一边死（`--verify` 在 `check_baseline` 被读 3 次、在 `checksum_results` 读 0 次），71 个实例去重只有 **51** 个唯一名、重名 **11** 组 ⇒ 分母是组合数不是开关名；逃逸写法（`vars(args)` / `getattr(args, …)` / `**args` 展开 / `args.__dict__` / `parse_known_args()` / 整包传参）按 AST 结构复算命中 **0**——这是 dest 级判据成立的前提，命中即整门退成**不可判**并计红；本门**不设豁免表**：装饰性开关的正当处置只有接线或删除。两条写侧接线（`warn_only` 真参与调度并拒 `--strict` 与 `--warn-only` 矛盾组合 rc=2；verify 分支改由 `args.verify` 自己选、无模式时报错退出——该兜底今天走不到，`required=True` 的组先退出）。零 LLM、$0；新增 99 例锁 ⇒ collected **12754** = **12749 passed + 5 skipped**；预登记 **12,742 passed / 5 skipped / 7 failed**、52 warnings、**231.20s** / rc=2（七红 = 基线守卫 104 > 6 + CG 真树四例 + CF 两例，全是登记前状态）；变异 **75 锚点全红 + 1 中性对照 0 红**（collected 逐锚点恒 99、sha256 原字节还原、`# mutation:` 残留 0、墙钟 334s；首轮 3 存活 = M38 判据缺口（「读不懂就静默」长在本轮门禁自己身上 ⇒ 补 fail-closed + M76）、M68 断言歧义（`[OK]` 行与通过行共享子串 ⇒ 一条断言只能钉一行）、M06 等价变异（显式记录不入锚点，连同工装另 5 处合计 **6** 处等价区）；最大扇出 M53 红 **32** 例而多数是 `KeyError` ⇒ 红数是扇出不是判据数）。现树在盘 **32** / 有 argparse **25** / 声明 **73** / 活 **73** / 代理 **0** / 死 **0** / 不可判 **0** / 互斥必填组 **1**；CG 侧联动读数随接线移动（在盘 31→32、链上 17→18、声明 71→73、代码锁 26→29、登记无读者 9→8，其余八数不动），两条恒等式各自成立（CG `73 = 14 + 29 + 8 + 0 + 22`、CH `73 = 73 + 0 + 0 + 0`）；覆盖率行 **19522/20036 = 97.4346%**、弧 **7159/7590 = 94.3215%**（`src/**/*.py` 136 个文件 mtime 晚于 2026-10-24 00:00 命中 **0**、最新 1792766822 与 CG 同 epoch ⇒ 继承态，相对 CG 各 −1 行 / −1 弧落在 ±2 抖动带内且与 CE 逐位相同）；规矩入册 §79；详见 CH 分册（分册已删除）。此前 **CG 轮：门禁「挂在链上」不等于「以同一口径在跑」**——新增 `scripts/gates/check_invocation_caliber.py` 对账 `make` 链与两份 workflow 的调用口径，五条约定 = 判据按 YAML 结构不按子串 / 开关相等按**有效值**（`default=` 走 `ast` 复算，`--f=v` 与 `--f v` 同解）/ 差异落机器可读登记表 / 判据档无读者记红、范围与呈现档记数 / 分母恒等式自校验；改前实测绑定**两棵可重建的树**（改前树 = 工作树移除本轮四个新文件并回退接线，中间态树 = 改前树 + 本门脚本）：非阻断按子串 CF 复算 **3 / 26**、按结构 **2 / 27**（中间态 **2 / 28**），多的一条来自 ci.yml 注释里的 `continue-on-error: true` 字样且已进 BASELINE 与 §1；跨面开关不对称 **3** 处（只比 `make gates` ↔ ci.yml 一对得 **1**，两处理由只在注释里）；`check_prompt_artifacts` 不在 `make gates` 链上而 CI 裸跑 ⇒「已接线」真、「强制」假；shell `||` 兜底与区块级 `set +e` 生效区、`$STRICT_FLAG` 运行时注入各计层；改前树在盘 30（链上 16 / ci 28 / perf 1 / 仅 import 1 / 无归属 0）、声明 69（23 道有 argparse）里无读者 **31** = 判据档 **9** + 呈现 **22**，中间态 71 / 33 = **10** + 23（差值恰为本门自身的 `--list` 与 `--quiet`）。零 LLM、$0；新增 66 例锁 ⇒ collected **12655** = **12650 passed + 5 skipped**；预登记 **12,647 passed / 5 skipped / 3 failed**、6 warnings、**231.13s** / rc=2（墙钟 233s；三红 = 基线守卫 + CF 两条真树锁）；变异 **70 锚点全红 + 1 中性对照 0 红**（三轮处置：首轮 12 存活 = 2 判据缺口 + 9 有判据无锁 + 1 等价变异，第二轮 1 存活，红数 36×1 / 11×2 / 最高扇出 33，墙钟 424s）；登记表 `docs/invocation_caliber_allowlist.txt` 15 条 / 5 类、九种坏登记各计红；本门单跑 rc=0、39 行 `[OK]` + 6 行 `[SURFACE]`；规矩入册 §78；详见 CG 分册（分册已删除）。此前 **CF 轮：登记面的「当前口径」数字与分册清单只被写、不被读**——新增 `scripts/gates/check_registration_consistency.py`：§1 括号内 15 个数字逐项对账（9 门禁面 + 2 静态面现场复算、4 个 BASELINE 权威逐键回读，缺键 / 非整数 / 不等皆红）、`collected = passed + failed + skipped + xfailed` 恒等式、分册清单双向覆盖（盘→INDEX 本门判，INDEX→盘交 `check_doc_links.py`）、§2.2 编号连续、拥有者活性 5 项、本门自身接线；改前同一门 **28 项红**（8 个 BASELINE 缺键含 `tests.collected`、3 个值漂移、14 个「未登记当前口径键」、2 行 §3.5 孤儿、1 处 §2.2 编号）；`已格式化` BQ 轮手写 **999** 跨 BR…CE 约 14 轮无人复算，HEAD 干净树复算 **1037**、本轮收口 **1050**；新增 46 例锁 ⇒ collected **12589** = **12584 passed + 5 skipped**；预登记 **12,581 passed / 5 skipped / 3 failed**、52 warnings、210.40s / rc=2（3 红 = 本轮 2 例真树锁 + 基线差额守卫）；变异 **38 锚点全红 + 1 中性对照 0 红**、collected 逐锚点恒 44、墙钟 82s；终跑（`make gates` 链内、不带 `--cov`）**12,584 passed / 5 skipped / 0 failed、205.78s、rc=0**（链墙钟 212.81s）（零 LLM，$0）；详见 CF 分册（分册已删除）。此前 **CE 轮：模型指纹门禁把 `pinned=true` 说成「可比」、把窗口计数说成语料结论**——两条可比性围栏（`alias_mismatch is True` 严格布尔、`requested_alias` 对账 import 的运行时权威源 `src.config.config_generator.COMMON_MODELS`）+ `[SURFACE]` 四行口径披露（受检面 / 语料面 / 结构面 / alias 对账，在成功、报红、空窗口、`--allow-empty` 四条输出路径全打印）；`pinned` 判定值与方向逐字节不动；新增 19 例锁（35 → 54）⇒ collected 12543 = **12538 passed + 5 skipped**，覆盖率 19522/20036 行 = 97.43%、7159/7590 弧 = 94.32%，变异 33 锚点全红 + 1 中性对照 0 红；详见 CE 分册（分册已删除）。此前 **CD 轮：运行面与文档面收敛到「仅保留 DeepSeek 官方」，历史归档删除后派生读数按存盘语料重算**——`PROVIDER_TEMPLATES` 仅剩 `deepseek`、`COMMON_MODELS` 仅 `deepseek-flash`，第三方 SDK 调用路径整体移除；历史结果删除 **330 个文件**（3 份批次 JSON + 327 份 trace），`SHA256SUMS` 复算 **1869 项一致**（20,895,308 字节）；派生读数按存盘语料重算（批次 10 → 7、detection 率 14.03% / 1.64% / 48.86%、trace 9086 → 8763、span 129058 → 126408、token 属性 27135 → 26166；语料守卫 239/138/8216 不变）；终跑（`make gates` 链内、不带 `--cov`）**12,519 passed / 5 skipped / 0 failed、207.64s、rc=0**（collected 12524；链墙钟 214s），覆盖率 19523/20036 行 = **97.44%**、7160/7590 弧 = **94.33%**；详见本轮条目。此前 **CC 轮：补丁重采样在真实 LLM 下结构上永不生效——`DebuggerAgent` 的 system prompt 要求 JSON 输出，真跑返回 `{"root_cause":…,"patch":"```python…```"}` 信封，重采样回调却对整段信封调 `extract_code_block`：JSON 转义换行是字面 `\n`，围栏正则匹配不到，整段 JSON 被当作补丁，`check_naming_contract` 必然拒绝，`resampled` 恒 False（真跑 1 调用 / 80 in / 80 out 复现；既有用例全部 mock 成裸代码块，故无锁）。修复：先 `extract_json_object` 解信封取非空 `patch` 字段，非信封才回退原文提取；`tests/test_nodes_callbacks.py` 新增 2 例锁（信封提取成功 / 无 `patch` 字段保守 None），`scripts/tools/cc_mutation_verify.py` 3 锚点全红 + 1 中性对照 0 红（collected 逐锚点恒 10、sha256 原字节还原）；修复后 19 面复跑 `applied=True / resampled=True / resample_count=1 / success=True / new_code_has_fix=True`（1 调用 / 716 in / 159 out / $0.00041），全 19 面 19 调用 / 12,212 in / 4,344 out / $0.00888；预登记跑 12,553 passed / 5 skipped / 1 failed、225.11s（带 `--cov`）；终跑（`make gates` 链内、不带 `--cov`）**12,554 passed / 5 skipped / 0 failed、222.37s、rc=0、链墙钟 234.07s**（`ruff format --check .` 1044 文件、mypy 137 源文件零问题），基线刷新 12,552 → 12,554，覆盖率 19572/20086 行 = 97.4414%、7169/7600 弧 = 94.3289%**。此前 **CB 轮：状态通道门禁的成功语句大于判定面——`check_state_contract.py` 只审就地赋值（2 键 / 11 站点）与 `state.get/state[]` 字面读（57 键 / 353 站点），而 LangGraph 的规范写侧（节点返回更新 dict）实测 45 键 / 95 站点完全在判定面外，docstring 自己点名的M14 / O35 静默丢弃事故正属此路；118 个声明键中 35 个未被审计面触及，其中 1 个（`failure_frequency_applied`）全仓零字面——声明注释承诺「`_debugger_node` 写入 True」，实际 `_debugger_node` 只拼 prompt 从不写该键，而 `None` 又被解释为「开关关」，实验分析只能把「没开」与「从没写入」读成同一件事。处置纯读侧：`channel_coverage()` 三向覆盖（读 / 就地写 / update dict 写）+ 成功语句后四行披露 + `--coverage` 逐键表，update dict 只披露不判定，判定值与方向一处不动、`src/` 零改动；并修复自指缺陷（门禁 docstring 与守卫测试里的死键字面曾被算作「别处有出现」，把零字面键从 1 抹成 0）。新增 17 例锁（13 → 30）+ 变异 18 锚点全红 / 对照 0 红；预登记跑 12,551 passed / 5 skipped / 1 failed、226.95s（带 `--cov`），终跑（`make gates` 链内、不带 `--cov`）12,552 passed / 5 skipped / 0 failed、226.42s、rc=0、链墙钟 235s，基线刷新 12,535 → 12,552；覆盖率结构性同值（`coverage.xml` root `sources` 仅 `src/`、本轮未改 `src/`）。**）。此前 **CA 轮：门禁的豁免登记只被查询、不被审计——16 条登记里 1 条目录已不存在、1 条 53/53 已全部入库，其余 14 条遮蔽 155/158 个未入库工件，而门禁照旧打印「✓ 188/188 …引用链完整」；处置为单一事实源覆盖表 + 五类漂移（目录消失 / 已全入库 / 空目录 / 不可读 / 登记名不在扫描面内）+ 逐条与汇总遮蔽量披露，删除两条实测失效登记，扫描判定口径一处未改**）。此前 **BZ 轮：CI 历史三族红的归因与修复——29 例测试引用的归档工件被 gitignore 排除致 fresh clone 全红、45 个传递依赖漏洞升级清零、跨平台 libm 末位容差**。fresh clone 模拟复现 31 例（本地全量绿只因工件在盘被忽略）；处置：契约工件入库 408 个 / 5.9 MB、三类前提缺失显式具名 skip、pillow / aiohttp / certifi / otel 四族升级（lock 132 → 133）、test 作业超时 30 → 60。验证：fresh clone 三轮闭环 31 红 → 9 红 → **0 红**、pip-audit「No known vulnerabilities found, 5 ignored」。此前 **BY 轮：报告的「分析集流量」从未披露——载入行数不是 n，整份剔除与行内折叠是两种剔除，`## 数据来源` 只列纳入文件**。归档实测（扫描面 246 份 / 10,659 行）：数据集白名单剔除 **77 份 / 886 行**、schema 不完备剔除 **59 份 / 2,463 行**、未登记基线 **300 行**，载入 **110 份 / 7,010 行**；随后按 `task_id` 折叠 **6,449 行（91.997%）**，唯一 task 行 **561**；字段 None：`passed` 0 / `detection_rate` 45 / `repair_rate` 52。全归档带 `results` 的 JSON **257 份 / 11,197 行**，其中非 `benchmark_*` 命名 **13 份 / 538 行**不进扫描面；混批口径 **169 份 / 9,473 行**、重复 8,494、唯一 979，与默认口径之差恰为 schema 层 2,463 行。处置纯读侧：单一事实源 `experiments/_analysis_flow.py` + `statistical_analysis.analysis_flow_stats` + `## 数据来源` 新子章节（流量表 + 三层对账 + 外部口径脚注）+ 控制台一行，判定值与方向一处不动、`src/` 零改动；**27 例新锁 + 变异 46 锚点 = 45 变异全红 / 对照 0 红**。此前 **BX 轮：写而不读键池最后两键的读侧从未披露——`risk_summary` 全归档 `enabled=False` 占位（`enabled=True` 0、level 非空 0、键缺席 2,333、`contract_status` 在场 0），`mdo_crash_rate` 五层共用一个 `None`，`mdo_pool_floor_ok=False` 1,516 行是两义键**。归档 257 批次 / 11197 行：risk 在场 8,864；crash 五层 2,312 / 122 / 986 / 530 / 94（值 94：79 零 / 15 非零，池化 0.46875%；暂定池 12/7,190 分列）。读侧收口 + 102 例新锁 + 变异 44 锚点；键池闭合 76,488，零读者池为空。此前 **BW 轮：补丁接收链的覆盖率与分母从未披露——`patch_precision`（预注册 E3）、`patch_plausible_evidence` / `patch_plausible_invariant_violation`、`patch_abstain_signals`、`patch_validated` / `patch_validate_verdict` 自写入起报告面 0 读者（弃权与验证两族只有测试读者），`None`「算不出」与 `0.0`「算出零」同形**。归档 257 批次 / 11197 行：接受集 1331（16.61%）、存储精确率 45.60% vs 并集 50.75% vs gold 57.92%、选择性风险 54.40%（gold 42.08%）、抑制精确率 93.98%（gold 分母）/ 93.11%（全部分母）、验证输入仅 `patch_evidence_level` 1007 行可达（`repo_verification` / `deterministic_repair_status` 全归档为空）。处置纯读侧：单一事实源 `experiments/_patch_acceptance.py` + 报告四表新章节 + 批次摘要两行，判定值与方向一处不动；**94 例新锁 + 变异 68 锚点全红 / 对照 0 红**。此前 **BV 轮：批次 VIII / XIV 两份判定核的「沉默」从未披露——归档 5935 行里 20 行 test-hacking 判 True（12 硬编码输入分支 + 8 新增吞异常）在任何报告面都不出现，而 FL 约束门的六种早退共用一个 `not_evaluable`**。`test_hacking_suspected` / `_signals`（批次 VIII，ADR-0022）与 `fl_constraint_verdict` / `_hit_rank` / `_changed_functions`（批次 XIV，ADR-0028）自写入起报告面读端 **0**；判定核在「无原码 / 无补丁 / 两侧之一解析失败」时返回 `suspected=False, signals=[]`——与「三信号都跑过且零命中」**完全同形**，5915 行的「不怀疑」分不清判干净还是没看；FL 侧 `not_evaluable` 4442/5935（74.8%）、已求值 1493 行里 hit **1487** / miss **6**（hit 比 99.60%），而变更函数 3+ 档只占 1.9% ⇒ **ADR-0028 登记的「整文件重写 ⇒ 近乎恒 hit」不足以解释这个比值**，该门在本语料几乎不区分。处置：判定核增返 `status`（两侧解析分开归属，`ok` 之外仍是 `suspected=False`）、结果行落 `test_hacking_status` / `fl_constraint_reason`（判定值与方向一处不动）、单一事实源 `experiments/_verdict_silence.py`、`statistical_analysis.detector_silence_stats` 读侧（成因按「记录 / 推断 / 不适用 / 无判定键」分列，推断明写为下界）、`analyze_results` 新章节（hack 9 列 + FL 11 列两张表 + 判别力注 + 两条口径脚注）、`run_main_batch` 摘要一行；顺带把判定核在结果行的两次重复调用收成一次。**87 例新锁 + 变异 58 锚点全红、中性对照 N01 0 红**（collected 逐锚点恒 227）；首轮 3 项存活全部就地处置：V04 常量改名 ⇒ 补字面量契约锁、P11 对称夹具（记录:推断 = 1:1）⇒ 换不对称夹具、S03 按构造恒真的「恒等式为真」标记 ⇒ **删字段改由测试断言**。collected **12276** = 12271 passed + 5 skipped（正常口径）；本会话沙箱确认跑实测 **12257 passed / 19 skipped / 0 failed、218.94s / rc=0**（19 = 正常口径 5 + 14 项环境能力缺失 skip〔sandbox_apply 4 / ps 8 / Seatbelt 1 / 内核沙箱 1〕，两口径 collected 同为 12276，不混用）。覆盖率（CI 口径，`coverage.xml` root）：行 **19538/20052 = 97.4367%**（97.44）、弧 **7150/7584 = 94.2774%**（94.28）——相对 BU 的 19526/20040 与 7150/7582，+12 行 / +12 分母全部来自本轮唯一 `src/` 改动 `src/tools/patch_test_hacking.py`（五状态拆分 + 两侧独立 try），未覆盖行 511 → 514；棘轮 96.40 / 92.50 绿。此前 **BU 轮：Self-Repair Trap 判定核的输入可达域从未披露——归档 5935 行恒判「不怀疑」，而其中 3200 行只有 1 个点、declining 与 score 两个信号全域 0 行输入**。三个信号各自的最少点数门槛（3 / 2 / 2）从不写进报告，于是「进不了任何门」「进了域且确实判干净」「信号从没拿到输入」三种事实在报告面上是同一个读数；同进程重跑判定核 **0 处不一致** ⇒ 判定核与任何行的值一处不动，只加单一事实源 `experiments/_trap_input_domain.py` + `self_repair_trap_domain_stats` 读侧 + 13 列报告章节。**79 例新锁 + 变异 61 锚点全红 / 对照 U63 0 红**（collected 逐锚点恒 339、`# mutation: ` 残留 0、rc=0），首轮 U18 / U30 / U54 三项存活与 U49 / U50 / U53 三处 SYNTAX-ERROR 全部就地处置。预登记跑 collected **12189** = 12183 + 5 + 1（唯一红 = 基线守卫）、200.51s / 墙钟 202s；确认跑 **12184 / 5 / 0、194.81s / rc=0**（墙钟 196s）；覆盖率行 19526/20040 = 97.4351%、弧 7150/7582 = 94.3023% 与 BT 逐位相同（`src/` 零改动）。〔存量漂移：**BR / BS / BT 三轮未推进本 `Last updated` 行**，本行历史链从 BU 直接接到 BQ——那三轮的 H2 正文在下方序列里齐全；登记册 §1 快照三行同样停在 BQ，本轮按实测刷新、不追改历史文本。〕详见 TRAP_INPUT_DOMAIN_BU_2026-10-23（分册已删除）。此前 **BQ 轮：报告读侧把四个 status 通道当作不存在——BN 落盘的结果行四键零行读者**。BM 给 `contract_status` 接的是生产侧透传（`final_state→结果行`），报告面（`build_analysis` 30 个指标助手 / `run_main_batch` 摘要块 / `statistical_analysis`）对四键**一个都不读**（探针实测：`experiments/`+`scripts/` 184 个 .py 里行读 = 0；对照组 `contract_missing_symbols` 有 1 个真实行读者 `refresh_patch_field.py:201`，其 `or []` 把 null / 缺席折成空列表、同族折叠登记不修）。后果：「这条腿跑过且干净（ok）」与「崩了（error）/ 按设计没跑（disabled）/ 材料缺失（unavailable）/ 没记录（null / absent）」在所有报告面同形——BG→BN 七轮披露链断在最后一步。归档 1702 份 JSON 四键出现 **0**（BN 之后无批次；`contract_missing_symbols` 8865 处为 BL 之前历史行）。处置纯读侧披露、**判定值与方向一处不动**：新助手 `experiments/analysis_parts/check_leg_analysis._check_leg_measurability`（四通道 × 七档计数 + 三条恒等式）+ `analyze_results` 新章节「检查腿可测量性」（沉默臂按名列入「**不是「四腿都干净」**」而非渲染全零表）+ `run_main_batch` 摘要行（未记录明写「不可读作干净」）。**65 例新锁 + 既有 0 例改写**（五套件合跑 219 passed / 0 failed）；变异 **16 锚点全红** + 中性对照 0 红（采集面恒 219）；未新增门禁。**顺带收口存量红**：BD→BP 批次（b44a1aad）入库的 `scripts/tools/bo_raw_readside_fold_probe.py` 两个宽松 `json.dumps` 写点使严格 JSON 门禁在 HEAD 即红（门禁按 `git ls-files` 只扫**已跟踪**文件 ⇒ 入库前的门禁跑盲区；BP 收口「门禁全绿」声明与工件分裂，登记不追改）——补 `allow_nan=False` 两处（合成载荷、零行为变化）后门禁转绿，干净树上门禁链 19 步 rc=0、总墙钟 233s。collected **11992** = passed 11987 + skipped 5（本会话沙箱确认跑实测 11973 / 19 / 0、198.25s / rc=0；沙箱与正常口径不混用）。`src/` 零改动 ⇒ 行覆盖与 BP 逐位相同（19393/19904 = 97.4327%）；弧覆盖 7103/7532 = 94.3043%（较 BP −2，三路归因：沙箱 skip 集 + xdist 重排，均非 `src/` 改动）。详见 CHECK_LEG_READERS_BQ_2026-10-22（分册已删除）。此前 **BP 轮：统计对照面把「这一行没记录污染级别」折成沉默——同一种缺席在两个消费者手里去向不同**。BO 收的是 raw 落盘面的读侧，本轮收同一批 `details` 行在**统计对照面**的读法：`analysis_parts/cross_analysis` 的 `if not level: continue` 对未记录行**一个都不记**，`statistical_analysis.contamination_view_summary` 的 `recorded or "unknown"` 却把它们**并计进 `unknown`**（与「检测跑了但判不了」同一个数），渲染层 5.3 的「未入对照任务」按前者加、脚注却按后一种口径解释前一种。归档实测 **159** 份含键批次文件 / **320** 臂：`key_absent` **2093** 行、值为 null **0** 行、精确空串 **0** 行；**122** 臂整臂无字段 ⇒ `available=False` ⇒ **5.3 节从报告里整节消失，与「这一节没跑」同形**；`high_vs_low_success_delta` 在两档不齐时**键直接缺席**，读者无从分辨「没算」与「算出 0」。处置只加平行披露、**判定值与判定方向一处不动**：缺席分 `key_absent` / `value_null` / `value_blank` / `other_falsy` 四档并给 `n_details` / `unobserved_total`，`available=False` 分 `no_rows` / `no_level_recorded`，delta 落成**显式 `None`** 并由 `delta_missing_buckets` 点名缺哪一档（归档 **198** 个可对照臂 **0** 个有差值：157 双缺、41 缺 high），5.3 表补未记录行数、沉默臂按名点名、`N/A` 单元格写明缺哪一档、全表算不出差时追加「≥0.2 / ≤0.2 判据在这批数据上无从应用」，②侧加 `unknown_of_which_absent`；两消费者恒等式 `view.unknown` = 真 unknown 行数 + `cross.unobserved_total` 在 **320/320** 臂成立。口径修正一处：`value_blank` 只收**精确空串**——空白串在批次 IX 侧是真值、自成一档，划进缺席会让恒等式在含空白串的语料上差 1，而归档恰好 **0** 行空白串，**探针与真归档同盲区、都测不出来**。**62 例新锁**（逐类例数取自 `--collect-only` 实测）+ 既有 92 例 **0 例改写**（四套件合跑 1415 passed / 3 skipped / 0 failed）+ **变异 18 锚点全红、采集面逐锚点恒 collected=154、中性对照 0 红、`# mutation:` 残留 0**；本轮未新增门禁；`src/` 与 `config.py` 写入面命中 **0** ⇒ 覆盖率与 BO/BN/BM 逐位相同（⚠️ 相同读数不证明 `src/` 零改动，依据是写入面普查）。确认跑 **11922 passed / 5 skipped / 0 failed、195.48s / rc=0**（collected **11927**）。详见 BP 手册（分册已删除）。此前 **BO 轮：raw 落盘面的读侧把「没落盘 / 键不在 / 值是 null / 件读坏了」折成实测——而落盘开关态自己也不落盘**。BN 把四值 `status` 落到了盘，本轮量的是消费这些工件的 `experiments/` 读侧五处站点，它们共同的写法是 `x = state.get(key) or []` 再 `len(x) == 0`——「读到空」与「没读到」在同一个 `if` 里。① `--save-state` 决定 raw 存不存在，可实测 **246 份批次 JSON 里该值 0 出现**、provenance 15 个键里没有它，而磁盘 **34** 个 `raw/` 目录只有 **88** 份文件入库、只覆盖 **6** 个批次目录（`.gitignore:172` 忽略 `experiments/results/**`）⇒「没开 / 开了但没随归档留存 / 开了且留存」三种世界事后同一个观察，处置是 provenance 补 `"save_state": bool(save_state)`（只对新批次生效，**不改默认值**）；② `cross_file_root_cause` 把三种缺席折成「实测 0 条依赖边」的 `DEP_GRAPH_INCOMPLETE`——真实批次两臂复放（9 臂 29 例多文件失败）**改前 14 例判定随 raw 目录给不给翻转**、本轮分档后 **18 例**（多出的 4 例是改前两臂同折、翻不出来的键级缺席），`level1` 两臂恒 0 例；现分 `RAW_UNAVAILABLE` / `DEP_INPUT_ABSENT` / `DEP_INPUT_NULL` 三档、`dep_edges` 由 `0` 回 `null`，报告再加 `raw_coverage` / `rule_evidence` / `unreachable_rules` 自证：可达性按**值非 null** 判（BN 起白名单恒写键，「键在场」不再是证据），`ROLLBACK_CONSERVATIVE` / `TOPOLOGICAL_ORDER` 按构造零证据、由报告点名而不是从分布里被读成「没有这种根因」；③ `position_aware_ab` 的四条不可计算腿（raw 目录缺席 / 任务件缺席 / `position_aware_focus` 键缺席 / `details` 不可用）改前与「实测定位全未命中」**数值同形 = True、文本同形 = True**（都是 `0.0`、都印 `0.0%`）——`0.0` 不是保守值，是缺席造出来的读数；现按十档 grade 点名（`-1.0` 沿用既有「不可计算」数值档，不新增取值域），另收一条更窄的折档：`focus=null` 且该行**确有**修复轮次或补丁时，改前会进分母记一次实测未命中；④ `compare_failures` 改前只有**两臂都缺**才有一行披露、损坏 JSON 直接掀翻整份报告、空产物 `{}` 与「件不存在」同一句，现逐臂点名缺席形态、坏件记 `unreadable` 不抛穿、空产物自成一档；⑤ `cross_file_ab` 跑批后提示的根因命令不带 `--raw-dir`，**照抄一次就把 14 例折进结构档**，本轮补上该参数。**判定值与判定方向不变**（缺席只披露，不归因、不拒绝）；真语料零影响实测：八臂定位读数现场复算与归档**逐位相同**（21.43 / 0.0 / 0.0 / 0.0 / 25.0 / 0.0 / −1.0 / −1.0）、236 条 details 形态 = 键在且为空 **156** / 键在且有内容 **80** / 键不存在 **0**、311 份 `aitester.json` 的 `cross_file_deps` = 键不存在 **216** / 非空列表 **95** / 值为 null **0** ⇒ `DEP_INPUT_NULL` 在归档里 0 实例（该腿为 BN 之后的新批次而准备）。**70 例新锁**（逐类例数取自 `--collect-only` 实测）+ 既有 2 例按新口径改写（「保守 `0.0`」→ `-1.0` + grade，用例数不变）+ **变异 23 锚点全红、采集面逐锚点恒 collected=70、中性对照 0 红、`# mutation:` 残留 0**；本轮未新增门禁；`src/` 与 `config.py` 写入面命中 **0** ⇒ 覆盖率与 BN/BM 逐位相同。详见 BO 手册（分册已删除）。此前 **BN 轮：状态通道运行时披露、归档工件里 0 出现——「检查崩了 / 没跑」在字节层与「检查干净」同形**。BH→BM 五轮建立的四值 `status` 只活在内存里：只读探针实测 `experiments/run_benchmark._dump_state_artifacts` 的 raw 白名单把 5 种运行时状态（`ok` / `error` / `unavailable` / `disabled` / 键不存在）折成 1 种 558 字节形状，而 `_build_task_result` 的「5 态 → 5 形状」全靠 BM 刚接上的 `contract_status` 一条腿撑住——**逐通道拆开测**才见 static / safety / oracle 三对通道在两道边界同样折档；存量归档普查（1700 份 JSON〔raw 1121〕+ 9096 行 JSONL）里这 7 个键 **0 命中 / 0 文件**。处置纯归位：白名单 +10 键、结果行两分支各 +6 键（失败分支 `None` 占位保持键集合同构），另加 BK 同族但**豁免额度为空**的新门 `scripts/gates/check_status_persistence.py`（`AITesterState` 声明的 10 个 `_status`/`_outcomes` 通道 ⊆ 每一个落盘面；`**helper(...)` 解析不出就不计入——宁可假红、不可假绿），已接 `make gates` 与 CI 独立阻断步骤。**判定值与判定方向逐字节不变**，历史工件一个字节不改（归档里 0 出现仍是 0 出现，本轮只买新批次的可复核性）。**54 例新锁 + 变异 24 锚点全红（采集面逐锚点恒 collected=54）+ 中性对照仅改注释措辞 0 红、`# mutation:` 残留 0**；确认跑零失败（读数见 BASELINE.yaml）；本轮 `src/` 零改动 ⇒ 覆盖率与 BM 逐位相同（⚠️ 相同读数不证明 `src/` 零改动，该主张的依据是改动面清单）。详见 BN 手册（分册已删除）。此前 **BM 轮：实验/报告读侧把「检测没发生 / 检测崩了」折成取值域最有利一档——崩溃记进「干净组」、未测记进「零回归」**。BL 把双读口径收在 `src/`，登记边界明写 `experiments/` 未做——本轮就是那块：`run_benchmark._compute_contamination_risk_level` 的崩溃腿 `return "low"` 返回的正是取值域里**最有利**的一档，而 `low` 在下游**就是干净组**（`statistical_analysis.contamination_view_summary.clean_n` 与 `analysis_parts/cross_analysis.high_vs_low_success_delta` 的对照基线）；`contract_status` 被 BL 写到实验侧结果行却没人读，`contract_unmeasurable(...)` 披露在实验产出的 `risk_summary` 里恒不出现；`run_main_batch._print_r4_summary` 的 R4/N1 分子只数 `== 1.0`、分母却是**全部行**，未测行按「没回归 / 没测试错误」计分，而 `0.0%` 恰好好读成「零回归」。四处处置全落在「披露 / 归位」侧：崩溃腿 → `unknown`（**修漏不是新设计**——同仓内层 `_combined_risk_level` 早在 O22 就为同一件事引入 `unknown` 并写明「异常时一律 fail-open 归 low」，本轮补的是漏改的包装器）、`contract_status` 透传给 `build_risk_summary`（分数 / 级别 / 因子逐位不变）、R4/N1 分母换成可测行数并印「可测 k/n」（`k=0` 时打印不可测而非 `0.0%`）、5.3 对照表补「未入对照任务」列。**判定值与判定方向不变**：`unknown` 不触发拒绝、不改 `passed`，只是离开干净组；③的分子仍是 `== 1.0` 的行数。真语料三组：崩溃腿可达性栅格 15 条改前 `{'high': 1, 'medium': 2, 'low': 12, 'unknown': 0}`、崩溃腿 5/15 命中且 5/5 折成 `low`，改后 `{'high': 1, 'medium': 2, 'low': 7, 'unknown': 5}`；归档 **8865** 处 `contamination_risk_level` = `not_applicable` 7843 + `low` 1022、非 str 补丁 **0** 行 ⇒ 崩溃腿在归档里 0 实例，①②对历史读数零影响；`regression_rate` 在 11197 行里可测 **0** 行（8012 `None` + 3185 缺键），`test_error_rate` 可测 7206/11197 ⇒ 现口径 7.3% vs 可测口径 **11.3%**（`single_agent` 一行 6.7% vs **94.0%**——换分母读出的新数，不得与历史值相减）。**32 例新锁 + 变异 9 锚点全红（红数 8/3/1/2/2/1/2/1/1）+ 中性对照 M10 0 红**；确认跑 11736 passed / 5 skipped / 0 failed、209.76s / rc=0（37 warnings；collected 11741）；`src/` 本轮零改动 ⇒ 覆盖率与 BL 逐位相同（19393/19904 行 = 97.4327% / 7105/7532 弧 = 94.3309%，未覆盖 511、缺弧 427）。教训：红数必须与产生它的采集面一起登记（M1=83 / M2=91，「恒 32」那句已被复测否证）、同一个打印块里两套分母正是本轮缺陷的形状学来源、`94.0%` 这类换分母的新数与历史值相减即口径错配。详见 BM 手册（分册已删除）。此前 **BL 轮：发布侧已经带 status、判定侧仍按空值判定——“写了没人读”这一面的收口**。BH→BK 四轮把「读不懂」写进了观测键，但判定侧读不读从未验过：本轮普查实测 `assess_task_risk` 的形参表里没有 `contract_status`，四个 status 通道的**键名判定读点改前全为 0**。处置分三层：按腿取 status（新原语 `status_for_check(outcomes, check)`，`safety_check_status` 是两道独立预检的 worst-of 聚合、不能冒充契约腿；该腿没记录 ⇒ `None`）、消费侧双读（`risk_approval` 四处 + `graph/debugger.py:918` 调用点 + `agents/debugger.py:795` 静态层 + `patch_applier.py:507` S2 —— **只把文本追加进 note，`factor` 与 G2 判定逐字节不动**）、观测侧把 status≠ok 认成失败模式（第 **12** 条 `check_unmeasurable`：5 个 status 通道 × `error`/`unavailable` → MAST `Inadequate verification`，`_flatten_record` 同步抬平 trace 的 `output` 内层键）。发布面四处补齐（`nodes.py` per-leg 通道与 trace 载荷、`run_benchmark.py` 行、`state.py` 声明）。**`None` 与 `error` 必须分读**：归档 1702 文件里 `contract_missing_symbols` 出现 8865 次、其中 **8853 是 `None`**，把「没记录」当「没测成」会整批改判历史行；五个 status 键在归档中出现 **0** 次 ⇒ 历史读数零影响。**32 例新锁 + 变异 22 锚点全红（红数 2/3/1/2/1/3/1/1/1/1/1/3/2/1/1/1/1/1/1/1/1/1）+ 中性对照 0 红**（墙钟 86s、基线 collected=32 全绿、sha256 原字节还原、`# mutation:` 残留 0）；确认跑 11704 passed / 5 skipped / 0 failed、209.29s / rc=0（39 warnings；collected 11709）；覆盖率 **19393/19904 行 = 97.4327%** / **7105/7532 弧 = 94.3309%**，未覆盖 511 与缺弧 427 与 BK 登记**逐位相同**（本轮只回收自己新增的行与弧）。**`make gates` 全链 rc=0**（回填前首跑、回填后终跑，各自单独执行：两跑 rc=0、18 步命令全绿，墙钟 **213s / 214s**；链内 pytest 为 xdist `-n 4 --dist loadfile` 且**不带 `--cov`**：两跑同判 **11704 passed / 5 skipped / 0 failed**（用时 207.16s / 208.34s、warnings 54 / 46，collected 11709），链尾分步读数两跑逐字节相同；链首 ruff 974 文件已格式化、mypy 137 源文件 0 错；`ast-guards` 链内读数 136/78/20/0/20/19 与 BK 轮链外自测逐位相同）。教训：量具中途换口径会让改前/改后差值掺入仪器变更（只登记现值或重跑改前）、用被测集合自身遍历的锁是自证循环（删键跟着变短而不是变红，M11 存活）、不可达的语料组合会让变异假存活（“契约 ok + 危险 API error”在 `safe_apply_patch` 的 `ast.parse` 硬闸下根本触发不了，M17 存活；可达形状是 `disabled` + 聚合 `error`）、继承来的四位小数要重算（BK 的 97.4300% / 94.3200% 除得值实为 97.4288% / 94.3218%，两位小数判读不变）。详见 BL 手册（分册已删除）。此前 **BK 轮**：**`ast.parse` 守卫的捕获面棘轮——"读不懂"有两种异常，逐点收敛永远收不完，于是把口径交给门禁**。`src/` 78 个含 `ast.parse` 的 `try` 站点里改前有 **35 个只捕 `SyntaxError`**，而 Python 3.14.6 对**孤立代理位**文本抛的是 `UnicodeEncodeError`（`ValueError` 子类；null 字节抛的仍是 `SyntaxError` 本体，不算新腿）——单腿守卫让这条腿从"读不懂 ⇒ 降级"分支里**抛穿到调用方**（最直白的一处是 `static_validate_patch`：含代理位的候选补丁把整个 `_debugger_node` 抛崩）；已经降级的分支又把"读不懂"折进**带判定含义**的空结果（`[]` / `set()` / 原码 / `ok=True`）。处置：5 个模块 **13 处**站点收敛到共享常量 `AST_UNREADABLE_ERRORS`，形态归因走 `unparseable_shape()`（fenced_block / git_diff / undecodable / syntax），13 处经 `outcome_sink` 侧信道逐腿披露、三个发布点写 `check_status` / `check_outcomes`（`graph/debugger.py` 确定性分支与专家池分支、`agents/debugger.py` 编辑意图）；**判定值逐字节不变**：11 个判定面 × 14607 条输入 = 160677 项对账，`identical=160636 / escape_fixed=41 / both_raised=0 / UNEXPECTED=0`，41 条抛穿腿全部来自人工形态栅格（归档 14596 条贡献 0 实例）；并新增 CI 阻断门禁 `scripts/gates/check_ast_parse_guards.py`（`make gates` 新目标 `ast-guards`）——同一把尺子复测 HEAD 树得 79 站点 / 35 单腿 / 违规 **15**（恰为 BK 13 + BJ 2），现树 136 文件 / 78 站点 / 20 未覆盖 / 违规 **0**，20 处存量按 `(站点数, 折叠形态)` 计额度且**只允许变短**。**55 例新锁 + 变异 13 锚点全击杀（24/15/1/2/1/5/2/2/1/1/1/5/1）+ 中性对照 0 红、`# bk-mutation` 残留 0**；全量确认跑 11672 passed / 5 skipped / 0 failed、191.76s / rc=0（collected 11677，无 `--cov`）；`make gates` 全链 **rc=0**（首跑墙钟 **242s**、`date +%s` 成对采集；链内 pytest **11672 passed / 5 skipped / 0 failed、193.90s**、47 warnings、collected 11677 与确认跑同一采集面；本轮新门 `ast-guards` 链内读数 136 文件 / 78 站点 / 未覆盖 20 / 违规 0 / 豁免命中 20 / EXEMPT 19，与链外自测逐位相同）；终跑（上述门禁句回填后再单独跑一次）**rc=0**、墙钟 198s（同为 `date +%s` 成对采集）、链内 **192.95s**、44 warnings、`4 workers [11677 items]` 与首跑同一采集面，**链尾 47 行分步读数两跑逐字节相同（diff 0 行）**。教训：开工普查的两套分母（125 站点 / 64 与 60 单腿）不可复现，登记以守卫自测为准；HEAD 不等于"本轮之前"（其下压着七轮未提交栈），基线归因要逐文件核；本轮自己的 +19 行打断 Prompt Card——改带 prompt 的源文件必须同批重跑生成器。详见 BK 手册（分册已删除）。此前 **BJ 轮**：**AST 断言一致性检查的「读不懂 ⇒ 无疑点」收口——`check_assertions` 两腿各带 status、消费侧取最差者优先，`findings=[]` 不再单独算"扫过且干净"的证据**。把 HEAD 版本接到真实消费点复现即知可达：**围栏整块产物、真语法错误产物、空产物三行与一次真实干净扫描逐字节相同**（`oracle_findings=[] / tautological_count=0 / o4_triggered=False`），而 O4（恒真断言 ⇒ 标 `test_defect` ⇒ 路由回 Generator 重生成）是 generator 侧唯一的写侧路径、对读不懂的产物**恒不触发**；被测代码读不懂时类型推断通道哑火却与"类型都一致"同值；含孤立代理位的产物在旧口径下让 `ast.parse` 抛 `UnicodeEncodeError`（`ValueError` 子类而非 `SyntaxError`）**抛穿观测层**。处置：`check_assertions` 新增可选 `outcome_sink`，逐腿追加 `{check, status, reason}`——`assertion_consistency` 与 `target_type_inference` 两腿，四值词表沿用 BI 上收的 `src/utils/check_status.py` 单一事实源（本轮是第 4 个消费点）；三条实现口径各上有向锁：**盲区早退不记第二腿**、**围栏归因判据 = 剥前导空白后以三反引号开头**（与"正文出现过围栏"在真语料上差 1 条，由不 import `src/` 的 `scripts/tools/bj_discriminator_crosscheck.py` 独立复核）、**解析面收敛到 `parses_as_module`**（本轮唯一披露的行为变化）；消费点两腿相互独立 ⇒ **worst-of** 聚合，发布 `oracle_check_status` / `oracle_check_outcomes`（TypedDict 显式声明 + 默认 `None`；键名经 grep 实测避开 `experiments/oracle_quality_replay.py:1254` 已占用的规约 oracle `oracle_status`）。**判定值与判定方向逐字节不变**——不剥围栏、不把"读不懂 ⇒ 零疑点"翻成拒绝：语料 10855 条产物 HEAD-vs-现版 `repr(findings)` 逐条比对 **0 差异**（`crashes_old=0 / crashes_new=0`），变异面专设三条"判定翻转"锚点守住这一点。**63 例新锁 + 变异 23 锚点全红（9/2/9/1/11/5/3/3/3/1/2/8/8/2/1/2/50/8/1/1/7/20/1）+ 中性对照 0 红**（collected 全程 501）；真语料：`generated_test` 站点 **10855** 条 = 真扫过 10671 + 空输入 77 + 围栏块 72 + 无断言 31 + 语法错误 4（76 条"读不懂"旧口径与真扫过逐字节相同），第二腿只记 `disabled:target_not_provided = 10702` = 10855 − 153 ⇒ `error:unparseable_target` 语料 **0 实例**；开关开启的 57 份归档中盲区站点恰 1 个；`oracle_findings` / `tautological_count` / `o4_triggered` 在 1594 份可解析归档中出现 **0** 次 ⇒ 零回填；登记前一跑 **11616 passed / 1 failed / 5 skipped、197.48s**（collected 11622）；行 **19272/19793 = 97.3678%** / 弧 **7072/7504 = 94.2431%**；mypy **137** 源文件零问题；`make gates` 全链 **rc=0**（首跑墙钟 198s、链内 **11617 passed / 5 skipped / 0 failed、192.51s**、54 warnings、collected 11622；复验跑墙钟 198s、链内 192.46s、13 warnings；两跑各 90 行分步读数在归一化用时与 warnings 计数后 `diff` 为空；终跑（上述全部登记文本回填之后再单独跑一次）rc=0、墙钟 **197s**、链内 **192.06s**、66 warnings，其 88 行门禁分步读数（不含 pytest 警告噪声行）与前两跑逐行相同；此前另有一次在 0s 处停在 lint 步转 `rc=2`，那次没有门禁读数可引）。详见 BJ 手册（分册已删除）。此前 **BI 轮**：**写盘前两道静态预检的「读不懂 → 通过」收口——`check_naming_contract` 与 `dangerous_api_added` 各带 status、消费侧取最差者优先，空结果不再单独算"预检通过"的证据**。把 HEAD 版本接到真实消费点复现即知可达：**补丁前原文是当前解释器不接受的语法（py2 `print`）时，删除模块级常量 `CONST` 的补丁 `applied=True` 直通写盘、零条 warning**，`contract_missing_symbols` 保持 `null`，与一次真实干净比较逐字节相同；补丁侧读不懂时报"补丁删除了 2 个模块级符号"——一句关于从未发生的比较的假陈述。处置：两守卫新增可选 `outcome_sink`（`{check, status, reason}`，四值词表沿用 BG 并上收单一事实源 `src/utils/check_status.py`）；`_check_patch_safety` 按 **worst-of** 聚合（两道守卫相互独立 ⇒ 方向与 BG 的"任一后端 ok ⇒ ok"相反），`_patch_applier_node` 发布通道键 `safety_check_status` / `safety_check_outcomes`（TypedDict 显式声明 + 默认 `None`，未声明键会被 LangGraph 静默丢弃）；`type_repair_layer` 的 `contract_ok` 补配 `contract_status` / `contract_reason` / `contract_outcomes`。**判定值与判定方向逐字节不变**——本轮只把沉默翻成披露，没把"读不懂 ⇒ 保守放行"翻成拒绝，变异面专设两个"判定翻转"锚点守住这一点。**50 例新锁 + 变异 19 锚点全红（4/2/1/5/1/5/1/1/4/4/1/2/1/1/1/2/1/4/7）+ 中性对照 0 红**（collected 全程 452）；真语料：`contract_missing_symbols` 在 **172** 份归档 JSON 的 **8865** 处取值中有 **8853** 处 `null`（四义折叠在记录里正是不可见的），归档不存补丁前原文（`target_code` **1** 处 / `patch` **11101** 处）⇒ 零回填；登记前一跑 **11553 passed / 1 failed / 5 skipped、213.52s**（collected 11559）；行 **19247/19770 = 97.3546%** / 弧 **7064/7496 = 94.2369%**；mypy **137** 源文件零问题。详见 BI 手册（分册已删除）。此前 **BH 轮**：**G5 testless 验证四层的「不可测量 → 验证通过」收口——每层返回 `{passed,status,reason,detail}`、顶层 `validation_status` 取最差层，`passed=True` 不再单独算“验证通过”的证据**。`src/tools/testless_validation.py` 的四层（AST 符号守卫 / mypy / 命名契约 / 导入冒烟）把“这层根本没测成”与“这层测完且零缺陷”折成同一个 `passed=True`，顶层只在 `not passed` 时记 `failed_layers`。**根因实测坐实**：mypy 层长期传 `--silent-imports`，mypy 1.15.0 已无此旗标（实跑 rc=2 + `unrecognized arguments`），干净补丁 / 类型错误 / 语法错误三种输入返回逐字节相同的“mypy 发现 1 处问题”，该层从未完成过一次真实类型检查；本轮改传 `--follow-imports=silent`，并以 argv 断言 + 真 mypy 端到端 3 例上锁。处置：每层 `status` 四值 `ok / disabled / unavailable / error`（词表沿用 BG），顶层 `validation_status` **最差层胜出**（error > unavailable > disabled > ok，与 BG 的“任一 ok ⇒ ok”方向相反——四层是彼此独立的校验层，不是同一检查的两个可替换后端） + `degraded_layers`，非 ok 时 warning 点名 `层=status:reason`；**只把未披露的假干净翻成 fail-closed**（mypy `rc ∉ {0,1}`、`rc=1` 却解析不出疑点行、AST / 命名契约输入无法解析），已披露降级（层开关关 / mypy 未安装 / 超时 / OSError）的 `passed` 一律不动；导入冒烟的危险 API 拒跑记 `disabled`；`nodes.py` 消费点在 `passed=True` 而 `validation_status != ok` 时显式记“不构成验证通过的证据”。真语料（本轮重测）：`TESTLESS_VALIDATION_ENABLE` 在 **100** 份归档 JSON 的 **107** 处取值全为 `null`、`testless_validation` 载荷键仅 **2** 份且均为 `null`、四个状态键在 **1702** 份归档出现 **0** 次 ⇒ 历史读数零影响、零回填。**52 例新锁 + 1 条旧断言按新口径改写 + 变异 11 锚点全红（7/4/1/5/2/1/8/2/1/1/1）+ 中性对照 0 红**；登记前一跑 **11503 passed / 1 failed / 5 skipped、218.93s**（collected 11509；唯一失败 = 基线守卫）；确认跑 **11504 passed / 5 skipped / 0 failed、212.17s、rc=0**；行 97.32%（19151/19678）/ 分支 94.17%（7027/7462）。详见 BH 手册（分册已删除）。此前 **BG 轮**：**静态类型检查的「不可测量 → 假干净」收口——mypy / pyright outcome 四值化，空 findings 不再是免费证据**。`_run_mypy_findings` / `_run_pyright_findings` 旧实现对开关关 / 未安装 / 超时 / 崩溃 / 退出码异常 / 报告损坏一律返回 `[]`，与“检查完成且确实零疑点”不可区分，`mypy_findings_count=0` 把四种状态折成一个 0。每次尝试经 `outcome_sink` 记录 `{backend,status,reason}`（`ok / disabled / unavailable / error`），静态层聚合为 `static_check_status` / `static_check_outcomes`（任一 ok ⇒ ok，否则 error > unavailable > disabled），error 时 warning 点名后端与原因；两键随 debugger 写入图状态并在 TypedDict 声明。pyright 空 stdout / JSON 损坏 / 缺 `generalDiagnostics` / 超时 / rc 非 0/1 均判 error；已解析疑点保留但文本兜底不升级为 ok。真语料 `TYPE_CHECK_ENABLE` 默认关、170/170 份归档均为 `null` ⇒ 历史读数零影响、零回填。**25 例新锁 + 变异 8 锚点全红（1/3/1/2/1/1/3/2）+ 中性对照 0 红**；登记前一跑 **11449 passed / 3 failed / 5 skipped、202.57s**（collected 11457；失败 = 基线守卫 + 键集合契约 + prompt card，后两者已修正）；行 97.32%（19111/19637）/ 分支 94.14%（7006/7442）。详见 BG 手册（分册已删除）。此前 **BF 轮**：**脚本工具链 rc==0 判绿收口——self-mutation 与模板验证器接“有效通过”，空套件不再记成存活 / 自洽**。BA–BE 逐层收口 M1 / experiments / MDO / 生产路径后，`scripts/tools/` 仍有两处以裸 `rc==0` 判绿：`self_mutation.py` 的 preflight 基线门（全 skip 基线记绿，其后的变异体不可能被真实杀死）与变异体分类（全 skip / xfail / deselect 的变异体记 `survived`，无证据压低 mutation score），`verify_synthetic_templates.py` 的 buggy / fixed 两侧（全 skip 的 fixed 侧记“gold 自洽”，模板带假证据进检测率分母）。修法：四处统一走 `run_has_effective_pass`（`src/utils/pytest_output.py`）；基线无有效通过记 `baseline_no_effective_pass` 并默认阻断（`--allow-red-baseline` 才继续并标 `measurement_valid=false`），变异体 `classify_result(rc, timed_out, output)` 记 `invalid` + `no_effective_pass:<counts>`（不进 mutation score 分母），模板 buggy / fixed 两侧各报“无有效通过”；超时仍优先判非绿。真语料 self-mutation 80 变异体行逐行相等（score 0.7467 不变）、模板 50/50 通过 ⇒ 历史读数零影响、零回填。**20 例新锁 + 变异 8 锚点全红（2/2/5/1/1/1/2/42）+ 中性对照 0 红**；登记前一跑 **11426 passed / 1 failed / 5 skipped、201.04s**（collected 11432；唯一失败 = 基线守卫）；行 97.31%（19055/19581）/ 分支 94.12%（6982/7418，`src/` 除共享谓词只读引用外零改动，与 BE 逐位相同）。详见 BF 手册（分册已删除）。此前 **BE 轮**：**生产路径 rc==0 判绿收口——六处判绿点接“有效通过”，空套件不再记成修复正确**。BA–BD 逐层收口 M1 / experiments / MDO 后，生产路径仍有六处以裸 `rc==0` 判绿：检测门 `_run_test_against_code`、本地执行器、venv 沙箱、Docker、仓库节点、P2P 回归。全 skip / xfail / deselect 的套件 rc 同样是 0，旧实现把它们记成“修复正确 / 补丁安全”：检测门误判缺陷特异、执行器带假 passed 进入下一轮、`failed_cases` 为空骗过 F2P/P2P、P2P 在 fail-closed 下也不回滚。修法：新增 `run_has_effective_pass(rc, output)`（`src/utils/pytest_output.py`）作为执行级唯一判绿入口（`rc==0` 且至少 1 个真实 passed、0 failed；部分 skip 仍有效；摘要不可解析 fail-closed），六处接入；检测门记 `unavailable`、执行器新增 `error_info.type=no_effective_pass`、仓库节点记 failed case、P2P 记 `regression_error`（fail-closed 时 `regression_failed`）；A16 尝试记录新增 `effective_pass`，fail→pass 只认有效通过。真语料 11197 行 / 5884 passed / 静态全 skip 0 / 50 条 repo_verification 全 failed / P2P 归档无 verdict ⇒ 历史读数零影响、零回填。**40 例新锁 + 变异 8 锚点全红（3/1/1/1/2/2/1/33）+ 中性对照 0 红**；确认跑 **11407 passed / 5 skipped / 0 failed、199.06s、rc=0**（collected 11412）；行 97.31%（19055/19581）/ 分支 94.12%（6982/7418）。详见 BE 手册（分册已删除）；`make gates` 全链 rc=0（见文末收口批注）。此前 **BD 轮**：**测量模块自己的 rc==0 判绿收口——MDO 基线与变异体接“有效通过”，谓词上移单一事实源**。BA–BC 逐层收口 experiments 侧后，`src/measurement/mdo.py` 仍以裸 rc==0 判绿：基线全 skip / xfail / deselect 时同样 rc==0，若不短路则每个变异体也以 rc==0 收场 → measured 且 **MDR=0**（把“没跑起来”记成判别力）；变异体侧 rc==0 但无有效通过被记成“未判别”，无证据地压低 MDR。修法：基线在 rc!=0 与执行错误判据之后、探针之前短路为 not_measurable（`test_not_green_on_base(no_effective_pass)`）；变异体无有效通过单列 `no_effective_pass` 并排除出 MTR/MDR 分母（披露 `mdo_no_effective_pass`；全部排除 ⇒ `mutant_runs_no_effective_pass`）；计数解析与谓词上移 `src/utils/pytest_output.py` 单一事实源，`_m1_metrics` 以同一对象别名保持约 20 个消费点与既有锁零改动。真语料 4044 条含 MDO 行 / 624 条 available / MDR=0 的 available 行 **0** / 模块级全 skip **0** ⇒ 历史读数零影响。**15 例新锁 + 变异 6 锚点全红（8/2/24/21/2/1）+ 中性对照 0 红**；确认跑 **11367 passed / 5 skipped / 0 failed、222.87s、rc=0**（collected 11372）；行 97.31%（19025/19551）/ 分支 94.11%（6968/7404）。详见 BD 手册（分册已删除）；`make gates` 全链 rc=0（墙钟 230s；链内 pytest 11367 passed / 222.38s）。此前 **BC 轮**：**重放对账工具的 rc==0 判绿收口——misguided_metrics 三处任务级判据接“有效通过”**。本模块逐测试四分类早已把 skip 单列为“无 pass/fail 信号”，任务级重放判绿却只看 rc（内部不一致）：`replay_detection` 的 fixed 侧无有效通过 ⇒ `None`（判据顺序与 `_m1_metrics` 对齐）、`replay_fixed_green` 无有效通过 ⇒ 保持 `None`（未演示 green 不是 False）、`_verdict_agreement` 无有效通过 ⇒ `not_applicable`（不记 mismatch 冤枉归档）；新增 `_side_has_effective_pass`（outcomes 优先 + 摘要行回退 + fail-closed）。真语料 350 任务行 / 700 侧零 all-skip-at-runtime ⇒ 历史读数零影响。**35 例新锁 + 变异 5 锚点全红（5/3/4/14/1）+ 中性对照 0 红**；确认跑 **11352 passed / 5 skipped / 0 failed、195.47s、rc=0**（collected 11357）；`make gates` 全链 rc=0。详见 BC 手册（分册已删除）。此前 **BB 轮：rc==0 判绿消费点的剩余收口——experiments 侧 11 处接共享有效通过谓词**。BA 轮建立 `_suite_has_effective_pass` 后，本轮将同一判据传播到 `experiments/` 全部剩余的 pytest 套件判绿点（全仓普查 11 处）：gold 自洽性审计 / 过红 P4 复跑（P5 新模式）/ GCP 块剪枝 / testlevel 任务级判据 / ULT gold 诊断归因 / SRP 见证安全门 / 四个健全性门 / mutation_testing 基线诊断——全 skip / xfail / deselect 的套件（rc==0 但 passed==0）不再计成有效 green，一律 fail-closed。`misguided_metrics` 三处对账与 `src/` 生产路径保留原口径待专门轮次。真语料 246 份归档零模块级全 skip ⇒ 历史读数零影响。**60 例新锁 + 11 变异锚点全红（2/2/2/1/2/2/2/2/2/2/1）+ 中性对照 0 红**；确认跑 **11317 passed / 5 skipped / 0 failed、243.69s、rc=0**（collected 11322）；`make gates` 全链 rc=0。详见 BB 手册（分册已删除）。此前 **BA 轮**：**rc==0 不是有效通过——全 skip / xfail 的套件没有断言执行**。pytest 对没有任何断言执行的套件同样返回 `rc==0`，旧实现只看 `rc`：detection 的 fixed 侧与 repair 的 gold 侧各有一条假阳性通道（全 skip 也记 **1.0**），重放工具给出 `correct`，变异检测把"测试没跑"误报成"测试没有检出力"（`rate=0.0`）。修法：新增共享谓词 `_suite_has_effective_pass`（至少 1 个 `passed` 且 0 个 `failed`；部分 skip 与真实 passed 并存仍有效；摘要不可解析判 `False`），四处消费点接入，无有效通过一律 fail-closed（`None` / `unverifiable` / `skipped`）。真语料 246 份 benchmark / 9358 条生成测试 / 114 条带 skip·xfail 标记 / 12 条 `detection=1.0`（均为条件性标记，无模块级全 skip）、736 份 gold 套件 / 2 份含标记 / 0 份全 skip、4895 条 mutation 行 / 1376 条已测 / 132 条含标记；**35 例新锁 + 变异 6 锚点全红（红数 14/1/3/3/1/2）+ 中性对照 0 红**；登记前 11256 passed / 1 failed / 5 skipped（唯一失败 = 基线守卫）、覆盖率 19002/19528 = 97.3064% / 6960/7396 = 94.1049%（`src/` 零改动）；确认跑 **11257 passed / 5 skipped / 0 failed、204.07s、rc=0**。详见 BA 手册。此前 **AZ 轮**：**量纲与尾部不得被实现悄悄改写——Cohen's g 是 0–0.5，不是 2g；精确 p 不得被 epsilon 抬高**。`emse_stats_extensions.cohens_g` 返回 `abs(n10−n01)/(n10+n01)`（**2g**，0–1），与函数名和论文引用声称的 Cohen's g（0–0.5）量纲错位；`binom_exact_two_sided` 对 `p=0.5` 用 `pmf <= prob_k + 1e-12` 浮点比较，把 113/0 的 **1.926e-34** 抬成 ~1.93e-12（22 个数量级）。修法：g 改 effectsize 口径 `abs(n10−n01)/(2*(n10+n01))`；精确尾改整数权重 `math.comb` 精确比较，`p≠0.5` 分支按概率序双侧。真批次：R-P0-2 aitester vs df **g 0.370 / p 1.716e-13**（原 0.739 / 1.073e-12）、df vs plain LLM **g 0.500 / p 1.926e-34**（原 1.000 / 1.931e-12）、E6 **g 0.423**（原 0.846）、E4 **g 0.500**。受保护归档 20261016 零改写（sha256 复验 OK），修正值重发 20261021；论文 / EMSE 骨架 / 复现包 / X 轮勘误同批改引；**21 例新锁 + 变异 M1 11 红 / M2 4 红**；确认跑 **11222 passed / 5 skipped / 0 failed、187.56s、rc=0**。此前 **AY 轮**：**读取层保真，判定层收口——run_b8 载荷形状不得被 `or {}` 改写，假值非对象不是免费**。`run_b8_injection` 的 `_load_arm` 与 `_load_harness_smoke` 仍用 `rd.get("token_metrics") or {}`：`[]` / `""` / `0` / `False` 被改写成 `{}`，`_arm_summary` 把"载荷坏了"读成"没有 metrics"，成本报 `$0.0` 且无机制名，入库 `REPORT.json` 丢失原始坏形状；冒烟行成本虽在改写前算出，载荷证据已丢。修法：两处读取层原样搬运 `token_metrics`（缺席 / null 保持 `None`，非对象保持原值），金额判定只在 `_cost_usd`——假值非对象同样 `None` + `token_metrics_not_object:<T>`，不折历史 0；干净 dict 与历史 0 口径不变。真批次 14 份 JSON / 12 个 `token_metrics` 键全为 dict、零坏形状；`REPORT.json` 两臂成本 0.046531 / 0.060761 与四行冒烟 0.007456 / 0.008501 / 0.007356 / 0.009719 及载荷逐位复现，受保护工件零改动；**27 例新锁 + 6/6 变异锚点转红**；确认跑 **11201 passed / 5 skipped / 0 failed、177.62s、rc=0**。此前 **AX 轮**：**基准/全栈汇总的呈现与聚合读点也有值域——呈现可以折历史 0，均值不可以**。AW 收口逐臂统计后，`run_benchmark` 终端 Token 效率两行仍以 `%d` / `%.2f` 直出聚合对象：AN/AT 合法写 `None` 时，一次完整基准在收尾抛 `TypeError`；全栈 G8 表 `bl.get("token_metrics", {})` 兜不住 `null` / 非对象，坏值原样印出；`summarize_full_stack` 用 `or {}` + `float()` 求均值，真值非对象中止整份汇总、假值非对象静默跳过、bool / 字符串 / 负数 / 非有限值进均值。修法：三处统一接共享 `token_metric_reading`——呈现层缺席 / null 仍是 AE2 历史 0、在场坏值落 `不可读` + 机制名（终端另发 warning，不中止）；均值缺席块沿历史跳过，任一在场块不可读 ⇒ 该基线 `None` + `avg_total_tokens_reason`，不给部分均值、不连坐其他基线与成功率。真语料 64 份顶层 benchmark / 递归 324 个 `token_metrics` 键（246 个 `results.<baseline>` 汇总块 + 78 个嵌套形状）零坏值，246 个汇总块终端文本、全栈干净行与四基线均值逐位不变（6 个 PREFLIGHT 嵌套块缺 `avg_tokens_per_task`，不参与终端对照）；**48 例新锁 + 8/8 变异锚点转红**；确认跑 **11174 passed / 5 skipped / 0 failed、177.06s、rc=0**。此前 **AW 轮**：**T1/B2 逐臂统计的 `token_metrics` 形状与事件计数同样有值域——坏形状不中止分析，事件计数不是免检通道**。AV 收口 `add_cost` 后，`arm_stats` 仍以 `res.get("token_metrics") or {}` 兜底：真值非对象（`"abc"` / `True`）留给 `.get` 抛 `AttributeError` 中止整批分析，假值非对象（`[]` / `""` / `0`）被静默改写成 `{}`——"载荷坏了"冒充"没有 metrics"；`"calls": tm.get("total_llm_calls")` 把事件计数原值直出，bool / 数字字符串 / 小数 / 负数与池化列（`sum_token_metric_values` 会拒绝同一份值）在同一报告里互斥。修法：整份 `token_metrics` 原样保留交下游共享读取器判定；`calls` 过 `token_metric_reading`——缺席 / null metrics / 字段缺席按 AE2 历史 0，字段在场却读不动 ⇒ `None` + `calls_reason`（去重后以竖线拼接，仅非空写入），事件计数与 token 金额互不连坐。真语料 324/324 逐臂读数干净；T1/B2 入库报告 18/18 逐位复现、原始批次新臂 9/9 复现，重算 `ANALYSIS_REPORT.json` 逐字节相同（35542 字节），受保护工件零改动；**22 例新锁 + 6/6 变异锚点转红**（0 逃逸）；登记前一跑 11125 passed / 1 failed / 5 skipped（180.28s，collected 11131，唯一失败 = 基线守卫）、刷新后确认跑 11126 passed / 5 skipped / 0 failed、179.21s、rc=0；行 19002/19528 = 97.3064% / 弧 6960/7396 = 94.1049%（`src/` 零改动，与 AV 逐位相同）；零 LLM、$0。此前 **AV 轮**：**T1/B2 分析侧的成本入口同样有值域——单侧未知不是部分和，未知金额不是字符串 `None`**。AU 收口实验侧三个聚合器后，`analyze_t1_b2_main_batch.add_cost` 仍用 `tm.get(...) or 0` 直接计价：`token_metrics=None` 折 0、`input=None` 仍按输出侧给部分和、`True` 当 1、小数直接相乘、负数编出负金额、`nan`/`inf` 进报告、字符串抛 `TypeError`、非对象抛 `AttributeError`；片段渲染把未知金额印成 YAML 字符串 `None`。修法：两个 token 字段过共享 `token_metric_reading`，整份 metrics 缺席 / `null` / `{}` 仍是历史 0（AE2），字段在场却读不动 ⇒ `cost_usd=None` + 去重后以 `|` 拼接的机制名，不给部分和；YAML 未知金额一律 `null`，未知 token 落 `不可读`。真实批次 18/18 逐 seed 成本逐位一致、入库片段逐字节相同；**19 例新锁 + 6/6 变异锚点转红**；确认跑 11104 passed / 5 skipped / 0 failed；行 97.31% / 分支 94.10%。此前 **AU 轮**：**实验侧的未知不是零——读不动不给数字、部分和不冒充全额、AT 写拒绝标记不得丢失**。AI–AT 把共享读取器与报告侧读端逐层收口后，实验侧仍有三个活聚合器自折数：`estimate_cost_usd` 对 usage 直接 `float(... or 0)`（`input_tokens=None` + 100 万输出 token 只按输出侧计价 **$1.2**、`True` 当 1、`"12"` 当 12、负数编出负数金额、`nan` 产出非有限金额）；`generation_summary` / `usage_totals` 用 `int(... or 0)` 求和，AT 的写拒绝标记在汇总里消失；`run_b8._cost_usd` 把 `None` 折 0，总额可把一侧未知与另一侧金额相加，README 印 `$None`。修法：金额与计数统一走共享值域，缺席才是历史 0、读不动给 `None` + 机制名，任一字段不可读整笔阻断；事件计数独立；命中列只依赖本列；`cost_total_usd` 与含冒烟总额任一侧未知即 `None` + 合并披露；README 统一「不可读 / 无法估算（机制）」。真语料 1701 份 JSON 零坏值，37/37 b8 成本与 6/6 generation 成本只读复算一致；**62 例新锁 + 7/7 变异锚点转红**；确认跑 11085 passed / 5 skipped / 0 failed；行 97.31% / 分支 94.10%。此前 **AT 轮**：**写入侧的 token 计数同样有值域——被拒绝的写入不是零，且必须可追溯**。读端在 AI–AS 各轮把「零 / 缺席 / 读不动」逐层分开后，写入端仍在用 `int(... or 0)` 静默转计数：bool 记 1、float 截断、数字字符串收下、负数进入累计、`nan`/`inf` 与不可解析字符串崩溃；缓存文件的坏 `tokens` 还可能把一次真实缓存命中变成一次真实 LLM 调用。修法：`record_usage` / `record_cache_hit_usage` 统一走共享谓词 `count_reason`，拒绝写入不写计数但 `llm_calls` / `cache_hits` 事件仍 +1，机制名只在非空时写入 `token_write_reasons` / `cache_write_reasons`；读端以 `token_write_rejected:<mech>` / `cache_write_rejected:<mech>` 把整行判为不可读，`otel_export` 不导出 token 属性；`write_rejection_count` 让缓存 `tokens: null` 的「未知」区别于历史缺席。真语料 1701 个 trace 文件 / 10629 条 `token_usage` 零坏值、存量读数逐位不变；**62 例新锁 + 19/19 变异锚点转红**；确认跑 11023 passed / 5 skipped / 0 failed；行 97.31% / 分支 94.10%。此前 **AS 轮**：生产端标识先写对——`TraceSession` 写 16 位 `run_id`、12 位 `span_id`，`task_start`/`task_end` 无标识，`parent_span_id` 从未出现；真语料 9086 文件 / 110926 条 node：61188 条带 16/12 位标识、49738 条无标识（全部早于 O7）、905 条 task 首尾事件全无标识、parent 0 次。修法：32 位 `run_id`、16 位 root / 子 span，`task_start` 在文件与内存两种模式都写 root，node/task_end 的 parent 指向 root，结构标识按字段名 + 形状精确豁免通用 32+ hex 脱敏；**10 例新锁 + 18/18 变异锚点转红**；收口 10961 passed / 5 skipped / 0 failed；行 97.29% / 分支 94.06%。此前 **AR 轮**：OTel 导出标识与字符串值域——`run_id` 原样当 trace_id（真实 16 位 hex）、`span_id` 原样导出（真实 12 位 hex）都不符合 OTel（trace_id 32 位 / span_id 16 位）；缺失标识每次导出随机 uuid，node 又拿 run_id 覆盖文件级 trace，实测 **8002 个文件出现两个 trace、61188 条 parent 断链、9086/9086 文件重复导出标识不一致**。修法：标识规范化为 32/16 位小写 hex（短 hex 左补零、大小写归一；非字符串/空串/非 hex/超宽/全零不可导出），一个文件一个 trace_id，缺失/非法按 SHA-256 确定性派生，同 trace 内 span_id 冲突改派生并披露 `span_id_duplicate`，字符串属性只导出 `str`；真实语料 9086 文件 / 129058 span 全部单 trace、标识合规、parent 闭合、零披露、重复导出逐字相同；**48 例新锁 + 16/16 变异锚点转红**；收口 10951 passed / 5 skipped / 0 failed；行 97.29% / 分支 94.06%。此前 **AQ 轮**：OTel 导出边界数值值域——token 属性不再泄漏 bool/str/小数/负数/NaN/Inf/容器，坏时间戳不再炸整份文件，非对象 `token_usage` 的静默丢弃改为 `aitester.export_value_reasons` 披露。token 计数复用共享 `count_reason`；时间/duration/budget 只收有限非负数；真实语料 9086 文件 / 129058 span 零披露，18 份稳定文件逐字不变；61 例新锁 + 12/12 变异转红；收口 10903 passed / 5 skipped / 0 failed；行 97.29% / 分支 94.05%。此前 **AP 轮**：五处报告侧聚合 token 汇总也各算一遍——t1_b2 池化、b8 README、rag_ab 解析/统计、RAG 分组均值、成本表。字段在场 `None` 被 `or 0` 折 0、`True` 记 1、`"100"` 被 `int()`/`_safe_float` 收下、负数拉低总量、nan/inf 传播或崩、非对象崩；`None` 进 `_mean` 崩溃，nan 让 `p<0.05` 为假并报"无显著差异"。修法：新增聚合 metric 口径共享读取器 `token_metric_reading` + `sum_token_metric_values`（缺席历史 0、在场 `None` 是上游拒绝、计数走 `count_reason`、派生均值 `allow_float`），五处接线；不可读不给部分和，表格/README/解读渲染「不可读」。真工件读数逐位不变；67 例新锁 + 33/33 变异锚点转红；收口 10842 passed / 5 skipped / 0 failed；行 97.28% / 分支 93.98%。此前 **AO 轮**：三个报告级 token 汇总读端也持有宽松折叠——档位 / 翻转对比 / 收敛曲线各算一遍。`model_gradient` 的 `int(... or 0)` 把 bool 记 1、float 截断、str 收下、负数得负总量、nan/inf 崩实验；`compare_failures` 的 `(row.get("token_usage") or {}).get(...)` 遇 truthy 非对象崩、str 总量求和崩、坏值折进合计；`convergence_analysis` 的 `_safe_float(... or 0)` 收下 str/bool/负数/nan。处置：新增总量口径共享读取器 `row_total_token_reading` + `aggregate_row_token_totals`，三个消费端接入；读不动不给部分和，total-only 旧 schema 仍可读，拆分矛盾只披露。真批次 10659 行 / 322 臂零实例、9 臂新旧差 0。52 例新锁 + 16/16 变异锚点转红。此前 **AN 轮**：三个 token 聚合读端也持有 `or 0` 折叠——读不动不是零，部分和不是总量。`run_benchmark._aggregate_token_metrics`（落盘 `token_metrics` 的写侧）、`trusted_verification.arm_trusted_metrics`（离线报告/CLI）、`rag_analysis._token_metrics_from_details`（旧 JSON 回退）改前各自把行级 `token_usage` 读成数字：真值非对象抛 `AttributeError`、假值非对象静默 0、`True` 当 1、字符串抛 `TypeError`、负数产负总量、nan 产 nan，`cache_hits=-3` 编出 −300% 命中率；`total_tokens=999` 与 `in+out=110` 一个取 110、一个取 999；缺 `total_tokens` 在可信报告里读成 0；旧 CLI 的分母是字面文本。修法：AM 的行级策略迁入 `src/budget/token_usage.row_token_reading`，新增 `aggregate_row_token_usage` 一处聚合——缺席/null ⇒ 历史 0 并计 `n_absent_rows`；在场坏值/正 token 缺项 ⇒ 三元组全 `None` + 机制名；`llm_calls` 独立判定；拆分矛盾只披露；缓存整批旧 schema ⇒ 历史 0、半套/坏值 ⇒ `None`；`statistical_analysis._row_cost_tokens` 改别名。真批次 783 行 / 9 臂逐位不变，全仓 11197 行 / 337 臂中 1218 行缺席、0 坏值；**38 例新锁 + 15/15 变异锚点转红**；收口 10723 passed / 5 skipped / 0 failed；行 97.27% / 分支 93.93%。此前 **AM 轮**：成本表聚合的行级 token 读取也有值域——`or 0` 把在场坏值折成可计价数字（false $0、坏归因漏行、S11 非计数证据）。`cost_analysis` 改走共享 `row_token_counts`，两级阻断（读不动 ⇒ 整臂 token/金额 `None`；拆分/归因矛盾 ⇒ 只废金额），归因谓词迁入 `src/budget/token_usage.by_model_reason`，S11 证据改走 `count_reason`；真批次 783 行全部干净 ⇒ 三臂读数与返回域逐位不变；**64 例新锁 + 10/10 变异锚点转红**；收口 10685 passed / 5 skipped / 0 failed；行 97.26% / 分支 93.90%。此前 **AL 轮**：报告侧逐行 token 算术也有值域——一行读不动不是零。`emse_stats_report.cost_effectiveness_block` 改前自持第二套行级算术：`usage.get("input_tokens") or 0` 把缺席/null/字符串/bool/负数/nan/inf 折成可计价数字；`token_usage` 缺席或非对象的行在检出计数之前 `continue`，`n_detections` 随 token 可读性缩水；正 token 行缺 `by_model` 归因、`in+out ≠ total`、`Σby_model ≠ total` 时金额静默漏行或按矛盾数字计价；缓存命中解释的零消耗被计入 AK 下界。修法：`row_token_counts` 迁入 `src/budget/token_usage.py`（ext 保留别名，AI 既有锁零改动），报告改读共享读取器——读不动 ⇒ token 总量、总 $ 与两个比值一律 `None` + `token_reading_reasons`；拆分/归因不一致 ⇒ 只废金额（token 总量与 `tokens/detection` 仍可读，`token_money_reasons`）；检出计数与 token 可读性解耦；缓存零行不计入 AK 下界。真批次 783 行全部干净 ⇒ 三臂总金额 6.755979 / 0.876692 / 1.185783 逐位不变，受保护工件不重写；57 例锁 + 6/6 变异锚点；全量 10621 passed / 5 skipped / 0 failed，读数见 BASELINE.yaml。此前 **AK 轮**：**少数无记账行不是免费，也不是精确值——成本读数是已记录花费的下界**。`plain_llm_df` 35/261 行（13.4%）token 三元组全 0、`llm_calls=0`、`generated_test` 非空（其中 3 行 `detection_rate=1.0`），S11 因零占比 < 50% 判 `computable=True`，这些行以 0 进金额分子、却仍占任务分母，`$/task = 1.1857833/261 = 0.004543231034482759` 与 `$/solved` 被按精确值渲染。修法：S11 新增 `n_zero_output_rows` 子集（仅 >0 写入；`_row_has_generated_test` 只认非空字符串；AJ 缓存证据行不算零记账行）；`cost_analysis` 仅在成本非 None、`computable`、无记账行 >0 时写 `token_zero_output_rows` 与 `cost_caliber="recorded_lower_bound"`；三层呈现同源（成本报告「**成本口径下界（AK）**」节 + `$/solved` 后缀 / `emse_stats_report` §4 子集注 + §4.1「**零 token 行的成本口径（AK）**」块 / ext `_zero_token_note` 四条返回路径）；行级数学口径（AE2）与 S11 阈值不变，全记账臂与旧批次返回域/文本逐字不变，受保护归档未重写。**21 例新锁 + 4/4 变异锚点逐处转红**（红 3/5/3/1，中性对照 0 红、collected 恒 89、sha256 原字节还原）；AJ 两处旧锁按新口径改写（净 0 例）。登记前一跑 10563 passed / 1 failed / 5 skipped（173s；唯一失败 = 基线守卫），刷新后确认跑 **10564 passed / 5 skipped / 0 failed、177.85s、rc=0**；覆盖率行 **18554/19077 = 97.26%** / 分支 **6708/7144 = 93.90%**（较 AJ +1 行 / +1 弧，落抖动域；`src/` 零改动，佐证为改动面清单）；零 LLM、$0。此前 **AJ 轮**：**缓存命中是第三种记账状态——不是记账断裂，也不是免费**。生产者 `record_cache_hit_usage` 一直写 `cache_hits` / `cache_avoided_tokens`，但所有成本读端只看真实 token：缓存密集臂因"真实 token 为 0 的行 ≥ 50%"被 S11 判 `NOT_COMPUTABLE`（QuixBugs df 臂 50/50 行命中、64 命中 / 123644 avoided，改前 `n_without_accounting=50`），纯缓存臂的成本行只剩无因「（缺: ）」（ULT df 臂 20 行命中、39 / 89249），examples df 臂（2 / 3387）同被拒。现在共享读取器收口到生产者模块 `src/budget/token_usage.py`（`cache_caliber` 判单行、`cache_totals` 判一臂；`count_reason` 自 ext 迁入，成为 token 三元组与缓存字段共用的值域谓词），S11 / `cost_analysis` / `emse_stats_report` 两个成本块与章节 / ext `_cost_per_task` 四处同源：合法且正向的缓存证据算「有记账」；命中行真实消耗记 0 是对的，但 0 不等于免费；坏值 / 半套 schema / 非对象 ⇒ `hits` / `avoided` 均 `None`，按 `token_field_absent:<field>` / `token_not_count:<field>:<T>` / `token_not_finite:<field>` / `token_negative:<field>` 逐条点名，不留部分和；纯缓存臂成因 `cache_hit_no_api_spend`；避免 token 不写 `by_model`，无法折算金额，只披露 token。旧 schema 批次（主批 261 行/臂、E6、E4 无缓存键）返回域、note 与受保护工件逐字节不变——三臂 ext 读数 `26114.854406130267 / 0.025884977011494247`、`3209.44061302682 / 0.003358973563218391`、`4223.103448275862 / 0.004543231034482759` 逐位相同，归档 `STATS_EXTENSIONS.json` 逐字段相等。68 例新锁 + **19/19 变异锚点转红**（红 38/10/10/11/6/6/10/4/2/3/1/3/1/3/1/2/2/1/1，中性对照 0 红、collected 恒 298、sha256 原字节还原）。登记前一跑 **10542 passed / 1 failed / 5 skipped**（collected 10548，175.54s 带 `--cov`；唯一失败 = 基线守卫自身）；收口确认跑 **10543 passed / 5 skipped / 0 failed、179.94s、rc=0**；覆盖率行 **18553/19077 = 97.25%** / 分支 **6707/7144 = 93.88%**（较预登记 −1 行 / −1 弧，落抖动域；`src/budget/token_usage.py` 131 条语句执行 130 条；10 项核心模块逐位不变）；零 LLM、$0。此前 **AI 轮**：**token 计数也有值域——不完整的 token 和不是 token 读数**。AH §7 第 1~3 条处置：`emse_stats_extensions` 的读入侧改前在 `_cost_per_task` 与 `_bootstrap_cost_ci` 各写一遍 `sum += value or 0`——`"100"` 抛 `TypeError`、真值非对象 `token_usage` 在 `.get` 上抛 `AttributeError`、`True` 当 1、`-5` 让 tokens/task 与金额同时为负、`inf` 让占比成 `nan`（且 `inf != inf` 为假，AH 的闭合检查恰好放行）、`token_usage` 缺席或 `{}` 但 in/out 有数被 `or {}` 折成 0、`by_model: []` / `"x"` 直接崩、`{5: 100}` 非字符串键不拦截、`{"m": "100"}` 在 `+=` 上抛 `TypeError`、行级 `in+out != total` 无判定、零任务分母仍印 0.0。现在一行 token 记账是**三个非负整数**：形状/缺席/类型/负数/非有限任一不成立 ⇒ 整臂 `tokens/task` 与 `$/task` 均 `None` 并逐条点名机制（`token_usage_absent` / `token_usage_not_object:<T>` / `token_field_absent:<field>` / `token_not_count:<field>:<T>` / `token_not_finite:<field>` / `token_negative:<field>`）；行级 split 与 `by_model` 形状/键/值域只废金额（token 总数仍可读），且 `by_model` 在场读不动时不再同时报 `no_model_attribution`。`tokens_per_task` 改 `float | None`、bootstrap CI 改 `tuple | None`，渲染 `—（无 token 读数）` / `—`。真批次三臂读数逐位不变（`26114.854406130267 / 3209.44061302682 / 4223.103448275862`；`$/task` `0.025884977011494247 / 0.003358973563218391 / 0.004543231034482759`），受保护归档一字未动。63 例新锁 + **18/18 变异锚点转红**（红 4/7/11/3/2/8/3/3/3/1/6/14/2/3/3/9/4/1，中性对照 0 红、collected 恒 78、sha256 原字节还原）；AH 旧锁改写 1 例（净 0 例）。收口全量 **10475 passed / 5 skipped / 0 failed**（collected 10480，177.44s），行 **18491/19015 = 97.24%** / 分支 **6675/7112 = 93.86%**（`src/` + `config.py` 零改动，读数与 AH 逐位相同）；零 LLM、$0。此前 **AH 轮**：**不完整的和不是金额——覆盖、归因与分母，缺一项就没有 $/task**。AE 评审 §5.2 候选 B 处置：`emse_stats_extensions._cost_per_task` 改前对「价目表缺该模型」只记 `unpriced` 并继续累加，把部分和当 `$/task`；对 `by_model` 缺席却 `tok>0`、`by_model` 合计 ≠ `total_tokens`、零任务分母同样给出金额（0.0）。现在 `usd_per_task` 仅在价目覆盖全部 `by_model` token、合计 = `total_tokens`、`n_tasks > 0` 时给出；否则 `None` + note 点名 `model_unregistered←<models>` / `no_model_attribution` / `token_attribution_mismatch:<a>/<b>` / `无任务 ⇒ $/task 无金额（不是 0）`，与 AB-15 的 `计价被拒` 并存；`tok==0` 仍是真实 0.0。真批次三臂 `by_model` 合计恰好闭合（6815977 / 837664 / 1102230），读数 0 行改变。15 例新锁 + **6/6 变异锚点转红**（中性对照 0 红、collected 恒 298、sha256 原字节还原）；AB-15 / AB-16 / AB-17 三处旧锁按新口径改写净 0 例。收口全量 **10412 passed / 5 skipped / 0 failed**（collected 10417，177.80s），行 **18491/19015 = 97.24%** / 分支 **6675/7112 = 93.86%**（`src/` 零改动，读数与 AG 逐位相同）；零 LLM、$0。此前 **AG 轮**：**归因不是措辞——不同机制不得共用一句话，照错提示去修不会变绿**。AE 评审 §5.2 候选 C 处置：`cost_analysis` 改前把「表里没登记」与「价格域坏值」同塞 `missing_models`、把条目形状码塞进名为「币种」的桶、行级混算只剩 `（缺: ）`，全未计价分支统一教人补价目字段。新增共享谓词 `src.budget.pricing.model_entry_reason`（键缺席 → `model_unregistered`，其余交 `entry_block_reason`；`allow_non_usd=True` 只放行**可判定的非 USD**，不可判定币种仍拒），`run_b8_injection._price_entry_reason` 改纯委托；`cost_analysis` 三桶互斥（`missing_models` 只留真键缺席 / `unpriced_currency_models` 保持 AB-14 词汇 / `unpriced_model_reasons` 全机制图）+ 行级 `mixed_currencies:*` / `mixed_price_pairs`，披露键只非空写入；呈现层按机制给建议（`**成本不可计算**` + `**未计价机制**`），纯未登记 / 无 token 观测旧文本逐行不变。真批次 **522 行 0 行改变**（成本单元格与未计价注逐字节相同）。46 例新锁 + **15/15 变异锚点转红**（red 1–25，collected 恒 365，中性对照 0 红）；AB-14 / AB-16 / AB-17 旧锁按新口径改写净 0 例。收口全量 **10397 passed / 5 skipped / 0 failed**（collected 10402，178.78s 带 `--cov`），行 **18491/19015 = 97.24%** / 分支 **6675/7112 = 93.86%**；零 LLM、$0。此前 **AF 轮**：**落盘即契约——RFC 8259 之外的 token 不得从任何受控写入口流出**。AE 评审 §5.6/§5.7 合并处置：`json.dumps` 默认 `allow_nan=True` 把 `nan`/`±inf` 写成裸 `NaN`/`Infinity`，Python 自己能读回而 jq / Go / Rust serde / JS `JSON.parse` 一律拒绝，形成"生产端静默写出、消费端读不动"；新增 `src/utils/json_strict.py`（`strict_json_dumps` + `nonfinite_pointers` 递归点名 JSON 路径、`NonFiniteJSONError` fail-closed、`allow_nan=False` 第二道防线、**不静默转 null**），四条中心写盘路径接线（`atomic_write_json` 失败发生在临时文件创建之前；`run_b8._write_json`；`_Injection._record` 不留半行；`trace` 三处保持"少记不误记"——坏记录整条丢弃、文件仍逐行严格可解析），另为 39 份源码的 41 个直写点补 `allow_nan=False`（src 8/8、experiments 17/19、scripts 14/14）；新增全仓门禁 `scripts/gates/check_json_strict.py`（`git ls-files` 全部 `.json`/`.jsonl` 严格解析 + `src|experiments|scripts` AST 写入点扫描；空集合与"豁免文件变得可严格解析"的漂移均 fail-closed），实测 **工件 7273 份 = 严格 7271 + 2 份 A20 历史截断行逐路径豁免 + 违规 0；源码 300 份写入点违规 0**，接 `make gates` + CI。**AE §5.6「`experiments/results/` 下 68 份 JSON 含裸 `NaN`」复测为文本 grep 假阳性**——69 份 worktree 文件（其中 42 份 tracked）只在**字符串值内部**含 `NaN`/`Infinity` 字样（测试名、诊断文本），严格解析器全部接受；真正成立的缺口是 §5.7 的写入路径，以日期化勘误登记、不改写 AE 原文。28 例新锁 + **9/9 变异锚点转红**（M1–M9，含门禁四路；collected 恒 28、写盘前 `compile()`、sha256 还原）；收口全量 **10351 passed / 5 skipped / 0 failed**（collected 10356，191.66s 带 `--cov`），行 **18486/19009 = 97.25%** / 分支 **6674/7110 = 93.87%**（分母 +46 行 / +20 弧，新增部分 100% 被锁执行，未覆盖行 523 与偏弧 436）；登记前一跑 10349 passed / 2 failed / 5 skipped——失败②是**本轮新引入的真实缺陷**：CI 步骤 `name` 含未加引号的 `AF: ` 触发 YAML ScannerError，被 `test_ci_yaml_parses` 当场抓住，加引号后转绿（自纠如实登记）；零 LLM、$0。此前 **AE 轮**：`run_b8_injection.aggregate` 的价目**条目级**准入接共享谓词——自持 `isinstance((int, float))` 数字门（`bool`/`nan`/`inf`/负价全收、`nan`/`inf` 写非 RFC-8259 裸 `NaN`/`Infinity`）+ 币种盲（CNY 记成 USD）+ 读不出价静默退回内置价，全部收口为「共享谓词判定 + 内置价兜底 + 机制码披露」；测试侧价目 schema 的域同步收口；AB-15/AB-16 登记的入库 e2 报告陈旧差值 86/88 按当前树重算为 94/100（canonical 110→122，增量 100% 来自 AD-1 渲染），只更新登记不重写受保护工件；新增回归锁 23 例、10/10 变异锚点全红；零 LLM、$0。此前 **AD 轮**：统计量渲染量级保持 + 正态尾部补集模式消除 + 数值精度丢失模式全仓普查。此前 **Z→AB 收口轮**：2026-10-19 傍晚起滞留工作区的约 18 轮（Z / AA / 工程质量 / AB-1~17）一次提交收口 + README 双语「最新优化」行轮换补做（全批只维护了 CHANGELOG/BASELINE/INDEX/登记册，README 停留在 Y 轮——该约定第 4 次复发，AO3 行锁同步推进至 2026-10-20）+ E7 裁决录入表"被 .gitignore 忽略 = 永远不可能入库"缺口修复（6 份空白表已进 SHA256SUMS 却被通配排除压掉、MANIFEST 亦未登记——双静默缺口；narrow 放行 + 登记 179→185 + 入库，2040 项清单条目全部可在 fresh clone 检出）；零 LLM、$0。此前 **AB-17 轮**：**"这个文件读出来算不算一张表"一处写一遍**——AB-16 把"什么算一张合格条目"收成一遍后，两者共同的上游（文件 → `models` 层）仍在七个读点各写一套：`src` 缓存包装七种不同坏（顶层 list / null / 空对象 / 缺键 / `models` 为 list·str·null）全读同一句「结构不符（缺 models dict）」；`emse_stats_extensions` 七种坏**全部直接崩**（FileNotFoundError / JSONDecodeError / TypeError ×2 / KeyError ×2 / AttributeError ×3）；`emse_stats_report` 六个中文短语只在 stderr、归因全落 `model_unregistered`；`spec_examples_generator` 文件级只进日志、`models` 层 pass-through；`statistical_analysis` 文件路径全程无痕而参数路径另一套短语；`run_b8_injection` 的 `is_file()` 前置守卫静默退回内置价；检索层 `.get(model)` 的 `is None` 让"键缺席"与"值 null"共用一句 `model_unregistered`。处置为 `src.budget.pricing` 四个共享助手：`table_read_reason`（`price_table_file_missing` / `price_table_json_invalid:<T>`〔含 UnicodeDecodeError〕/ `price_table_file_unreadable:<T>` 三族）、`load_table_json`（`(None, None)` 是合法读数——文件内容就是 `null`）、`models_layer`（顶层非对象 `price_table_not_object:<T>`；非空对象缺键 `models_key_absent`；键在值非对象**真假一律** `models_not_object:<T>`；`{}` / `{"models": {}}` 静默"空对象没有形状可说"；可用则原样交出、非对象条目不再被静默过滤）、`load_table_models`（一步到位）；七处读点全部接线（缓存包装 / spec / report / ext / statistical / analyze / run_b8，run_b8 `table_reason` 只在真不可用时写入、②自持数字门登记不修只加 `isinstance(row, dict)`）；检索层 `.get` 改 `not in`（值 null → `entry_not_object:NoneType`、键缺席 → `model_unregistered`，spec / report / ext / analyze 四处）；两处 `isinstance(v, dict)` 静默过滤删除（src + statistical）。**真批次读数零改变**（池化 `1.447277 / 0.260967 / 0.541408`、总额 `2.249652`、ext 三臂 `$/task` 六个读数逐位不变；run_b8 真表 `price` 元数据与受保护 `REPORT.json` 逐字段相等、聚合在 tmp 副本上跑；归档 P-1 README 未重生成）。`tests/test_experiments_table_admission_ab17.py` **26 例** + **8 处锚点逐处转红**（红数 `14/7/5/1/1/3/1/4`、collected 恒 484、sha256 字节还原）；5 个既有锁文件按新口径改写词汇接线断言（净 0 例）；两处设计性读法差异（spec 加载器 models 层 pass-through、ext `is_file()` 守卫目录读"缺失"）记录在案；收口全量 **10283 passed / 5 skipped / 0 failed / collected 10288**（登记前一跑 10282 passed / 1 failed / 5 skipped、181.15s 带 `--cov`，唯一失败 = 基线守卫本身；确认跑 185.04s、rc=0，`coverage.xml` 复算两次同值），行 **97.24%**（18439/18963 = 97.2367%）/ 分支 **93.84%**（6653/7090 = 93.8364%），较 AB-16 +20 行 / +15 弧且新增部分 100% 被锁执行、未覆盖行 524 与偏弧 437（差额由 pricing.py 一项对账）；同族九项边界只登记不修见分册 §5；零 LLM、$0。此前 **AB-16 轮**：**"什么算一个价格数字、什么算一张合格条目"一处写一遍**——AB-15 把判定与归因收成一遍后，准入域本身仍在仓内写了五套：生产 `_as_non_negative_float` 收下 `nan`/`inf`；spec/report 用 `float()` 直收（`True` 当 1 得金额 `3.0`、`"1.0"` 收下、`-1.0` 编出负数金额、`[1.0]` 抛 `TypeError`、`nan`/`inf` 乘成非有限金额）；ext 拦 `bool` 但对空条目/`null` 价折成 0.0 部分和；analyze 的本地 `_price_reject_reason` 不管非有限；statistical 的 `p >= 0` 收下 `inf`——同一张条目在一处计价、在第二处被拒、在第三处崩溃：非对象条目 `5` 在 spec/ext/analyze 读 `currency_unreachable:int`、在 report 读 `entry_not_object:int`，空条目 `{}` 四处读三种结论，spec 真值非对象 `models` 还在 `models.get` 上抛 `AttributeError`。处置为 `src/budget/pricing.price_block_reason`（缺席 > 类型 > 负数 > 非有限；`bool` 单列一档；`-inf` 仍 `price_negative`，AB-15b 既有码逐条保持）+ `entry_block_reason`（形状 → 空 → 币种 → 数字）两谓词收口，六处消费点全部接过去（删 `_as_non_negative_float` 与 `_price_reject_reason`；spec 真值非对象改点名 `models_not_object:<T>`；非对象条目与 report 统一读 `entry_not_object:<T>`；ext 空条目/`null` 价从"未计价"改归"拒绝"，任一份额被拒即 `usd_per_task=None`）。**真批次读数零改变**（真表仅 deepseek-flash 一条目可计价——`USD 0.3/1.2`；另有价 `null` 与 CNY 计价两条目，均已随 2026-10-23 清理删除；池化 `1.447277 / 0.260967 / 0.541408`、总额 `2.249652`、ext 三臂六个读数逐位相同、载荷不新增披露键）。`tests/test_experiments_price_admission_ab16.py` **148 例** + **21 处锚点逐处转红**（红例 7/12/13/21/1/29/8/6/5/1/10/3/12/11/1/11/10/10/9/3/12、collected 恒 148、中性对照 2 处 0 红、sha256 字节还原）；收口全量 **10257 passed / 5 skipped / 0 failed / collected 10262**（登记前一跑 10256 passed / 1 failed / 5 skipped、173.05s，唯一失败 = 基线守卫本身；确认跑 176.35s、rc=0），行 **97.23%**（18419/18944 = 97.2287%）/ 分支 **93.81%**（6638/7076 = 93.8101%），较 AB-15 +16 行 / +12 弧且新增部分 100% 被锁执行、未覆盖 525 行与偏弧 438 逐位不变；statistical 唯一读数变化 = `inf` 从"已计价"改"不计价"；十一项边界只登记不修见分册 §5；零 LLM。**此前 AB-15 轮**：**被拒绝的金额不得披着金额的形状出现；"为什么没有金额"必须与判定同源**——AB-14 把判定收成一遍后，下游仍留着三种"拒绝穿金额衣服"的通道与三套归因词汇：`oracle_examples_replay.render_readme` 把未登记模型与 CNY 模型都印成 `**$None**`、真零印成 `**$0.0**`（同一个美元前缀、无机制）；`analyze_t1_b2_main_batch` 的池化用 `or 0.0` 把逐 seed 的 `None` 折回金额形状，整臂"没能计价"与"确实没花钱"同为 `$0.0`；`emse_stats_extensions._cost_per_task` 是 AB-14 漏掉的**第六处**币种盲点（把真表模型改标 `CNY`，`usd_per_task` 逐位不变，实测 `0.025884977011494247`）；拒绝的原因又各写各的（report 自派 if/elif、`statistical_analysis` 另一套桶名、oracle 连名字都没有、spec 的判定与归因是两段可漂移代码）。处置为 `src/budget/pricing.currency_block_reason` + `CURRENCY_UNDETERMINED_STATUSES` 单一机制词汇（`usd→None`、缺席/`null`/空白→`currency_absent`、非 USD→`currency_not_usd:<NORM>`、非字符串→`currency_not_usd:not_string:<T>`、其余→`currency_unreachable:<T>`）+ `spec_examples_generator._price_admission` 让"算不算得出钱"与"为什么算不出"同源 + 六处全部接过去（共享词汇 + 五个消费站点）；**拒绝一律不落 `$`、不折 `0.0`、部分和不得冒充全额**（池化/批次/ext 任一份额被拒即 `None`），披露键只在真拒绝时写入。**真批次读数零改变**（池化 `1.447277 / 0.260967 / 0.541408`、总额 `2.249652`、ext 三臂 `0.025884977011494247 / 0.003358973563218391 / 0.004543231034482759` 逐位相同、载荷不新增披露键、归档 P-1 README 未重生成、入库统计报告仍差改前即存在的 86 / 88 行）。`tests/test_experiments_cost_rejection_ab15.py` **109 例** + **27 处锚点逐处转红**（红例 5/19/6/2/5/2/6/12/3/3/3/6/2/6/3/4/3/1/3/1/4/2/4/5/1/3/3、collected 恒 109、中性对照 0 红、sha256 字节还原）；收口全量 **10109 passed / 5 skipped / 0 failed / collected 10114**（登记前一跑 10108 passed / 1 failed / 5 skipped、181.66s，唯一失败 = 基线守卫本身；确认跑 180.55s、rc=0），行 **97.23%**（18403/18928 = 97.2263%）/ 分支 **93.80%**（6626/7064 = 93.7995%），较 AB-14 +12 行 / +8 弧且新增部分 100% 被锁执行、未覆盖 525 行与偏弧 438 逐位不变；十项边界只登记不修见分册 §5；零 LLM。**此前 AB-14**：**判定只写一遍；缺席不得默认成任何单位；"看起来多余"的 term 也要有观测面**——AB-13 留下一句"仓内另有口径、本轮不统一"，本轮前置普查把那句话展开成表：**同一个"这笔钱是不是美元"的判断仓内写了四遍且四遍互不相同，第五遍根本没写**（`pricing.py` 键缺席默认成美元并计价、同站点值为 `null` 却不计价 ⇒ 两种缺席相反结论；`statistical_analysis.py` 的 `or "USD"` 把"缺席 / null / 空串"三种事实一律印成 `USD`，报告里的单位是代码编的不是价目登记的；`spec_examples_generator` 与 `emse_stats_report` 反而一律剔除、`" USD "` 也被剔；币种集合大小写敏感 ⇒ `USD` 与 `usd` 并存让整臂成本降为 `None` 而 `missing_models` 为空、报告落一行"未计价——（缺: ）"**没有任何归因**；币种为 `["USD"]` 让集合推导抛 `TypeError`、实测 CLI 退出码 1、整份统计报告不产出；第五处 `analyze_t1_b2_main_batch.add_cost` **一行都不读 `currency`**，把人民币原样累加进名为 `cost_usd` 的字段）。处置为 `src/budget.pricing.currency_status` 单一事实源（值域七族、13 个输入落 **9 个互不相同读数**，锁用集合相等断言）+ **计价准入与可呈现标签分开**（`currency_label` 只在 `usd` / `other:<NORM>` 时给标签 ⇒ 缺席不得被渲染成任何单位名，尤其不得渲染成 `USD`）+ 五站点全部接过去、不留本地写法；**站点差异只允许出现在"有没有地方把单位写出来"**：带币种列的 `cost_analysis` 可对 `other:CNY` 计价但标签必须是归一化的 `CNY` 并追加单位提醒，单一美元列的 `total_usd` / `cost_usd` 对非 USD 一律剔除——判定同一份、处置分两种，这是设计不是漂移。**产品侧行为变化（AB-8 起连续五轮 `src/` 零改动后首次）**：币种键缺席的条目不再当成美元，改走 `COST_USD_PER_1K` 回退或如实记"未计价"；真表每条目都登记了币种 ⇒ 存量读数不变，这条同时是本轮一份受保护工件也不重写的依据（三份 `statistical_report_e2*.md` 改前/改后/终态快照逐字节相同、`SHA256SUMS` 2040 条全 OK、归档 21 条 `cost_usd` 逐位相等）。`tests/test_experiments_currency_caliber_ab14.py` **124 例** + **19 处锚点变异逐处转红**（21 / 25 / 26 / 21 / 22 / 1 / 1 / 1 / 29 / 1 / 9 / 1 / 1 / 1 / 21 / 5 / 3 / 12 / 5；行为中性对照 0 红、基线 collected **709** 全程不变、五文件 sha256 字节还原）。一处自纠是本轮方法学产出：`not currency_blocked` 第一版 **0 红**（币种不可判定同时让 `labels` 变空、被 `len(labels) == 1` 先挡），**没有据此判它冗余**，而是逐条推演出唯一能单独触发它的输入（一模型登记 `USD`、另一模型没写单位、两者价目数字一字相同）补锁后才算锁，基线由 708 变 709；反向也登记一条——`_currency_cell` 去掉 `str()` 后 0 红且**没有观测面**，故它不是锁、只是"变异脚本本身没坏"的对照。既有断言撞新口径时按 AB-13 先例改输入不放宽断言（`test_experiments_absent_vs_zero_ab12.py` 的合成条目补 `currency: USD`），而 `test_ae_batch.py:125` 的测试侧 `get("currency", "USD")` 兜底**登记不修**。收口全量 **10000 passed / collected 10005 / 0 failed**（登记前一跑 9999 passed / 1 failed / 5 skipped、176.76s，唯一失败 = 基线守卫本身；确认跑 176.33s、rc=0），行 **97.22%**（18391/18916 = 97.2246%）/ 分支 **93.79%**（6618/7056 = 93.7925%），较 AB-13 **+20 行 / +12 弧且新增部分 100% 被锁执行**、未覆盖 525 行与偏弧 438 **逐位不变**、十项逐模块行覆盖全部不变——**本轮覆盖率换了性质**，§14 口径反向同样成立：读数**变化**也不是缺陷的证据，佐证仍是改动面清单；水位 96.40/92.50 不动；`（缺: ）` 空归因、`spec_examples_generator` 的 `models` 非对象崩溃通道、入库报告"逐位可复现"自述失效（改前即差 86 / 88 行）等**六处站点未处置**转 AB-15；教训入 `docs/MEASUREMENT_INTEGRITY.md` §17；零 LLM。**此前 AB-13 轮**：**字段名里的单位不是实现约束，直到实现参与判定**——`emse_stats_report.py` 的 `total_usd` / `usd_per_detection` / `$/task` 把单位写死在名字里，实现里却**没有一行读 `currency`**：前置探针用一条 CNY 计价模型（当时盘上真表登记 CNY 0.5 / 2.0，出处为官方价目页；条目已随 2026-10-23 清理删除）的合成行实测得 `total_usd=2.5`、`n_priced_rows=1` 并印在"总 $"列，分母非空、单价非空、无任何不可计价披露，**账面完全正常**。处置为只有 `currency` 大写等于 `USD` 的条目进入 `total_usd`、键缺席记 `currency_absent`（**缺席不默认成任何一种单位**）、不可计价机制七桶互斥且披露键只在真剔除时出现；同时处置 AB-12 转来的两处（六种合法非对象顶层原样返回把崩溃留给调用方 `.get` 而 docstring 写"缺失/损坏 → 空表"、`price_table=None` 与省略形参给出同一金额），改为按机制点名 + `_UnsetPriceTable` 三态，**返回域一字不动**。真批次三臂 783 行只用 USD 已登记的 `deepseek-flash`、`n_unpriceable` 全 0 ⇒ **闸门对入库读数改变 0 行**，`$/task` 与 `usd_per_detection` 六个受保护读数逐位复现、`SHA256SUMS` 目录一份未重写，而同一个 0 也正是"闸门可能从未执行"的嫌疑来源，故覆盖面下界与 CNY/null 两模型对照写进断言。**既有断言撞新口径时先裁决旧期望、改后必须仍测它声称的东西**（`test_zero_detection_no_division` 补 `currency` 后仍须加 `n_priced_rows == 1 and total_usd > 0`，否则分子为 0 时该例根本没走到除零守卫）。`tests/test_experiments_price_table_ab13.py` **51 例** + 改写既有 2 例（净增 51，collected 9830 → 9881）+ **15 处锚点变异逐处转红**（7 / 2 / 10 / 2 / 1 / 9 / 7 / 4 / 2 / 1 / 1 / 2 / 4 / 9 / 5，对照 0 红、收集数 78 不变、sha256 字节还原）；收口全量 **9876 passed / collected 9881 / 0 failed**（登记前一跑 9875 passed / 1 failed / 5 skipped、177.56s 带 `--cov`，唯一失败 = 基线守卫本身；刷新后确认跑 179.05s、rc=0），行 97.22%（18371/18896）/ 分支 93.78%（6606/7044）与前五轮同值（**同值不作佐证**，佐证是改动面清单）；**两套币种口径并存未统一**（`statistical_analysis.py:991` 缺省视为 USD），水位 96.40/92.50 不动；教训入 `docs/MEASUREMENT_INTEGRITY.md` §16；零 LLM。**此前 AB-12 轮**（该轮分节当时已入库、本摘要行未回写，属存量漂移，本轮一并补齐）：**竞态改锁执行与五处登记一次收口**——站点 d 的 `process_utils.py:638-642` `killpg(SIGKILL)` 兜底竞态分支补 5 例确定性锁（**`src/` 一行未改**、不补 pragma，四锚 5 / 1 / 1 / 5 红 + 只改文案对照 0 红），AB-11 量到的 18371 → 18369 → 18371 行读数抖动改由锁执行；站点 a 三件缺席机制（`(x or {})` 塌缩、`GATES.json` 缺席报 `FAIL`、宽 `except` 无痕摘批次）53 例锁；站点 c 的非对象 trace 行撤出"有效文件数"分母 32 例锁；共享 loader 同 `task_id` 后写覆盖前写改命名 WARN + 五桶互斥 26 例锁；价目表非对象顶层与 `None` 哨兵 26 例锁。共 **142 例新锁**、五组变异各带一条行为中性对照，入库工件一份未重写，同族两处与 `--write` 幂等分叉转 AB-13。**此前 AB-11 轮**：**「键缺席」不等于「值为 null」，也不等于「读不动」**——AB-10 余下 3 处登记全部处置，三处都是**归因塌缩**而非丢数据：`spec_augment_applied` 把"生产者写下 `null`（真的没触发）/ 详情行没这个键 / 第二遍读不动"塞进同一个 `none` 桶（还挂 `# pragma: no cover` 藏掉唯一会说真话的分支），改为值域三态 + 命名 WARN + 三数披露，实测盘上 df 臂 50/50 行为"键在值为 `null`" ⇒ 入库桶读数与 Markdown 逐字节不变、新桶 0 实例；`_profile_presets` 四种失败机制全返回同一个 `{}` 而调用方把原因**写死**成"git show 失败"（形对内容假），且 `old.get(profile) or {}` 让"档位不存在"与"两边一致"同形报"无漂移"，改为原因由机制拼 + 新增档名缺席分支，实测 `_profile_drift(b533cff…, a93c1f60…)` 与归档 `profile_preset_drift` 逐字段相等；`parse_trace_file` 损坏即返回 `None` 并把明写臂名的文件整体归入 `unknown`、坏行前记录无痕作废（全仓普查 148 目录 / 9086 文件 / 5 损坏 / **44 条作废记录**），改为归臂口径同完好文件 + 作废量披露，5 目录"改前 vs 改后"复刻证明判定分母不变。另登记一条**因输入增长而失效的入库声明**（`mast_distribution_report.md` 自称 963 个文件可逐位复算，同目录今天 2007 个），只锁不改写。`tests/test_experiments_absent_vs_zero_ab11.py` **31 例** + 改写 2 例（净增 33，collected 9655 → 9688）+ **18 处锚点变异逐处转红**，其中一条方法学自纠值得记住：c4 锚点第一版留下孤儿缩进导致整文件 `ImportError`、收集数 86→41，**"有红"不等于"有锁"**，靠"收集数相等"前置检查识破。如实登记**四件**未处置（站点 a 那行原文的三件：`(x or {})` 降空对象、`GATES.json` 缺席报 `FAIL`、宽 `except Exception` 静默摘掉一对种子；站点 c 那行的一件：非对象行计入分母——四处收口后实测均 0 实例；且本轮改的 profile 预设属同文件另一站点、不在这三件之内，原"部分由 AB-11 处置"记法系归因错位、已撤销）与一件未动的共享 loader。收口全量 **9683 passed / collected 9688 / 0 failed**（登记前一跑 9682 passed / 1 failed / 5 skipped、170.11s 带 `--cov`，唯一失败 = 基线守卫本身），行 **97.22%**（18371/18896）/ 分支 **93.78%**（6606/7044）与前两轮同值，但 `make gates` 的 `format` 门抓到本轮 reason 字符串写成两段隐式拼接、须 `ruff format`，格式化后**同一条树**连跑两次实测 **18369 行 / 6605 弧**再回到 **18371 / 6606**，逐行比对唯一变动是 `src/utils/process_utils.py` 的 641-642（638-642 是 `killpg(SIGKILL)` 失败后回退 `proc.kill()` 的负载相关竞态分支、无确定性锁），故**同值不作 `src/` 零改动佐证**、佐证改用改动面清单；18 处变异锚点格式化后全部重跑仍逐处转红（收集数 86 保持）；水位 96.40/92.50 维持不动；教训入 `docs/MEASUREMENT_INTEGRITY.md` §13 与 §14；零 LLM。**此前 AB-10 轮**：**「缺席 / 读不动」不得报成「零命中 / 一致 / 未要求」**——从 AB-9 剩下的 5 处登记里处置 2 处（`emse_ult_gold_diagnosis.py`），三条读数全部实测坐实：上游读不到时把本地 gold 包装后与本地 gold 归一比对，`upstream_bodies_equal` **恒真**（此时零份上游数据被读到，AB-9 那句推测由复算确认）；`_load_json_array` 顶层非列表静默返回空列表被 4 个调用点读成"上游没有该行"；README 4c / 4d 节按"工件在不在输出目录"整段消失不留消息。处置为 `_load_upstream_array`（缺失 `FileNotFoundError`、零对象行 `ValueError`，口径对齐同文件 `_load_project_tasks` 先例）、`_official_tests_for`（一致性扩成含"无法核验"的三态）、`_load_supplement` + 两节渲染器（就地写明"本节未渲染 = 工件缺席"），非对象行照旧跳过但向 stderr 报丢弃数与余下数；**改前实测真路径**（200 / 3909 行全保留丢 0、71/71 命中上游分支、0 条走包装分支）是入库报告能**逐字节复现**（两次成立）的前提，复现须同时给 `--supplement` 且把 `SUPPLEMENT_GENERATED_MUTK.json` 放进输出目录、且 `--from-json` 会就地重写输入的坑已登记；`tests/test_experiments_absent_vs_zero_ab10.py` **35 例**（全 `tmp_path`、不读缓存、无新增 skip）+ **10 处锚点变异逐处转红**；AB-9 余下 3 处继续登记；收口全量 **9650 passed / collected 9655 / 0 failed**（登记前一跑 9649 passed / 1 failed / 5 skipped、168.76s 带 `--cov`，唯一失败 = 基线守卫本身），行 **97.22%**（18371/18896）/ 分支 **93.78%**（6606/7044）与前两轮同值（当时写作"逐位相同即 `src/` 零改动佐证"，该推断已由 AB-11 轮撤销，见 `docs/MEASUREMENT_INTEGRITY.md` §14）；水位 96.40/92.50 维持不动；教训入 `docs/MEASUREMENT_INTEGRITY.md` §12；零 LLM。**此前 AB-9 轮**：**`experiments/` 层 68 处 `json.loads` 按解析器返回域普查 + 一处"静默缩分母"改为计数披露**——AB-8 登记的"`experiments/` 层未普查"边界本轮撤销：95 个文件扫出 42 个含调用点、共 68 处，逐处读数分入 **42 响亮崩溃 / 9 已 fail-closed / 5 崩溃被上层吞掉但留痕 / 12 静默丢数据**；**判据换了一层就重述一遍**——分析层响亮崩溃可接受（宁可非零退出也不要看起来正常的错数字），所以 42 处崩溃点刻意不改，给 68 处补 `isinstance` 等于把崩溃换成静默；12 处里"已有显式 `isinstance` 且带计数或原因码"的刻意静默 6 处不改，其余 6 处处置 1 处（`target_quality_replay.py`，入口 `make target-quality`、产物在 `SHA256SUMS` 保护目录且数字进 `BASELINE.target_quality`）：按 AB-8 `enrichment_stats` 先例**只增不改**——新增 `skipped` 两类分开计数、报告仅在真有跳过时追加披露节并写明引用纪律、CLI 打 `[WARN]` 而**退出码一律不变**，`tests/test_experiments_json_domain_ab9.py` **14 例**、6 处锚点变异逐处转红、入库报告对盘上 10 份批次（实测跳过 0 份）**逐字节复现**且先断言输入存在；顺带照出 `experiments/price_table.json`（顶层两份人写 JSON 中唯一"多消费者"的一份，两份都无哈希保护；五种非对象返回在 5 处读取/消费点实测全部响亮崩溃，其一崩在整轮付费 LLM 重放之后；另一份 `injection_benchmark_samples.json` 单消费者、五种形状实测同样响亮崩溃）与"`.jsonl` 不等于逐行 JSON"两条同族读数，本册两处推断被实测否证（"带 `except` 的读取点把 `[]` 降级为空表"错、改 `_PRICE_TABLE_PATH` 注入不生效因默认参数在定义时绑定）；收口全量 **9615 passed / collected 9620 / 0 failed**（登记前一跑 9614 passed / 1 failed / 5 skipped、169.40s 带 `--cov`，唯一失败 = 基线守卫本身），行 **97.22%**（18371/18896）/ 分支 **93.78%**（6606/7044）与 AB-8 同值（当时写作"逐位相同即 `src/` 零改动佐证"，该推断已由 AB-11 轮撤销，见 `docs/MEASUREMENT_INTEGRITY.md` §14）；水位 96.40/92.50 维持不动；教训入 `docs/MEASUREMENT_INTEGRITY.md` §11；零 LLM。**此前 AB-8 轮**：**`json.loads` 返回域里的非对象行与主键域六处收口**——AB-5 那句"坏行只作废那一行、不中止整批"当时只对**已测的两类形状**成立；本轮按解析器返回域（六种合法值）重测，五种非对象行让产品侧四处读取器与门禁两处整批崩溃（`AttributeError`），而 int/bool 主键一侧**静默存活**（补充文件日志照写"已加载 N 条"、整份零生效），G8 门禁的崩溃码恰好也是 1，于是阻塞看起来生效、调用方只拿到一段 traceback；六处一律**对齐仓内既有口径**（`dataset_ult.py` 的 `isinstance(raw_row, dict)` 过滤、门禁自身 `unparsed_` 分支的 fail-closed 先例）而非新设计，留痕按"这份文本谁写的"分两类（人手写的补充文件汇总三条 warning / 官方主数据逐行含路径与行号）；主键域中途**改判一次**（两侧一起丢弃等于让补充"配了但零生效、只是丢得有声有色"，终口径为标量 `str()` 归一、容器主键跳过留痕、falsy 沿用 AB-5 计数，且 **AB-5 的 24 例锁一条未改口径**）；门禁报表**只新增** `enrichment_stats`、既有键一个没动；新增 `tests/test_jsonl_non_object_row_tolerance.py` **47 例**并逐处变异验证七处守卫必红；本轮两处自我捕获如实登记——一次性探测**否证**了我对 `dataset_ult._iter_records` 的路径推断（`[]` 根本走不到 JSONL 分支），第一轮变异验证脚本因 `-k` 匹配零条而报"七处全红"、实为**空转**；收口全量 **9601 passed / collected 9606 / 0 failed**、行 **97.22%**（18371/18896）/ 分支 **93.78%**（6606/7044）（10 项逐模块 1 项变动 = `dataset_loader` 97.12 → 97.28），登记前一跑 9600 passed / 1 failed 的唯一失败即基线守卫本身；水位 96.40/92.50 维持不动；教训入 `docs/MEASUREMENT_INTEGRITY.md` §10；零 LLM。**此前 AB 轮**：**真实语料否证合成枚举前提 + 文档判据变成可执行工件 + 数据集适配层容错补口 + 表格静默丢格修复与全仓判定锁 + 覆盖率证据化收口**——`helpers.py` 首对象修复档（档 2）的"恒不可达"结论换成观测+机制：7,565 条真实 LLM 响应重放得"到达 692 / 取到片段 667 / 分歧 1 / 真会触发 **0**"，并**否证**了 AA-5 的推理前提（存在档 1 返回 `None` 的真实分歧样本，档 2 在该类输入上是首个也是唯一产出片段的档），改由"分歧片段必含串外裸 `\`、5 个候选都不删 `\`"的机制论证支撑（定向枚举分歧类 716 例、可返回 0 例），处置仍为**保留**（决定不变、依据变）；AA-8 发布的进程级状态判据从散文升级为**测试当场执行的工件**（文档与锁同一件东西，第 5 个读者出现即同时转红）；ROUND3 点名的数据集适配层 47 行**前提被否证**——没有一行真的需要数据集，用 `tmp_path` 写真实坏文件即可走到，24 例锁补 36 行、9 行按机制登记，顺带修掉 `_load_enrichment` 无主键行**静默丢弃**的真实缺口（返回值语义未变），并把判据收紧为"删掉守卫必红才算锁"；撤销 ROUND3 ② 一处陈旧"待补"判断；**表格静默丢格**一类：活文档 6 行把裸竖线写进行内代码（shell 管道 / 正则交替 / 绝对值），而 GFM 切格不认行内代码且「行格数 > 表头列数 ⇒ 尾格直接丢弃」，于是源码齐全、渲染少一整列——逐行转义修复并新增 29 例判定锁；判定器按 **GitHub cmark-gfm 的奇偶反斜杠口径**实现（第一轮用 markdown-it 判"已修好"是错的，同一文本两个参考实现结论相反，该分歧已钉成语义锁，教训入 `docs/MEASUREMENT_INTEGRITY.md` §9）；冻结面 `docs/history/` 5 行 + `experiments/results/` 4 行按逐文件清单与棘轮**只登记不修**（两处受 SHA256SUMS 保护），故口径只能写"活文档零丢格"；草稿的 12 行 / 27 例经现算纠正为 **9 行 / 29 例**，`docs/INDEX` 双语"四起伪影"同步更正为五起；AB 轮收口全量 **9525 passed / collected 9530 / 0 failed**（170.34s）、AB-7 后全量 **9554 passed / collected 9559 / 0 failed**、行 **97.22%**（18349/18874）/ 分支 **93.76%**（6591/7030）（`src/` 零改动故读数逐位不变），刷新前对账跑的 2 例失败是文档↔工件门如实报出 §1 覆盖率滞后（非守卫、非顺序依赖）；棘轮水位 96.40/92.50 维持不动待 CI 校准；零 LLM）；此前 2026-10-19 **AA 轮**（**棘轮跨平台误上调处置 + 静默回退收口 + 覆盖率证据化登记 + D3b Step B 边界锁定 + E7 裁决执行面 + 跨文件顺序依赖修复**——覆盖率棘轮的本地自动上调改为须显式 `--allow-bump`（本机 macOS 读数抬水位会让 CI ubuntu 阻断档必红，且失败看起来像"覆盖率退化"）；`analyze_results.load_latest_benchmark` 的"无 benchmark 文件则回退全部 JSON"静默降级改 fail-closed；撤销状态登记册一处与同册自相矛盾的陈旧登记、纠正 `ci.yml` 漏改的 ±0.10pp 容差注释；新增 9 例确定性回归锁并对 9 处"构造上不可达"防御线给出可复现证据登记，明确不加 `# pragma: no cover`、不删已被上游吞并的修复档；D3b Step B 判**不实施**——四件前置件逐条对代码定位 + 3 例反面锁定（实装即红）；E7 人工裁决从"协议文档"落到**可执行面**（6 份 CSV 录入表 + 五档量表校验 + 未加权 Cohen's κ 合并 + 10,000 次 bootstrap CI / seed=42）并加 3 例"E7 未执行、尚无 κ 工件"反向锁；收口全量抓到并修掉一例跨文件进程级哨兵顺序依赖（AA-8：autouse 复位 fixture + 1 例污染重放锁，删 fixture 必红），教训入 `docs/MEASUREMENT_INTEGRITY.md` §8；全量 **9485 passed / collected 9490 / 0 failed**（178.62s）、行 96.98% / 分支 93.51%；水位 96.40/92.50 维持不动待 CI 校准；零 LLM）；此前 工程质量轮：**三节点复杂度拆分 + 四模块可达分支补口**——`src/graph/nodes.py` 的 generator / executor / patch-applier 三节点按职责拆为可测单元，净增 75 例（13 例行为契约 + 1 例源码接线锁 + 61 例分支补口），全量 9413 passed / collected 9418、行 96.95% / 分支 93.48%（本机口径，CI 校准另计）；此前 Z 轮：**第四轮第三方全量静态审查 20 项修复收口**（Windows 环境，报告审 `55bb711`，P0=0 / P1=14 / P2=6，20 项全部静态确认并修复；标准 BH q + 全量重算、配对分母、rlimit/DB/共享 venv/官方 harness、MDO 断言分类与 Windows 探针、负 rc 守卫、配置与绘图来源、严格 JSON、协议/效度/数据卡文档；新增回归锁 5 文件 138 例；零 LLM）；此前 Y5 轮：**E7 三路径备料齐备 + 嵌套性回归锁**——补齐 n=72 全框普查的候选清单与工作表，三条路径用户选定即可开工；修正协议中「n=8 ⊆ n=41 零返工」的过度承诺（实测 150 组合成参数上 13% 集合不嵌套，该性质非算法保证而是当前参数下的事实），并加回归锁守护。此前 Y4 轮：第三轮评审八项待澄清回应（5 已闭合 / 2 待裁定 / 1 未做）；Y3 轮：审计收尾与全仓未覆盖地图；Y2 轮：审计收口与 experiments 首审；Y 轮：修复覆盖率缺口审计；X 轮：论文复现性闭环；W/V 轮：第二/第一轮第三方评审修复；U/T/S/R/Q/P/O/N/M/L/K 轮同日登记
 
 # Changelog
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
+
+## [Unreleased] — 2026-10-24 CI 轮：收口声明与树分裂——「12749 passed 收口实测」先于收口跑被写下，而那次跑只会显示 4 红（零 LLM，$0）
+
+> 归因对象 = **实测读数与登记声明的落差**。CA–CH 六轮完成但未提交，对这批工作做全量回归验证（`make test`）时
+> 实测 **12,745 passed / 5 skipped / 4 failed**（collected 12754、224.78s），而 BASELINE `tests` 节与 §1「全量测试」行
+> 声称「CH 轮收口实测 12,749 passed / 0 failed」——那次收口跑从未发生。
+
+### 根因与证据
+
+- 四条红全部在 `tests/test_invocation_caliber_cg.py` 真树锁（r01/r03/r04/r05）：它们把 CG 轮的分母写成
+  **硬编码字面量**（在盘 31 / 链上 17 / 声明 71 / 登记 9 / 结构 28-30-29-30 / 登记表 15 条），CH 轮写侧移动了
+  全部分母（新增 `check_flag_effect.py` + 删一条失效登记 ⇒ 32 / 18 / 73 / 8 / 29-31-30-31 / 14 条）并刷新了
+  BASELINE 与 §1，唯独没刷锁。
+- **CH 收口跑从未发生**：BASELINE `suite_seconds: 221` 注首句仍明写「本键取 **CG 轮终跑**」；CH 分册 §3 末明写
+  「终跑……读数在收口跑之后回填」，全仓无该回填；无 CG 轮终跑那样的 date 成对采集指纹。
+- **门禁绿 ≠ 测试绿**：四例红着的整个周期里 `make invocation-caliber` 与 `make flag-effect` 全绿——门对账的是
+  已刷新的 BASELINE，锁对账的是没刷新的字面量；链上门禁抓不到「测试锁过期」这一族，全量 pytest 是其唯一读者。
+- **半真的归因**：CH 注「七红随登记落盘消失」对其中 3 例（动态读者）成立、对 4 例硬编码锁不可能成立——
+  硬编码不读登记文本。
+
+### 处置
+
+- 四条真树锁期望值**单一事实源化**到 BASELINE（`gates` / `invocation` 两节，经 CG 门自己的
+  `load_baseline_yaml` 读取——与门同一权威源、另一条实现路径；r01 保留 CF/CG 双实现相遇断言）。
+  依据 AB14 单一事实源判据：同一个数留两份，必然有一份先过期——本轮就是那份字面量；此后「改分母忘刷锁」
+  在结构上不可再现：门与锁同指 BASELINE，BASELINE 与树不符时两者同红。
+- 保留的字面量只剩**性质锁**（faces 5 / 幽灵 0 / 兜底动态 1-1 / 判据档无读者 0）——性质不随增删一道门移动；
+  r05 删「登记表总条数 15」换「flag-diff 条数 == BASELINE `invocation.flag_diffs`」互证。
+- BASELINE 注释链与 §1「全量测试」行**追加勘误**（历史不回溯改写）：「收口实测」归属从 CH 改为 CI 终跑回填。
+
+### 验证
+
+- `pytest tests/test_invocation_caliber_cg.py -q`：**66 passed**（改前 62 passed / 4 failed，collected 恒 66）。
+- `scripts/tools/cg_mutation_verify.py`：**70 锚点全红 + 中性对照 0 红**、`# mutation:` 残留 0。
+- 零门禁改动、零 `src/` 改动；本轮无独立变异工装（判据长在测试锁自身，对测试文件做变异红方向不存在），
+  显式披露而不是留白；「锁的锁」由 r01 双实现相遇承担。详见 CLOSING_TREE_SPLIT_CI_2026-10-24（分册已删除）。
+
+### 补遗（同日）：非 DeepSeek 历史数据清除（1,333 份 / 约 11.2 MB）
+
+- 普查三层信号（字段级模型名 / `by_model` 聚合 / provider 痕迹）确证 2026-08-13~18 Agnes/GLM 时代批次、
+  2026-09 混跑批次（`by_model` 含 `agnes-3.0-flash` / `glm-4-flash`）、g8 GPT-4 级对照组目录族等
+  **1,333 份**非 DeepSeek 批次产物并删除；清单与 tar 备份落盘 `/tmp`（补删 66 份未及备份，37 份 git 可恢复、
+  29 份无备份，如实披露）。
+- 连锁处置：model-fingerprint 预指纹豁免表清空（「文件消失 ⇒ 删登记」）、BY PinnedBatches 参数锁具名 skip、
+  BT g8 归档锁自守卫生效；BASELINE tests 节刷新（passed 12735 / skipped 19 / suite_seconds 215，
+  collected 12754 不变）。
+- **第二轮复查**（「检查清楚，只能保留 DeepSeek」）：扩展词表（agnes/litellm 等 20+ 词族）全文件类型复扫
+  抓到 **236 份 / 13.9 MB 漏网**——raw/ 66 份 Agnes 任务级批次、lite20 同族另两目录、9 月顶层散件、
+  EMSE 端点失败审计 2 份（首轮词表缺 agnes 误判保留）、repo_level 报告（明载「可用端点仅 agnes」）；
+  **先备份后删除**（/tmp/aitester_nonds_backup_r2_20261024.tar.gz）；终扫残留 4 份全为判定保留项。
+  全量 = **12,733 passed / 21 skipped / 0 failed、214.58s**（EMSE 披露材料退出，真树锁具名 skip）。
+- 全量确认跑 = **12,735 passed / 19 skipped / 0 failed、214.85s**；三份内容命中判为误报保留
+  （被测代码 input_args / 诊断文本 / 纯文本提及）。详见 CI 分册 §7。
+
+## [Unreleased] — 2026-10-24 CH 轮：命令行上传了的开关，有两个从来没被读过——「判据档无读者 0」是真绿但误导（零 LLM，$0）
+
+> 归因对象 = `add_argument` 声明的开关在**门禁源码里有没有接线**。CG 轮收口时交来的边界 ① 正是本族入口：
+> 「只判静态调用面，不执行任何门禁——『传了这个开关』不等于『那个开关真改变了行为』」。
+> 本轮闭合它的**可静态判定核**（dest 活性），并给 CG 那条「判据档无读者 0」定性：真绿，但误导。
+
+### 改前实测（绑定一棵可重建的树：**改前树** = 工作树移除本轮四个新文件并回退接线；判据就地复算见分册 §4 A/B/C 段）
+
+| # | 形态 | 改前读数 | 后果 |
+|---|---|---|---|
+| ① | 开关声明后 `dest` 从不被读 | 31 道在盘门禁里 24 道有 argparse、声明 **71** 个 `(门禁, 开关)` 实例，dest 从不被读 **2** 条 = 死 1（`check_docs_history_drift --warn-only`，调度只读 `args.strict`）+ 代理 1（`checksum_results --verify`，调度只读 `args.write`）；两条**都是判据档**且**都被 ci.yml 真实传入**（改前 ci.yml:744 与 ci.yml:298） | CG 判定四把「调用面出现过这个 token」算作读者，于是「判据档无读者 **0**」成立——token 有读者，开关没有效果路径 |
+| ② | 有效性由「兄弟开关缺席」间接保证 | `--write` / `--verify` 同处一个 `add_mutually_exclusive_group(required=True)`，组内 `--write` 被读 **2** 次、`--verify` **0** 次；31 道门禁里这样的互斥必填组**只有 1 个** | 今天与按 `--verify` 调度**等价**（`required=True` 保证恰有一真），所以不是「CI 现在跑错了」而是**潜在**：等价性由那个组担保、不由开关自己担保。摘掉 `required=` 或往组里加第三个模式，`--verify` 立刻和新模式一起落进 `else`——命令行写着「校验」，跑的是别的 |
+| ③ | 同名开关跨门一边活一边死 | `--verify` 出现在 2 道门：`check_baseline`（dest 被读 3 次）与 `checksum_results`（0 次）；**71** 个实例去重只有 **51** 个唯一名、重名 **11** 组（`--list` ×6、`--strict` ×4、`--json` ×4、`--allow-empty` ×3） | 「这个开关在这道门里生效」不能从名字推断，只能逐 `(门禁, 开关)` 判 ⇒ 分母是组合数 71 而不是唯一名 51 |
+| ④ | 无逃逸写法（dest 级判据得以成立的前提） | 扫 `vars(args)` / `getattr(args, …)` / `**args` 展开 / `args.__dict__` / `parse_known_args()` / 整个 `args` 传进别的函数：31 道门禁命中 **0** | 命中即「整包读走 Namespace」，dest 级判定就会造假；本门把这类门禁单列**不可判**并计红——不可判必须是显式的，不能静默算通过 |
+| ⑤ | 「装饰性开关」在本仓不是正当终态 | `--warn-only` 的 help 自述「与默认行为一致，便于 CI 可读性」= **被文档承认的 no-op**，而 CI 每次都传它 | 处置只有接线或删除 ⇒ 本门**不设豁免表**：加一张表等于把「没人接线的开关」变成可申请的常态（与 CG §5③「33 条呈现档逐条豁免会把登记表变成橡皮章」同一条顾虑） |
+
+### 处置（新门 `scripts/gates/check_flag_effect.py`，553 行 / 23 个顶层函数，五档判定）
+
+- **判 dest 活性**：AST 取 `add_argument` 调用，`dest` 按 argparse 自己的规则复算（首个 `--` 长选项去 `--`、`-` 换 `_`、显式 `dest=` 覆盖），准入要求存在 `--` 前缀的字符串字面量 token（短选项、位置参数、`add_parser` 子命令不进分母）；只在声明行区间**之外**按 `\b{ns}\.{dest}\b` 计读（词尾设界防 `--verb` 的 dest 被 `args.verbose` 命中），命名空间绑到属性上（`self.args = parser.parse_args()`）时退回 `args`。
+- **四态互斥且完备**：`活` / `代理`（dest 不被读，但与已读兄弟同处**赋给具名变量**的 `required=True` 互斥组；匿名内联组退化成死，方向更严）/ `死` / `不可判`，恒等式 `声明 = 活 + 代理 + 死 + 不可判` 不成立即红。这个恒等式今天由循环结构保证，留着防的是**下一轮给分类加一个新态却忘了计数**——那时「死开关 0」会变成漏计之后的数，而不是判出来的数。
+- **`代理` 与 `死` 都记红、不给豁免**（理由见 ⑤）；`不可判` 显式计红而不是静默放行。改前那 2 条本轮**逐个接了线**，所以现树两态均为 0，而不是「登记成豁免」。
+- **逃逸判定按 AST 结构不按子串**：按子串搜会把 docstring 里**讲**这些写法的门禁误判成不可判——其中就包括本门自己（本轮第一版正是这样，见下文自纠 ④）。
+- **判登记面**：9 个声明键逐项要求 **本门复算 == BASELINE `flag_effect.<key>` == §1〔当前口径〕** 三处同值；缺键 / 非整数（`True` 被 `isinstance(x, int)` 认成整数，故显式排除 `bool`）/ 值漂移 / §1 未写这条各计一条红。
+- **失败面与可见面**：`[SURFACE]` 三行（判定面 / 不判定面 / 判据归属）在成功、失败、报红三条路径都打印，其中「判据归属」明写同一个分母由 CG 门与本门**两条独立实现**各自复算再对账；仓库级前提（`Makefile` / `scripts/gates` / `ci.yml` / `BASELINE.yaml` / 登记册）缺位一律计红；`self_wiring` 要求**完整脚本路径**同时出现在 `Makefile` 与 `ci.yml`（裸文件名或别的目录下的同名文件不算）；`--list` 打印 73 行逐项表后 rc=0 且**不判定**，`--quiet` 只抑制逐项 `[OK]`、**不吞 `[SURFACE]` 披露也不削弱退出码**。
+- **两条写侧接线（本轮唯一改动的被判定文件）**：`check_docs_history_drift` 的 `args.warn_only` 现在真参与调度（`strict=args.strict and not args.warn_only`），`--strict` 与 `--warn-only` 同时给出时报 rc=2（一个要求阻断、一个要求不阻断，过去由「谁排在后面谁生效」隐式决定），help 从「与默认行为一致」改成「显式要求不阻断」——把「装饰性」那句话从文档里删掉，因为它不再是装饰；`checksum_results` 的 verify 分支由 `if args.write: … else: verify` 改成**读 `args.verify` 自己选分支**，两个模式都没给时报 rc=2 并点名「未选择模式」——这条兜底**今天走不到**（`required=True` 的组会先让 argparse 以「one of the arguments --write --verify is required」退出，分册 §4 D 段实测 rc=2 两条都在），留着它是因为「模式由开关自己选」才是这条判据的保证来源。
+
+### 与 CG 门的联动读数（两条独立实现，同一个分母）
+
+新门接上链与 CI 后 CG 侧的数随本轮接线移动，其余面未动：在盘 **31 → 32**、链上 **17 → 18**、声明 **71 → 73**（本门自身贡献 `--list` / `--quiet`）、代码锁 **26 → 29**（`+2` 本门两条、`+1` 是 `check_docs_history_drift --strict` 接线后第一次有真代码锁）、登记无读者 **9 → 8**（删掉已失效的 `manual-only check_docs_history_drift --strict` 那条，登记表 31 → 30 行、`manual-only` 9 → 8），而调用面数 **5** / 传过 **14** / 判据档无读者 **0** / 呈现档 **22** / 跨面不对称 **3** / 兜底 **1** / 动态注入 **1** / 幽灵开关 **0** 全部不变。分母恒等式两侧各自成立：CG `73 = 传过 14 + 代码锁 29 + 登记 8 + 判据档 0 + 呈现 22`、CH `73 = 活 73 + 代理 0 + 死 0 + 不可判 0`。
+
+### 本轮自纠（七处，全部登记）
+
+① **「读不懂就静默」这个病灶长在本轮门禁自己身上，是变异抓出来的，不是我看出来的**：首版 `judge_effect` 用
+`if src is None: continue` 跳过读不到源码的门禁、用 `except SyntaxError: continue` 把不可解析的源码折叠成「没有 argparse」——
+两种折叠都让 `[SURFACE]` 那句「在盘门禁逐 `(门禁, 开关)` 复算」对那一道门变成假话（受检面比判定面多一道，
+而它对全部判据的贡献是 0 且不留痕，与 BH→BT 那一族同一个形状）。M38 存活把它逼出来，处置 = fail-closed 计红 +
+同批补 M76（不可解析那一档）+ 各一例锁。规矩：**每写一条「受检面 = N」的披露，就要为「N 里某一个成员读不到」写一条红**。
+② **M68 是断言歧义，不是判据缺失**：`assert "死开关 0、代理开关 0…" in out` 里那段文本**同时出现在 `[OK]` 行和通过行**，
+删掉通过行的数字仍由 `[OK]` 行满足 ⇒ 三条断言各自钉死自己那一行后 M68 红 1 例。**一条断言只能钉一行**。
+③ **M06 差点被我算成「已锁」**：放松声明准入的 `--` 前缀过滤跑出 0 红，第一反应是「锚点写坏了、锁面漏了」；
+复算才发现 `_flag_of` / `_dest_of` 的第二次 `--` 检查把它兜住，两个放松点合起来才等价 ⇒ 删锚点、记进等价清单
+（连同工装 docstring 另列 5 处，合计 **6** 处不列锚点的等价区），不用它凑锚点数。
+④ **反子串这条我一开始用错了方向，被自己的测试纠正**：`_escape_reads` 首版按子串搜 `vars(args)`，
+把 docstring 里讲这个写法的门禁判成不可判——其中就包括本门自己。锁 `test_docstring_mention_is_not_an_escape` 当场红 ⇒ 改 AST 判定。
+**判据读的是结构层还是文本层，必须在写判据之前决定。**
+⑤ **BASELINE 的 `dead_flags` 注最初写成「改前实测 2 条死开关」，把四态里的两态折成一个词**：实算 死 **1** + 代理 **1**——
+这正是本门判的形态（把两种不同状态说成同一件事），而代理那一档的意义（当下等价、保证来自组而不是它自己）一旦写成「死开关」就丢了。
+⑥ **真实树锁里两条硬编码数一度写进断言**（`locked_flags` / `registered_unread` 的绝对值）：本文件自身就是 CG 口径下
+`--list` / `--quiet` 的代码锁——改一行锁的文本就会动 CG 的数，再让 CG 的数去红，等于锁在改自己的判据 ⇒
+真实树只断言「本文件移动不了」的 dest 活性八个数，读者敏感的数留给分母恒等式。
+⑦ **「同一棵改前树」这句话本轮一开头就写坏了**：docstring 首版把 ①~④ 说成取自同一棵树，但 ① 的在盘 **31** 与 ③ 的实例 **71**
+要求那棵树**没有**本门脚本，而现树读数 32 / 73 要求**有** ⇒ 沿用 CG §6① 立的规矩，在 §1 明写改前树定义并在 §4 A/B 段给出可复跑构造。
+
+### 顺带核实的两处存量面（只读，不改判据）
+
+- **`src/` 零改动的依据是改动面清单**：`src/**/*.py` 共 **136** 个文件，mtime 晚于 2026-10-24 00:00 的命中 **0**，
+  最新 **1792766822**（`src/utils/credential_scrub.py` 与 `src/agents/base_agent.py`）与 CG 登记值同一 epoch ⇒ CH 与 CG 之间
+  `src/` 未动一个字节；本轮改动面全在 `scripts/gates/`、`scripts/tools/`、`tests/` 与文档面，而 `coverage.xml` 的 root `sources` 只测 `src/`。
+- **现树的「活」无一靠注释撑起**：`_read_count` 是行窗口排除 + 正则，不是数据流分析——注释里出现的 `args.x` 会被算成读，
+  这是**本门自己的假绿方向**（分册 §5⑤）。本轮按分册 §4 G 段普查 73 条「活」里**只被注释命中**的条数 = **0**；
+  但这条只能靠纪律复算、没有判据，改成 AST 读（`ast.Attribute` 真实节点）交下一族。
+
+### 验证
+
+- 回归锁：`tests/test_flag_effect_ch.py`（917 行）**99 例**（`--collect-only` 实测）——A dest 复算口径 11 /
+  B 四态 24 / C 反子串与结构口径 7 / D 分母与两档 fail-closed 11 / E 登记面对账 13 / F 接线与 CLI 21 /
+  R 真实树与两处写侧修复 12。除 R 外全部跑在 tmp 里的**合成假仓**（合成门禁源码 / Makefile / ci.yml / BASELINE / 登记册文本），
+  不写真实文件；单跑 **99 passed / 1.82s**。
+- 变异：`scripts/tools/ch_mutation_verify.py`（703 行）**75 锚点（M01–M76，全部打在门禁本体）全红 + 1 中性对照 0 红**；
+  `未杀活的变异 = []`、`锚点自身失效 = []`、`# mutation:` 残留 **0**、collected 逐锚点恒 **99**（含 `[baseline]` 预检共 77 次采样）、
+  sha256 原字节还原、墙钟 **334s**（单进程串行口径）。红数分布 41 锚点红 1 / 13 红 2 / 4 红 3 / 4 红 4 / 2 红 5 / 4 红 6 /
+  1 红 7 / 2 红 10 / 1 红 12 / 1 红 14 / 1 红 25 / 1 红 **32**（最大扇出 M53 = 把 `counts` 初始化里的 `me_groups` 键摘掉：
+  32 例红里绝大多数是 `KeyError`，凡调用 `judge_effect` 的用例都被击穿——它证明的是「32 例都执行到」，
+  **不是**「32 例都断言了 `me_groups` 这个值」）。首轮 76 项跑出 **3** 个存活项，处置见上文 ①②③，第二轮全绿。
+- 预登记跑（`make test-cov`，xdist `-n 4 --dist loadfile`、带 `--cov`）：collected **12754** →
+  **12,742 passed / 5 skipped / 7 failed**、52 warnings、**231.20s** / rc=2（墙钟 233s）。七红均为本轮预期且各自有名字：
+  基线守卫 `test_tests_and_mypy_are_current`（实收 12,754 − 当时 `total_passed` 12,650 = **104 > 6** 容差）、
+  CG 真树四例 `test_r01` / `test_r03` / `test_r04` / `test_r05`（本轮接线动的 CG 侧数）、CF 两例（§1 两行括号与 BASELINE 键尚未落盘）。
+- 本门单跑（BASELINE `flag_effect` 9 键与 §1「开关有效性（CH 轮）」行落盘后）：`make flag-effect` **rc=0**，
+  stdout 共 16 行 = **10** 项 `[OK]`（1 项开关有效性 + 9 项三处对账）+ **3** 行 `[SURFACE]` + 通过行
+  「25 道门禁声明 73 个开关实例，死开关 0、代理开关 0、不可判 0 全为 0，四态分母自校验成立」。
+- 覆盖率（本轮 `make test-cov` 工件）：行 **19522/20036 = 97.4346%**（未覆盖 **514**）、弧 **7159/7590 = 94.3215%**（缺弧 **431**），
+  棘轮 96.40 / 92.50 通过；相对 CG 的 19523/7160 各 **−1 行 / −1 弧**，落在既有 ±2 读数抖动带内且与 CE 轮读数逐位相同 ⇒
+  按「继承态 + 抖动带」登记，既不是本轮收益也不是本轮损失。
+- 终跑（`make gates`，全部登记文本落盘后单独执行、不与其他 pytest 重叠）：读数待收口跑之后回填至
+  BASELINE `tests.suite_seconds`、本节与登记册「全量测试」行（`suite_seconds` 只取终跑，与上面带 `--cov` 的 231.20s 不可互换）。
+- 登记面：登记册 §1 新增「开关有效性（CH 轮）」行（9 个 `〔当前口径〕` 键与门禁 `ITEMS` 标签逐字一致）+
+  `BASELINE.yaml` `flag_effect` 节 **9** 键 + §3.2 本轮行 + §4.1 本轮边界行 + 双语 INDEX §2.2/§3.5 与 README 头部；
+  规矩入册 `docs/MEASUREMENT_INTEGRITY.md` §79。
+- 分册：FLAG_EFFECT_CH_2026-10-24（分册已删除）（§4 复现 A–G 全部就地执行；§5 十一条边界含
+  「dest 被读只是必要非充分」、`$STRICT_FLAG` 实际值、`--verify-mypy`、注释命中算读的假绿方向、盘 **32** / 索引 **29** 口径差、
+  「变异只证明判据被锁住、不证明判据充分」）。
+
+## [Unreleased] — 2026-10-24 CG 轮：门禁「挂在链上」不等于「以同一口径在跑」——调用面归属、开关有效值与阻断写法从未跨面复算（零 LLM，$0）
+
+> 归因对象 = `make` 链与 `.github/workflows/*.yml` 的**调用口径**。CF 轮收口时交来的边界里有一条正是本族入口：
+> `check_registration_consistency` 只答「这道门有没有人调用」（在场性），不答「**以什么口径**调用」。
+> 本轮把它落成第五道读侧门禁，并先纠正一个已经写进 `BASELINE.yaml` 与登记册 §1 的数——「非阻断 3」里有一条是 YAML 注释造出来的。
+
+### 改前实测（两棵可重建的树；构造脚本见分册 §4 C 段）
+
+| # | 形态 | 改前读数 | 后果 |
+|---|---|---|---|
+| ① | 非阻断判据按**子串**搜步骤正文 | CF 复算 非阻断 **3** / 阻断 **26**；按 YAML 结构（步骤级键缩进 8 且非注释行）复算 **2 / 27**（中间态树同一对 **2 / 28**） | ci.yml 注释里那句「改 `continue-on-error: true`」被当成当前键，而这个数已进 BASELINE 与 §1 |
+| ② | 同一脚本跨调用面开关不等，无人对账 | 只比「`make gates` ↔ ci.yml」一对得 **1** 处；所有面两两比得 **3** 处 | 其中两处理由只写在 Makefile 与 perf.yml 的**注释**里，注释不会被复算 |
+| ③ | 本地链缺席被 OR 语义掩盖 | `check_prompt_artifacts` 不在 `make gates` 链上，CI 又裸跑不带严格档 | 清单缺席时两侧都打 `[SKIP]` rc=0 ⇒「已接线」为真而「强制」为假 |
+| ④ | 不阻断还有第三层：shell 兜底 | **1** 个步骤同时带 `continue-on-error` 键与 `\|\| echo "::warning"` 兜底 | 删掉键也永远绿，两层各自消失都无人知 |
+| ⑤ | 开关由 shell 变量注入 | **1** 处 `$STRICT_FLAG`（值由 `workflow_dispatch` 输入决定，默认空串） | 静态普查看不到 `--strict` 到底传没传，阻断性取决于运行时输入 |
+| ⑥ | 在盘门禁的调用面归属 | 改前树在盘 **30**：链上 16 / ci.yml 28 / perf.yml 1 / 仅由 `experiments/` 以 import 调用 1 / 三侧皆无 0 | 「写了没人跑」第一次有判据 |
+| ⑦ | 声明开关的读者 | 改前树 **69** 个声明（23 道有 argparse）：传过 14 / 代码锁 24 / 无读者 **31**（判据档 **9** + 范围与呈现 **22**）；中间态树 **71 / 33**（判据档 **10**） | 宽松读者判据（文件里出现过 token 就算读者）会报「0 条无读者」——听起来更干净，其实把判定面取消了 |
+| ⑧ | 严格档从未在任何执行面被传 | `check_registration_consistency --verify-mypy` 有代码锁、无执行面 | CF §4 交来的边界原样仍在，本轮登记不修 |
+| ⑨ | 调用点也按全文正则数 | CF 原式 **32**（中间态；改前树 **31**）；只数非注释行 **30**（改前树 **29**） | 与 ① 同一条病灶的第二处：注释在场 ≠ 调用在场 |
+
+**两棵树不是同一棵**（这是本轮第一处自纠）：改前树 = 工作树移除本轮四个新文件并回退本轮接线；
+中间态树 = 改前树 + 本门脚本本身（本轮初测那一棵）。⑥ 的在盘 **30** 要求那棵没有本门，⑦ 的声明 **71**
+要求那棵**有**本门——差值恰为本门自身的 `--list`（判据档）与 `--quiet`（呈现档）。
+
+### 处置（第五道读侧门禁 `scripts/gates/check_invocation_caliber.py`，五条口径约定）
+
+- **判据按结构不按子串**：workflow 步骤级键按缩进 8 且非注释行解析，`run` 区块正文与注释都不算键；
+  同一批结构读数交给 CF 门 `ci_effective_refs` 独立复算，**同一个数两条实现**必须相等。
+- **开关相等按有效值**：`add_argument` 的 `default=` 用 `ast` 就地复算，`store_true` 记 `set`，
+  `--f=v` 与 `--f v` 同解——文本不同而有效值相同不算不对称，文本相同而默认值不同要算。
+- **阻断性三层**：步骤键 / `--warn-only`・`--no-strict` / shell 兜底（`||` 或 `set +e` **生效区**，
+  按 `set ±e` 逐行推进状态，`set -e` 回补之后仍算阻断）。
+- **读者活性四类**：调用面传过 / 代码锁 / 登记表 / 无读者。**判据档无读者记红**（改变退出码语义的开关
+  必须有人证明它的语义），**范围与呈现档只记数**（默认值即两侧共同的有效口径）。
+- **差异落机器可读登记表**：`docs/invocation_caliber_allowlist.txt` 15 条 / 5 类（flag-diff / no-face /
+  manual-only / soft-layer / dynamic-flag），无理由・畸形・重复・失效・现场找不到・§1 未认领各计红；
+  再加**分母自校验** `声明 = 传过 + 代码锁 + 登记 + 判据档 + 呈现`（收口 **71 = 14 + 26 + 9 + 0 + 22**），
+  以及仓库级前提缺失显式 `[SKIP]` 带成因、本门自身接线判定、`[SURFACE]` 六行口径披露。
+
+### 本轮自纠（八处，全部登记）
+
+① docstring 里那句「①~⑩ 取自同一棵未提交树」是**错的**，按它复算永远差 1 条 ⇒ 分列两棵树并各标读数；
+② `set +e` 首版只认与门禁同一行，M05/M67 存活暴露的是**判据缺口**而非锁缺口 ⇒ 补生效区状态推进；
+③ e16 的两行标签不同，M59 仍存活（折叠与否都判得到）⇒ 补 e18 让标签逐字相同、漂移放前一行，
+「一条锁看似覆盖，其实一个字节没碰到」；④ 拼接 BASELINE `gates:` 节时删掉了 `not_in_ci:`，
+CF 门立刻报「键缺席」——方向对、成因是我的编辑失误；⑤ 我先把新数字只写进了**行尾注释**，
+交叉核对继续报红才逼出「注释不是登记面」，与本轮病灶 ①② 同构；⑥ `passed_flags` 一度写成占位 **71**
+（把声明数抄成传过数），靠分母自校验逼回 **14**；⑦ 工具口径两处：macOS BSD `find` 不支持
+`-newermt "@epoch"`（改 `stat -f "%m %N"` 比较），临时分类脚本两次崩溃后改为**直接调门禁自己的判定函数**。
+⑧（分册 §6 ⑨）**终跑第一次红，红在我本轮写的登记面里**：`make gates` 停在 `test`（rc=2，
+**1 failed / 12649 passed / 5 skipped / 223.18s**，其后 14 个目标因此未跑），判据是 AB-7 那条表格完整性锁
+`test_live_docs_have_zero_content_loss_rows`——GFM 在表格里**连代码段里的竖线也照样切格**，于是登记册 §1
+「调用口径（CG 轮）」那一行 3 列表头被读成 **8 格**（`` `ls scripts/gates/*.py | wc -l` `` 与两处 `` `||` `` 共 5 条竖线），
+§4.1 的 CG 边界行 3 列表头被读成 **4 格**（我把「本轮落地」那句写成了第四列）。
+处置：5 条竖线改 `\|` 转义（渲染后仍是竖线、内容一字不减），1 处误写的列分隔改成 prose。
+复算：活文档全仓丢格行 **0**、该锁 29 例全绿、八份滚动行粗体奇偶仍全偶（登记册整行原始 1131 / 剔码后 1130，
+那条落在代码段里的标记正是剔除规则存在的原因）。教训两条：**预登记跑绿 ≠ 终跑绿**——登记文本在预登记跑之后
+才落盘，写侧错字只有终跑抓得到，这正是收口顺序里终跑不能被预登记跑替代的原因；
+**表格行有两个正交判据**（本轮 §5 ⑪ 只谈粗体奇偶，格宽是 AB-7 那道已在门的判据，两者互不覆盖）。
+
+### 顺带收口的存量面（15 处跨段粗体错位，全部补齐）
+
+BP §6⑤ 立的配对口径是「单逻辑行 + 剔除行内代码后看奇偶」，并据此登记过六份登记面「全部为偶、当前零缺陷」。
+本轮把这条判据从**聚合档**改成**结构档**——按 `此前 **` / `Previously **` 切出轮次段、每段自己配对——量到 **15 处**
+段内为奇：`README.en.md` 2（BO 43 / BN 11）、`docs/INDEX.en.md` 3（CB 1 / BO 43 / BN 11）、`docs/INDEX.md` 1（CB 1）、
+`CHANGELOG.md` 1（CD 13）、`CHANGELOG.en.md` 4（CD 11 / BP 47 / BO 43 / BN 11）、`docs/PROJECT_STATUS_REGISTER.md` 4
+（CG 49 / CF 33 / CE 25 / CD 31）。BO 段与 BN 段各自为奇、成对落在同一条整行里 ⇒ `README.en.md` 的整行读数一直是偶：
+**聚合口径把两处错配读成零处**，与本轮病灶 ①（子串 vs 结构）、⑤（读者判据的松紧）同形。处置只补配对、不改一个字内容：
+**9 个闭标记**加在轮名标题句末（en 侧 8 段 + `docs/INDEX.md` 的 CB 段按该文件自身的段末闭合写法）、登记册 **4 个开标记**
+补在标签之后（该文件老写法是 4 个标记 / 段：标签一对 + 标题一对）、两份 CHANGELOG 的 CD 段各删 **1 个**多余段尾闭标记
+——15 处对应 15 个标记。复算后八份滚动行「奇段」全空。**同口径再扫表格行**（也是单逻辑行）：
+改前全仓 **22 行**为奇，登记册 §4.1 的 BK 边界行就地补成偶（21→20 个标记），余 **21 行全在生成物里**
+（`experiments/results/main_batch/statistical_report*.md` 20 行 + 一份归档历史 1 行），成因是**报告渲染器写出不配对的重读标记**——
+写侧缺陷，改它等于改写归档读数，本轮不动、按名交下一族。**同批否证 CF 登记的一句**：
+「登记册每轮 3 个、奇偶逐轮翻转」——3 个 / 段本身就是加粗跨段延续，不是写法。未收口：配对判据仍无门禁（先要定义
+可机读口径），登记为分册 §5 ⑪。
+
+### 验证
+
+- 回归锁：`tests/test_invocation_caliber_cg.py` **66 例**（`--collect-only` 实测）——A 结构判据 7 /
+  B 调用面归属 6 / C 有效值口径 6 / D 兜底层与动态注入 6 / E 活性与登记表 26（含 9 种坏登记参数化）/
+  F CLI 与前提 9（含 4 种仓库级前提）/ R 真实树 6。除 R 外全部跑在 tmp 里的**合成调用面**，不写真实文件；
+  真实树锁只断言本文件移动不了的数，读者敏感的 `locked_flags` / `presentation_unread` 留成分母恒等式。
+- 变异：`scripts/tools/cg_mutation_verify.py` **70 锚点（M01–M70，全打在门禁本体）全红 + 1 中性对照 0 红**；
+  `未杀活的变异 = []`、`锚点自身失效 = []`、`# mutation:` 残留 **0**、collected 逐锚点恒 **66**、sha256 原字节还原、
+  墙钟 **424s**（单进程串行口径）。红数分布 36 锚点红 1 / 11 红 2 / 最高扇出 **33**（M04）——**红数是扇出，不是判据数**。
+  首轮 12 存活 = 2 判据缺口 + 9 有判据无锁 + 1 等价变异（显式记录、不入锚点）；第二轮 1 存活（M59）；第三轮全绿。
+- 预登记跑（`make test-cov`，xdist `-n 4 --dist loadfile`、带 `--cov`）：**12,647 passed / 5 skipped / 3 failed**、
+  6 warnings、**231.13s** / rc=2（墙钟 **233s**）。三红 = 基线守卫 `test_tests_and_mypy_are_current`
+  （实收 12,655 − passed 12,584 = 71 > 6）+ CF 的两条真树锁（登记文本尚未落盘）。
+- 门禁单跑（BASELINE `invocation` 13 键与 §1「调用口径」行落盘后）：**rc=0**，39 行 `[OK]`（13 项调用口径 +
+  13 项 BASELINE 交叉 + 结构五数与接线/归属/阻断各项）+ 6 行 `[SURFACE]`。
+- 终跑（登记文本全部落盘后单独执行、不与其他 pytest 重叠）：**第一次 rc=2**（停在 `test`：1 failed / 12,649 passed /
+  5 skipped、**223.18s**，其后 14 个目标未跑；唯一红 = AB-7 表格格宽锁，见上文自纠 ⑧）；就地修复后**第二次 rc=0**，
+  链墙钟 **230s**（`date "+%H:%M:%S"` 成对采集 11:12:32→11:16:22）、链内 pytest **12,650 passed / 5 skipped / 0 failed、
+  28 warnings、221.24s**（collected **12655**、不带 `--cov`），`suite_seconds` 换代 **206 → 221**；链尾逐项读数
+  ruff format **1054** / mypy **137** / 双语 0 警告 0 失败 / 文档链接 strict **200** 文件 **896** 条 0 错误 /
+  env-budget **253** = 登记 **253** / env-snapshot 覆盖 **84** 缺失 **0** / 状态通道 **136** 文件 / 模型指纹受检 **1/1** /
+  严格 JSON **7351** = 严格 **7348** + 豁免 **3** + 违规 **0** / 零断言 **474** 文件 **0** 例 / ast-guards **79** 站点违规 **0** /
+  CF 门数字项 **15** 全对账 + 拥有者活性 **6** 项 / 本门全绿（详见分册 §3.3）。
+- 登记面：登记册 §1 新增「调用口径（CG 轮）」行（13 个 `〔当前口径〕` 键与门禁 `ITEMS` 标签逐字一致）+
+  `BASELINE.yaml` `invocation:` 13 键 + §3.2 本轮行 + §4.1 十条边界 + 双语 INDEX §2.2/§3.5 与 README 头部；
+  规矩入册 `docs/MEASUREMENT_INTEGRITY.md` §78。
+- 分册：INVOCATION_CALIBER_CG_2026-10-24（分册已删除）。
+
+## [Unreleased] — 2026-10-24 CF 轮：登记面的「当前口径」数字与分册清单只被写、不被读（零 LLM，$0）
+
+> 归因对象 = `docs/PROJECT_STATUS_REGISTER.md` §1 的**派生数字读侧**与 `docs/INDEX.md` / `docs/INDEX.en.md`
+> 的**清单反方向**。本轮把「写了没人查」这一族从运行面推进到文档面：前面 14 轮立的门禁查代码，
+> 本轮的门禁查登记表自己。
+
+### 改前实测（同一棵树，四条缺口）
+
+| # | 形态 | 改前读数 | 成因 |
+|---|---|---|---|
+| ① | 登记册写「权威口径 = `BASELINE.yaml`」 | `gates` 节 Python 读者 **0** | 全仓普查 `scripts_total` / `ci_unique_scripts` / `ci_call_sites` 只命中本轮新门与其 fixture——指认权威不等于权威被读 |
+| ② | §1「静态检查」行的 `已格式化` | **999**（BQ 轮手写）→ **1037**（HEAD 干净树复算）→ **1050**（本轮收口） | 约 14 轮无人复算；且 `ruff format --check .` 把 `.md` 计入受检面，新写一份分册即 +1 |
+| ③ | 分册清单单向 | zh §3.5 **2** 份在盘未登记、en §3.5 **5** 份未登记 | `check_doc_links.py` 只判 INDEX→盘（死链方向）；反方向「写了就等于不存在」 |
+| ④ | §2.2 条目编号 | `[6…19, 20, 22, 21, 23]` 非连续（CC / CB 写反） | 手写装饰编号，而读者会把它当计数用 |
+
+①②③④ 合起来是同一族：**文档面的写侧与读侧不对称**。同一棵树改前复跑本门共 **28 项红**
+= 8 个 BASELINE 缺键（含本轮新增的 `tests.collected`）+ 3 个值漂移（`scripts_total` 29→30、
+`ci_unique_scripts` 27→28、`ci_call_sites` 30→31）+ 14 个「未登记当前口径键」+ 2 行 §3.5 孤儿 + 1 处 §2.2 编号。
+
+### 处置（15 个数字逐项对账 + 三类在场性判定；一个判定量只留一个判据）
+
+- **`ITEMS` 15 项分两种权威**：`self` 现场复算（9 门禁面：盘 / 索引 / ci 唯一 / ci 调用点 / 步骤 / 非阻断 / 阻断 / make 目标 / make 命令；2 静态面：`ruff format --check` 已格式化数、mypy 目标源文件数）
+  与 `baseline` 逐键回读（`tests.passed` / `failed` / `skipped` / `collected`）——BASELINE 缺键、非整数、与复算不等各计一条红，
+  而不是笼统一句「与基线不符」。
+- **声明语法只认括号**：`〔当前口径…：键 数 / 键 数 …〕` 才是可解析的当前口径；括号外一律按历史快照叙述处理，
+  本轮终读 **830** 个裸数字不判定、只在 `[SURFACE]` 里给出计数（§1 三行括号落盘时 811，
+  终跑读数回填 §1 后 830；此数无锁，随 §1 任何编辑变动）——判定它们等于改史。
+- **恒等式**：`collected == passed + failed + skipped + xfailed`；`ruff_version` 与 BASELINE 记录一致才算绿。
+- **覆盖率两行本门不重判**：权威仍是 `check_artifact_doc_consistency.py` 对 `coverage.xml` 的 ±0.20pp；
+  本门只判它的**拥有者活性**（文件在盘、锚点在位、仍挂在 `make` 链或 `ci.yml`）。
+- **清单双向各留一处**：盘→INDEX 由本门判（含未跟踪 5 份的口径披露「读作本轮未提交，不是丢失」），
+  INDEX→盘仍由 `check_doc_links.py` 判；两处都不留空，也不重复判。
+- **豁免登记表**：`docs/registration_consistency_allowlist.txt`，语法 `<分册名>:<INDEX 文件>  # 理由`，
+  无理由 / 已失效 / 重复 / 畸形四类各计红；本轮**零豁免**。
+- **接线判定（`invoked_by_chain`）**：`make_gate_deps` 展开出的 `gates:` 前置目标体内命中，**或** `ci.yml` 文本内命中——
+  两者皆断才算红（本地跑与 CI clone 跑任一路活着都算已接线）；本门自己也在判定面上，「新增门禁忘记接线」是 CA 轮那一族。
+
+### 本轮自纠（七处：前六处由锁或变异带出，⑦ 由收口后自读登记面带出）
+
+解析子进程摘要首版按「含关键字的行」取数，被 `ruff format --check` 的 diff 正文里同形句子骗过，
+把当时的 **1047** 读成 **5** ⇒ 改 `_summary_line()` 只取末条非空行（锚点 M33 + 锁 `test_ruff_diff_body_is_not_read_as_summary`）；`surface_disclosure`
+的 zh 侧调用漏传 `root`，于是合成仓测试读到的是**真仓的 78 份**分册而断言只看键存在 ⇒ 测试全绿、错的是口径（补 `root` 形参 + 锁
+`test_disclosure_reads_the_given_root_not_the_real_repo`，锚点 M27）；`invoked_by_chain` 的 OR 语义（`make` 链或 `ci.yml` 任一即可）差点被写成 AND；
+M36（§1 不切片到下一个 H2）与 M38（重复行取末个）单跑都不红——两处互相遮掩，各补一条**直接**锁
+`test_section_one_stops_at_next_h2` / `test_register_rows_keeps_first_hit`，而不是放松断言；`gates.disk_scripts` 更名
+`gates.index_scripts` 后 BASELINE 与登记面同批改；门禁本体 `pinned` 式「成功语句大于判定面」由
+`[SURFACE]` 三行在成功与报红两条路径同时打印（报红路径专门一例锁 `err.count("[SURFACE]") == 3`）。
+⑦（收口后自读登记面带出）把本轮 CF 叙述逐条对回门禁本体后查出三处措辞与一处失配读数：接线被写成「三处缺一即红」
+（实为 `make` 链**或** `ci.yml`，两头皆断才红）、漏传 `root` 的症状被写成「读到空索引」（实为合成仓测试读到真仓 78 份而全绿）、
+M36/M38 的处置被写成「拆成两条独立判据」（实为各补一条直接锁）；括号外裸数字登记 811，在终跑读数回填 §1 三行之后由同一处
+命令打印为 **830**（无锁的披露值，随 §1 任何编辑变动）。四处全部改正，裸数字改为谱系写法（788 → 811 → 830）。
+
+### 验证
+
+- 回归锁：`tests/test_registration_readers_cf.py` **46 例**（6 类：声明数字 12 / 权威复算 16 / 清单在场 8 / 读者活性 4 / 披露 2 / 真实树 4）。
+- 变异：`scripts/tools/cf_mutation_verify.py` **38 锚点全红 + 1 中性对照 0 红**；逐锚点 collected 恒 **44**、
+  sha256 原字节还原、`# mutation: ` 残留 **0**、墙钟 **82s**；`未杀活的变异 = []；对照误杀 = []`。
+- 预登记跑（`make test-cov`，xdist `-n 4 --dist loadfile`、带 `--cov`）：**12,581 passed / 5 skipped / 3 failed**、
+  52 warnings、**210.40s** / rc=2。三红即本轮预期：`test_gate_passes_on_real_tree`、
+  `test_real_authorities_equal_baseline`（登记文本尚未落盘）与基线守卫
+  `test_tests_and_mypy_are_current`（实收 12589 − passed 12538 = 51 > 6）。
+- 门禁单跑（BASELINE 与 §1 括号落盘后）：`rc=0`，15 行 `[OK]` 逐项对账 + 6 行 `[SURFACE]`
+  （3 行口径注记：盘 30 / 索引 29 未跟踪 1 · mypy 面未真跑 · 在盘 79 / 索引 74 未跟踪 5；3 行判定面披露）。
+- 终跑（全部登记文本落盘后单独执行，不与其他 pytest 重叠）：**`make gates` rc=0、链墙钟 212.81s**，链内 pytest
+  （`-n 4 --dist loadfile`、不带 `--cov`）**12,584 passed / 5 skipped / 0 failed、34 warnings、205.78s**
+  （collected 12,589）；链尾 ruff format **1050** 已格式化 / mypy **137** 源文件 0 问题 / 双语 0 警告 0 失败 /
+  文档链接 strict **199** 文件 **886** 条 0 错误 / 本门 15 项全绿 + 6 行 `[SURFACE]`；`suite_seconds` 取该终跑读数。
+  覆盖率行 **19522/20036 = 97.4346%**、弧 **7159/7590 = 94.3215%** 为继承态（`src/**/*.py` 136 个文件 mtime
+  晚于 CE 回填标记的命中 **0**，`src/` 本轮零改动）。
+- 分册：REGISTRATION_READER_CF_2026-10-24（分册已删除）；规矩入册：`docs/MEASUREMENT_INTEGRITY.md` §77。
+
+## [Unreleased] — 2026-10-23 CE 轮：模型指纹门禁把 `pinned=true` 说成「可比」、把窗口计数说成语料结论（零 LLM，$0）
+
+> 归因对象 = `scripts/gates/check_model_fingerprint.py` 的**判定面**与**成功语句的分母**。
+> 本轮测量在 2026-10-23 深夜完成、文档回填与终跑跨入 2026-10-24（轮次标签仍记测量日）。
+
+### 改前实测（同一棵树，三条缺口）
+
+| # | 形态 | 改前读数 | 成因 |
+|---|---|---|---|
+| ① | `pinned=true` + `alias_mismatch=true` | **rc=0** | 写侧三处登记（HEAD `experiments/run_benchmark.py:3838/3840/3852`），门禁本体对该键读者 **0**；存盘语料 85 个 `False` + 2 个 `None` |
+| ② | `pinned=true` + `requested_alias` 不在运行时模型集 | **rc=0** | 无对账；CD 轮把运行面收成单别名 `deepseek-flash` 后这条缺口第一次可判定 |
+| ③ | 成功语句「通过：1/1 个受检工件均 pinned=true」 | 分母 = 窗口计数 | 窗口内 2 / 豁免 1 ⇒ 实检 1，而 benchmark 语料在盘递归 239 / 入库 107 / 顶层非递归 64、结构面 provenance 122 / fingerprint 87 / pinned 85（⇒ 2 份未锁定在窗口外根本不进判定） |
+
+① 属 CA 轮那一族（**登记在场、读者缺席**——写了没人查），③ 属 CB 轮那一族
+（**成功语句大于判定面**），② 则是 CD 轮收敛运行面后才出现的可判定缺口：`alias_mismatch` 登记了却没人读，而「别名不变、返回模型变了」
+正是 S29/F13 当初立这条门禁时的原始漂移形态。
+
+### 处置（两条围栏 + 一路口径披露；`pinned` 判定值与方向逐字节不动）
+
+- **围栏一 `alias_mismatch is True`**：严格布尔（字符串 `"true"` 不算），与 `pinned`
+  同口径；命中即 `rc=1`，文案与「未锁定」分开点名——修复动作不同（前者要人工确认
+  可比性，后者要确认别名并重跑）。
+- **围栏二 `requested_alias ∉ 运行时模型集`**：权威源是运行面本身，
+  `RUNTIME_REGISTRY_ORIGIN = "src.config.config_generator.COMMON_MODELS"` 以 **import**
+  取得而不是复制常量——复制会让「运行面删了某个别名」与「门禁仍认它」同时为真。
+- **前提缺失显式 skip**：注册表取不到 ⇒ 打印 `[SKIP]` 带三类成因（import 失败 /
+  为空或类型漂移 / 条目无 `name`），只关闭 alias 对账，不关闭 `alias_mismatch` 判定。
+- **`[SURFACE]` 四行口径披露**：受检面（窗口内 / 豁免 / 实检 + 窗口口径）/ 语料面
+  （在盘递归 / 入库 / 顶层非递归）/ 结构面（provenance / fingerprint / pinned）/
+  alias 对账（运行时模型集 + 全语料两个读数）。成功、报红、空窗口、`--allow-empty`
+  四条输出路径全打印。语料侧 alias 读数**只披露不判定**——历史批次不能重跑，判红等于改史。
+- **成功语句的分母改为实检数**（`len(files) − exempt_count`），并把口径写进同一行。
+- **`_tracked_benchmark_count()`**：`subprocess` 上收模块顶层（函数内 import 会让
+  「git 失败 ⇒ −1」这条路径在测试里不可达）；git 不可用记 **−1** 并在打印侧写
+  「不可用（git 失败）」而不是冒充 0。
+
+### 本轮自纠（脚本执行口径 ≠ 进程内 import 口径）
+
+首版 `runtime_model_aliases()` 在函数内 import，进程内测试全绿，但 `make model-fingerprint`
+以脚本方式执行时 `sys.path[0] = scripts/gates`、仓库根不在路径上 ⇒ `ModuleNotFoundError`
+⇒ alias 围栏整条静默退化成 `[SKIP]`：围栏存在但在真实调用口径下不存在。补
+`sys.path.insert(0, str(PROJECT_ROOT))` 后两侧同值，并给「围栏生效」与「skip 生效」各设
+一个变异锚点（M24 / M28），使这条退化路径不再可能悄悄回来。
+
+### 验证
+
+- 回归锁：`tests/test_model_fingerprint.py` 35 → **54 例（+19）**；真实语料对账锁
+  （入库指纹的 alias 全部仍受运行时支持）、既有 pinned 锁 **0 例改写**。
+- 变异：`scripts/tools/ce_mutation_verify.py` **33 锚点全红 + 1 中性对照 0 红**
+  （逐锚点 collected 恒 54、sha256 原字节还原、`# mutation: ` 残留 0）。
+  **`pinned` 判定面刻意不设锚点**——本轮纪律是判定值与方向一处不动，由
+  `test_pinned_judgment_values_are_untouched` 与既有 pinned 锁共同守。
+- 预登记跑（`make test-cov`，xdist `-n 4 --dist loadfile`、带 `--cov`）：
+  **12,537 passed / 5 skipped / 1 failed、47 warnings、210.48s / rc=2**（collected 12,543；
+  唯一红 = 基线守卫 12,543 − 12,519 = 24 > 6）。
+- 覆盖率（同预登记跑工件）：行 **19522/20036 = 97.4346%**（未覆盖 514）、弧
+  **7159/7590 = 94.3215%**（缺弧 431）；棘轮 96.40 / 92.50 通过。相对 CD 各 −1 行 / −1 弧，
+  落在既有 ±2 抖动带内；`src/` 晚于 CD 回填标记（epoch 1792768809）的 mtime 命中 **0**，
+  工作区仍携带 CD 之前落地的 12 个未提交 `src/` 改动 ⇒ **继承态**，不作 CE 收益。
+- 门禁单跑：`rc=0`，`[EXEMPT] 1` + `[PASS] 1` + 四行 `[SURFACE]`
+  （受检面 2/1/1 · 语料面 239/107/64 · 结构面 122/87/85 · alias 对账 `['deepseek-flash']` 0/0）。
+- 终跑（登记文本落盘后单独执行，不与其他 pytest 重叠）与逐项读数见
+  `BASELINE.yaml` 与本册 §3.3；分册 MODEL_FINGERPRINT_COMPARABILITY_CE_2026-10-23（分册已删除）。
+
+## [Unreleased] — 2026-10-23 CD 轮：运行面与文档面收敛到「仅保留 DeepSeek 官方」，历史归档删除后派生读数按存盘语料重算（零 LLM，$0）
+
+> 归因对象 = 全仓的 **provider 面**。用户指令「项目中只保留 DeepSeek 官方的那个，其他的删除」
+> 分四层落地：运行时配置、脚本与实验入口、测试面、文档与历史归档。
+
+### 删除面
+
+- **运行时**：`PROVIDER_TEMPLATES` 仅 `deepseek`；`COMMON_MODELS` 仅 `deepseek-flash`；
+  第三方 SDK 调用路径（域名判定、客户端缓存、双重试、`temperature` 透传）整体移除；
+  `config_generator` 的模板断言、价目表与 `.env` 模板同步收为单端点。
+- **测试面**：第三方路径的专属用例删除；路由/缓存/重试用例改为 DeepSeek 端点与 `deepseek-flash`。
+- **文档面**：README / MODEL_CARD / performance_guide / usage_examples / failure_analysis /
+  preregistration / ADR / 历史评审与变更日志中的 provider 支持、配置与探针描述一律改为
+  「第三方 SDK（已于 2026-10-23 移除）」或在删除处补日期注记。对五个已删 provider 名做全仓检索：
+  **运行时配置、探针与支持性描述命中 0**；剩余命中只有两类——本轮清理登记文本自身，以及文献引用
+  里的第三方模型名（外部证据，非本仓运行时能力，按「清理面外」保留）。
+- **历史归档**：删除 330 个入库结果文件（3 份批次 JSON + 327 份 trace，均记录非 DeepSeek 模型）；
+  `SHA256SUMS` 复算 **1869 项一致**（20,895,308 字节）。
+
+### 清理面外（保留并写明理由）
+
+- **第三方文献引用**（论文 / 榜单 / 外部适配器数字）保留：它们是外部证据，不是本仓的运行时支持；
+- **凭证脱敏拒绝名单**（`OPENAI_API_KEY` / `ANTHROPIC_API_KEY` 及编号变体）保留：DeepSeek 经
+  OpenAI 兼容协议调用，删掉这些模式等于关掉泄露防线（见 `src/utils/credential_scrub.py`）。
+- **归档里仍带历史模型名的 3 份入库工件**（`e2e_llm_probes_20261017/README.md`、两份
+  `full_suite_cov.log`）保留：它们是当时的实测记录，改写即篡改证据；已在 `PROJECT_STATUS_REGISTER`
+  与本条登记，引用时按「历史读数」对待。
+
+### 派生读数重算（改前 → 改后）
+
+| 读数 | 改前 | 改后 | 说明 |
+|---|---|---|---|
+| mutation×detection 表批次文件数 | 10 | **7** | `make mutation-det-correlation` 按存盘批次重生成 |
+| detection 可测 n（三臂） | 605 / 658 / 571 | **556 / 609 / 571** | 可测 n 回落为配对 n |
+| detection 率（三臂） | 13.06% / 1.67% / 48.86% | **14.03% / 1.64% / 48.86%** | 分子不变、分母缩小 |
+| 分层均值 / Δ均值 / Pearson / Spearman | — | 逐格不变 | 被删批次未改变分层结构 |
+| trace 语料文件数（`rglob`） | 9086 | **8763** | 323 份含非 DeepSeek 模型的 trace 归档删除 |
+| span 总数 | 129058 | **126408** | 同上 |
+| token 属性数（`gen_ai.usage.*`） | 27135 | **26166** | 同上 |
+| 语料守卫口径（benchmark / traces 目录 / trace 文件） | 239 / 138 / 8216 | **239 / 138 / 8216** | 不随清理移动（守卫为直接子文件口径） |
+
+### 锁的处置（随语料移动的不变量必须换判据）
+
+- `test_otel_export_identifier_domain_ar` / `_value_domain_aq`：文件数、span 数、token 属性数、
+  checked 下界按**复测值**重写并注明日期与成因（不是放宽：`spans` / `token_attrs` 仍是精确等式）。
+- `test_experiments_currency_caliber_ab14::test_protected_reports_not_rewritten`：原判据是
+  `SHA256SUMS` 行数 ≥ 2000（清理后 1869 ⇒ 假红），改为**直接比对两份受保护报告的在盘 sha256
+  与登记值**——判据从「规模下界」换成「逐字节未改写」，语义更严且不随语料规模移动。
+- `test_x_batch::test_main_batch_smoke_batches_filtered`：其前提（2 个 n=5 冒烟批次被 schema 过滤）
+  已随批次删除消失，改为锁定真实语料上的白名单审计诚实性（缺席文件不进「数据来源」清单）。
+
+### 悬空引用收口
+
+被删批次在文档里的引用分两类处置：**可运行示例**改为存盘批次
+（`docs/api_reference{,.en}.md`、`docs/usage_examples{,.en}.md`）；**历史叙述**原地补注记
+（`docs/adr/0015-detection-first-protocol.md`「该批工件已于 2026-10-23 provider 清理删除，读数保留为
+决策登记」；`BASELINE.yaml` 历史批次条目同型）。`tests/test_2026_10_05_v_batch.py` 的合成
+`tmp_path` 文件名与 `test_experiments_json_domain_ab9.py` 的 `DELETED_BATCHES` 元组是**测试夹具**，不动。
+
+### 验证
+
+- 预登记跑（`make test-cov`，`-n 4 --dist loadfile`、带 `--cov`）：**12,518 passed / 5 skipped / 1 failed、208.94s**
+  （唯一红 = 基线守卫，本文件与 `BASELINE.yaml` 刷新后转绿）；collected **12524**。
+- 终跑（`make gates` 链内、不带 `--cov`）：**12,519 passed / 5 skipped / 0 failed、207.64s、rc=0**（链墙钟 214s，`date +%s` 成对采集）。
+- 覆盖率：行 **19523/20036 = 97.4400%**（未覆盖 513）、弧 **7160/7590 = 94.3300%**（缺弧 430）；
+  `src/` 的改动即 provider 面删除（分母 −40 行 / −6 弧）。
+- 文档门禁：`check_doc_links` 867 条链接 0 错误；`check_citations` rc=0；`check_artifacts_tracked`
+  188/188（豁免 14 条、遮蔽 155）；`ruff format --check .` 1044 文件。
+
+## [Unreleased] — 2026-10-23 CA 轮：门禁豁免登记从不被审计，也不披露它遮蔽了什么（零 LLM，$0）
+
+> 归因对象 = `scripts/gates/check_artifacts_tracked.py` 的证据目录覆盖扫描。豁免表只有
+> 一处读者（`if name in EVIDENCE_DIR_EXEMPTIONS: continue`）——只在「抑制报错」时被
+> 读到，因此「登记项是否仍然需要」与「它遮蔽了多少未入库工件」两件事都没有观察点。
+> 分册：GATE_WAIVER_STALENESS_CA_2026-10-23（分册已删除）。
+
+### 修了什么（纯读侧 + fail-closed）
+
+- **改前实测（仓库实态，逐目录 `git ls-files`）**：16 条登记中 1 条目录已不存在
+  （`emse_jsonmode_smoke_20261013`）、1 条 **53/53 已全部入库**
+  （`emse_spec_ir_quixbugs_20261013`），其余 14 条遮蔽未入库工件 **155 / 158**；
+  同一时刻门禁输出为 `✓ 188/188 关键工件均已入库；证据目录覆盖扫描通过`、rc=0。
+- **单一事实源**：新增 `ExemptionCoverage`（`NamedTuple`）+ `exemption_coverage()`，
+  每条给出 total / tracked / hidden / status / 是否在扫描面内；遮蔽量与漂移判定
+  同源（`hidden = total − tracked`），不再各算一遍。
+- **五类漂移判失败**（`exemption_drift_failures()`，与「扫描面是否为空」解耦）：
+  目录已不存在 / 目录已全部入库 / 目录为空 / 不可读（含 `git ls-files` 失败）/
+  登记名不匹配 `EVIDENCE_DIR_GLOBS`（豁免永不生效）。阻断输出分「未入库」与
+  「登记漂移」两段，修复指引分开。
+- **遮蔽量披露**：通过时逐条 `[EXEMPT] <name>: 遮蔽未入库工件 h/total`，加一行
+  `豁免披露：N 项有效登记共遮蔽未入库工件 M 个`。
+- **删除两条实测失效登记**（移除前后门禁输出逐字相同，均为 `✓ 188/188`）。
+- **可导入性**：`ExemptionCoverage` 从 `@dataclass` 改为 `NamedTuple`——本模块被两个
+  历史测试以 `spec_from_file_location` 动态加载且不登记 `sys.modules`，`dataclass`
+  在 Python 3.14 装饰期访问 `sys.modules[cls.__module__]` 会 `AttributeError`，本轮
+  首次预登记跑因此 2 例红；该加载路径已锁成用例。
+
+### 验证
+
+- 回归锁 12 例（`tests/test_artifacts_tracked_gate.py` 21 → **33**）：条数锁 14、
+  扫描面覆盖、覆盖表恒等式、五类漂移各一例、部分入库不是漂移、删登记不减弱扫描、
+  `main()` 被漂移阻断、端到端披露与重算值一致、无登记动态加载可导入。
+- 变异 **16 锚点全红 + 1 中性对照 0 红**（`scripts/tools/ca_mutation_verify.py`；
+  逐锚点 `collected=33`、`sha256` 原字节还原、残留 0）。
+- 预登记跑（`make test-cov`，带覆盖率）：**12,534 passed / 5 skipped / 1 failed、
+  220.10s / rc=2**（collected 12,540；唯一红 = 基线守卫 12,540 − 12,502 = 38 > 6）。
+  刷新 `BASELINE.yaml` 后确认跑（`make gates` 链内 pytest，不带 `--cov`）：
+  **12,535 passed / 5 skipped / 0 failed、28 warnings、218.82s**（collected 12,540）。
+- 覆盖率：行 **19,562/20,076 = 97.4397%**（棘轮 96.40）、分支 **7,165/7,596 = 94.3260%**
+  （棘轮 92.50）。**CA 自身 `src/` 零改动**；分母较上轮的 +24 行 / +12 弧来自工作树中
+  **继承的在途复审改动**（R02/R05），不是本轮收益。
+- 另：工作树中在途的 R05 改动（`mypy.api.run` 解包改为官方契约）遗留 3 个旧 mock
+  未对齐，本轮按新契约对齐（`tests/test_type_repair_more_branches.py`，仅 mock 顺序），
+  属继承态收口、不计入本族。
 
 ## [Unreleased] — 2026-10-23 BZ 轮：CI 历史三族红的归因与修复——测试契约工件入库、三类前提缺失显式 skip、依赖升级清零 45 漏洞（零 LLM，$0）
 
@@ -12,7 +513,7 @@
 > 失败、3.14 作业 30min 超时被 cancel、Security 在 pip-audit lock 审计失败；失败清单逐字取自
 > check-run 注解 API（ci.yml 诊断步骤的 `::error` 注解，公开可读）。fresh clone 模拟
 > （`git clone --depth 1` + CI 同环境变量）复现 **31 例**——本地全量绿只因 4129 个归档工件在盘
-> 而被 `.gitignore` 排除。分册：`docs/reviews/CI_RED_ATTRIBUTION_BZ_2026-10-23.md`。
+> 而被 `.gitignore` 排除。分册：CI_RED_ATTRIBUTION_BZ_2026-10-23（分册已删除）。
 
 ### 修了什么
 
@@ -37,6 +538,13 @@
 - **CI 超时**：test 作业 `timeout-minutes` 30 → 60（失败诊断重跑与测试步骤串联可超帽）。
 - **严格 JSON 豁免 +3**：入库的 406 个工件里 3 个是 AB-11/AB-12 损坏通道语料（测试契约锁定的
   坏行文件），按档内登记口径加豁免（归档工件不重写）。
+- **模型指纹门禁的 fresh clone 误红（补遗）**：门禁按 2 天 mtime 判「新批次」，而
+  `actions/checkout` 把全部工件 mtime 刷成当下 ⇒ 为 BY 契约入库的预指纹历史批次
+  （`benchmark_examples_20260813_125502.json`，2,219 B，无 `provenance` 块）在任何 checkout 上
+  都被要求 `pinned=true`，门禁恒红；旧 run 的 0 秒通过只因为顶层工件尚未入库（空扫描面是合规
+  状态，「没跑」与「跑过且干净」同形）。处置：按名豁免登记表（每条带理由）+ 三向漂移检查
+  （文件消失 / 已 pinned / 不可审计）+ 豁免先于空扫描面判定 + `[EXEMPT]` 带理由 + 豁免不掩盖
+  同目录其他批次；登记条目数按 1 锁定，扩张必须改测试。
 
 ### 验证
 
@@ -48,6 +556,13 @@
 - 覆盖率复跑两次：19538/20052 与 19539/20052（97.4367% / 97.4417%）、7150/7584 与 7151/7584
   （94.2774% / 94.2906%）——**±1 行 / ±1 弧的跑批间噪声**（cost_budget.py 在两跑间翻转），
   登记值取与既有口径逐位相同的抽样；棘轮 96.40 / 92.50 绿。
+- 模型指纹补遗：受影响面 **35 例**全绿（新增 8 例豁免锁）；变异 **12 锚点全红 + 1 中性对照 0 红**
+  （collected 逐锚点恒 35、sha256 原字节还原、`# mutation: ` 残留 0、rc=0）；首轮 M10
+  「相对键根改错」存活 ⇒ 补「`_rel_key` 与登记键同源」锁后整轮复跑。
+- 预登记全量跑 **12,501 passed / 5 skipped / 1 failed、215.16s、rc=1**（collected 12,507；xdist
+  `-n 4 --dist loadfile`、不带 `--cov`）；唯一红 = 基线守卫（12,501 − 12,494 = 7 > 6 容差），刷新后转绿。
+  确认跑 = `make gates` 链内 pytest **12,502 passed / 5 skipped / 0 failed、66 warnings、219.43s /
+  rc=0**（collected 12,507；链墙钟 227s，`date +%s` 成对采集）。
 
 ### 边界（按名登记）
 
@@ -141,7 +656,7 @@
 
 ## [Unreleased] — 2026-10-23 BV 轮：批次 VIII / XIV 两份判定核的「沉默」从未披露——20 行 test-hacking 判 True 与 4442 行 FL 未求值在任何报告面都不出现（零 LLM，$0）
 
-> 归档实测（257 批次 / 11197 行）：批次 VIII（ADR-0022）的 `test_hacking_suspected` / `_signals` 与批次 XIV（ADR-0028）的 `fl_constraint_verdict` / `_hit_rank` / `_changed_functions` 自写入起报告面读端 **0**，而两者的沉默都是「多成因、同取值」——判定核四种早退（无原码 / 无补丁 / 两侧解析失败）与「三信号都跑过且零命中」返回同一个 `{"suspected": False, "signals": []}`（5915 行分不清判干净还是没看），FL 六种早退 + 异常共用一个 `not_evaluable`（4442/5935）。详见 `docs/reviews/DETECTOR_SILENCE_BV_2026-10-23.md`。
+> 归档实测（257 批次 / 11197 行）：批次 VIII（ADR-0022）的 `test_hacking_suspected` / `_signals` 与批次 XIV（ADR-0028）的 `fl_constraint_verdict` / `_hit_rank` / `_changed_functions` 自写入起报告面读端 **0**，而两者的沉默都是「多成因、同取值」——判定核四种早退（无原码 / 无补丁 / 两侧解析失败）与「三信号都跑过且零命中」返回同一个 `{"suspected": False, "signals": []}`（5915 行分不清判干净还是没看），FL 六种早退 + 异常共用一个 `not_evaluable`（4442/5935）。详见 DETECTOR_SILENCE_BV_2026-10-23（分册已删除）。
 
 ### 改了什么
 
@@ -172,7 +687,7 @@
 
 ## [Unreleased] — 2026-10-23 BU 轮：Self-Repair Trap 判定核的输入可达域从未披露——5935 行恒判「不怀疑」，其中两个信号在全归档拿到过 0 行输入（零 LLM，$0）
 
-> 归档实测：`self_repair_trap_suspected` / `self_repair_trap_signals` 自批次 XIV（ADR-0028）写入 **5935** 行，取值恒 `False` / `[]`，报告面读端 **0**。判定核 `src/tools/self_repair_trap.py:104/:106/:113` 的三个信号各带最少点数门槛（**3 / 2 / 2**），而门槛从不写进报告 ⇒「**3200** 行只有 1 个点、进不了任何门」「**2723** 行进得了 collapse 门且确实判干净」「declining 与 score 两个信号**全域 0 行输入**」三种事实在报告面上是同一个读数。详见 `docs/reviews/TRAP_INPUT_DOMAIN_BU_2026-10-23.md`。
+> 归档实测：`self_repair_trap_suspected` / `self_repair_trap_signals` 自批次 XIV（ADR-0028）写入 **5935** 行，取值恒 `False` / `[]`，报告面读端 **0**。判定核 `src/tools/self_repair_trap.py:104/:106/:113` 的三个信号各带最少点数门槛（**3 / 2 / 2**），而门槛从不写进报告 ⇒「**3200** 行只有 1 个点、进不了任何门」「**2723** 行进得了 collapse 门且确实判干净」「declining 与 score 两个信号**全域 0 行输入**」三种事实在报告面上是同一个读数。详见 TRAP_INPUT_DOMAIN_BU_2026-10-23（分册已删除）。
 
 ### 改了什么
 
@@ -192,7 +707,7 @@
 
 ## [Unreleased] — 2026-10-22 BT 轮：验收 oracle 来源与可见性——写入端说反了、读端为 0（零 LLM，$0）
 
-> 归档实测：`oracle_type` / `test_visible_to_system` 写入 **8012** 行（全 `generated_test/True`），全仓读取方 **0**；写入端把 SWE-bench 仓库级验收（gold F2P，测试对系统不可见）标成生成测试 + 可见。详见 `docs/reviews/ORACLE_PROVENANCE_BT_2026-10-22.md`。
+> 归档实测：`oracle_type` / `test_visible_to_system` 写入 **8012** 行（全 `generated_test/True`），全仓读取方 **0**；写入端把 SWE-bench 仓库级验收（gold F2P，测试对系统不可见）标成生成测试 + 可见。详见 ORACLE_PROVENANCE_BT_2026-10-22（分册已删除）。
 
 ### 改了什么
 
@@ -212,7 +727,7 @@
 
 ## [Unreleased] — 2026-10-22 BS 轮：覆盖率口径写进配置（branch=true）+ 基线复算（零 LLM，$0）
 
-> 发现：`pytest --cov=src --cov-branch -n 4` 在本机直接崩在 combine——`.coverage`（控制进程）lines 1 / arcs 0，四个 worker 2.4k–23k 弧，同一命令行两种口径。详见 `docs/reviews/COVERAGE_CONFIG_BS_2026-10-22.md`。
+> 发现：`pytest --cov=src --cov-branch -n 4` 在本机直接崩在 combine——`.coverage`（控制进程）lines 1 / arcs 0，四个 worker 2.4k–23k 弧，同一命令行两种口径。详见 COVERAGE_CONFIG_BS_2026-10-22（分册已删除）。
 
 ### 改了什么
 
@@ -227,7 +742,7 @@
 
 ## [Unreleased] — 2026-10-22 BR 轮：第三方集中复审 27 项全部确认并收口（零 LLM，$0）
 
-> 报告 HEAD `53bbbbd4`，收口 HEAD `f49959b2`；P1=14 / P2=13、P0=0，逐项在收口 HEAD 复核，**零误报**。详见 `docs/reviews/BR_ROUND_CENTRAL_REVIEW_2026-10-22.md`。
+> 报告 HEAD `53bbbbd4`，收口 HEAD `f49959b2`；P1=14 / P2=13、P0=0，逐项在收口 HEAD 复核，**零误报**。详见 BR_ROUND_CENTRAL_REVIEW_2026-10-22（分册已删除）。
 
 ### 改了什么
 
@@ -360,7 +875,7 @@ P14 首跑存活（0 红），补一例「全部臂都不可对照」后才击�
    历史读数，差值不可减。
 
 ## [Unreleased] — 2026-10-22 BP 轮：统计对照面把「这一行没记录污染级别」折成沉默——两种缺席在两个消费者手里去向不同（零 LLM，$0）
-> 缺陷族（BH→BN 系列第 9 面）。BO 收的是 raw 落盘面的读侧，本轮收同一批 `details` 行在**统计对照面**的读法：`analysis_parts/cross_analysis` 的 `if not level: continue` 对未记录行**一个都不记**，而 `statistical_analysis.contamination_view_summary` 的 `recorded or "unknown"` 把它们**并计进 `unknown`**（与"检测跑了但判不了"同一个数）；渲染层 5.3 的「未入对照任务」按前者加、脚注却按后一种口径解释前一种。详见 `docs/reviews/CONTAMINATION_ABSENT_BUCKET_DISCLOSURE_BP_2026-10-22.md`。
+> 缺陷族（BH→BN 系列第 9 面）。BO 收的是 raw 落盘面的读侧，本轮收同一批 `details` 行在**统计对照面**的读法：`analysis_parts/cross_analysis` 的 `if not level: continue` 对未记录行**一个都不记**，而 `statistical_analysis.contamination_view_summary` 的 `recorded or "unknown"` 把它们**并计进 `unknown`**（与"检测跑了但判不了"同一个数）；渲染层 5.3 的「未入对照任务」按前者加、脚注却按后一种口径解释前一种。详见 CONTAMINATION_ABSENT_BUCKET_DISCLOSURE_BP_2026-10-22（分册已删除）。
 
 ### 改了什么
 
@@ -407,7 +922,7 @@ P14 首跑存活（0 红），补一例「全部臂都不可对照」后才击�
   报告头先说证据面、单臂缺席**逐臂**披露（改前只有两臂都缺才有一行）、两种缺席不同句、空产物 `{}` 自成一档（≠ 件不存在）。
 - **⑥ A/B 提示命令**（`experiments/cross_file_ab.py:275`）：跑批后打印的根因分析命令补 `--raw-dir {on_dir}/raw`——
   该臂跑批时 `save_state=True`，照抄旧提示即把 14 例折进结构档。
-- **未新增门禁**：BN 的 `check_status_persistence.py` 管"声明面 ⊆ 落盘面"，读侧折叠本轮由测试锁覆盖（`docs/reviews/RAW_READSIDE_DISCLOSURE_BO_2026-10-22.md` §7.7 写明为什么还没有可机读的声明源）。
+- **未新增门禁**：BN 的 `check_status_persistence.py` 管"声明面 ⊆ 落盘面"，读侧折叠本轮由测试锁覆盖（RAW_READSIDE_DISCLOSURE_BO_2026-10-22（分册已删除） §7.7 写明为什么还没有可机读的声明源）。
 
 ### Tests — 净增 70 例（`tests/test_bo_raw_readside_disclosure.py`）
 
@@ -543,7 +1058,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
 ② trace 的 `record_node` 为 opt-in；③ `validation_status` 在已落盘的 `testless_validation` 父键内（可达但需下钻）；
 ④ 三条非四值通道（`detection_first_status` / `edit_intent_status` / `deterministic_repair_status`）只保证落盘、
 不接 `status_for_check` 判档；⑤ 门对 `**helper(...)` 的解析是静态的；⑥ 历史归档不回填。
-详见 `docs/reviews/STATUS_PERSISTENCE_BN_2026-10-22.md`。
+详见 STATUS_PERSISTENCE_BN_2026-10-22（分册已删除）。
 
 ## [Unreleased] — 2026-10-22 BM 轮：实验/报告读侧把"检测没发生 / 检测崩了"折成最有利判定——崩溃记进"干净组"、未测记进"零回归"（零 LLM，$0）
 
@@ -633,7 +1148,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
   严格 JSON **7274** 份工件 = 严格 7272 + 登记豁免 2 + 违规 0、零断言扫描 457 个测试文件 0 例、
   `ast-guards` 136 文件 / 78 站点 / 未覆盖 20 / 违规 0 / 豁免命中 20 / EXEMPT 19（与 BK 轮两跑逐位相同——BM 未在 `src/` 动守卫面）。
   覆盖率本轮未重跑 `--cov`（`src/` 零改动，行/弧为 BL 继承值）。两轮之间与终跑之后**都只做过纯文档回填**：首跑与终跑之间回填的是首跑读数，
-  终跑之后回填的是两跑读数与本轮新踩的两条提醒（本条、`BASELINE.yaml` 门禁行、[BM 手册](docs/reviews/EXPERIMENT_READSIDE_FAVORABLE_FOLD_BM_2026-10-22.md) §8/§9、
+  终跑之后回填的是两跑读数与本轮新踩的两条提醒（本条、`BASELINE.yaml` 门禁行、BM 手册（分册已删除） §8/§9、
   登记册 §1「全量测试」行、双语 README **头部引言**的门禁句——`**最新优化**` 表行本身在首跑之前即已定稿），全程未动 `src/`、`tests/`、`scripts/`、
   `experiments/` 任何一行 ⇒ 全量判读数不可能改变，链未第三次重跑：**本节主张"两跑跑过链且链内采集面与确认跑一致"，
   不主张"最终树跑过链"，只主张"最终树与终跑的差异面 = 文档文本"**。
@@ -710,7 +1225,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
   99.08%，+13 行 / +4 弧跨 BD→BL 整条未提交栈，**不作 BL 单独归因**）。
   顺带纠 BK 的四位小数：按 19363/19874 与 7093/7520 除得值应为 **97.4288% / 94.3218%**（BK 原文写
   97.4300% / 94.3200%；两位小数判读不变，BL 起四位一律写除得值）。
-- **`make gates` 全链 rc=0，两跑**（首跑在本条回填之前、终跑在回填之后，两次都单独执行、不与其他 pytest / 文档编辑重叠）：墙钟 **213s / 214s**、链内 **18 步命令全绿**；链内 pytest（xdist `-n 4 --dist loadfile`、**不带 `--cov`**）两跑同判 **11704 passed / 5 skipped / 0 failed**（用时 207.16s / 208.34s、warnings 54 / 46；collected **11709**），链尾各门禁分步读数两跑逐字节相同，差异全在 hypothesis 警告计数；回填后复验**读文档与 `BASELINE.yaml` 的测试面**（38 个文件）**1037 passed / 52.43s**（两跑同树 ⇒ 采集面同为 collected **11709**；终跑之后 `src/`+`tests/`+`scripts/` 最新 mtime 08:25:19 早于链起于 08:38:36 ⇒ 差异面只剩文档与注释）——判读数与上面的确认跑一致，用时口径不同（那个带 `--cov`）。链首 `ruff check` 全绿、`ruff format --check .` **974 files already formatted**（与链外复测逐位相同）、`mypy src/ config.py` **137 source files** 0 错；`ast-guards` 在链内给出 **136/78/20/0/20/19**，与 BK 轮链外自测逐位相同（BL 未动 `ast.parse` 守卫面）；`check_artifact_doc_consistency.py` 的登记册覆盖率对账支路 `[OK]`（`coverage.xml` 取 `make test-cov` 全口径工件；先前那份无分支工件已按口径事故登记）。手册 `docs/reviews/CONSUMER_SIDE_STATUS_READERS_BL_2026-10-22.md`；
+- **`make gates` 全链 rc=0，两跑**（首跑在本条回填之前、终跑在回填之后，两次都单独执行、不与其他 pytest / 文档编辑重叠）：墙钟 **213s / 214s**、链内 **18 步命令全绿**；链内 pytest（xdist `-n 4 --dist loadfile`、**不带 `--cov`**）两跑同判 **11704 passed / 5 skipped / 0 failed**（用时 207.16s / 208.34s、warnings 54 / 46；collected **11709**），链尾各门禁分步读数两跑逐字节相同，差异全在 hypothesis 警告计数；回填后复验**读文档与 `BASELINE.yaml` 的测试面**（38 个文件）**1037 passed / 52.43s**（两跑同树 ⇒ 采集面同为 collected **11709**；终跑之后 `src/`+`tests/`+`scripts/` 最新 mtime 08:25:19 早于链起于 08:38:36 ⇒ 差异面只剩文档与注释）——判读数与上面的确认跑一致，用时口径不同（那个带 `--cov`）。链首 `ruff check` 全绿、`ruff format --check .` **974 files already formatted**（与链外复测逐位相同）、`mypy src/ config.py` **137 source files** 0 错；`ast-guards` 在链内给出 **136/78/20/0/20/19**，与 BK 轮链外自测逐位相同（BL 未动 `ast.parse` 守卫面）；`check_artifact_doc_consistency.py` 的登记册覆盖率对账支路 `[OK]`（`coverage.xml` 取 `make test-cov` 全口径工件；先前那份无分支工件已按口径事故登记）。手册 CONSUMER_SIDE_STATUS_READERS_BL_2026-10-22（分册已删除）；
   教训入 `docs/MEASUREMENT_INTEGRITY.md` §56。
 
 ## [Unreleased] — 2026-10-22 BK 轮：`ast.parse` 守卫的捕获面棘轮——"读不懂"有两种异常，逐点收敛收不完，于是把口径交给门禁（零 LLM，$0）
@@ -769,7 +1284,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
   `patch_intent.py` 63/63 + 18/18 = 100%，`multi_candidate` 311/313、`cross_file` 293/309、
   `expert_pool` 181/198、`deterministic_repair` 113/114；**未覆盖行与本轮新增行交集为空**。
 - **`make gates` 全链 rc=0**（首跑墙钟 242s、链内 pytest 193.90s / 47 warnings；18 步命令全绿，链尾门禁分步读数按本册 47 行口径逐条登记；新门 `ast-guards` 在链内给出与链外自测逐位相同的 136/78/20/0/20/19。终跑 rc=0、墙钟 198s、链内 192.95s / 44 warnings，与首跑的链尾 47 行分步读数逐字节相同、差异全在 hypothesis 警告计数）。手册
-  `docs/reviews/AST_PARSE_GUARD_CAPTURE_BK_2026-10-22.md`；教训入 `docs/MEASUREMENT_INTEGRITY.md` §55。
+  AST_PARSE_GUARD_CAPTURE_BK_2026-10-22（分册已删除）；教训入 `docs/MEASUREMENT_INTEGRITY.md` §55。
 ## [Unreleased] — 2026-10-22 BJ 轮：AST 断言一致性检查的「读不懂 ⇒ 无疑点」收口——两腿各带 status、消费侧取最差者优先，`findings=[]` 不再单独算"扫过且干净"的证据（零 LLM，$0）
 
 > BI 之后，generator 侧还剩一条把四件事折成一个返回值的通道：
@@ -845,7 +1360,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
 
 - `make gates` 全链 **rc=0**（两次独立执行，均单独跑、不与其他 pytest / 文档编辑重叠）：首跑墙钟 **198s**、链内 pytest（xdist `-n 4 --dist loadfile`、**不带 `--cov`**）**11617 passed / 5 skipped / 0 failed、192.51s**（54 warnings；collected **11622**）；复验跑墙钟 **198s**、链内 **192.46s**（13 warnings）；两跑各 90 行分步读数在归一化用时与 warnings 计数后 `diff` **为空**（`ruff format --check` **965 份** / mypy **137** 源文件 / 双语 0 警告 0 失败 / 文档链接 **178 份 · 830 条 · 0 错误** / env-budget 253/253 / 状态通道 136 文件 / JSON 契约 7/7 / 严格 JSON **7274 份工件 0 违规 · 304 份写入点 0 违规** / 三臂对账 + 登记册覆盖率对账 [OK] / 零断言 **454 份**）。；终跑（上述全部登记文本回填之后再单独跑一次）rc=0、墙钟 **197s**、链内 **192.06s**、66 warnings，其 88 行门禁分步读数（不含 pytest 警告噪声行）与前两跑逐行相同。**这两跑之前同一条链曾以 `rc=2` 停在 lint 步（0s）**：`ruff check .` 报 2 处 `F821` 未定义名，出处正是本轮标为"可逐条重跑"的语料探针 `scripts/tools/bj_corpus_probe.py` 漏了样本路径列表的初始化，而它只在真实语料那 **1** 个盲区站点上崩——修复后已在干净树重跑、§3 读数逐位复现；那次失败**没有任何门禁读数可引**，也没被任何登记文本引用过。
 
-手册：`docs/reviews/ORACLE_VALIDATOR_MEASURABILITY_BJ_2026-10-22.md`。
+手册：ORACLE_VALIDATOR_MEASURABILITY_BJ_2026-10-22（分册已删除）。
 
 ## [Unreleased] — 2026-10-22 BI 轮：写盘前两道静态预检的「读不懂 → 通过」收口——两守卫各带 status、消费侧取最差者优先，空结果不再单独算"预检通过"的证据（零 LLM，$0）
 
@@ -933,7 +1448,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
   **200s / 195.21s**（36 warnings）；终跑 **201s / 195.73s**（8 warnings）。四跑
   **rc=0**，除墙钟 / 链内用时 / warnings 计数外逐行相同，计数差不作性能主张。
 
-手册：`docs/reviews/STATIC_PRECHECK_MEASURABILITY_BI_2026-10-22.md`。
+手册：STATIC_PRECHECK_MEASURABILITY_BI_2026-10-22（分册已删除）。
 
 ## [Unreleased] — 2026-10-21 BH 轮：G5 testless 验证四层的「不可测量 → 验证通过」收口——每层带 status、顶层取最差层，`passed=True` 不再单独算证据（零 LLM，$0）
 
@@ -988,7 +1503,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
   `make gates` 全链 **rc=0**（首跑墙钟 263s、链内 11504 passed / 5 skipped /
   0 failed、213.22s；回填读数后验证跑 rc=0、219s，其余门禁读数逐项一致）。
 
-手册：`docs/reviews/TESTLESS_VALIDATION_STATUS_BH_2026-10-21.md`。
+手册：TESTLESS_VALIDATION_STATUS_BH_2026-10-21（分册已删除）。
 
 ## [Unreleased] — 2026-10-21 BG 轮：静态类型检查的「不可测量 → 假干净」收口——mypy / pyright outcome 四值化，空 findings 不再是免费证据（零 LLM，$0）
 
@@ -1035,7 +1550,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
   11457；失败 = 基线守卫 + 键集合契约 + prompt card，后两者已修正）；
   行 19111/19637 = 97.3214% / 弧 7006/7442 = 94.1414%。
 
-手册：`docs/reviews/STATIC_CHECK_OUTCOME_BG_2026-10-21.md`。
+手册：STATIC_CHECK_OUTCOME_BG_2026-10-21（分册已删除）。
 
 ## [Unreleased] — 2026-10-21 BF 轮：脚本工具链的 rc==0 判绿收口——self-mutation 与模板验证器接"有效通过"，空套件不再记成存活 / 自洽（零 LLM，$0）
 
@@ -1086,7 +1601,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
   11432；唯一失败 = 基线守卫）；行 19055/19581 = 97.3147% / 弧
   6982/7418 = 94.1224%（与 BE 逐位相同）。
 
-手册：`docs/reviews/TOOLCHAIN_EFFECTIVE_GREEN_BF_2026-10-21.md`。
+手册：TOOLCHAIN_EFFECTIVE_GREEN_BF_2026-10-21（分册已删除）。
 
 ## [Unreleased] — 2026-10-21 BE 轮：生产路径的 rc==0 判绿收口——六处判绿点接"有效通过"，空套件不再记成修复正确（零 LLM，$0）
 
@@ -1131,7 +1646,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
 - 确认跑 11407 passed / 5 skipped / 0 failed、199.06s、rc=0（collected
   11412）；行 19055/19581 = 97.3147% / 弧 6982/7418 = 94.1224%。
 
-手册：`docs/reviews/PRODUCTION_EFFECTIVE_GREEN_BE_2026-10-21.md`。
+手册：PRODUCTION_EFFECTIVE_GREEN_BE_2026-10-21（分册已删除）。
 
 ## [Unreleased] — 2026-10-21 BD 轮：测量模块自己的 rc==0 判绿收口——MDO 基线与变异体接"有效通过"，谓词上移单一事实源（零 LLM，$0）
 
@@ -1167,7 +1682,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
 - 确认跑 11367 passed / 5 skipped / 0 failed、222.87s、rc=0（collected
   11372）；行 19025/19551 = 97.3095% / 弧 6968/7404 = 94.1113%。
 
-手册：`docs/reviews/MDO_EFFECTIVE_GREEN_BD_2026-10-21.md`。
+手册：MDO_EFFECTIVE_GREEN_BD_2026-10-21（分册已删除）。
 
 ## [Unreleased] — 2026-10-21 BC 轮：重放对账工具的 rc==0 判绿收口——misguided_metrics 三处任务级判据接"有效通过"（零 LLM，$0）
 
@@ -1204,7 +1719,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
 - 确认跑 11352 passed / 5 skipped / 0 failed、195.47s、rc=0（collected
   11357）；`make gates` 全链 rc=0。
 
-手册：`docs/reviews/MISGUIDED_REPLAY_EFFECTIVE_GREEN_BC_2026-10-21.md`。
+手册：MISGUIDED_REPLAY_EFFECTIVE_GREEN_BC_2026-10-21（分册已删除）。
 
 ## [Unreleased] — 2026-10-21 BB 轮：rc==0 判绿消费点的剩余收口——experiments 侧 11 处接共享"有效通过"谓词（零 LLM，$0）
 
@@ -1236,7 +1751,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
 - 真语料 246 份 benchmark 归档零模块级全 skip ⇒ 历史归档读数零影响（不回填、不重跑）；
 - 确认跑 **11317 passed / 5 skipped / 0 failed、243.69s、rc=0**（collected **11322**）；`make gates` 全链 rc=0。
 
-手册：`docs/reviews/EFFECTIVE_GREEN_CONSUMERS_BB_2026-10-21.md`。
+手册：EFFECTIVE_GREEN_CONSUMERS_BB_2026-10-21（分册已删除）。
 
 ## [Unreleased] — 2026-10-21 BA 轮（补记）：rc==0 不是有效通过——全 skip / xfail 的套件没有断言执行（零 LLM，$0）
 
@@ -1250,7 +1765,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
 > `tests/test_effective_green_ba.py` 35 例 + 变异 6 锚点全红
 > （14/1/3/3/1/2）+ 中性对照 0 红。真语料 246 份 benchmark /
 > 9358 条生成测试 / 114 条含标记 / 12 条 detection=1.0（均条件性标记）。
-> 手册：`docs/reviews/EFFECTIVE_GREEN_BA_2026-10-21.md`。
+> 手册：EFFECTIVE_GREEN_BA_2026-10-21（分册已删除）。
 
 ## [Unreleased] — 2026-10-21 AZ 轮：统计量的量纲与尾部不得被实现改写——Cohen's g 回 0–0.5，精确 p 去除 epsilon（零 LLM，$0）
 
@@ -1260,7 +1775,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
 > **1.926e-34** 尾部抬成 ~1.93e-12。修法：g 改 effectsize 口径
 > `abs(n10−n01)/(2*(n10+n01))`；精确尾改整数权重 `math.comb` 精确比较，
 > 非 0.5 分支按概率序双侧。受保护归档 20261016 零改写，修正值重发
-> 20261021。手册见 `docs/reviews/STATS_DEFINITION_AZ_2026-10-21.md`。
+> 20261021。手册见 STATS_DEFINITION_AZ_2026-10-21（分册已删除）。
 
 ### Fixed — Cohen's g 回到标准刻度
 
@@ -1279,7 +1794,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
 
 ### Changed — 工件重发与引用传播
 
-- 新增 `experiments/results/emse_stats_extensions_20261021/`
+- 新增 `（工件已清除）`
   （README + JSON + SHA256SUMS）；20261016 归档逐字节保留；
   `reproduce_zero_llm` 同时校验两代目录。
 - 论文 `g = 0.739` → 0.370、EMSE 骨架区间 → 0.37–0.50、复现包路径改指
@@ -1297,7 +1812,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
 > 金额对、证据已丢）。修法：读取层原样搬运 `token_metrics`，金额判定只在
 > `_cost_usd`——假值非对象同样 `None` + `token_metrics_not_object:<T>`，
 > 不折历史 0；干净 dict 与历史 0 口径不变。手册见
-> `docs/reviews/RUN_B8_PAYLOAD_AY_2026-10-21.md`。
+> RUN_B8_PAYLOAD_AY_2026-10-21（分册已删除）。
 
 ### Fixed — run_b8 读取层不再改写 `token_metrics` 形状
 
@@ -1319,7 +1834,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
 > 金额判定只在 `_cost_usd` 一处（假值非对象 ⇒ `None` +
 > `token_metrics_not_object:<T>`）。真批次 14 份 JSON / 12 键全 dict，
 > 两臂成本与四行冒烟逐位复现。`tests/test_run_b8_payload_ay.py` 27 例 +
-> 6/6 变异锚点。手册：`docs/reviews/RUN_B8_PAYLOAD_AY_2026-10-21.md`。
+> 6/6 变异锚点。手册：RUN_B8_PAYLOAD_AY_2026-10-21（分册已删除）。
 
 ## [Unreleased] — 2026-10-21 AX 轮：基准/全栈汇总的呈现与聚合读点也有值域——呈现可以折历史 0，均值不可以（零 LLM，$0）
 
@@ -1333,7 +1848,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
 > 呈现层缺席 / null 仍是 AE2 历史 0，在场坏值落 `不可读` + 机制名（终端
 > 另发 warning，不中止整轮）；均值缺席块沿历史跳过，任一在场块不可读
 > ⇒ 该基线 `None` + `avg_total_tokens_reason`，不给部分均值、不连坐任务
-> 统计与其他基线。手册见 `docs/reviews/SUMMARY_TOKEN_READERS_AX_2026-10-21.md`。
+> 统计与其他基线。手册见 SUMMARY_TOKEN_READERS_AX_2026-10-21（分册已删除）。
 
 ### Fixed — 基准/全栈汇总不再原值直出，均值不再给部分和
 
@@ -1360,7 +1875,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
 > 下游 `add_cost` 与池化读取器判定；`calls` 过共享 `token_metric_reading`
 > （缺席 / null metrics / 字段缺席仍是历史 0，字段在场读不动 ⇒ `None` +
 > `calls_reason`），事件计数与 token 金额互不连坐。手册见
-> `docs/reviews/COST_USAGE_READERS_AW_2026-10-21.md`。
+> COST_USAGE_READERS_AW_2026-10-21（分册已删除）。
 
 ### Fixed — 逐臂统计不再改写载荷形状，事件计数不再原值直出
 
@@ -1384,7 +1899,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
 > token 字段过共享 `token_metric_reading`（整份 metrics 缺席 / `null` / `{}`
 > 仍是历史 0，字段在场却读不动 ⇒ `cost_usd=None` + 去重后 `|` 拼接的机制名，
 > 不给部分和）；YAML 未知金额一律 `null`，未知 token 落 `不可读`。手册见
-> `docs/reviews/COST_USAGE_READERS_AV_2026-10-21.md`。
+> COST_USAGE_READERS_AV_2026-10-21（分册已删除）。
 
 ### Fixed — 分析侧成本入口不再折数，未知金额落 YAML `null`
 
@@ -1409,7 +1924,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
 > 把 `None` 读成免费并把一侧未知与另一侧金额相加。修法：金额与计数读数统一走
 > 共享值域，缺席才是历史 0、读不动给 `None` + 机制名，任一字段不可读整笔阻断；
 > 事件计数独立；总额的 `None` 传播到工件与 README。手册见
-> `docs/reviews/COST_USAGE_READERS_AU_2026-10-21.md`。
+> COST_USAGE_READERS_AU_2026-10-21（分册已删除）。
 
 ### Fixed — 金额与计数不再把未知折成 0 或部分和
 
@@ -1460,7 +1975,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
 > 计事件，机制名写入 `token_write_reasons` / `cache_write_reasons`；读端以
 > 写拒绝标记把整行判为不可读；`write_rejection_count` 区分缓存 `tokens: null`
 > 的「未知」与历史缺席。手册见
-> `docs/reviews/TOKEN_WRITE_DOMAIN_AT_2026-10-21.md`。
+> TOKEN_WRITE_DOMAIN_AT_2026-10-21（分册已删除）。
 
 ### Fixed — 写入端不再静默改写 token 计数
 
@@ -1508,7 +2023,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
 > parent 0 次。修法：`TraceSession` 写 32 位 run_id、16 位 root 与子 span，
 > task_start 在文件/内存两种模式都产 root，node/task_end 的 parent 指向 root；
 > 结构标识按字段名 + 形状精确豁免通用 32+ hex 脱敏。手册见
-> `docs/reviews/TRACE_IDENTIFIER_DOMAIN_AS_2026-10-21.md`。
+> TRACE_IDENTIFIER_DOMAIN_AS_2026-10-21（分册已删除）。
 
 ### Fixed — 生产端写入可导出的标识与父子链
 
@@ -1550,7 +2065,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
 > trace，parent 指向另一 trace 的 root）。修法：五个私有判定器 / 派生器，标识
 > 规范化为 32/16 位小写 hex，一个文件一个 trace，缺失 / 非法按 SHA-256 确定性
 > 派生，冲突改派生并披露；字符串属性只导出 `str`。手册见
-> `docs/reviews/OTEL_EXPORT_IDENTIFIER_DOMAIN_AR_2026-10-21.md`。
+> OTEL_EXPORT_IDENTIFIER_DOMAIN_AR_2026-10-21（分册已删除）。
 
 ### Fixed — 标识合法、单 trace、parent 闭合、重复导出稳定
 
@@ -1600,7 +2115,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
 > 在场 `None`）、整份文件崩溃（非有限 `ts`/`duration_ms` 的 `int()`）。修法：
 > 三个私有判定器 + 复用共享 `count_reason`，坏值不导出原值，机制名写进
 > `aitester.export_value_reasons`。手册见
-> `docs/reviews/OTEL_EXPORT_VALUE_DOMAIN_AQ_2026-10-21.md`。
+> OTEL_EXPORT_VALUE_DOMAIN_AQ_2026-10-21（分册已删除）。
 
 ### Fixed — 坏值不泄漏、坏时间戳不中止整文件、静默丢弃改为披露
 
@@ -1642,7 +2157,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
 > rag_ab 里把 `None` 送进统计、在 RAG 分组里被 `_safe_float` 强转、在成本表里印出
 > 字面量 `None`。修法：新增**聚合 metric 口径**共享读取器
 > `token_metric_reading` + `sum_token_metric_values`，五处接线。手册见
-> `docs/reviews/TOKEN_USAGE_REPORT_RESIDUAL_AP_2026-10-21.md`。
+> TOKEN_USAGE_REPORT_RESIDUAL_AP_2026-10-21（分册已删除）。
 
 ### Fixed — 聚合 `None` 不再折 0，缺席不再冒充拒绝，坏值不再冒充计数
 
@@ -1691,7 +2206,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
 > 读端仍在各自折叠 `total_tokens`。同一个坏行在档位表里静默变 0、在翻转对比里
 > 崩掉整份报告、在收敛曲线里产出负增量或 nan 边际。处置新增**总量口径**共享
 > 读取器（成本口径仍要 in/out，报告只展示总量），三个消费端接入。
-> 分册见 `docs/reviews/TOKEN_USAGE_REPORT_AGGREGATE_AO_2026-10-21.md`。
+> 分册见 TOKEN_USAGE_REPORT_AGGREGATE_AO_2026-10-21（分册已删除）。
 
 ### Fixed — 报告总量不再把读不动折成 0、崩溃或部分和
 
@@ -1734,7 +2249,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
 > `(r.get("token_usage") or {}).get(..., 0)` 求一遍。同一个坏行在写盘侧崩溃、
 > 在离线报告里静默变 0、在旧 JSON 回退里产出部分和。处置把聚合收口到
 > `aggregate_row_token_usage`，并区分"整批缺席"（历史 0）与"半套/坏值"（`None`）。
-> 分册见 `docs/reviews/TOKEN_USAGE_AGGREGATE_AN_2026-10-21.md`。
+> 分册见 TOKEN_USAGE_AGGREGATE_AN_2026-10-21（分册已删除）。
 
 ### Fixed — 聚合层不再把读不动的 token 折成 0 或部分和
 
@@ -1778,7 +2293,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
 > 仍在用 `tu.get(...) or 0`：在场坏值被折成可计价数字，正 token 行缺拆分时编出 $0，
 > `by_model` 归因不闭合仍照单计价，S11 把非计数当记账证据。处置把行级读取接到共享
 > 值域并区分“读不动”（总量级阻断）与“矛盾”（金额级阻断）。分册见
-> `docs/reviews/COST_AGGREGATE_AM_2026-10-21.md`。
+> COST_AGGREGATE_AM_2026-10-21（分册已删除）。
 
 ### Fixed — 成本表聚合不再把读不动的 token 折成 0
 
@@ -1821,7 +2336,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
 > 本轮不新增能力：`cost_effectiveness_block` 改前自持第二套行级算术（`usage.get(...) or 0`），
 > 同一行在 ext 读不动、在 §4.1 却被折成 0 并计价；读不动的行还在检出计数前被跳过，
 > 检出分母随记账好坏缩水。处置把读取器收口到生产模块，并区分"读不动"（总量级阻断）
-> 与"矛盾"（金额级阻断）。分册见 `docs/reviews/REPORT_TOKEN_READING_AL_2026-10-21.md`。
+> 与"矛盾"（金额级阻断）。分册见 REPORT_TOKEN_READING_AL_2026-10-21（分册已删除）。
 
 ### Fixed — 报告成本-效果块不再把读不动的行折成 0
 
@@ -1861,7 +2376,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
 
 > 本轮不新增能力：S11 的 50% 断裂阈值单侧通过时（`0 < 无记账行 < 50%`），零 token 行
 > 以 0 进入金额分子、仍占任务分母，`$/task` 被按精确值渲染。只增加披露与口径键，
-> 不改行级数学口径（AE2 锁定）。分册见 `docs/reviews/PARTIAL_ACCOUNTING_AK_2026-10-21.md`。
+> 不改行级数学口径（AE2 锁定）。分册见 PARTIAL_ACCOUNTING_AK_2026-10-21（分册已删除）。
 
 ### Fixed — 部分记账臂不再把下界当精确均值
 
@@ -1895,7 +2410,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
 ## [Unreleased] — 2026-10-21 AJ 轮（补记）：缓存命中是第三种记账状态——不是记账断裂，也不是免费（零 LLM，$0）
 
 > 本节在 AK 轮收口时补记：AJ 轮已更新头部摘要行与登记册，但未落本文件的分节。
-> 内容与 `docs/reviews/CACHE_CALIBER_AJ_2026-10-21.md` 一致。
+> 内容与 CACHE_CALIBER_AJ_2026-10-21（分册已删除） 一致。
 
 ### Fixed — 缓存命中不再被读成记账断裂
 
@@ -1920,7 +2435,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
 
 > 本轮不新增能力：处置 AH §7 第 1~3 条（`tokens_per_task` 两态 / `by_model` 形状域 /
 > `input+output` 与 `total_tokens` 一致性）——AH 把「三种不完整的和」判在金额侧，读入侧仍是
-> `sum += value or 0`。分册见 `docs/reviews/TOKEN_DOMAIN_AI_2026-10-21.md`。
+> `sum += value or 0`。分册见 TOKEN_DOMAIN_AI_2026-10-21（分册已删除）。
 
 ### Fixed — 一行 token 记账按三个非负整数判定
 
@@ -1956,7 +2471,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
 
 > 本轮不新增能力：处置 AE 评审 §5.2 候选 B（AB-15 / AB-16 / AB-17 / AE / AG
 > 多轮登记未修的那一条）——`emse_stats_extensions._cost_per_task` 把"不完整的和"
-> 当 `$/task` 返回。分册见 `docs/reviews/COST_COMPLETENESS_AH_2026-10-20.md`。
+> 当 `$/task` 返回。分册见 COST_COMPLETENESS_AH_2026-10-20（分册已删除）。
 
 ### Fixed — 四种"没有完整金额"的情形不再披金额形状
 
@@ -1999,7 +2514,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
 
 > 本轮不新增能力：处置 AE 评审 §5.6（全仓非严格 JSON 工件且无门禁）与 §5.7
 > （`run_b8._write_json` 的 `allow_nan=True`），并把 §5.6 的一处计量误读以日期化勘误更正。
-> 分册见 `docs/reviews/JSON_STRICT_AF_2026-10-20.md`。
+> 分册见 JSON_STRICT_AF_2026-10-20（分册已删除）。
 
 ### Added — 严格序列化原语 `src/utils/json_strict.py`
 
@@ -2066,7 +2581,7 @@ AE 的"68 份"是文本 grep 计数，不等于 JSON 裸 token 违规：严格�
 
 > 本轮不新增能力：处置 AE 评审 §5「登记未修 / 口径边界」第 2 条（候选 C）——
 > `cost_analysis` 的 `missing_models` 桶把「未登记 / 价格域坏 / 形状坏」三种事实混在
-> 一个名字下，修复建议与成因不对应。分册见 `docs/reviews/COST_ATTRIBUTION_AG_2026-10-20.md`。
+> 一个名字下，修复建议与成因不对应。分册见 COST_ATTRIBUTION_AG_2026-10-20（分册已删除）。
 
 ### Fixed — `cost_analysis` 未计价归因（真实缺陷、真批次 0 行改变）
 
@@ -2173,7 +2688,7 @@ AE 的"68 份"是文本 grep 计数，不等于 JSON 裸 token 违规：严格�
   桶不区分三种事实（仅归因措辞、0 实例）；E：P-1 归档 README 非渲染器产物（受保护、不重写）；
   G：`trace` A20 守卫无实例（Y2 已消化）；新登记：仓内 68 份历史 JSON 含裸 `NaN`/`Infinity`
   token（无严格 JSON 门禁）、`_write_json` 的 `allow_nan=True` 仍在、`run_b8` 拒绝路径按内置
-  标准价兜底而非 `None`。逐项见 `docs/reviews/COST_ADMISSION_AE_2026-10-20.md` §5。
+  标准价兜底而非 `None`。逐项见 COST_ADMISSION_AE_2026-10-20（分册已删除） §5。
 
 ## [Unreleased] — 2026-10-20 AD 轮：统计量渲染量级保持 + 正态尾部补集模式消除 + 数值精度丢失模式全仓普查（零 LLM，$0）
 
@@ -2281,7 +2796,7 @@ AE 的"68 份"是文本 grep 计数，不等于 JSON 裸 token 违规：严格�
 ### Fixed — E7 裁决录入表"被 .gitignore 忽略 = 永远不可能入库"缺口
 
 - AA 轮落地的 6 份空白录入表（`e7_entry_rater{A,B}_{n8,n41,n72}.csv`，协议 §7.1
-  备料工件）已进 `experiments/results/main_batch/SHA256SUMS`（受 CI `--verify`
+  备料工件）已进 `（工件已清除）`（受 CI `--verify`
   校验），却被 `.gitignore` 的 `experiments/results/main_batch/**` 通配排除压掉——
   `git status` 不显示、`check_artifacts_tracked` MANIFEST 亦未登记（该门禁
   docstring 点名的"被忽略"失效形态），**双静默缺口**：若只提交 SHA256SUMS，
@@ -2358,7 +2873,7 @@ AE 的"68 份"是文本 grep 计数，不等于 JSON 裸 token 违规：严格�
 - `tests/test_dataset_manifest_tolerance.py` **24 例**覆盖其中 **36 行**；**9 行**按机制
   登记为不可评估/不可达（含两处"构造上不可达"的冗余判定：legacy 文件名已被 glob 涵盖、
   `jsonl_paths` 不存在"混合存在"状态）。`dataset_ult.py` 与 `dataset_realbugs.py`
-  未覆盖语句**归零**。详见 `docs/reviews/DATASET_ADAPTER_TOLERANCE_AB5_2026-10-19.md`。
+  未覆盖语句**归零**。详见 DATASET_ADAPTER_TOLERANCE_AB5_2026-10-19（分册已删除）。
 - **修掉一处真实缺口**：`SWEBenchDataset._load_enrichment` 对缺 `instance_id` 的行原先
   **静默**丢弃——补充文件用错键名（如 `id`）时"整份补充零生效"毫无痕迹。现按行计数、
   结束时汇总一条 warning（**返回值语义未变**），并钉住"3 行只发 1 条、不得逐行刷屏"。
@@ -2478,7 +2993,7 @@ AE 的"68 份"是文本 grep 计数，不等于 JSON 裸 token 违规：严格�
   9554 / collected 9559），刷新后转绿；新增文件改变 xdist loadfile 配对后，全量未出现 AA-8
   同类跨文件顺序依赖。
 - 教训入 `docs/MEASUREMENT_INTEGRITY.md` §10，逐项报告见
-  `docs/reviews/JSONL_NON_OBJECT_ROW_AB8_2026-10-20.md`。
+  JSONL_NON_OBJECT_ROW_AB8_2026-10-20（分册已删除）。
 
 ### Fixed — `experiments/` 层 68 处 `json.loads` 返回域普查 + 一处"静默缩分母"改为计数披露（AB-9）
 
@@ -2498,7 +3013,7 @@ AE 的"68 份"是文本 grep 计数，不等于 JSON 裸 token 违规：严格�
   有跳过时追加「读取完整性」一节并写明"引用本报告任何数字时必须同时引用本节"，CLI 在有跳过时向
   stderr 打 `[WARN]` 而**退出码一律不变**（仍有可用批次 = 0，全部不可用仍走原 `[FAIL]` = 1）。
 - **入库工件的等价性由锁执行而非措辞承诺**：对盘上 10 份批次（实测跳过 0 份）重放 `_render`，与
-  `experiments/results/main_batch/target_quality_report.md` **逐字节相同**；该锁先断言输入文件确实
+  `（工件已清除）` **逐字节相同**；该锁先断言输入文件确实
   存在，否则空目录会让它空转给出"通过"。
 - **普查顺带照出的两条同族读数**：`experiments/` 顶层只有两份人写 JSON（`price_table.json` 与
   `injection_benchmark_samples.json`），都不在任何 `SHA256SUMS` 之下；前者是其中唯一"多消费者"的
@@ -2517,7 +3032,7 @@ AE 的"68 份"是文本 grep 计数，不等于 JSON 裸 token 违规：严格�
   读到真表并给出 `0.0015`），桩替换 `load_price_table` 后才拿到真实读数。与 AB-8 §10 的
   "推断必须在写完后实测一次"同形。
 - 教训入 `docs/MEASUREMENT_INTEGRITY.md` §11，逐项报告见
-  `docs/reviews/EXPERIMENTS_JSON_DOMAIN_AB9_2026-10-20.md`。
+  EXPERIMENTS_JSON_DOMAIN_AB9_2026-10-20（分册已删除）。
 
 ### Tests — 68 处普查的 14 例计数披露锁（AB-9b）
 
@@ -2559,7 +3074,7 @@ AE 的"68 份"是文本 grep 计数，不等于 JSON 裸 token 违规：严格�
   71 条任务，按 `code` 对齐后 **71/71 命中 `ULT.jsonl:tests` 分支、0 条走包装分支**。恒真路径在
   盘上真工件上走不到，恰是它值得改的原因——它只在缓存缺失或形状坏掉时出现，而那时它恰好产出
   最像结论的错读数：**罕见路径 + 高置信读数**是这类缺陷的指纹。
-- **入库工件逐字节不变**：`experiments/results/emse_ult_gold_diagnosis_20261015/README.md` 受
+- **入库工件逐字节不变**：`（工件已清除）` 受
   `SHA256SUMS.txt` 保护，本轮改动全在渲染与读取路径上，判据只能是逐字节复现。实测两次成立
   （改动后一次、`ruff format` 之后再一次）。两条踩到的口径：复现 README **必须同时提供
   `--supplement` 并把 `SUPPLEMENT_GENERATED_MUTK.json` 放进输出目录**（4c 节的开关是工件在不在
@@ -2569,7 +3084,7 @@ AE 的"68 份"是文本 grep 计数，不等于 JSON 裸 token 违规：严格�
   归档 gold（`task_metadata.gold_tests`），`ULT_Lite` 只是这批 gold 的上游出处；改名在真路径上不产生
   任何字节变化，但纯属措辞、不影响读数，故本轮只在代码注释写清，不动标签字符串。
 - 教训入 `docs/MEASUREMENT_INTEGRITY.md` §12，逐项报告见
-  `docs/reviews/ABSENT_VS_ZERO_AB10_2026-10-20.md`。
+  ABSENT_VS_ZERO_AB10_2026-10-20（分册已删除）。
 
 ### Tests — 「缺席 ≠ 零命中」的 35 例锁与 10 处锚点变异验证（AB-10c）
 
@@ -2632,7 +3147,7 @@ AE 的"68 份"是文本 grep 计数，不等于 JSON 裸 token 违规：严格�
   0 份、三 seed 配对无缺席。站点之三的 AB-9 原文所指"非对象行仍计入分母"（实测 0 实例）同样继续登记；
   重复 `task_id` 缩分母发生在**共享 loader** `emse_docstring_anchor_analysis.load_arm_rows` 内，
   本轮只在 augment 侧命名披露。
-- 逐项报告见 `docs/reviews/ABSENT_VS_ZERO_AB11_2026-10-20.md`，教训入 `docs/MEASUREMENT_INTEGRITY.md` §13。
+- 逐项报告见 ABSENT_VS_ZERO_AB11_2026-10-20（分册已删除），教训入 `docs/MEASUREMENT_INTEGRITY.md` §13。
 
 ### Tests — 三种缺席分三桶的 31 例锁与 18 处锚点变异验证（AB-11）
 
@@ -2803,7 +3318,7 @@ AE 的"68 份"是文本 grep 计数，不等于 JSON 裸 token 违规：严格�
 
 - **本轮前置复测新发现的第三处，此前从未登记**。字段名写死单位（`total_usd` /
   `usd_per_detection` / `$/task`），实现里**没有任何一行读 `currency`**：`/tmp/ab13_probe2.py` R4
-  用一条 `qwen-long`（盘上真表登记 CNY 0.5 / 2.0，出处是官方价目页）的合成行实测得
+  用一条 CNY 计价模型（当时盘上真表登记 CNY 0.5 / 2.0，出处是官方价目页；条目已随 2026-10-23 清理删除）的合成行实测得
   `total_usd = 2.5`、`n_priced_rows = 1`，报告把它印在"总 $"列——分母非空、单价非空、
   没有任何不可计价披露，**账面完全正常**。这不是精度问题：`usd_per_detection` 是成本-效果
   主张的分子，币种错一次整体错一个汇率。
@@ -2824,7 +3339,7 @@ AE 的"68 份"是文本 grep 计数，不等于 JSON 裸 token 违规：严格�
   语法/缺席/键缺席分桶 + 六机制互不相同 + 真表干净路径无留痕 + 禁 `# pragma: no cover` 源码锁 +
   哨兵三态 + 币种与机制分桶 + 渲染节（有机制才追加、GFM 格数与表头相等）+
   真路径不变量（三臂 `$/task` 逐位、无披露键、783 行 / 3 文件覆盖面下界、
-  `qwen-long`（CNY）与 `agnes-3.0-flash`（价格 null）两模型证明闸门不是空转、
+  一条 CNY 计价模型与一条价 `null` 模型两例证明闸门不是空转、
   入库报告确实早于 `cost_eff` 块）。除真路径组外全部 `tmp_path` 合成，缺工件即 `pytest.fail`。
 - **既有断言撞新口径的裁决**：`tests/test_emse_stats_report.py::TestCostEffectivenessA07` 两例
   用不写 `currency` 的合成条目，新口径下从"计价成功"退化成"根本没计价"。判**旧期望本身不对**
@@ -2851,11 +3366,11 @@ AE 的"68 份"是文本 grep 计数，不等于 JSON 裸 token 违规：严格�
   `0.177789 / 0.219173 / 0.010135` 逐位复现；归档的 EMSE 报告本就早于 `cost_eff` 块，
   故文档↔工件一致性门不受影响。**这同时是"闸门可能从未执行"的嫌疑来源**，
   因此覆盖面下界与两模型对照写进断言。
-- 登记：`docs/reviews/PRICE_TABLE_CURRENCY_AB13_2026-10-20.md` 分册入库并同步中英 `docs/INDEX`；
+- 登记：PRICE_TABLE_CURRENCY_AB13_2026-10-20（分册已删除） 分册入库并同步中英 `docs/INDEX`；
   `docs/MEASUREMENT_INTEGRITY.md` 新增 §16；状态登记册 §1 / §3.2 / §4 刷新，§4 新增 AB-13 行六条边界
   （含"成本口径已全仓统一"与"这类错报不存在"两条禁用引用），并把 AB-12 行 ③ 的两处"只登记不修"
   改判为已由本轮处置。**AB-14 候选**：两套币种口径统一、§4.1 表增列币种、
-  `price_table.json` 补齐 `agnes-3.0-flash` 价格（数据缺口），另携 AB-12 的两处（`--write` README
+  `price_table.json` 补齐价 `null` 条目（数据缺口；该条目已随 2026-10-23 清理删除），另携 AB-12 的两处（`--write` README
   前言对入库文件不幂等、站点 a 同 seed 多份候选的胜者文件名未记录）。
 - `make gates` 全链实测 **rc=0**，共三跑：本机同口径前两跑读数 **174.92s / 176.10s**，均
   **9876 passed / 5 skipped / 0 failed**（两跑间 1.18s 差属墙钟抖动）；收口后为验证末次文档改写
@@ -2866,7 +3381,7 @@ AE 的"68 份"是文本 grep 计数，不等于 JSON 裸 token 违规：严格�
 ### Fixed — 同一个"这笔钱是不是美元"的判断，仓内写了四遍且四遍互不相同（AB-14a）
 
 - AB-13 处置第 3 条自己留下一句"仓内另有口径、本轮不统一"。本轮把它展开成前置读数表
-  （`/tmp/ab14_probe.py`、`/tmp/ab14_probe2.py`，`docs/reviews/CURRENCY_SINGLE_SOURCE_AB14_2026-10-20.md` §1）：
+  （`/tmp/ab14_probe.py`、`/tmp/ab14_probe2.py`，CURRENCY_SINGLE_SOURCE_AB14_2026-10-20（分册已删除） §1）：
   **四处写法给出四种相反结论**——`src/budget/pricing.py` 的 `entry.get("currency", "USD")` 让键缺席
   **默认成美元并计价**、而同站点值为 `null` 时**不计价**（两种缺席、相反结论）；
   `statistical_analysis.py` 的 `or "USD"` 把"键缺席 / 值为 null / 值是空串"**三种事实一律印成 `USD`**，
@@ -2942,7 +3457,7 @@ AE 的"68 份"是文本 grep 计数，不等于 JSON 裸 token 违规：严格�
   第二套口径，与本轮判据相反，但改它要连带核对该文件全部成本例期望值，转 AB-15。
 - **受保护工件三项对账**：改前 `/tmp/ab14_re`、改后 `/tmp/ab14_post`、终态 `/tmp/ab14_post3` 三份
   `statistical_report_e2.md` / `_e2_iter.md` **逐字节相同**（只归一生成时间行）⇒ 本轮对报告输出改变 0 行；
-  `experiments/results/main_batch/SHA256SUMS` **2040 条全 OK、0 条不符**；归档 T1/B2 载荷 21 条
+  `（工件已清除）` **2040 条全 OK、0 条不符**；归档 T1/B2 载荷 21 条
   `cost_usd` 逐位相等。与入库版本身的差值（`_e2.md` 86 行、`_e2_iter.md` 88 行）是**改前即如此**的
   既存陈旧（S11 记账节与 BH-FDR 节晚于报告生成），本轮不修、如实登记。
 - 全量口径（本机 macOS 3.14.6、xdist `-n 4 --dist loadfile` 带 `--cov`）：登记前一跑
@@ -2953,7 +3468,7 @@ AE 的"68 份"是文本 grep 计数，不等于 JSON 裸 token 违规：严格�
   未覆盖行数 525 与偏弧 438 **逐位不变**，十项逐模块行覆盖逐项复算**全部不变**。
   **本轮覆盖率换了性质**：AB-8 起连续五轮"`src/` 零改动 ⇒ 同值"的观测链条在此终结，
   §14 的口径反过来同样成立——读数**变化**也不是缺陷的证据，佐证仍是改动面文件清单。
-- 登记：`docs/reviews/CURRENCY_SINGLE_SOURCE_AB14_2026-10-20.md` 分册入库并同步中英 `docs/INDEX`；
+- 登记：CURRENCY_SINGLE_SOURCE_AB14_2026-10-20（分册已删除） 分册入库并同步中英 `docs/INDEX`；
   `docs/MEASUREMENT_INTEGRITY.md` 新增 §17；状态登记册 §1 / §3.2 / §4 刷新（§4 新增 AB-14 行七条边界，
   并把 AB-13 行 ① 的"两套口径并存"标注为已由本轮统一）。**AB-15 候选六处站点（另携两处随携）**：
   `oracle_examples_replay.py:581` 把"无法估算"印成 `$None`（与真零消费的 `$0.0` 共用美元前缀、
@@ -2975,7 +3490,7 @@ AE 的"68 份"是文本 grep 计数，不等于 JSON 裸 token 违规：严格�
 ### Fixed — 被拒绝的金额不得披着金额的形状出现（AB-15a / AB-15b / AB-15c）
 
 - **oracle**：`render_readme` 改前对 `estimated_cost_usd=None` 无条件加 `$` ⇒ 未登记模型与
-  `qwen-long`（CNY）都印 **`**$None**`**，真零印 `**$0.0**`，两者共用美元前缀且无机制归因。
+  该 CNY 计价模型都印 **`**$None**`**，真零印 `**$0.0**`，两者共用美元前缀且无机制归因。
   `generation_summary` 现在只在 `cost is None` 时写 `cost_unpriced_reason`，取值来自与
   `estimate_cost_usd` 同一个 `_price_admission`；README 渲染 `**无法估算（<机制>）**`，
   `0.0` 仍是 `**$0.0**`。归档 P-1 README（251 行手写富文本，当前渲染器输出 64 行）**不重生成**，
@@ -3033,7 +3548,7 @@ AE 的"68 份"是文本 grep 计数，不等于 JSON 裸 token 违规：严格�
   0 failed、179.70s）、登记后终态复跑 **177.89s**（链内 10109 passed / 5 skipped / 0 failed、173.96s）；
   文档↔工件门三项对账两跑全部 `[OK]`（含"状态登记册 §1 行/分支声明与 `coverage.xml` 实测相符，
   容差 ±0.20pp"）。两跑均不带 `--cov`，与全量覆盖率口径不可互换引用。
-- 登记：分册 `docs/reviews/COST_REJECTION_RENDERING_AB15_2026-10-20.md` 入库并同步中英
+- 登记：分册 COST_REJECTION_RENDERING_AB15_2026-10-20（分册已删除） 入库并同步中英
   `docs/INDEX`；`docs/MEASUREMENT_INTEGRITY.md` 新增 §18；状态登记册 §1 / §3.2 / §4 刷新
   （§4 新增 AB-15 行十项边界）。十项边界中两项属"拒绝之外的形状"（spec 真值非对象仍崩、
   三站点数字域不一致），三项属"部分和仍存在"（report `total_usd`、ext 未登记模型、
@@ -3064,7 +3579,7 @@ AE 的"68 份"是文本 grep 计数，不等于 JSON 裸 token 违规：严格�
   （0.0 部分和）改归**拒绝**（"登记了却用不了" ≠ "没登记"，任一份额被拒 ⇒ `usd_per_task=None`）；
   未登记模型仍走旧"部分和 + note"口径（登记见分册 §5.7）。
 - **真批次读数零改变**：盘上真表三条目 audit——`deepseek-flash` `USD 0.3/1.2`（批次实际唯一
-  用到）、`agnes-3.0-flash` `USD` 但价 `null/null`、`qwen-long` `CNY 0.5/2.0`；收紧数字域后
+  用到）、一条 `USD` 但价 `null/null` 的条目、一条 `CNY 0.5/2.0` 的条目（后两条已随 2026-10-23 清理删除）；收紧数字域后
   deepseek-flash 仍是唯一可计价条目 ⇒ 池化 `1.447277 / 0.260967 / 0.541408`、总额 `2.249652`、
   逐 seed 成本、ext 三臂六个读数逐位不变、载荷不新增披露键。
 - **接线锁与死词汇**：新锁断言 `def price_block_reason(` / `def entry_block_reason(` 全仓各恰 1 次、
@@ -3089,7 +3604,7 @@ AE 的"68 份"是文本 grep 计数，不等于 JSON 裸 token 违规：严格�
 - 受保护读数：真批次池化与逐 seed 成本逐位相同、载荷不新增披露键、ext 三臂六个读数逐位复现、
   statistical 真表 priced / missing 不变、归档 P-1 README 未重生成；入库统计报告的 86 / 88 行
   陈旧差值本轮未复算、未重写（登记）。
-- 登记：分册 `docs/reviews/PRICE_ADMISSION_AB16_2026-10-20.md` 入库并同步中英 `docs/INDEX`；
+- 登记：分册 PRICE_ADMISSION_AB16_2026-10-20（分册已删除） 入库并同步中英 `docs/INDEX`；
   `docs/MEASUREMENT_INTEGRITY.md` 新增 §19；状态登记册 §1 / §3.2 / §4 刷新（§4 新增 AB-16 行
   十一项边界；AB-15 行中"spec 真值非对象仍崩"与"三站点数字域不一致"两项标注已由本轮处置）。
   十一项边界构成：假值非对象容器、聚合脚本数字门、`KeyError` 通道、null 值条目、桶词汇、
@@ -3164,7 +3679,7 @@ AE 的"68 份"是文本 grep 计数，不等于 JSON 裸 token 违规：严格�
   525 − 1、偏弧 437 = 438 − 1（差额由 pricing.py 一项对账：141 语句 2 未覆盖〔397–398
   `invalid_usage` 早退存量〕、66 弧 0 偏弧；其余文件合计净差 0，未逐个复算）；十项核心模块行
   覆盖与 routing 三项逐位不变。
-- 登记：分册 `docs/reviews/TABLE_ADMISSION_AB17_2026-10-20.md` 入库并同步中英 `docs/INDEX`；
+- 登记：分册 TABLE_ADMISSION_AB17_2026-10-20（分册已删除） 入库并同步中英 `docs/INDEX`；
   `docs/MEASUREMENT_INTEGRITY.md` 新增 §20；状态登记册 §1 / §3.2 / §4 刷新（§4 新增 AB-17 行
   九项边界；AB-16 行 ①③④⑨ 四项标注已由本轮处置，②⑤⑥⑦⑧⑩⑪ 六项原样延续）。九项边界构成：
   统计桶词汇、聚合脚本数字门、ext `is_file()` 两套目录机制码（设计性）、spec 加载器
@@ -3248,7 +3763,7 @@ AE 的"68 份"是文本 grep 计数，不等于 JSON 裸 token 违规：严格�
   该门文法是拒绝分支不可达的**唯一前提**，提升后测试可逐字节钉住它（放宽即先红）。
 - 棘轮水位 `96.40 / 92.50` **维持不动**：本轮新增测试的覆盖率增量待 CI ubuntu 3.14 阻断档
   实测同口径后再由 `--allow-bump` 决定。
-- 审计报告：`docs/reviews/FIX_COVERAGE_AUDIT_ROUND4_2026-10-19.md`。
+- 审计报告：FIX_COVERAGE_AUDIT_ROUND4_2026-10-19（分册已删除）。
 
 ### Added — 跨文件 D3b Step B：不实施，但把边界钉成机器可验的反面锁定（AA-6）
 
@@ -3372,7 +3887,7 @@ AE 的"68 份"是文本 grep 计数，不等于 JSON 裸 token 违规：严格�
   0 跳过（旧实现设零额度）。
 - **F07** `init_db.init_database`：conn/cursor 创建后即进入 try/finally（覆盖库名校验与
   全部建表 SQL），异常路径不再泄漏连接。
-- **F09** zai SDK 路径 `temperature`：`_call_zai` 新增 `temperature` 参数并透传
+- **F09** 第三方 SDK 路径 `temperature`：`_call_<third-party>` 新增 `temperature` 参数并透传
   `create(temperature=...)`，与缓存请求身份记录的"实际生效温度"一致。
 - **F10** 共享 venv 跨 commit 错源：新增 `<venv>/.venv_editable_commit` marker +
   仓库级 venv 锁内校验/按需重指向；verify 持锁至验证结束、绑定失败 fail-closed；
@@ -3431,7 +3946,7 @@ AE 的"68 份"是文本 grep 计数，不等于 JSON 裸 token 违规：严格�
   使用内置 `hash()`，受 `PYTHONHASHSEED` 随机化影响在全量 xdist 下偶发"无关 prompt 误命中"
   （实测复现 1/10 文件级运行）；改 sha256 派生维度后 25 次复跑 0 失败。
 - 全量回归 **9338 passed / 5 skipped / 0 failed**（collected 9343）；`make gates` 全绿。
-- 收口报告：`docs/reviews/THIRD_PARTY_REVIEW_2026-10-19_FIX_CLOSURE.md`。
+- 收口报告：THIRD_PARTY_REVIEW_2026-10-19_FIX_CLOSURE（分册已删除）。
 
 ## [Unreleased] — 2026-10-19 Y5 轮：E7 三路径备料齐备 + 嵌套性回归锁（零 LLM，$0）
 
@@ -3471,7 +3986,7 @@ AE 的"68 份"是文本 grep 计数，不等于 JSON 裸 token 违规：严格�
 > 第三轮独立评审 §15 列了 8 个待澄清问题，答案此前散落在登记册、ADR、论文与
 > 各轮审计报告中，评审方需跨 4+ 份文档拼合。本轮收敛为单一权威入口。
 
-### Added — `docs/reviews/REVIEW_CLARIFICATIONS_2026-10-19.md`
+### Added — REVIEW_CLARIFICATIONS_2026-10-19（分册已删除）
 
 - 8 项逐条回应：**5 项已闭合**（ULT 复算路径 / `SPEC_SMT_ENABLE` 端到端 / 编排搜索
   解锁 / 门禁口径 / B2 后主叙事）、**2 项待项目方裁定**（E7 时间表与 n 口径、
@@ -3492,7 +4007,7 @@ AE 的"68 份"是文本 grep 计数，不等于 JSON 裸 token 违规：严格�
 ## [Unreleased] — 2026-10-19 Y3 轮：审计收尾与全仓未覆盖地图（零 LLM，$0）
 
 > Y2 轮遗留项收口，并把审计视野从"修复新增行"扩展到全仓。真实 LLM 花费：**$0**。
-> 详细报告：`docs/reviews/FIX_COVERAGE_AUDIT_ROUND3_2026-10-19.md`。
+> 详细报告：FIX_COVERAGE_AUDIT_ROUND3_2026-10-19（分册已删除）。
 
 ### Removed — 2 个零调用点死函数
 
@@ -3527,7 +4042,7 @@ AE 的"68 份"是文本 grep 计数，不等于 JSON 裸 token 违规：严格�
 
 > Y 轮审计的收口：补齐 `src/` 剩余的 A20 守卫缺口，并把同一方法首次应用到
 > `experiments/`（Y 轮明确披露未覆盖的领域）。真实 LLM 花费：**$0**。
-> 详细报告：`docs/reviews/FIX_COVERAGE_AUDIT_ROUND2_2026-10-19.md`。
+> 详细报告：FIX_COVERAGE_AUDIT_ROUND2_2026-10-19（分册已删除）。
 
 ### Fixed — A20 三级降级链补口（`trace.py`，3 例）
 
@@ -3578,7 +4093,7 @@ AE 的"68 份"是文本 grep 计数，不等于 JSON 裸 token 违规：严格�
 
 > 针对前两轮评审暴露的复发模式（"修复覆盖主路径、漏掉分支路径"）做系统审计：
 > 以 `coverage.xml` 行集合为权威口径，审计 `ff15a2f`→HEAD 的 `src/` 修复新增代码。
-> 真实 LLM 花费：**$0**。详细报告：`docs/reviews/FIX_COVERAGE_AUDIT_2026-10-19.md`。
+> 真实 LLM 花费：**$0**。详细报告：FIX_COVERAGE_AUDIT_2026-10-19（分册已删除）。
 
 ### Audit — 552 行修复新增代码中 37 行（6.70%）从未被测试执行
 
@@ -3596,8 +4111,8 @@ AE 的"68 份"是文本 grep 计数，不等于 JSON 裸 token 违规：严格�
   （跨模型切换前）零覆盖——回退后第一个模型失败即继续烧第二个模型，预算闸被绕过。
   **变异验证**：抹掉该分支后既有 `test_budget_rechecked_before_retry` **仍然通过**（它走第一层），
   仅新增用例变红，日志显示 `model-2` 被调用。
-- **A11 zai 路径的预算异常透传**（`llm_client.py:589-592`）：`except BudgetExceededError: raise`
-  零覆盖；回退后预算超限被包装成 `RuntimeError("zai API 调用失败")`，上层误判为普通 API 故障
+- **A11 第三方 SDK 路径的预算异常透传**（`llm_client.py:589-592`）：`except BudgetExceededError: raise`
+  零覆盖；回退后预算超限被包装成 `RuntimeError("第三方 API 调用失败")`，上层误判为普通 API 故障
   继续故障转移。
 - **A15 同端点不同 key 的实例 ID 后缀**（`api_manager.py:239-240`）：实例 ID 只由 `base_url`
   派生（刻意不让凭证进节点键），故**同 model / 同 base_url / 不同 api_key**（配额轮询的常见配置）
@@ -3617,7 +4132,7 @@ AE 的"68 份"是文本 grep 计数，不等于 JSON 裸 token 违规：严格�
 
 > 论文定稿核对的前置工作：对论文引用的核心数字逐一零 LLM 复算（12 项全吻合），
 > 并审计附录 A 引用的复算入口。真实 LLM 花费：**$0**。详细报告：
-> `docs/reviews/X_ROUND_ZERO_LLM_VERIFICATION_2026-10-19.md`。
+> X_ROUND_ZERO_LLM_VERIFICATION_2026-10-19（分册已删除）。
 
 ### Verified — 零 LLM 复算核对（12 项全吻合）
 
@@ -3696,13 +4211,13 @@ AE 的"68 份"是文本 grep 计数，不等于 JSON 裸 token 违规：严格�
 
 - 反例测试：`tests/test_review_73481bb_residuals.py`（12 例）。同一文件在修复前提交 `73481bb` 的干净检出上实测 **10 failed / 2 passed**，修复后 **12 passed**。
 - 受影响模块既有回归（13 文件，含连带修复触及的 `test_examples_multisample.py`/`test_oracle_examples.py`/`test_run_benchmark.py`）：**442 例全部通过**（含两种文件顺序各跑一遍的污染复查）。
-- 逐项收口与边界说明：`docs/reviews/THIRD_PARTY_REVIEW_2026-10-18_FIX_CLOSURE.md` §5。
+- 逐项收口与边界说明：THIRD_PARTY_REVIEW_2026-10-18_FIX_CLOSURE（分册已删除） §5。
 - **AO3 行锁随批推进（W 轮文档同步批次收口）**：`tests/test_ao_batch.py::TestReadmeEnHeader` 的 en README 头部日期行锁由 `Last updated: 2026-10-07` + `repair-engine batch XIV` 更新为 `Last updated: 2026-10-19` + W 轮表述——U/V 两轮均未按该锁"随最新批次推进"的约定维护头部日期行与行锁（二者一致地停留在 10-07，故 73481bb 的 CI 测试矩阵仍绿）；本批刷新日期行后 CI test 矩阵三档首跑暴露（诊断注解唯一失败项），本批同步收口。
 - **CI Security 门禁修复（W 轮文档同步批次实测发现，属 V 轮推送即存在的失败）**：`gitleaks detect --no-git`（v8.28.0 + 仓库配置，干净检出精确复现）命中 `tests/test_trace_jsonl_integrity.py`（V 轮新增）的 **9 条 generic-api-key**——全部为"必须被 `<REDACTED>` 脱敏"断言的夹具假值（`abcdefgh123456` ×6 / `placeholderSecret123` / `supersecretvalue` / `sk-ws-ABCDEFGH1234567890xy`）。按 `.gitleaks.toml` 既定治理口径**逐字面量**登记豁免并注明用途（非整目录豁免，真实泄漏仍会检出）；干净检出复扫 **0 findings / 退出码 0**。
 
 ## [Unreleased] — 2026-10-18 V 轮（第三方独立评审 23 项修复：A08 P0 凭证隔离 + A01–A07/A09–A17 P1 + A18–A23 P2）
 
-> V 轮响应第三方独立评审（Windows 环境静态审查，评审报告：`AITester_审查报告.md`；用户确认 23 项结论 **100% 准确**）。评审提交 `ff15a2f` 与本轮起点逐位一致；逐项修复 + 回归锁 + 评审 M1–M9 验收脚本复跑，另有独立收口报告 `docs/reviews/THIRD_PARTY_REVIEW_2026-10-18_FIX_CLOSURE.md`。
+> V 轮响应第三方独立评审（Windows 环境静态审查，评审报告：`AITester_审查报告.md`；用户确认 23 项结论 **100% 准确**）。评审提交 `ff15a2f` 与本轮起点逐位一致；逐项修复 + 回归锁 + 评审 M1–M9 验收脚本复跑，另有独立收口报告 THIRD_PARTY_REVIEW_2026-10-18_FIX_CLOSURE（分册已删除）。
 > 真实 LLM 花费：**$0**（全部为代码/文档/工件层修复与零 LLM 验证；不调用模型、不构建容器）。
 
 ### Security — A08（P0）：不可信执行环境凭证隔离
@@ -3728,7 +4243,7 @@ AE 的"68 份"是文本 grep 计数，不等于 JSON 裸 token 违规：严格�
 
 - **A09**：精确缓存键与语义缓存索引统一按**规范化有效请求身份**（model/endpoint/有效默认温度/thinking/reasoning_effort/max_tokens/JSON 实际生效值/namespace/路由）隔离；payload 记录 `request_identity`；旧格式缓存仅在历史默认包络下只读回退。M6 复跑：B 身份不再命中 A。
 - **A10**：生产请求链改为线程局部任务分配**优先**、全局链随后故障转移（半截配置不注入、去重）；成功请求记录真实配置并在缓存 payload 写 `request_identity` + `response_identity`（查找身份 vs 真实响应来源可区分）。M9-A10 复跑：首请求 = 线程局部 B、链=[B, global-A]。
-- **A11**：OpenAI 与 zai 路径改为**收到响应先记账 usage、再判 finish_reason/空响应**；重试器新增 `pre_retry_check`（重试前复查预算）。M9-A11 复跑：两次 usage 累计 22（15 + 7）。
+- **A11**：OpenAI 与 第三方 SDK 路径改为**收到响应先记账 usage、再判 finish_reason/空响应**；重试器新增 `pre_retry_check`（重试前复查预算）。M9-A11 复跑：两次 usage 累计 22（15 + 7）。
 - **A15**：节点/客户端改以端点实例 ID（`model@sha256(base_url)[:8]`）标识，模型名为属性；同 model 多 provider 全部保留、健康/熔断/选路独立；单实例对外键不变，新增 `remove_node_by_id()`，Prometheus 追加 `node_id`。M9-A15 复跑：同 model 两端点 2 节点、健康独立。
 - **A22（P2）**：`retrieval_relevance` 一次解析有效 k、top-k 内直接整数计数（不再用 `len(refs)` 反推）。
 - **A23（P2）**：`_lru_tokens` 随正缓存淘汰、负缓存写入与 clear 同步维护，键集 ⊆ 正缓存且受 `_LRU_MAXSIZE` 约束；M7 复跑 `before clear 2 2` → `after clear 0 0`。
@@ -3759,11 +4274,11 @@ AE 的"68 份"是文本 grep 计数，不等于 JSON 裸 token 违规：严格�
 
 - `BASELINE.yaml` tests：collected **9130** = passed **9125** + skipped 5 + failed 0（V 轮净增 169 例）；coverage 刷新见同文件 coverage 节。
 - 评审 M1–M9 复跑：M1 数值逐位一致（38/240/21、4/261/0、117/261/0、12:80、31 归档模板）；M2 清单 69 份 / 7,639 条 raw / 0 缺失 / 0 不符（修复前 9 missing）；M3 CSV 12/12、损坏 JSONL 有书面归因且后续写入受守卫；M4/M6/M7/M8/M9 对应断言全部通过（M5 Windows 分支以 Mock 单测覆盖）。
-- 门禁：`make docs-check`、`check_baseline_numbers`、`check_baseline`、`check_artifact_doc_consistency`、`check_checksum`、`check_zero_assert_tests`、`check_env_budget --check` 等全绿（完整命令与结果见 `docs/reviews/THIRD_PARTY_REVIEW_2026-10-18_FIX_CLOSURE.md`）。
+- 门禁：`make docs-check`、`check_baseline_numbers`、`check_baseline`、`check_artifact_doc_consistency`、`check_checksum`、`check_zero_assert_tests`、`check_env_budget --check` 等全绿（完整命令与结果见 THIRD_PARTY_REVIEW_2026-10-18_FIX_CLOSURE（分册已删除））。
 
 ## [Unreleased] — 2026-10-18 U 轮（第三轮独立评审收口：A-05/A-06/A-08/A-09 + A-03/A-17 漂移论文化 + P3 评测诚信 checklist + D3b Step A 接线，零 LLM）
 
-> U 轮执行第三轮独立系统性评审（`docs/reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-18.md`）中不依赖 LLM 配额/人力授权的收口项，并把该轮评审报告入库：
+> U 轮执行第三轮独立系统性评审（INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-18（分册已删除））中不依赖 LLM 配额/人力授权的收口项，并把该轮评审报告入库：
 > ① **A-05 门禁数量口径统一**——五处分裂（README 文件树 23/18、论文 24、登记册 headline 25、git 记录 25、实测 26 脚本/27 调用）收敛为 `BASELINE.yaml` `gates` 节三个可复算数字；
 > ② **A-06 "0 failed" 环境标签**——登记口径改为"正常环境 0 failed"，受限宿主 14-15 例能力缺失失败逐项归因披露；
 > ③ **A-08/A-09 测试环境假设加固**——broker `mkdir` 垫片防御 + `ps`/生产 profile `sandbox_apply` 能力探测 `skipif`，加固后受限环境亦 0 failed；
@@ -3849,7 +4364,7 @@ AE 的"68 份"是文本 grep 计数，不等于 JSON 裸 token 违规：严格�
 
 - **文档链接（18 处）**：用 `git archive HEAD` 解包树模拟 fresh clone / CI checkout 实测
   `check_doc_links.py --strict` 报 **18 处失败**——全部指向被 `.gitignore` 排除、只存在于本机的工件
-  （`experiments/results/experiment_report_20260925.md`、`synthetic_50_final/charts/`、
+  （`（工件已清除）`、`synthetic_50_final/charts/`、
   `docs/study/SUBMISSION_{CHECKLIST,SKELETON}_*.md`、根目录 `INDEPENDENT_REVIEW_2026-10-16.md`）；
   本机工作树因文件在场而一直"假绿"。处置：证据类引用改为代码路径文本（README 中英、design、
   failure_analysis）；投稿清单/骨架与 10-16 评审改为纯文本并指向已入库的
@@ -3870,7 +4385,7 @@ AE 的"68 份"是文本 grep 计数，不等于 JSON 裸 token 违规：严格�
   改为 `cyclonedx-py requirements requirements.txt`（`ci.yml` + `release.yml` 同修），
   本地 4.5.0 实测生成成功。
 - **CI 首跑暴露的四类跨平台测试缺陷（ubuntu 3.13，均为既有用例、非 U 轮代码引入）**：
-  ① `test_none_cell_renders_dash`——默认图表输出目录 `experiments/results/synthetic_50_final/charts`
+  ① `test_none_cell_renders_dash`——默认图表输出目录 `（工件已清除）`
   为本地工件（不入库），CI 中 `savefig` 抛 `FileNotFoundError`；测试改为 monkeypatch 输出到 `tmp_path`。
   ② `test_diff_codes_full_file_replace_is_git_applicable`——临时仓库 `git commit` 依赖全局 git
   identity（CI runner 无），显式配置仓库级 `user.name/email`。③ `test_explicit_roots_outside`——
@@ -3975,7 +4490,7 @@ AE 的"68 份"是文本 grep 计数，不等于 JSON 裸 token 违规：严格�
   预注册 P1/P2/P3 按字面未全满足 → classification **`unexpected_delta`**（ON 10/10 停滞终止、repair-invalid 日志 0；
   但 preempt 日志 8/10——另 2 任务无平局走既有尾部短路；OFF 1/10 任务 LLM 轨迹分叉到 max_iterations；
   Δ iterations=0.2 不可归因）。**不得当作收益主张**；判据修正项（固定响应重放/拆子判据）已登记下轮。详见
-  `experiments/results/t_round_a19_default_gate_20261018/README.md`。
+  `（工件已清除）`。
 - **T4：回滚 verdict 结果行 schema**（`experiments/run_benchmark.py` 纯投影 +2 键 × 双分支）：
   `patch_rollback_verdict` / `patch_rolled_back`（成功分支 state 投影；失败分支 `(None, False)`；键集合同构 93=93）。
 - **T4：`run_preflight.py::quota_probe` 缺陷修复**：旧实现 import 不存在的 `LLMClient` → `--check-quota` 恒
@@ -4036,7 +4551,7 @@ AE 的"68 份"是文本 grep 计数，不等于 JSON 裸 token 违规：严格�
 ### Verification
 
 - 定向测试：T4 `pytest` 7 文件 **217 passed**；T3 既有 62+33 passed；T3c 8 文件 **187 passed**；T5 断言/校验补测全绿。
-- 全量测试与覆盖率（T 轮收尾，CI 同口径，干净树全绿轮）：**8929 passed / 5 skipped / 0 failed**（`pytest tests/ -n 4 --dist loadfile --cov=src --cov-branch`，177.9s；总行覆盖 **96.55%**（17482/18106）、分支 **92.80%**（6275/6762），均高于 ratchet 水位 96.4/92.5）。日志 `experiments/results/t_round_final_checks_20261018/full_suite_cov.log`。
+- 全量测试与覆盖率（T 轮收尾，CI 同口径，干净树全绿轮）：**8929 passed / 5 skipped / 0 failed**（`pytest tests/ -n 4 --dist loadfile --cov=src --cov-branch`，177.9s；总行覆盖 **96.55%**（17482/18106）、分支 **92.80%**（6275/6762），均高于 ratchet 水位 96.4/92.5）。日志 `（工件已清除）`。
 - 门禁链实测：`ruff check .` 全绿 / `ruff format --check .` **809 文件已格式化** / `mypy src/ config.py` 0 错（**134** 源文件）；
   `check_bilingual_docs --strict` 0 错、`check_doc_links --strict` 0 错（120 文件 / 550 链接）；
   `check_env_budget` 251/251 登记、`check_baseline(+numbers)`、`check_state_contract`（133 文件）、
@@ -4711,7 +5226,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
   03 跨文件 L3×2（机制可用但首轮即绿未进入 → D3 审计字段修复）/ 04 venv 执行器
   （快路径口径，use_venv=true）/ 05 budget（USD 缺陷 D1 + token 通道阳性对照）/
   06 safe 档（旧快照 D2，主树已修）/ 07 oracle 冒烟（依 N-3，记录 blocked）。
-  总成本 **$0.0463**、有效墙钟 28.8min；产物 `experiments/results/e2e_llm_probes_20261017/`
+  总成本 **$0.0463**、有效墙钟 28.8min；产物 `（工件已清除）`
   （README/ITEM_RESULTS/逐项 logs+traces/meta/SHA256SUMS）、复现入口
   `experiments/run_e2e_llm_probes.sh`。纪律：发现缺陷只立案不改源码；两次中止原因
   （主树在途修改 / wall-time）归档披露；终检清理 1 个中止遗留孤儿 pytest（M-3 已知族）。
@@ -4791,7 +5306,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
   真实命令同进程组，0.1s 级检查父 PID，父死即 killpg 回收）；M1 嵌套 pytest 已接线。
   最小复现 before/after：孤儿场景 **2 → 0**（命令自身 `start_new_session` 的子孙仍
   逃逸为主动披露边界）。回归 **25 例**（23 新 + 2 detector CLI）；目标集 253 passed。
-  证据：`experiments/results/orphan_repro_20261017/`（README + before/after + SHA256SUMS）。
+  证据：`（工件已清除）`（README + before/after + SHA256SUMS）。
 
 ### Added
 
@@ -4822,7 +5337,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
   （Δ−57.89pp、lost 22 / added 0）；归档交叉校验 **0 mismatch**。
   口径纪律：**仅锚表材料重建 state 的受控反事实（质量下界）**，非 LLM 能力指标、
   不与 TestAgent/Tratto/TOGLL 横向对比、描述性无显著性推断。工件
-  `experiments/results/emse_oracle_quality_20261017/`（SHA256SUMS 6 项 verify 通过）；
+  `（工件已清除）`（SHA256SUMS 6 项 verify 通过）；
   口径文档 `docs/design/oracle_quality_metric.md`；分析
   `docs/MEASUREMENT_INTEGRITY.md` §6（新增：**仪器未校验 + 判分对象耦合**）。测试 32 例。
 - **M-4：A-11 编译率 / 执行率（零 LLM 重放）**。新增
@@ -4834,7 +5349,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
   （排除 9 个 `*_test` 驱动任务后 **100%**，41/41）；main_batch pooled
   aitester 99.58%/99.49%、plain_llm 100%/100%、plain_llm_df 100%/99.52%；
   与 TestAgent 99.11%/97.46% **仅方向参考**（数据集/语言/执行定义不同，禁止横向断言）。
-  工件 `experiments/results/emse_compile_exec_20261017/`（SHA256SUMS 10 项通过）。
+  工件 `（工件已清除）`（SHA256SUMS 10 项通过）。
   测试 30 例。
 - **M-6：Q11 论文数字-SRC 一致性审计（本地工具 + 首次全文对账）**。新增
   `scripts/tools/audit_paper_numbers.py`（数字声明识别 / SRC 窗口覆盖 / 段落级引文
@@ -4865,8 +5380,8 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
   prompt 同时含完整缺陷代码块 + 人类规格锚段落。成本合计 **$0.1588**
   （df $0.0743 / aug $0.0845），墙钟 4175s/臂（后处理主导），15 次孤儿巡检
   （`--min-age 60`）**0 泄漏**。工件
-  `experiments/results/emse_docstring_augment_20261017/`（128 文件，
-  SHA256SUMS 127 条全 OK）、`experiments/results/emse_misguided_augment_20261017/`。
+  `（工件已清除）`（128 文件，
+  SHA256SUMS 127 条全 OK）、`（工件已清除）`。
   **机制侧（零 LLM 重放，描述性）**：effective **47.85% → 56.92%（+9.07pp）**、
   misguided **1.32% → 0.31%（−1.01pp）**、both_pass −8.07pp、both_fail 持平；
   可分类测试 836 → 954、collected 933 → 1317、挂死单列 timeout 97 → 363。
@@ -4991,7 +5506,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
   的负向（df_spec 54.3% vs doc 60.0% 为跨批参考，同批对照 86.11%）；同批对照与
   历史批 77.8%（10-16）/83.8%（10-09）相差 **8.3pp**，再次证明**同批对照是唯一
   可辩护的配对方式**（Q5 未归因，跨批数字不得混池）。工件
-  `experiments/results/emse_docstring_anchor_20261017/`（README + `DF_DOC_REPORT.
+  `（工件已清除）`（README + `DF_DOC_REPORT.
   {json,md}` + 三臂批次 JSON + 150 trace + SHA256SUMS 165 条校验 0 失败）；
 - **L-4：misguided/effective 逐测试三分度量（ISSTA'26 操作化，零 LLM 重放）**。
   新增 `experiments/misguided_metrics.py`（~2.2k 行）：读批次 JSON →
@@ -5015,8 +5530,8 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
   写不出有效测试。交叉校验与归档 detection/verdict **0 mismatch**（差异仅由 per-test
   超时口径与 `node` 无缺陷信号完整解释）；`--repeat 2` body digest 两次完全相同。
   测试 **74 例**；口径文档 `docs/design/misguided_effective_metric.md`；工件
-  `experiments/results/emse_misguided_20261017/` 与
-  `experiments/results/emse_misguided_docstring_anchor_20261017/`；
+  `（工件已清除）` 与
+  `（工件已清除）`；
 - **L-5：自身变异测试"待补"清零（零 LLM）**。3 模块同 K 轮口径 before
   **165/215 = 0.7674** → after **177/215 = 0.8233**（helpers 77/42 → **89/30**；
   env_utils 0.9467 / atomic_io 0.8095 不变；invalid 8 / timeout 1 不进分母；
@@ -5027,7 +5542,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
   等价 5 + 强证据实践等价 28 + 公开契约外 5。新增
   `tests/test_self_mutation_survivors_l.py`（13 例，仅公开 API；12/12 变异体经
   临时沙箱副本逐条复跑确认 rc=1）；工件
-  `experiments/results/self_mutation_l_round/`（before/after JSON+MD、
+  `（工件已清除）`（before/after JSON+MD、
   `SELF_MUTATION_L_ROUND.md` 逐条归因、3 个可复算脚本）；
 - **L-6：H2 收敛回归锁（37 例）**。见 L-2；测试文件
   `tests/test_nested_pytest_env_convergence.py`（5+2 站点 AST 锁、override 键集合
@@ -5041,7 +5556,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
   `pinned=true`；发现 L-1 真缺陷，见上）。交付可复现跑批入口
   `experiments/run_docstring_anchor_batch.sh`（三臂顺序、preflight、干净树检查、
   时间戳工件、成本汇总、跑后孤儿巡检、分析调用；`--dry-run` 已验）；pilot 工件
-  `experiments/results/l_round_pilot_20261017/`（README + SHA256SUMS +
+  `（工件已清除）`（README + SHA256SUMS +
   `defect_repro/` 缺陷证据）。
 
 ### Changed
@@ -5094,7 +5609,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
 - **自身变异强度**：`scripts/tools/self_mutation.py`（3 模块同口径）before
   165/215 → after 177/215（0.7674 → 0.8233，12 killed、0 反向翻转）；
 - **真实 LLM 链路**：`AITESTER_SMOKE_LLM=true run_smoke_llm.py --require-json` exit 0；
-  3 任务 pilot exit 0（工件 `experiments/results/l_round_pilot_20261017/`，DEF-1 证据
+  3 任务 pilot exit 0（工件 `（工件已清除）`，DEF-1 证据
   `defect_repro/aborted_full50_run.log` + 9 trace）；
 - **跑批可复现性**：三臂 provenance `git_sha=61493ce`、`git_dirty=false`、
   `model_fingerprint.pinned=true`；worktree 跑前/跑后 `git status` 0 dirty；锚表
@@ -5157,7 +5672,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
   等价**）。新增 `tests/test_self_mutation_tool.py`（47 例）+
   `tests/test_self_mutation_targets.py`（11 例击杀测试）+
   `docs/design/self_mutation_harness.md`；工件
-  `experiments/results/self_mutation_20261017/`（before/after + 归因，随批次入库）。
+  `（工件已清除）`（before/after + 归因，随批次入库）。
   验证：`make self-mutation`；
 - **K-2：G16 文档链接完整性门禁 + 文档 INDEX**。新增
   `scripts/gates/check_doc_links.py`（零网络纯静态：相对链接 / 行锚目标 /
@@ -5212,7 +5727,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
   BASELINE/登记册刷新转绿）；本轮净增 **358** 例；
 - 本轮**零 LLM 配额消耗**：所有优化与验证均为本地计算（变异测试/覆盖率/链接
   检查/性能基准）；
-- 工件入库：`experiments/results/self_mutation_20261017/`（5 文件，`git add -f`，
+- 工件入库：`（工件已清除）`（5 文件，`git add -f`，
   受 `experiments/results` gitignore 规则约束）；文档侧数字与工件逐项对账；
 - 剩余风险（已在登记册 §4 登记）：50 个存活变异体中 23 个"待补"不声称等价；
   存量 mutation_score/MDO 指标为旧口径下界；覆盖率对账容差 ±0.10pp 仍偏宽
@@ -5303,7 +5818,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
   （+ `tests/test_emse_df_spec_analysis.py` 25 例）——主判定 C1
   detection ≥60% ∧ C2 单向 McNemar p<0.05；trend p<0.10 ∧ δ>0；
   失败线 <50%；机制 proxy：over_red 占比降 ≥30%（描述性）；
-- **实验工件**：`experiments/results/emse_df_spec_20261016/`（两臂
+- **实验工件**：`（工件已清除）`（两臂
   50 任务批次 JSON + `DF_SPEC_REPORT.json` 预注册判定 + README +
   SHA256SUMS 104 项校验通过）。
 
@@ -5535,7 +6050,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
 >   通过**（rc=0），否则保守跳过并全额披露——该门 = ULT 官方
 >   `correct_tasks` 过滤（Ray/main.py 一手核对）与官方击杀判据"原码上
 >   通过"锚点的**操作化**；审计工件
->   `experiments/results/emse_test_sanity_20261015/`（121 gen + 71 gold
+>   `（工件已清除）`（121 gen + 71 gold
 >   任务分类 + 失败摘要）；
 > - **上游数据发现（ULT gold 作废）**：官方 `test_list` 在 **71/71 任务**
 >   上无法在 `fixed` 通过（官方物化风格复测仍败；`fixed` 与上游
@@ -5572,13 +6087,13 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
   `experiments/emse_quixbugs_mutk_full.py`（健全性门 + 增量落盘）+
   `experiments/emse_ult_mutk_full.py`（三组 + `--groups` + 增量落盘）；
 - **健全性审计脚本与工件**：`experiments/emse_test_sanity_audit.py`
-  + `experiments/results/emse_test_sanity_20261015/`（README + SANITY_AUDIT.json
+  + `（工件已清除）`（README + SANITY_AUDIT.json
   + SHA256SUMS；gen 121 + gold 71 任务）；
-- **全量跑批工件**：`experiments/results/emse_quixbugs_mutk_full_20261015/`
+- **全量跑批工件**：`（工件已清除）`
   （README + MUTK_QUIXBUGS_FULL.json + SHA256SUMS）+
-  `experiments/results/emse_ult_mutk_full_20261015/`（README +
+  `（工件已清除）`（README +
   MUTK_ULT_FULL_REPLACE.json + MUTK_ULT_FULL_SPECIR_GOLD.json + SHA256SUMS）；
-- **M4 四臂报告**：`experiments/results/emse_quixbugs_specir_expand_20261014/QUIXB_EXPAND_ABCD_REPORT.json`
+- **M4 四臂报告**：`（工件已清除）`
   （primary/repeat/merged + 判定）。
 
 ### Fixed
@@ -5741,7 +6256,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
 - **SpecExpr 诊断与对账工具（gitignored）**：`experiments/emse_dsl_diag3.py`
   （缓存语料提取 + 三口径归因）+ `experiments/emse_dsl_extend_recheck.py`
   （常量摘除法精确复刻旧门，逐子句前后对账）；工件
-  `experiments/results/emse_dsl_diag3_20261015/` 与
+  `（工件已清除）` 与
   `emse_dsl_extend_recheck_20261015/`（README 强制入库）。
 
 ### Fixed
@@ -5790,7 +6305,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
 
 ### Added
 
-- **M4 4 臂扩样 A/B 实跑（`experiments/results/emse_quixbugs_specir_expand_20261014/`，
+- **M4 4 臂扩样 A/B 实跑（`（工件已清除）`，
   gitignored）**：A specir（SPEC_IR_ENABLE=true + SPEC_IR_DSL_ENABLE=true，
   cache namespace `emse_qbug_specir_expand_A_20261014`）+ B NL
   （DETECTION_SPEC_MODE=replace，namespace `..._B_20261014`），各 50 任务；
@@ -5798,7 +6313,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
   p=0.4531 / BF10=0.5625 / MDE 16.57pp → not_confirmed）+ SHA256SUMS；
   成本 ~$0.25（246+241 LLM 调用 / 760K+611K tokens），在 ~$0.3 预算内；
 - **QuixBugs 全量 cosmic-ray Mut@k（`experiments/emse_quixbugs_mutk.py` +
-  `experiments/results/emse_quixbugs_mutk_20261014/MUTK_QUXBUGS_RECOMPUTE.json`，
+  `（工件已清除）`，
   gitignored）**：50 程序（49 可测 1 skip）pooled **0.9610**（443/461），与
   ULT replace（0.95）同量级；复用 `ult_adapter.ult_mutation_score`
   （max_mutants=10 / timeout 120s / timeout 计 killed）；
@@ -5807,9 +6322,9 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
   + provenance 校验（C/D 复跑臂支持）；
 - **批次五编排器（`experiments/emse_batch5_orchestrator.py`，gitignored）**：
   串联 M4 跑批 + 零 LLM 分析 + 产物归档；
-- **过红 P1-P4 工件（`experiments/results/emse_batch5_20261014/OVERRED_P1_P4.json`，
+- **过红 P1-P4 工件（`（工件已清除）`，
   gitignored）**：seed=42 抽样 5 例（主批次 167/669 过红行），4/5 P1 + 1/5 P3；
-- **批次五报告（`experiments/results/emse_batch5_20261014/BATCH5_REPORT.md`，
+- **批次五报告（`（工件已清除）`，
   gitignored）**：M4 阴性结果 + Mut@k 四组对照 + P1-P4 + 成本 / 工件 / 待办。
 
 ### Fixed
@@ -5902,7 +6417,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
   ④`emse_quixbugs_specir_expand.py`（24 例）——见 M4；
   ⑤`emse_t08_gates_recompute.py`（测试文件在 `tests/test_emse_t08_gates.py`，
   脚本 gitignored 未重建——T-08 双门复跑已有归档工件
-  `experiments/results/emse_t08_gates_20261013/`，脚本非本批次范围）；
+  `（工件已清除）`，脚本非本批次范围）；
 - **ADR-0032（`docs/adr/0032-m10-leaf-fallback-observability.md`）**：
   M10 可观测性强化决策记录（背景/决策/后果/已知局限与演进方向）+
   ADR README 索引同步（0032 已用 → 下一个 0033）；
@@ -5950,7 +6465,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
   阴性非功效失败；**主机制=基线天花板**（synthetic 干净口径 detection 基线
   ~3% 无 flip 空间 vs QuixBugs ~63%）；分析脚本
   `experiments/emse_specexpr_confirm.py`（24 例测试）+ 工件归档
-  `experiments/results/emse_specexpr_synth_20261014/`（356 文件 + SHA256SUMS）；
+  `（工件已清除）`（356 文件 + SHA256SUMS）；
 - **三数据集修门后可编译率校准（`experiments/emse_compile_rate_calib.py`）**：
   QuixBugs **0.7161**（n=50，旧门 0.6321）/ ULT **0.5937**（n=25，旧门
   0.5626）/ synthetic **0.6397**（n=174，旧门 0.3102）——旧门口径的
@@ -5963,7 +6478,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
   （232/250，n=25）/ 纯 NL 规格优先 0.9543（439/460，n=46）/ gold 上界 1.0；
   **「变异强但缺陷盲」洞察**：同批 specir 测试 detection=0/24 却杀死 92.8%
   变异体——测试强度（变异维度）与缺陷检出（F2P 维度）可分离；工件
-  `experiments/results/emse_ult_mutk_20261014/`；
+  `（工件已清除）`；
 - **LLM 结构化输出加固（ADR-0031，DeepSeek 官方文档对齐）**：
   ①`LLM_JSON_MODE`（默认 on）——JSON Output（`response_format=
   {"type":"json_object"}`）绑定 7 处 JSON 契约调用点（Planner 测试计划 /
@@ -6022,9 +6537,9 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
 >   （40 例：统计原语对照项目定案值 / 口径聚合 / 贝叶斯因子数值积分
 >   对照 / fixed 上复跑 / 主批次工件定案值断言）
 > - `docs/design/false_fix_caliber_matrix.md`（口径矩阵 + 引用纪律）
-> - `experiments/results/main_batch/PROFILE_RETRO_REGISTRATION_2026-10-13.md`
+> - `（工件已清除）`
 >   （C-07/T-05 补登记三线证据 + 诚实边界）
-> - `experiments/results/spec_ab_scale87_20261012/`（T-10 归档 584 文件）
+> - `（工件已清除）`（T-10 归档 584 文件）
 > - `docs/study/OPTIMIZATION_2026-10-13.md`（主报告）
 > 全量测试数不变（新增 40 例独立文件）；ruff/mypy 全绿。
 
@@ -6049,7 +6564,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
   87.16%（380/436，ADR-0027 修正）作伴随披露；对外引用强制携带
   口径标签；
 - **spec_replace 扩样工件归档（T-10 收口）**：
-  `experiments/results/spec_ab_scale87_20261012/`（584 文件 + SHA256SUMS
+  `（工件已清除）`（584 文件 + SHA256SUMS
   + README）——此前仅在 `/tmp`（重启即失），使功效分析与方向勘误
   可被外部复算。
 
@@ -6118,12 +6633,12 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
 
 ### Executed（D1/D2 实跑，2026-10-13 下午，用户批准预算）
 
-- **D2 profile provenance 实跑验证 ✅**（`experiments/results/emse_d2_profile_smoke_20261013/`，
+- **D2 profile provenance 实跑验证 ✅**（`（工件已清除）`，
   5 任务合成集冒烟）：`provenance.profile="logic"` +
   `env_snapshot["AITESTER_PROFILE"]="logic"` 双字段在场，logic 预设
   6 项抽查全部 true；模型指纹 pinned 且与 10-12 批次一致
   （aeb56401…）——C-07/T-05 链条闭合，并充当当前工作树端到端冒烟；
-- **D1 QuixBugs 提示协议 A/B ✅**（`experiments/results/emse_d1_quixbugs_ab_20261013/`，
+- **D1 QuixBugs 提示协议 A/B ✅**（`（工件已清除）`，
   50 任务双臂 seed42 logic 档，101 文件 + SHA256SUMS）：
   **+43pp 协议增益在真实代码上不可复现**——plain_llm 66.67%
   （24/36）vs plain_llm_df 69.44%（25/36），δ=−2.78pp、p=1.0000、
@@ -6155,7 +6670,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
 
 ### Executed（T-08/T-11/D3 三任务并行，2026-10-13 晚，用户批准）
 
-- **T-08 双门复跑（阴性结果）✅**（`experiments/results/emse_t08_gates_20261013/`，
+- **T-08 双门复跑（阴性结果）✅**（`（工件已清除）`，
   87 任务 seed42 aitester 臂，$0.28）：双门（特异性门+红回归门）**不能消除
   −28pp 且小幅恶化**——detection 14.81%→9.20%（配对净 −4：det0→det1=4 /
   det1→det0=8）。机制三链：① 特异性门拦截过红（37→17）但 regenerate 产物是
@@ -6348,7 +6863,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
     官方测试材料）；转换脚本产物 `~/.cache/aitester/ult/ult_manifest.jsonl`
     200 任务。
 - **spec_replace 三臂 A/B 首跑（`SPEC_REPLACE_AB_REPORT_2026-10-12.md` +
-  `experiments/results/spec_ab_quixbugs_20261012/`）**：quixbugs（50 任务，
+  `（工件已清除）`）**：quixbugs（50 任务，
   41 带官方 gold 测试，9 无 gold → detection 恒 None）× 3 臂 × 单种子 42 ×
   parallel=4 × --save-state 全环节落盘：
   - A = aiterst（vanilla），`DETECTION_SPEC_MODE=off`
@@ -7018,16 +7533,16 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
 
 ### Changed
 
-- **移除依赖 `zhipuai`**（环境 + `requirements.lock`）。**理由**：`zhipuai 2.1.5.20250825`
-  硬钉 `pyjwt>=2.8.0,<2.9.0`，与 PyJWT 修复版（≥2.14）**不可同时满足**，且 zhipuai
+- **移除冗余依赖（某第三方 LLM SDK）**（环境 + `requirements.lock`）。**理由**：该 SDK `2.1.5.20250825`
+  硬钉 `pyjwt>=2.8.0,<2.9.0`，与 PyJWT 修复版（≥2.14）**不可同时满足**，且该 SDK
   已是 PyPI 最新版（无放宽约束的新版）；而证据表明其为**冗余依赖**——① 全仓**零代码
   import**（仅 `dependency.py` 白名单与 `llm_client.py` 域名正则出现该字符串）；
   ② `pip show` 的 `Required-by` **为空**；③ **不在 `requirements.txt`**（lock_sync
-  守卫原本已对其报 warning）；④ 项目智谱端点走 **`zai-sdk`**（`pyproject.toml` 显式声明，
-  `llm_client.py` 用 `from zai import ZhipuAiClient`）。其 `Authlib`/`CacheControl`/
+  守卫原本已对其报 warning）；④ 当时项目另有该 SDK 端点（`pyproject.toml` 显式声明，
+  `llm_client.py` 走该 SDK）。其 `Authlib`/`CacheControl`/
   `cryptography` 子树随之失依赖。`pip check` 仅剩既有的
   `z3-solver not supported on this platform`（与本变更无关）。
-  **⚠️ 若存在未入库的 zhipuai 用途，须改回并登记豁免 + 记录 CVE 接受理由。**
+  **⚠️ 若存在未入库的该 SDK 用途，须改回并登记豁免 + 记录 CVE 接受理由。**
 - **全量回归**：`5107 passed / 3 skipped / 0 failed`；ruff check / ruff format / mypy
   全绿；10 个守卫脚本（env_budget / bilingual / baseline / baseline_numbers /
   artifacts_tracked / lock_sync / dependency_exemptions / state_contract / tool_versions /
@@ -7073,7 +7588,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
 >   （arXiv:2601.09695）。
 > - **LLM 端点收拢（仅保留 DeepSeek V4.1 Flash 官方 API）**：`llm_configs.json`
 >   17 条 → 1 条（`deepseek-v4.1-flash`，provider `deepseek`，
->   `https://api.deepseek.com/v1`）；`.env` 删除 Agnes 国际/国内 + BigModel 备用
+>   `https://api.deepseek.com/v1`）；`.env` 删除当时的其余备用端点
 >   全部 API Key 与 base_url（明文 Key 已按 C-02 轮换处理）；`config.local.example`
 >   / `.env.local.template` / `config.py` 注释 / `src/config/config_generator.py`
 >   （`COMMON_MODELS` 仅保留 DeepSeek；`PROVIDER_TEMPLATES` 保留全量 provider
@@ -7081,7 +7596,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
 >   同步；`tests/test_config_generator.py` 断言改为"仅 DeepSeek"口径；
 >   `scripts/check_llm_configs_schema.py` 通过（1 条）。
 > - **预注册增补（E2'/E1b 设计，落盘于修订版报告 §9，`docs/preregistration.md`
->   正文条目待 C-03 批次并入）**：E2' Gemini 2.5 Pro one-shot 对照臂（C-09）；
+>   正文条目待 C-03 批次并入）**：E2' one-shot 对照臂（C-09）；
 >   E1b 约束学习 recall/precision ≥ 0.8 判据（C-04b，对齐 Centaur ICSE 2026
 >   [待核验]）。
 >
@@ -7218,7 +7733,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
 >   而脏 / 已豁免而缺原因 → 抛错，豁免可审计）；
 > - **spec_smt 受限 eval 收紧（R9）**：`ast.literal_eval` 快速路径（常量子句
 >   零 eval）+ 兜底 eval 显式 debug 告警（eval 面未消除但不再静默）；
-> - **R4/QuixBugs 存量批次入库（R14）**：`experiments/results/r4_batches/`
+> - **R4/QuixBugs 存量批次入库（R14）**：`（工件已清除）`
 >   6 批次 JSON + SHA256SUMS/README（此前滞留 /tmp）；`check_artifacts_tracked`
 >   MANIFEST 13→21；
 > - **对外叙事对齐（R20/R26/R21）**：DATA_CARD §1/§4（QuixBugs 定位降格声明 +
@@ -7573,7 +8088,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
 ## [Unreleased] — 2026-10-07 E1 执行批次（E1 契约冒烟通过生死门 + recursion_limit 上界后置修复）
 
 > 用户预算续费（DeepSeek V4.1 Flash）+ 终端提交七批（059343f）后，按
-> 预注册就绪命令原样执行 E1。批次工件 `experiments/results/ab1_validation_e1/`
+> 预注册就绪命令原样执行 E1。批次工件 `（工件已清除）`
 > （12 任务，87,495 tok，AITESTER_PROFILE=logic，seed 42，temp 0.0，
 > **provenance 首次 git_dirty=False**）：
 > - **E1 生死门通过：spec_compile_rate 均值 0.367 ≥ 0.3 保留线**
@@ -7638,7 +8153,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
 ### 用户侧关键路径不变
 
 终端提交（AM…AR+AS 七批，含 E7 两工件入库）/ 密钥轮换 / E1 最小预算
-批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可三选一 / agnes 价目
+批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可三选一 / 价目表补齐
 + CITATION 真实作者。
 
 ## [Unreleased] — 2026-10-07 AR 批次（第十五轮审查续三：hypothesis extras 缺口补齐 + README CI 矩阵声称勘误 + prereg 双语结构奇偶锁）
@@ -7670,7 +8185,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
 
 终端提交（AM+AN+AO+AP+AQ+AR 六批，含 E7 两工件入库）/ 密钥轮换 /
 E1 最小预算批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可三选一 /
-agnes 价目 + CITATION 真实作者。
+价目表补齐 + CITATION 真实作者。
 
 ## [Unreleased] — 2026-10-07 AQ 批次（第十五轮审查续二：E7 工作表 v2 逐行差异 + E7 工件纳入入库守卫 + survey 打包陈旧结论勘误）
 
@@ -7703,7 +8218,7 @@ agnes 价目 + CITATION 真实作者。
 
 终端提交（AM+AN+AO+AP+AQ 五批，含 E7 两工件入库）/ 密钥轮换 /
 E1 最小预算批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可三选一 /
-agnes 价目 + CITATION 真实作者。
+价目表补齐 + CITATION 真实作者。
 
 ## [Unreleased] — 2026-10-07 AP 批次（第十五轮审查续：E7 复核工作表生成器 + E6 提取命令端到端验证 + B-05 检查器缩进盲区修复 + survey 文档陈旧行更新）
 
@@ -7716,7 +8231,7 @@ agnes 价目 + CITATION 真实作者。
   → 8 候选节）：每节内嵌四段素材（生成补丁 / gold fixed〔task_metadata.fixed〕/
   gold 官方测试〔test_cases〕/ 最终生成测试）+ 五选一判定勾选栏 + 整文件替换
   口径判定提示；四反引号围栏防破栏（修复过一次 6 反引号拼接 bug，测试锁定）。
-  产出 `experiments/results/main_batch/e7_review_worksheet.md`，两次复算逐位
+  产出 `（工件已清除）`，两次复算逐位
   一致，SHA256SUMS 975 项过。**E7 人工比对素材从"清单索引"升级为"逐节
   对照可判"，结论仍以人工判定为准**。prereg 双语 E7 节补工作表引用。
 - **AP2（E6 命令端到端验证 + schema 守卫）** 预注册 E6"第 1 步提取均值"
@@ -7737,7 +8252,7 @@ agnes 价目 + CITATION 真实作者。
 ### 用户侧关键路径不变
 
 终端提交（AM+AN+AO+AP 四批）/ 密钥轮换 / E1 最小预算批准 / **E7 人工
-比对（工作表已备，~1 人日）** / L2 许可三选一 / agnes 价目 + CITATION
+比对（工作表已备，~1 人日）** / L2 许可三选一 / 价目表补齐 + CITATION
 真实作者。
 
 ## [Unreleased] — 2026-10-07 AO 批次（第十五轮审查落地：E6 matched cap 来源修订 + CI 按 lock 安装 + E7 候选清单生成 + 文档日期同步）
@@ -7768,7 +8283,7 @@ agnes 价目 + CITATION 真实作者。
 - **AO4（R15-9，P2）** U10 弃用别名移除时间线定档：`entry_ocurrence_stat`
   告警文本改为"计划于 v0.8.0 移除（AO 批定档）"。
 - **AO5（R15-6 前置）** E7 候选清单生成（`repair_sample_selection.py` 首次对
-  真实工件运行，零 LLM）：`experiments/results/main_batch/e7_repair_sample_candidates.md`
+  真实工件运行，零 LLM）：`（工件已清除）`
   ——72 框行（patch_plausible=1，全部 sbfl 单层）按层 ceil(10%)、seed=42
   确定性抽出 8 候选行；两次复算逐位一致；SHA256SUMS 974 项校验通过。
   **E7 现仅欠人工比对（约 1 人日）**，prereg 执行记录表 E7 行推进为
@@ -7785,7 +8300,7 @@ agnes 价目 + CITATION 真实作者。
 
 终端提交（AM+AN+AO 三批）/ 密钥轮换 / E1 最小预算批准（≈0.1M token，
 "逻辑驱动"主张生死门）/ L2 许可三选一（BugsInPy+TestGenEval）/
-agnes 价目 + CITATION 真实作者。
+价目表补齐 + CITATION 真实作者。
 
 ## [Unreleased] — 2026-10-07 AN 批次（第十四轮审查落地：报告层呈现性增补 $/detection 与测试套件可靠性 + TestGenEval L2 候补许可登记 + E1 失败出口骨架 + 工件卫生）
 
@@ -7925,8 +8440,8 @@ agnes 价目 + CITATION 真实作者。
   结论对差异性缺失稳健。
 - **AK2 价目表官方登记**（`experiments/price_table.json`）：deepseek-flash
   （$0.30/$1.20 每百万 token，峰时保守口径，官方定价页可核验）+
-  qwen-long（¥0.5/¥2.0，官方计费页）；agnes-3.0-flash 无公开官方价
-  维持 null（诚实条款）。$/task 首次算出：aitester 0.0259 / plain_llm
+  一条 CNY 计价模型（¥0.5/¥2.0，官方计费页）与一条价 `null` 的模型
+  （无公开官方价，诚实条款）；两条均已于 2026-10-23 随 provider 清理删除。$/task 首次算出：aitester 0.0259 / plain_llm
   0.0034 / plain_llm_df 0.0045 USD（7.6× 成本比入预算匹配论证）。
 - **AK3 工件入库守卫**（`scripts/check_artifacts_tracked.py` + CI）：
   "报告 → 证据工件 → commit 时间序"引用链 11 项白名单强制入库——
@@ -8132,8 +8647,8 @@ agnes 价目 + CITATION 真实作者。
 ### 新增（成本与可观测）
 - **AD1 LLM 传输层思考控制**（src/agents/llm_client.py
   `_openai_extra_body` + `_get_or_create_chat_client`）：OpenAI 兼容
-  路径（DeepSeek 等）新增三参数，zai 路径保持自身硬编码 disabled 不变：
-  - `LLM_THINKING_MODE`：**默认 disabled**（对齐 zai 路径"关思考"先例，
+  路径（DeepSeek 等）新增三参数，第三方 SDK 路径保持自身硬编码 disabled 不变：
+  - `LLM_THINKING_MODE`：**默认 disabled**（对齐 第三方 SDK 路径"关思考"先例，
     输出即工件本身，成本降一至两个数量级）；`enabled` 显式开启（=
     R-P0-2 历史口径，质量敏感实验自行选择）；
   - `LLM_REASONING_EFFORT`：none/low/high/max（默认不发；none 亦关
@@ -8386,7 +8901,7 @@ agnes 价目 + CITATION 真实作者。
 
 ## [Unreleased] — 2026-10-06 优化批次 Y（X 批次真实冒烟补遗：检出优先终态三值 + 再生成计数透出 + MAST 对齐 + README 瘦身）
 
-> 2026-10-05 深夜—10-06 凌晨：用免费档存活模型（qwen-long 等）对 X 批次新链路做**真实 LLM 端到端冒烟**
+> 2026-10-05 深夜—10-06 凌晨：用免费档存活模型对 X 批次新链路做**真实 LLM 端到端冒烟**
 > （examples/calculator_divide，plain_llm_df 基线）：trace 实证
 > PASS→regenerate→FAIL→done——弱测试全绿被检出优先协议逼出再生成，
 > 第二版测试**检出除零缺陷（红）**；缓存命名空间 seed42 自动生效、
@@ -8726,7 +9241,7 @@ agnes 价目 + CITATION 真实作者。
 - **T6 模型卡（G23）**：`MODEL_CARD.md` + `MODEL_CARD.en.md`（模型来源 /
   数据 provenance / 风险面与防护 / 诚实局限声明；SWE-bench 数据许可
   标注为发表前待核对 TODO）。
-- **T7 根因分析工件**：`experiments/results/analysis/swe_lite_root_cause_2026-10-05.md`
+- **T7 根因分析工件**：`（工件已清除）`
   ——对 09-25 SWE Lite 0/20 批次的取证式归因：20/20 原始切片可解析（实测），
   18/20 patch_validation_failed + 17/20 coverage=0.0，诊断文本一致指向
   目标文件被写坏；该批次早于 M6/A-03 回滚防线（09-29 入树），**H1=
@@ -9127,7 +9642,7 @@ agnes 价目 + CITATION 真实作者。
 > **2821 → 3760 passed / 0 failed**（`-n 4 --dist loadfile` ~24s），ruff 0 告警、
 > mypy 95 源文件 0 错误、总行覆盖 88%、分支门禁 77% 绿、`BASELINE.yaml` 同步刷新：
 >
-> - **真实缺陷修复（2 处）**：① `llm_client` zhipuai 空响应误入指数退避
+> - **真实缺陷修复（2 处）**：① `llm_client` 某 SDK 客户端空响应误入指数退避
 >   （空响应重试无效退避 → 区分空响应与网络异常的重试口径）；②
 >   `tree_sitter_backend` 顶层调用边全丢（AST 词法回退路径顶层函数调用边
 >   丢失 → 补齐顶层调用边提取）；
@@ -9378,14 +9893,13 @@ agnes 价目 + CITATION 真实作者。
 > 的 P0/P1/P2 条目，默认行为不变（各开关保持原默认值）：
 >
 > - **P0 G8 全开链路重测（更强免费档模型）**：`data/swe_bench_lite_g8_ready.jsonl`
->   20-task sqlfluff 子集 + 5 个实测可用端点（kimi-k2.7-code / kimi-k2.5 /
->   glm-4.7 / agnes-3.0-flash / agnes-2.5-flash，2026-09-29 端点探明 kimi 系
->   为可用池）+ 数据门禁修复（`data/g8_lite/swe_bench_lite_g8_ready_instances.jsonl`
+>   20-task sqlfluff 子集 + 5 个实测可用端点（名称已随 2026-10-23 provider 清理删除，
+>   2026-09-29 端点探明其中一家为可用池）+ 数据门禁修复（`data/g8_lite/swe_bench_lite_g8_ready_instances.jsonl`
 >   补齐 `instance_code` 字段，门禁 20/20 通过）+ 全开开关 7 项
 >   （`RUNTIME_PROBE_ENABLE` / `STRATEGY_BANK_ENABLE` / `EXPERT_POOL_ENABLE` /
 >   `CROSS_FILE_ENABLE` / `CROSS_FILE_BIDIRECTIONAL` / `REPO_LEVEL_EXECUTION` /
 >   `SWE_REPO_VENV_ISOLATION`）。仓库级验证结果单独落
->   `experiments/results/experiment_report_20260929_repo_level.md`。
+>   `（工件已清除）`。
 > - **P1.1 位置感知补测（定位激活验证）**：合成数据集 `level2.5` /
 >   `level2.5-hard` 运行时异常缺陷库（`IndexError` / `KeyError` /
 >   `AttributeError` / `TypeError`，失败输出携带 traceback 帧行号，
@@ -9394,12 +9908,12 @@ agnes 价目 + CITATION 真实作者。
 >   `level2.5`。level2.5-hard n=40 实测定位正确率 21.43%（定位阶段
 >   **已激活**，不再是 0/30 全降级），ON 85.0% / OFF 90.0%（−5.00pp，
 >   小样本波动，方向性证据有限）。结果：
->   `experiments/results/pa_l25h_n40_g8batch/`。
+>   `（工件已清除）`。
 > - **P1.2 RAG 增强层补测（困难任务）**：`RAG_RELEVANCE_THRESHOLD_ENABLE` +
 >   `RAG_CONDITIONAL_ENABLE` + `RAG_JUDGE_INSTRUCTION_ENABLE` 三增强层在
 >   level2.5-hard n=40 实测 RAG ON 95% vs OFF 88%（+7pp），平均迭代
 >   −0.4 轮（p=0.0497 显著），token +97%（检索注入成本未回收）。结果：
->   `experiments/results/rag_lvl25h_n40_g8batch/`。
+>   `（工件已清除）`。
 > - **P1.3 跨文件 T1 阈值状态**：三批次（level3 双模块 +10.00pp /
 >   level3.5 三模块 +7.50pp / L3.5 小样本 n=16 +0.00pp 无分化）一致方向
 >   为正但量级低于 T1 阈值 +15pp。结合 `cross_file_root_cause.py`
@@ -9874,8 +10388,8 @@ agnes 价目 + CITATION 真实作者。
 >   （离线→在线知识库闭环，设计文档，未落地代码）。
 > - **八、模型能力梯度实验编排器**：新增 `experiments/model_gradient.py`
 >   （按 task-count 5-10、2-3 档位跑 run_benchmark，记录 llm_applied /
->   first-attempt success / avg iterations，落 `experiments/results/model_gradient.md`）
->   + `experiments/results/model_gradient.md` 结果表模板。
+>   first-attempt success / avg iterations，落 `（工件已清除）`）
+>   + `（工件已清除）` 结果表模板。
 > - **九、新贡献者引导脚本**：新增 `scripts/bootstrap_dev.sh`
 >   （venv + install + env 复制 + 配置校验，`--check-only` / `--no-install`）；
 >   `QUICKSTART.md` / `.en.md` 补一行 bootstrap 指向。
@@ -10434,7 +10948,7 @@ agnes 价目 + CITATION 真实作者。
   `type_repair` 类型家族保守口径 / `multi_candidate` credit 默认
   0.0 防御写法 / `dependency` `_importable_cache` 无锁双读（幂等
   无损坏）/ `executor_imports` LRU 失效（单任务顺序路径不触发）/
-  `llm_client` zai 双层重试（deadline 快速失败机制既有）——均为
+  `llm_client` 第三方 SDK 双层重试（deadline 快速失败机制既有）——均为
   设计口径或 opt-in 路径，默认行为不变，留作记录。
 
 #### 延期项（下轮处理或需决策）
@@ -10485,7 +10999,7 @@ agnes 价目 + CITATION 真实作者。
 > 双调用窗消除、helpers JSON 叶子回退 O(1) 内存）、第八轮收尾审计
 > （ruff lint / format 全仓清零 + 工作树示例文件修复 +
 > type_repair 契约参照口径 + type_repair_findings 状态传播 +
-> zai 域名预编译正则 + run_benchmark 异常面收紧）、第九轮并行
+> 第三方域名预编译正则 + run_benchmark 异常面收紧）、第九轮并行
 > 子代理深审（4 路并行子代理对 graph/api/tools/agents 深审 + 主代理
 > 复核）：P1×4（difficulty_level 归一口径 + _should_debug 分支顺序
 > + 半开探测双计/丢失 + executor_repo 临时文件竞争）+ P2×10（async
@@ -10685,7 +11199,7 @@ agnes 价目 + CITATION 真实作者。
   家族保守口径 / multi_candidate credit 默认 0.0 防御写法 /
   dependency `_importable_cache` 无锁双读（幂等无损坏）/
   executor_imports LRU 失效（单任务顺序路径不触发）/
-  llm_client zai 双层重试（deadline 快速失败机制既有）——
+  llm_client 第三方 SDK 双层重试（deadline 快速失败机制既有）——
   均为设计口径或 opt-in 路径，默认行为不变，留作记录。
 
 ### 第九轮并行子代理深审（默认行为不变）
@@ -10797,10 +11311,10 @@ agnes 价目 + CITATION 真实作者。
   （state.py schema 已声明该键，消费侧恒 None）；现按
   `result.get("type_repair_findings", [])` 写入（缺省空列表，
   历史调用方无此键时不报 KeyError）。
-- `src/agents/llm_client.py::_is_zai_compatible`：zai 域名判定由
+- `src/agents/llm_client.py::_is_<third-party>_compatible`：第三方域名判定由
   frozenset + `any` 子串扫描升级为模块级预编译 alternation 正则
-  `_ZAI_DOMAIN_RE`（一次 O(n) 扫描，零调用期分配）；命中口径与
-  历史子串扫描逐样本等价（守卫测试 test_zai_domain_regex_equivalence 锁定）。
+  `_THIRDPARTY_DOMAIN_RE`（一次 O(n) 扫描，零调用期分配）；命中口径与
+  历史子串扫描逐样本等价（守卫测试 第三方域名正则等价守卫 锁定）。
 - `src/graph/workflow.py::route_after_diagnosis` / `_diagnosis_node`：
   路由判定与状态写入补齐回归守卫（8 条：test_defect → regenerate /
   其余 → debug / 缺省 → debug；_debugger_node 写 type_repair_findings
@@ -10870,8 +11384,8 @@ agnes 价目 + CITATION 真实作者。
   `_is_within_allowed_roots` 热路径零重算；`roots=None` 默认走
   预计算前缀对（历史调用方 `_ALLOWED_WRITE_ROOTS` 显式传参路径
   保持原语义）。前缀碰撞防护（`AITester_backup/` 兄弟目录）不变。
-- `src/agents/llm_client.py::_is_zai_compatible`：zai 域名判定列表
-  从每次调用重建 list 提升为模块级 `_ZAI_DOMAINS` frozenset，
+- `src/agents/llm_client.py::_is_<third-party>_compatible`：第三方域名判定列表
+  从每次调用重建 list 提升为模块级 `_THIRDPARTY_DOMAINS` frozenset，
   --parallel 多任务 LLM 路由决策每次调用 2 次无谓分配消除。
 
 ### 性能回归守卫测试（tests/test_performance_guards.py，新增 17 条）
@@ -10916,8 +11430,7 @@ agnes 价目 + CITATION 真实作者。
   存在的多端点编号命名（`OPENAI_API_KEY_2/3`、`OPENAI_BASE_URL_2/3`）——
   旧模式锚定全名 `^OPENAI_API_KEY$` 漏掉编号变体，凭证原样进被测代码子进程
   （执行向量 + 泄露面）。补编号变体通配 `OPENAI_(API_KEY|BASE_URL)_\d+`
-  与 provider 中间变量（`ALIYUN_BAILIAN_API_KEY` / `AGNES_{DOMESTIC|INTERNATIONAL}_API_KEY`
-  / `BIGMODEL_API_KEY` / `DEEPSEEK_API_KEY`，与 config_generator 的
+  与 provider 中间变量（`DEEPSEEK_API_KEY` / `DEEPSEEK_BASE_URL`，与 config_generator 的
   PROVIDER_TEMPLATES 键联动，消名单漂移）；
 - `src/api/api_manager.py::call`（P0）：全节点失败路径 `RuntimeError` 携带
   未脱敏的原始 openai 异常体（网关错误体可能回显带 token 的 base_url），
@@ -11237,7 +11750,7 @@ agnes 价目 + CITATION 真实作者。
   - `debugger.py` 的 `cross_file_contexts` 经 `extract_function_context`
     生成 per-module 2000 字符预算 + 总 4000 字符预算，注入 Debugger prompt。
 
-- **1.2 复杂度感知路由（固定 Agnes 3.0-flash 多 provider 端点）**（`src/api/complexity_router.py`
+- **1.2 复杂度感知路由（当时固定在免费档小模型的多 provider 端点；现为 DeepSeek 官方 deepseek-flash 多实例档位）**（`src/api/complexity_router.py`
   新增 + `src/api/api_manager.py` + `src/graph/state.py` + `experiments/run_benchmark.py`）：
   - `compute_complexity_score(lines, num_files, num_deps, cyclomatic_complexity)` 输出
     [0,1] 归一化评分（阈值 `<0.35 → simple / <0.70 → medium / >=0.70 → complex`，
@@ -11246,7 +11759,7 @@ agnes 价目 + CITATION 真实作者。
     APIHealth 节点（complex → 高 cost_weight 端点在前，simple → 低成本端点在前）；
   - `state["complexity_class"]` / `state["complexity_score"]` / `state["complexity_breakdown"]`
     / `state["routing_hints"]` 由 `run_benchmark.py` 在 `create_initial_state` 后计算写入；
-  - 约束：仅路由 Agnes 3.0-flash 的多 provider 端点，不引入其他模型家族；
+  - 约束：仅在 DeepSeek 官方 deepseek-flash 的多个 LLM 实例档位间路由，不引入其他模型家族；
   - `MODEL_ROUTING_STRATEGY=fixed` 回退历史策略。
 
 - **1.3 补丁命名契约验证（默认开启）**（`src/tools/patch_applier.py` + `src/graph/nodes.py`）：
@@ -11850,9 +12363,9 @@ record_task_end 入口），`_append` 仅做脱敏 + 写盘。
 >   "预声明 + try-import"模式（Table 延迟到调用期导入）。
 >
 > **代码质量清理**：
-> - `src/agents/llm_client.py` `_call_zai`：重试元组
+> - `src/agents/llm_client.py` `_call_<third-party>`：重试元组
 >   `(APIReachLimitError, APIStatusError, Exception)` → `(Exception,)`
->   （两个具体子类被基类 Exception 覆盖，列举属死代码；zai 路径
+>   （两个具体子类被基类 Exception 覆盖，列举属死代码；第三方 SDK 路径
 >   限流与普通错误不做区分，统一指数退避口径不变）；
 > - `src/utils/logging_utils.py` `setup_logger_safety`：加幂等短路
 >   （logger 与全部 handler 均已挂 SensitiveFilter 时直接返回，多入口
@@ -11977,7 +12490,7 @@ record_task_end 入口），`_append` 仅做脱敏 + 写盘。
   `llm.invoke` 此前单次调用即跨模型/跨 API 切换，网络抖动一次 429/超时 =
   整个任务级失败（benchmark 100 任务 × 3 基线场景下 10% 抖动率 → 90-180 次
   调用直接失败）。现把 `_retry_with_exponential_backoff`（1s/2s/4s 退避）套到
-  OpenAI 路径，空响应也触发重试；重试耗尽才进入故障转移（与 zai 路径语义对齐）。
+  OpenAI 路径，空响应也触发重试；重试耗尽才进入故障转移（与 第三方 SDK 路径语义对齐）。
 - **P0-2 venv 统计双锁分离**（`src/tools/dependency.py`）：
   `_record_venv_cache_event` 此前持 `_venv_cache_stats_lock` 做
   `json.load + os.makedirs + json.dump`（~2-5ms/事件），`--parallel` 下所有
@@ -12232,7 +12745,7 @@ record_task_end 入口），`_append` 仅做脱敏 + 写盘。
   32+ hex / 40+ base64 / sk- 前缀凭证。
 - **3.2 多候选补丁 A/B 对比实验**：synthetic 数据集 50 任务 × 3 基线，
   两组（多候选 ON vs OFF，seed=42）完整跑完，差异数据见
-  `experiments/results/multi_candidate_ab_summary.md`。
+  `（工件已清除）`。
 
 ### 测试
 - `tests/test_smell_detection_v2.py` 新增 4 用例：boolean_negation 真替换
@@ -12249,7 +12762,7 @@ record_task_end 入口），`_append` 仅做脱敏 + 写盘。
   `ruff check src/ tests/ experiments/` 全绿
 - 脱敏审计完整报告归档于 `docs/log_redaction_audit.md`（四层核查 +
   R-1 修复）
-- 多候选 A/B 对比数据归档于 `experiments/results/multi_candidate_ab_summary.md`
+- 多候选 A/B 对比数据归档于 `（工件已清除）`
   （含 plain_llm 基线 LLM 缓存命中导致 token 数据失效的限制说明）
 
 ## [0.2] - 2026-09-19 代码质量与可靠性优化轮次

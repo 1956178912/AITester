@@ -158,3 +158,59 @@ class TestRetryChainStops:
             agent._call_llm("hello")
 
         assert fake_llm.invoke.call_count == 0
+
+
+class TestUnmeasurableLatchSurvivesLegitAccounting:
+    """R02（2026-10-23 全量集中复审 P1）：锁存不得被并发合法记账清除。
+
+    复现（报告 M04）：cap=100，坏 usage 先锁存 exceeded=True；随后合法
+    10 token 记账——旧 `check_budget()` 按已计量重新计算并把 exceeded
+    覆盖回 False、返回放行，共享预算实例下等于解除了坏 usage 任务的停止
+    状态。修复后 `unmeasurable_latched` 独立锁存，直至 reset_budget()。
+    """
+
+    def test_latch_survives_below_cap_legit_usage(self, monkeypatch):
+        monkeypatch.setenv("COST_BUDGET_ENABLE", "false")
+        monkeypatch.setenv("COST_BUDGET_USD", "0")
+        monkeypatch.setenv("COST_BUDGET_TOKENS", "0")
+        monkeypatch.setenv("COST_USD_PER_1K", "0")
+        reset_budget()
+        set_task_token_cap(100)
+
+        mark_budget_exceeded("mock unmeasurable usage")
+        assert is_budget_exceeded() is True
+
+        from src.budget.cost_budget import check_budget
+
+        assert check_budget(10) is False  # 在途合法响应（低于 cap）不得放行
+        assert is_budget_exceeded() is True  # 停止位保持
+        assert check_budget(0) is False  # 后续前置检查同样拒绝
+
+    def test_latch_cleared_only_by_reset(self, monkeypatch):
+        monkeypatch.setenv("COST_BUDGET_ENABLE", "false")
+        reset_budget()
+        set_task_token_cap(100)
+
+        mark_budget_exceeded("mock")
+        reset_budget()  # 任务边界显式 reset 是唯一解除点
+        set_task_token_cap(100)
+
+        from src.budget.cost_budget import check_budget
+
+        assert is_budget_exceeded() is False
+        assert check_budget(10) is True
+
+    def test_real_exceed_still_blocks_without_latch(self, monkeypatch):
+        """对照：未锁存时正常超限语义不变（重新计算可自行触发阻断）。"""
+        monkeypatch.setenv("COST_BUDGET_ENABLE", "false")
+        monkeypatch.setenv("COST_BUDGET_USD", "0")
+        monkeypatch.setenv("COST_BUDGET_TOKENS", "0")
+        monkeypatch.setenv("COST_USD_PER_1K", "0")
+        reset_budget()
+        set_task_token_cap(100)
+
+        from src.budget.cost_budget import check_budget
+
+        assert check_budget(50) is True
+        assert check_budget(60) is False  # 110 >= 100 真实超限
+        assert is_budget_exceeded() is True

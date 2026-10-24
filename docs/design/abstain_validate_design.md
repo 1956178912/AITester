@@ -190,7 +190,7 @@
 
 ### 6.2 测法（离线、零 LLM、可复算）
 
-**输入**：既有批次结果行（`experiments/results/main_batch/`，10 批 **669 行**；含 `patch_abstain_signals`、`repair_rate`(gold 裁决)、`patch_plausible` 等键）。
+**输入**：既有批次结果行（`（工件已清除）`，10 批 **669 行**；含 `patch_abstain_signals`、`repair_rate`(gold 裁决)、`patch_plausible` 等键）。
 **方法**（复用 ADR-0027 的零 LLM 回放通道 `experiments/corrected_metrics.py`）：
 
 1. 把弃权判定参数化为 **信号权重向量 `w`（5+2 维）+ 阈值 τ**：

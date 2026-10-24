@@ -10,7 +10,7 @@
 
 | 事件 | 证据 |
 |---|---|
-| 已删除文件在历史 commit 残留疑似真实 api.agnes-ai.cn 密钥 | commit `2e5272a` / `c505f506`（ci.yml 注释与 threat_model T7 引用） |
+| 已删除文件在历史 commit 残留疑似真实 provider 端点密钥 | commit `2e5272a` / `c505f506`（ci.yml 注释与 threat_model T7 引用） |
 | 本地事故：`.env.local.bak_g8` 曾含 22 条真实 key | `.git-hooks/check_secret_leak.sh` 注释记录（该文件未入库） |
 | 当前防线为何非阻断 | `.github/workflows/ci.yml` 全历史 gitleaks 步骤 `continue-on-error`（周日 schedule），注释注明"待凭证轮换" |
 
@@ -23,9 +23,8 @@
 公共仓库到首次恶意使用的中位时间以分钟计），故轮换是**根本性修复**，
 purge 历史只是减少暴露面。
 
-1. 盘点泄漏涉及的全部 provider（agnes / aliyun_bailian / bigmodel / deepseek /
-   anthropic / openai 编号变体——以 `gitleaks detect --log-opts="all" --redact`
-   输出为准）；
+1. 盘点泄漏涉及的全部凭证变量名（以 `gitleaks detect --log-opts="all" --redact`
+   输出为准；编号变体如 `OPENAI_API_KEY_2` 同样计入）；
 2. **创建新密钥**（不触碰旧密钥）——在各 provider 控制台新建；
 3. **推送新值到单一真相源**——新 key 只入 `.env.local`（0600，gitignore）
    或 CI Secrets，**绝不入任何被跟踪文件**；

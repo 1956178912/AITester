@@ -31,7 +31,7 @@
 |----------|----------|------|
 | 1.1 多维质量代理（覆盖率/运行时/断言强度） | `analyze_results.py:_quality_proxy_metrics`（coverage_proxy / runtime_proxy / assertion_proxy + failure_top_categories） | 以 proxy 标注，不含 AST 圈复杂度精确值；`code_analyzer.compute_cyclomatic_complexity` 已具备能力未接入 |
 | 1.3 首次尝试成功率 / 迭代分布 | `analyze_results.py:_repair_convergence_metrics`（first_attempt_success_rate + success/failed_iteration_stats） | 迭代分布表已有 |
-| 2.1 SWE-bench 20 任务归档 + 源码导出 | `experiments/results/swebench_20_summary.json`（7 完成/10 超时，API 限流记录在案）；`scripts/export_swe_bench_source.py` | 20 任务结果已归档但 pass_rate 0/7（限流所致） |
+| 2.1 SWE-bench 20 任务归档 + 源码导出 | `（工件已清除）`（7 完成/10 超时，API 限流记录在案）；`scripts/export_swe_bench_source.py` | 20 任务结果已归档但 pass_rate 0/7（限流所致） |
 | 2.3 RAG 自动汇总（RAG vs 禁用对比 + 哪类错误帮助最大） | `analyze_results.py:_rag_by_kind_from_details` + `_rag_hit_by_failure_category` | RAG 启用/禁用 token 对比需各跑一次实验，脚本无内置 |
 | 3.3 多候选补丁默认关 + 可选启用 | `ENABLE_MULTI_CANDIDATE_PATCH` 默认 false；`src/tools/multi_candidate.py` 完整实现（静态筛选 + 执行验证） | 对比实验未跑 |
 | 4.1 结构化追踪层主动启用 | `src/observability/trace.py` + `AITESTER_TRACE_DIR`（默认 no-op） | 追踪层已实现，大规模实验未主动启用 |
@@ -138,7 +138,7 @@
 > ### 需用户确认的点
 >
 > 1. **F-02 缓存路径更正**：redaction_audit C 项的"已知可接受风险"结论不变（本地可信域），仅路径与信任级论述对齐代码实际（`src/cache/` 仓库内 + gitignore）；
-> 2. **F-04 analyze_failures.py 默认输出路径**：`--output` 默认值由 `docs/paper/failure_analysis.md`（目录已不存在）改为 `experiments/results/failure_analysis.md`（无测试引用该脚本，零回归面）；
+> 2. **F-04 analyze_failures.py 默认输出路径**：`--output` 默认值由 `docs/paper/failure_analysis.md`（目录已不存在）改为 `（工件已清除）`（无测试引用该脚本，零回归面）；
 > 3. **阶段 6 推送**：用户指令"上传 GitHub"，沿用历史轮次 main 直推（无 feature 分支、无 PR）。
 
 ## 文档收尾轮次（2026-09-14 批次②收尾，文档数据对齐）

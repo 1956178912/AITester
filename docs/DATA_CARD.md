@@ -50,7 +50,7 @@ BugsInPy 无 SPDX 许可证〔L2 决策门槛新登记〕；AA2：§2 重复采�
   `docs/VALIDITY.md` §4）。**50 是模板库唯一 pattern 数 / 历史主批任务数，
   不是当前确认性主批的任务数**；数字单一事实来源 = `BASELINE.yaml`
   `benchmark` 节，批次工件与合并统计见
-  `experiments/results/main_batch/statistical_report_3seed_pooled.md`
+  `（工件已清除）`
   （`benchmark_synthetic_20261006_{140906,151907,164357}.json`）；
 - **gold 材料 schema**：`metadata["test_cases"]`（gold 测试）、
   `metadata["fixed"]`（单文件 gold 补丁）、`fixed_module_code`（跨文件）、
@@ -144,7 +144,7 @@ BugsInPy 无 SPDX 许可证〔L2 决策门槛新登记〕；AA2：§2 重复采�
     `src/datasets/synthetic_dataset.py`；pattern 总数以 `BASELINE.yaml` 的
     `synthetic_templates` 为单一事实来源（见 §2）；
   - 聚合结果工件（部分入库）：`experiments/results/`。其中
-    `experiments/results/main_batch/` 的批次 JSON、统计报告与 `SHA256SUMS`
+    `（工件已清除）` 的批次 JSON、统计报告与 `SHA256SUMS`
     已入库（`git ls-files` 实测 2,029 个文件）；其余批次目录默认被
     `.gitignore` 第 158 行 `experiments/results/**` 忽略，仅部分工件/校验
     文件被强制入库（`experiments/results/` 下 24 个 `SHA256SUMS*` 中 18 个

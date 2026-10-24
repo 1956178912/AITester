@@ -5,7 +5,7 @@
 共享 LLM 调用、JSON 解析、代码提取等通用能力。
 
 LLM 客户端管理（客户端缓存 / 指数退避重试 / 日志脱敏 / token 统计 / 配置获取 /
-zai 兼容检测 / 文件缓存开关）已拆分到 `src/agents/llm_client.py`（代码可维护性
+文件缓存开关）已拆分到 `src/agents/llm_client.py`（代码可维护性
 优化）。本模块通过 re-import 复用其工具函数，保持「从 base_agent 命名空间访问」
 的历史语义不变。
 """
@@ -27,11 +27,9 @@ from src.agents.llm_client import (
     _ABNORMAL_FINISH_REASONS,
     _DEFAULT_LLM_MAX_RETRIES,
     _cache_creator_label,
-    _call_zai,
     _get_all_api_configs,
     _get_llm_config,
     _get_or_create_chat_client,
-    _is_zai_compatible,
     _llm_cache_dir,
     _llm_cache_enabled,
     _openai_extra_body,
@@ -226,7 +224,7 @@ def _budget_exceeded_error() -> Exception:
     触发时异常消息会把 token 数当美元展示，可诊断性失效）。
 
     A11（2026-10-18 第三方审查 P1）：单一实现在 `llm_client._budget_exceeded_error`
-    ——zai 路径重试前预算复查也要抛同一异常，两处不得各持一份单位口径。
+    ——重试前预算复查抛同一异常，不得各持一份单位口径。
     """
     from src.agents.llm_client import _budget_exceeded_error as _factory
 
@@ -285,9 +283,7 @@ def _effective_request_identity(
       不同角色/指令的系统提示词必须分区隔离；None = 无 system 材料）。
       取摘要而非全文，避免身份 dict 写入每个缓存 payload 时体积随提示词增长；
     - ``temperature``：实际生效采样温度 = 显式覆盖值，否则 config.TEMPERATURE；
-      F09（2026-10-19 第三方审查 P1）：该字段现在对 OpenAI 兼容路径与 zai SDK
-      路径都描述**实际发出的请求**（zai 路径经 create(temperature=...) 透传），
-      身份材料与实际请求保持同一口径；
+      该字段描述**实际发出的请求**，身份材料与实际请求保持同一口径；
     - ``json_object``：JSON 输出**实际生效值** = json_mode 且
       LLM_JSON_MODE≠off；
     - ``thinking`` / ``reasoning_effort`` / ``max_tokens``：请求体实际注入值
@@ -520,7 +516,7 @@ class BaseAgent:
 
     封装了与 LLM 交互的底层逻辑，包括：
     - 初始化 LangChain ChatOpenAI 客户端（复用连接池缓存）
-    - 带重试的 LLM 调用（指数退避 + API 自动切换，支持 zai SDK）
+    - 带重试的 LLM 调用（指数退避 + API 自动切换）
     - JSON 输出提取（处理 LLM 可能输出的 markdown 包裹）
     - Python 代码块提取
 
@@ -934,20 +930,17 @@ class BaseAgent:
         """
         调用 LLM 并返回文本响应。
         失败时进行最多 max_retries 次重试，采用指数退避策略（1s, 2s, 4s）。
-        OpenAI 兼容路径与 zai SDK 路径均套 _retry_with_exponential_backoff
+        OpenAI 兼容路径套 _retry_with_exponential_backoff
         （0.6 轮次 P0-1 修复：此前 OpenAI 路径单次调用零重试，网络抖动即触发
         跨模型/跨 API 故障转移）；重试耗尽后自动切换到备用 API 继续尝试。
-        支持 OpenAI 兼容接口和 zai SDK（BigModel）两种调用路径。
 
         Args:
             user_message: 用户消息内容。
             max_retries: 单次 API 的最大重试次数，默认 3 次。
             temperature: 采样温度覆盖（3.3 动态策略接线用）；None 时使用
-                config.TEMPERATURE。F09（2026-10-19 第三方审查 P1）起
-                OpenAI 兼容路径与 zai SDK 路径**都实际发送**该有效温度
-                （zai 经 create(temperature=...)，历史实现静默丢弃），
-                与 `_effective_request_identity` 记录的"实际生效采样温度"
-                一致——缓存身份不再与实际请求分叉。
+                config.TEMPERATURE，实际发送的有效温度与
+                `_effective_request_identity` 记录保持一致——缓存身份不与
+                实际请求分叉。
             complexity_class: P0 1.2 复杂度档位（"simple"/"medium"/"complex"）。
                 提供时传递给 APIManager 按档位选择 LLM 实例（同模型多 provider
                 端点场景下路由到对应复杂度档位）；None 走历史策略。
@@ -956,8 +949,7 @@ class BaseAgent:
                 response_format={"type":"json_object"}（DeepSeek JSON
                 Output，保证合法 JSON；提示侧"必须指示输出 JSON"的前置
                 条件由调用点保证——Planner/Debugger 提示均含 JSON 字样
-                与格式示例，2026-10-14 逐一核查）。zai 路径不支持该参数，
-                保守忽略（不改变 zai 行为）。False 时请求体与历史逐字节
+                与格式示例，2026-10-14 逐一核查）。False 时请求体与历史逐字节
                 一致。响应 finish_reason ∈ {length, insufficient_system_
                 resource}（截断/资源中断）视为可恢复失败重试，不把残缺
                 内容交给下游解析。
@@ -1024,110 +1016,88 @@ class BaseAgent:
         # 2026-10-14 LLM_JSON_MODE（DeepSeek JSON Output）：调用点显式
         # json_mode=True 且环境开关非 off 时，对请求绑定
         # response_format={"type":"json_object"}（默认 on；off=历史口径，
-        # 请求体逐字节一致，供旧批次复现）。zai 路径不适用（保守忽略）。
+        # 请求体逐字节一致，供旧批次复现）。
         eff_json = bool(json_mode and json_output_mode_enabled())
 
         for base_url, models in api_groups.items():
-            # 判断当前 API 是否为 zai SDK 兼容接口，分流至不同调用路径
-            is_zai = _is_zai_compatible(base_url)
-
             for api_key, model_name in models:
                 # 每次尝试新模型前先查预算，超出即快速失败（不再空耗剩余组合）
                 if time.time() > deadline:
                     raise RuntimeError(f"LLM 调用超过全局预算 {LLM_CALL_BUDGET_SECONDS}s，快速失败")
                 # A11：重试/故障转移前复查任务级预算——上一响应即使被判不可用，
-                # 其 usage 已记账（见 _invoke_openai / _call_zai），预算可能已耗尽；
+                # 其 usage 已记账（见 _invoke_openai），预算可能已耗尽；
                 # 超限立即抛 BudgetExceededError，不再尝试后续模型（默认关零变化）。
                 if is_budget_exceeded():
                     raise _budget_exceeded_error()
                 try:
-                    if is_zai:
-                        # BigModel 等非 OpenAI 兼容接口：使用 zai SDK 专属调用
-                        # F09：显式透传有效温度——与下方 OpenAI 路径的
-                        # `_get_or_create_chat_client(..., eff_temperature, ...)` 同口径，
-                        # 保证"_effective_request_identity 记录的温度 = 实际请求温度"。
-                        text = _call_zai(
-                            api_key,
-                            base_url,
-                            model_name,
-                            self.system_prompt,
-                            user_message,
-                            max_retries,
-                            temperature=eff_temperature,
-                        )
-                        # A10：zai 路径成功返回后记录真实请求配置（provenance 消费）
-                        _record_actual_request_config(api_key, base_url, model_name)
-                    else:
-                        # OpenAI 兼容接口：复用缓存的 ChatOpenAI 客户端（连接池跨调用复用）
-                        # P0-1 修复（0.6 轮次性能审计）：此前 llm.invoke 单次调用零重试——
-                        # 一次网络抖动/429 即跨模型切换或任务级失败。现套通用指数退避
-                        # （_retry_with_exponential_backoff，base_wait=1s：1s/2s/4s），
-                        # 语义与 zai 路径对齐；重试耗尽才进入故障转移。
-                        llm = _get_or_create_chat_client(model_name, eff_temperature, api_key, base_url)
+                    # OpenAI 兼容接口：复用缓存的 ChatOpenAI 客户端（连接池跨调用复用）
+                    # P0-1 修复（0.6 轮次性能审计）：此前 llm.invoke 单次调用零重试——
+                    # 一次网络抖动/429 即跨模型切换或任务级失败。现套通用指数退避
+                    # （_retry_with_exponential_backoff，base_wait=1s：1s/2s/4s）；
+                    # 重试耗尽才进入故障转移。
+                    llm = _get_or_create_chat_client(model_name, eff_temperature, api_key, base_url)
 
-                        def _invoke_openai(
-                            client: Any = llm,
-                            model: str = model_name,
-                            # B023：显式绑定循环变量，避免闭包晚绑定歧义
-                            # （本函数在迭代内即被重试器同步消费，绑定后语义不变）
-                            _api_key: str = api_key,
-                            _base_url: str = base_url,
-                        ) -> str:
-                            _invoke_kwargs: dict[str, Any] = {"timeout": LLM_TIMEOUT}
-                            if eff_json:
-                                # DeepSeek JSON Output（官方文档 guides/json_mode）：
-                                # 保证响应为合法 JSON 字符串。提示侧先决条件
-                                # （须指示输出 JSON）由调用点保证。
-                                _invoke_kwargs["response_format"] = {"type": "json_object"}
-                            response = client.invoke(
-                                [
-                                    SystemMessage(content=self.system_prompt),
-                                    HumanMessage(content=user_message),
-                                ],
-                                **_invoke_kwargs,
-                            )
-                            # A11（2026-10-18 第三方审查 P1）：收到响应**立即**
-                            # 记账，再判 finish_reason / 空响应。历史实现先对
-                            # 截断（finish_reason=length）与空响应 raise，最后才
-                            # `_record_response_usage`——带 usage 的失败响应其
-                            # token 已真实消耗却漏记，重试/故障转移继续烧 token
-                            # 时统计系统性偏低（成本报表失真）。记账早于任何
-                            # raise 后，每一次已发生的响应消耗都入账；重试前由
-                            # _raise_if_budget_exceeded 复查预算。
-                            _record_response_usage(getattr(response, "usage_metadata", None), model)
-                            # 2026-10-14：异常 finish_reason 守卫（DeepSeek 官方
-                            # 文档）——length=被 max_tokens 截断 / insufficient_
-                            # system_resource=推理系统资源不足中断；残缺响应
-                            # 按可恢复失败重试，不交给下游解析。
-                            _finish = str(
-                                (getattr(response, "response_metadata", None) or {}).get("finish_reason") or ""
-                            )
-                            if _finish in _ABNORMAL_FINISH_REASONS:
-                                logger.warning(
-                                    "LLM 响应不完整（finish_reason=%s, model=%s），按可恢复失败重试",
-                                    _finish,
-                                    model,
-                                )
-                                raise RuntimeError(f"LLM 响应不完整（finish_reason={_finish}）")
-                            text_ = response.content.strip()
-                            # 空响应视为失败，触发重试（而非直接跨模型切换）
-                            if not text_:
-                                raise RuntimeError("LLM 返回空响应")
-                            # A10：记录真实请求配置（首选端点成功时即首选；
-                            # 故障转移后记录实际成功端点，供缓存 provenance 使用）
-                            _record_actual_request_config(_api_key, _base_url, model)
-                            return text_
-
-                        text = _retry_with_exponential_backoff(
-                            _invoke_openai,
-                            max_retries,
-                            base_wait=1,
-                            # N02（2026-10-22 第三方复审 P1）：预算类异常是控制流
-                            # 信号（真超限 / 记账不可判定锁存），不得被退避重试
-                            # 吞掉——每次重试都是一次无法计量或已越预算的付费请求。
-                            non_retryable_exceptions=(BudgetExceededError,),
-                            pre_retry_check=_raise_if_budget_exceeded,
+                    def _invoke_openai(
+                        client: Any = llm,
+                        model: str = model_name,
+                        # B023：显式绑定循环变量，避免闭包晚绑定歧义
+                        # （本函数在迭代内即被重试器同步消费，绑定后语义不变）
+                        _api_key: str = api_key,
+                        _base_url: str = base_url,
+                    ) -> str:
+                        _invoke_kwargs: dict[str, Any] = {"timeout": LLM_TIMEOUT}
+                        if eff_json:
+                            # DeepSeek JSON Output（官方文档 guides/json_mode）：
+                            # 保证响应为合法 JSON 字符串。提示侧先决条件
+                            # （须指示输出 JSON）由调用点保证。
+                            _invoke_kwargs["response_format"] = {"type": "json_object"}
+                        response = client.invoke(
+                            [
+                                SystemMessage(content=self.system_prompt),
+                                HumanMessage(content=user_message),
+                            ],
+                            **_invoke_kwargs,
                         )
+                        # A11（2026-10-18 第三方审查 P1）：收到响应**立即**
+                        # 记账，再判 finish_reason / 空响应。历史实现先对
+                        # 截断（finish_reason=length）与空响应 raise，最后才
+                        # `_record_response_usage`——带 usage 的失败响应其
+                        # token 已真实消耗却漏记，重试/故障转移继续烧 token
+                        # 时统计系统性偏低（成本报表失真）。记账早于任何
+                        # raise 后，每一次已发生的响应消耗都入账；重试前由
+                        # _raise_if_budget_exceeded 复查预算。
+                        _record_response_usage(getattr(response, "usage_metadata", None), model)
+                        # 2026-10-14：异常 finish_reason 守卫（DeepSeek 官方
+                        # 文档）——length=被 max_tokens 截断 / insufficient_
+                        # system_resource=推理系统资源不足中断；残缺响应
+                        # 按可恢复失败重试，不交给下游解析。
+                        _finish = str((getattr(response, "response_metadata", None) or {}).get("finish_reason") or "")
+                        if _finish in _ABNORMAL_FINISH_REASONS:
+                            logger.warning(
+                                "LLM 响应不完整（finish_reason=%s, model=%s），按可恢复失败重试",
+                                _finish,
+                                model,
+                            )
+                            raise RuntimeError(f"LLM 响应不完整（finish_reason={_finish}）")
+                        text_ = response.content.strip()
+                        # 空响应视为失败，触发重试（而非直接跨模型切换）
+                        if not text_:
+                            raise RuntimeError("LLM 返回空响应")
+                        # A10：记录真实请求配置（首选端点成功时即首选；
+                        # 故障转移后记录实际成功端点，供缓存 provenance 使用）
+                        _record_actual_request_config(_api_key, _base_url, model)
+                        return text_
+
+                    text = _retry_with_exponential_backoff(
+                        _invoke_openai,
+                        max_retries,
+                        base_wait=1,
+                        # N02（2026-10-22 第三方复审 P1）：预算类异常是控制流
+                        # 信号（真超限 / 记账不可判定锁存），不得被退避重试
+                        # 吞掉——每次重试都是一次无法计量或已越预算的付费请求。
+                        non_retryable_exceptions=(BudgetExceededError,),
+                        pre_retry_check=_raise_if_budget_exceeded,
+                    )
 
                     # 打印成功日志
                     api_id = base_url.split("/")[2] if "/" in base_url else base_url

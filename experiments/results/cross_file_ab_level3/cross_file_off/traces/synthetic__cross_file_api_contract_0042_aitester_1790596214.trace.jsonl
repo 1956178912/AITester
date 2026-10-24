@@ -1,6 +1,0 @@
-{"event": "task_start", "task": "<REDACTED_KEY>", "ts": 1790596214.688916, "meta": {"dataset_task_id": "synthetic__cross_file_api_contract_0042", "baseline": "aitester", "target_function": null}}
-{"event": "node", "task": "<REDACTED_KEY>", "node": "planner", "ts": 1790596214.704275, "output": {"function_name": "process", "test_cases": 4}, "decision": "plan_complete", "duration_ms": 0.45}
-{"event": "node", "task": "<REDACTED_KEY>", "node": "generator", "ts": 1790596214.7047942, "output": {"generated_test_len": 596}, "decision": "generated"}
-{"event": "node", "task": "<REDACTED_KEY>", "node": "executor", "ts": 1790596215.1986198, "output": {"passed": true, "coverage": 100.0, "failed_cases": 0}, "decision": "PASS", "duration_ms": 493.65, "iteration": 0}
-{"event": "node", "task": "<REDACTED_KEY>", "node": "_should_debug", "ts": 1790596215.199063, "output": {"reason": "test_passed"}, "decision": "done"}
-{"event": "task_end", "task": "<REDACTED_KEY>", "ts": 1790596215.199678, "passed": true, "duration_s": 0.51, "token_usage": {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0, "llm_calls": 0, "by_model": {}}}

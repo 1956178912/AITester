@@ -410,6 +410,11 @@ class TestReasonCountRendering:
 
 
 class TestAnalyzeBatchEndToEnd:
+    pytestmark = pytest.mark.skipif(
+        not (_ROOT / "experiments/results/main_batch").is_dir(),
+        reason="主批次工件已清除（2026-10-24 用户指令、DeepSeek 重跑前）：历史读数锁退役，重跑落盘后重建",
+    )
+
     def test_real_pooled_costs_are_bit_identical(self, real_b2_report: dict[str, Any]) -> None:
         assert {arm: blk["cost_usd"] for arm, blk in real_b2_report["pooled"].items()} == {
             "aitester": 1.447277,

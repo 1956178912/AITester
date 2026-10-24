@@ -220,7 +220,7 @@ export PATCH_ROLLBACK_FAIL_CLOSED=true       # rc>=2/超时/IO 异常也触发�
 # 统计报告：白名单显式批次（替代 glob 全目录混批次），McNemar/BH-FDR/
 # bootstrap CI/Cliff's delta 全部落盘 statistical_report.md
 python experiments/statistical_analysis.py --results-dir experiments/results/main_batch \
-  --batches benchmark_synthetic_20261001_121523.json,benchmark_plain_llm_20261001_121523.json
+  --batches benchmark_synthetic_20261006_140906.json,benchmark_synthetic_20261006_151907.json
 ```
 
 ### 示例 E：故障定位双通道消融（2026-10-07 修复引擎批次 I）
@@ -286,9 +286,9 @@ python experiments/visualize_results.py \
 ```
 
 输出文件：
-- `experiments/results/charts/baseline_comparison.png`
-- `experiments/results/charts/statistical_significance.png`
-- `experiments/results/charts/summary_stats.md`
+- `（工件已清除）`
+- `（工件已清除）`
+- `（工件已清除）`
 
 ---
 
@@ -335,7 +335,7 @@ python experiments/analyze_failures.py \
 ```
 
 输出：
-- 失败案例按基线 / 错误类型聚类的 Markdown 报告（`--output` 默认 `experiments/results/failure_analysis.md`）
+- 失败案例按基线 / 错误类型聚类的 Markdown 报告（`--output` 默认 `（工件已清除）`）
 - 失败根因三大类（`llm_capability` / `dependency` / `framework`，`root_cause_classification()` 保守启发式归类，每类最多 3 个代表案例）
 - 结构化案例知识库 `failure_knowledge_base.json`（按 `error_category` 多样性优先选取，含 `task_id` / `root_cause` / `reproducible_steps` / `suggested_fix`）
 
@@ -617,11 +617,8 @@ python main.py run examples/my_module.py --func my_function
 
 编辑 `.env.local`（LLM 敏感配置所在），修改 `LLM_N_*` 组：
 ```bash
-LLM_1_MODEL_NAME=gpt-4o
-LLM_1_BASE_URL=https://api.openai.com/v1
-# 或
-LLM_1_MODEL_NAME=agnes-3.0-flash
-LLM_1_BASE_URL=https://api.agnes-ai.cn/v1
+LLM_1_MODEL_NAME=deepseek-flash
+LLM_1_BASE_URL=https://api.deepseek.com/v1
 ```
 
 ---

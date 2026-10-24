@@ -17,6 +17,10 @@
     - 只做 git ls-files 存在性判定（零网络、纯本地，秒级）；
     - 文件缺失 / 未跟踪 / 被 .gitignore 忽略分别报错（忽略 = 永远
       不可能入库，需先修 .gitignore 白名单）。
+    - 豁免登记本身受审计（CA 轮 2026-10-23）：目录消失 / 已全部入库 /
+      目录为空 / 不可读 / 登记名不在扫描面内均判漂移并阻断；通过时逐条
+      披露每条豁免遮蔽多少未入库工件（此前豁免只在抑制报错时被读取，
+      遮蔽量与失效登记均不可见）。
 
 用法：
     python scripts/gates/check_artifacts_tracked.py          # 审计，违规 exit 1
@@ -30,257 +34,19 @@ CI 接线：ci.yml test 作业（仅 3.14 档，工件与 Python 版本无关）
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import subprocess
 from pathlib import Path
+from typing import NamedTuple
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 # "报告 → 证据工件"引用链清单（相对仓库根）。新增引用新工件时同步登记。
 MANIFEST: tuple[str, ...] = (
-    # R-P0-2 生死实验三种子批次（statistical_report_3seed_pooled.md 数据来源）
-    "experiments/results/main_batch/benchmark_synthetic_20261006_140906.json",
-    "experiments/results/main_batch/benchmark_synthetic_20261006_151907.json",
-    "experiments/results/main_batch/benchmark_synthetic_20261006_164357.json",
-    # canonical 与 pooled 统计报告 + MAST 分布 + 修复上限归因（AK1 新增）
-    "experiments/results/main_batch/statistical_report.md",
-    "experiments/results/main_batch/statistical_report_3seed_pooled.md",
-    "experiments/results/main_batch/mast_distribution_report.md",
-    "experiments/results/main_batch/repair_ceiling_report.md",
-    # E7 修复上限人工复核工件（AO5 候选清单 + AP1 工作表；AQ 批登记——
-    # prereg 双语 E7 节引用的复核入口，入库前本守卫本地预期红）
-    "experiments/results/main_batch/e7_repair_sample_candidates.md",
-    "experiments/results/main_batch/e7_review_worksheet.md",
-    # AA 轮（2026-10-19）：E7 裁决执行面 6 份空白录入表（协议 §7.1 引用的备料
-    # 工件，已进 main_batch SHA256SUMS 受 --verify 校验）。此前被 .gitignore
-    # 通配排除压掉、本清单亦未登记——"被忽略（永远不可能入库）"型静默缺口，
-    # 本批收口：.gitignore narrow 放行 e7_entry_rater*.csv + 此处登记。
-    "experiments/results/main_batch/e7_entry_raterA_n8.csv",
-    "experiments/results/main_batch/e7_entry_raterA_n41.csv",
-    "experiments/results/main_batch/e7_entry_raterA_n72.csv",
-    "experiments/results/main_batch/e7_entry_raterB_n8.csv",
-    "experiments/results/main_batch/e7_entry_raterB_n41.csv",
-    "experiments/results/main_batch/e7_entry_raterB_n72.csv",
-    # 完整性锚点与成本价目（$/task 口径依赖）
-    "experiments/results/main_batch/SHA256SUMS",
-    "experiments/price_table.json",
-    # R14（2026-10-08 R2）：R4 / QuixBugs 存量批次入库（口径矩阵与勘误引用的
-    # 证据链——此前全部滞留 /tmp，易失且违反预注册工件条款）
-    "experiments/results/r4_batches/README.md",
-    "experiments/results/r4_batches/SHA256SUMS",
-    "experiments/results/r4_batches/r4_ab_arm_a/benchmark_synthetic_20261008_133303.json",
-    "experiments/results/r4_batches/r4_ab_arm_b/benchmark_synthetic_20261008_134156.json",
-    "experiments/results/r4_batches/r4_synth_arm_b2/benchmark_synthetic_20261008_161508.json",
-    "experiments/results/r4_batches/r4_qb_arm_a/benchmark_quixbugs_20261008_165558.json",
-    "experiments/results/r4_batches/r4_qb_arm_b/benchmark_quixbugs_20261008_165603.json",
-    "experiments/results/r4_batches/loc_test_quix/benchmark_quixbugs_20261007_195728.json",
-    # 预注册（时间顺序审计条款的执行前提）
-    "docs/preregistration.md",
-    "docs/preregistration.en.md",
-    # 独立评审 A-04（2026-10-17）：2026-10-14 之后四批旗舰实验工件此前
-    # 全部 0 git 跟踪（新结果目录静默缺口——本守卫的硬编码清单不覆盖
-    # 新目录，缺口无声复发）。补齐引用链关键件（df_spec / M4 specir 扩样 /
-    # D1 / ULT df200），并新增证据目录覆盖扫描（T 轮扩展为 emse_* + *_round_*，
-    # 见 _scan_evidence_dirs）。
-    "experiments/results/emse_df_spec_20261016/DF_SPEC_REPORT.json",
-    "experiments/results/emse_df_spec_20261016/SHA256SUMS",
-    "experiments/results/emse_df_spec_20261016/benchmark_quixbugs_20261016_232138.json",
-    "experiments/results/emse_df_spec_20261016/benchmark_quixbugs_20261017_003023.json",
-    "experiments/results/emse_quixbugs_specir_expand_20261014/QUIXB_EXPAND_ABCD_REPORT.json",
-    "experiments/results/emse_quixbugs_specir_expand_20261014/SHA256SUMS.txt",
-    "experiments/results/emse_d1_quixbugs_ab_20261013/README.md",
-    "experiments/results/emse_d1_quixbugs_ab_20261013/SHA256SUMS",
-    "experiments/results/emse_ult_df200_20261017/ACCURACY_REPORT.json",
-    "experiments/results/emse_ult_df200_20261017/SHA256SUMS",
-    "experiments/results/emse_ult_df200_20261017/benchmark_ult_20261017_110803.json",
-    # spec_compile_rate / spec_expr_coverage 校准链（BASELINE 引用的证据源；
-    # 各目录的聚合报告名以实物为准：CALIB.md / CALIB_QB_ULT.json）
-    "experiments/results/emse_calib_quixbugs_20261014/benchmark_quixbugs_20261014_165103.json",
-    "experiments/results/emse_calib_ult_20261014/benchmark_ult_20261014_165906.json",
-    "experiments/results/emse_calib_synth_20261014/CALIB.md",
-    "experiments/results/emse_calib_synth_20261014/CALIB.json",
-    "experiments/results/emse_calib_synth174_20261014/CALIB_QB_ULT.json",
-    # 过红 P1-P4 分类（SUBMISSION_CHECKLIST 引用的证据源）
-    "experiments/results/emse_batch5_20261014/OVERRED_P1_P4.json",
-    # T-08 双门多种子原始数据（BASELINE §exec_2026_10_09 的 3 种子声称；
-    # seed43 目录仅含 traces，由下方 emse_* 目录扫描兜底"整目录入库"）
-    "experiments/results/emse_t08_gates_seed44_20261013/benchmark_synthetic_20261014_002657.json",
-    # 统计扩展（SUBMISSION_SKELETON 引用的证据源）
-    # AZ（2026-10-21）：20261016 为 F01/F02 修正前历史归档（保留，不重写）；
-    # 20261021 为当前重发工件（入库时需 git add -f，目录被 results/** 通配排除）。
-    "experiments/results/emse_stats_extensions_20261016/README.md",
-    "experiments/results/emse_stats_extensions_20261016/STATS_EXTENSIONS.json",
-    "experiments/results/emse_stats_extensions_20261021/README.md",
-    "experiments/results/emse_stats_extensions_20261021/STATS_EXTENSIONS.json",
-    "experiments/results/emse_stats_extensions_20261021/SHA256SUMS",
-    # L 轮（2026-10-17）：P1 独立 docstring 锚三臂正式批（真 LLM，预注册判定）
-    # —— BASELINE benchmark.docstring_anchor / README 最新优化 / 登记册 L-2 的证据源
-    "experiments/results/emse_docstring_anchor_20261017/README.md",
-    "experiments/results/emse_docstring_anchor_20261017/SHA256SUMS",
-    "experiments/results/emse_docstring_anchor_20261017/DF_DOC_REPORT.json",
-    "experiments/results/emse_docstring_anchor_20261017/DF_DOC_REPORT.md",
-    "experiments/results/emse_docstring_anchor_20261017/benchmark_quixbugs_20261017_194444.json",
-    "experiments/results/emse_docstring_anchor_20261017/benchmark_quixbugs_20261017_193626.json",
-    "experiments/results/emse_docstring_anchor_20261017/benchmark_quixbugs_20261017_201928.json",
-    # L 轮：misguided/effective 逐测试三分度量报告（MEASUREMENT_INTEGRITY §5 /
-    # BASELINE target_quality.mechanism_metrics 的证据源）
-    "experiments/results/emse_misguided_20261017/README.md",
-    "experiments/results/emse_misguided_20261017/MISGUIDED_REPORT.json",
-    "experiments/results/emse_misguided_20261017/MISGUIDED_REPORT.md",
-    "experiments/results/emse_misguided_docstring_anchor_20261017/README.md",
-    "experiments/results/emse_misguided_docstring_anchor_20261017/MISGUIDED_REPORT.json",
-    "experiments/results/emse_misguided_docstring_anchor_20261017/MISGUIDED_REPORT.md",
-    # L 轮：自身变异测试击杀批次（BASELINE self_mutation 的证据源）
-    "experiments/results/self_mutation_l_round/SELF_MUTATION_L_ROUND.md",
-    "experiments/results/self_mutation_l_round/self_mutation_l_round.json",
-    # L 轮：真实 LLM 链路 pilot（DEF-1 缺陷证据链；验证性、不构成能力证据）
-    "experiments/results/l_round_pilot_20261017/README.md",
-    "experiments/results/l_round_pilot_20261017/SHA256SUMS",
-    "experiments/results/l_round_pilot_20261017/defect_repro/aborted_full50_run.log",
-    # M 轮（2026-10-17）：规格增广二臂正式批（BASELINE benchmark.docstring_augment /
-    # README 最新优化 / 登记册 M-2 的证据源；预注册判定 + prompt 一等证据）
-    "experiments/results/emse_docstring_augment_20261017/README.md",
-    "experiments/results/emse_docstring_augment_20261017/SHA256SUMS",
-    "experiments/results/emse_docstring_augment_20261017/DF_AUG_REPORT.json",
-    "experiments/results/emse_docstring_augment_20261017/PROMPT_EVIDENCE.json",
-    "experiments/results/emse_docstring_augment_20261017/benchmark_quixbugs_20261017_221735.json",
-    "experiments/results/emse_docstring_augment_20261017/benchmark_quixbugs_20261017_221948.json",
-    # M 轮：misguided/effective 机制重放（增广批）
-    "experiments/results/emse_misguided_augment_20261017/README.md",
-    "experiments/results/emse_misguided_augment_20261017/MISGUIDED_REPORT.json",
-    "experiments/results/emse_misguided_augment_20261017/SHA256SUMS",
-    # M 轮：A-05 oracle 质量（MEASUREMENT_INTEGRITY §6 / BASELINE target_quality.oracle_quality 证据源）
-    "experiments/results/emse_oracle_quality_20261017/README.md",
-    "experiments/results/emse_oracle_quality_20261017/ORACLE_QUALITY_REPORT.json",
-    "experiments/results/emse_oracle_quality_20261017/SHA256SUMS",
-    # M 轮：A-11 编译/执行率（BASELINE target_quality.compile_exec 证据源）
-    "experiments/results/emse_compile_exec_20261017/COMPILE_EXEC_REPORT.json",
-    "experiments/results/emse_compile_exec_20261017/SHA256SUMS",
-    # M 轮：m1_metrics 孤儿根因证据（M-3；before/after + 现场残留证据）
-    "experiments/results/orphan_repro_20261017/README.md",
-    "experiments/results/orphan_repro_20261017/SHA256SUMS",
-    # N 轮（2026-10-17）：全功能 e2e 探针矩阵（三组探针 + 汇总报告；功能矩阵证据源）
-    "experiments/results/e2e_probe_20261017/README.md",
-    "experiments/results/e2e_probe_20261017/report.json",
-    "experiments/results/e2e_probe_20261017/SHA256SUMS",
-    "experiments/results/e2e_probe_workflow_20261017/README.md",
-    "experiments/results/e2e_probe_workflow_20261017/report.json",
-    "experiments/results/e2e_probe_workflow_20261017/SHA256SUMS",
-    "experiments/results/e2e_probe_platform_20261017/README.md",
-    "experiments/results/e2e_probe_platform_20261017/llm_report.json",
-    "experiments/results/e2e_probe_platform_20261017/SHA256SUMS",
-    # N 轮：oracle 接线 + 独立判读（N-3；口径变更与重放对账证据）
-    "experiments/results/emse_oracle_independent_judging_20261017/README.md",
-    "experiments/results/emse_oracle_independent_judging_20261017/ORACLE_INDEPENDENT_JUDGING_REPORT.json",
-    "experiments/results/emse_oracle_independent_judging_20261017/SHA256SUMS",
-    # N 轮：真实 LLM 重型功能探针（N-4；logic/RAG/跨文件/venv/预算/safe 路径证据）
-    "experiments/results/e2e_llm_probes_20261017/README.md",
-    "experiments/results/e2e_llm_probes_20261017/ITEM_RESULTS.json",
-    "experiments/results/e2e_llm_probes_20261017/SHA256SUMS",
-    # O 轮（2026-10-18）：oracle 仪器治疗（O-1；before/after + 生产独立判读验证）
-    "experiments/results/emse_oracle_instrument_hardening_20261017/README.md",
-    "experiments/results/emse_oracle_instrument_hardening_20261017/ORACLE_QUALITY_REPORT.json",
-    "experiments/results/emse_oracle_instrument_hardening_20261017/SHA256SUMS",
-    # O 轮：跨文件修复路径真实进入（O-3；8 节点 trace + 多文件回滚证据）
-    "experiments/results/o_round_cross_file_20261017/README.md",
-    "experiments/results/o_round_cross_file_20261017/O3_EVIDENCE.json",
-    "experiments/results/o_round_cross_file_20261017/SHA256SUMS",
-    # O 轮：oracle-enabled 二臂真实验证（O-2；同批 only-switch 差异 + 无 fp 分布）
-    "experiments/results/emse_oracle_enabled_validation_20261017/README.md",
-    "experiments/results/emse_oracle_enabled_validation_20261017/ARM_COMPARISON.json",
-    "experiments/results/emse_oracle_enabled_validation_20261017/SHA256SUMS",
-    # P 轮（2026-10-18）：规格可执行示例通道质量重放（P-1/P-1.1；raw + 表示归一双报告）
-    "experiments/results/p_round_oracle_examples_20261018/README.md",
-    "experiments/results/p_round_oracle_examples_20261018/ORACLE_EXAMPLES_REPORT.json",
-    "experiments/results/p_round_oracle_examples_20261018/ORACLE_EXAMPLES_REPORT_norm.json",
-    "experiments/results/p_round_oracle_examples_20261018/SHA256SUMS",
-    # P 轮：A-19 停滞检测 wiring 修复 + B8 缩小消融（探索性，无触发场景如实披露）
-    "experiments/results/p_round_b8_ablation_20261018/README.md",
-    "experiments/results/p_round_b8_ablation_20261018/ABLATION_REPORT.json",
-    "experiments/results/p_round_b8_ablation_20261018/SHA256SUMS",
-    # Q 轮（2026-10-18）：示例通道生产化预注册 A/B（含事故披露件）
-    "experiments/results/q_round_examples_ab_20261018/README.md",
-    "experiments/results/q_round_examples_ab_20261018/ANALYSIS_REPORT.json",
-    "experiments/results/q_round_examples_ab_20261018/SHA256SUMS",
-    "experiments/results/q_round_examples_ab_20261018/_incident_unintended_llm_launch_20261018/README_INCIDENT.md",
-    # Q 轮：批后处理墙钟可观测模块（smoke + 说明）
-    "experiments/results/q_round_postprocess_wall_20261018/README.md",
-    "experiments/results/q_round_postprocess_wall_20261018/SHA256SUMS",
-    # R 轮（2026-10-18）：Q-2 检出损失诊断 + seed-43 复现批
-    "experiments/results/r_round_examples_repro_20261018/README.md",
-    "experiments/results/r_round_examples_repro_20261018/DIAGNOSIS.md",
-    "experiments/results/r_round_examples_repro_20261018/PREREG_REPRO.md",
-    "experiments/results/r_round_examples_repro_20261018/SHA256SUMS",
-    # R 轮：示例自校验过滤器离线评估
-    "experiments/results/r_round_examples_selfcheck_20261018/README.md",
-    "experiments/results/r_round_examples_selfcheck_20261018/FILTER_STATS.json",
-    "experiments/results/r_round_examples_selfcheck_20261018/ORACLE_EXAMPLES_REPORT_selfcheck.json",
-    "experiments/results/r_round_examples_selfcheck_20261018/SHA256SUMS",
-    # S 轮（2026-10-18）：seed-44 复现批 + 3-seed 生产化决策
-    "experiments/results/s_round_examples_decision_20261018/README.md",
-    "experiments/results/s_round_examples_decision_20261018/PREREG_DECISION.md",
-    "experiments/results/s_round_examples_decision_20261018/ANALYSIS_REPORT.json",
-    "experiments/results/s_round_examples_decision_20261018/SHA256SUMS",
-    # S 轮：B8/A-19 失败注入重做
-    "experiments/results/s_round_b8_injection_20261018/README.md",
-    "experiments/results/s_round_b8_injection_20261018/PREREG.md",
-    "experiments/results/s_round_b8_injection_20261018/REPORT.json",
-    "experiments/results/s_round_b8_injection_20261018/ISOLATION.json",
-    "experiments/results/s_round_b8_injection_20261018/SHA256SUMS",
-    # S 轮：多采样示例自一致性评估
-    "experiments/results/s_round_examples_multisample_20261018/README.md",
-    "experiments/results/s_round_examples_multisample_20261018/PREREG.md",
-    "experiments/results/s_round_examples_multisample_20261018/MULTISAMPLE_STATS.json",
-    "experiments/results/s_round_examples_multisample_20261018/SHA256SUMS",
-    # T 轮（2026-10-18）：真实 LLM 配额解锁后的可引用证据链——
-    # ① K=3 示例治理（判定 high_risk_default_off）；② SMT 见证 pre/post-fix 并列；
-    # ③ 语义修复汇总 + A-19 默认门复验（classification=unexpected_delta）；
-    # ④ 文档↔工件审计报告；⑤ B1/B2 复现批（见各目录）。全部 SHA256SUMS verify 通过。
-    "experiments/results/t_round_oracle_k3_20261018/PREREG.md",
-    "experiments/results/t_round_oracle_k3_20261018/ANALYSIS_REPORT.json",
-    "experiments/results/t_round_oracle_k3_20261018/README.md",
-    "experiments/results/t_round_oracle_k3_20261018/SHA256SUMS",
-    "experiments/results/t_round_smt_witness_20261018/PREREG.md",
-    "experiments/results/t_round_smt_witness_20261018/ANALYSIS_REPORT.json",
-    "experiments/results/t_round_smt_witness_20261018/README.md",
-    "experiments/results/t_round_smt_witness_20261018/SHA256SUMS",
-    "experiments/results/t_round_smt_witness_aliasfix_20261018/PREREG_ALIASFIX.md",
-    "experiments/results/t_round_smt_witness_aliasfix_20261018/COMPARISON.json",
-    "experiments/results/t_round_smt_witness_aliasfix_20261018/ANALYSIS_REPORT.json",
-    "experiments/results/t_round_smt_witness_aliasfix_20261018/README.md",
-    "experiments/results/t_round_smt_witness_aliasfix_20261018/SHA256SUMS",
-    "experiments/results/t_round_semantic_fixes_20261018/README.md",
-    "experiments/results/t_round_semantic_fixes_20261018/A19_REVALIDATION_PREREG.md",
-    "experiments/results/t_round_semantic_fixes_20261018/D3B_DESIGN_AND_PREREG_DRAFT.md",
-    "experiments/results/t_round_semantic_fixes_20261018/SHA256SUMS",
-    "experiments/results/t_round_a19_default_gate_20261018/PREREG.md",
-    "experiments/results/t_round_a19_default_gate_20261018/ANALYSIS.json",
-    "experiments/results/t_round_a19_default_gate_20261018/ISOLATION.json",
-    "experiments/results/t_round_a19_default_gate_20261018/README.md",
-    "experiments/results/t_round_a19_default_gate_20261018/SHA256SUMS",
-    "experiments/results/t_round_artifact_audit_20261018/AUDIT_REPORT.md",
-    "experiments/results/t_round_artifact_audit_20261018/SHA256SUMS",
-    "experiments/results/t_round_verify_20261018/VERIFY_REPORT.md",
-    "experiments/results/t_round_verify_20261018/SHA256SUMS",
-    "experiments/results/e2e_probe_t_round_20261018/README.md",
-    "experiments/results/e2e_probe_t_round_20261018/SHA256SUMS",
-    "experiments/results/t_round_b1_protocol_text_20261018/PREREG.md",
-    "experiments/results/t_round_b1_protocol_text_20261018/PREREG_CONTINUATION.md",
-    "experiments/results/t_round_b1_protocol_text_20261018/GATES.json",
-    "experiments/results/t_round_b1_protocol_text_20261018/ANALYSIS_REPORT.json",
-    "experiments/results/t_round_b1_protocol_text_20261018/README.md",
-    "experiments/results/t_round_b1_protocol_text_20261018/DOC_RECONCILIATION.md",
-    "experiments/results/t_round_b1_protocol_text_20261018/SHA256SUMS",
-    "experiments/results/t_round_b2_main_batch_20261018/PREREG.md",
-    "experiments/results/t_round_b2_main_batch_20261018/PREFLIGHT.json",
-    "experiments/results/t_round_b2_main_batch_20261018/PREREG_AMENDMENT_cost_estimate.md",
-    "experiments/results/t_round_b2_main_batch_20261018/GATES.json",
-    "experiments/results/t_round_b2_main_batch_20261018/ANALYSIS_REPORT.json",
-    "experiments/results/t_round_b2_main_batch_20261018/README.md",
-    "experiments/results/t_round_b2_main_batch_20261018/SHA256SUMS",
-    "experiments/results/t_round_final_checks_20261018/README.md",
-    "experiments/results/t_round_final_checks_20261018/GATES.md",
-    "experiments/results/t_round_final_checks_20261018/SHA256SUMS",
-    "experiments/results/t_round_final_checks_20261018/full_suite_cov.log",
+    # CI 轮第三批（2026-10-24）：用户指令清除 experiments/results/ 全部历史数据
+    # （DeepSeek 重跑前），MANIFEST 全部条目随文件一并删除（「文件消失 ⇒ 删登记」，
+    # 与 model-fingerprint 预指纹豁免表同逻辑）；机制保留，重跑生成新工件后
+    # 由新的证据登记重建本表。
 )
 
 # 证据目录覆盖扫描的显式豁免登记（相对 experiments/results/）。
@@ -290,23 +56,19 @@ MANIFEST: tuple[str, ...] = (
 # T 轮（2026-10-18）扩展：扫描面从 emse_* 扩到所有轮次证据目录
 # （`*_round_*`，如 q_round_/r_round_/s_round_/t_round_）——历史教训是
 # "每次新轮次命名一种前缀，硬编码清单就再漏一次"。
+# CA 轮（2026-10-23）：豁免只在"抑制报错"时被读取，从未被审计是否仍然
+# 需要——登记过期（目录消失 / 已全部入库）与登记遮蔽量此前均不可见。
+# 现由 exemption_coverage() 单源统计、exemption_drift_failures() 判漂移，
+# 并删除本轮实测失效的两条（目录已不存在 / 53 个文件已全部入库）。
 EVIDENCE_DIR_EXEMPTIONS: dict[str, str] = {
-    "emse_d2_profile_smoke_20261013": "D2 profile 冒烟；结论性数字经 df_spec/主批次聚合报告入库",
-    "emse_d3_ult_20261013": "D3 cosmic-ray 冒烟；正式 Mut@k 见 emse_ult_mutk_full_20261015（已入库）",
-    "emse_dsl_diag_20261014": "DSL diag v1 初版；被 emse_dsl_diag3_20261015（已入库）取代",
-    "emse_jsonmode_smoke_20261013": "JSON mode 冒烟",
-    "emse_jsonmode_smoke_20261014": "JSON mode 冒烟",
-    "emse_jsonmode_smoke_v2_20261014": "JSON mode 冒烟（被 v4 已入库版取代）",
-    "emse_jsonmode_smoke_v3_20261014": "JSON mode 冒烟（被 v4 已入库版取代）",
-    "emse_quixbugs_mutk_20261014": "Mut@k 截断面初版；被 emse_quixbugs_mutk_full_20261015（已入库）取代",
-    "emse_spec_ir_qb_smoke_20261013": "SpecIR QuixBugs 冒烟",
-    "emse_spec_ir_quixbugs_20261013": "SpecIR QuixBugs 初版；正式见 spec_replace_ab_scale87 链（已入库）",
-    "emse_spec_ir_quixbugs_smoke_20261013": "SpecIR QuixBugs 冒烟",
-    "emse_specexpr_smoke_20261014": "SpecExpr 冒烟；确认性正式批见 emse_specexpr_synth_20261014（已入库）",
-    "emse_stats_2026-10-15": "统计报告初版；被 emse_stats_extensions_20261016（已入库）取代",
-    "emse_t08_gates_seed43_v2_20261013": "T-08 seed43 重跑中间态；定稿见 seed43 主目录（已入库）",
-    "emse_t11_spec_compile_20261013": "T-11 spec 编译率冒烟；正式校准见 emse_calib_*（已入库）",
-    "emse_ult_dfsmoke_20261017": "ULT df 冒烟；正式 200 任务批见 emse_ult_df200_20261017（已入库）",
+    # CI 轮第三批（2026-10-24）原表随数据清除清空；以下为 DeepSeek 重跑期新批：
+    # 证据性批次但按用户口径暂不提交（工作树携带 CA-CI 轮未提交改动）；
+    # 提交入库后「已全部入库」漂移判定会自动提醒移除这些登记。
+    "emse_docstring_anchor_20261017": "2026-10-24 DeepSeek 重跑期材料目录（正式批被干净树门禁阻断，残留锚表批材料）；未提交 @experiments/run_docstring_anchor_batch.sh",
+    "emse_docstring_augment_20261017": "2026-10-24 重跑期目录（正式批被干净树门禁阻断，preflight 残留）；未提交 @experiments/run_augment_batch.sh",
+    "emse_oracle_enabled_validation_20261017": "2026-10-24 重跑期目录（材料探针 compiled_empty 阻断，PREFLIGHT 残留）；未提交 @experiments/run_oracle_validation_batch.sh",
+    "emse_spec_anchor_20261016": "2026-10-24 自 LLM 缓存零成本重建的锚表；未提交 @experiments/build_spec_anchor_table.py",
+    "p_round_b8_ablation_20261018": "2026-10-24 DeepSeek 重跑批（重跑 PREREG 已落盘）；未提交 @experiments/run_b8_ablation.sh",
 }
 
 # 向后兼容别名（T 轮前仅扫 emse_*；既有测试/调用方仍可用旧名）。
@@ -333,11 +95,95 @@ def _is_tracked(path: Path) -> tuple[bool, str]:
     return False, "存在于工作区但未被 git 跟踪（git add 后提交）"
 
 
+class ExemptionCoverage(NamedTuple):
+    """单条豁免登记的可审计状态（遮蔽量与是否仍然需要，同源计数）。
+
+    用 NamedTuple 而非 dataclass：本模块被两个历史测试以
+    `spec_from_file_location` 动态加载（模块未登记进 sys.modules），
+    dataclass 在 Python 3.14 上会在装饰期访问 `sys.modules[cls.__module__]`
+    而 AttributeError——门禁模块的可导入性是测试契约的一部分。
+    """
+
+    name: str
+    status: str  # ok / missing / unreadable / empty / fully_tracked
+    in_scan_surface: bool
+    total_files: int
+    tracked_files: int
+    detail: str = ""
+
+    @property
+    def hidden_files(self) -> int:
+        return self.total_files - self.tracked_files
+
+
+def _in_scan_surface(name: str) -> bool:
+    return any(fnmatch.fnmatchcase(name, pattern) for pattern in EVIDENCE_DIR_GLOBS)
+
+
+def exemption_coverage() -> list[ExemptionCoverage]:
+    """统计每条豁免实际遮蔽多少未入库工件，并判定登记是否仍然有效。
+
+    豁免此前只在"抑制报错"分支被读取（`if name in EVIDENCE_DIR_EXEMPTIONS:
+    continue`），于是三种失效形态都无声：①目录已消失，登记成死条目；②目录
+    已全部入库，豁免不再抑制任何东西；③登记名不在扫描面内，豁免永不生效。
+    此外"豁免遮挡了多少未入库工件"本身从不披露——门禁通过时无法分辨
+    "没有豁免"与"豁免遮蔽了上百个文件"。
+    """
+    results_root = PROJECT_ROOT / "experiments/results"
+    rows: list[ExemptionCoverage] = []
+    for name in sorted(EVIDENCE_DIR_EXEMPTIONS):
+        surface = _in_scan_surface(name)
+        directory = results_root / name
+        if not directory.is_dir():
+            rows.append(ExemptionCoverage(name, "missing", surface, 0, 0, "目录不存在"))
+            continue
+        try:
+            files = sorted(path for path in directory.rglob("*") if path.is_file())
+        except OSError as exc:  # 目录存在但不可遍历：豁免不可复核
+            rows.append(ExemptionCoverage(name, "unreadable", surface, 0, 0, str(exc)))
+            continue
+        if not files:
+            rows.append(ExemptionCoverage(name, "empty", surface, 0, 0, "目录内无文件"))
+            continue
+        rels = [path.relative_to(PROJECT_ROOT).as_posix() for path in files]
+        ls = subprocess.run(["git", "ls-files", "--", *rels], cwd=PROJECT_ROOT, capture_output=True, text=True)
+        if ls.returncode != 0:
+            rows.append(
+                ExemptionCoverage(name, "unreadable", surface, len(files), 0, f"git ls-files 失败: {ls.stderr.strip()}")
+            )
+            continue
+        tracked = {line for line in ls.stdout.splitlines() if line.strip()}
+        status = "fully_tracked" if len(tracked) == len(files) else "ok"
+        rows.append(ExemptionCoverage(name, status, surface, len(files), len(tracked)))
+    return rows
+
+
+def exemption_drift_failures(rows: list[ExemptionCoverage] | None = None) -> list[tuple[str, str]]:
+    """登记漂移：死条目 / 已全入库 / 目录为空 / 不可读 / 不在扫描面 → 失败。
+
+    漂移与"是否存在未入库目录"独立判定（先于空扫描面分支），否则一个
+    experiments/results 缺失的检出环境会让所有登记同时失去审计。
+    """
+    rows = exemption_coverage() if rows is None else rows
+    failures: list[tuple[str, str]] = []
+    for row in rows:
+        if not row.in_scan_surface:
+            failures.append((row.name, "豁免漂移（登记名不在 EVIDENCE_DIR_GLOBS 扫描面内，豁免永不生效）"))
+        if row.status == "missing":
+            failures.append((row.name, "豁免漂移（目录已不存在，登记应移除）"))
+        elif row.status == "unreadable":
+            failures.append((row.name, f"豁免漂移（无法审计：{row.detail}）"))
+        elif row.status == "empty":
+            failures.append((row.name, "豁免漂移（目录内无文件，豁免不遮蔽任何工件）"))
+        elif row.status == "fully_tracked":
+            failures.append((row.name, f"豁免漂移（{row.total_files}/{row.total_files} 个文件已全部入库，应移除登记）"))
+    return failures
+
+
 def _scan_evidence_dirs() -> list[tuple[str, str]]:
     """覆盖扫描：`experiments/results/` 下轮次证据目录必须入库或显式豁免。
 
-    扫描面 = `EVIDENCE_DIR_GLOBS`（`emse_*` 与 `*_round_*`）。防"新结果目录
-    静默缺席"复发（独立评审 A-04：四批旗舰工件曾 0 跟踪而无任何门禁察觉——
+    防"新结果目录静默缺席"复发（独立评审 A-04：四批旗舰工件曾 0 跟踪而无任何门禁察觉——
     MANIFEST 是硬编码白名单，天然不覆盖未来目录；T 轮进一步发现单靠
     `emse_*` 前缀也会漏掉 `q/r/s/t_round_*` 新命名）。
 
@@ -399,16 +245,30 @@ def main(argv: list[str] | None = None) -> int:
     evidence_offenders = _scan_evidence_dirs()
     offenders.extend(evidence_offenders)
 
-    if offenders:
-        print(f"✗ {len(offenders)} 个关键工件/目录未入库（引用链断裂，CI 阻断）：")
-        for rel, reason in offenders:
-            print(f"  - {rel}: {reason}")
-        print("修复：git add <路径> 并随本批提交（预注册时间顺序审计的前提）。")
+    coverage = exemption_coverage()
+    drift = exemption_drift_failures(coverage)
+
+    if offenders or drift:
+        if offenders:
+            print(f"✗ {len(offenders)} 个关键工件/目录未入库（引用链断裂，CI 阻断）：")
+            for rel, reason in offenders:
+                print(f"  - {rel}: {reason}")
+            print("修复：git add <路径> 并随本批提交（预注册时间顺序审计的前提）。")
+        if drift:
+            print(f"✗ {len(drift)} 条证据目录豁免登记漂移（登记与实物不符，CI 阻断）：")
+            for name, reason in drift:
+                print(f"  - {name}: {reason}")
+            print("修复：删除失效登记，或在 experiments/results/ 恢复对应目录后复核理由。")
         return 1
     print(
         f"✓ {len(MANIFEST)}/{len(MANIFEST)} 关键工件均已入库；"
         f"证据目录覆盖扫描通过（{'/'.join(EVIDENCE_DIR_GLOBS)}，引用链完整）"
     )
+    active = [row for row in coverage if row.status == "ok"]
+    hidden_total = sum(row.hidden_files for row in active)
+    for row in active:
+        print(f"  [EXEMPT] {row.name}: 遮蔽未入库工件 {row.hidden_files}/{row.total_files}")
+    print(f"  豁免披露：{len(active)} 项有效登记共遮蔽未入库工件 {hidden_total} 个")
     return 0
 
 

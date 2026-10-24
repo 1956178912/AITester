@@ -1,6 +1,0 @@
-{"event": "task_start", "task": "<REDACTED_KEY>", "ts": 1790596038.366567, "meta": {"dataset_task_id": "synthetic__multi_func_chain_error_0012", "baseline": "aitester", "target_function": null}}
-{"event": "node", "task": "<REDACTED_KEY>", "node": "planner", "ts": 1790596038.3826408, "output": {"function_name": "normalize", "test_cases": 4}, "decision": "plan_complete", "duration_ms": 0.48}
-{"event": "node", "task": "<REDACTED_KEY>", "node": "generator", "ts": 1790596048.361257, "output": {"generated_test_len": 1241}, "decision": "generated"}
-{"event": "node", "task": "<REDACTED_KEY>", "node": "executor", "ts": 1790596048.8915682, "output": {"passed": true, "coverage": 40.0, "failed_cases": 0}, "decision": "PASS", "duration_ms": 528.87, "iteration": 0}
-{"event": "node", "task": "<REDACTED_KEY>", "node": "_should_debug", "ts": 1790596048.945844, "output": {"reason": "test_passed"}, "decision": "done"}
-{"event": "task_end", "task": "<REDACTED_KEY>", "ts": 1790596048.946263, "passed": true, "duration_s": 10.58, "token_usage": {"input_tokens": 1708, "output_tokens": 492, "total_tokens": 2200, "llm_calls": 1, "by_model": {"agnes-3.0-flash": 2200}}}

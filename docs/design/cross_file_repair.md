@@ -32,7 +32,7 @@ SWE-bench 仓库级验证（P0/P1，`RepoExecutor`）落地后，跨文件任务
   真实数据收益作为"已识别的架构 + 引擎能力边界"如实陈述，不强行跑
   0/N 的无信息量 A/B。
 
-详见 `experiments/results/experiment_report_20260925.md` §7.4（本地历史报告，不入库）。
+详见 `（工件已清除）` §7.4（本地历史报告，不入库）。
 
 ## 1. 背景与目标
 
@@ -242,7 +242,7 @@ false，不作为推荐开启项**；条件满足后建议开启默认值并更�
 |---|------|------|----------|
 | T1 | 合成数据集跨文件任务（Level 3 双模块，`--difficulty level3`）跨文件修复成功率相对单文件回退策略（`CROSS_FILE_ENABLE=false` 基线） | **≥ +15 个百分点（绝对值）** | `experiments/run_benchmark.py --dataset synthetic --difficulty level3 --task-count 50` 分别跑 ON/OFF 两批，配对比较 `passed` 比例 |
 | T2 | 额外 token 成本 | **跨文件批次平均单任务 `total_tokens` ≤ 单文件回退基线 × 1.5**（即 50% 以内增幅） | 两批结果 JSON 的 `token_usage` 均值对比；超出则记录为"成本不可接受"，不转正 |
-| T3 | 模型档位验证 | 在 **≥ 2 个模型档位**（如 agnes-3.0-flash 免费档 + 更强模型档）上 T1/T2 结论**方向一致**（都为正向） | 复用 `experiments/model_gradient.py` 的档位矩阵，跨文件 ON/OFF 各档位成对 |
+| T3 | 模型档位验证 | 在 **≥ 2 个模型档位**（如当前 deepseek-flash 档 + 更强模型档）上 T1/T2 结论**方向一致**（都为正向） | 复用 `experiments/model_gradient.py` 的档位矩阵，跨文件 ON/OFF 各档位成对 |
 | T4 | 无回归 | 单文件任务（Level 1/2）开启 `CROSS_FILE_ENABLE=true` 后成功率不下降（自动降级路径稳定） | 单文件子集 ON/OFF 配对，下降 > 5pp 视为降级路径缺陷 |
 
 **实验命令（最小可运行口径）**：

@@ -126,6 +126,50 @@ class TestPassAtKIdentity:
         assert summary["n_tasks"] == 2  # 跨批同号不再当同题
         assert summary["identity_basis"] == {"batch_scoped": 2}
 
+    def test_loader_same_seed_cross_batch_stays_separate(self, tmp_path: Path):
+        """R03（2026-10-23 全量集中复审 P1）：同 seed 异批异题不得合成同题多轮。
+
+        真实例（报告 M07）：seed44 的 t08 gates 批次与主批同为
+        synthetic__task_0016 且均无 fixed，pattern/gold 不同——旧加载层
+        `_batch_tag = "s44__"` 使 batch_scoped 回退身份相同，pass@k 把两道
+        题合成 pass@2。修复后 tag 恒取批次文件身份（目录/stem）。
+        """
+        from experiments.statistical_analysis import _load_batch_file, pass_at_k_summary
+
+        def _batch_doc(pattern: str) -> dict:
+            return {
+                "dataset": "synthetic",
+                "provenance": {"seed": 44},
+                "results": {
+                    "aitester": {
+                        "details": [
+                            {
+                                "task_id": "synthetic__task_0016",
+                                "detection_rate": 1,
+                                "patch_correct": 0,
+                                "task_metadata": {"pattern_name": pattern},
+                            }
+                        ]
+                    }
+                },
+            }
+
+        (tmp_path / "benchmark_a.json").write_text(json.dumps(_batch_doc("three_module_chain")), encoding="utf-8")
+        (tmp_path / "benchmark_b.json").write_text(json.dumps(_batch_doc("type_mismatch")), encoding="utf-8")
+
+        results: dict[str, list[dict]] = {"aitester": []}
+        for name in ("benchmark_a.json", "benchmark_b.json"):
+            assert _load_batch_file(results, tmp_path / name, pool_seeds=True) is True
+
+        rows = results["aitester"]
+        # 两行 task_id 的 seed 前缀不变（AB4 分层语义保留），tag 已按批次分开
+        assert all(r["task_id"] == "s44__synthetic__task_0016" for r in rows)
+        assert len({r["_batch_tag"] for r in rows}) == 2
+
+        summary = pass_at_k_summary(results)["aitester"]
+        assert summary["n_tasks"] == 2, "同 seed 跨批异题不得合成同题多轮"
+        assert summary["identity_basis"] == {"batch_scoped": 2}
+
 
 class TestCliJsonErrorLine:
     """F11：异常任务也必须在 JSON 流里有一行。"""

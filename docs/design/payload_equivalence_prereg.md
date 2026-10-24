@@ -294,7 +294,7 @@ H1 三期臂的**代码态不同**（provenance `git_sha` 不同），破坏单�
 "assay sensitivity 未建立"，并把 H1 结论降级为"不可判定"。
 
 > **阈值 +10pp 与 REF 的选择均在取数前固定**。REF 取
-> `experiments/results/e6_a1_batches/e4_quixbugs_FIXED_harness/plain_llm_df.json`
+> `（工件已清除）`
 > （sha256 `d23402fb…`，gold 口径 31/41 = 75.6%）。
 
 ---
@@ -358,7 +358,7 @@ H1 三期臂的**代码态不同**（provenance `git_sha` 不同），破坏单�
 - 每臂产物：批次 JSON、逐任务 trace、运行日志、`env_snapshot.json`、
   本次运行的 `code_state.txt`（`git rev-parse HEAD` + `git status --short` 全文）。
 - **`SHA256SUMS`**：每臂目录一份，覆盖该目录**全部**文件（含日志与 trace）；
-  顶层 `experiments/results/e3_h1_payload/SHA256SUMS` 覆盖各臂 SHA256SUMS。
+  顶层 `（工件已清除）` 覆盖各臂 SHA256SUMS。
   校验：`shasum -a 256 -c SHA256SUMS`。
 - **入库白名单**：三臂工件全部入 git 白名单目录；`/tmp` 产物**不构成证据**。
 

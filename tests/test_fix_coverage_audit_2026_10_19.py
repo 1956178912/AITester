@@ -92,35 +92,6 @@ class TestA11BudgetRecheckBeforeFailover:
 
         assert invoked_models == ["model-1"], "预算超限后不得切换第二个模型"
 
-    def test_zai_path_propagates_budget_exceeded(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """A11：zai 路径的预算超限异常必须**原样传播**，不得被包装成 RuntimeError。
-
-        `_call_zai` 曾用 `except Exception` 把所有失败统一包成 "zai API 调用失败"；
-        预算超限被裹进去后，上层只看到普通 API 故障，会继续故障转移到下一个
-        模型——预算闸被绕过。修复加了 `except BudgetExceededError: raise`，
-        该分支此前零覆盖。
-        """
-        from src.agents import llm_client
-
-        calls = {"create": 0}
-
-        def _create(**kwargs: Any) -> Any:
-            calls["create"] += 1
-            raise RuntimeError("zai 限流")
-
-        client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=_create)))
-        monkeypatch.setattr(llm_client, "_get_or_create_zai_client", lambda *a, **k: client)
-        monkeypatch.setattr("src.budget.cost_budget.is_budget_exceeded", lambda: True)
-        monkeypatch.setattr(
-            "src.budget.cost_budget.get_budget_stats",
-            lambda: {"consumed_tokens": 5000, "token_limit": 1000, "unit": "tokens"},
-        )
-        monkeypatch.setattr("time.sleep", lambda s: None)
-
-        with pytest.raises(BudgetExceededError):
-            llm_client._call_zai("key", "https://open.bigmodel.cn/api/paas/v4", "glm-4", "系统", "问题", max_retries=1)
-        assert calls["create"] == 1, "预算超限后不得在同模型内继续重试"
-
 
 # ═══════════════════════════════════════════════════════════════════════════
 #  缺口 2：A15 同端点不同 key 的实例 ID 后缀（api_manager.py:239-240）

@@ -1,6 +1,0 @@
-{"event": "task_start", "task": "<REDACTED_KEY>", "ts": 1790595538.836202, "meta": {"dataset_task_id": "synthetic__clamp_range_error_0006", "baseline": "aitester", "target_function": null}}
-{"event": "node", "task": "<REDACTED_KEY>", "node": "planner", "ts": 1790595538.854413, "output": {"function_name": "clamp", "test_cases": 7}, "decision": "plan_complete", "duration_ms": 0.5}
-{"event": "node", "task": "<REDACTED_KEY>", "node": "generator", "ts": 1790595876.8632262, "output": {"generated_test_len": 1504}, "decision": "generated"}
-{"event": "node", "task": "<REDACTED_KEY>", "node": "executor", "ts": 1790595877.395909, "output": {"passed": true, "coverage": 100.0, "failed_cases": 0}, "decision": "PASS", "duration_ms": 531.07, "iteration": 0}
-{"event": "node", "task": "<REDACTED_KEY>", "node": "_should_debug", "ts": 1790595877.4508102, "output": {"reason": "test_passed"}, "decision": "done"}
-{"event": "task_end", "task": "<REDACTED_KEY>", "ts": 1790595877.451244, "passed": true, "duration_s": 338.62, "token_usage": {"input_tokens": 2762, "output_tokens": 648, "total_tokens": 3410, "llm_calls": 1, "by_model": {"glm-4-flash": 3410}}}

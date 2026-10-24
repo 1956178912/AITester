@@ -4,7 +4,7 @@
 > N-3（2026-10-17）更新：接线修复 + 独立判读已落地，质量控制口径见 §10。
 > 对应独立评审 §10 A-05 / G6 / D-4："spec_oracle 注入率 40%，正确率未度量"。
 > 工具：`experiments/oracle_quality_replay.py`；工件：
-> `experiments/results/emse_oracle_quality_20261017/`；单测：
+> `（工件已清除）`；单测：
 > `tests/test_oracle_quality_replay.py`。
 > **描述性度量**：不是预注册确认性证据、不做显著性推断；
 > **oracle 质量反映确定性规约通道，不是 LLM 生成能力指标**，也不与
@@ -145,7 +145,7 @@ buggy / fixed 两侧各跑一次 pytest（`--junitxml` 逐测试结果），只�
 
 ## 6. 本轮实测摘要（M 轮 T7-A，2026-10-17，**描述性**）
 
-> 工件：`experiments/results/emse_oracle_quality_20261017/`
+> 工件：`（工件已清除）`
 > （`ORACLE_QUALITY_REPORT.json/.md` + `README.md`）；body digest
 > `ce10e33bc54b56c00c26cd5fd5f7f741649a52554e579d0f154f4a46fd372376`；
 > 重放墙钟 **390.3s**（`--jobs 4 --per-test-timeout 1 --file-timeout 240
@@ -297,7 +297,7 @@ nice -n 15 .venv/bin/python -m experiments.oracle_quality_replay \
 工具新增 `experiments/oracle_quality_replay.py --independent-judging`：state
 **只带 spec_anchor**（复刻生产臂形态、同时验证接线修复），直接调用生产
 `_m1_metrics` 判分链，`M1_PER_TEST_TIMEOUT=1s` 与 M-2 重放口径对齐。工件：
-`experiments/results/emse_oracle_independent_judging_20261017/`
+`（工件已清除）`
 （README + JSON + SHA256SUMS + `smoke/` 真 LLM 冒烟）。核心结果：
 
 | 指标 | df_spec（处理） | df（对照） |
@@ -429,7 +429,7 @@ nice -n 15 .venv/bin/python -m experiments.oracle_quality_replay \
     --jobs 4 --repeat 1
 ```
 
-工件：`experiments/results/emse_oracle_instrument_hardening_20261017/`
+工件：`（工件已清除）`
 （README + JSON + MD + `independent_judging/` + SHA256SUMS；输入 sha256/命令/
 分母/限制齐全）。
 
@@ -548,7 +548,7 @@ nice -n 15 .venv/bin/python -m experiments.oracle_examples_replay \
 .venv/bin/python -m pytest tests/test_oracle_examples.py -q
 ```
 
-工件：`experiments/results/p_round_oracle_examples_20261018/`
+工件：`（工件已清除）`
 （`ORACLE_EXAMPLES_REPORT.json` + `ATTRIBUTION.json` + `README.md` +
 `SHA256SUMS`；输入 sha256/prompt sha256/生成 examples/成本/限制齐全）。
 
@@ -673,7 +673,7 @@ P-1 的 2 例 misguided 来自 LLM 示例期望值幻觉（`is_valid_parenthesiz
 （保守放行，不误杀）。默认开启（`SPEC_EXAMPLES_SELF_VALIDATE=false/0/off`
 可关）；无 examples 路径零变化（单测锁定与无示例产物逐字节一致）。
 
-协议（`experiments/results/r_round_examples_selfcheck_20261018/PREREG.md`
+协议（`（工件已清除）`
 跑前冻结）：输入 = P-1 raw 的 20 任务/90 条 examples；基线 = P-1.1 norm
 （correct 8 / fp 0 / silent 3 / misguided 2 / unavailable 7，分母 13）；
 零 LLM 复用重放（`--reuse-examples`，显式开 Q-1 生产双门）；判定 =
@@ -787,7 +787,7 @@ R-2 过滤器通过的另一部分示例合并；④ 示例级 LLM 二次核验�
 R-2（后置子句过滤器）在 90 条示例上 `dropped=0`；S-3（K=2 精确求交）排除 2/2 幻觉
 但 correct 8→3（−5）→「高风险，默认关」；S-3 登记的下一步是 **K=3 + ≥2/3 多数一致
 + canonical input 约束**（提高跨采样重叠、保留有判别力示例）。T-3 按该方向执行，预注册
-`experiments/results/t_round_oracle_k3_20261018/PREREG.md`（跑前冻结，sha256 见 PREFLIGHT）：
+`（工件已清除）`（跑前冻结，sha256 见 PREFLIGHT）：
 
 - 采样 20 任务 × K=3（60 次 spec-only 调用，cache off，$0.020577，45.3s，回退 0）；
 - 归一化键与 S-3 相同；`majority=2`（≥2/3 一致保留）；每样本 ≤3 条；
@@ -828,5 +828,5 @@ correct 8→5、损失 **3 ≥ 2** → **`high_risk_default_off`**。生产开�
 保留非平凡判别样例"；③ 多数一致只作高置信子集与 P-1 原示例取并集；④ 规约强化
 （关键语义 → `*_expr`）。**不得**再以"清掉 N 个幻觉"单独作质量提升主张。
 
-工件：`experiments/results/t_round_oracle_k3_20261018/`（PREREG/PREFLIGHT/SAMPLING_REPORT/
+工件：`（工件已清除）`（PREREG/PREFLIGHT/SAMPLING_REPORT/
 K3_STATS/K3_REUSE_REPORT/两份重放报告/ANALYSIS_REPORT/README/SHA256SUMS，22 项 verify）。

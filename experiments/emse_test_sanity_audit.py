@@ -38,6 +38,19 @@ from src.utils.process_utils import run_with_timeout  # noqa: E402
 CAP_SECONDS = 30
 OUT_DIR = REPO / "experiments/results/emse_test_sanity_20261015"
 
+
+def _ult_lite46_path() -> Path:
+    """惰性解析 ult_lite46 批次文件（CI 轮补遗 2026-10-24：数据清除后目录为空，
+    模块级 glob()[0] 会在导入时 IndexError 使整个测试文件无法收集；
+    材料缺失延迟到运行期并按既有「任务源缺失」口径显式跳过）。"""
+    hits = sorted(
+        (REPO / "experiments/results/spec_ab_scale87_20261012/ult_lite46_replace").glob("benchmark_ult_*.json")
+    )
+    if not hits:
+        return REPO / "experiments/results/spec_ab_scale87_20261012/ult_lite46_replace/benchmark_ult_MISSING.json"
+    return hits[0]
+
+
 SETS: list[tuple[str, Path, tuple[str, ...]]] = [
     (
         "quixbugs50",
@@ -46,9 +59,7 @@ SETS: list[tuple[str, Path, tuple[str, ...]]] = [
     ),
     (
         "ult_lite46",
-        sorted((REPO / "experiments/results/spec_ab_scale87_20261012/ult_lite46_replace").glob("benchmark_ult_*.json"))[
-            0
-        ],
+        _ult_lite46_path(),
         ("generated", "gold"),
     ),
     (

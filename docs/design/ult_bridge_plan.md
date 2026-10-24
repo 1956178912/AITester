@@ -118,7 +118,7 @@
 
 - 现状：**已安装 8.7.0**（2026-10-13 D3 第一阶段，`experiments/ult_adapter.py`
   已实装 `init → exec → dump` 工作流并冒烟通过）；需**钉版本进 `requirements.lock`**
-  （见 D3 报告 `experiments/results/emse_d3_ult_20261013/D3_REPORT.md` §5）；
+  （见 D3 报告 `（工件已清除）` §5）；
 - 口径一致性：变异体集合必须与 ULT 论文一致（cosmic-ray 版本 + 算子配置）→ **报告里记录 cosmic-ray 版本与配置哈希**，否则 mutation score 不可比；
 - 每个变异体 **120s 超时**（ULT 口径）；超时按**击杀（killed/detected）**计——与 ULT 官方 Cosmic-Ray 口径一致（见下）；
   - ✅ **2026-10-13 已裁定（超时语义）**：cosmic-ray 8.7.0 的 `run_tests`
@@ -147,7 +147,7 @@
 - 基线漂移：本项目自研 `MutationGenerator` 的分数**保留**，作为"内部可比"的旧口径；cosmic-ray 分数是**新口径**，两者不得混述。
 - ✅ **2026-10-14 Mut@k 子集实测完成**（`experiments/emse_ult_mutk.py` +
   `tests/test_emse_ult_mutk.py`，零 LLM；工件
-  `experiments/results/emse_ult_mutk_20261014/`）：对既有工件的生成测试
+  `（工件已清除）`）：对既有工件的生成测试
   批量跑 cosmic-ray 口径 Mut@k——
   | 组 | 任务 | killed/total | pooled |
   |---|---|---|---|
@@ -171,7 +171,7 @@
   包装/物化因素；官方物化风格复测同败）。**新定案（全变异体 + 健全性
   前置门 = 官方 correct_tasks 操作化）**：specir **0.4395**（847/1927，
   n=5/25）；replace **0.6749**（1590/2356，n=9/46）；gold **n=0**（全跳过）。
-  工件：`experiments/results/emse_ult_mutk_full_20261015/` + 审计
+  工件：`（工件已清除）` + 审计
   `emse_test_sanity_20261015/`。完整口径链与对外措辞纪律见
   `docs/design/layered_narrative.md` §3（批次八修正）。
 

@@ -61,7 +61,7 @@ license [new L2 decision gate registered]; AA2: §2 registers the
   count / historical main-batch task count, not the current confirmatory main-batch
   task count**; the single source of truth for numbers = the `benchmark` section of
   `BASELINE.yaml`, and the batch artifacts plus pooled statistics live in
-  `experiments/results/main_batch/statistical_report_3seed_pooled.md`
+  `（工件已清除）`
   (`benchmark_synthetic_20261006_{140906,151907,164357}.json`);
 - **Gold-material schema**: `metadata["test_cases"]` (gold tests),
   `metadata["fixed"]` (single-file gold patch), `fixed_module_code`
@@ -179,7 +179,7 @@ license [new L2 decision gate registered]; AA2: §2 registers the
     (see §2);
   - Aggregated result artifacts (partially committed): `experiments/results/`.
     The batch JSONs, statistical reports and `SHA256SUMS` under
-    `experiments/results/main_batch/` are committed (2,029 files measured with
+    `（工件已清除）` are committed (2,029 files measured with
     `git ls-files`); the remaining batch directories are ignored by
     `.gitignore` line 158 (`experiments/results/**`) and only selected
     artifacts/checksum files were force-added (18 of the 24 `SHA256SUMS*`

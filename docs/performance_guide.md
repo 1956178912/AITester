@@ -103,13 +103,13 @@ MAX_ITERATIONS=3
 `_retry_with_exponential_backoff`）：
 
 ```python
-# llm_client.py 中的统一重试逻辑（OpenAI 兼容路径与 zai SDK 路径共用）
+# llm_client.py 中的统一重试逻辑（OpenAI 兼容路径与第三方 SDK 路径共用（后者已于 2026-10-23 移除））
 for attempt in range(max_retries + 1):
     try:
         response = llm.invoke(messages, timeout=LLM_TIMEOUT)
         return response
     except Exception:
-        wait_time = base_wait * (2**attempt)  # 指数退避：1s→1/2/4s（zai 路径 5s→5/10/20s）
+        wait_time = base_wait * (2**attempt)  # 指数退避：1s→1/2/4s（第三方 SDK 路径 5s→5/10/20s）
         time.sleep(wait_time)
         continue
 # 重试耗尽 → 自动切换到同 API 下一模型 / 备用 API
@@ -117,7 +117,7 @@ for attempt in range(max_retries + 1):
 
 **特点**：
 - 退避等待按 `base_wait * 2^attempt` 增长：OpenAI 兼容路径 `base_wait=1s`
-  （1s/2s/4s），zai SDK 路径 `base_wait=5s`（5s/10s/20s，限流更严格取更长基准）
+  （1s/2s/4s），第三方 SDK 路径 `base_wait=5s`（5s/10s/20s，限流更严格取更长基准）
 - 所有重试失败：自动切换到同 API 下一模型 / 备用 API（故障转移）
 - 注意：`LLM_RETRY_WAIT` 现仅用于 `run_benchmark` 的任务间限流等待，**不再驱动重试退避**
   （退避基准由 `base_wait` 参数控制）
@@ -446,18 +446,17 @@ snakeviz profile.prof
 
 ### 7.1 背景
 
-优化前，每次 LLM 调用都新建一个客户端实例（`ChatOpenAI` / `ZhipuAiClient`），意味着反复创建底层 HTTP 连接池。高迭代次数（`MAX_ITERATIONS=3` × 多任务）时，建连开销累积明显。
+优化前，每次 LLM 调用都新建一个客户端实例（`ChatOpenAI`），意味着反复创建底层 HTTP 连接池。高迭代次数（`MAX_ITERATIONS=3` × 多任务）时，建连开销累积明显。
 
 ### 7.2 实现方案
 
-`src/agents/base_agent.py` 提供两个按配置键复用的客户端缓存：
+`src/agents/base_agent.py` 提供按配置键复用的客户端缓存：
 
 | 路径 | 缓存键 | 上限 | 驱逐策略 |
 |------|--------|------|----------|
 | OpenAI 兼容（`ChatOpenAI`） | `(model_name, temperature, api_key, base_url)` | 16 | FIFO |
-| zai SDK（`ZhipuAiClient`） | `(api_key, base_url)` | 16 | FIFO |
 
-入口函数：`_get_or_create_chat_client()` 与 `_get_or_create_zai_client()`。同一配置下的多次调用共享同一客户端（及其连接池），不同配置互不影响。
+入口函数：`_get_or_create_chat_client()`。同一配置下的多次调用共享同一客户端（及其连接池），不同配置互不影响。
 
 ### 7.3 注意事项
 
@@ -630,7 +629,7 @@ ExecutorAgent 在本地 / venv / Docker 三种模式下，子进程环境均剔�
 三条链路统一走 `src/utils/credential_scrub.py` 的 `scrub_os_environ()`（单一实现，避免名单漂移）：
 - **动态模式**：`LLM_\d+_API_KEY` / `LLM_\d+_BASE_URL`（N 为 1-32，对齐 `config.py` 的 LLM provider 扫描口径）——覆盖 `LLM_1_API_KEY` 等全部编号，此前 venv/Docker 链路原样继承宿主 `os.environ`、本地链路只剔 7 个固定变量（覆盖不了 `LLM_N_*` 系列），现统一动态剔除；
 - **通用 SDK 凭证固定名单**：`OPENAI_API_KEY` / `OPENAI_BASE_URL` / `ANTHROPIC_API_KEY` / `API_KEY` / `LLM_API_KEY` / `LLM_CONFIG_API_KEY`（保留历史口径）；
-- **P0 补强（2026-09-26 审查轮）**：固定名单锚定全名（`^OPENAI_API_KEY$`）漏掉 `.env` 实测存在的多端点编号命名（`OPENAI_API_KEY_2/3`、`OPENAI_BASE_URL_2/3`），凭证原样进被测代码子进程（执行向量 + 泄露面）——补编号变体通配 `OPENAI_(API_KEY|BASE_URL)_\d+` 与 provider 中间变量（`ALIYUN_BAILIAN_API_KEY` / `AGNES_{DOMESTIC|INTERNATIONAL}_API_KEY` / `BIGMODEL_API_KEY` / `DEEPSEEK_API_KEY`，与 `config_generator.py` 的 `PROVIDER_TEMPLATES` 键联动消名单漂移），覆盖批量脚本推导口径。
+- **P0 补强（2026-09-26 审查轮）**：固定名单锚定全名（`^OPENAI_API_KEY$`）漏掉 `.env` 实测存在的多端点编号命名（`OPENAI_API_KEY_2/3`、`OPENAI_BASE_URL_2/3`），凭证原样进被测代码子进程（执行向量 + 泄露面）——补编号变体通配 `OPENAI_(API_KEY|BASE_URL)_\d+` 与 provider 中间变量（`DEEPSEEK_API_KEY` / `DEEPSEEK_BASE_URL`，与 `config_generator.py` 的 `PROVIDER_TEMPLATES` 键联动消名单漂移），覆盖批量脚本推导口径。
 
 ## 十一、SWE-bench 仓库级验证的 venv 隔离（P1，2026-09-25）
 

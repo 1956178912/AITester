@@ -82,6 +82,15 @@ ast-guards:  ## ast.parse 守卫捕获面棘轮（BK 轮，CI 阻断项：新增
 status-persistence:  ## 状态通道落盘可达性棘轮（BN 轮，CI 阻断项：声明了却不落盘=归档里 0 出现、事后不可复核；豁免清单为空）
 	$(PY) scripts/gates/check_status_persistence.py
 
+registration-consistency:  ## 登记面读侧对账（CF 轮，CI 阻断项：§1 当前口径数字必须可复算、在盘分册必须进 INDEX 清单）
+	$(PY) scripts/gates/check_registration_consistency.py
+
+invocation-caliber:  ## 门禁调用口径对账（CG 轮，CI 阻断项：挂在链上 ≠ 以同一口径在跑；跨面开关差 / 判据档无读者 / 多层兜底都必须落登记表）
+	$(PY) scripts/gates/check_invocation_caliber.py
+
+flag-effect:  ## 门禁开关有效性对账（CH 轮，CI 阻断项：命令行上传了的开关必须在源码里真被读；死开关/代理开关都不给豁免）
+	$(PY) scripts/gates/check_flag_effect.py
+
 self-mutation:  ## 自身测试套件变异测试（零 LLM；临时副本内变异；默认 3 个核心模块等距抽样 120/文件）
 	$(PY) scripts/tools/self_mutation.py
 
@@ -112,7 +121,7 @@ perf-check:  ## 性能回归比对（默认 non-blocking 告警；本地同机�
 tool-versions:  ## CI/pre-commit/lock 三方工具版本一致守卫（AK4 接入 CI）
 	$(PY) scripts/gates/check_tool_versions.py
 
-gates: lint format typecheck test docs-check env-budget baseline-check state-contract env-snapshot model-fingerprint tool-versions json-contract-sites json-strict artifact-doc-consistency zero-assert ast-guards status-persistence  ## 本地全部门禁（合并前自检；format = ruff format --check，2026-10-12 质量债清偿批次补入；zero-assert = K 轮补入，此前 CI 阻断但本地 gates 缺席；json-strict = AF 轮补入；ast-guards = BK 轮补入，捕获面棘轮；status-persistence = BN 轮补入，落盘可达性棘轮）
+gates: lint format typecheck test docs-check env-budget baseline-check state-contract env-snapshot model-fingerprint tool-versions json-contract-sites json-strict artifact-doc-consistency zero-assert ast-guards status-persistence registration-consistency invocation-caliber flag-effect  ## 本地全部门禁（合并前自检；format = ruff format --check，2026-10-12 质量债清偿批次补入；zero-assert = K 轮补入，此前 CI 阻断但本地 gates 缺席；json-strict = AF 轮补入；ast-guards = BK 轮补入，捕获面棘轮；status-persistence = BN 轮补入，落盘可达性棘轮；registration-consistency = CF 轮补入，登记面当前口径与分册清单对账）
 
 repro:  ## 复现主批次（详见 reproduce.sh；消耗 LLM 配额，勿自动触发）
 	bash reproduce.sh

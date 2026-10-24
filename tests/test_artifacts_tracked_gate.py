@@ -12,7 +12,14 @@
    （emse_* 与 *_round_* 两种前缀都验）；
 4. **扫描面固定**：`EVIDENCE_DIR_GLOBS` 必须同时含 `emse_*` 与 `*_round_*`
    （缩小扫描面 = 门禁静默失效）；
-5. **MANIFEST 无重复条目**（重复登记会掩盖清单增长审计）。
+5. **MANIFEST 无重复条目**（重复登记会掩盖清单增长审计）；
+6. **豁免登记自身受审计**（CA 轮 2026-10-23）：目录消失 / 已全部入库 /
+   目录为空 / 不可读 / 登记名不在扫描面内 → `exemption_drift_failures()`
+   非空（此前豁免只在抑制报错时被读取，过期条目永不被发现）；
+7. **遮蔽量可见**：`exemption_coverage()` 逐条给出未入库工件数，门禁通过时
+   打印的披露数字必须等于其重算值（披露不得与数据分叉）；
+8. **登记删除不减弱扫描**：为两条已失效登记（目录已删 / 53 个文件已全部
+   入库）移除条目后，原本未登记的未跟踪目录仍必须被报出。
 
 注意：本测试在真实仓库上运行（门禁语义依赖 git），不 mock git。
 """
@@ -20,6 +27,7 @@
 from __future__ import annotations
 
 import importlib.util
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -34,6 +42,19 @@ _spec.loader.exec_module(gate)
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
+def _fake_repo(root: Path) -> Path:
+    subprocess.run(["git", "init", "-q", str(root)], check=True)
+    return root
+
+
+def _fake_batch(root: Path, name: str, files: int) -> Path:
+    directory = root / "experiments" / "results" / name
+    directory.mkdir(parents=True)
+    for index in range(files):
+        (directory / f"f{index}.json").write_text("{}", encoding="utf-8")
+    return directory
+
+
 class TestManifestHygiene:
     def test_manifest_has_no_duplicates(self):
         assert len(gate.MANIFEST) == len(set(gate.MANIFEST)), "MANIFEST 存在重复条目"
@@ -43,144 +64,13 @@ class TestManifestHygiene:
         missing = [rel for rel in gate.MANIFEST if not (PROJECT_ROOT / rel).exists()]
         assert not missing, f"MANIFEST 条目不存在于工作区: {missing}"
 
-    def test_manifest_covers_q_round_chain(self):
-        """Q 轮（2026-10-18）：示例生产化 A/B / 事故披露 / 后处理墙钟工件必须在清单。"""
-        required_substrings = (
-            "q_round_examples_ab_20261018/ANALYSIS_REPORT.json",
-            "q_round_examples_ab_20261018/SHA256SUMS",
-            "q_round_examples_ab_20261018/_incident_unintended_llm_launch_20261018/README_INCIDENT.md",
-            "q_round_postprocess_wall_20261018/SHA256SUMS",
-        )
-        for needle in required_substrings:
-            assert any(needle in rel for rel in gate.MANIFEST), f"清单缺少 Q 轮工件条目: {needle}"
-
-    def test_manifest_covers_r_round_chain(self):
-        """R 轮（2026-10-18）：seed-43 复现批与示例自校验工件必须在清单。"""
-        required_substrings = (
-            "r_round_examples_repro_20261018/DIAGNOSIS.md",
-            "r_round_examples_repro_20261018/PREREG_REPRO.md",
-            "r_round_examples_repro_20261018/SHA256SUMS",
-            "r_round_examples_selfcheck_20261018/FILTER_STATS.json",
-            "r_round_examples_selfcheck_20261018/SHA256SUMS",
-        )
-        for needle in required_substrings:
-            assert any(needle in rel for rel in gate.MANIFEST), f"清单缺少 R 轮工件条目: {needle}"
-
-    def test_manifest_covers_s_round_chain(self):
-        """S 轮（2026-10-18）：3-seed 决策 / B8 注入 / 多采样评估工件必须在清单。"""
-        required_substrings = (
-            "s_round_examples_decision_20261018/PREREG_DECISION.md",
-            "s_round_examples_decision_20261018/SHA256SUMS",
-            "s_round_b8_injection_20261018/ISOLATION.json",
-            "s_round_b8_injection_20261018/REPORT.json",
-            "s_round_examples_multisample_20261018/MULTISAMPLE_STATS.json",
-        )
-        for needle in required_substrings:
-            assert any(needle in rel for rel in gate.MANIFEST), f"清单缺少 S 轮工件条目: {needle}"
-
-    def test_manifest_covers_t_round_chain(self):
-        """T 轮（2026-10-18）：K=3 治理 / SMT pre-post-fix / 语义修复 / A-19 默认门 / 审计工件必须在清单。"""
-        required_substrings = (
-            "t_round_oracle_k3_20261018/PREREG.md",
-            "t_round_oracle_k3_20261018/ANALYSIS_REPORT.json",
-            "t_round_oracle_k3_20261018/SHA256SUMS",
-            "t_round_smt_witness_20261018/ANALYSIS_REPORT.json",
-            "t_round_smt_witness_aliasfix_20261018/COMPARISON.json",
-            "t_round_semantic_fixes_20261018/A19_REVALIDATION_PREREG.md",
-            "t_round_a19_default_gate_20261018/ANALYSIS.json",
-            "t_round_artifact_audit_20261018/AUDIT_REPORT.md",
-            "t_round_b1_protocol_text_20261018/PREREG_CONTINUATION.md",
-            "t_round_b1_protocol_text_20261018/DOC_RECONCILIATION.md",
-            "t_round_b1_protocol_text_20261018/SHA256SUMS",
-        )
-        for needle in required_substrings:
-            assert any(needle in rel for rel in gate.MANIFEST), f"清单缺少 T 轮工件条目: {needle}"
-
-    def test_manifest_covers_df_spec_chain(self):
-        """A-04：df_spec / M4 / D1 / ULT-df200 四批旗舰工件的关键件必须在清单。"""
-        required_substrings = (
-            "emse_df_spec_20261016/DF_SPEC_REPORT.json",
-            "emse_df_spec_20261016/SHA256SUMS",
-            "emse_quixbugs_specir_expand_20261014/QUIXB_EXPAND_ABCD_REPORT.json",
-            "emse_d1_quixbugs_ab_20261013/README.md",
-            "emse_ult_df200_20261017/ACCURACY_REPORT.json",
-            "emse_ult_df200_20261017/SHA256SUMS",
-        )
-        for needle in required_substrings:
-            assert any(needle in rel for rel in gate.MANIFEST), f"清单缺少旗舰工件条目: {needle}"
-
-    def test_manifest_covers_l_round_chain(self):
-        """L 轮（2026-10-17）：P1 三臂批 / misguided 度量 / 自身变异 / pilot 四链证据必须在清单。
-
-        这些工件被 BASELINE `benchmark.docstring_anchor`、`target_quality.
-        mechanism_metrics`、`self_mutation` 与登记册 L-1~L-6 直接引用——清单漏登记
-        即为"报告引用未入库工件"的引用链断裂（本守卫的核心失效形态）。
-        """
-        required_substrings = (
-            "emse_docstring_anchor_20261017/DF_DOC_REPORT.json",
-            "emse_docstring_anchor_20261017/SHA256SUMS",
-            "emse_docstring_anchor_20261017/benchmark_quixbugs_20261017_194444.json",
-            "emse_misguided_20261017/MISGUIDED_REPORT.json",
-            "emse_misguided_docstring_anchor_20261017/MISGUIDED_REPORT.json",
-            "self_mutation_l_round/SELF_MUTATION_L_ROUND.md",
-            "l_round_pilot_20261017/defect_repro/aborted_full50_run.log",
-        )
-        for needle in required_substrings:
-            assert any(needle in rel for rel in gate.MANIFEST), f"清单缺少 L 轮工件条目: {needle}"
-
-    def test_manifest_covers_m_round_chain(self):
-        """M 轮（2026-10-17）：增广批 / oracle 质量 / 编译执行率 / 孤儿根因四链证据必须在清单。
-
-        这些工件被 BASELINE 新增节（`benchmark.docstring_augment`、
-        `target_quality.oracle_quality` / `compile_exec`）、MEASUREMENT_INTEGRITY §6
-        与登记册 M-1~M-6 直接引用——漏登记即引用链断裂。
-        """
-        required_substrings = (
-            "emse_docstring_augment_20261017/DF_AUG_REPORT.json",
-            "emse_docstring_augment_20261017/SHA256SUMS",
-            "emse_docstring_augment_20261017/PROMPT_EVIDENCE.json",
-            "emse_misguided_augment_20261017/MISGUIDED_REPORT.json",
-            "emse_oracle_quality_20261017/ORACLE_QUALITY_REPORT.json",
-            "emse_compile_exec_20261017/COMPILE_EXEC_REPORT.json",
-            "orphan_repro_20261017/README.md",
-        )
-        for needle in required_substrings:
-            assert any(needle in rel for rel in gate.MANIFEST), f"清单缺少 M 轮工件条目: {needle}"
-
-    def test_manifest_covers_n_round_chain(self):
-        """N 轮（2026-10-17）：功能矩阵 / oracle 独立判读 / 真实 LLM 重型探针链必须在清单。"""
-        required_substrings = (
-            "e2e_probe_20261017/report.json",
-            "e2e_probe_workflow_20261017/report.json",
-            "e2e_probe_platform_20261017/llm_report.json",
-            "emse_oracle_independent_judging_20261017/ORACLE_INDEPENDENT_JUDGING_REPORT.json",
-            "e2e_llm_probes_20261017/ITEM_RESULTS.json",
-        )
-        for needle in required_substrings:
-            assert any(needle in rel for rel in gate.MANIFEST), f"清单缺少 N 轮工件条目: {needle}"
-
-    def test_manifest_covers_p_round_chain(self):
-        """P 轮（2026-10-18）：示例通道双报告与 B8 消融工件必须在清单。"""
-        required_substrings = (
-            "p_round_oracle_examples_20261018/ORACLE_EXAMPLES_REPORT.json",
-            "p_round_oracle_examples_20261018/ORACLE_EXAMPLES_REPORT_norm.json",
-            "p_round_oracle_examples_20261018/SHA256SUMS",
-            "p_round_b8_ablation_20261018/ABLATION_REPORT.json",
-            "p_round_b8_ablation_20261018/SHA256SUMS",
-        )
-        for needle in required_substrings:
-            assert any(needle in rel for rel in gate.MANIFEST), f"清单缺少 P 轮工件条目: {needle}"
-
-    def test_manifest_covers_o_round_chain(self):
-        """O 轮（2026-10-18）：oracle 仪器治疗 / 跨文件路径 / oracle 二臂验证链必须在清单。"""
-        required_substrings = (
-            "emse_oracle_instrument_hardening_20261017/ORACLE_QUALITY_REPORT.json",
-            "emse_oracle_instrument_hardening_20261017/SHA256SUMS",
-            "o_round_cross_file_20261017/O3_EVIDENCE.json",
-            "emse_oracle_enabled_validation_20261017/ARM_COMPARISON.json",
-        )
-        for needle in required_substrings:
-            assert any(needle in rel for rel in gate.MANIFEST), f"清单缺少 O 轮工件条目: {needle}"
+    def test_manifest_is_empty_after_purge_and_self_consistent(self):
+        """CI 轮第三批（2026-10-24）：用户指令清除 experiments/results/ 全部历史数据
+        （DeepSeek 重跑前），MANIFEST 条目随文件一并删除——13 个「清单必须含 X」
+        内容锁整体退役为本空表语义锁：空表 + 去重 + 门禁通过是该机制在数据清除期的
+        正常终态；重跑生成新工件后由新登记重建清单、锁面随之重建。"""
+        assert gate.MANIFEST == ()
+        assert len(set(gate.MANIFEST)) == len(gate.MANIFEST)
 
 
 class TestEmseDirScan:
@@ -230,8 +120,143 @@ class TestEmseDirScan:
         fake_dir = fake_results / "emse_d2_profile_smoke_20261013"
         fake_dir.mkdir(parents=True)
         monkeypatch.setattr(gate, "PROJECT_ROOT", tmp_path)
+        # CI 轮第三批：真实豁免表已随数据清除清空，本测试测的是「豁免机制」本身，
+        # 故注入临时条目而不是依赖那张具体表。
+        monkeypatch.setattr(
+            gate, "EVIDENCE_DIR_EXEMPTIONS", {"emse_d2_profile_smoke_20261013": "测试豁免（tmp 合成目录） @tmp"}
+        )
         offenders = gate._scan_evidence_dirs()
         assert offenders == [], f"豁免目录被误报: {offenders}"
+
+
+class TestExemptionDrift:
+    """CA 轮：豁免登记的失效判定与遮蔽量披露（读侧不得与数据分叉）。"""
+
+    def test_registry_size_is_locked(self):
+        # CI 轮补跑（2026-10-24）：豁免表自「清空态」重建为 5 条（DeepSeek 重跑期
+        # 新批目录、按用户口径暂不提交）；提交入库后「已全部入库」漂移会提醒删登记，
+        # 届时同步把本锁改回更小值。
+        assert len(gate.EVIDENCE_DIR_EXEMPTIONS) == 5, sorted(gate.EVIDENCE_DIR_EXEMPTIONS)
+
+    def test_registry_names_stay_in_scan_surface(self):
+        """登记名必须落在 EVIDENCE_DIR_GLOBS 内，否则豁免永不被扫描读取。"""
+        off = [name for name in gate.EVIDENCE_DIR_EXEMPTIONS if not gate._in_scan_surface(name)]
+        assert off == [], f"登记名不在扫描面内: {off}"
+
+    def test_coverage_reconciles_with_registry(self):
+        """覆盖表与登记表一一对应，且 hidden = total - tracked（同一计数口径）。"""
+        rows = gate.exemption_coverage()
+        assert sorted(row.name for row in rows) == sorted(gate.EVIDENCE_DIR_EXEMPTIONS)
+        for row in rows:
+            assert row.hidden_files == row.total_files - row.tracked_files
+            assert row.status == "ok", (row.name, row.status, row.detail)
+            assert 0 <= row.tracked_files < row.total_files, (row.name, row.tracked_files, row.total_files)
+
+    def test_drift_clean_on_current_repo(self):
+        """当前仓库：14 条登记全部仍然需要（目录存在、未全入库、可审计）。"""
+        assert gate.exemption_drift_failures() == []
+
+    def test_drift_flags_missing_dir(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(gate, "EVIDENCE_DIR_EXEMPTIONS", {"emse_gone_20260101": "已删批次"})
+        monkeypatch.setattr(gate, "PROJECT_ROOT", tmp_path)
+        failures = gate.exemption_drift_failures()
+        assert [name for name, _ in failures] == ["emse_gone_20260101"]
+        assert "目录已不存在" in failures[0][1]
+
+    def test_drift_flags_empty_dir(self, tmp_path, monkeypatch):
+        (tmp_path / "experiments/results/emse_empty_20260101").mkdir(parents=True)
+        monkeypatch.setattr(gate, "EVIDENCE_DIR_EXEMPTIONS", {"emse_empty_20260101": "空目录"})
+        monkeypatch.setattr(gate, "PROJECT_ROOT", tmp_path)
+        failures = gate.exemption_drift_failures()
+        assert [name for name, _ in failures] == ["emse_empty_20260101"]
+        assert "不遮蔽任何工件" in failures[0][1]
+
+    def test_drift_flags_fully_tracked_dir(self, tmp_path, monkeypatch):
+        """全部入库后豁免不再抑制任何东西——登记应移除。"""
+        repo = _fake_repo(tmp_path)
+        directory = _fake_batch(repo, "emse_all_tracked_20260101", 2)
+        subprocess.run(["git", "-C", str(repo), "add", str(directory)], check=True)
+        monkeypatch.setattr(gate, "EVIDENCE_DIR_EXEMPTIONS", {"emse_all_tracked_20260101": "旧豁免"})
+        monkeypatch.setattr(gate, "PROJECT_ROOT", repo)
+        rows = gate.exemption_coverage()
+        assert [(row.status, row.tracked_files, row.total_files) for row in rows] == [("fully_tracked", 2, 2)]
+        failures = gate.exemption_drift_failures()
+        assert [name for name, _ in failures] == ["emse_all_tracked_20260101"]
+        assert "2/2" in failures[0][1]
+
+    def test_drift_flags_unreadable_dir(self, tmp_path, monkeypatch):
+        """git ls-files 失败时豁免无法复核，必须判漂移而不是静默继续。"""
+        _fake_batch(tmp_path, "emse_unreadable_20260101", 1)
+        real_run = subprocess.run
+        boom = subprocess.CompletedProcess(args=[], returncode=1, stdout="", stderr="boom")
+
+        def fake_run(cmd, *args, **kwargs):
+            if isinstance(cmd, list) and "ls-files" in cmd:
+                return boom
+            return real_run(cmd, *args, **kwargs)
+
+        monkeypatch.setattr(gate.subprocess, "run", fake_run)
+        monkeypatch.setattr(gate, "EVIDENCE_DIR_EXEMPTIONS", {"emse_unreadable_20260101": "不可读"})
+        monkeypatch.setattr(gate, "PROJECT_ROOT", tmp_path)
+        failures = gate.exemption_drift_failures()
+        assert [name for name, _ in failures] == ["emse_unreadable_20260101"]
+        assert "无法审计" in failures[0][1]
+
+    def test_drift_flags_name_outside_scan_surface(self, tmp_path, monkeypatch):
+        repo = _fake_repo(tmp_path)
+        _fake_batch(repo, "review_batch_20260101", 1)
+        monkeypatch.setattr(gate, "EVIDENCE_DIR_EXEMPTIONS", {"review_batch_20260101": "命名不在扫描面"})
+        monkeypatch.setattr(gate, "PROJECT_ROOT", repo)
+        failures = gate.exemption_drift_failures()
+        assert [name for name, _ in failures] == ["review_batch_20260101"]
+        assert "扫描面内" in failures[0][1]
+
+    def test_partial_exemption_is_not_drift(self, tmp_path, monkeypatch):
+        """部分入库（1/2）仍是有效豁免，遮蔽量如实给出 1。"""
+        repo = _fake_repo(tmp_path)
+        directory = _fake_batch(repo, "emse_partial_20260101", 2)
+        subprocess.run(["git", "-C", str(repo), "add", str(directory / "f0.json")], check=True)
+        monkeypatch.setattr(gate, "EVIDENCE_DIR_EXEMPTIONS", {"emse_partial_20260101": "部分入库"})
+        monkeypatch.setattr(gate, "PROJECT_ROOT", repo)
+        rows = gate.exemption_coverage()
+        assert [(row.status, row.hidden_files, row.total_files) for row in rows] == [("ok", 1, 2)]
+        assert gate.exemption_drift_failures() == []
+
+    def test_gate_imports_without_sys_modules_registration(self):
+        """历史测试以 spec_from_file_location 动态加载且不登记 sys.modules——
+        门禁模块在该载入路径下也必须可导入（`@dataclass` 在 3.14 会因
+        `sys.modules[cls.__module__]` 为 None 而 AttributeError）。"""
+        name = "_ca_unregistered_gate"
+        sys.modules.pop(name, None)
+        spec = importlib.util.spec_from_file_location(name, _GATE_PATH)
+        assert spec and spec.loader
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)  # 故意不写入 sys.modules
+        assert module.EVIDENCE_DIR_GLOBS
+        rows = module.exemption_coverage()
+        assert rows == [] or all(r.hidden_files >= 0 for r in rows)
+
+    def test_drift_blocks_gate_even_when_scan_clean(self, tmp_path, monkeypatch, capsys):
+        """main() 必须把漂移接成阻断（扫描面无违例 ≠ 登记健康）。"""
+        monkeypatch.setattr(gate, "EVIDENCE_DIR_EXEMPTIONS", {"emse_gone_20260101": "已删批次"})
+        monkeypatch.setattr(gate, "PROJECT_ROOT", tmp_path)
+        monkeypatch.setattr(gate, "MANIFEST", ())
+        assert gate.main([]) == 1
+        out = capsys.readouterr().out
+        assert "豁免登记漂移" in out, out
+        assert "emse_gone_20260101" in out, out
+
+    def test_exemption_does_not_mask_other_dirs(self, tmp_path, monkeypatch):
+        """删条目后扫描面不得退化：未登记的未跟踪目录仍被报出。"""
+        _fake_repo(tmp_path)
+        _fake_batch(tmp_path, "emse_waived_20260101", 1)
+        _fake_batch(tmp_path, "emse_unwaived_20260101", 1)
+        monkeypatch.setattr(gate, "EVIDENCE_DIR_EXEMPTIONS", {"emse_waived_20260101": "冒烟"})
+        monkeypatch.setattr(gate, "PROJECT_ROOT", tmp_path)
+        offenders = gate._scan_evidence_dirs()
+        rels = " ".join(rel for rel, _ in offenders)
+        assert "emse_unwaived_20260101" in rels, offenders
+        assert "emse_waived_20260101" not in rels, offenders
 
 
 class TestGateEndToEnd:
@@ -244,3 +269,21 @@ class TestGateEndToEnd:
             text=True,
         )
         assert result.returncode == 0, f"门禁失败:\n{result.stdout}\n{result.stderr}"
+
+    def test_gate_discloses_hidden_artifacts(self):
+        """披露不得与数据分叉：打印的项数/遮蔽总数必须等于重算值。"""
+        result = subprocess.run(
+            [sys.executable, str(_GATE_PATH)],
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, f"门禁失败:\n{result.stdout}\n{result.stderr}"
+        match = re.search(r"豁免披露：(\d+) 项有效登记共遮蔽未入库工件 (\d+) 个", result.stdout)
+        assert match, result.stdout
+        rows = gate.exemption_coverage()
+        assert int(match.group(1)) == len(rows)
+        assert int(match.group(2)) == sum(row.hidden_files for row in rows)
+        for row in rows:
+            line = f"[EXEMPT] {row.name}: 遮蔽未入库工件 {row.hidden_files}/{row.total_files}"
+            assert line in result.stdout, f"缺少逐条披露: {line}"

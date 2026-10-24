@@ -614,7 +614,7 @@ TASK_SUMMARY.md、.agent-teams/、SUBMISSION_* 等），`--force` 推送干净�
 ### 设计决策
 
 - **F-02 缓存路径**：redaction_audit C 项"已知可接受风险"结论不变（本地可信域、脱敏与缓存命中互斥），仅路径与信任级论述对齐代码实际（`src/cache/` 在仓库内且已 gitignore）；
-- **F-04 默认输出路径**：`analyze_failures.py --output` 默认值改为 `experiments/results/failure_analysis.md`（无测试引用该脚本，零回归面）；
+- **F-04 默认输出路径**：`analyze_failures.py --output` 默认值改为 `（工件已清除）`（无测试引用该脚本，零回归面）；
 - **阶段 6 推送**：用户指令"上传 GitHub"，沿用历史轮次 main 直推（无 feature 分支、无 PR）。
 
 ---
@@ -717,7 +717,7 @@ TASK_SUMMARY.md、.agent-teams/、SUBMISSION_* 等），`--force` 推送干净�
 - `MULTI_CANDIDATE_EXEC_VALIDATE` 收敛为 `multi_candidate_exec_validate()`。
 
 ### 死代码清理（4 处）+ DRY/并发
-- 删 EXECUTOR_SYSTEM_PROMPT / safe_apply_multi_function_patch / _call_llm_with_fallback（+_is_zai_url）/
+- 删 EXECUTOR_SYSTEM_PROMPT / safe_apply_multi_function_patch / _call_llm_with_fallback（+第三方域名判定）/
   benchmark 装饰器 / cross_file.topo_key。
 - RAG 检索器抽 `_upsert` 单一写入点 + threading.Lock 串行化；`refine_failure_category` 接线收敛为
   `refine_final_error_category`；cross_file docstring 如实描述「当前字典序」。

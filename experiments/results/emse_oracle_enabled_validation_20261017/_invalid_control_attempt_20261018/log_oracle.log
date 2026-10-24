@@ -1,152 +1,0 @@
-=== O-2 ARM=oracle baseline=plain_llm_df_spec oracle=1 namespace=emse_oracle_enabled_validation_20261017_oracle ===
-START_ISO_UTC=2026-10-17T16:34:21Z START_EPOCH=1792254861
-CODE_ROOT=/Users/wangchenyu/Workspace/AITester-o2-oracle-70b5436 GIT_HEAD=70b5436a9b8786b18b5bd80a83ce8a4741b2bfce
-GIT_STATUS_PRE=<clean>
-CMD:
- env -u DOC_ANCHOR_TABLE -u DF_SPEC_ANCHOR_TABLE -u AITESTER_QUIXBUGS_DATA -u DETECTION_SPEC_MODE -u SPEC_ORACLE_EXEC_ENABLE AITESTER_PROFILE=logic TEMPERATURE=0.0 LLM_THINKING_MODE=disabled BENCHMARK_PARALLELISM=4 AITESTER_BATCH_MAX_CALLS=100 COST_BUDGET_ENABLE=true COST_BUDGET_USD=1 AITESTER_LLM_CACHE=0 AITESTER_CACHE_NAMESPACE=emse_oracle_enabled_validation_20261017_oracle AITESTER_TRACE_DIR=/Users/wangchenyu/Workspace/AITester/experiments/results/emse_oracle_enabled_validation_20261017/traces_oracle SPEC_ORACLE_EXEC_ENABLE=true /Users/wangchenyu/Workspace/AITester/.venv/bin/python /Users/wangchenyu/Workspace/AITester-o2-oracle-70b5436/experiments/run_main_batch.py --dataset quixbugs --task-limit 20 --seed 42 --baselines plain_llm_df_spec --output-dir /Users/wangchenyu/Workspace/AITester/experiments/results/emse_oracle_enabled_validation_20261017/.staging_oracle --skip-stats
-R4 主批次：dataset=quixbugs task_count=None seed=42（全量数据集前 20 个任务）
-基线：plain_llm_df_spec；输出：/Users/wangchenyu/Workspace/AITester/experiments/results/emse_oracle_enabled_validation_20261017/.staging_oracle；确定性采样：开（temp=0.0）
-基准测试 [plain_llm_df_spec]:   0%|          | 0/20 [00:00<?, ?task/s]第 1 次执行失败，尝试重试...
-第 2 次执行失败，尝试重试...
-第 1 次执行失败，尝试重试...
-第 2 次执行失败，尝试重试...
-第 1 次执行失败，尝试重试...
-第 2 次执行失败，尝试重试...
-第 1 次执行失败，尝试重试...
-第 2 次执行失败，尝试重试...
-基准测试 [plain_llm_df_spec]:   5%|▌         | 1/20 [00:23<07:23, 23.36s/task]基准测试 [plain_llm_df_spec] - 耗时: 5.5s:   5%|▌         | 1/20 [00:23<07:23, 23.36s/task]第 1 次执行失败，尝试重试...
-基准测试 [plain_llm_df_spec] - 耗时: 5.5s:  10%|█         | 2/20 [00:29<04:01, 13.40s/task]基准测试 [plain_llm_df_spec] - 耗时: 23.6s:  10%|█         | 2/20 [00:29<04:01, 13.40s/task]第 2 次执行失败，尝试重试...
-第 1 次执行失败，尝试重试...
-第 2 次执行失败，尝试重试...
-executor_runtime：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-测试执行超时（>30s）: Command '['/Users/wangchenyu/Workspace/AITester/.venv/bin/python', '-m', 'pytest', '/var/folders/pj/frxc6s715_x9x19hkk6pj2nh0000gn/T/aitester_sandbox_ok599el9/test_generated.py', '-v', '--tb=short', '--cov=/var/folders/pj/frxc6s715_x9x19hkk6pj2nh0000gn/T/aitester_sandbox_ok599el9', '--cov-report=term', '-k', 'bitcount']' timed out after 30 seconds
-mutation_testing：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-基准测试 [plain_llm_df_spec] - 耗时: 23.6s:  15%|█▌        | 3/20 [00:49<04:38, 16.35s/task]基准测试 [plain_llm_df_spec] - 耗时: 33.0s:  15%|█▌        | 3/20 [00:49<04:38, 16.35s/task]第 1 次执行失败，尝试重试...
-第 2 次执行失败，尝试重试...
-基准测试 [plain_llm_df_spec] - 耗时: 33.0s:  20%|██        | 4/20 [00:55<03:16, 12.27s/task]基准测试 [plain_llm_df_spec] - 耗时: 40.1s:  20%|██        | 4/20 [00:55<03:16, 12.27s/task]基准测试 [plain_llm_df_spec] - 耗时: 40.1s:  25%|██▌       | 5/20 [00:55<01:58,  7.89s/task]基准测试 [plain_llm_df_spec] - 耗时: 50.3s:  25%|██▌       | 5/20 [00:55<01:58,  7.89s/task]第 1 次执行失败，尝试重试...
-第 2 次执行失败，尝试重试...
-基准测试 [plain_llm_df_spec] - 耗时: 50.3s:  30%|███       | 6/20 [01:22<03:19, 14.28s/task]基准测试 [plain_llm_df_spec] - 耗时: 58.9s:  30%|███       | 6/20 [01:22<03:19, 14.28s/task]第 1 次执行失败，尝试重试...
-mutation_testing：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-第 2 次执行失败，尝试重试...
-executor_runtime：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-测试执行超时（>30s）: Command '['/Users/wangchenyu/Workspace/AITester/.venv/bin/python', '-m', 'pytest', '/var/folders/pj/frxc6s715_x9x19hkk6pj2nh0000gn/T/aitester_sandbox_gw7i08g0/test_generated.py', '-v', '--tb=short', '--cov=/var/folders/pj/frxc6s715_x9x19hkk6pj2nh0000gn/T/aitester_sandbox_gw7i08g0', '--cov-report=term', '-k', 'find_first_in_sorted']' timed out after 30 seconds
-m1_metrics：执行超时（>60s），已终止整个进程组并返回（文件后端，不会挂死）
-基准测试 [plain_llm_df_spec] - 耗时: 58.9s:  35%|███▌      | 7/20 [01:38<03:12, 14.84s/task]基准测试 [plain_llm_df_spec] - 耗时: 66.0s:  35%|███▌      | 7/20 [01:38<03:12, 14.84s/task]第 1 次执行失败，尝试重试...
-第 2 次执行失败，尝试重试...
-基准测试 [plain_llm_df_spec] - 耗时: 66.0s:  40%|████      | 8/20 [01:50<02:46, 13.90s/task]基准测试 [plain_llm_df_spec] - 耗时: 73.5s:  40%|████      | 8/20 [01:50<02:46, 13.90s/task]基准测试 [plain_llm_df_spec] - 耗时: 73.5s:  45%|████▌     | 9/20 [01:53<01:55, 10.51s/task]基准测试 [plain_llm_df_spec] - 耗时: 83.9s:  45%|████▌     | 9/20 [01:53<01:55, 10.51s/task]第 1 次执行失败，尝试重试...
-第 1 次执行失败，尝试重试...
-第 2 次执行失败，尝试重试...
-第 2 次执行失败，尝试重试...
-第 1 次执行失败，尝试重试...
-第 2 次执行失败，尝试重试...
-基准测试 [plain_llm_df_spec] - 耗时: 83.9s:  50%|█████     | 10/20 [02:20<02:34, 15.49s/task]基准测试 [plain_llm_df_spec] - 耗时: 93.0s:  50%|█████     | 10/20 [02:20<02:34, 15.49s/task]基准测试 [plain_llm_df_spec] - 耗时: 93.0s:  55%|█████▌    | 11/20 [02:24<01:48, 12.11s/task]基准测试 [plain_llm_df_spec] - 耗时: 114.8s:  55%|█████▌    | 11/20 [02:24<01:48, 12.11s/task]测试代码语法错误: closing parenthesis ']' does not match opening parenthesis '(' on line 116 → 需要重试
-Generator 检测到 parametrize 格式错误，触发重试
-第 1 次执行失败，尝试重试...
-第 2 次执行失败，尝试重试...
-O3 branch 测量：执行超时（>60s），已终止整个进程组并返回（文件后端，不会挂死）
-O3 branch 测量超时（>60s），降级 None
-第 1 次执行失败，尝试重试...
-第 2 次执行失败，尝试重试...
-基准测试 [plain_llm_df_spec] - 耗时: 114.8s:  60%|██████    | 12/20 [02:49<02:08, 16.12s/task]基准测试 [plain_llm_df_spec] - 耗时: 131.5s:  60%|██████    | 12/20 [02:49<02:08, 16.12s/task]mutation_testing：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-第 1 次执行失败，尝试重试...
-第 2 次执行失败，尝试重试...
-基准测试 [plain_llm_df_spec] - 耗时: 131.5s:  65%|██████▌   | 13/20 [02:57<01:35, 13.68s/task]基准测试 [plain_llm_df_spec] - 耗时: 147.8s:  65%|██████▌   | 13/20 [02:57<01:35, 13.68s/task]第 1 次执行失败，尝试重试...
-第 2 次执行失败，尝试重试...
-mutation_testing：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-基准测试 [plain_llm_df_spec] - 耗时: 147.8s:  70%|███████   | 14/20 [03:17<01:32, 15.45s/task]基准测试 [plain_llm_df_spec] - 耗时: 164.4s:  70%|███████   | 14/20 [03:17<01:32, 15.45s/task]Parametrize 参数不匹配：声明 1 个，实际 3 个 → 需要重试
-Generator 检测到 parametrize 格式错误，触发重试
-mutation_testing：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-第 1 次执行失败，尝试重试...
-第 2 次执行失败，尝试重试...
-mutation_testing：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-executor_runtime：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-测试执行超时（>30s）: Command '['/Users/wangchenyu/Workspace/AITester/.venv/bin/python', '-m', 'pytest', '/var/folders/pj/frxc6s715_x9x19hkk6pj2nh0000gn/T/aitester_sandbox_1chvmk8v/test_generated.py', '-v', '--tb=short', '--cov=/var/folders/pj/frxc6s715_x9x19hkk6pj2nh0000gn/T/aitester_sandbox_1chvmk8v', '--cov-report=term', '-k', 'knapsack']' timed out after 30 seconds
-基准测试 [plain_llm_df_spec] - 耗时: 164.4s:  75%|███████▌  | 15/20 [03:53<01:48, 21.69s/task]基准测试 [plain_llm_df_spec] - 耗时: 178.3s:  75%|███████▌  | 15/20 [03:53<01:48, 21.69s/task]mutation_testing：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-第 1 次执行失败，尝试重试...
-第 2 次执行失败，尝试重试...
-mutation_testing：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-基准测试 [plain_llm_df_spec] - 耗时: 178.3s:  80%|████████  | 16/20 [04:16<01:28, 22.22s/task]基准测试 [plain_llm_df_spec] - 耗时: 188.1s:  80%|████████  | 16/20 [04:16<01:28, 22.22s/task]第 1 次执行失败，尝试重试...
-第 2 次执行失败，尝试重试...
-mutation_testing：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-m1_metrics：执行超时（>60s），已终止整个进程组并返回（文件后端，不会挂死）
-基准测试 [plain_llm_df_spec] - 耗时: 188.1s:  85%|████████▌ | 17/20 [04:39<01:06, 22.28s/task]基准测试 [plain_llm_df_spec] - 耗时: 196.6s:  85%|████████▌ | 17/20 [04:39<01:06, 22.28s/task]mutation_testing：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-mutation_testing：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-mutation_testing：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-mutation_testing：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-mutation_testing：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-m1_metrics：执行超时（>120s），已终止整个进程组并返回（文件后端，不会挂死）
-mutation_testing：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-mutation_testing：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-mutation_testing：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-mutation_testing：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-mutation_testing：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-mutation_testing：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-mutation_testing：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-m1_metrics：执行超时（>120s），已终止整个进程组并返回（文件后端，不会挂死）
-基准测试 [plain_llm_df_spec] - 耗时: 196.6s:  90%|█████████ | 18/20 [08:09<02:37, 78.80s/task]基准测试 [plain_llm_df_spec] - 耗时: 351.9s:  90%|█████████ | 18/20 [08:09<02:37, 78.80s/task]mutation_testing：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-mutation_testing：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-mutation_testing：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-m1_metrics：执行超时（>120s），已终止整个进程组并返回（文件后端，不会挂死）
-m1_metrics：执行超时（>120s），已终止整个进程组并返回（文件后端，不会挂死）
-m1_metrics：执行超时（>120s），已终止整个进程组并返回（文件后端，不会挂死）
-基准测试 [plain_llm_df_spec] - 耗时: 351.9s:  95%|█████████▌| 19/20 [11:33<01:56, 116.41s/task]基准测试 [plain_llm_df_spec] - 耗时: 472.5s:  95%|█████████▌| 19/20 [11:33<01:56, 116.41s/task]m1_metrics：执行超时（>120s），已终止整个进程组并返回（文件后端，不会挂死）
-基准测试 [plain_llm_df_spec] - 耗时: 472.5s: 100%|██████████| 20/20 [13:29<00:00, 116.28s/task]基准测试 [plain_llm_df_spec] - 耗时: 560.4s: 100%|██████████| 20/20 [13:29<00:00, 116.28s/task]基准测试 [plain_llm_df_spec] - 耗时: 560.4s: 100%|██████████| 20/20 [13:29<00:00, 40.49s/task] 
-mutation_testing：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-mutation_testing：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-mutation_testing：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-mutation_testing：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-mutation_testing：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-mutation_testing：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-mutation_testing：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-mutation_testing：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-mutation_testing：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-mutation_testing：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-mutation_testing：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-mutation_testing：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-mutation_testing：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-mutation_testing：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-mutation_testing：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-mutation_testing：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-mutation_testing：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-mutation_testing：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-mutation_testing：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-mutation_testing：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-mutation_testing：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-mutation_testing：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-mutation_testing：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-mutation_testing：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-mutation_testing：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-mutation_testing：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-mutation_testing：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-m1_metrics：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-m1_metrics：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-m1_metrics：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-m1_metrics：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-m1_metrics：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-python：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-python：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-python：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-python：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-python：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-python：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-python：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-python：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-
-============================================================
-基准测试完成！
-============================================================
-  [plain_llm_df_spec] 成功率: 0.0%, 平均覆盖率: 60.1%
-  [plain_llm_df_spec] 平均每任务Token: 3049.0, LLM调用次数: 27
-总耗时: 560.4s
-结果文件: /Users/wangchenyu/Workspace/AITester/experiments/results/emse_oracle_enabled_validation_20261017/.staging_oracle/benchmark_quixbugs_20261018_011301.json
-============================================================
-批次工件：/Users/wangchenyu/Workspace/AITester/experiments/results/emse_oracle_enabled_validation_20261017/.staging_oracle/benchmark_quixbugs_20261018_011301.json
-
-============================================================
-R4 批次摘要（M1 三指标 + R52/R53/R8）
-============================================================
-  [plain_llm_df_spec] success=0.0% (有效 20/20，剔除 harness_invalid=0)
-    M1 三指标（可测 14/20 任务）: detection=78.6% repair=0.0% false_fix=0.0%
-    R4 regression_rate=0.0% / N1 test_error_rate=0.0%
---skip-stats：跳过 R14 统计协议
-[watchdog] rc=0 wall=2319.8s

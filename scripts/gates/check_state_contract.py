@@ -26,9 +26,28 @@ observability/failure_taxonomy.py 读顶层 ``logic_degraded``，写侧却只写
   不进 channel（node 侧 pop 消费），豁免；
 - tests/ / experiments/ 不扫（构造 fixture 自由）。
 
+CB 轮（2026-10-23）：**审计面本身必须被披露**。本门禁的判定面只有
+「就地赋值 `state["k"] = ...` + `state.get/state[]` 字面读写」；LangGraph 的规范
+写侧是节点返回局部更新 dict（`return {"k": v}`），实测 45 键 / 95 站点完全不在
+判定面内——而 docstring 背景里点名的静默丢弃事故（M14 / O35）正是这条路径。
+旧成功语句「无未声明键读写」于是把「判过且干净」与「压根没看」说成同一件事。
+本轮只加披露、不动判定：`channel_coverage()` 一次遍历算出 声明键 → 读 / 就地写 /
+update dict 写 的三向覆盖，未触及键再按「扫描面之外有无字面」分成两类，成功时
+逐条打印；`--coverage` 输出逐键表。实测：声明 118 键，读侧 57 键 / 353 站点，
+就地写 2 键 / 11 站点，update dict 45 键 / 95 站点，未触及 35 键（34 个在
+tests/experiments/scripts 有字面、**1 个全仓零字面**：`failure_frequency_applied`——
+声明处注释写「_debugger_node 写入 True」，实际全仓无写者，实验分析侧拿到的恒 None）。
+
+CB 的第二个发现是**自指**：上面这句披露在本 docstring 里写下了死键字面，守卫测试
+也硬编码该字面用于断言——首版 `_outside_literal_blob()` 把这两处算作「别处有出现」，
+于是 `untouched_nowhere` 由 1 变 0，门禁用自己的披露文本把自己的结论证伪。现按
+`_apparatus_paths()` 排除测量装置（本模块 + 直接 import 本模块的测试模块）后再分类；
+排除面精确到模块级导入（`from scripts.gates import other` 不算），已加锁。
+
 用法：
     python scripts/gates/check_state_contract.py            # 审计，违规 exit 1
     python scripts/gates/check_state_contract.py --list     # 仅打印声明键集
+    python scripts/gates/check_state_contract.py --coverage # 逐键覆盖表 + 审计面披露
 """
 
 from __future__ import annotations
@@ -36,7 +55,9 @@ from __future__ import annotations
 import argparse
 import ast
 import sys
+from collections import Counter
 from pathlib import Path
+from typing import NamedTuple
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
@@ -52,6 +73,13 @@ if str(PROJECT_ROOT) not in sys.path:
 # 无关的同名局部 dict——此时按"改名或改用下划线前缀临时键"处置，不放宽容差。
 SCAN_ROOTS = ("src",)
 _STATE_VAR_HINTS = ("state", "_state")  # 变量名启发式：state / cast 后别名
+#: CB 轮（2026-10-23）：判断「声明键在扫描面之外还有没有字面出现」时的对照面。
+#: 只读文本，不扩充审计面——tests/ experiments/ 本就不在扫描面内（见 docstring 豁免口径）。
+_OUTSIDE_ROOTS = ("tests", "experiments", "scripts")
+#: LangGraph 的**规范写侧**：节点返回局部更新 dict（`return {"k": v}`）或对 update
+#: dict 调 update/merge。CB 轮实测：本门禁只审就地赋值，不审这两条路径——故它们
+#: 只进披露、不进判定（加入判定会把辅助函数的普通 dict 返回值误判为状态写）。
+_UPDATE_MERGE_ATTRS = frozenset({"update", "merge"})
 
 
 def scan_files() -> list[Path]:
@@ -130,9 +158,227 @@ def _allowed(key: str, declared: set[str]) -> bool:
     return key in declared or key.startswith("_")
 
 
+class ChannelCoverage(NamedTuple):
+    """状态通道「声明面 vs 审计面」普查结果（CB 轮 2026-10-23）。
+
+    NamedTuple 而非 dataclass 是刻意的：历史测试用 `spec_from_file_location`
+    加载本模块且不登记 `sys.modules`，`@dataclass` 在 Python 3.14 的
+    `dataclasses._is_type` 里会走到 `sys.modules.get(...).__dict__` 而抛
+    AttributeError（CA 轮实测并锁在 test_gate_imports_without_sys_modules_registration）。
+    """
+
+    declared: tuple[str, ...]
+    read_keys: tuple[str, ...]
+    read_sites: int
+    inplace_write_keys: tuple[str, ...]
+    inplace_write_sites: int
+    update_write_keys: tuple[str, ...]
+    update_write_sites: int
+    foreign_update_keys: int
+    untouched: tuple[str, ...]
+    untouched_elsewhere: tuple[str, ...]
+    untouched_nowhere: tuple[str, ...]
+    temp_keys: int
+    temp_sites: int
+    dynamic_sites: int
+    undeclared_sites: int
+
+    @property
+    def written_keys(self) -> tuple[str, ...]:
+        """任一写形态（就地赋值 ∪ update dict）触及的声明键。"""
+        return tuple(sorted(set(self.inplace_write_keys) | set(self.update_write_keys)))
+
+    @property
+    def unaudited_write_keys(self) -> tuple[str, ...]:
+        """只经 update dict 写的声明键——判定面对它们完全失明。"""
+        return tuple(sorted(set(self.update_write_keys) - set(self.inplace_write_keys)))
+
+
+class _Usage(NamedTuple):
+    """单次遍历的逐键计数（Counter 语义：键 → 站点数）。"""
+
+    read: Counter[str]
+    inplace: Counter[str]
+    update: Counter[str]
+    temp: Counter[str]
+    foreign_update: int
+    dynamic_sites: int
+    undeclared_sites: int
+
+
+def _walk_channel_usage(paths: list[Path], declared: set[str]) -> _Usage:
+    """与 `_audit_file` 同口径地走一遍，但只计数不判定。
+
+    三形态：就地赋值 `state["k"] = ...`、读 `state.get("k")` / `state["k"]`、
+    update dict（`return {"k": ...}` 与 update/merge 的 dict 实参）。
+    update dict 只统计**已声明键**——普通函数返回的 dict 与状态更新同形，
+    未声明键无法归属（实测 898 处），计数会把噪声说成覆盖面。
+    """
+    read: Counter[str] = Counter()
+    inplace: Counter[str] = Counter()
+    update: Counter[str] = Counter()
+    temp: Counter[str] = Counter()
+    foreign = dynamic = undeclared = 0
+
+    def note(key: str | None, bucket: Counter[str]) -> None:
+        nonlocal dynamic, undeclared
+        if key is None:
+            dynamic += 1
+        elif key.startswith("_"):
+            temp[key] += 1
+        elif key in declared:
+            bucket[key] += 1
+        else:
+            undeclared += 1
+
+    for path in paths:
+        tree = ast.parse(Path(path).read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.Assign, ast.AugAssign, ast.AnnAssign)):
+                targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+                for tgt in targets:
+                    if isinstance(tgt, ast.Subscript) and _is_state_var(tgt.value):
+                        note(_literal_key(tgt.slice), inplace)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+                if node.func.attr == "get" and _is_state_var(node.func.value):
+                    note(_literal_key(node.args[0]) if node.args else None, read)
+                elif node.func.attr in _UPDATE_MERGE_ATTRS:
+                    for arg in node.args:
+                        if isinstance(arg, ast.Dict):
+                            for k in arg.keys:
+                                if isinstance(k, ast.Constant) and isinstance(k.value, str):
+                                    key = k.value
+                                    if key.startswith("_"):
+                                        temp[key] += 1
+                                    elif key in declared:
+                                        update[key] += 1
+                                    else:
+                                        foreign += 1
+            elif isinstance(node, ast.Subscript) and not isinstance(node.ctx, ast.Store) and _is_state_var(node.value):
+                note(_literal_key(node.slice), read)
+            if isinstance(node, ast.Return) and isinstance(node.value, ast.Dict):
+                for k in node.value.keys:
+                    if isinstance(k, ast.Constant) and isinstance(k.value, str):
+                        key = k.value
+                        if key.startswith("_"):
+                            temp[key] += 1
+                        elif key in declared:
+                            update[key] += 1
+                        else:
+                            foreign += 1
+    return _Usage(read, inplace, update, temp, foreign, dynamic, undeclared)
+
+
+def _module_dotted_name() -> str:
+    """本模块的点分名（不受 `__main__` 调用方式影响），用于识别「谁在 import 门禁」。"""
+    rel = Path(__file__).resolve().relative_to(PROJECT_ROOT).with_suffix("")
+    return ".".join(rel.parts)
+
+
+def _imports_module(tree: ast.Module, dotted: str) -> bool:
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            if node.module == dotted:
+                return True
+            if node.module and any(f"{node.module}.{a.name}" == dotted for a in node.names):
+                return True
+        elif isinstance(node, ast.Import):
+            if any(alias.name == dotted for alias in node.names):
+                return True
+    return False
+
+
+def _apparatus_paths() -> set[Path]:
+    """测量装置自身：本模块 + 直接 import 它的测试模块。
+
+    CB 轮实测踩到的自指缺陷：本模块 docstring 点名了死键
+    `failure_frequency_applied`，守卫测试也硬编码该字面用于断言——若把这两处
+    算作「该键在别处还有出现」，门禁就会用自己的披露文本把自己的结论证伪
+    （实测 untouched_nowhere 由 1 变 0）。装置提到键名是披露/断言，不是消费者。
+    """
+    paths = {Path(__file__).resolve()}
+    dotted = _module_dotted_name()
+    tests_dir = PROJECT_ROOT / "tests"
+    if tests_dir.is_dir():
+        for p in sorted(tests_dir.rglob("test_*.py")):
+            try:
+                tree = ast.parse(p.read_text(encoding="utf-8", errors="ignore"))
+            except SyntaxError:
+                continue
+            if _imports_module(tree, dotted):
+                paths.add(p.resolve())
+    return paths
+
+
+def _outside_literal_blob() -> str:
+    """扫描面之外（tests/ experiments/ scripts/）的源码文本——只用于「还有没有字面」。
+
+    排除测量装置（见 `_apparatus_paths`），否则门禁的自我披露会被当作用例证据。
+    """
+    skip = _apparatus_paths()
+    parts: list[str] = []
+    for rel_root in _OUTSIDE_ROOTS:
+        root = PROJECT_ROOT / rel_root
+        if root.is_dir():
+            for p in sorted(root.rglob("*.py")):
+                if p.resolve() in skip:
+                    continue
+                parts.append(p.read_text(encoding="utf-8", errors="ignore"))
+    return "\n".join(parts)
+
+
+def channel_coverage() -> ChannelCoverage:
+    """一次性算出审计面覆盖：声明键 → 读 / 就地写 / update dict 写，及未触及键。
+
+    未触及 ⇒ 再看扫描面之外有没有字面出现，把「只是不在判定面」与
+    「全仓无人使用」分开——两者在「无未声明键读写」这句成功语句下同形。
+    """
+    declared = declared_state_keys()
+    usage = _walk_channel_usage(scan_files(), declared)
+    non_temp = {k for k in declared if not k.startswith("_")}
+    touched = set(usage.read) | set(usage.inplace) | set(usage.update)
+    untouched = tuple(sorted(non_temp - touched))
+    outside = _outside_literal_blob()
+    elsewhere = tuple(k for k in untouched if f'"{k}"' in outside or f"'{k}'" in outside)
+    nowhere = tuple(k for k in untouched if k not in elsewhere)
+    return ChannelCoverage(
+        declared=tuple(sorted(declared)),
+        read_keys=tuple(sorted(usage.read)),
+        read_sites=sum(usage.read.values()),
+        inplace_write_keys=tuple(sorted(usage.inplace)),
+        inplace_write_sites=sum(usage.inplace.values()),
+        update_write_keys=tuple(sorted(usage.update)),
+        update_write_sites=sum(usage.update.values()),
+        foreign_update_keys=usage.foreign_update,
+        untouched=untouched,
+        untouched_elsewhere=elsewhere,
+        untouched_nowhere=nowhere,
+        temp_keys=len(usage.temp),
+        temp_sites=sum(usage.temp.values()),
+        dynamic_sites=usage.dynamic_sites,
+        undeclared_sites=usage.undeclared_sites,
+    )
+
+
+def coverage_lines(cov: ChannelCoverage) -> list[str]:
+    """成功路径的审计面披露（CB 轮）：把「判定面覆盖了什么」写进同一句成功信息。"""
+    return [
+        f"  审计面披露：声明 {len(cov.declared)} 键；读侧 {len(cov.read_keys)} 键 / {cov.read_sites} 站点；"
+        f"未触及声明键 {len(cov.untouched)} 个",
+        f"  写侧判定面：就地赋值 {len(cov.inplace_write_keys)} 键 / {cov.inplace_write_sites} 站点；"
+        f"未判定的 update dict {len(cov.update_write_keys)} 键 / {cov.update_write_sites} 站点"
+        f"（LangGraph 规范写侧，只披露不判定）",
+        f"  未触及声明键：{len(cov.untouched_elsewhere)} 个在 {' / '.join(_OUTSIDE_ROOTS)} 有字面出现，"
+        f"{len(cov.untouched_nowhere)} 个全仓零字面（{', '.join(cov.untouched_nowhere) or '无'}）",
+        f"  面外计数：下划线临时键 {cov.temp_keys} 个 / {cov.temp_sites} 站点；动态键 {cov.dynamic_sites} 站点；"
+        f"未声明键 {cov.undeclared_sites} 站点；update dict 中非声明键 {cov.foreign_update_keys} 处（与普通 dict 无法区分，不计入覆盖）",
+    ]
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="LangGraph 状态通道契约静态守卫（P1-6）")
     parser.add_argument("--list", action="store_true", help="仅打印声明键集与扫描范围")
+    parser.add_argument("--coverage", action="store_true", help="打印逐键审计面覆盖表（CB 轮）")
     args = parser.parse_args()
 
     declared = declared_state_keys()
@@ -144,6 +390,16 @@ def main() -> None:
         print(f"扫描面：{', '.join(SCAN_ROOTS)}/ 全树递归，共 {len(files)} 个 .py 文件")
         return
 
+    if args.coverage:
+        cov = channel_coverage()
+        usage = _walk_channel_usage(scan_files(), declared)
+        print(f"状态通道逐键覆盖（声明 {len(cov.declared)} 键；read / 就地写 / update dict 写）：")
+        for key in cov.declared:
+            print(f"  {key}: {usage.read[key]} / {usage.inplace[key]} / {usage.update[key]}")
+        for line in coverage_lines(cov):
+            print(line)
+        return
+
     violations: list[tuple[str, int, str, str]] = []
     files = scan_files()
     for p in files:
@@ -151,6 +407,8 @@ def main() -> None:
 
     if not violations:
         print(f"状态通道契约审计通过：{len(files)} 个文件（{', '.join(SCAN_ROOTS)}/ 全树）无未声明键读写")
+        for line in coverage_lines(channel_coverage()):
+            print(line)
         return
 
     print(f"❌ 状态通道契约违规 {len(violations)} 处（未声明键会被 LangGraph 静默丢弃）：")

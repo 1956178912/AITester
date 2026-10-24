@@ -5,7 +5,7 @@
 进被测代码子进程（执行向量 + 泄露面）。本测试锁定：
 - LLM_N_API_KEY / LLM_N_BASE_URL 动态编号剔除（覆盖 1-32 扫描口径）；
 - 编号变体（OPENAI_API_KEY_2、OPENAI_BASE_URL_3）剔除；
-- provider 中间变量（ALIYUN_BAILIAN / AGNES_DOMESTIC 等，config_generator
+- provider 中间变量（DEEPSEEK_API_KEY 等，config_generator
   PROVIDER_TEMPLATES 联动命名）剔除；
 - 非凭证变量（LLM_N_MODEL_NAME、PYTHONPATH）保留；
 - 入参不可变（返回副本，不修改源 dict）。
@@ -28,9 +28,6 @@ _ENV_SAMPLE = {
     "OPENAI_BASE_URL_2": "https://api2.openai.example/v1",
     "OPENAI_API_KEY_3": "sk-openai-3",
     "OPENAI_BASE_URL_3": "https://api3.openai.example/v1",
-    "ALIYUN_BAILIAN_API_KEY": "sk-bailian",
-    "AGNES_DOMESTIC_API_KEY": "sk-agnes",
-    "BIGMODEL_API_KEY": "sk-bigmodel",
     "DEEPSEEK_API_KEY": "sk-deepseek",
     "ANTHROPIC_API_KEY": "sk-anthropic",
     "LLM_API_KEY": "sk-llm",
@@ -56,9 +53,6 @@ _SCRUBBED_KEYS = {
     "OPENAI_BASE_URL_2",
     "OPENAI_API_KEY_3",
     "OPENAI_BASE_URL_3",
-    "ALIYUN_BAILIAN_API_KEY",
-    "AGNES_DOMESTIC_API_KEY",
-    "BIGMODEL_API_KEY",
     "DEEPSEEK_API_KEY",
     "ANTHROPIC_API_KEY",
     "LLM_API_KEY",
@@ -183,9 +177,8 @@ class TestProviderScrubNames:
         # 动态推导：PROVIDER_TEMPLATES 每个 provider 产生 {UPPER}_API_KEY / _BASE_URL
         assert "DEEPSEEK_API_KEY" in names
         assert "DEEPSEEK_BASE_URL" in names
-        assert "ALIYUN_BAILIAN_API_KEY" in names
         # 每个 provider 恰好两条（API_KEY + BASE_URL）
-        assert len(names) % 2 == 0
+        assert len(names) == 2
 
     def test_fallback_names_when_templates_unavailable(self):
         from unittest.mock import patch
@@ -194,7 +187,5 @@ class TestProviderScrubNames:
 
         with patch.object(cs, "_PROVIDER_BASE_URLS", {}):
             names = cs.provider_scrub_names()
-        # 回退历史固定名单（ALIYUN_BAILIAN / AGNES_DOMESTIC / BIGMODEL / DEEPSEEK）
-        assert "ALIYUN_BAILIAN_API_KEY" in names
-        assert "BIGMODEL_API_KEY" in names
-        assert "DEEPSEEK_API_KEY" in names
+        # 回退口径：DeepSeek 官方变量名
+        assert names == ["DEEPSEEK_API_KEY"]

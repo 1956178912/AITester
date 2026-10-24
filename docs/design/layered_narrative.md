@@ -133,7 +133,7 @@ spec_compile_rate **必须带数据集标签 + 门口径标签**（新门 vs 旧
   就是"套件在未变异代码上 green"——本门即官方程序的**操作化**，非自创；
   ② 变异测试标准有效性前提：已红/挂死套件的击杀为恒红/超时驱动的平凡信号；
 - **健全子集**：通过门的任务集；未过门任务全额披露（含分类与失败摘要，
-  工件 `experiments/results/emse_test_sanity_20261015/`）。
+  工件 `（工件已清除）`）。
 
 **全量定案值（健全子集，零 LLM 逐位可复算）**：
 
@@ -268,7 +268,7 @@ p<0.10 ∧ δ>0 = trend / 其余 = not_confirmed。
 **merged 4:12 / n=70 / δ=−11.43pp / p=0.0768 → not_confirmed**。
 复现稳定性：方向稳定（均为负）、量级 −8.6～−14.3pp（pilot 的 +14.29pp
 阳性未复现）。工件
-`experiments/results/emse_quixbugs_specir_expand_20261014/QUIXB_EXPAND_ABCD_REPORT.json`。
+`（工件已清除）`。
 
 ---
 
@@ -354,7 +354,7 @@ Open Science 清单与 P0 状态见
   "下降 ≥30%"，实测**反向上升 104%**；specific_red 20 vs 31；
 - **参照**：df_spec 与 E4 历史 df 的 35 共同可判定中，df_spec 独有 **0**、
   E4 df 独有 11（方向一致、量级更强）；同批 df 对照为主配对（隔离模型版本/环境）；
-- **工件**：`experiments/results/emse_df_spec_20261016/`（两臂批次 JSON +
+- **工件**：`（工件已清除）`（两臂批次 JSON +
   `DF_SPEC_REPORT.json` 判定 + README + SHA256SUMS，104 文件校验通过）。
 
 **推论**（基于证据的机制假设，待独立预注册检验，不作定论）：

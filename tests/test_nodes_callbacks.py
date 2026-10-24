@@ -329,6 +329,53 @@ class TestPatchApplierOnResample:
         assert "patch_resample_stats" in result
         assert result["patch_resample_stats"].get("resampled") is True
 
+    def test_json_envelope_patch_field_extracted(self, tmp_path, monkeypatch):
+        """DebuggerAgent 真实返回 JSON 信封时从 patch 字段取补丁（回归锁）。"""
+        monkeypatch.setenv("PATCH_RESAMPLE_ENABLE", "true")
+        monkeypatch.setenv("PATCH_EVIDENCE_GATE_ENABLE", "false")
+        import json as _json
+
+        import src.agents.debugger as dbg
+        from src.graph.nodes import _patch_applier_node
+
+        # json.dumps 产出的 \n 是转义序列（字面反斜杠 n），对整段信封做
+        # extract_code_block 匹配不到围栏——真跑时补丁永远被当作 JSON 文本拒绝。
+        envelope = _json.dumps(
+            {
+                "root_cause": "return 少了偏移",
+                "error_category": "logic_error",
+                "fix_strategy": "补上 + 3",
+                "patch": "```python\ndef add(a, b):\n    return a + b + 3\n```",
+            },
+            ensure_ascii=False,
+        )
+        mock_agent = MagicMock()
+        mock_agent._call_llm_with_cache.return_value = envelope
+        with patch.object(dbg, "DebuggerAgent", return_value=mock_agent):
+            state = self._state(tmp_path, "def other_name():\n    return 1\n")
+            result = _patch_applier_node(state)
+        assert result["patch_resample_stats"].get("resampled") is True
+        assert result["patch_resample_stats"].get("success") is True
+        assert "+ 3" in result["target_code"]
+        assert result["repair_history"][-1]["patch_applied"] is True
+
+    def test_json_envelope_without_patch_field_returns_none(self, tmp_path, monkeypatch):
+        """信封里没有 patch 字段 → 回退原文提取失败，保守 None（不误写盘）。"""
+        monkeypatch.setenv("PATCH_RESAMPLE_ENABLE", "true")
+        import json as _json
+
+        import src.agents.debugger as dbg
+        from src.graph.nodes import _patch_applier_node
+
+        envelope = _json.dumps({"root_cause": "未知", "error_category": "runtime"}, ensure_ascii=False)
+        mock_agent = MagicMock()
+        mock_agent._call_llm_with_cache.return_value = envelope
+        with patch.object(dbg, "DebuggerAgent", return_value=mock_agent):
+            state = self._state(tmp_path, "def other_name():\n    return 1\n")
+            result = _patch_applier_node(state)
+        assert result["patch_resample_stats"].get("resampled") is False
+        assert result["target_code"] == "def add(a, b):\n    return a + b\n"
+
     def test_disabled_by_default_no_resample_llm(self, tmp_path, monkeypatch):
         """默认关 → 重采样 LLM 从不被调用（历史口径零变化）。"""
         monkeypatch.delenv("PATCH_RESAMPLE_ENABLE", raising=False)

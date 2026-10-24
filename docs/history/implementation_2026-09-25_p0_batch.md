@@ -19,7 +19,7 @@
   `_CODE_MAX_CHARS` 改读 `CODE_MAX_CHARS` 环境变量（默认 3000）。
 - **配置**：`CODE_FOCUS_DEPTH`（默认 1）/ `CODE_MAX_CHARS`（默认 3000）。
 
-### 2. 1.2 复杂度感知路由（固定 Agnes 3.0-flash 多 provider 端点）
+### 2. 1.2 复杂度感知路由（当时固定在免费档小模型的多 provider 端点；2026-10-23 起仅保留 DeepSeek 官方的多实例档位）
 - **新增** `src/api/complexity_router.py`：
   - `ComplexityScore` dataclass（score / class_name / breakdown）；
   - `compute_complexity_score(lines, num_files, num_deps, cyclomatic_complexity)`：

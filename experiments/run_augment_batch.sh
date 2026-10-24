@@ -309,7 +309,7 @@ if [ -n "${EXPECT_SHA}" ]; then
     log "  ✓ HEAD 与 --expect-sha 一致"
 fi
 if [ -n "${GIT_DIRTY_PRE}" ]; then
-    printf '%s\n' "${GIT_DIRTY_PRE}" | head -20 >&2
+    printf '%s\n' "${GIT_DIRTY_PRE}" | sed -n '1,20p' >&2  # CI 补跑修复：head 早关会 SIGPIPE(141) 杀死 pipefail 脚本
     if [ "${ALLOW_DIRTY}" -eq 1 ]; then
         warn "脏树豁免（--allow-dirty）：provenance 将记 git_dirty=true；原因：${DIRTY_REASON}"
     elif [ "${DRY_RUN}" -eq 1 ]; then

@@ -1,5 +1,5 @@
 """
-BaseAgent 扩展单元测试：覆盖 _call_zai、_get_llm_config 线程局部、
+BaseAgent 扩展单元测试：覆盖 _get_llm_config 线程局部、
 _get_all_api_configs、_call_llm_with_cache、_call_llm 等未覆盖路径，
 将覆盖率从 62% 提升至 ≥80%。
 """
@@ -19,262 +19,26 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.agents.base_agent import (
     _DEFAULT_LLM_MAX_RETRIES,
     BaseAgent,
-    _call_zai,
     _get_all_api_configs,
     _get_llm_config,
 )
 from src.agents.llm_client import (
-    LLMEmptyResponseError,
-    _get_or_create_zai_client,
     _llm_client_cache,
     _thread_local,
-    _zai_client_cache,
 )
 from src.utils.helpers import _find_balanced_json
 
 
 @pytest.fixture(autouse=True)
 def _clear_llm_client_cache():
-    """每个测试前后清空 LLM 客户端复用缓存（ChatOpenAI 与 zai 两套）。
+    """每个测试前后清空 LLM 客户端复用缓存。
 
     各测试独立 patch 客户端构造，若缓存残留前一个测试的 mock 实例，
-    _call_llm / _call_zai 会复用旧 mock 导致断言错乱。
+    _call_llm 会复用旧 mock 导致断言错乱。
     """
     _llm_client_cache.clear()
-    _zai_client_cache.clear()
     yield
     _llm_client_cache.clear()
-    _zai_client_cache.clear()
-
-
-# ─── TestCallZai ──────────────────────────────────────────────────────────────
-
-
-@pytest.mark.unit
-class TestCallZai:
-    """测试 zai SDK 调用路径 (_call_zai)。"""
-
-    @patch("src.agents.llm_client._retry_with_exponential_backoff")
-    def test_call_zai_success(self, mock_retry):
-        """zai 调用成功时返回 LLM 文本。"""
-        mock_retry.return_value = "zai response text"
-        result = _call_zai(
-            api_key="test_key",
-            base_url="https://open.bigmodel.cn/api/llm/chat",
-            model_name="glm-4.7-flash",
-            system_prompt="You are helpful.",
-            user_message="Hello",
-        )
-        assert result == "zai response text"
-        mock_retry.assert_called_once()
-
-    @patch("src.agents.llm_client._retry_with_exponential_backoff")
-    def test_call_zai_raises_on_failure(self, mock_retry):
-        """zai 调用全部失败时抛出 RuntimeError。"""
-        mock_retry.side_effect = RuntimeError("zai error")
-        with pytest.raises(RuntimeError, match="zai API 调用失败"):
-            _call_zai(
-                api_key="key",
-                base_url="https://open.bigmodel.cn/api",
-                model_name="glm-4.7-flash",
-                system_prompt="sys",
-                user_message="usr",
-            )
-
-    @patch("src.agents.llm_client._retry_with_exponential_backoff")
-    def test_call_zai_passes_correct_args(self, mock_retry):
-        """验证传递给重试函数的参数正确（包含 base_wait=5）。"""
-        mock_retry.return_value = "ok"
-        _call_zai(
-            api_key="k",
-            base_url="https://open.bigmodel.cn/api",
-            model_name="m",
-            system_prompt="s",
-            user_message="u",
-            max_retries=2,
-        )
-        call_kwargs = mock_retry.call_args
-        assert call_kwargs.kwargs["base_wait"] == 5
-        assert call_kwargs.kwargs["max_retries"] == 2
-
-    def test_call_zai_forwards_temperature_to_sdk(self, monkeypatch):
-        """F09（2026-10-19 第三方审查 P1）：temperature 必须实际到达 SDK create。
-
-        历史缺陷：_call_zai 无 temperature 参数，zai 请求从不下发采样温度，
-        而缓存身份（_effective_request_identity）仍记录"实际生效温度"——
-        请求身份与真实请求分叉。本用例走真实重试器 + fake SDK 客户端，
-        锁定调用级参数（报告 §M11 验收口径）。
-        """
-        from src.agents import llm_client
-
-        message = MagicMock()
-        message.content = "zai ok"
-        message.reasoning_content = None
-        response = MagicMock()
-        response.choices = [MagicMock(message=message)]
-        response.usage = None
-        create = MagicMock(return_value=response)
-        client = MagicMock()
-        client.chat.completions.create = create
-        monkeypatch.setattr(llm_client, "_get_or_create_zai_client", lambda *a, **k: client)
-
-        result = _call_zai(
-            api_key="k",
-            base_url="https://open.bigmodel.cn/api",
-            model_name="glm-4.7-flash",
-            system_prompt="s",
-            user_message="u",
-            max_retries=0,
-            temperature=0.41,
-        )
-        assert result == "zai ok"
-        assert create.call_args.kwargs["temperature"] == 0.41, "zai SDK 必须收到调用方 temperature"
-
-    @patch("src.agents.llm_client._get_or_create_zai_client")
-    def test_zai_empty_response_not_retried(self, mock_client_factory):
-        """P1-3 回归：zai 空响应走 non_retryable_exceptions，不做指数退避。
-
-        历史口径：_ZAI_RETRYABLE_EXCEPTIONS=(Exception,) 兜底会把
-        RuntimeError("LLM 返回空响应") 也按可重试处理，浪费 5+10+20=35s
-        墙钟才最终抛出。现空响应抛 LLMEmptyResponseError（模块级哨兵，
-        继承 RuntimeError），经 non_retryable_exceptions 立即向上抛出，
-        重试器对 func 仅调用 1 次（attempt 0）即失败。
-        """
-        # 让 _do_zai_call 的 create() 返回空响应（content 与 reasoning_content 均空）
-        mock_client = MagicMock()
-        empty_msg = MagicMock()
-        empty_msg.content = ""
-        empty_msg.reasoning_content = None
-        empty_response = MagicMock()
-        empty_response.choices = [MagicMock(message=empty_msg)]
-        mock_client.chat.completions.create.return_value = empty_response
-        mock_client_factory.return_value = mock_client
-
-        # patch time.sleep 加速（non_retryable 路径本就不 sleep，这是双保险）
-        # 并 spy _retry_with_exponential_backoff 验证 create() 仅被调用 1 次
-        with patch("time.sleep", lambda s: None), pytest.raises(RuntimeError, match="zai API 调用失败"):
-            _call_zai(
-                api_key="k",
-                base_url="https://open.bigmodel.cn/api",
-                model_name="m",
-                system_prompt="s",
-                user_message="u",
-                max_retries=3,
-            )
-        # non_retryable 命中：func 仅被调用 1 次 → create() 仅 1 次（不触发指数退避）
-        assert mock_client.chat.completions.create.call_count == 1
-
-    def test_zai_empty_response_error_is_runtime_error_subclass(self):
-        """LLMEmptyResponseError 是 RuntimeError 子类（保持既有 except 兼容）。"""
-        assert issubclass(LLMEmptyResponseError, RuntimeError)
-        e = LLMEmptyResponseError("LLM 返回空响应")
-        assert "空响应" in str(e)
-
-
-# ─── TestZaiClientReuse ──────────────────────────────────────────────────────
-@pytest.mark.unit
-class TestZaiClientReuse:
-    """测试 zai SDK 客户端复用缓存（_get_or_create_zai_client）。
-
-    zai 是延迟导入（from zai import ZhipuAiClient），测试通过向 sys.modules
-    注入假 zai 模块来追踪构造次数，不依赖真实 zai SDK。
-    """
-
-    @pytest.fixture
-    def fake_zai(self, monkeypatch):
-        """注入假的 zai / zai.core / zai.core._errors 模块，返回 (假模块, 构造记录)。"""
-        import types
-
-        fake_module = types.ModuleType("zai")
-        fake_core = types.ModuleType("zai.core")
-        fake_errors = types.ModuleType("zai.core._errors")
-
-        class APIReachLimitError(Exception):
-            """假 zai 限流异常（用于 _call_zai 导入路径）。"""
-
-        class APIStatusError(Exception):
-            """假 zai 状态异常（用于 _call_zai 导入路径）。"""
-
-        fake_errors.APIReachLimitError = APIReachLimitError
-        fake_errors.APIStatusError = APIStatusError
-        fake_core._errors = fake_errors
-        fake_module.core = fake_core
-
-        constructed: list = []
-
-        # 预配置 LLM 响应：所有 fake 客户端的 create() 直接返回该响应
-        response = MagicMock(name="zai_response")
-        message = MagicMock(name="zai_message")
-        message.content = "zai ok"
-        response.choices = [MagicMock(message=message)]
-
-        def _fake_zhipu_ai_client(api_key=None, base_url=None, **kwargs):
-            mock_client = MagicMock(name=f"zai_client_{api_key}_{base_url}")
-            mock_client.chat.completions.create.return_value = response
-            constructed.append(mock_client)
-            return mock_client
-
-        fake_module.ZhipuAiClient = _fake_zhipu_ai_client
-        monkeypatch.setitem(sys.modules, "zai", fake_module)
-        monkeypatch.setitem(sys.modules, "zai.core", fake_core)
-        monkeypatch.setitem(sys.modules, "zai.core._errors", fake_errors)
-        return fake_module, constructed
-
-    def test_same_config_reuses_client(self, fake_zai):
-        """相同 (api_key, base_url) 返回同一实例，只构造一次。"""
-        _, constructed = fake_zai
-        c1 = _get_or_create_zai_client("key-1", "https://open.bigmodel.cn/api/paas/v4/")
-        c2 = _get_or_create_zai_client("key-1", "https://open.bigmodel.cn/api/paas/v4/")
-
-        assert c1 is c2
-        assert len(constructed) == 1
-
-    def test_different_config_creates_new_client(self, fake_zai):
-        """不同 api_key 构建新实例。"""
-        _, constructed = fake_zai
-        c1 = _get_or_create_zai_client("key-1", "https://open.bigmodel.cn/api/paas/v4/")
-        c2 = _get_or_create_zai_client("key-2", "https://open.bigmodel.cn/api/paas/v4/")
-
-        assert c1 is not c2
-        assert len(constructed) == 2
-
-    def test_fifo_eviction_at_capacity(self, fake_zai, monkeypatch):
-        """缓存达到上限时按 FIFO 淘汰最早条目。"""
-        import src.agents.llm_client as ba
-
-        _fake_module, _ = fake_zai
-        monkeypatch.setattr(ba, "_MAX_CACHED_ZAI_CLIENTS", 2)
-
-        _get_or_create_zai_client("k1", "u")
-        _get_or_create_zai_client("k2", "u")
-        _get_or_create_zai_client("k3", "u")
-
-        assert len(_zai_client_cache) == 2
-        assert ("k1", "u") not in _zai_client_cache  # 最早插入的 k1 被淘汰
-        assert ("k3", "u") in _zai_client_cache
-
-    def test_call_zai_reuses_client_across_calls(self, fake_zai):
-        """_call_zai 连续两次调用复用同一客户端。"""
-        _fake_module, constructed = fake_zai
-
-        result1 = _call_zai(
-            api_key="key-1",
-            base_url="https://open.bigmodel.cn/api/paas/v4/",
-            model_name="glm-4.7-flash",
-            system_prompt="sys",
-            user_message="hello",
-        )
-        result2 = _call_zai(
-            api_key="key-1",
-            base_url="https://open.bigmodel.cn/api/paas/v4/",
-            model_name="glm-4.7-flash",
-            system_prompt="sys",
-            user_message="hello",
-        )
-
-        assert result1 == "zai ok"
-        assert result2 == "zai ok"
-        assert len(constructed) == 1  # 两次调用只构造 1 个客户端
 
 
 # ─── TestGetLlmConfigThreadLocal ──────────────────────────────────────────────
@@ -603,13 +367,11 @@ class TestCallLlm:
         with pytest.raises(RuntimeError, match="未配置任何 LLM API"):
             agent._call_llm("hello")
 
-    @patch("src.agents.base_agent._is_zai_compatible")
     @patch("src.agents.llm_client.ChatOpenAI")
     @patch("src.agents.base_agent._get_all_api_configs")
-    def test_success_on_first_api(self, mock_get_configs, mock_chat_openai, mock_is_zai):
+    def test_success_on_first_api(self, mock_get_configs, mock_chat_openai):
         """第一个 API 成功时直接返回文本。"""
-        mock_get_configs.return_value = [("key1", "https://api.openai.com/v1", "gpt-4")]
-        mock_is_zai.return_value = False
+        mock_get_configs.return_value = [("key1", "https://api.deepseek.com/v1", "deepseek-flash")]
         mock_response = MagicMock()
         mock_response.content = "  hello world  "
         mock_chat_openai.return_value.invoke.return_value = mock_response
@@ -617,16 +379,14 @@ class TestCallLlm:
         result = agent._call_llm("hello")
         assert result == "hello world"
 
-    @patch("src.agents.base_agent._is_zai_compatible")
     @patch("src.agents.llm_client.ChatOpenAI")
     @patch("src.agents.base_agent._get_all_api_configs")
-    def test_falls_back_to_second_api_on_failure(self, mock_get_configs, mock_chat_openai, mock_is_zai):
+    def test_falls_back_to_second_api_on_failure(self, mock_get_configs, mock_chat_openai):
         """第一个 API 失败时自动切换到备用 API。"""
         mock_get_configs.return_value = [
-            ("key1", "https://api.fail.com/v1", "gpt-4"),
-            ("key2", "https://api.ok.com/v1", "gpt-3.5"),
+            ("key1", "https://api.fail.com/v1", "deepseek-flash"),
+            ("key2", "https://api.ok.com/v1", "deepseek-flash"),
         ]
-        mock_is_zai.return_value = False
 
         call_count = [0]
 
@@ -645,11 +405,10 @@ class TestCallLlm:
         assert result == "recovered"
         assert mock_chat_openai.return_value.invoke.call_count == 2
 
-    @patch("src.agents.base_agent._is_zai_compatible")
     @patch("src.agents.llm_client.ChatOpenAI")
     @patch("src.agents.base_agent._get_all_api_configs")
     @patch("src.agents.llm_client.time.sleep")
-    def test_raises_when_all_apis_fail(self, mock_get_configs, mock_chat_openai, mock_is_zai, mock_sleep):
+    def test_raises_when_all_apis_fail(self, mock_get_configs, mock_chat_openai, mock_sleep):
         """所有 API 均失败时抛出 RuntimeError。
 
         mock 掉 llm_client 内的 time.sleep：全失败路径会走指数退避
@@ -659,7 +418,6 @@ class TestCallLlm:
             ("key1", "https://api1.com/v1", "m1"),
             ("key2", "https://api2.com/v1", "m2"),
         ]
-        mock_is_zai.return_value = False
         mock_instance = MagicMock()
         mock_instance.invoke.side_effect = RuntimeError("all fail")
         mock_chat_openai.return_value = mock_instance
@@ -668,11 +426,10 @@ class TestCallLlm:
         with pytest.raises(RuntimeError, match="已尝试所有 API"):
             agent._call_llm("hello")
 
-    @patch("src.agents.base_agent._is_zai_compatible")
     @patch("src.agents.llm_client.ChatOpenAI")
     @patch("src.agents.base_agent._get_all_api_configs")
     @patch("src.agents.llm_client.time.sleep")
-    def test_empty_response_triggers_retry(self, mock_get_configs, mock_chat_openai, mock_is_zai, mock_sleep):
+    def test_empty_response_triggers_retry(self, mock_get_configs, mock_chat_openai, mock_sleep):
         """LLM 返回空响应时视为失败，尝试下一个模型/API。
 
         mock 掉 llm_client 内的 time.sleep：重试退避不真实等待
@@ -681,7 +438,6 @@ class TestCallLlm:
         mock_get_configs.return_value = [
             ("key1", "https://api1.com/v1", "m1"),
         ]
-        mock_is_zai.return_value = False
         mock_instance = MagicMock()
         mock_empty_response = MagicMock()
         mock_empty_response.content = "   "
@@ -692,33 +448,14 @@ class TestCallLlm:
         with pytest.raises(RuntimeError, match="已尝试所有 API"):
             agent._call_llm("hello")
 
-    @patch("src.agents.base_agent._is_zai_compatible")
-    @patch("src.agents.base_agent._call_zai")
-    @patch("src.agents.base_agent._get_all_api_configs")
-    def test_zai_path_called_for_zai_url(self, mock_get_configs, mock_call_zai, mock_is_zai):
-        """zai 兼容 URL 走 _call_zai 路径，并透传 eff_temperature（F09）。"""
-        mock_get_configs.return_value = [("zai_key", "https://open.bigmodel.cn/api", "glm-4")]
-        mock_is_zai.return_value = True
-        mock_call_zai.return_value = "zai reply"
-        agent = self._make_agent()
-        result = agent._call_llm("hello")
-        assert result == "zai reply"
-        mock_call_zai.assert_called_once()
-        # F09（2026-10-19 第三方审查 P1）：未显式覆盖时发送 config.TEMPERATURE
-        from src.agents.base_agent import TEMPERATURE as _BASELINE_TEMPERATURE
-
-        assert mock_call_zai.call_args.kwargs["temperature"] == pytest.approx(_BASELINE_TEMPERATURE)
-
-    @patch("src.agents.base_agent._is_zai_compatible")
     @patch("src.agents.llm_client.ChatOpenAI")
     @patch("src.agents.base_agent._get_all_api_configs")
-    def test_same_api_multiple_models_fallback(self, mock_get_configs, mock_chat_openai, mock_is_zai):
+    def test_same_api_multiple_models_fallback(self, mock_get_configs, mock_chat_openai):
         """同一 API 有多个模型时，失败后尝试同 API 的下一个模型。"""
         mock_get_configs.return_value = [
             ("key1", "https://api1.com/v1", "m1"),
             ("key1", "https://api1.com/v1", "m2"),
         ]
-        mock_is_zai.return_value = False
         call_count = [0]
 
         def side_effect(*args, **kwargs):
@@ -976,7 +713,6 @@ class TestA10ThreadLocalRequestChain:
         self._set_thread_api(monkeypatch, "b-key", "https://b.example/v1", "model-B")
         from src.agents import base_agent as ba
 
-        monkeypatch.setattr(ba, "_is_zai_compatible", lambda url: False)
         seen: list[tuple[str, str, str]] = []
 
         def _get_client(model: str, temperature: float, api_key: str, base_url: str):
@@ -1001,7 +737,6 @@ class TestA10ThreadLocalRequestChain:
             [LLMConfig("global-key", "https://global.example/v1", "global-model")],
         )
         self._set_thread_api(monkeypatch, "b-key", "https://b.example/v1", "model-B")
-        monkeypatch.setattr(ba, "_is_zai_compatible", lambda url: False)
         monkeypatch.setattr("time.sleep", lambda s: None)
         seen: list[str] = []
 
@@ -1044,7 +779,6 @@ class TestA10ThreadLocalRequestChain:
             [LLMConfig("global-key", "https://global.example/v1", "global-model")],
         )
         self._set_thread_api(monkeypatch, "b-key", "https://b.example/v1", "model-B")
-        monkeypatch.setattr(ba, "_is_zai_compatible", lambda url: False)
         monkeypatch.setattr("time.sleep", lambda s: None)
         ba.clear_llm_lru_cache()
 
@@ -1071,38 +805,3 @@ class TestA10ThreadLocalRequestChain:
         assert payload["request_identity"]["model"] == "model-B"
         assert payload["response_identity"]["model"] == "global-model", "provenance 必须记录真实成功的端点"
         ba.clear_llm_lru_cache()
-
-
-@pytest.mark.unit
-class TestA11ZaiUsageAccounting:
-    """A11：zai 路径收到响应立即记账，再做空响应可用性判定。"""
-
-    @patch("src.agents.llm_client._get_or_create_zai_client")
-    def test_zai_usage_recorded_before_empty_response_raise(self, mock_factory):
-        from src.budget.token_usage import get_usage, reset
-
-        reset()
-        client = MagicMock()
-        message = MagicMock()
-        message.content = ""
-        message.reasoning_content = None
-        response = SimpleNamespace(
-            choices=[SimpleNamespace(message=message)],
-            usage=SimpleNamespace(prompt_tokens=8, completion_tokens=2),
-        )
-        client.chat.completions.create.return_value = response
-        mock_factory.return_value = client
-
-        with pytest.raises(RuntimeError, match="zai API 调用失败"):
-            _call_zai(
-                api_key="k",
-                base_url="https://open.bigmodel.cn/api",
-                model_name="glm-4.7-flash",
-                system_prompt="s",
-                user_message="u",
-                max_retries=0,
-            )
-        usage = get_usage()
-        assert usage.total_tokens == 10, "A11：空响应的 usage 必须先入账再抛错"
-        assert usage.llm_calls == 1
-        reset()

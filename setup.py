@@ -56,7 +56,6 @@ setup(
         # 会把测试工具与可选 DB 驱动装进运行时依赖面（见下方 extras_require
         # 与 tests/test_packaging.py 的 install_requires 漂移守卫）。
         "openai>=1.0.0",
-        "zai-sdk>=0.2.0",
     ],
     extras_require={
         "rag": ["chromadb>=0.5.0"],

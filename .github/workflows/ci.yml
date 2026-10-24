@@ -331,6 +331,39 @@ jobs:
         if: matrix.python-version == '3.14'
         run: python scripts/gates/check_status_persistence.py
 
+      - name: Check registration consistency (CF 登记面读侧对账)
+        # CF（2026-10-24）：docs/PROJECT_STATUS_REGISTER.md §1 的「当前口径」数字必须有可复算
+        # 权威源（门禁链 9 项 + 静态检查 2 项 + 测试 4 项），docs/reviews/ 在盘分册必须进
+        # docs/INDEX*.md 的 §3.5 清单。改前实测：登记册声明 999 文件已格式化而 `ruff format
+        # --check .` 实跑 1046（漂移 47，跨 14 轮无人复算）；BASELINE `gates` 三键在全仓
+        # Python 里读者 0；zh §3.5 漏登 1 份、en §3.5 漏登 4 份；zh §2.2 编号 20,22,21,23。
+        if: matrix.python-version == '3.14'
+        run: python scripts/gates/check_registration_consistency.py
+
+      - name: Check invocation caliber (CG 门禁调用口径对账)
+        # CG（2026-10-24）：CF 判「这道门有没有人调用」，本门判「以什么口径调用」——同一脚本在
+        # `make` 链与各 workflow 上的命令行有效开关、调用面归属、阻不阻断逐面对账。改前实测：
+        # 上面 bilingual 步骤注释里那句「改 continue-on-error 键为 true」被 CF 的子串判据当成当前
+        # 键，非阻断/阻断复算成 3/26，而按 YAML 结构（缩进 8 的步骤级键、排除注释）复算为 2/27
+        #——注释即可造出一个已进 BASELINE 与 §1 的数。另有 3 个脚本在链与 CI 两侧有效开关不等
+        #（理由只写在 Makefile/perf.yml 注释里，注释不会被复算）、10 条「判据档」开关（--list
+        #「不判退出码」/ --skip-t10 / --allow-empty / --strict / --update-baseline 等）在全仓
+        # 无任何调用面与代码读者——其中本门自己的 --list 由 CG 回归锁补读者，其余 9 条落登记表。
+        # 本步骤不写注释型豁免：差异一律落 docs/invocation_caliber_allowlist.txt，表本身被复算
+        #（无理由 / 畸形 / 重复 / 主体已删 / 现场不在 / 登记的开关在现场找不到 / 条目失效各计红）。
+        if: matrix.python-version == '3.14'
+        run: python scripts/gates/check_invocation_caliber.py
+
+      - name: Check flag effect (CH 门禁开关有效性对账)
+        # CH（2026-10-24）：CG 判「有没有人传这个开关」，本门判「这个开关在源码里接没接线」。改前实测
+        # 71 个 (门禁,开关) 实例里 dest 从不被读的有 2 个，且两个都被本 workflow 真实传入：
+        # 下面的 docs-history-drift 步骤传 --warn-only（调度只读 args.strict）、上面的 checksum 步骤传
+        # --verify（调度只读 args.write，等价性靠 required=True 的互斥组担保、不靠这个开关）。
+        # 「判据档无读者 0」因此是真绿但误导——token 有读者，开关没有效果路径。本门不设豁免表：
+        # 死开关的正当处置只有接线或删除。
+        if: matrix.python-version == '3.14'
+        run: python scripts/gates/check_flag_effect.py
+
       - name: Check env budget (X3 开关预算守卫)
         # X3（2026-10-05 审查 P0-5）：环境变量开关冻结棘轮——产品开关面
         #（src/ + config.py）新环境变量须先本地运行 check_env_budget.py
@@ -683,8 +716,8 @@ jobs:
       - name: Gitleaks full history scan (R10：非阻断周检)
         # 全历史凭证扫描——保持非阻断（info-only），原因：2026-10-05 本地
         # 实测存在存量历史泄漏（API_MANAGER_EXTENSION_GUIDE.md 已从工作树
-        # 删除，但 commit 2e5272a / c505f506 历史中残留一把疑似真实
-        # api.agnes-ai.cn 密钥 + 2 条旧版测试夹具误报），转阻断会使 CI
+        # 删除，但 commit 2e5272a / c505f506 历史中残留一把疑似真实的
+        # 第三方 API 密钥 + 2 条旧版测试夹具误报），转阻断会使 CI
         # 恒红直至"凭证轮换 + git filter-repo 重写历史"完成（需仓库所有者
         # 操作）。工作树阻断扫描（上一步）已覆盖"新推送代码不含凭证"；
         # 本步骤仅周日全量档运行做轮换提醒。

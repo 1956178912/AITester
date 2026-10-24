@@ -1,1 +1,0 @@
-{"event": "task_start", "task": "quixbugs__kth_aitester_1792268080", "ts": 1792268080.159511, "meta": {"dataset_task_id": "quixbugs__kth", "baseline": "aitester", "target_function": "kth"}}

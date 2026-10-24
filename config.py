@@ -316,10 +316,6 @@ def refresh_llm_configs() -> list[LLMConfig]:
     return LLM_CONFIGS
 
 
-# 向后兼容：保留旧的扁平变量名，指向默认 LLM 配置（供旧代码引用）
-OPENAI_API_KEY: str = DEFAULT_LLM_CONFIG.api_key if DEFAULT_LLM_CONFIG else ""
-OPENAI_BASE_URL: str = DEFAULT_LLM_CONFIG.base_url if DEFAULT_LLM_CONFIG else ""
-MODEL_NAME: str = DEFAULT_LLM_CONFIG.model_name if DEFAULT_LLM_CONFIG else ""
 # TEMPERATURE 非敏感配置，可留在 .env 或 .env.local 中
 # 范围 [0, 2]：OpenAI 兼容接口的合法采样温度上限（来源：OpenAI API 文档）
 TEMPERATURE: float = _parse_float_env("TEMPERATURE", 0.2, 0.0, 2.0)
@@ -401,7 +397,8 @@ ENABLE_DEBUGGER: bool = env_flag("ENABLE_DEBUGGER", True)
 def detection_first_enabled() -> bool:
     """W3（2026-10-05 审查落地）：检出优先协议开关（DETECTION_FIRST_ENABLE）。
 
-    背景：主批次（benchmark_synthetic_20261001_121523）实证 false_fix_rate=89.8%——
+    背景：2026-10-01 R4 主批（工件已随 2026-10-23 provider 清理删除，读数存档于
+    BASELINE history）实证 false_fix_rate=89.8%——
     修复循环以"自产测试通过"为成功信号，系统被奖励生成"能在缺陷代码上通过"
     的弱测试而非"能让缺陷代码变红"的强测试。检出优先协议（"先红后绿"）：
 

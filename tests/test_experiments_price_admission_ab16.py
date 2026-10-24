@@ -335,10 +335,8 @@ class TestProductionPricingPath:
         assert usd == 3.0 and source == "price_table:m"
 
     def test_real_table_readings_unchanged(self) -> None:
-        """真表逐模型读数：deepseek-flash 1.5；agnes（null 价）与 qwen-long（CNY）不换算。"""
+        """真表逐模型读数：deepseek-flash 1.5（唯一登记条目）。"""
         assert pricing._usd_prices(_REAL_MODELS["deepseek-flash"]) == (0.3, 1.2)
-        assert pricing._usd_prices(_REAL_MODELS["agnes-3.0-flash"]) is None
-        assert pricing._usd_prices(_REAL_MODELS["qwen-long"]) is None
         assert pricing._usd_prices(None) is None
 
     def test_deleted_private_helper_stays_deleted(self) -> None:
@@ -410,8 +408,7 @@ class TestSpecGeneratorAdmission:
     def test_real_table_readings_unchanged(self) -> None:
         assert seg.estimate_cost_usd("deepseek-flash", _USAGE) == 1.5
         assert seg.price_block_reason_for("deepseek-flash") is None
-        assert seg.price_block_reason_for("agnes-3.0-flash") == "price_null"
-        assert seg.price_block_reason_for("qwen-long") == "currency_not_usd:CNY"
+        assert seg.price_block_reason_for("unknown-model") == "model_unregistered"
 
 
 # ─── 6. emse_stats_report：坏数字剔除不崩，可达码不变 ────────────────────────
@@ -561,6 +558,11 @@ class TestEmseExtensionsAdmission:
 
 
 class TestAnalyzeBatchAdmission:
+    pytestmark = pytest.mark.skipif(
+        not (_ROOT / "experiments/results/main_batch").is_dir(),
+        reason="主批次工件已清除（2026-10-24 用户指令、DeepSeek 重跑前）：历史读数锁退役，重跑落盘后重建",
+    )
+
     @pytest.mark.parametrize(
         ("price", "reason"),
         [
@@ -684,8 +686,7 @@ class TestStatisticalAnalysisAdmission:
 
     def test_real_table_entry_readings_unchanged(self) -> None:
         assert sa._model_is_priced(_REAL_MODELS["deepseek-flash"]) is True
-        assert sa._model_is_priced(_REAL_MODELS["agnes-3.0-flash"]) is False
-        assert sa._model_is_priced(_REAL_MODELS["qwen-long"]) is True
+        assert sa._model_is_priced(_REAL_MODELS.get("unknown-model")) is False
 
     def test_cost_analysis_bad_number_goes_to_mechanism_index_not_a_price(self) -> None:
         """AG（2026-10-20）口径变更：域坏值不再与"未登记"同桶，进机制索引。
@@ -765,8 +766,6 @@ class TestProtectedArtifactsUnchanged:
         assert len(text.splitlines()) > 200
 
     def test_repo_price_table_is_numerically_pristine(self) -> None:
-        """真表两处非 USD/未计价的既有事实不得被本轮"修表"——表不因补漏洞而变。"""
+        """真表不得被本轮"修表"——仅登记 DeepSeek 官方 USD 价目，数值不变。"""
         assert _REAL_MODELS["deepseek-flash"]["currency"].upper() == "USD"
-        assert _REAL_MODELS["agnes-3.0-flash"]["input_per_mtok"] is None
-        assert str(_REAL_MODELS["qwen-long"]["currency"]).upper() == "CNY"
         assert math.isfinite(float(_REAL_MODELS["deepseek-flash"]["input_per_mtok"]))

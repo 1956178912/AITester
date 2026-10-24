@@ -1,9 +1,0 @@
-O-2 attempt#2 (valid same-batch A/B) proc hygiene: 每 5min 只读巡检（--min-age 60）；不自动 kill
-2026-10-17T17:18:26Z phase=attempt2_pre_batch detector_exit=0 {"available": true, "scanned": 611, "min_age_seconds": 60, "leaked": [], "leaked_count": 0}
-2026-10-17T17:23:09Z phase=attempt2_in_batch detector_exit=0 {"available": true, "scanned": 582, "min_age_seconds": 60, "leaked": [], "leaked_count": 0}
-2026-10-17T17:28:04Z phase=attempt2_in_batch detector_exit=0 {"available": true, "scanned": 480, "min_age_seconds": 60, "leaked": [], "leaked_count": 0}
-2026-10-17T17:32:58Z phase=attempt2_in_batch detector_exit=0 {"available": true, "scanned": 528, "min_age_seconds": 60, "leaked": [], "leaked_count": 0}
-2026-10-17T17:37:51Z phase=attempt2_in_batch detector_exit=0 {"available": true, "scanned": 539, "min_age_seconds": 60, "leaked": [], "leaked_count": 0}
-2026-10-17T17:42:45Z phase=attempt2_in_batch detector_exit=0 {"available": true, "scanned": 549, "min_age_seconds": 60, "leaked": [], "leaked_count": 0}
-2026-10-17T17:47:08Z phase=attempt2_in_batch detector_exit=0 {"available": true, "scanned": 549, "min_age_seconds": 60, "leaked": [], "leaked_count": 0}
-2026-10-17T17:57:33Z phase=attempt2_post_batch detector_exit=1 {"available": true, "scanned": 607, "min_age_seconds": 60, "leaked": [{"pid": 63956, "ppid": 1, "etime": "01:11", "age_seconds": 71, "command": "/Library/Frameworks/Python.framework/Versions/3.14/Resources/Python.app/Contents/MacOS/Python -m pytest -q --no-header -p no:cacheprovider /var/folders/pj/frxc6s715_x9x19hkk6pj2nh0000gn/T/aitester_mdo_t_5fehw6dq/test_find_first_in_sorted.py", "matched_marker": "aitester_mdo_"}], "leaked_count": 1}

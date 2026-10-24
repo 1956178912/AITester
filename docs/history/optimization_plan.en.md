@@ -31,7 +31,7 @@
 |----------|----------|------|
 | 1.1 Multi-dimensional quality proxies (coverage/runtime/assertion strength) | `analyze_results.py:_quality_proxy_metrics` (coverage_proxy / runtime_proxy / assertion_proxy + failure_top_categories) | Marked as proxies, no exact AST cyclomatic complexity values; `code_analyzer.compute_cyclomatic_complexity` has the capability but is not yet wired in |
 | 1.3 First-attempt success rate / iteration distribution | `analyze_results.py:_repair_convergence_metrics` (first_attempt_success_rate + success/failed_iteration_stats) | Iteration distribution table already exists |
-| 2.1 SWE-bench 20-task archive + source export | `experiments/results/swebench_20_summary.json` (7 completed / 10 timed out, API rate-limiting recorded on file); `scripts/export_swe_bench_source.py` | 20-task results are archived but pass_rate is 0/7 (due to rate limiting) |
+| 2.1 SWE-bench 20-task archive + source export | `（工件已清除）` (7 completed / 10 timed out, API rate-limiting recorded on file); `scripts/export_swe_bench_source.py` | 20-task results are archived but pass_rate is 0/7 (due to rate limiting) |
 | 2.3 RAG automatic summary (RAG vs disabled comparison + which error type benefits most) | `analyze_results.py:_rag_by_kind_from_details` + `_rag_hit_by_failure_category` | RAG enabled/disabled token comparison requires running the experiment once each; the script has no built-in support |
 | 3.3 Multi-candidate patches off by default + optionally enabled | `ENABLE_MULTI_CANDIDATE_PATCH` defaults to false; `src/tools/multi_candidate.py` has a complete implementation (static filtering + execution verification) | Comparison experiment not yet run |
 | 4.1 Structured trace layer explicitly enabled | `src/observability/trace.py` + `AITESTER_TRACE_DIR` (no-op by default) | Trace layer implemented; not explicitly enabled in large-scale experiments |
@@ -138,7 +138,7 @@
 > ### Points Needing User Confirmation
 >
 > 1. **F-02 cache path correction**: the redaction_audit item C "known acceptable risk" conclusion is unchanged (local trusted domain); only the path and trust-level discussion are aligned with the actual code (`src/cache/` inside the repo + gitignored);
-> 2. **F-04 analyze_failures.py default output path**: the `--output` default changed from `docs/paper/failure_analysis.md` (directory no longer exists) to `experiments/results/failure_analysis.md` (no test references this script, zero regression surface);
+> 2. **F-04 analyze_failures.py default output path**: the `--output` default changed from `docs/paper/failure_analysis.md` (directory no longer exists) to `（工件已清除）` (no test references this script, zero regression surface);
 > 3. **Phase 6 push**: user directive "upload to GitHub", following the historical-rounds main-direct-push (no feature branch, no PR).
 
 ## Documentation Wrap-up Round (2026-09-14 batch ② wrap-up, documentation data alignment)

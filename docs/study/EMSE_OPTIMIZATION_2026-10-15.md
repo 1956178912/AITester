@@ -56,19 +56,22 @@
 
 ## 2. 本轮新增的实证发现（由 1.2 的交叉验证首次产出）
 
-`make mutation-det-correlation`（零 LLM；输入 = `experiments/results/main_batch/` 下**全部 10 个**
+`make mutation-det-correlation`（零 LLM；输入 = `（工件已清除）` 下**全部 7 个**
 批次 JSON 的 `results[arm].details[]`，`detection_rate` 与 `mutation_score` 均非 None 的行才进配对，
 None = 不可测、遵循保守口径不计为 0）：
 
 | 臂 | 批次文件数 | 配对 n | detection 可测 n | detection 率 | mean(MS\|det=1) | mean(MS\|det=0) | Δ均值 | Pearson | Spearman | 饱和判定 |
 |----|-----------|--------|------------------|--------------|------------------|------------------|--------|---------|----------|----------|
-| aitester | 10 | 556 | 605 | 13.06% | 0.9968 | 0.8705 | 0.1263 | 0.1805 | 0.1892 | 可鉴别 |
-| plain_llm | 10 | 609 | 658 | 1.67% | 1.0000 | 0.9768 | 0.0232 | 0.0263 | 0.0365 | 近饱和，谨慎解读 |
-| plain_llm_df | 10 | 571 | 571 | 48.86% | 0.9857 | 0.9954 | -0.0098 | -0.0562 | -0.0730 | **无鉴别力（饱和）** |
+| aitester | 7 | 556 | 556 | 14.03% | 0.9968 | 0.8705 | 0.1263 | 0.1805 | 0.1892 | 可鉴别 |
+| plain_llm | 7 | 609 | 609 | 1.64% | 1.0000 | 0.9768 | 0.0232 | 0.0263 | 0.0365 | 近饱和，谨慎解读 |
+| plain_llm_df | 7 | 571 | 571 | 48.86% | 0.9857 | 0.9954 | -0.0098 | -0.0562 | -0.0730 | **无鉴别力（饱和）** |
 
-> 口径说明（2026-10-15 修订）：本表由 `make mutation-det-correlation` 聚合
-> `experiments/results/main_batch/` 下**全部 10 个**批次 JSON（`批次文件数=10`，**并非**仅
-> R-P0-2 三种子）生成，权威工件为 `experiments/results/main_batch/mutation_detection_correlation.md`；
+> 口径说明（2026-10-15 修订，2026-10-23 重算）：本表由 `make mutation-det-correlation` 聚合
+> `（工件已清除）` 下**全部 7 个**批次 JSON（`批次文件数=7`，**并非**仅
+> R-P0-2 三种子）生成，权威工件为 `（工件已清除）`；
+> 2026-10-23 provider 清理删除了 3 份引用非 DeepSeek provider 的批次归档，表内数字已按存盘语料
+> 重算：detection 可测 n 回落为配对 n（605→556、658→609），detection 率相应变为
+> 14.03% / 1.64% / 48.86%；分层均值、Δ均值与相关系数逐格不变。
 > 本节此前引用的"R-P0-2 三种子，n=261/臂"表已被本表取代（两表人群不同，不得互相替换；
 > `README.md` / `BASELINE.yaml` 中的三种子口径 detection 44.8% / 15.8% / 1.5% 不受本节影响）。
 > 解读纪律（同工件）：detection 为强不平衡二值，Pearson 对少数类不敏感、Spearman 受 ties 支配；
@@ -96,7 +99,7 @@ None = 不可测、遵循保守口径不计为 0）：
    反证证据**如实披露（这是审稿人 1/3 最可能追问的点，现在有据可答）。
 
 > 注：本表同时暴露一个可深挖的方向——plain_llm_df 的 48.86% 检出伴随 0.9857 的
-> mean(MS\|det=1)，而 aitester 的 13.06% 检出伴随 0.9968；即"检出率"与"变异覆盖"在高饱和区
+> mean(MS\|det=1)，而 aitester 的 14.03% 检出伴随 0.9968；即"检出率"与"变异覆盖"在高饱和区
 > **并不同向**。
 
 ---
@@ -105,10 +108,10 @@ None = 不可测、遵循保守口径不计为 0）：
 
 | 项 | 状态 | 阻塞原因 |
 |----|------|----------|
-| **E7 人工复核（唯一能建立 detection 外部校标的动作）** | 未执行 | 需**人力投入**：工作表已备料（`experiments/results/main_batch/e7_review_worksheet.md`，判定列空），预注册口径已定义（五选一）。**建议优先做**：≥40 行分层样本、双人独立、报 Kappa |
+| **E7 人工复核（唯一能建立 detection 外部校标的动作）** | 未执行 | 需**人力投入**：工作表已备料（`（工件已清除）`，判定列空），预注册口径已定义（五选一）。**建议优先做**：≥40 行分层样本、双人独立、报 Kappa |
 | Prompt Card + 哈希锁 | **已被后续批次收口（2026-10-16）** | 原阻塞（需 prompt 全文）解除：`PROMPT_ARTIFACTS.json` 逐字抽取 + sha256 锁 + `make prompt-artifacts-check`（CI 阻断）；投稿用 `PROMPT_CARD.md` 由 `experiments/prompt_artifacts.py` 生成。**T 轮复核**：行号引用改为函数名口径（`_detection_first_section` / `_over_red_section`），防再次漂移 |
 | QuixBugs 真实缺陷阶梯进正文 | 未执行 | 需确认最新批次口径与授权 |
-| 2×2 消融（协议文本 vs 多一次采样） | **已执行（勘误：2026-10-09 RT1 单 seed 三格批；T 轮 T-2 指纹级 3 格×2 seed 复现）** | 原"未执行"系本表成稿时的陈旧状态——`experiments/results/e6_a1_batches/rt1_no_reinforcement_seed42/`（2026-10-09）已有 RT1 批与三格对照（并入 `BASELINE.yaml benchmark.rt1_sampling_control`）；T 轮以干净切点 `a93c1f6` + 指纹 + PREREG 复现，见 `experiments/results/t_round_b1_protocol_text_20261018/` |
+| 2×2 消融（协议文本 vs 多一次采样） | **已执行（勘误：2026-10-09 RT1 单 seed 三格批；T 轮 T-2 指纹级 3 格×2 seed 复现）** | 原"未执行"系本表成稿时的陈旧状态——`（工件已清除）`（2026-10-09）已有 RT1 批与三格对照（并入 `BASELINE.yaml benchmark.rt1_sampling_control`）；T 轮以干净切点 `a93c1f6` + 指纹 + PREREG 复现，见 `（工件已清除）` |
 | success 呈现层降级（报告首表/CLI/可视化） | **已执行（2026-10-16，8c2b655，B6）** | 三指标落图表/表格/显著性基口径（主图四联 + 表列 Detection/False-Fix/Repair 前置）；详见登记册 §2 B6 |
 | regression_rate 未进 M1 聚合 | 未执行 | 第四指标未并列，需确认是否纳入论文主表 |
 | 复现包钉 seed/model/temperature/dataset-version | 未执行 | 需确认"三种子"的**实际执行语义**（seed 不传 LLM API，非确定性由缓存命名空间控制） |
@@ -128,8 +131,8 @@ None = 不可测、遵循保守口径不计为 0）：
 | `check_bilingual_docs.py --strict` | 通过（0 警告 / 0 失败） |
 | `check_baseline.py` + `check_baseline_numbers.py` | 通过 |
 | `check_json_contract_sites.py`（新增） | 通过（口径 A=7，9 处文档表述一致） |
-| `make mutation-det-correlation` | 产出 `experiments/results/main_batch/mutation_detection_correlation.md` |
-| `make swebench-disclosure` | 产出 `experiments/results/emse_swebench_disclosure.md` |
+| `make mutation-det-correlation` | 产出 `（工件已清除）` |
+| `make swebench-disclosure` | 产出 `（工件已清除）` |
 | 首要口径 FDR 端到端 | detection q=0.0000 显著；repair q=1.0000（如实） |
 
 ---
@@ -141,10 +144,10 @@ None = 不可测、遵循保守口径不计为 0）：
 - `docs/study/OPTIMIZATION_2026-10-15.md`（本文件，优化记录）
 
 **机器生成的报告（有意不纳入版本控制）**
-- `experiments/results/main_batch/mutation_detection_correlation.md`（`make mutation-det-correlation` 再生）
-- `experiments/results/emse_swebench_disclosure.md`（`make swebench-disclosure` 再生）
+- `（工件已清除）`（`make mutation-det-correlation` 再生）
+- `（工件已清除）`（`make swebench-disclosure` 再生）
 
-理由：二者均可由已入库的源工件（三种子批次 JSON + `experiments/results/swebench_20_summary.json`）
+理由：二者均可由已入库的源工件（三种子批次 JSON + `（工件已清除）`）
 零 LLM 一键再生，属**派生物**而非一次性的实验证据；证据链仍指向源 JSON，
 `scripts/gates/check_artifacts_tracked.py` 的 MANIFEST 无需变更（该项新增登记会
 反向要求把派生物入库，与"可再生产物不入库"的既有口径冲突）。

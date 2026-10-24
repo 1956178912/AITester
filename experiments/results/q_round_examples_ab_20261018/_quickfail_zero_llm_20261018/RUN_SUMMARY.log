@@ -1,6 +1,0 @@
-==============================================================
-Q-2 examples A/B run summary
-RUN_STAMP=20261017T201647Z
-ROOT=/Users/wangchenyu/Workspace/AITester-q2-examples-a48a53f HEAD=a48a53ffe1844d098b5a84e59ab70fb6375e661c dirty_before=0 dirty_after=0
-exit control=2 examples=2 wall_total=15s task_limit=20
-PREREG_sha256=580c6401185693b6b355866485e6a07b1e6ef7688277a4d95a49b15ca17744c6

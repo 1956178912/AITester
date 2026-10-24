@@ -210,6 +210,12 @@ class BudgetSnapshot:
     # 同一实例后自动继承（与 C8 预算作用域修复同语义）；reset_budget()
     # 每 (任务, 基线) 重建实例时天然清零，无跨任务残留。
     token_cap_override: int = 0
+    # R02（2026-10-23 全量集中复审 P1）：记账不可判定锁存位。mark_budget_exceeded()
+    # 置位后，check_budget() 的重新计算**不得**将其清除——共享预算实例下，
+    # 在途合法响应（token 低于 cap）若把 exceeded 覆盖回 False，坏 usage 任务
+    # 的停止状态即被解除，付费通道重新开放。锁存只随 reset_budget() 重建实例
+    # 清除（与 token_cap_override 同作用域：每任务/基线一次）。
+    unmeasurable_latched: bool = False
 
     def as_dict(self) -> dict[str, float | int | bool | str]:
         return {
@@ -220,6 +226,7 @@ class BudgetSnapshot:
             "exceeded": self.exceeded,
             "enabled": self.enabled,
             "token_cap_override": self.token_cap_override,
+            "unmeasurable_latched": self.unmeasurable_latched,
             "unit": "tokens" if self.token_limit > 0 else ("usd" if self.usd_limit > 0 else "none"),
         }
 
@@ -299,7 +306,10 @@ def check_budget(consumed_delta_tokens: int = 0, consumed_delta_usd: float = 0.0
         # G 轮：配置错误时上限值不可信，**不得**按"不限"放行——与真实超限同样
         # 阻断，但计数分列（budget_misconfigured_events），避免把拼错环境变量
         # 读成"任务烧爆预算"。
-        blocked = exceeded or bool(misconfigured)
+        # R02（2026-10-23 全量集中复审 P1）：unmeasurable_latched 是独立于
+        # 计量结果的停止位（mark_budget_exceeded 置位），重新计算不得清除——
+        # 否则共享实例下在途合法响应会把坏 usage 的锁存解除。
+        blocked = exceeded or bool(misconfigured) or budget.unmeasurable_latched
         # O35（2026-09-30 全面审查 P2）：tasks_capped 语义修正——此前超限后的
         # **每一次** check_budget 调用都 +1（含被前置守卫拦下的后续调用），
         # 该字段名是"被封顶的任务数"，实际计的是"被拦下的 LLM 调用数"
@@ -426,6 +436,10 @@ def reset_budget() -> None:
     （`_usd_unpriced_warned`）——它是纯提示状态、不参与判定；不清会让
     "同进程内先跑的任务已告警过"导致后续任务/测试的告警断言静默失败
     （N 轮全量套件曾因此出现跨测试文件状态泄漏）。
+
+    R02（2026-10-23）：重建实例同时清除 `unmeasurable_latched`——不可计量
+    停止位的唯一解除点是任务边界的显式 reset，check_budget 的重新计算不
+    触碰它。
     """
     _thread_local.budget = BudgetSnapshot()
     _usd_unpriced_warned.clear()
@@ -470,8 +484,13 @@ def mark_budget_exceeded(reason: str = "") -> None:
 
     调用方在 token 写入被拒绝且存在有效预算时调用：锁存后 `is_budget_exceeded()`
     恒 True——后续 `_call_llm` 前置守卫与重试前复查都会抛 BudgetExceededError，
-    不再产生无法计量的付费请求。与 `check_budget()` 的 `budget.exceeded` 同
-    一标志位（C8 锁口径一致）。
+    不再产生无法计量的付费请求。
+
+    R02（2026-10-23 全量集中复审 P1）：同时置位 `unmeasurable_latched`
+    独立锁存。旧实现只写 `budget.exceeded`，而 `check_budget()` 每次按已计
+    token/USD 重新计算并**覆盖** exceeded——共享预算实例（专家池）下，A 的
+    坏 usage 锁存会被 B 在途合法响应（低于 cap）解除。锁存位不参与重新
+    计算，只随 reset_budget() 重建实例清除。
 
     Args:
         reason: 锁存原因（仅日志诊断用，不参与判定）。
@@ -480,6 +499,7 @@ def mark_budget_exceeded(reason: str = "") -> None:
     _was_exceeded = budget.exceeded
     with _lock:
         budget.exceeded = True
+        budget.unmeasurable_latched = True
         if not _was_exceeded:
             _process_stats["tasks_capped"] += 1
     if not _was_exceeded:

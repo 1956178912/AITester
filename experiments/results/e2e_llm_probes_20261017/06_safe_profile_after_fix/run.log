@@ -1,25 +1,0 @@
-CMD: AITESTER_PROFILE=safe TEMPERATURE=0.0 LLM_THINKING_MODE=disabled AITESTER_LLM_CACHE=0 AITESTER_CACHE_NAMESPACE=n5_06_safe_after_fix .venv/bin/python experiments/run_main_batch.py --dataset synthetic --task-count 1 --seed 42 --baselines plain_llm_df --output-dir experiments/results/e2e_llm_probes_20261017/06_safe_profile_after_fix --skip-stats --allow-dirty --dirty-reason='N-5 D2 复验：主树含 N 轮并行交付（非本探针路径）'
-START_ISO=2026-10-17T15:38:41Z
-R4 主批次：dataset=synthetic task_count=1 seed=42（生成 1 个）
-基线：plain_llm_df；输出：experiments/results/e2e_llm_probes_20261017/06_safe_profile_after_fix；确定性采样：开（temp=0.0）
-基准测试 [plain_llm_df]:   0%|          | 0/1 [00:00<?, ?task/s]R16 流氓行为监控：1 个 finding（['entropy']）
-基准测试 [plain_llm_df]: 100%|██████████| 1/1 [00:08<00:00,  8.09s/task]基准测试 [plain_llm_df] - 耗时: 6.3s: 100%|██████████| 1/1 [00:08<00:00,  8.09s/task]基准测试 [plain_llm_df] - 耗时: 6.3s: 100%|██████████| 1/1 [00:08<00:00,  8.09s/task]
-
-============================================================
-基准测试完成！
-============================================================
-  [plain_llm_df] 成功率: 100.0%, 平均覆盖率: 100.0%
-  [plain_llm_df] 平均每任务Token: 2125.0, LLM调用次数: 2
-总耗时: 6.3s
-结果文件: experiments/results/e2e_llm_probes_20261017/06_safe_profile_after_fix/benchmark_synthetic_20261017_233851.json
-============================================================
-批次工件：experiments/results/e2e_llm_probes_20261017/06_safe_profile_after_fix/benchmark_synthetic_20261017_233851.json
-
-============================================================
-R4 批次摘要（M1 三指标 + R52/R53/R8）
-============================================================
-  [plain_llm_df] success=100.0% (有效 1/1，剔除 harness_invalid=0)
-    M1 三指标（可测 1/1 任务）: detection=0.0% repair=0.0% false_fix=100.0%
-    R4 regression_rate=0.0% / N1 test_error_rate=0.0%
---skip-stats：跳过 R14 统计协议
-EXIT=0

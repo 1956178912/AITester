@@ -1,6 +1,7 @@
 """AR（2026-10-21）otel_export 标识与字符串导出值域回归锁。
 
-缺陷族（实测于真实 trace 语料 9086 文件 / 129058 span）：
+缺陷族（实测于真实 trace 语料 9086 文件 / 129058 span；2026-10-23 provider
+清理删除 323 份归档后复测为 8763 文件 / 126408 span，判定不变）：
 - `run_id` 原样当 trace_id 导出（真实形态 16 位 hex），`span_id` 原样导出
   （真实形态 12 位 hex）——都不符合 OTel：trace_id 必须 32 位小写 hex、
   span_id 必须 16 位；
@@ -397,13 +398,15 @@ class TestExportEndToEnd:
 
 class TestRealCorpus:
     def test_corpus_shape_links_and_zero_disclosures(self):
-        # BZ 轮：trace 文件数（9086）与 span 总数（129058）以全归档为扫描面
+        # BZ 轮：trace 文件数与 span 总数以全归档为扫描面
         # ——fresh clone 只有入库子集 ⇒ require_full_corpus 显式 skip 并带
         # 实测读数（tests/_corpus_guard.py）。
+        # 2026-10-23 provider 清理（删除 323 份含非 DeepSeek provider 的 trace
+        # 归档）后复测：文件 9086 → 8763、span 129058 → 126408。
         require_full_corpus()
         root = Path(__file__).resolve().parents[1]
         files = sorted(root.rglob("*.trace.jsonl"))
-        assert len(files) == 9086, "真实 trace 语料文件数变化，先复测再改锁"
+        assert len(files) == 8763, "真实 trace 语料文件数变化，先复测再改锁"
         total = 0
         for path in files:
             spans = export_trace_jsonl(str(path))
@@ -420,7 +423,7 @@ class TestRealCorpus:
                     assert span["parent_span_id"] in span_ids, path
                 assert _VALUE_REASONS_ATTRIBUTE not in span["attributes"], path
             total += len(spans)
-        assert total == 129058
+        assert total == 126408
 
     def test_corpus_repeat_export_is_stable(self):
         root = Path(__file__).resolve().parents[1]

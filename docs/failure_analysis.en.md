@@ -10,10 +10,11 @@
 > experiment + SWE-bench repo-level verification P0/P1); **all data is frozen
 > to that batch and is not auto-refreshed across version iterations**:
 >
-> 1. **All repo-level verification data is based on the free-tier model
->    (`agnes-3.0-flash`)**, reflecting that model's capability boundary rather
->    than AITester's architecture. Results from stronger models (GPT-4 class)
->    are stored separately in
+> 1. **All repo-level verification data is based on the free-tier model used
+>    at the time** (that entry was removed in the 2026-10-23 provider purge and
+>    is not part of the current DeepSeek-only configuration), reflecting that
+>    model's capability boundary rather than AITester's architecture. Results
+>    from stronger models are stored separately in
 >    `experiments/results/experiment_report_<date>_repo_level.md` and are not
 >    appended here (to avoid polluting the free-tier baseline snapshot).
 > 2. **Error-classification counts in the body (e.g. "12 classes / 16
@@ -29,7 +30,7 @@
 >
 > Snapshot frozen date: 2026-09-14 (batch scope).
 
-> ⚠️ **Historical snapshot**: this document is a 2026-09 batch data snapshot (50-task synthetic experiment + SWE-bench repo-level P0/P1); **data is not auto-refreshed across version iterations**. All repo-level verification data is based on the free-tier model (`agnes-3.0-flash`); results from stronger models are stored in separate files, not appended here.
+> ⚠️ **Historical snapshot**: this document is a 2026-09 batch data snapshot (50-task synthetic experiment + SWE-bench repo-level P0/P1); **data is not auto-refreshed across version iterations**. All repo-level verification data is based on the free-tier model used at the time (entry removed in the 2026-10-23 provider purge); results from stronger models are stored in separate files, not appended here.
 
 ## Overview
 
@@ -62,14 +63,15 @@ This document analyzes in depth the failure cases of AITester in synthetic datas
 > is designed in [docs/design/failure_knowledge_feedback.md](design/failure_knowledge_feedback.md).
 >
 > **SWE-bench 0/7 failure-attribution boundary**: measured on the **free-tier small
-> model (agnes-3.0-flash)**; it reflects the fix-quality boundary of that model on
+> model used at the time** (entry removed in the 2026-10-23 provider purge); it
+> reflects the fix-quality boundary of that model on
 > real repo-level code, not a limitation of the AITester architecture itself. With a
-> stronger model (GPT-4 class), the failure categorization and counts are expected to
+> stronger model, the failure categorization and counts are expected to
 > change significantly; stronger-model repo-level verification data is stored
 > separately in `experiments/results/experiment_report_<date>_repo_level.md` and is
 > not appended in-place here (to avoid polluting the free-tier baseline snapshot).
 
-> **Status note (2026-09-25, SWE-bench repo-level verification P0/P1)**: The first 0/20 on SWE-bench lite-20 repo-level verification (`RepoExecutor`, `REPO_LEVEL_EXECUTION=true`) was initially misdiagnosed as "the LLM engine cannot produce an applicable patch" (`repo_verification.llm_applied` all False). **Root cause corrected** — the 0/20 was the superposition of three defect layers: data pipeline (missing `instance_code`) + execution environment (a single temporary-file executor cannot hold repo-level code + global-python cross-commit editable-install pollution) + patch pipeline (`_diff_codes` hand-joining with difflib produced corrupt unified diffs in the "whole-file rewrite" scenario, rejected by `git apply`) — **not LLM engine capability**. After the fixes (`SWE_BENCH_ENRICHMENT` injecting real source + `RepoExecutor` repo-level clone + pip install -e + venv isolation + `_diff_codes` switched to `git diff --no-index` for an applicable unified diff), the P1 single-source 0/7 failure categorization is: 5/7 `LLM_BREAKS_IMPORT` (LLM rewrites break sqlfluff's plugin naming contract — a mangled `Rule_L*` class name → the whole import chain crashes) + 2/7 `EMPTY_LLM_PATCH` (LLM produced no fix) — **this is the real measurement of the LLM engine's fix-quality boundary** (free-tier small model on actual repo-level code). Cross-file tasks (13/20 multi-source) have no positive signal before the engine-capability breakthrough (ON/OFF both 0/N); cross-file gain validation needs a stronger model + full-repo source context. See `experiments/results/experiment_report_20260925.md` §7 (local historical report, not committed) and [docs/design/swe_bench_probe.md](design/swe_bench_probe.md) §0.
+> **Status note (2026-09-25, SWE-bench repo-level verification P0/P1)**: The first 0/20 on SWE-bench lite-20 repo-level verification (`RepoExecutor`, `REPO_LEVEL_EXECUTION=true`) was initially misdiagnosed as "the LLM engine cannot produce an applicable patch" (`repo_verification.llm_applied` all False). **Root cause corrected** — the 0/20 was the superposition of three defect layers: data pipeline (missing `instance_code`) + execution environment (a single temporary-file executor cannot hold repo-level code + global-python cross-commit editable-install pollution) + patch pipeline (`_diff_codes` hand-joining with difflib produced corrupt unified diffs in the "whole-file rewrite" scenario, rejected by `git apply`) — **not LLM engine capability**. After the fixes (`SWE_BENCH_ENRICHMENT` injecting real source + `RepoExecutor` repo-level clone + pip install -e + venv isolation + `_diff_codes` switched to `git diff --no-index` for an applicable unified diff), the P1 single-source 0/7 failure categorization is: 5/7 `LLM_BREAKS_IMPORT` (LLM rewrites break sqlfluff's plugin naming contract — a mangled `Rule_L*` class name → the whole import chain crashes) + 2/7 `EMPTY_LLM_PATCH` (LLM produced no fix) — **this is the real measurement of the LLM engine's fix-quality boundary** (free-tier small model on actual repo-level code). Cross-file tasks (13/20 multi-source) have no positive signal before the engine-capability breakthrough (ON/OFF both 0/N); cross-file gain validation needs a stronger model + full-repo source context. See `（工件已清除）` §7 (local historical report, not committed) and [docs/design/swe_bench_probe.md](design/swe_bench_probe.md) §0.
 
 **Experiment setup** (historical data snapshot, not a current-version performance commitment):
 - Dataset: Synthetic Dataset (50 tasks)
@@ -180,7 +182,7 @@ diagnosis: "JSON 解析失败: Could not find complete JSON: line 1 column 1 (ch
 **Solutions**:
 1. Implement a response post-processing pipeline to standardize output format
 2. Add a retry mechanism that automatically retries on format errors
-3. Use a more reliable model (e.g., gpt-4o instead of the flash model)
+3. Use a more reliable model (instead of the current flash-tier model)
 
 ---
 

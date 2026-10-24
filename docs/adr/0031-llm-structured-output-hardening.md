@@ -41,7 +41,7 @@
    `off` 时请求体与历史逐字节一致（旧批次复现/回归对照）。配置入
    `env_budget.yaml` 与 `_env_snapshot_keys`（双登记），provenance 可审计。
    代码生成类调用（Generator 测试、重采样补丁）**不**受影响——避免把
-   代码输出强制成 JSON；zai 兼容路径不支持该参数，保守忽略。
+   代码输出强制成 JSON；已移除的第三方 SDK 兼容路径曾不支持该参数（该路径已于 2026-10-23 移除）。
 2. **数值表达式 JSON 修复**（`_normalize_python_numeric_expressions`）：
    值位置的纯数值 Python 表达式换算为等值 JSON 数字字面量。**受限求值
    无 eval**（仅 常量/一元正负/`+ - *`/`**`），指数 ≤4096 有界、结果位数

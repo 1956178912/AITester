@@ -1,13 +1,0 @@
-基准测试 [aitester]:   0%|          | 0/1 [00:00<?, ?task/s]第 1 次执行失败，尝试重试...
-第 2 次执行失败，尝试重试...
-基准测试 [aitester]: 100%|██████████| 1/1 [00:10<00:00, 10.67s/task]基准测试 [aitester] - 耗时: 7.2s: 100%|██████████| 1/1 [00:10<00:00, 10.67s/task]基准测试 [aitester] - 耗时: 7.2s: 100%|██████████| 1/1 [00:10<00:00, 10.67s/task]
-
-============================================================
-基准测试完成！
-============================================================
-  [aitester] 成功率: 100.0%, 平均覆盖率: 100.0%
-  [aitester] 平均每任务Token: 4340.0, LLM调用次数: 3
-总耗时: 7.2s
-结果文件: /Users/wangchenyu/Workspace/AITester/experiments/results/o_round_cross_file_20261017/run_artifacts/run1/benchmark_o3_cross_file_20261018_001550.json
-============================================================
-O3_MARKER={"status": "ok", "summary_path": "/Users/wangchenyu/Workspace/AITester/experiments/results/o_round_cross_file_20261017/run_run1_summary.json", "wall_seconds": 11.59, "analyzer_entered": true, "node_event_counts": {"_should_debug": 2, "cross_file_analyzer": 1, "debugger": 1, "executor": 2, "generator": 1, "patch_applier": 1}, "row_audit": {"cross_file_enabled": true, "cross_file_deps": [{"source_module": "o3_caller", "target_module": "o3_target", "symbol": "", "call_line": 0, "source": "benchmark_preset", "context": "dep_chain[0]: o3_caller -> o3_target"}], "cross_file_plan_present": false, "repair_history": [{"iteration": 1, "diagnosis": "被测模块 add 函数第 6 行实现为 `return a - b`，与函数名及文档字符串 'Return the sum of a and b' 的语义不符，应为加法。所有 6 个失败用例（正整数、零、负数、混合符号、浮点、交换律）均因减法结果与期望和值不一致而断言失败；唯一通过的用例可能是 a-b 与 a+b 恰好相等的边界（如 b=0 且 a 任意，或 a=0,b=0）。", "error_category": "assertion", "patch_applied": true}], "patch_plausible": 1, "passed": true, "iterations": 1, "stop_reason": "test_passed", "error_category": "assertion", "detection_rate": null, "repair_rate": 1.0}}

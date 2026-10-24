@@ -227,7 +227,7 @@ export PATCH_ROLLBACK_FAIL_CLOSED=true       # rc>=2/timeout/IO errors also trig
 # cross-batch mixing); McNemar/BH-FDR/bootstrap CI/Cliff's delta are all
 # persisted into statistical_report.md
 python experiments/statistical_analysis.py --results-dir experiments/results/main_batch \
-  --batches benchmark_synthetic_20261001_121523.json,benchmark_plain_llm_20261001_121523.json
+  --batches benchmark_synthetic_20261006_140906.json,benchmark_synthetic_20261006_151907.json
 ```
 
 ### Example E: Dual-channel fault-localization ablation (2026-10-07 repair-engine batch I)
@@ -295,9 +295,9 @@ python experiments/visualize_results.py \
 ```
 
 Output files:
-- `experiments/results/charts/baseline_comparison.png`
-- `experiments/results/charts/statistical_significance.png`
-- `experiments/results/charts/summary_stats.md`
+- `（工件已清除）`
+- `（工件已清除）`
+- `（工件已清除）`
 
 ---
 
@@ -344,7 +344,7 @@ python experiments/analyze_failures.py \
 ```
 
 Output:
-- A Markdown report clustering failure cases by baseline / error type (`--output` defaults to `experiments/results/failure_analysis.md`)
+- A Markdown report clustering failure cases by baseline / error type (`--output` defaults to `（工件已清除）`)
 - The three major failure root-cause classes (`llm_capability` / `dependency` / `framework`, conservatively heuristically classified by `root_cause_classification()`, up to 3 representative cases per class)
 - The structured case knowledge base `failure_knowledge_base.json` (selected by `error_category` diversity first, containing `task_id` / `root_cause` / `reproducible_steps` / `suggested_fix`)
 
@@ -627,11 +627,8 @@ python main.py run examples/my_module.py --func my_function
 
 Edit `.env.local` (where LLM-sensitive configuration lives) and modify the `LLM_N_*` group:
 ```bash
-LLM_1_MODEL_NAME=gpt-4o
-LLM_1_BASE_URL=https://api.openai.com/v1
-# Or
-LLM_1_MODEL_NAME=agnes-3.0-flash
-LLM_1_BASE_URL=https://api.agnes-ai.cn/v1
+LLM_1_MODEL_NAME=deepseek-flash
+LLM_1_BASE_URL=https://api.deepseek.com/v1
 ```
 
 ---

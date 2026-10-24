@@ -1,6 +1,0 @@
-{"event": "task_start", "task": "<REDACTED_KEY>", "ts": 1790669396.568025, "meta": {"dataset_task_id": "synthetic__hard_mixed_numeric_agg_0014", "baseline": "aitester", "target_function": "total"}}
-{"event": "node", "task": "<REDACTED_KEY>", "node": "planner", "ts": 1790669396.589074, "output": {"function_name": "total", "test_cases": 5}, "decision": "plan_complete", "duration_ms": 0.64}
-{"event": "node", "task": "<REDACTED_KEY>", "node": "generator", "ts": 1790669411.6209888, "output": {"generated_test_len": 1279}, "decision": "generated"}
-{"event": "node", "task": "<REDACTED_KEY>", "node": "executor", "ts": 1790669412.1816828, "output": {"passed": true, "coverage": 57.0, "failed_cases": 0}, "decision": "PASS", "duration_ms": 559.07, "iteration": 0}
-{"event": "node", "task": "<REDACTED_KEY>", "node": "_should_debug", "ts": 1790669412.248176, "output": {"reason": "test_passed"}, "decision": "done"}
-{"event": "task_end", "task": "<REDACTED_KEY>", "ts": 1790669412.248609, "passed": true, "duration_s": 15.68, "token_usage": {"input_tokens": 2063, "output_tokens": 354, "total_tokens": 2417, "llm_calls": 1, "by_model": {"kimi-k2.5": 2417}}}

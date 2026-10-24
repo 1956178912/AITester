@@ -39,15 +39,10 @@ from src.budget import token_usage as tu
 _ROOT = Path(__file__).resolve().parents[1]
 _T1B2_DIR = _ROOT / "experiments/results/t_round_b2_main_batch_20261018"
 _B8_DIR = _ROOT / "experiments/results/s_round_b8_injection_20261018"
-_RAG_SYNTHETIC_DIR = _ROOT / "experiments/results/rag_ab_synthetic"
-_RAG_LVL_DIR = _ROOT / "experiments/results/rag_lvl25h_n40"
 _MAIN_BATCH = _ROOT / "experiments/results/main_batch/benchmark_synthetic_20261006_140906.json"
 
-
-def _rag_details(directory: Path, sub: str) -> list[dict[str, Any]]:
-    path = sorted((directory / sub).glob("*.json"))[-1]
-    data = json.loads(path.read_text(encoding="utf-8"))
-    return next(iter(data["results"].values()))["details"]
+# 2026-10-23 provider 清理：RAG 两批归档（rag_ab_synthetic / rag_lvl25h_n40）
+# 引用非 DeepSeek provider，随历史结果一并删除；此前的两份真批次读数锁一并移除。
 
 
 def _record(task_id: str, usage: Any, *, passed: bool = True) -> dict[str, Any]:
@@ -384,17 +379,6 @@ class TestRagAbCompare:
         assert report["rag_off"]["avg_tokens"] is None
         assert report["token_saving"]["token_reading_reasons"] == {"token_negative:total_tokens": 1}
 
-    def test_real_synthetic_batch_clean_values(self) -> None:
-        on = ra._load_results(sorted((_RAG_SYNTHETIC_DIR / "rag_on").glob("*.json"))[-1])
-        off = ra._load_results(sorted((_RAG_SYNTHETIC_DIR / "rag_off").glob("*.json"))[-1])
-        assert len(on) == len(off) == 20
-        assert all(record["tokens_total"] is not None for record in on + off)
-        report = ra.compare_ab(on, off)
-        assert report["rag_on"]["avg_tokens"] == 4345.6
-        assert report["rag_off"]["avg_tokens"] == 3088.3
-        assert report["token_saving"]["delta_avg"] == -1257.3
-        assert "n_token_unreadable_records" not in report["token_saving"]
-
     def test_compare_source_gates_before_scipy(self) -> None:
         src = inspect.getsource(ra.compare_ab)
         assert "tokens_available" in src
@@ -456,14 +440,6 @@ class TestRagTokenEfficiency:
     def test_zero_denominator_still_none(self) -> None:
         result = rag._rag_token_efficiency(self._details({"total_tokens": 200}, {"total_tokens": 0}))
         assert result["token_delta_ratio"] is None
-
-    def test_real_batch_mixed_groups_clean_values(self) -> None:
-        details = _rag_details(_RAG_LVL_DIR, "rag_on") + _rag_details(_RAG_LVL_DIR, "rag_off")
-        result = rag._rag_token_efficiency(details)
-        assert result["rag_group"]["avg_tokens"] == 4197.38
-        assert result["no_rag_group"]["avg_tokens"] == 1558.28
-        assert result["token_delta_ratio"] == 2.6936
-        assert "n_token_unreadable_rows" not in result["rag_group"]
 
     def test_group_stats_no_longer_uses_safe_float(self) -> None:
         src = inspect.getsource(rag._rag_token_efficiency)

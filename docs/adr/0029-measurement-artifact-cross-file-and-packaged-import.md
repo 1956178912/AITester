@@ -103,6 +103,6 @@ module_c`（与 pattern 名无关，模块名中性化不重写）。历史单�
 
 - 口径矩阵：`docs/design/repair_caliber_matrix.md`；
 - 预注册执行记录：`docs/preregistration.md`（R4 / QuixBugs 单臂运行登记 + E4 待执行）；
-- 工件：`experiments/results/r4_batches/`（SHA256SUMS + README）与
-  `experiments/results/main_batch/corrected_report_v2.md`；
+- 工件：`（工件已清除）`（SHA256SUMS + README）与
+  `（工件已清除）`；
 - 上游先例：ADR-0021（第一起）、ADR-0027（修正重估）、ADR-0016（编排净负）。

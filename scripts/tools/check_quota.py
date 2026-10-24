@@ -11,7 +11,7 @@ LLM 模型额度/存活探测脚本。
     - 最小 token 消耗：每个模型只发 1 个 max_tokens=1 的补全请求。
     - 零密钥泄露：API key 只用于请求头，绝不出现在输出里；错误详情会做脱敏截断。
     - 无新依赖：用 requests（openai/chromadb 已带）打 OpenAI 兼容的 /chat/completions，
-      对 dashscope / deepseek / agnes / bigmodel 统一适用。
+      适用于 DeepSeek 官方端点。
 
 数据来源：
     - 运行时配置：import config 触发 load_dotenv + load_env_local，填充 LLM_CONFIGS
@@ -22,15 +22,15 @@ LLM 模型额度/存活探测脚本。
     # 探测当前已配置的所有 LLM
     .venv/bin/python scripts/tools/check_quota.py
 
-    # 扫「阿里云百炼」目录下全部模型（用你配在 dashscope 的 key）
-    .venv/bin/python scripts/tools/check_quota.py --provider aliyun_bailian
+    # 扫 DeepSeek 目录下全部模型
+    .venv/bin/python scripts/tools/check_quota.py --provider deepseek
 
     # 只探测指定几个模型名（默认用第一个已配置 LLM 的 base_url + key）
-    .venv/bin/python scripts/tools/check_quota.py --models qwen-max,qwen-plus,qwen-turbo
+    .venv/bin/python scripts/tools/check_quota.py --models deepseek-flash
 
     # 显式指定 key 来源（env 变量名，运行期读取，不打印值）与端点
-    .venv/bin/python scripts/tools/check_quota.py --provider agnes_domestic \
-        --key-env AGNES_DOMESTIC_API_KEY
+    .venv/bin/python scripts/tools/check_quota.py --provider deepseek \
+        --key-env DEEPSEEK_API_KEY
 
 状态标记：
     ✅ live      200 成功，模型可用
@@ -62,10 +62,7 @@ import config  # noqa: E402
 
 # provider → 基准 base_url（用于 --provider 扫目录；与 llm_configs.json 保持一致）
 PROVIDER_BASE_URL = {
-    "aliyun_bailian": "https://dashscope.aliyuncs.com/compatible-mode/v1",
     "deepseek": "https://api.deepseek.com/v1",
-    "bigmodel": "https://open.bigmodel.cn/api/paas/v4/",
-    "agnes_domestic": "https://api.agnes-ai.cn/v1",
 }
 
 # 状态标记（终端可读，避免冗长表格）

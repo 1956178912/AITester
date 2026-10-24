@@ -2,7 +2,7 @@
 
 背景：2026-10-09 审查修订 C-08 把 `PIP_PACKAGE_WHITELIST_ENABLE` 默认翻转为
 开（Slopsquatting 已确认为现实攻击 [待核验]）。默认开后，若
-`requirements.lock` 中 LLM provider / 编排框架相关包（openai / zai-sdk /
+`requirements.lock` 中 LLM provider / 编排框架相关包（openai /
 langchain 族等）不在内置 `_PIP_PACKAGE_WHITELIST` 内，正常依赖会被误拒，
 沙箱执行退化为"缺依赖"。本守卫测试读取 requirements.lock，把 LLM provider
 相关包（显式清单，防清单漂移）逐一断言被内置白名单覆盖——新增 provider
@@ -23,7 +23,6 @@ LOCK_FILE = PROJECT_ROOT / "requirements.lock"
 _LLM_PROVIDER_PACKAGES: tuple[str, ...] = (
     # 直接 import 依赖（pyproject.toml 核心依赖面）
     "openai",
-    "zai-sdk",
     "langchain",
     "langchain-openai",
     "langgraph",

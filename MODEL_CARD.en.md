@@ -24,8 +24,8 @@ system is research code, not a deployed product).
 
 - **Model provenance**: this project trains no models. All intelligence comes
   from user-configured OpenAI-compatible endpoints (`.env.local` `LLM_N_*`
-  triples: API key / base URL / model name; any OpenAI-compatible provider and
-  Zhipu zai-sdk endpoints are supported).
+  triples: API key / base URL / model name; only the official DeepSeek
+  endpoint ships as a built-in provider).
 - **Model roles**: Planner (logic analysis / spec production), Generator (test
   code), Debugger/Review (root-cause diagnosis and patches), FaultLocalizer
   (RGFL-style reasoning fault localization, localization only no repair,
@@ -96,8 +96,8 @@ system is research code, not a deployed product).
   alongside detection / repair metrics. The E2 final-adjudication batch
   first measured FL@1 at 19/53 = 35.8% (after the gold-diff alignment fix).
 - Cost: aitester $0.0259 / plain_llm_df $0.0045 per task (officially sourced
-  price table, 2026-10-06: deepseek-flash peak-hour rates, qwen-long
-  standard rates; agnes unregistered absent a public official price).
+  price table, 2026-10-06: deepseek-flash peak-hour rates — the only model
+  registered; on 2026-10-23 all non-DeepSeek entries were removed).
   **plain_llm_df's $0.0045 is a lower bound on recorded spend, not an exact
   mean and not "free"**: 35 of the main batch's 261 rows carry an all-zero
   token triple with a non-empty `generated_test` (3 of them
@@ -106,7 +106,7 @@ system is research code, not a deployed product).
   amount numerator as 0 while still occupying the task denominator. Since
   round AK this is disclosed explicitly via
   `cost_caliber="recorded_lower_bound"`; true spend can only be higher
-  (`docs/reviews/PARTIAL_ACCOUNTING_AK_2026-10-21.md`).
+  (`PARTIAL_ACCOUNTING_AK_2026-10-21.md`).
 - **Suite-green caliber (BA→BC rounds, 2026-10-21)**: pytest also returns
   `rc==0` for suites that are all skip / xfail / deselect, so `rc==0` is not
   "a pass with assertions executed". M1 detection / repair, `repair_replay`,
@@ -119,7 +119,7 @@ system is research code, not a deployed product).
   MISGUIDED_REPORT archives (350 task rows / 700 sides) contain zero
   module-level all-skip suites ⇒ zero impact on archived readings; the
   caliber affects derived readings and verdicts only and rewrites no
-  archived artifact (see `docs/reviews/EFFECTIVE_GREEN_BA_2026-10-21.md` /
+  archived artifact (see `EFFECTIVE_GREEN_BA_2026-10-21.md` /
   `EFFECTIVE_GREEN_CONSUMERS_BB_2026-10-21.md` /
   `MISGUIDED_REPLAY_EFFECTIVE_GREEN_BC_2026-10-21.md`).
 - spec_compile_rate measured constantly 0.0 in the logic profile (AB1

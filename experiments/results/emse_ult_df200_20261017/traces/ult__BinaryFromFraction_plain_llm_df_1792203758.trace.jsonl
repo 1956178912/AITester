@@ -1,5 +1,0 @@
-{"event": "task_start", "task": "<REDACTED_KEY>", "ts": 1792203758.901571, "meta": {"dataset_task_id": "ult__BinaryFromFraction", "baseline": "plain_llm_df", "target_function": "BinaryFromFraction"}}
-{"event": "node", "task": "<REDACTED_KEY>", "node": "generator", "ts": 1792203763.25937, "run_id": "440b760665c545d0", "span_id": "188b8c0a65ec", "output": {"generated_test_len": 2770}, "decision": "generated"}
-{"event": "node", "task": "<REDACTED_KEY>", "node": "executor", "ts": 1792203765.237411, "run_id": "440b760665c545d0", "span_id": "8729750c6ea0", "output": {"passed": false, "coverage": 19.0, "failed_cases": 0}, "decision": "FAIL", "duration_ms": 1943.0, "iteration": 0}
-{"event": "node", "task": "<REDACTED_KEY>", "node": "_should_debug", "ts": 1792203885.8371341, "run_id": "440b760665c545d0", "span_id": "fee002750b7b", "output": {"iteration": 0}, "decision": "debug"}
-{"event": "task_end", "task": "<REDACTED_KEY>", "ts": 1792204700.961967, "passed": false, "duration_s": 942.06, "token_usage": {"input_tokens": 752, "output_tokens": 1036, "total_tokens": 1788, "llm_calls": 1, "cache_hits": 0, "cache_avoided_tokens": 0, "by_model": {"deepseek-flash": 1788}}}

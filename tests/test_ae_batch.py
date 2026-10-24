@@ -134,8 +134,8 @@ class TestPriceTable:
     def test_repo_price_table_schema(self) -> None:
         """入库价目表：models 为 dict，条目为对象、币种显式登记、数字域符合生产谓词。
 
-        真表三模型全部须过：deepseek-flash `0.3/1.2` USD、agnes-3.0-flash 两个 `null`、
-        qwen-long `0.5/2.0` CNY（币种登记非 USD 是"能不能计价"的事，不是 schema 的事）。
+        真表 deepseek-flash `0.3/1.2` USD 必须通过（币种登记非 USD 时
+        属于"能不能计价"的事，不是 schema 的事）。
         """
         table = load_price_table(_ROOT / "experiments" / "price_table.json")
         # 零断言门禁扫描测试体（`_validate_price_table` 内的断言不算本函数的断言信号，

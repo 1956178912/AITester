@@ -286,21 +286,27 @@ class TestX2SchemaFilter(unittest.TestCase):
             self.assertEqual(len(included), 2)
             self.assertEqual(len(results.get("aitester", [])), 2)
 
-    def test_main_batch_smoke_batches_filtered(self):
-        """入库 main_batch：2 个 n=5 冒烟批次被剔除，仅主批次（n=50）纳入。"""
+    def test_main_batch_whitelist_reports_actual_inclusions(self):
+        """入库 main_batch：白名单只纳入在盘批次，缺席文件不进"数据来源"清单。
+
+        （2026-10-23 provider 清理后 main_batch 只剩 DeepSeek 官方端点批次，
+        原先的"2 个 n=5 冒烟批次被 M1 schema 过滤"前提已不存在——该过滤语义
+        由上方两例合成批次覆盖，本例改为锁定真实语料上的审计清单诚实性。）
+        """
         from experiments.statistical_analysis import load_experiment_results_with_sources
 
         results_dir = PROJECT_ROOT / "experiments" / "results"
-        if not (results_dir / "main_batch").exists():
+        batch_dir = results_dir / "main_batch"
+        if not batch_dir.exists():
             self.skipTest("main_batch 工件不在库（精简 clone）")
-        whitelist = [
-            "main_batch/benchmark_synthetic_20261001_112528.json",
-            "main_batch/benchmark_synthetic_20261001_112801.json",
-            "main_batch/benchmark_synthetic_20261001_121523.json",
-        ]
+        present = sorted(p.name for p in batch_dir.glob("benchmark_*.json"))
+        if not present:
+            self.skipTest("main_batch 无在盘批次（归档未解包）")
+        whitelist = [f"main_batch/{name}" for name in present]
+        whitelist.append("main_batch/benchmark_synthetic_20990101_000000.json")
         results, included = load_experiment_results_with_sources(str(results_dir), whitelist)
-        self.assertEqual(len(included), 1)
-        self.assertEqual(len(results.get("aitester", [])), 50)
+        self.assertEqual(sorted(included), sorted(f"main_batch/{name}" for name in present))
+        self.assertGreater(len(results.get("aitester", [])), 0)
 
 
 # ═══ C5/P1-4b：repo 链路危险 API 守卫 ══════════════════════════════════════

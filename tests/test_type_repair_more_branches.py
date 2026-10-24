@@ -95,13 +95,14 @@ class TestInferLiteralTypeEdge:
 
 
 # ═══ 3. mypy 输出解析（_run_mypy_findings，mock mypy.api.run）══════════════════
+# R05：mock 按 mypy.api.run 真实契约 (stdout, stderr, exit_status)（mypy/api.py）。
 
 
 class TestRunMypyFindingsParse:
     def test_mypy_output_parsed(self, monkeypatch):
         monkeypatch.setenv("TYPE_CHECK_ENABLE", "true")
         out = "patched_code.py:2:1: error: Name 'x' is not defined [name-defined]\n"
-        with patch("mypy.api.run", return_value=(1, out, "")):
+        with patch("mypy.api.run", return_value=(out, "", 1)):
             findings = _run_mypy_findings("o", "def f():\n    return x\n")
         assert len(findings) == 1
         assert findings[0]["kind"] == "mypy_name_defined"
@@ -114,7 +115,7 @@ class TestRunMypyFindingsParse:
             "patched_code.py:2:1: error: low [no-any-return]\n"  # 低置信度类别跳过
             "patched_code.py:3:1: error: Name 'x' is not defined [name-defined]\n"  # 命中
         )
-        with patch("mypy.api.run", return_value=(1, out, "")):
+        with patch("mypy.api.run", return_value=(out, "", 1)):
             findings = _run_mypy_findings("o", "def f():\n    return x\n")
         assert len(findings) == 1
         assert findings[0]["kind"] == "mypy_name_defined"
@@ -131,7 +132,7 @@ class TestRunMypyFindingsParse:
             "some random non-mypy line\n"  # 不匹配正则 → continue
             "patched_code.py:2:1: error: Name 'x' is not defined [name-defined]\n"
         )
-        with patch("mypy.api.run", return_value=(1, out, "")):
+        with patch("mypy.api.run", return_value=(out, "", 1)):
             findings = _run_mypy_findings("o", "def f():\n    return x\n")
         assert len(findings) == 1
 

@@ -2,7 +2,7 @@
 
 > **性质**：机制度量（mechanism metric）的设计/口径文档，配套实现
 > `experiments/misguided_metrics.py`、契约测试 `tests/test_misguided_metrics.py`、
-> 首轮真实工件报告 `experiments/results/emse_misguided_20261017/`。
+> 首轮真实工件报告 `（工件已清除）`。
 > **最后更新**：2026-10-17（L 轮 T2；首轮 df / df_spec 两臂零 LLM 重放）。
 > **证据状态**：描述性度量，**非**预注册确认性证据；不含显著性推断。
 > 单语文档（过程/口径记录类，非对外参考文档；与 `docs/design/` 下其他
@@ -13,7 +13,7 @@
 
 ## 1. 动机：为什么需要它
 
-独立评审（`docs/reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-17.md`）§6 P1
+独立评审（INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-17（分册已删除））§6 P1
 与 §10 A-05 指出：df_spec 规格锚路线三连阴性（D1 / M4 / df_spec）后，机制
 假设是"**锚材料 = 对缺陷代码的再描述，约一半概率把缺陷固化成预期行为**"。
 但当时能支撑该假设的机制侧信号只有 **`over_red` proxy**：
@@ -330,5 +330,5 @@ pass/fail** 可能因顺序/状态污染而变化。报告保留逐测试明细�
 ```
 
 输入工件的 sha256、运行命令、时间戳、确定性声明、逐任务明细与分母披露
-全部写入报告；`experiments/results/emse_misguided_20261017/README.md` 记录
+全部写入报告；`（工件已清除）` 记录
 本轮实跑口径、覆盖面与限制。

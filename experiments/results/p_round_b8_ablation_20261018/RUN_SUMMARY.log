@@ -1,5 +1,0 @@
-==============================================================
-P-2 B8 ablation run summary
-RUN_STAMP=20261017T190449Z
-ROOT=/Users/wangchenyu/Workspace/AITester-p2-b8-14a9662 HEAD=aeadb7bac0741313c09d3af58b5a3ce271ed091e dirty_before=0 dirty_after=0
-exit stagnation=0 no_stagnation=0 wall_total=45s task_count=10

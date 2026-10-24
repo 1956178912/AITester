@@ -1,6 +1,0 @@
-第 1 次执行失败，尝试重试...
-第 2 次执行失败，尝试重试...
-完整文件补丁漏掉原代码函数 ['add_twice']，保守拒绝应用
-完整文件补丁漏掉原代码函数 ['add_twice']，保守拒绝应用
-跨文件补丁：模块 o3_caller 应用失败，整体回滚
-O3_COMPONENT_MARKER={"status": "ok", "summary_path": "/Users/wangchenyu/Workspace/AITester/experiments/results/o_round_cross_file_20261017/run_run2_component_summary.json", "run_tag": "run2_component_multifile", "kind": "component_level_real_llm", "disclosure": "组件级证明（DebuggerAgent × 模块数 + build_cross_file_repair_plan + apply_multi_file_patch），不经过 LangGraph 路由；图路由证据见 Run #1。", "wall_seconds": 5.17, "plan": {"target_modules": ["o3_caller", "o3_target"], "per_module_patches": ["o3_caller", "o3_target"], "per_module_patch_lens": {"o3_caller": 99, "o3_target": 126}, "estimated_token_cost": 55, "dependency_edges": [{"source_module": "o3_caller", "target_module": "o3_target"}]}, "multi_file_apply": {"applied": false, "target_changed": false, "caller_changed": false, "input_sha256_target": "621ac7e2193744b86c8355a884f3a72faa4a9a152ebe4d556eb6cc9d60c066ff"}, "tests_after_apply": {}, "llm_usage": {"input_tokens": 2641, "output_tokens": 558, "total_tokens": 3199, "llm_calls": 2, "cache_hits": 0, "cache_avoided_tokens": 0, "by_model": {"deepseek-flash": 3199}}, "buggy_run_failed_cases": 1, "scenario": "o3_target(add: docstring=sum/impl=subtract) + o3_caller(add_twice)"}

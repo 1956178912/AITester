@@ -49,7 +49,7 @@ class TestHarnessDisclosure:
                 "max_iterations": int(os.environ.get("MAX_ITERATIONS", "3")),
             },
             "per_task_time_limit_seconds": int(os.environ.get("EXECUTION_TIMEOUT", "30")),
-            "model_version": "agnes-3.0-flash",
+            "model_version": "deepseek-flash",
         }
 
         # 键集合同构：四大块 + 快照日期 + 模型版本齐备

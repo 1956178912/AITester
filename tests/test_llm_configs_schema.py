@@ -13,27 +13,23 @@ from src.config.config_generator import validate_llm_configs
 
 def _entry(**overrides: str) -> dict[str, str]:
     base = {
-        "model_name": "qwen-max",
-        "provider": "aliyun_bailian",
-        "provider_description": "阿里云百炼",
-        "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-        "required_api_key": "ALIYUN_BAILIAN_API_KEY",
+        "model_name": "deepseek-flash",
+        "provider": "deepseek",
+        "provider_description": "DeepSeek",
+        "base_url": "https://api.deepseek.com/v1",
+        "required_api_key": "DEEPSEEK_API_KEY",
     }
     base.update(overrides)
     return base
 
 
 def test_valid_catalog_no_violations() -> None:
-    configs = [
-        _entry(),
-        _entry(
-            model_name="glm-4",
-            provider="bigmodel",
-            required_api_key="BIGMODEL_API_KEY",
-            base_url="https://open.bigmodel.cn/api/paas/v4/",
-        ),
-    ]
-    assert validate_llm_configs(configs) == []
+    assert validate_llm_configs([_entry()]) == []
+
+
+def test_valid_catalog_two_entries_no_violations() -> None:
+    """同 provider 两个不同 model_name 的条目也合法（schema 只锁唯一性与推导）。"""
+    assert validate_llm_configs([_entry(), _entry(model_name="deepseek-flash-2")]) == []
 
 
 def test_top_level_not_list() -> None:
@@ -51,7 +47,7 @@ def test_unknown_provider_flagged() -> None:
 
 def test_required_api_key_drift_flagged() -> None:
     violations = validate_llm_configs([_entry(required_api_key="WRONG_KEY")])
-    assert any("required_api_key 'WRONG_KEY' 应为 'ALIYUN_BAILIAN_API_KEY'" in v for v in violations)
+    assert any("required_api_key 'WRONG_KEY' 应为 'DEEPSEEK_API_KEY'" in v for v in violations)
 
 
 def test_base_url_not_http_flagged() -> None:

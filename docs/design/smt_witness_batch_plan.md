@@ -99,7 +99,7 @@
   `result_alias_not_reached`=110（66%）、`untranslatable_call`=51、其他=5。
 - **关联层：不做**。预注册的中位数二分在本数据上退化（median=0，28/41 任务 witness_rate=0
   → 低桶为空），按 §3 只报告"无对照"；MDE≈16.57pp 已披露，未做 detection 比较/检验。
-- 工件：`experiments/results/t_round_smt_witness_20261018/`（7 项 SHA verify，只读保留为
+- 工件：`（工件已清除）`（7 项 SHA verify，只读保留为
   pre-fix 基线）。
 
 ### 6.2 T3c 别名修复 + 复跑（post-fix）
@@ -117,7 +117,7 @@
   纯别名桶 13→8 reached；余 5 条受 `is`/`in` 算子集限制（非别名问题）。
 - 语义安全：solver_exception=0；单子句 unsat 0→0；全组一致性探针新增 unsat 任务 **0**
   （expr 通道 skipped 39→sat 2/skipped 37；NL 生产通道 41/41 不变）；未触发停止条件。
-- 工件：`experiments/results/t_round_smt_witness_aliasfix_20261018/`（9 项 SHA verify）；
+- 工件：`（工件已清除）`（9 项 SHA verify）；
   预注册 `PREREG_ALIASFIX.md` 跑前冻结（含 C1–C5 与风险 guard；预注册预期 reach≈32、
   实测 27 的偏差已披露，仅偏差披露不参与判定）。
 

@@ -1,9 +1,0 @@
-O-2 proc hygiene: 每 5min 只读巡检（detect_orphan_procs.py --json --min-age 60）；不自动 kill
-2026-10-17T16:36:07Z phase=pre_batch detector_exit=0 {"available": true, "scanned": 747, "min_age_seconds": 60, "leaked": [], "leaked_count": 0}
-2026-10-17T16:40:07Z phase=in_batch_t240 detector_exit=0 {"available": true, "scanned": 708, "min_age_seconds": 60, "leaked": [], "leaked_count": 0}
-2026-10-17T16:44:51Z phase=in_batch detector_exit=0 {"available": true, "scanned": 645, "min_age_seconds": 60, "leaked": [], "leaked_count": 0}
-2026-10-17T16:49:44Z phase=in_batch detector_exit=0 {"available": true, "scanned": 592, "min_age_seconds": 60, "leaked": [], "leaked_count": 0}
-2026-10-17T16:54:38Z phase=in_batch detector_exit=0 {"available": true, "scanned": 591, "min_age_seconds": 60, "leaked": [], "leaked_count": 0}
-2026-10-17T16:59:32Z phase=in_batch detector_exit=0 {"available": true, "scanned": 589, "min_age_seconds": 60, "leaked": [], "leaked_count": 0}
-2026-10-17T17:03:52Z phase=in_batch detector_exit=0 {"available": true, "scanned": 596, "min_age_seconds": 60, "leaked": [], "leaked_count": 0}
-2026-10-17T17:15:23Z phase=post_batch detector_exit=0 {"available": true, "scanned": 583, "min_age_seconds": 60, "leaked": [], "leaked_count": 0}

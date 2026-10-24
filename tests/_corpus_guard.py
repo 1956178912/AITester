@@ -5,8 +5,8 @@
 clone 里不成立，而此前它们的失败形态是 AssertionError / FileNotFoundError
 （把"环境里没有"报成"锁被打破"）：
 
-① 语料面普查：要全归档 246 份 `benchmark_*.json` / 138 个 `traces*` 目录 /
-   8539 个 `*.trace.jsonl` 才够扫描面（`test_corpus_counts_are_stable`、
+① 语料面普查：要全归档 239 份 `benchmark_*.json` / 138 个 `traces*` 目录 /
+   8216 个 `*.trace.jsonl` 才够扫描面（`test_corpus_counts_are_stable`、
    `test_no_real_batch_collapses_any_row`、
    `test_non_arm_batches_are_admitted_by_name_not_dropped`、
    `test_repo_wide_non_object_census_is_zero_and_instrument_covered`）；
@@ -15,7 +15,7 @@ clone 里不成立，而此前它们的失败形态是 AssertionError / FileNotF
    `test_real_revs_still_report_drift`）。
 
 处置口径（BD→BP 纪律的延伸）：**"没看"必须与"判干净"分形**——前提不成立时
-显式 `pytest.skip` 且理由带实测读数（benchmark X/246、trace Y/8539、缺哪个
+显式 `pytest.skip` 且理由带实测读数（benchmark X/239、trace Y/8216、缺哪个
 rev），不折叠成通过、也不折叠成失败。本地全量环境（作者机，归档与完整历史
 均在盘）两项前提均成立，守卫不触发，行为与 BZ 轮之前逐位相同。
 
@@ -33,11 +33,11 @@ import pytest
 
 _ROOT = Path(__file__).resolve().parent.parent
 
-# 全归档实测下界（2026-10-23 本机 macOS，Python 3.14.6；与 BY 轮登记口径
-# 同源：扫描面 246 份 / 10,659 行）。低于下界 ⇒ 本环境没有完整语料。
-_FULL_CORPUS_BENCHMARK_FILES = 246
+# 全归档实测下界（2026-10-23 provider 清理后本机 macOS，Python 3.14.6；清理
+# 删除了 7 份 benchmark 归档 + 323 份 trace，读数按删除后重算）。
+_FULL_CORPUS_BENCHMARK_FILES = 239
 _FULL_CORPUS_TRACE_DIRS = 138
-_FULL_CORPUS_TRACE_FILES = 8539
+_FULL_CORPUS_TRACE_FILES = 8216
 
 
 def _measure_corpus() -> tuple[int, int, int]:

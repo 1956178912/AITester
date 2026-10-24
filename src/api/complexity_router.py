@@ -2,7 +2,7 @@
 任务复杂度评估器（P0 1.2 模型路由按任务复杂度分级）。
 
 设计口径：
-    模型固定为 Agnes 3.0-flash（同一 provider 的多 LLM_N 实例），按任务复杂度
+    模型固定为 DeepSeek 官方 deepseek-flash（同一 provider 的多 LLM_N 实例），按任务复杂度
     路由到不同复杂度档位（低档 = 简单任务省钱，高档 = 复杂仓库级任务用更多
     上下文/更多迭代）。复杂度分数由以下维度加权计算：
 
@@ -18,7 +18,7 @@
 
     档位决定"路由标签"（complexity_class），供 APIManager 选择对应
     LLM 实例（同模型不同 provider 端点，或同 provider 不同 cost_weight）。
-    模型名不变（仍为 agnes-3.0-flash），变的是实例档位与上下文预算。
+    模型名不变（仍为 deepseek-flash），变的是实例档位与上下文预算。
 
 环境变量：
     MODEL_ROUTING_STRATEGY: "complexity_aware"（默认）| "fixed"（历史口径，

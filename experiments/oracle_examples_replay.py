@@ -619,7 +619,7 @@ def render_readme(report: dict[str, Any]) -> str:
     est_cost = generation.get("estimated_cost_usd")
     if est_cost is None:
         # AB-15c：改前这里无条件给 `estimated_cost_usd` 加 `$` 前缀，实测未登记模型与
-        # `qwen-long`（CNY）都落 `**$None**`、`0.0` 落 `**$0.0**`——"无法估算"与"确实没花钱"
+        # 当时真表里的 CNY 价目条目都落 `**$None**`、`0.0` 落 `**$0.0**`——"无法估算"与"确实没花钱"
         # 只差一个词，却共用同一个美元形状，且没有一行说清是哪条机制。
         cost_txt = f"**无法估算（{generation.get('cost_unpriced_reason') or '机制未记录'}）**"
     else:

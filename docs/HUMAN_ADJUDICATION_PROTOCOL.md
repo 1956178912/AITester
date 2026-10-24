@@ -18,9 +18,9 @@
 - **E7 未执行**：`docs/preregistration.md` 执行记录表中 E7 行状态为"**待人工复核（候选清单已生成，AO 批）**"，其"批次工件 / 主终点结果 / 判定 / 日期"四列**均为空**——即已预注册、已备料、尚未取数；`docs/study/OPTIMIZATION_2026-10-15.md`
   §3 亦把"E7 人工复核"列为**未执行**，阻塞原因记"需人力投入"；同文件 §1.1 明记
   "E7 预注册未执行"。
-- **工件已备料但判定列全空**：候选清单 `experiments/results/main_batch/e7_repair_sample_candidates.md`
+- **工件已备料但判定列全空**：候选清单 `（工件已清除）`
   的"人工判定"列全部为"（待复核）"；对照式工作表
-  `experiments/results/main_batch/e7_review_worksheet.md`（1761 行、8 个候选节）每节的
+  `（工件已清除）`（1761 行、8 个候选节）每节的
   判定勾选栏（`☐ equivalent ☐ plausible_overfit ☐ wrong_location ☐ test_only ☐ incomplete`）
   均未勾选。
 - **核验命令与结果（本次核验，2026-10-15，在本协议落盘之前执行）**：
@@ -48,7 +48,7 @@
 ## 1. 目标与判定规则（预注册原文 + 已生效的修订注记）
 
 **动机（预注册 R9/AL10）**：repair=0 的漏斗（patch 产出 94.2% → plausible 46.8% →
-correct 0，`experiments/results/main_batch/repair_ceiling_report.md`）中 correct=0 由
+correct 0，`（工件已清除）`）中 correct=0 由
 gold 全等裁决得出——须排除"gold 判定过严低估 repair"的可能，"上限卡在合理性与正确性"
 才可定案。
 
@@ -81,7 +81,7 @@ ADR-0021 机制性回答——gold 裁决并非"过严低估"，而是**从未�
 `experiments/repair_sample_selection.py`（同 (行集合, fraction, seed) 恒产出同一样本）。
 
 **当前实测**：三个批次（`benchmark_synthetic_20261006_{140906,151907,164357}.json`）
-上该抽样框为 **72 行且全部落在单一层 `sbfl`**（`experiments/results/main_batch/e7_repair_sample_candidates.md`
+上该抽样框为 **72 行且全部落在单一层 `sbfl`**（`（工件已清除）`
 表头"分层框（patch_plausible=1 行）：72 行〔sbfl: 72〕"），按 10% 规则产出
 `ceil(72 × 0.10) = 8` 行——即候选清单与工作表的 **8 个候选节**。
 
@@ -168,7 +168,7 @@ n=72（取消抽样、全框普查）压到 5% 以下且**无抽样误差**。�
 
 判定集合（预注册原文，逐字）：`{equivalent（语义等价，应判 repair）, plausible_overfit,
 wrong_location, test_only, incomplete}`。工作表每节的勾选栏即此五项
-（`experiments/results/main_batch/e7_review_worksheet.md` 表头"判定口径（预注册 E7
+（`（工件已清除）` 表头"判定口径（预注册 E7
 五选一）"）。
 
 **逐条操作化定义**（来源标注；凡预注册未给出逐条判据者，本协议的操作化定义必须在
@@ -200,7 +200,7 @@ gold fixed（参考答案）/ gold 官方测试 / 最终生成测试（检出裁
 1. **裁决人**：≥2 名，均须具备 Python 阅读能力；**互不沟通、互不可见对方判定**。
 2. **独立性**：每人拿到**同一份工作表**的**独立副本**（各自填写"人工判定"列；
    建议文件名 `e7_review_worksheet_rater<A|B>.md`，但**不得**修改
-   `experiments/results/main_batch/e7_review_worksheet.md` 本体——它是备料工件）。
+   `（工件已清除）` 本体——它是备料工件）。
 3. **盲法**：候选行来自 aitester 臂（单一臂），故**无臂盲**可言；能做的盲法是
    **先生成判定、后看聚合统计**——裁决人不得在完成全部行之前查看任何汇总指标
    （含漏斗分层占比、`patch_evidence_level` 分布）。
@@ -286,7 +286,7 @@ p_e = (1/N²) * Σ_i (n_i+ * n_+i)            # 期望一致率（行边际 × �
       追加一条。
 - [ ] **步骤 1（重建候选清单）**：按 §2 命令重跑抽样（路径 A 或 B），核对行数与
       `patch_plausible=1` 框一致；如不一致，按 §2"抽样框完整性前提"登记差异。
-- [ ] **步骤 2（备料）**：以 `experiments/results/main_batch/e7_review_worksheet.md`
+- [ ] **步骤 2（备料）**：以 `（工件已清除）`
       为模板生成/复用工作表；确认每节四段素材与 diff 段完整（材料缺失行记"不可判"）。
       判定载体改用 §7.1 的 CSV 录入表（6 份空白表已备料，判定列全空）。
 - [ ] **步骤 3（独立判定）**：两名裁决人各持独立副本完成全部行；完成后各自固化
@@ -295,7 +295,7 @@ p_e = (1/N²) * Σ_i (n_i+ * n_+i)            # 期望一致率（行边际 × �
 - [ ] **步骤 4（合并与信度）**：第三方合并 → 计算首轮 `p_o` / `p_e` / κ / bootstrap CI /
       5×5 矩阵（脚本入库；即 §7.1 的 `merge`，工件为 `E7_KAPPA.json` + `E7_KAPPA.md`）。
 - [ ] **步骤 5（冲突解决）**：按 §5 讨论 → 必要时第三裁决人 → 形成终判。
-- [ ] **步骤 6（结果登记）**：把终判回填 `experiments/results/main_batch/e7_repair_sample_candidates.md`
+- [ ] **步骤 6（结果登记）**：把终判回填 `（工件已清除）`
       的"人工判定"列（工作表表尾原文要求）；按 §1 修订后的判定规则更新
       `docs/preregistration.md` 执行记录表 E7 行；追加全局决策日志。
       **注**：以上三个文件均不在本协议作者的写权限范围内，须由工件所有者执行。
@@ -336,7 +336,7 @@ p_e = (1/N²) * Σ_i (n_i+ * n_+i)            # 期望一致率（行边际 × �
 **必须**连同 §0 的状态声明一起改写，否则测试红（预期会红的反面锁定，与 §2.1 的嵌套性锁同类）。
 
 > **填表位置纪律（AA 轮新增，与工件清单有关）**：这 6 份空白表已进
-> `experiments/results/main_batch/SHA256SUMS`（2040 项，`--verify` 为 CI 步骤），
+> `（工件已清除）`（2040 项，`--verify` 为 CI 步骤），
 > 因此**它们是受清单校验的备料工件**：裁决人须把副本拷到裁决批次目录后再填写，
 > 不得原地改写 `main_batch/` 内的空白表——原地填写会让 `checksum_results --verify`
 > 直接判红（内容不符）。填完的两份表与 `merge` 工件一并落在

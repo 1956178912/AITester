@@ -1924,9 +1924,16 @@ def _runtime_probe_backend(agent: Any, result: dict[str, Any]) -> str:
     （local / venv）才允许重放；Docker / 内核沙箱 / 隔离拒绝一律返回不可用
     档位，由 `capture_failure_snapshot` 拒绝启动子进程（宁缺不降级）。
 
+    R01（2026-10-23 全量集中复审 P1）：内核沙箱档位必须优先读不可变执行
+    结果 `result["kernel_sandbox_obs"]`——executor 在正常成功/失败返回前会
+    清除实例级 `_kernel_sandbox_executable` / `_kernel_sandbox_obs`（防下次
+    调用透传旧观测），后端推导若仍读实例属性，内核沙箱内正常 rc1（真实断言
+    失败）会被误判回 local/venv，探针以宿主解释器重放。实例属性仅作模拟
+    agent / 旧路径兼容回退，且不覆盖 result 中的执行证据。
+
     Args:
         agent: 执行器实例（读 use_docker / use_venv / 内核沙箱观测）。
-        result: 执行结果（读 error_info.type 识别隔离拒绝）。
+        result: 执行结果（读 kernel_sandbox_obs 观测层与 error_info.type）。
 
     Returns:
         "local" / "venv" / "docker" / "kernel" / "refused"。
@@ -1935,6 +1942,10 @@ def _runtime_probe_backend(agent: Any, result: dict[str, Any]) -> str:
     if err_type in ("docker_unavailable", "kernel_sandbox_unavailable", "sandbox_unavailable"):
         # 显式隔离拒绝之后不得在宿主重执行（威胁模型 T4：不可用即拒绝）
         return "refused"
+    _ks_obs = (result or {}).get("kernel_sandbox_obs") or {}
+    if _ks_obs and str(_ks_obs.get("backend") or "none") != "none" and bool(_ks_obs.get("supported")):
+        # 主执行确在内核沙箱内运行（seatbelt / landlock_bwrap），探针不得降级宿主重放
+        return "kernel"
     if getattr(agent, "use_docker", False):
         return "docker"
     if getattr(agent, "_kernel_sandbox_executable", None):
@@ -2355,7 +2366,23 @@ def _run_patch_resample(
             )
             try:
                 _result = resampler._call_llm_with_cache(strict_prompt, temperature=_patch_resample_temperature())
-                _extracted = extract_code_block(_result or "", language="python")
+                # DebuggerAgent 的 system prompt 要求 JSON 输出，真跑返回的是
+                # {"...","patch":"```python..."} 信封。直接对信封提取代码块会因
+                # JSON 转义换行（字面 \n）匹配不到围栏而把整段 JSON 当作补丁，
+                # 契约检查必然拒绝 → 重采样永不生效。先解信封取 patch 字段，
+                # 非信封（纯代码）才回退到原文提取。
+                from src.utils.helpers import extract_json_object
+
+                _candidate = _result or ""
+                try:
+                    _payload = extract_json_object(_candidate)
+                except ValueError:
+                    _payload = None
+                if isinstance(_payload, dict):
+                    _patch_field = _payload.get("patch")
+                    if isinstance(_patch_field, str) and _patch_field.strip():
+                        _candidate = _patch_field
+                _extracted = extract_code_block(_candidate, language="python")
                 if not _extracted:
                     return None
                 # 二次静态验证：必须能 ast.parse 且不破坏命名契约

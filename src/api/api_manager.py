@@ -29,7 +29,7 @@
 使用示例：
     from src.api.api_manager import APIManager
     manager = APIManager()
-    result = manager.call(messages=[...], model="qwen-max")
+    result = manager.call(messages=[...], model="deepseek-flash")
 """
 # ruff: noqa: T201  — 本文件为 CLI 用户可见的报表/自检输出（print 属有意行为，非库代码副作用）
 
@@ -648,8 +648,7 @@ class APIManager:
         P0 1.2 复杂度感知路由：complexity_class 非 None 时，在 health_nodes 中
         优先选择与复杂度档位匹配的 LLM 实例（同名模型多 provider 端点场景下，
         高档位任务优先选 cost_weight 高的实例 = 更强 / 更贵端点；低档位优先
-        选 cost_weight 低的实例 = 省钱端点）。模型名不变（仍为 agnes-3.0-flash），
-        变的是实例档位。未配置多实例时降级为默认策略（历史行为）。
+        选 cost_weight 低的实例 = 省钱端点）。模型名不变，变的是实例档位。未配置多实例时降级为默认策略（历史行为）。
         """
         if complexity_class is not None and not model:
             node = self._select_node_by_complexity(complexity_class)

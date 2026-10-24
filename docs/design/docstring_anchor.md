@@ -15,7 +15,7 @@
 df_spec 臂（A-10）把 Generator prompt 的目标代码块替换为 Planner 计划子集
 （signature + `logic_analysis`），预期切断 oracle-from-implementation。实测
 **显著为负**：df_spec 54.3%（19/35）vs df 77.8%（28/36），δ=−25.7pp，双向
-精确 p=0.0117（`experiments/results/emse_df_spec_20261016/`）。
+精确 p=0.0117（`（工件已清除）`）。
 
 机制假设（独立评审 §6 P1）：Planner 的 `logic_analysis` 是对**缺陷代码**的
 再描述，约一半概率把缺陷行为固化成预期——这不是"独立规格"，而是
@@ -87,8 +87,8 @@ QuixBugs 41 个缺陷程序**没有函数 docstring**，但 **40/41** 个程序�
 | 默认（doc） | `DOCSTRING_ANCHOR_TABLE.json` | 人类规格（node.py 空串条目） | (a) |
 | `--union` | `DOCSTRING_ANCHOR_TABLE_UNION.json` | 人类规格 + 命中条目的 Planner `logic_analysis` | (b) |
 
-默认落点 `experiments/results/emse_docstring_anchor_20261017/`；union 默认读
-既有 Planner 锚表 `experiments/results/emse_spec_anchor_20261016/SPEC_ANCHOR_TABLE.json`
+默认落点 `（工件已清除）`；union 默认读
+既有 Planner 锚表 `（工件已清除）`
 （`--planner-table` 可覆盖）。QuixBugs 实测：doc 40/41 有 human_spec；union
 **41/41** 命中 Planner 子句（Planner 锚表对 QuixBugs 50 任务全覆盖）。
 
@@ -170,7 +170,7 @@ doc/union 两条 replace 臂几乎重合、且都**移除了实现代码**——
 主因、而非锚不独立"目前只有单批描述性证据支撑（replace 两臂重合），不足以
 完成因果归因，也不足以排除"锚不独立"——需机制消融验证后才可作为解释使用，
 不得表述为因果定论（详见 `docs/PROJECT_STATUS_REGISTER.md` M-4 行 2026-10-18
-修订与 `docs/reviews/INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-18.md` 文首勘误注记）。
+修订与 INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-18（分册已删除） 文首勘误注记）。
 
 **增广是这一解释的直接可证伪预测**：保留完整缺陷代码，把人类规格锚作为
 **独立 prompt 段并列追加**（不替换代码）。

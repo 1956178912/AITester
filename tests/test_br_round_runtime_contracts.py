@@ -73,6 +73,38 @@ class TestProbeBackendDerivation:
             (_FakeAgent(kernel="sandbox-exec"), {}, "kernel"),
             (_FakeAgent(use_venv=True), {}, "venv"),
             (_FakeAgent(), {}, "local"),
+            # R01（2026-10-23 全量集中复审 P1）：executor 返回前已清除实例级
+            # _kernel_sandbox_executable / _kernel_sandbox_obs，真实交接只携带
+            # 不可变 result["kernel_sandbox_obs"]——必须据此判 kernel，不得回落
+            # local/venv 让探针以宿主解释器重放。
+            (
+                _FakeAgent(),
+                {"kernel_sandbox_obs": {"backend": "seatbelt", "supported": True}},
+                "kernel",
+            ),
+            (
+                _FakeAgent(),
+                {"kernel_sandbox_obs": {"backend": "landlock_bwrap", "supported": True}},
+                "kernel",
+            ),
+            # venv 配置也不能覆盖 result 中的内核沙箱执行证据
+            (
+                _FakeAgent(use_venv=True),
+                {"kernel_sandbox_obs": {"backend": "seatbelt", "supported": True}},
+                "kernel",
+            ),
+            # backend=none / supported=False 的观测层不代表内核沙箱实际生效
+            (_FakeAgent(), {"kernel_sandbox_obs": {"backend": "none", "supported": False}}, "local"),
+            (_FakeAgent(), {"kernel_sandbox_obs": {"backend": "seatbelt", "supported": False}}, "local"),
+            # 内核观测存在但显式隔离拒绝仍优先 refused（T4：不可用即拒绝）
+            (
+                _FakeAgent(),
+                {
+                    "error_info": {"type": "kernel_sandbox_unavailable"},
+                    "kernel_sandbox_obs": {"backend": "seatbelt", "supported": True},
+                },
+                "refused",
+            ),
         ],
     )
     def test_backend_matrix(self, agent, result, expected):

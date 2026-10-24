@@ -2,7 +2,7 @@
 
 - 日期：2026-10-07（批次 I，用户 scope 级拍板）
 - 状态：已采纳（Accepted）
-- 关联：ADR-0016（编排定位重述）、ADR-0015（检出优先协议）、ADR-0003（默认关口径）、`src/agents/fault_localizer.py`、`src/agents/fl_spectral.py`、`experiments/results/main_batch/statistical_report_e2_iter.md`
+- 关联：ADR-0016（编排定位重述）、ADR-0015（检出优先协议）、ADR-0003（默认关口径）、`src/agents/fault_localizer.py`、`src/agents/fl_spectral.py`、`（工件已清除）`
 
 ## 背景（Context）
 

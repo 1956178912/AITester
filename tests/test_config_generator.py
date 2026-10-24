@@ -16,27 +16,13 @@ from src.config.config_generator import (
 class TestProviderTemplates:
     """测试 PROVIDER_TEMPLATES 数据"""
 
-    def test_aliyun_bailian_template(self):
-        tmpl = PROVIDER_TEMPLATES["aliyun_bailian"]
-        assert "base_url" in tmpl
-        assert "description" in tmpl
-        assert "dashscope" in tmpl["base_url"]
-
-    def test_agnes_domestic_template(self):
-        tmpl = PROVIDER_TEMPLATES["agnes_domestic"]
-        assert "api.agnes-ai.cn" in tmpl["base_url"]
-
-    def test_agnes_international_template(self):
-        tmpl = PROVIDER_TEMPLATES["agnes_international"]
-        assert "apihub.agnes-ai.com" in tmpl["base_url"]
-
-    def test_bigmodel_template(self):
-        tmpl = PROVIDER_TEMPLATES["bigmodel"]
-        assert "bigmodel.cn" in tmpl["base_url"]
-
     def test_deepseek_template(self):
         tmpl = PROVIDER_TEMPLATES["deepseek"]
         assert "deepseek.com" in tmpl["base_url"]
+
+    def test_only_deepseek_provider_registered(self):
+        """2026-10-23 配置要求：项目只保留 DeepSeek 官方 provider。"""
+        assert set(PROVIDER_TEMPLATES) == {"deepseek"}
 
     def test_get_unknown_provider_returns_empty(self):
         result = PROVIDER_TEMPLATES.get("nonexistent_provider", {})
@@ -56,8 +42,7 @@ class TestCommonModels:
 
     def test_deepseek_v41_flash_is_the_only_model(self):
         """2026-10-09 配置要求：仅保留用户配置的 DeepSeek V4.1 Flash（官方 API
-        现行 model 参数写法为 `deepseek-flash`），其余 qwen / glm / kimi /
-        agnes / deepseek-chat 等条目已删除。"""
+        现行 model 参数写法为 `deepseek-flash`）。"""
         names = [m["name"] for m in COMMON_MODELS]
         assert names == ["deepseek-flash"]
         for model in COMMON_MODELS:
@@ -74,26 +59,15 @@ class TestGenerateEnvTemplate:
 
     def test_template_contains_api_key_placeholders(self):
         """模板变量名与 generate_batch_config 的 {PROVIDER}_API_KEY 推导同源（全名）。
-        2026-10-09 起目录仅保留 DeepSeek provider（与 COMMON_MODELS 对齐），
-        其余 provider 的占位符已删除。"""
+        2026-10-23 起仅保留 DeepSeek 官方 provider，模板只有一条 API Key 占位符。"""
         result = generate_env_template()
         assert "DEEPSEEK_API_KEY=your-deepseek-api-key-here" in result
-        # 已删除 provider 的中间变量不再出现
-        assert "ALIYUN_BAILIAN_API_KEY=your-aliyun-api-key-here" not in result
-        assert "AGNES_DOMESTIC_API_KEY=your-agnes-api-key-here" not in result
-        assert "AGNES_INTERNATIONAL_API_KEY=your-agnes-international-api-key-here" not in result
-        assert "BIGMODEL_API_KEY=your-bigmodel-api-key-here" not in result
-        # 旧短名变量已废弃，不再出现（与批处理脚本的推导名对齐）
-        assert "ALIYUN_API_KEY=your-aliyun" not in result
-        assert "AGNES_API_KEY=your" not in result
+        assert result.count("_API_KEY=your-") == 1
 
     def test_template_contains_model_examples(self):
         result = generate_env_template()
         assert "deepseek-flash" in result
-        # 已删除 provider 的模型示例不再出现
-        assert "qwen-max" not in result
-        assert "agnes-3.0-flash" not in result
-        assert "glm-4-flash" not in result
+        assert result.count("LLM_1_MODEL_NAME=") == 1
 
     def test_generate_template_writes_to_file(self, tmp_path):
         output = str(tmp_path / "test_template.env")
@@ -198,7 +172,7 @@ class TestGenerateBatchConfigScript:
 
     def test_script_env_var_name_matches_provider(self, tmp_path):
         """M20 回归：环境变量名按 provider 推导（{PROVIDER}_API_KEY），
-        此前硬编码 ALIYUN_API_KEY 与 provider aliyun_bailian 的键名失配导致永远取不到。"""
+        此前硬编码短名变量与 provider 全名键名失配导致永远取不到。"""
         import subprocess
         import sys
 
@@ -208,14 +182,13 @@ class TestGenerateBatchConfigScript:
 
         models_file = tmp_path / "models.json"
         models_file.write_text(
-            json.dumps([{"name": "qwen-max", "provider": "aliyun_bailian", "base_url": "https://x/v1"}]),
+            json.dumps([{"name": "deepseek-flash", "provider": "deepseek", "base_url": "https://api.deepseek.com/v1"}]),
             encoding="utf-8",
         )
         out_file = tmp_path / ".env.local"
 
         env = {k: v for k, v in os.environ.items() if not k.endswith("_API_KEY")}
-        env["ALIYUN_BAILIAN_API_KEY"] = "sk-real-key-123"
-        env.pop("ALIYUN_API_KEY", None)
+        env["DEEPSEEK_API_KEY"] = "mock-key"
 
         result = subprocess.run(
             [sys.executable, str(script_path), "--output", str(out_file), "--models", str(models_file)],
@@ -224,4 +197,4 @@ class TestGenerateBatchConfigScript:
             env=env,
         )
         assert result.returncode == 0, result.stderr
-        assert "LLM_1_API_KEY=sk-real-key-123" in out_file.read_text(encoding="utf-8")
+        assert "LLM_1_API_KEY=mock-key" in out_file.read_text(encoding="utf-8")

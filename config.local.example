@@ -29,8 +29,8 @@ LLM_1_API_KEY=<YOUR_DEEPSEEK_API_KEY_HERE>
 LLM_1_BASE_URL=https://api.deepseek.com/v1
 LLM_1_MODEL_NAME=deepseek-flash
 
-# 其他 provider（阿里云百炼 / Agnes / 智谱 BigModel 等）已按 2026-10-09
-# 配置要求移除，如需再加回：复制上方三行，改为 LLM_2_* / LLM_3_* 递增编号。
+# 其他 LLM 厂商配置已按 2026-10-09 与 2026-10-23 要求删除；如需多端点，
+# 复制上方三行改为 LLM_2_* / LLM_3_* 递增编号（端点仍须为 DeepSeek 官方）。
 
 
 # ─── 全局温度参数（可选，未配置则默认 0.2）────────────────────────────────────

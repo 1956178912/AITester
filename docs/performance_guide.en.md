@@ -430,18 +430,17 @@ snakeviz profile.prof
 
 ### 7.1 Background
 
-Before optimization, every LLM call created a new client instance (`ChatOpenAI` / `ZhipuAiClient`), meaning the underlying HTTP connection pool was created repeatedly. With high iteration counts (`MAX_ITERATIONS=3` × many tasks), the connection-establishment overhead accumulates significantly.
+Before optimization, every LLM call created a new client instance (`ChatOpenAI`), meaning the underlying HTTP connection pool was created repeatedly. With high iteration counts (`MAX_ITERATIONS=3` × many tasks), the connection-establishment overhead accumulates significantly.
 
 ### 7.2 Implementation
 
-`src/agents/base_agent.py` provides two client caches that reuse by configuration key:
+`src/agents/base_agent.py` provides a client cache that reuses by configuration key:
 
 | Path | Cache Key | Limit | Eviction Policy |
 |------|-----------|-------|-----------------|
 | OpenAI-compatible (`ChatOpenAI`) | `(model_name, temperature, api_key, base_url)` | 16 | FIFO |
-| zai SDK (`ZhipuAiClient`) | `(api_key, base_url)` | 16 | FIFO |
 
-Entry functions: `_get_or_create_chat_client()` and `_get_or_create_zai_client()`. Multiple calls under the same configuration share the same client (and its connection pool); different configurations do not affect each other.
+Entry function: `_get_or_create_chat_client()`. Multiple calls under the same configuration share the same client (and its connection pool); different configurations do not affect each other.
 
 ### 7.3 Notes
 
@@ -614,7 +613,7 @@ In all three modes (local / venv / Docker), ExecutorAgent strips LLM API credent
 All three paths funnel through `scrub_os_environ()` in `src/utils/credential_scrub.py` (single implementation, no list drift):
 - **Dynamic pattern**: `LLM_\d+_API_KEY` / `LLM_\d+_BASE_URL` (N = 1-32, aligned with the LLM-provider scan range in `config.py`) — covers every numbered provider such as `LLM_1_API_KEY`. Previously the venv/Docker paths inherited the host `os.environ` verbatim and the local path popped only 7 hard-coded vars (missing the `LLM_N_*` family); now scrubbed dynamically across all three.
 - **Common SDK credentials (fixed list, historical)**: `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `ANTHROPIC_API_KEY` / `API_KEY` / `LLM_API_KEY` / `LLM_CONFIG_API_KEY`.
-- **P0 hardening (2026-09-26 review round)**: the fixed names anchored to the full string (`^OPENAI_API_KEY$`) missed the multi-endpoint numbered naming actually present in `.env` (`OPENAI_API_KEY_2/3`, `OPENAI_BASE_URL_2/3`), so those credentials reached the code-under-test subprocess verbatim (an execution vector + leak surface). Now widened with numbered-variant wildcards `OPENAI_(API_KEY|BASE_URL)_\d+` plus provider intermediate vars (`ALIYUN_BAILIAN_API_KEY` / `AGNES_{DOMESTIC|INTERNATIONAL}_API_KEY` / `BIGMODEL_API_KEY` / `DEEPSEEK_API_KEY`, keys coupled with `PROVIDER_TEMPLATES` in `config_generator.py` to prevent list drift), covering the batch-script derivation surface.
+- **P0 hardening (2026-09-26 review round)**: the fixed names anchored to the full string (`^OPENAI_API_KEY$`) missed the multi-endpoint numbered naming actually present in `.env` (`OPENAI_API_KEY_2/3`, `OPENAI_BASE_URL_2/3`), so those credentials reached the code-under-test subprocess verbatim (an execution vector + leak surface). Now widened with numbered-variant wildcards `OPENAI_(API_KEY|BASE_URL)_\d+` plus provider intermediate vars (`DEEPSEEK_API_KEY` / `DEEPSEEK_BASE_URL`, keys coupled with `PROVIDER_TEMPLATES` in `config_generator.py` to prevent list drift), covering the batch-script derivation surface.
 
 ## 11. SWE-bench repo-level verification venv isolation (P1, 2026-09-25)
 

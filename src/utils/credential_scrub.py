@@ -66,19 +66,13 @@ except ImportError:  # config_generator 缺失时回退空（守卫脚本会报�
     pass
 
 # provider 中间变量的 API Key / Base URL 模式（{PROVIDER}_API_KEY /
-# {PROVIDER}_BASE_URL，键全名大写 + 编号变体通配；_d 转义全名内的
-# 非单词字符，如 AGNES_DOMESTIC → AGNES_DOMESTIC 无特殊字符恒等）
+# {PROVIDER}_BASE_URL，键全名大写 + 编号变体通配）
 _PROVIDER_KEY_PATTERNS: tuple[re.Pattern, ...] = tuple(
     re.compile(rf"^{re.escape(provider.upper())}_(API_KEY|BASE_URL)(_{{0,1}}\d+)?$") for provider in _PROVIDER_BASE_URLS
 )
-# 兼容口径：历史固定名单（ALIYUN_BAILIAN/AGNES_*/BIGMODEL/DEEPSEEK）已被
-# 动态推导覆盖；保留显式回退清单仅在 PROVIDER_TEMPLATES 不可用时生效
-_PROVIDER_KEY_PATTERNS_FALLBACK = (
-    re.compile(
-        r"^(ALIYUN_BAILIAN_API_KEY|AGNES_(DOMESTIC|INTERNATIONAL)_API_KEY|BIGMODEL_API_KEY|DEEPSEEK_API_KEY)"
-        r"(_\d+)?$"
-    ),
-)
+# 兼容口径：动态推导覆盖时无需静态名单；仅在 PROVIDER_TEMPLATES 不可用时
+# 回退到 DeepSeek 官方变量名
+_PROVIDER_KEY_PATTERNS_FALLBACK = (re.compile(r"^DEEPSEEK_API_KEY(_\d+)?$"),)
 if not _PROVIDER_KEY_PATTERNS:
     _PROVIDER_KEY_PATTERNS = _PROVIDER_KEY_PATTERNS_FALLBACK
 
@@ -156,8 +150,7 @@ def provider_scrub_names() -> list[str]:
 
     返回 PROVIDER_TEMPLATES 键对应的 `{PROVIDER}_API_KEY` /
     `{PROVIDER}_BASE_URL` 环境变量名列表；PROVIDER_TEMPLATES 不可用时
-    返回历史固定名单（ALIYUN_BAILIAN / AGNES_DOMESTIC / AGNES_INTERNATIONAL
-    / BIGMODEL / DEEPSEEK）。
+    返回 DeepSeek 官方变量名。
     """
     if _PROVIDER_BASE_URLS:
         names: list[str] = []
@@ -167,10 +160,6 @@ def provider_scrub_names() -> list[str]:
             names.append(f"{upper}_BASE_URL")
         return names
     return [
-        "ALIYUN_BAILIAN_API_KEY",
-        "AGNES_DOMESTIC_API_KEY",
-        "AGNES_INTERNATIONAL_API_KEY",
-        "BIGMODEL_API_KEY",
         "DEEPSEEK_API_KEY",
     ]
 

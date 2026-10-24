@@ -1,6 +1,0 @@
-{"event": "task_start", "task": "<REDACTED_KEY>", "ts": 1790669488.8506198, "meta": {"dataset_task_id": "synthetic__hard_nested_iter_mixed_0024", "baseline": "aitester", "target_function": "collect"}}
-{"event": "node", "task": "<REDACTED_KEY>", "node": "planner", "ts": 1790669488.870579, "output": {"function_name": "collect", "test_cases": 0}, "decision": "plan_complete", "duration_ms": 0.58}
-{"event": "node", "task": "<REDACTED_KEY>", "node": "generator", "ts": 1790669521.4632692, "output": {"generated_test_len": 4861}, "decision": "generated"}
-{"event": "node", "task": "<REDACTED_KEY>", "node": "executor", "ts": 1790669522.012654, "output": {"passed": true, "coverage": 71.0, "failed_cases": 0}, "decision": "PASS", "duration_ms": 548.06, "iteration": 0}
-{"event": "node", "task": "<REDACTED_KEY>", "node": "_should_debug", "ts": 1790669522.075132, "output": {"reason": "test_passed"}, "decision": "done"}
-{"event": "task_end", "task": "<REDACTED_KEY>", "ts": 1790669522.0755541, "passed": true, "duration_s": 33.22, "token_usage": {"input_tokens": 2849, "output_tokens": 1192, "total_tokens": 4041, "llm_calls": 1, "by_model": {"kimi-k2.5": 4041}}}

@@ -275,7 +275,7 @@ Markdown 是同一事实源的人读镜像：测量口径、运行环境、总�
 
 - 有效分母不变（215）；invalid 8 / timeout 1 不变（不进分母）；
 - 共 **27 个 survived→killed**（无反向翻转），逐变异体到击杀测试的映射见
-  `experiments/results/self_mutation_20261017/survivor_attribution.md` §2；
+  `（工件已清除）` §2；
 - 击杀测试文件 `tests/test_self_mutation_targets.py` 在**未变异代码**上全绿
   （与 `tests/test_self_mutation_tool.py` 合计 58 例，`-n 2` 通过），
   且全部 28 个候选击杀在预验证阶段实测 `rc==1`。
@@ -379,7 +379,7 @@ CI 建议（`.github/workflows/ci.yml`，放在 3.14 档 matrix 的独立 step �
 .venv/bin/python -m pytest tests/test_self_mutation_tool.py tests/test_self_mutation_targets.py -q
 ```
 
-工件清单（`experiments/results/self_mutation_20261017/`，gitignore 数据目录）：
+工件清单（`（工件已清除）`，gitignore 数据目录）：
 
 | 文件 | 内容 |
 | --- | --- |

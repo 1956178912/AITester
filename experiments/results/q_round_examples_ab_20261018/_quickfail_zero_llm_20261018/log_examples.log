@@ -1,8 +1,0 @@
-===== Q-2 examples A/B arm=examples =====
-START_ISO_UTC=2026-10-17T20:16:49Z
-ROOT=/Users/wangchenyu/Workspace/AITester-q2-examples-a48a53f HEAD=a48a53ffe1844d098b5a84e59ab70fb6375e661c
-CMD=/Users/wangchenyu/Workspace/AITester/.venv/bin/python -m experiments.run_benchmark --dataset quixbugs --task-limit 20 --seed 42 --baselines aitester --output-dir experiments/results/q_round_examples_ab_20261018/.staging_examples
-ENV_COMMON=AITESTER_PROFILE=logic TEMPERATURE=0.0 LLM_THINKING_MODE=disabled BENCHMARK_PARALLELISM=4 AITESTER_LLM_CACHE=0 COST_BUDGET_ENABLE=true COST_BUDGET_USD=1 AITESTER_BATCH_MAX_CALLS=200
-ENV_ARM=examples SPEC_ORACLE_EXEC_ENABLE=true SPEC_ORACLE_EXAMPLES_ENABLE=true AITESTER_CACHE_NAMESPACE=q_round_examples_ab_20261018_examples AITESTER_TRACE_DIR=experiments/results/q_round_examples_ab_20261018/traces_examples
-/Library/Frameworks/Python.framework/Versions/3.14/Resources/Python.app/Contents/MacOS/Python: can't open file '/Users/wangchenyu/Workspace/AITester-q2-examples-a48a53f/experiments/results/q_round_examples_ab_20261018/_helpers/limited_run.py': [Errno 2] No such file or directory
-END_ISO_UTC=2026-10-17T20:16:49Z END_EPOCH=1792268209 EXIT_CODE=2 WALL_SECONDS=0

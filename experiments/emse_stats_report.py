@@ -527,7 +527,7 @@ def cost_effectiveness_block(
     诚实条款（与价目表 _comment 同口径）：
     - 行的计费模型 = `token_usage.by_model` 的**单一**键（多模型混合行不猜，
       记 unpriceable）；该模型价目未登记（input/output 任一为 null）→ 不编造；
-    - **只把 USD 价目计入 `total_usd`**（AB-13）：改前实测 `qwen-long`（真表登记为 CNY 0.5/2.0）
+    - **只把 USD 价目计入 `total_usd`**（AB-13）：改前实测一条 CNY 价目（当时真表登记为 CNY 0.5/2.0）
       被原样累加进名为 `total_usd` 的字段（1M in + 1M out 读出 2.5），币种不参与判定；
       非 USD 与币种键缺席现在各归各的 reason 并剔除。字段名是 `usd` ⇒ 这里没有币种列可以
       交代，非 USD 一律剔除；`statistical_analysis.cost_analysis` 的成本表**带币种列**，

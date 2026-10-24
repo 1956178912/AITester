@@ -223,11 +223,11 @@ E5（模型梯度）为**探索性**，不受本文档约束，结果呈现时�
   降级为"残余语义等价抽样审计"，预期占比大幅缩水。
 - **成本**：人工约 1 天，零 LLM 成本（纯离线抽样 + 人工比对）。
 - **候选清单（AO 批已生成，2026-10-07）**：
-  `experiments/results/main_batch/e7_repair_sample_candidates.md`——
+  `（工件已清除）`——
   抽样脚本已对真实工件运行（seed=42，确定性，可复算），人工复核自该
   清单逐行执行，复核完成后按上方判定规则回填执行记录表。
   **对照式复核工作表（AP 批已生成，2026-10-07）**：
-  `experiments/results/main_batch/e7_review_worksheet.md`——每个候选节
+  `（工件已清除）`——每个候选节
   内嵌四段素材（生成补丁 / gold fixed / gold 官方测试 / 最终生成测试）
   与判定勾选栏；整文件替换口径下 patch 正文即补丁应用后完整文件，与
   gold fixed 逐行对照即可分类。复核结论仍以人工判定为准，工作表仅
@@ -304,9 +304,9 @@ E5（模型梯度）为**探索性**，不受本文档约束，结果呈现时�
 - 复算命令逐份写进报告头（既有 R2 协议）；
 - 成本口径：$/task 由 `experiments/price_table.json` 价目表驱动（AE2），
   E1/E2/E4 报告生成前补齐对应模型价目（含来源与生效日期）。AK 补注
-  （2026-10-06）：deepseek-flash / qwen-long 已按官方页登记（$/task 可
-  计，主模型 deepseek-flash 不受阻）；agnes-3.0-flash 无公开官方价维持
-  null，使用该模型的批次须先补登记。
+  （2026-10-06）：deepseek-flash 已按官方页登记（$/task 可计）。2026-10-23
+  按"仅保留 DeepSeek 官方"要求删除其余模型条目，表内现仅 deepseek-flash；
+  历史批次所用模型不再可计价，其 $/task 读数保留为历史登记。
 
 ## 偏差控制与诚实条款
 
@@ -321,11 +321,11 @@ E5（模型梯度）为**探索性**，不受本文档约束，结果呈现时�
 
 | 实验 | 状态 | 批次工件 | 主终点结果 | 判定 | 日期 |
 |------|------|----------|------------|------|------|
-| E1 | 已执行（12/12 有效，其中 2 任务 recursion_limit 触顶无终态，E1 后置修复，见文首注记） | `experiments/results/ab1_validation_e1/`（AITESTER_PROFILE=logic，seed 42，temp 0.0，git_dirty=False，deepseek-flash，87,495 tok） | spec_compile_rate 均值=0.367（n=10/12 可测）；伴随观测：detection=20.0%（2 例均 specific_red 门确认）、repair=0.0%、false_fix=80.0% | **保留**（≥0.3） | 2026-10-07 |
+| E1 | 已执行（12/12 有效，其中 2 任务 recursion_limit 触顶无终态，E1 后置修复，见文首注记） | `（工件已清除）`（AITESTER_PROFILE=logic，seed 42，temp 0.0，git_dirty=False，deepseek-flash，87,495 tok） | spec_compile_rate 均值=0.367（n=10/12 可测）；伴随观测：detection=20.0%（2 例均 specific_red 门确认）、repair=0.0%、false_fix=80.0% | **保留**（≥0.3） | 2026-10-07 |
 | E2+E3 | 已执行（首跑 + 迭代重跑各双种子 42/44 × 3 臂；迭代批逐位复现首跑主指标——temp 0.0 缓存命中确定性重放，本迭代为恰好一次，后续不再迭代） | 迭代批 `main_batch/benchmark_synthetic_20261007_181638.json` + `..._185941.json` + `statistical_report_e2_iter.md`；首跑 `..._161053.json` + `..._170147.json` + `statistical_report_e2.md` | 迭代终判：过红 88→31（降幅 64.8%）、抹红 28→2（降幅 92.9%）；aitester vs df δ=−0.3673 [−0.4552,−0.2785]（bayes_neg，与首跑逐位一致）；pooled detection：aitester 12.7% / plain_llm 1.7% / df 52.3%；repair 全线 0.0%；spec_compile_rate=0.212（灰区）；**FL@1 首度可测 19/53=35.8%**（gold diff 修复后）；mutation 可测 31/174 均值 0.767（保守口径）；触顶 16/174（56 上界下 df 臂失控回环仍在，如实披露） | H2a/H2b **不成立**（未归零；降幅均 ≥50% 但"恰好一次"迭代已用尽 → 按停止规则接受结果：门削减过红约 2/3、抹红约 93%）；H2c **"编排容器在检出口径下结构性劣后"结论最终确立**（ADR-0016 预写，可发表）；次要终点 repair 未破零；E3 非空率：fl 30% 可测（修复后）/mutation 18%（设计口径）/spec 91% | 2026-10-07 |
 | R4 A/B + QuixBugs 单臂（**预注册外调试豁免**，非 E4） | 已执行（R4 通道原型验证的副产品；synthetic 两臂系 **dirty 树跑批**、QuixBugs 两臂系干净树跑批） | `experiments/results/r4_batches/{r4_ab_arm_a,r4_ab_arm_b,r4_synth_arm_b2,r4_qb_arm_a,r4_qb_arm_b,loc_test_quix}`（2026-10-08 R2 入库，含 SHA256SUMS/README） | synthetic repair 8/50；QuixBugs A/B repair M1 可测口径 **37/41、36/41**（all-task 37/50、36/50） | R4 局部化约束**阴性**（A/B 无增益）；QuixBugs 单臂仅验证管道，**不构成 E4 正式执行** | 2026-10-08 |
-| E4 | **已执行（2026-10-09，双臂完整结算：`aitester` + `plain_llm_df`）** | `experiments/results/e6_a1_batches/e4_quixbugs_aitester/`（`benchmark_quixbugs_20261009_215514.json`） + `e4_quixbugs_plain_llm_df/`（`benchmark_quixbugs_20261009_223101.json`），各含 50 traces 与日志 | **41 缺陷程序口径：两臂 detection 均 0/41 = 0.0%**；aitester repair 35/40 = 87.5%、false_fix 2.5%、token/task 17,156、red_seen 40/41；df repair 0（无修复通道）、token/task 2,370、red_seen 41/41。**配对 McNemar（detection）：不一致对 = 0、p = 1.0000**（41/41 逐位一致）；贝叶斯 δ=+0.0000、95% CI [−0.0659, +0.0672]、P(\|δ\|≤ROPE)=0.8943 | **主终点失败**（双臂 `detection > 0` 均不成立）。**机制定案**：红测试普遍存在（red_seen 40–41/41）但**不特异**——F2P 三段判定第 2 段（fixed 上绿）不通过，故「0% 检出」的准确含义是**「红得不特异」**（断言错/过苛，或 30s 执行超时），与合成集 over-red 通道同源。**「修复依赖非 F2P 信号」假说被否证**：repair 由 gold 测试独立裁决，与生成测试通道不相交。**真实基准上编排 vs 纯提示 detection 无差异**（p=1.0）而编排贵 7.2× token。限定：两臂各自标准预算，非等预算对照 | 2026-10-09 |
-| E6 | **已执行（2026-10-09，两阶段：冷缓存 standard + matched）** | `experiments/results/e6_a1_batches/e6_phase1_standard_coldcache/`（standard 三臂）+ `e6_phase2_matched_coldcache/`（matched 两臂），含 SHA256SUMS/README | 四臂 detection：aitester standard 6.9%（6/87, 8,857 tok）· aitester matched 2.3%（2/87, 87/87 触顶）· df standard 31.0%（27/87, 2,586 tok）· df matched 26.4%（23/87, 2,602 tok） | **预算混杂被证否**：df(matched) vs aitester(standard) χ²=13.474 p=0.0002（BH q=0.0005；2026-10-19 F01 勘误：标准 BH、m=2 同族 p=[0.0002, 0.4795]→q=[0.0005, 0.4795]，旧非标准实现给 0.0002/1.0）显著；df 抬预算后**不消费增量**（2,586→2,602）且检出无显著变化（p=0.2888）→ **−28pp 归因编排结构，ADR-0016 结论加固**。限定：aitester(matched) 的 cap 低于其单任务需求（84/87 行触顶提前终止），该臂测的是「预算不足时编排的表现」，非严格等能量对比 | 2026-10-09 |
+| E4 | **已执行（2026-10-09，双臂完整结算：`aitester` + `plain_llm_df`）** | `（工件已清除）`（`benchmark_quixbugs_20261009_215514.json`） + `e4_quixbugs_plain_llm_df/`（`benchmark_quixbugs_20261009_223101.json`），各含 50 traces 与日志 | **41 缺陷程序口径：两臂 detection 均 0/41 = 0.0%**；aitester repair 35/40 = 87.5%、false_fix 2.5%、token/task 17,156、red_seen 40/41；df repair 0（无修复通道）、token/task 2,370、red_seen 41/41。**配对 McNemar（detection）：不一致对 = 0、p = 1.0000**（41/41 逐位一致）；贝叶斯 δ=+0.0000、95% CI [−0.0659, +0.0672]、P(\|δ\|≤ROPE)=0.8943 | **主终点失败**（双臂 `detection > 0` 均不成立）。**机制定案**：红测试普遍存在（red_seen 40–41/41）但**不特异**——F2P 三段判定第 2 段（fixed 上绿）不通过，故「0% 检出」的准确含义是**「红得不特异」**（断言错/过苛，或 30s 执行超时），与合成集 over-red 通道同源。**「修复依赖非 F2P 信号」假说被否证**：repair 由 gold 测试独立裁决，与生成测试通道不相交。**真实基准上编排 vs 纯提示 detection 无差异**（p=1.0）而编排贵 7.2× token。限定：两臂各自标准预算，非等预算对照 | 2026-10-09 |
+| E6 | **已执行（2026-10-09，两阶段：冷缓存 standard + matched）** | `（工件已清除）`（standard 三臂）+ `e6_phase2_matched_coldcache/`（matched 两臂），含 SHA256SUMS/README | 四臂 detection：aitester standard 6.9%（6/87, 8,857 tok）· aitester matched 2.3%（2/87, 87/87 触顶）· df standard 31.0%（27/87, 2,586 tok）· df matched 26.4%（23/87, 2,602 tok） | **预算混杂被证否**：df(matched) vs aitester(standard) χ²=13.474 p=0.0002（BH q=0.0005；2026-10-19 F01 勘误：标准 BH、m=2 同族 p=[0.0002, 0.4795]→q=[0.0005, 0.4795]，旧非标准实现给 0.0002/1.0）显著；df 抬预算后**不消费增量**（2,586→2,602）且检出无显著变化（p=0.2888）→ **−28pp 归因编排结构，ADR-0016 结论加固**。限定：aitester(matched) 的 cap 低于其单任务需求（84/87 行触顶提前终止），该臂测的是「预算不足时编排的表现」，非严格等能量对比 | 2026-10-09 |
 | E7 | 待人工复核（候选清单已生成，AO 批） | — | — | — | — |
 | E8 | 待预算授权（预注册已冻结，2026-10-18；预估 $6–9；ADR-0034 纪律：授权前不得开跑） | — | — | — | — |
 | **A1 消融（预注册外，2026-10-09 审查报告 §5 路径 A1）** | **执行中（2026-10-09，见下方 A1 设计声明）** | 待落盘 | — | **先声明后取数** | — |
@@ -411,7 +411,7 @@ E2 协议同参（logic 档 / 双门 / temp 0.0 / thinking disabled /
 在该范围内仍为零效应。**副产物**：该 39% 空计划率是 never-red 通道的**新候选真因**
 （优先级高于原 A1/A2/A3）。
 
-**工件**：`experiments/results/e6_a1_batches/a1_strip_seed42/`（含 SHA256SUMS/README）。
+**工件**：`（工件已清除）`（含 SHA256SUMS/README）。
 
 ### E6 阶段 1 执行增补（2026-10-09，**数据产生前登记**）
 
@@ -441,7 +441,7 @@ E2 协议同参（logic 档 / 双门 / temp 0.0 / thinking disabled /
 
 **v2 修正口径指针（2026-10-08 R2，R27/R13）**：上表 E2+E3 行"repair 全线 0.0%"
 系 ADR-0021 围栏伪影 + **第三起伪影（跨文件任务未物化，R27）** 双重受染的原始值。
-R27 修复后按修正口径重放（`experiments/results/main_batch/corrected_report_v2.md`）：
+R27 修复后按修正口径重放（`（工件已清除）`）：
 R-P0-2 修正 repair **39.31%（57/145）**（v1 35.86%，52/145）；E1/E2 **54.72%（58/106）**
 （v1 48.11%，51/106）。对外引用一律以 v2 与
 `docs/design/repair_caliber_matrix.md` 口径矩阵为准（引用须注明分子/分母/oracle/臂）。

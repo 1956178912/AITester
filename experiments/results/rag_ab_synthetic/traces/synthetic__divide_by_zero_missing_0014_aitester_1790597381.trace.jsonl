@@ -1,6 +1,0 @@
-{"event": "task_start", "task": "<REDACTED_KEY>", "ts": 1790597381.700344, "meta": {"dataset_task_id": "synthetic__divide_by_zero_missing_0014", "baseline": "aitester", "target_function": null}}
-{"event": "node", "task": "<REDACTED_KEY>", "node": "planner", "ts": 1790597381.715919, "output": {"function_name": "divide", "test_cases": 6}, "decision": "plan_complete", "duration_ms": 0.43}
-{"event": "node", "task": "<REDACTED_KEY>", "node": "generator", "ts": 1790597385.5048609, "output": {"generated_test_len": 704}, "decision": "generated"}
-{"event": "node", "task": "<REDACTED_KEY>", "node": "executor", "ts": 1790597386.0323572, "output": {"passed": true, "coverage": 100.0, "failed_cases": 0}, "decision": "PASS", "duration_ms": 526.05, "iteration": 0}
-{"event": "node", "task": "<REDACTED_KEY>", "node": "_should_debug", "ts": 1790597386.032773, "output": {"reason": "test_passed"}, "decision": "done"}
-{"event": "task_end", "task": "<REDACTED_KEY>", "ts": 1790597386.033304, "passed": true, "duration_s": 4.33, "token_usage": {"input_tokens": 1219, "output_tokens": 287, "total_tokens": 1506, "llm_calls": 1, "by_model": {"agnes-3.0-flash": 1506}}}

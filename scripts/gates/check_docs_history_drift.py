@@ -130,10 +130,15 @@ def main() -> int:
     parser.add_argument("--threshold", type=float, default=10.0, help="漂移阈值（百分比，默认 10%%）")
     parser.add_argument("--strict", action="store_true", help="偏离超阈值时退出码 1（默认 warn-only 不阻断）")
     parser.add_argument(
-        "--warn-only", action="store_true", help="显式标记为 warning-only（与默认行为一致，便于 CI 可读性）"
+        "--warn-only",
+        action="store_true",
+        help="显式要求不阻断（与 --strict 互斥；不传时默认也不阻断）",
     )
     args = parser.parse_args()
-    return _check_history_drift(args.threshold, strict=args.strict)
+    if args.strict and args.warn_only:
+        print("[FAIL] --strict 与 --warn-only 互斥：一个要求阻断、一个要求不阻断")
+        return 2
+    return _check_history_drift(args.threshold, strict=args.strict and not args.warn_only)
 
 
 if __name__ == "__main__":

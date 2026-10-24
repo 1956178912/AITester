@@ -1,0 +1,30 @@
+# 门禁调用口径登记表（CG 轮：scripts/gates/check_invocation_caliber.py 判定面 2/3/4 的登记面）
+#
+# 语法：`<类别> <主体> <细节>  # 理由`——三段均不含空格；workflow 步骤主体用 `<文件>::<名称去空格>`。
+# 类别：flag-diff（同一脚本跨调用面有效开关不等）/ no-face（在盘但不在任何门禁调用面上）
+#       / manual-only（判据档开关无调用面也无代码锁）/ soft-layer（一个步骤叠多层不阻断写法）
+#       / dynamic-flag（命令行由 shell 变量注入，静态对账看不到实际口径）
+# 复算规则（本表不是垃圾桶，每条都被门禁读回去判）：
+#   无理由 / 畸形（段数≠3）/ 未知类别 / 重复登记 / 主体脚本已不在 scripts/gates/ 下
+#   / 理由没有 `@现场` / `@现场` 文件不存在 / 现场正文不含主体 / 登记的开关不出现在任何引用现场
+#   / 条目失效（该差异或开关现在真有了读者或调用面）
+# 各计一条红。理由里的开关要在现场里能找到：注释与分册里的理由不会被复算，本表里的会。
+
+flag-diff check_artifact_doc_consistency make:gates>wf:ci.yml  # 本地 `make gates` 不加 --require-coverage：coverage.xml 在本地常缺席，该支路按 [SKIP] 明示「未对账」而不是谎报 [OK]；CI 覆盖率作业加它把缺席变成红。两个口径都是刻意的，登记以防有人只改一侧。理由原写在 Makefile G6 注释里，注释不会被复算，故落表 @Makefile
+flag-diff check_prompt_artifacts make:prompt-artifacts-check>wf:ci.yml  # 本地目标 `make prompt-artifacts-check` 跑 --strict（清单缺席即红），但它不在 `make gates` 依赖里；ci.yml 的 prompt-artifacts 步骤裸跑，清单缺席只 [SKIP]。两侧都不是「链上强制档」，本轮不改判据，登记这个分叉 @Makefile
+flag-diff check_perf_regression make:perf-check>wf:perf.yml  # 本地 `make perf-check` 不带 --strict（只告警）；perf.yml 的 --strict 由 workflow_dispatch 输入注入，见本表 dynamic-flag 那条。跨机阈值本身就不宜阻断，登记两侧口径差而不是强行对齐 @.github/workflows/perf.yml
+
+no-face check_swe_bench_pro_ready programmatic-only  # SWE-bench Pro 数据前置门：判的是「数据集在不在、字段齐不齐」，由跑批入口以 import 方式调用（check_pro_ready），设计上不挂任何门禁面——挂上 make gates 反而会让没有数据集的机器永远红。调用现场 @experiments/run_full_stack_swe_bench_pro.py
+
+soft-layer ci.yml::Citation-link-check-(G15：非阻断周检) coe+shell-or  # 同一步骤叠了两层不阻断写法：continue-on-error 步骤键 + `|| echo "::warning …"` shell 兜底，脚本侧再跑 --no-strict 最松档。删掉任一层它仍然永不红，两层各自消失都无人知——这正是本轮要披露的形态。周检刻意不红 CI（引用缺失交人工核对），故登记而非拆层 @.github/workflows/ci.yml
+
+dynamic-flag perf.yml::Check-regression-vs-docs/performance_baseline.json-(non-blocking) STRICT_FLAG  # 命令行里的 --strict 来自 shell 变量 STRICT_FLAG，值由 workflow_dispatch 的 inputs.strict 决定（默认空串 = 只告警）。静态对账看不到实际口径，本步的阻断性因此按运行时输入计，不按文本计 @.github/workflows/perf.yml
+
+manual-only check_artifact_doc_consistency --skip-t10  # 调试档：传它这道门就跳过 T-10（通过率混淆）对账。链上与 CI 都跑全量档，本档无调用面也无代码锁——「关掉判据」的开关必须留名，且不得被挂上任何面。声明现场 @scripts/gates/check_artifact_doc_consistency.py
+manual-only check_artifacts_tracked --list  # 自检档：只打印清单后退出，不给退出码。链上与 CI 都跑判据档；本档仅维护者核对扫描面时手动传。声明现场 @scripts/gates/check_artifacts_tracked.py
+manual-only check_ast_parse_guards --list  # 自检档：「只列违规，不判退出码」（help 原文）。它让这道门不红，与 continue-on-error 同族，故必须登记谁在手动跑。声明现场 @scripts/gates/check_ast_parse_guards.py
+manual-only check_baseline --verify  # 加强档：额外跑全量 pytest 收集做一致性校验（help 原文标「慢」），链上与 CI 都不跑它——慢，且它的结论由 `make test-cov` 一侧给出。声明现场 @scripts/gates/check_baseline.py
+manual-only check_citations --allow-empty  # 放松档：扫描面为空时视为通过。默认是「为空即 FAIL」（防门禁因文件被删而静默失效），本档把那道防线关掉，所以任何面传它都必须先在表里留名。声明现场 @scripts/gates/check_citations.py
+manual-only check_perf_regression --update-baseline  # 改写判据档：跑它这道门把自己的判据文件（docs/performance_baseline.json）刷写掉后退出，只能手动——任何面自动传它，等于门禁自己改写自己。手动流程现场写在 perf.yml 的基线漂移处置注释里 @.github/workflows/perf.yml
+manual-only check_state_contract --list  # 自检档：仅打印声明键集与扫描范围，不判定。链上与 CI 都跑判据档。声明现场 @scripts/gates/check_state_contract.py
+manual-only check_zero_assert_tests --list  # 自检档：「只列违规不判退出码」（help 原文），传它这道 CI 阻断项就不阻断。声明现场 @scripts/gates/check_zero_assert_tests.py

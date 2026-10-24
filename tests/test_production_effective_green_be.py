@@ -77,6 +77,76 @@ class TestSharedPredicate:
         assert "effective_pass" in src
 
 
+class TestWarningBodyPollution:
+    """R04（2026-10-23 全量集中复审 P1）：标准 warning 正文不得冒充测试结果。
+
+    pytest 标准输出含 warnings summary 与源代码原文（官方文档可核）；旧共享
+    解析对整个输出 finditer 取首个计数匹配，warning 正文可制造假绿（反例 A）
+    或假红（反例 B）。修复后计数只从权威摘要行解析（剥掉计数 token 后只剩
+    分隔符的行，多条命中取最后一条），无权威摘要行 fail-closed 空 dict。
+
+    对应报告 M02 复现命令：A 当前 True/正确 False；B 当前 False/正确 True。
+    """
+
+    # 反例 A：warning 正文 "1 passed" + 真实全 skip（rc0）——不得假绿
+    _CASE_A = "warnings summary\nUserWarning: 1 passed\n=== 1 skipped, 1 warning in 0.01s ==="
+    # 反例 B：warning 正文 "1 failed validation" + 真实 1 passed（rc0）——不得假红
+    _CASE_B = "warnings summary\nUserWarning: 1 failed validation\n=== 1 passed, 1 warning in 0.01s ==="
+
+    def test_case_a_full_skip_not_poisoned_by_warning(self):
+        assert suite_has_effective_pass(self._CASE_A) is False
+        assert run_has_effective_pass(0, self._CASE_A) is False
+
+    def test_case_b_real_pass_not_poisoned_by_warning(self):
+        assert suite_has_effective_pass(self._CASE_B) is True
+        assert run_has_effective_pass(0, self._CASE_B) is True
+
+    def test_counts_from_authoritative_line_only(self):
+        from src.utils.pytest_output import pytest_summary_counts
+
+        assert pytest_summary_counts(self._CASE_A) == {"skipped": 1}
+        assert pytest_summary_counts(self._CASE_B) == {"passed": 1}
+
+    def test_warning_body_without_summary_line_fails_closed(self):
+        """无权威摘要行（warning 正文含计数）→ 空 dict，不判有效通过。"""
+        from src.utils.pytest_output import pytest_summary_counts
+
+        assert pytest_summary_counts("UserWarning: 1 passed\nUserWarning: 2 failed") == {}
+        assert suite_has_effective_pass("UserWarning: 1 passed") is False
+
+    def test_standard_full_output_still_parses(self):
+        """对照：完整标准输出（session 头 + warnings summary + 终末摘要）正常解析。"""
+        from src.utils.pytest_output import pytest_summary_counts
+
+        full = (
+            "============================= test session starts ==============================\n"
+            "platform darwin -- Python 3.14.6, pytest-9.1.1, pluggy-1.6.0\n"
+            "collected 2 items\n\n"
+            "test_x.py .s                                                      [100%]\n\n"
+            "=========================== warnings summary ===========================\n"
+            "test_x.py::test_a\n"
+            "  /tmp/test_x.py:3: UserWarning: 1 passed\n"
+            '    warnings.warn("1 passed")\n\n'
+            "========================= 1 passed, 1 skipped, 1 warning in 0.02s =========================\n"
+        )
+        assert pytest_summary_counts(full) == {"passed": 1, "skipped": 1}
+
+    def test_bare_summary_without_decorations_still_parses(self):
+        """对照：BE 既有夹具的裸摘要（-q 模式 / 单测拼接）保持可解析。"""
+        from src.utils.pytest_output import pytest_summary_counts
+
+        assert pytest_summary_counts("1 passed in 0.01s") == {"passed": 1}
+        assert pytest_summary_counts("2 passed, 1 skipped in 0.30s") == {"passed": 2, "skipped": 1}
+        assert pytest_summary_counts("1 xfailed in 0.01s") == {"xfailed": 1}
+
+    def test_last_summary_line_wins(self):
+        """多条摘要命中取最后一条（终末状态），不取 warning 正文或早期行。"""
+        from src.utils.pytest_output import pytest_summary_counts
+
+        output = "1 passed in 0.01s\n=== 1 failed in 0.01s ==="
+        assert pytest_summary_counts(output) == {"failed": 1}
+
+
 class TestDetectionGateEffectivePass:
     """门①：gold fixed 上 rc==0 但无有效通过 → unavailable。"""
 

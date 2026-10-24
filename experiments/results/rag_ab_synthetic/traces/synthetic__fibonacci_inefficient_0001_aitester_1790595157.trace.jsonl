@@ -1,6 +1,0 @@
-{"event": "task_start", "task": "<REDACTED_KEY>", "ts": 1790595157.022215, "meta": {"dataset_task_id": "synthetic__fibonacci_inefficient_0001", "baseline": "aitester", "target_function": null}}
-{"event": "node", "task": "<REDACTED_KEY>", "node": "planner", "ts": 1790595157.225779, "output": {"function_name": "fibonacci", "test_cases": 6}, "decision": "plan_complete", "duration_ms": 3.79}
-{"event": "node", "task": "<REDACTED_KEY>", "node": "generator", "ts": 1790595167.7302668, "output": {"generated_test_len": 1020}, "decision": "generated"}
-{"event": "node", "task": "<REDACTED_KEY>", "node": "executor", "ts": 1790595168.267073, "output": {"passed": true, "coverage": 100.0, "failed_cases": 0}, "decision": "PASS", "duration_ms": 535.36, "iteration": 0}
-{"event": "node", "task": "<REDACTED_KEY>", "node": "_should_debug", "ts": 1790595168.32272, "output": {"reason": "test_passed"}, "decision": "done"}
-{"event": "task_end", "task": "<REDACTED_KEY>", "ts": 1790595168.324039, "passed": true, "duration_s": 11.3, "token_usage": {"input_tokens": 2418, "output_tokens": 389, "total_tokens": 2807, "llm_calls": 1, "by_model": {"agnes-3.0-flash": 2807}}}

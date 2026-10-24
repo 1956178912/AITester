@@ -1,6 +1,0 @@
-{"event": "task_start", "task": "<REDACTED_KEY>", "ts": 1790669343.1047602, "meta": {"dataset_task_id": "synthetic__hard_iter_over_none_0009", "baseline": "aitester", "target_function": "expand_regions"}}
-{"event": "node", "task": "<REDACTED_KEY>", "node": "planner", "ts": 1790669343.123859, "output": {"function_name": "expand_regions", "test_cases": 6}, "decision": "plan_complete", "duration_ms": 0.26}
-{"event": "node", "task": "<REDACTED_KEY>", "node": "generator", "ts": 1790669363.090899, "output": {"generated_test_len": 2556}, "decision": "generated"}
-{"event": "node", "task": "<REDACTED_KEY>", "node": "executor", "ts": 1790669363.646587, "output": {"passed": true, "coverage": 80.0, "failed_cases": 0}, "decision": "PASS", "duration_ms": 554.16, "iteration": 0}
-{"event": "node", "task": "<REDACTED_KEY>", "node": "_should_debug", "ts": 1790669363.706454, "output": {"reason": "test_passed"}, "decision": "done"}
-{"event": "task_end", "task": "<REDACTED_KEY>", "ts": 1790669363.706843, "passed": true, "duration_s": 20.6, "token_usage": {"input_tokens": 2961, "output_tokens": 611, "total_tokens": 3572, "llm_calls": 1, "by_model": {"kimi-k2.5": 3572}}}

@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import ast
 import os
-import re
 import sys
 import time
 
@@ -250,39 +249,6 @@ class TestWorkflowDiagnosisKeywordRegex:
 
         for kw in ("AttributeError", "NameError", "SyntaxError"):
             assert not _diagnosis_hits_test_gen_keywords(f"xx {kw} xx"), f"M5 后 {kw} 不应命中"
-
-
-# ─── llm_client：zai 域名预编译正则等价性守卫 ────────────────────────────────
-
-
-class TestZaiDomainRegexEquivalence:
-    """_is_zai_compatible 预编译正则与历史 any(d in url) 口径逐样本等价。"""
-
-    def test_regex_equivalent_to_substring_scan(self):
-        import src.agents.llm_client as lc
-        from src.agents.llm_client import _is_zai_compatible
-
-        # 历史口径参照
-        legacy_domains = ["bigmodel.cn", "zhipuai"]
-        samples = [
-            "https://open.bigmodel.cn/api/paas/v4",
-            "https://open.bigmodel.cn/api/paas/v4/embeddings",
-            "https://api.zhipuai.cn",
-            "https://api.zhipuai.cn/v4",
-            "https://api.openai.com/v1",
-            "https://dashscope.aliyuncs.com/compatible-mode/v1",
-            "https://custom.host.example/zhipuai-proxy",  # 子串命中（历史口径同样命中）
-            "",
-        ]
-        for url in samples:
-            legacy = any(d in url for d in legacy_domains)
-            assert _is_zai_compatible(url) == legacy, url
-        # bigmodel.cn 的 "." 为字面匹配（正则已转义）：非域名变体不误命中，
-        # 同时不与历史子串扫描口径产生分歧
-        assert _is_zai_compatible("https://bigmodelXcn.example") is False
-        assert "bigmodelXcn.example" not in legacy_domains  # sanity: 历史口径同样不命中
-        # 模块级预编译正则确实存在（防止重构漂移回 list 重建）
-        assert isinstance(lc._ZAI_DOMAIN_RE, re.Pattern)
 
 
 # ─── 大文件 AST 解析量级守卫（宽松阈值，防量级回归）────────────────────────

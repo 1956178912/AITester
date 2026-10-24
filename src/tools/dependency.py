@@ -63,7 +63,7 @@ _venv_dir_locks_guard = threading.Lock()
 # PIP_PACKAGE_WHITELIST 环境变量（逗号分隔）可覆盖本清单。
 # PEP 503：pip 包名不区分大小写，匹配时统一 lower。
 # C-08 收尾（2026-10-09）：白名单默认开后，补充 requirements.lock 中
-# 的 LLM provider / 编排框架相关包（openai / zai-sdk / zhipuai /
+# 的 LLM provider / 编排框架相关包（openai /
 # langchain 族 / chromadb / langsmith / kubernetes 等）——这些是
 # LLM 测试生成 / 沙箱执行可能合理引入的依赖，默认放行避免正常依赖
 # 被误拒；tests/test_whitelist_provider_coverage.py 守卫该覆盖。
@@ -123,8 +123,6 @@ _PIP_PACKAGE_WHITELIST: frozenset[str] = frozenset(
         # LLM provider / 编排框架（C-08 收尾 2026-10-09：默认开后对齐
         # requirements.lock 的 provider 相关包，防正常依赖误拒）
         "openai",
-        "zai-sdk",
-        "zhipuai",
         "langchain",
         "langchain-core",
         "langchain-openai",

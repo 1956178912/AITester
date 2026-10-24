@@ -2,12 +2,12 @@
 
 缺陷形态（零 LLM；普查工具 `scripts/tools/by_analysis_flow_census.py`）：
 
-- 报告 `## 数据来源` 只列**纳入**的 110 份批次，此前四层文件级剔除
-  （数据集白名单 77 份 / 886 行、schema 不完备 59 份 / 2,463 行、读取/加载
+- 报告 `## 数据来源` 只列**纳入**的 109 份批次，此前四层文件级剔除
+  （数据集白名单 77 份 / 886 行、schema 不完备 53 份 / 2,323 行、读取/加载
   失败、未登记基线 300 行）与两层行级折叠（重复 task_id 6,449 行、字段
-  None 45/52）一层也不显示；
-- 读者看到“110 份 / n=187”无法核对 10,659 行里哪些行被哪条规则挡在门外，
-  也无法知道 7,010 行里 6,449 行被去重折叠——PRISMA 2020 流程图要求逐阶段
+  None 43/52）一层也不显示；
+- 读者看到“109 份 / n=187”无法核对 10,369 行里哪些行被哪条规则挡在门外，
+  也无法知道 6,860 行里 6,449 行被去重折叠——PRISMA 2020 流程图要求逐阶段
   数量与排除理由且与正文对账；Hurlbert（1984）伪重复要求 n 只数独立观测
   单元，折叠量必须披露。
 
@@ -16,8 +16,9 @@
 `## 数据来源` 子章节。加载器 `_load_batch_file` 的判定顺序、判定值与方向
 一处不动。
 
-锁的形状（沿用 BW/BX 纪律）：全归档读数（246 / 10,659 → 77 / 886 →
-59 / 2,463 → 110 / 7,310 → 7,010 → 6,449 → 561 …）是**实测读数**，登记在
+锁的形状（沿用 BW/BX 纪律）：全归档读数（239 / 10,369 → 77 / 886 →
+53 / 2,323 → 109 / 6,860 → 6,449 → 411 …；2026-10-23 provider 清理后重算）是
+**实测读数**，登记在
 手册并附复现命令，不在这里锁死（新批次一旦落盘就会漂移）。本文件锁的是：
 ①归层顺序与加载器一致、②文件级剔除分账与对账闭合、③白名单/混批口径、
 ④行级去重“最新批次优先且不看字段值”、⑤None 在去重后剔除、⑥报告面逐格
@@ -72,12 +73,12 @@ PINNED_BATCHES: dict[str, dict[str, Any]] = {
             "plain_llm_df": {"passed": 0, "detection_rate": 14, "repair_rate": 9},
         },
     },
-    "experiments/results/main_batch/benchmark_synthetic_20261001_112528.json": {
+    "experiments/results/e2e_llm_probes_20261017/05a_budget_usd/benchmark_quixbugs_20261017_232531.json": {
         "layer": "schema_incomplete",
         "info": {},
-        "rows": 10,
-        "per_baseline": {"aitester": 5, "plain_llm": 5},
-        "tracked_rows": 10,
+        "rows": 1,
+        "per_baseline": {"aitester": 1},
+        "tracked_rows": 1,
         "untracked": {},
     },
     "experiments/results/benchmark_examples_20260813_125502.json": {
@@ -484,6 +485,12 @@ class TestRenderingAndConsole:
 class TestPinnedBatches:
     @pytest.mark.parametrize("rel", sorted(PINNED_BATCHES))
     def test_layer_rows_and_row_accounting(self, rel: str, capsys: pytest.CaptureFixture[str]) -> None:
+        if not (ROOT / rel).is_file():
+            # CI 轮补遗（2026-10-24）：`benchmark_examples_20260813_125502.json` 属
+            # 2026-08-13 Agnes/GLM 时代批次，随非 DeepSeek 历史数据清除一并删除；
+            # 登记项保留（重新入库时本锁自动激活），前提缺失按 BZ 轮语料守卫纪律
+            # 显式具名 skip，不折叠成通过也不折叠成失败。
+            pytest.skip(f"PINNED_BATCHES 登记批次不在盘（非 DeepSeek 历史数据清除）：{rel}")
         expected = PINNED_BATCHES[rel]
         doc = json.loads((ROOT / rel).read_text(encoding="utf-8"))
         layer, info = _classify(doc)

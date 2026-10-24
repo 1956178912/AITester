@@ -78,9 +78,14 @@ class TestPricingEstimate:
         """未登记模型：不编造价格（None），由调用方记审计事件。"""
         assert pricing.estimate_usd("unknown-model", 100, 100) == (None, "unpriced")
 
-    def test_non_usd_currency_treated_unpriced(self) -> None:
-        """qwen-long 价目为 CNY → 无汇率事实源，不换算（诚实条款）。"""
-        usd, source = pricing.estimate_usd("qwen-long", 1_000_000, 0)
+    def test_non_usd_currency_treated_unpriced(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """非 USD 币种价目 → 无汇率事实源，不换算（诚实条款）。"""
+        monkeypatch.setattr(
+            pricing,
+            "load_price_table",
+            lambda: {"models": {"cny-model": {"input_per_mtok": 1.0, "output_per_mtok": 2.0, "currency": "CNY"}}},
+        )
+        usd, source = pricing.estimate_usd("cny-model", 1_000_000, 0)
         assert usd is None and source == "unpriced"
 
     def test_cost_usd_per_1k_fallback(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -268,14 +273,14 @@ class TestLlmClientUsdWiring:
         with pytest.raises(RuntimeError, match="预算记账异常"):
             _record_response_usage(self._usage(), "deepseek-flash")
 
-    def test_multi_provider_price_missing_policy_documented(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """多 provider 价格缺失策略：不编造价格、不误杀、审计可见（不是静默 0）。"""
+    def test_unpriced_model_policy_documented(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """未登记价目策略：不编造价格、不误杀、审计可见（不是静默 0）。"""
         from src.agents.llm_client import _record_response_usage
 
         monkeypatch.setenv("COST_BUDGET_ENABLE", "true")
         monkeypatch.setenv("COST_BUDGET_USD", "0.00001")
         reset_budget()
-        for model in ("agnes-3.0-flash", "qwen-long"):
+        for model in ("unknown-model-a", "unknown-model-b"):
             assert _record_response_usage(self._usage(10, 10), model) is True
         stats = get_process_budget_stats()
         assert stats["usd_pricing_unavailable_events"] >= 2

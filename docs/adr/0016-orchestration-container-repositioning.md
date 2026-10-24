@@ -2,7 +2,7 @@
 
 - 日期：2026-10-06（第十轮审查 T-P0-3）
 - 状态：已采纳（Accepted）
-- 关联：`experiments/results/main_batch/statistical_report_3seed_pooled.md`、ADR-0015（检出优先协议）、ADR-0003（默认关口径）、`src/tools/detection_gates.py`
+- 关联：`（工件已清除）`、ADR-0015（检出优先协议）、ADR-0003（默认关口径）、`src/tools/detection_gates.py`
 
 ## 背景（Context）
 
@@ -96,7 +96,7 @@ R-P0-2 生死实验（预注册，n=87 × 3 臂 {aitester, plain_llm, plain_llm_
    MIMOSA_GIT_GATE_MODE 后人工复核放行。
 3. 2026-10-06 AK 批次（修复上限归因证据 + 双界稳健性 + provenance 勘误）：
    repair=0 漏斗实测（`experiments/repair_ceiling_analysis.py` →
-   `experiments/results/main_batch/repair_ceiling_report.md`）：修复循环
+   `（工件已清除）`）：修复循环
    154/261 行中 patch 产出 94.2%、plausible 46.8%、correct 0，
    patch_evidence_level=none 占 48.1%、stop_reason=
    skip_debugger_repair_invalid 占 50.0%——"编排反噬"机制证据补充：修复

@@ -2,7 +2,7 @@
 模型能力梯度实验（3.3 模型能力边界量化分离，Design-only 编排器）。
 
 背景：
-    failure_analysis 反复强调"0/7 失败归因基于免费档小模型（agnes-3.0-flash），
+    failure_analysis 反复强调"0/7 失败归因基于当时的低成本小模型档位，
     而非架构局限；使用更强模型时失败分类与数量预计显著变化"。本脚本提供一个
     轻量级"模型能力梯度实验"编排器，把"架构能力 vs 模型能力"的边界从定性判断
     变为定量参照。
@@ -14,18 +14,19 @@
       调用（每个模型档位一次 benchmark 批次），记录并汇总三核心指标；
     - **选 5-10 个代表性任务 × 2-3 个模型档位**：代表性任务取自合成数据集
       的难度分层（level2/level3，含跨文件双模块），档位经
-      `--tier-models` 显式指定（config 中 cost_weight / model_name 区分的
-      2-3 个 LLM_N_* 端点）；
+      `--tiers` 显式指定（config 中 cost_weight / model_name 区分的
+      2-3 个 LLM_N_* 端点；当前项目仅登记 DeepSeek 官方 deepseek-flash，
+      跨模型档位需另行登记端点后才能构成真正的能力梯度）；
     - **三核心指标**：`llm_applied` 比例、首次修复成功率（iteration==1 且
       passed）、平均迭代次数；结果以表格沉淀到
       `experiments/results/model_gradient.md`。
 
 使用方式（人工触发，需真实 LLM key）：
     # 1. 准备 2-3 个模型档位端点（.env.local 中 LLM_1_* / LLM_2_* / LLM_3_*）
-    # 2. 运行梯度实验（--task-count 5-10，--tiers 2-3 个端点名）
+    # 2. 运行梯度实验（--task-count 5-10，--tiers 2-3 个端点序号）
     python experiments/model_gradient.py \
         --task-count 8 \
-        --tiers agnes-flash,agnes-plus \
+        --tiers 1,2 \
         --output-dir experiments/results/model_gradient
 
     # 档位端点名映射：experiments/model_gradient.py --list-tiers 列出
@@ -63,7 +64,7 @@ def _load_tier_configs() -> list[dict[str, int | float | str | None]]:
 
     模型"档位"的保守口径：以 `cost_weight`（.env.local 的 LLM_N_COST_WEIGHT
     或 llm_configs.json 注入）区分——低 cost_weight = 免费/低成本档，
-    高 cost_weight = 更强/更贵档。同 model_name 多 provider 端点场景下，
+    高 cost_weight = 更强/更贵档。同 model_name 多端点场景下，
     各端点作为独立档位候选。
     """
     tiers: list[dict[str, int | float | str | None]] = []

@@ -183,7 +183,7 @@ FaultLocalizer 的 `line_start/line_end` ± 窗口 `LOCALIZED_EDIT_WINDOW`（默
 全批可重放行 44.4%（8/18）→ **55.6%（10/18）**。synthetic 两臂初测"repair 逐任务完全相同 8/50"结论**在跨文件行上同样成立**——v1
 两臂跨文件行皆为 0（伪影所致）；R27 修复后逐任务独立重放，两臂跨文件行仍一致
 （各 2/2 正确，无差异），阴性结论不受影响；非跨文件行不变。
-详见 ADR-0029 与 `experiments/results/r4_batches/replay_r4_ab_arm_a_v2.md`。
+详见 ADR-0029 与 `（工件已清除）`。
 
 B 臂复现路径（同口径，零 LLM）：
 

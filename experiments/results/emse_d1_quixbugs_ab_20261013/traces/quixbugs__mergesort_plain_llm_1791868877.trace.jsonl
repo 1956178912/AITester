@@ -1,4 +1,0 @@
-{"event": "task_start", "task": "<REDACTED_KEY>", "ts": 1791868877.0189939, "meta": {"dataset_task_id": "quixbugs__mergesort", "baseline": "plain_llm", "target_function": "mergesort"}}
-{"event": "node", "task": "<REDACTED_KEY>", "node": "generator", "ts": 1791868881.8607879, "run_id": "b4dd36c02fdf47e3", "span_id": "bebfe4f8bb5a", "output": {"generated_test_len": 3588}, "decision": "generated"}
-{"event": "node", "task": "<REDACTED_KEY>", "node": "executor", "ts": 1791868893.373833, "run_id": "b4dd36c02fdf47e3", "span_id": "b0e0f8781f72", "output": {"passed": false, "coverage": 80.0, "failed_cases": 1}, "decision": "FAIL", "duration_ms": 11503.46, "iteration": 0}
-{"event": "task_end", "task": "<REDACTED_KEY>", "ts": 1791868933.223646, "passed": false, "duration_s": 56.2, "token_usage": {"input_tokens": 553, "output_tokens": 1110, "total_tokens": 1663, "llm_calls": 1, "cache_hits": 0, "cache_avoided_tokens": 0, "by_model": {"deepseek-flash": 1663}}}

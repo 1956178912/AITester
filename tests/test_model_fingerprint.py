@@ -27,6 +27,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import subprocess
 import sys
 import types
 from pathlib import Path
@@ -115,6 +116,11 @@ def _write_result_json(tmp_path: Path, payload: dict[str, Any], name: str = "ben
     path = tmp_path / name
     path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
     return path
+
+
+def _gate_rel_key(gate: Any, path: Path) -> str:
+    """豁免登记键与门禁同源（相对路径口径只由门禁定义，测试不手抄）。"""
+    return gate._rel_key(Path(path))
 
 
 def _payload_with_fingerprint(fingerprint: Any, *, provenance_missing: bool = False) -> dict[str, Any]:
@@ -508,7 +514,7 @@ class TestModelFingerprintGate:
         _write_result_json(
             tmp_path,
             _payload_with_fingerprint(
-                {"requested_alias": "a", "returned_model": "m", "system_fingerprint": "fp", "pinned": True}
+                {"requested_alias": "deepseek-flash", "returned_model": "m", "system_fingerprint": "fp", "pinned": True}
             ),
             name="benchmark_ok.json",
         )
@@ -526,3 +532,359 @@ class TestModelFingerprintGate:
         assert passed is False
         assert items == list(gate.REQUIRED_FINGERPRINT_KEYS)
         assert error is not None and "provenance" in error
+
+    # ── BZ 轮（2026-10-23）：预指纹时代历史批次的按名豁免 + 漂移检查 ──────
+    # 背景：2 天 mtime 窗口在 fresh clone（CI）上失效（checkout 刷新全部
+    # mtime），为测试契约入库的预指纹历史工件会被当作"新批次"要求
+    # pinned=true；豁免走 json-strict 同纪律（登记理由 + 漂移检查）。
+
+    def test_gate_exempts_registered_pre_fingerprint_batch(self, gate, tmp_path, monkeypatch, capsys):
+        """登记在豁免表里的未锁定工件：不阻断，且 [EXEMPT] 带理由。"""
+        path = _write_result_json(tmp_path, {"dataset": "examples", "results": {}}, name="benchmark_old.json")
+        monkeypatch.setattr(gate, "_PRE_FINGERPRINT_EXEMPT", {_gate_rel_key(gate, path): "测试豁免理由"})
+        assert gate.main([str(tmp_path)]) == 0
+        out = capsys.readouterr().out
+        assert "[EXEMPT]" in out and "测试豁免理由" in out
+        assert "另有 1 个预指纹时代历史批次按名豁免" in out
+        assert "[FAIL]" not in out
+
+    def test_gate_exemption_does_not_mask_other_batches(self, gate, tmp_path, monkeypatch):
+        """豁免只作用于登记的那一份：同目录另一份未锁定批次仍阻断。"""
+        exempt = _write_result_json(tmp_path, {"dataset": "examples", "results": {}}, name="benchmark_old.json")
+        _write_result_json(tmp_path, {"dataset": "synthetic", "results": {}}, name="benchmark_new.json")
+        monkeypatch.setattr(gate, "_PRE_FINGERPRINT_EXEMPT", {_gate_rel_key(gate, exempt): "测试豁免理由"})
+        assert gate.main([str(tmp_path)]) == 1
+
+    def test_gate_exemption_drift_when_unreadable(self, gate, tmp_path, monkeypatch, capsys):
+        """豁免登记项不可解析 ⇒ 漂移失败（豁免不能把坏工件变成干净）。"""
+        path = tmp_path / "benchmark_broken.json"
+        path.write_text("{not json", encoding="utf-8")
+        monkeypatch.setattr(gate, "_PRE_FINGERPRINT_EXEMPT", {_gate_rel_key(gate, path): "测试豁免理由"})
+        assert gate.main([str(tmp_path)]) == 1
+        assert "工件不可审计" in capsys.readouterr().err
+
+    def test_gate_exemption_drift_when_pinned(self, gate, tmp_path, monkeypatch, capsys):
+        """豁免登记项已 pinned=true ⇒ 漂移失败（豁免不再需要，应移除登记）。"""
+        path = _write_result_json(
+            tmp_path,
+            _payload_with_fingerprint(
+                {"requested_alias": "deepseek-flash", "returned_model": "m", "system_fingerprint": "fp", "pinned": True}
+            ),
+            name="benchmark_now_pinned.json",
+        )
+        monkeypatch.setattr(gate, "_PRE_FINGERPRINT_EXEMPT", {_gate_rel_key(gate, path): "测试豁免理由"})
+        assert gate.main([str(tmp_path)]) == 1
+        assert "豁免漂移" in capsys.readouterr().err
+
+    def test_gate_exemption_drift_when_missing(self, gate, tmp_path, monkeypatch, capsys):
+        """豁免登记项的文件消失 ⇒ 漂移失败（豁免失去对象）。"""
+        monkeypatch.setattr(
+            gate,
+            "_PRE_FINGERPRINT_EXEMPT",
+            {str(tmp_path / "benchmark_gone.json"): "测试豁免理由"},
+        )
+        assert gate.main([str(tmp_path)]) == 1
+        assert "豁免漂移" in capsys.readouterr().err
+
+    def test_gate_exempt_registry_entries_are_reasoned(self, gate):
+        """豁免登记表每条带理由；表为空是合法态——CI 轮（2026-10-24）非 DeepSeek
+        历史数据清除后，唯一的预指纹条目随文件一并删除（「文件消失 ⇒ 删登记」），
+        空表 + 门禁 rc=0 是该机制的正常终态，不再是「机制没接线」。"""
+        assert all(reason.strip() for reason in gate._PRE_FINGERPRINT_EXEMPT.values())
+
+    def test_gate_rel_key_matches_registry_keys(self, gate):
+        """相对键口径与登记表同源：绝对路径、仓库相对路径都收敛到登记键。
+
+        少了这条锁，`_rel_key` 的根目录写错也能全绿——登记表遍历不经过它。
+        """
+        for key in gate._PRE_FINGERPRINT_EXEMPT:
+            assert gate._rel_key(PROJECT_ROOT / key) == key
+            assert gate._rel_key(Path(key)) == key
+
+    def test_gate_exempt_registry_is_healthy_on_disk(self, gate):
+        """真实登记表零漂移；每条都是盘上存在、确无指纹块的历史工件。
+
+        CI 轮（2026-10-24）起条目数为 0（唯一条目随非 DeepSeek 历史数据清除
+        一并删除）；锁改为双向：条目为 0 时登记机制仍须输出空漂移清单，
+        条目非 0 时逐条做盘上存在与无指纹块核验——新增豁免必须同步改本锁。
+        """
+        assert gate._PRE_FINGERPRINT_EXEMPT == {} or len(gate._PRE_FINGERPRINT_EXEMPT) >= 1
+        assert gate.exemption_drift_failures() == []
+        for key in gate._PRE_FINGERPRINT_EXEMPT:
+            payload = json.loads((PROJECT_ROOT / key).read_text(encoding="utf-8"))
+            provenance = payload.get("provenance")
+            assert not (isinstance(provenance, dict) and provenance.get("model_fingerprint")), (
+                f"{key}: 登记为预指纹时代工件，但含 model_fingerprint 块"
+            )
+
+
+# ═══ CE 轮（2026-10-23）：pinned=true 不等于「可比」，也不等于「语料已审」 ══════
+
+
+class TestComparabilityAndScannedSurface:
+    """可比性围栏（alias_mismatch / 运行时模型集对账）+ 受检面披露。
+
+    改前实测（同一棵树，围栏未落地时）：
+    ① `pinned=true` + `alias_mismatch=true` 的工件 ⇒ 门禁 rc=0（写侧记了三处
+       `alias_mismatch`，全仓**零读者**）；
+    ② `pinned=true` + `requested_alias="gpt-4o-mini"`（CD 轮后运行面只剩
+       `deepseek-flash`）⇒ 门禁 rc=0；
+    ③ 成功语句「通过：1/1 个受检工件均 pinned=true」的分母 = 近 2 天窗口内
+       的文件数（实测窗口内 2、豁免 1、实检 1），而入库 `benchmark_*.json`
+       有 107 份、在盘递归 239 份——「1/1」可被读成语料级断言。
+    """
+
+    @pytest.fixture()
+    def gate(self):
+        return _load_gate_module()
+
+    @staticmethod
+    def _compliant(**over: Any) -> dict[str, Any]:
+        fp: dict[str, Any] = {
+            "requested_alias": "deepseek-flash",
+            "returned_model": "deepseek-flash",
+            "system_fingerprint": "fp_x",
+            "probe_sha256": "a" * 64,
+            "probe_at": "2026-10-23T00:00:00+00:00",
+            "missing": [],
+            "pinned": True,
+            "error": None,
+            "alias_mismatch": False,
+        }
+        fp.update(over)
+        return _payload_with_fingerprint(fp)
+
+    # ── 围栏一：写侧信号 alias_mismatch 必须有读者 ─────────────────────────
+
+    def test_gate_blocks_pinned_batch_with_alias_mismatch(self, gate, tmp_path, capsys):
+        """pinned=true 但 alias_mismatch=true → 阻断并点名可比性（改前 rc=0）。"""
+        path = _write_result_json(tmp_path, self._compliant(alias_mismatch=True, returned_model="deepseek-v4-pro"))
+        assert gate.main([str(path)]) == 1
+        out = capsys.readouterr().out
+        assert "可比性" in out
+        assert "alias_mismatch" in out
+
+    # ── 围栏二：工件记录的 alias 必须仍在运行时模型集内 ────────────────────
+
+    def test_gate_blocks_pinned_batch_with_unsupported_alias(self, gate, tmp_path, capsys):
+        """pinned=true 但 requested_alias 不在运行时模型集 → 阻断（改前 rc=0）。"""
+        path = _write_result_json(
+            tmp_path,
+            self._compliant(requested_alias="gpt-4o-mini", returned_model="gpt-4o-mini-2024-07-18"),
+        )
+        assert gate.main([str(path)]) == 1
+        out = capsys.readouterr().out
+        assert "运行时" in out and "COMMON_MODELS" in out
+
+    def test_gate_passes_fully_compliant_batch(self, gate, tmp_path, capsys):
+        """两项围栏都满足 → 仍 rc=0，且逐件说明"围栏跑过"（不是"没跑所以干净"）。"""
+        path = _write_result_json(tmp_path, self._compliant())
+        assert gate.main([str(path)]) == 0
+        assert "可比性围栏通过" in capsys.readouterr().out
+
+    def test_pinned_judgment_values_are_untouched(self, gate):
+        """既有判定面逐字节不动：check_payload 仍只判 pinned（围栏在 main 侧）。"""
+        for over in ({"alias_mismatch": True}, {"requested_alias": "gpt-4o-mini"}):
+            passed, items, _ = gate.check_payload(self._compliant(**over))
+            assert passed is True and items == [], over
+
+    # ── 前提缺失必须显式 skip 带读数，不得静默放行 ─────────────────────────
+
+    def test_registry_unavailable_skips_alias_judgment_explicitly(self, gate, tmp_path, monkeypatch, capsys):
+        """运行时注册表取不到 → 不判 alias，但必须打印显式 [SKIP] 带成因（不静默）。"""
+        monkeypatch.setattr(
+            gate, "runtime_model_aliases", lambda: (frozenset(), "注册表不可用：`COMMON_MODELS` 导入失败（测试注入）")
+        )
+        path = _write_result_json(
+            tmp_path, self._compliant(requested_alias="gpt-4o-mini", returned_model="gpt-4o-mini-x")
+        )
+        assert gate.main([str(path)]) == 0
+        out = capsys.readouterr().out
+        assert "[SKIP]" in out and "alias" in out and "COMMON_MODELS" in out
+
+    def test_alias_mismatch_fence_survives_registry_unavailable(self, gate, tmp_path, monkeypatch):
+        """注册表不可用只关闭 alias 对账，不关闭 mismatch 判定。"""
+        monkeypatch.setattr(gate, "runtime_model_aliases", lambda: (frozenset(), "测试注入：注册表不可用"))
+        path = _write_result_json(tmp_path, self._compliant(alias_mismatch=True))
+        assert gate.main([str(path)]) == 1
+
+    # ── 受检面披露：成功语句的分母必须与语料面同时给出 ────────────────────
+
+    def test_success_path_discloses_scanned_share(self, gate, tmp_path, capsys):
+        """通过路径也必须打印受检面 / 语料面读数（改前只有 N/N 一个分母）。"""
+        path = _write_result_json(tmp_path, self._compliant())
+        assert gate.main([str(path)]) == 0
+        out = capsys.readouterr().out
+        assert "受检面" in out and "语料面" in out
+        assert "在盘递归" in out and "入库" in out
+
+    def test_corpus_surface_keys_are_fully_reported(self, gate):
+        """corpus_surface() 的读数键集合锁（少一个键就是少一路披露）。"""
+        assert set(gate.corpus_surface()) == {
+            "tracked",
+            "on_disk",
+            "top_level",
+            "with_provenance",
+            "with_fingerprint",
+            "pinned_true",
+            "unsupported_alias",
+            "alias_mismatch_true",
+        }
+
+    def test_real_corpus_is_reconciled_and_clean(self, gate):
+        """真实语料对账：CD 轮收敛后，入库指纹的 alias 全部仍受运行时支持。"""
+        from tests._corpus_guard import require_full_corpus
+
+        require_full_corpus()
+        surface = gate.corpus_surface()
+        assert surface["on_disk"] == 239, surface
+        assert surface["top_level"] == 64, surface
+        assert surface["tracked"] == 107, surface
+        assert surface["with_provenance"] == 122, surface
+        assert surface["with_fingerprint"] == 87, surface
+        assert surface["pinned_true"] == 85, surface
+        assert surface["unsupported_alias"] == 0, surface
+        assert surface["alias_mismatch_true"] == 0, surface
+
+    def test_gate_run_as_script_keeps_registry_available(self):
+        """脚本方式执行（CI / `make model-fingerprint` 口径）时 alias 对账必须可用。
+
+        进程内 import 与脚本执行的 `sys.path[0]` 不同（脚本口径下是
+        `scripts/gates`，仓库根不在路径上）；测试内加载模块会**掩盖**这条
+        死路，使门禁在真实执行时静默退化成"只判 pinned"（CC 轮同源教训：
+        mock 的输出形态必须是真实形态）。这里用子进程跑真实入口。
+        """
+        out = subprocess.run(
+            [sys.executable, str(_GATE_SCRIPT)], capture_output=True, text=True, cwd=PROJECT_ROOT, timeout=300
+        )
+        assert out.returncode == 0, out.stdout + out.stderr
+        assert "[SKIP]" not in out.stdout, out.stdout
+        assert "运行时模型集 ['deepseek-flash']" in out.stdout, out.stdout
+
+    def test_runtime_registry_authority_is_named(self, gate):
+        """对账权威源必须是运行面本身（CD 轮后 = COMMON_MODELS 单别名）。"""
+        aliases, reason = gate.runtime_model_aliases()
+        assert reason is None, reason
+        assert aliases == frozenset({"deepseek-flash"}), aliases
+
+    # ── 分母 / 披露面：每一路读数都要在四条输出路径上都存在 ────────────────
+
+    def test_success_denominator_is_checked_not_window(self, gate, tmp_path, monkeypatch, capsys):
+        """成功语句的分母 = 实检数，不是窗口内文件数（改前两者混读）。"""
+        exempt = _write_result_json(tmp_path, {"dataset": "examples", "results": {}}, name="benchmark_old.json")
+        _write_result_json(tmp_path, self._compliant(), name="benchmark_ok.json")
+        monkeypatch.setattr(gate, "_PRE_FINGERPRINT_EXEMPT", {_gate_rel_key(gate, exempt): "测试豁免理由"})
+        assert gate.main([str(tmp_path)]) == 0
+        out = capsys.readouterr().out
+        assert "通过：1/1 个受检工件" in out
+        assert "豁免 1 ⇒ 实检 1" in out
+        assert "1/2" not in out
+
+    def test_failure_path_also_discloses_scanned_surface(self, gate, tmp_path, capsys):
+        """报红路径同样打印受检面/语料面——红字更要说清算了哪些文件。"""
+        _write_result_json(tmp_path, {"dataset": "examples"}, name="benchmark_unlocked.json")
+        assert gate.main([str(tmp_path)]) == 1
+        err = capsys.readouterr().err
+        assert "受检面" in err and "语料面" in err
+
+    def test_empty_window_still_discloses_corpus_surface(self, gate, tmp_path, capsys):
+        """空扫描面（近期无新批次）也要打印语料面："没有新批次"不得读成"语料已审"。"""
+        empty = tmp_path / "empty"
+        empty.mkdir()
+        assert gate.main([str(empty)]) == 0
+        assert "语料面" in capsys.readouterr().out
+        assert gate.main([str(empty), "--allow-empty"]) == 0
+        assert "受检面" in capsys.readouterr().out
+
+    def test_block_summary_names_both_failure_kinds(self, gate, tmp_path, capsys):
+        """阻断汇总必须点名"未锁定 + 可比性不成立"两类，否则读不出判据口径。"""
+        path = _write_result_json(tmp_path, self._compliant(alias_mismatch=True))
+        assert gate.main([str(path)]) == 1
+        err = capsys.readouterr().err
+        assert "可比性不成立" in err
+        assert "不得与历史批次合并统计" in err
+
+    # ── 语料面读数必须是"读出来的"，不是写死的 0 ────────────────────────────
+
+    def test_corpus_surface_counts_alias_reconciliation_on_planted_corpus(self, gate, tmp_path):
+        """递归在盘 / 单层顶层 / 结构层 / alias 双读数各自由增量构成，且严格 `is True`。"""
+        (tmp_path / "benchmark_a.json").write_text(json.dumps(self._compliant(alias_mismatch=True)), encoding="utf-8")
+        (tmp_path / "benchmark_b.json").write_text(
+            json.dumps(self._compliant(requested_alias="gpt-4o-mini", returned_model="gpt-4o-mini-2")),
+            encoding="utf-8",
+        )
+        (tmp_path / "benchmark_c.json").write_text(json.dumps(self._compliant()), encoding="utf-8")
+        (tmp_path / "notes.json").write_text(json.dumps({"provenance": {}}), encoding="utf-8")
+        nested = tmp_path / "nested"
+        nested.mkdir()
+        (nested / "benchmark_d.json").write_text(json.dumps(self._compliant(alias_mismatch="true")), encoding="utf-8")
+        gate.DEFAULT_RESULTS_DIR = tmp_path
+        gate._CORPUS_SURFACE_CACHE = None
+        surface = gate.corpus_surface()
+        assert surface["on_disk"] == 4, surface  # 递归口径；notes.json 不入面
+        assert surface["top_level"] == 3, surface  # 目录单层
+        assert surface["with_provenance"] == 4, surface
+        assert surface["with_fingerprint"] == 4, surface
+        assert surface["pinned_true"] == 4, surface
+        assert surface["alias_mismatch_true"] == 1, surface  # 字符串 "true" 不算（与 pinned 同口径）
+        assert surface["unsupported_alias"] == 1, surface
+
+    def test_tracked_count_failure_is_disclosed_not_zero(self, gate, monkeypatch):
+        """git 失败 ⇒ -1 并在披露里写"不可用"；计数只收 benchmark_*.json。"""
+        keys = (
+            "tracked",
+            "on_disk",
+            "top_level",
+            "with_provenance",
+            "with_fingerprint",
+            "pinned_true",
+            "unsupported_alias",
+            "alias_mismatch_true",
+        )
+
+        def _raise(*_a: Any, **_k: Any) -> None:
+            raise RuntimeError("git 不可用（测试注入）")
+
+        monkeypatch.setattr(gate, "subprocess", types.SimpleNamespace(run=_raise))
+        assert gate._tracked_benchmark_count() == -1
+        mixed = "experiments/results/benchmark_a.json\nexperiments/results/full_comparison.json\n"
+        monkeypatch.setattr(
+            gate, "subprocess", types.SimpleNamespace(run=lambda *_a, **_k: types.SimpleNamespace(stdout=mixed))
+        )
+        assert gate._tracked_benchmark_count() == 1
+        gate._CORPUS_SURFACE_CACHE = dict.fromkeys(keys, 0) | {"tracked": -1}
+        assert any("入库 不可用" in line for line in gate.surface_disclosure([], 0))
+
+    # ── 前提缺失的成因必须分类，且绝不冒充"可用" ────────────────────────────
+
+    def test_degenerate_registry_reports_its_own_cause(self, gate, monkeypatch):
+        """空集 / 类型漂移 / 条目无 name 三类成因不得混同，合法集仍照读。"""
+        cases = (
+            ([], "为空或类型漂移"),
+            ("not-a-list", "为空或类型漂移"),
+            ([{"model": "deepseek-flash"}], "无带 name 的条目"),
+        )
+        for value, expected in cases:
+            fake = types.ModuleType("src.config.config_generator")
+            fake.COMMON_MODELS = value
+            monkeypatch.setitem(sys.modules, "src.config.config_generator", fake)
+            aliases, reason = gate.runtime_model_aliases()
+            assert aliases == frozenset(), value
+            assert expected in str(reason), (value, reason)
+        ok = types.ModuleType("src.config.config_generator")
+        ok.COMMON_MODELS = [{"name": "deepseek-flash"}]
+        monkeypatch.setitem(sys.modules, "src.config.config_generator", ok)
+        assert gate.runtime_model_aliases() == (frozenset({"deepseek-flash"}), None)
+
+    def test_registry_import_failure_reports_cause_not_availability(self, gate, tmp_path, monkeypatch, capsys):
+        """import 失败 ⇒ 报成因 + 显式 [SKIP]；返回 (空集, None) 就是把前提缺失静默放行。"""
+        monkeypatch.setitem(sys.modules, "src.config.config_generator", None)
+        aliases, reason = gate.runtime_model_aliases()
+        assert aliases == frozenset()
+        assert "运行时模型集不可用" in str(reason)
+        path = _write_result_json(
+            tmp_path, self._compliant(requested_alias="gpt-4o-mini", returned_model="gpt-4o-mini-2")
+        )
+        assert gate.main([str(path)]) == 0
+        out = capsys.readouterr().out
+        assert "[SKIP]" in out and "import" in out

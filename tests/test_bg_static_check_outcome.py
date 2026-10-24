@@ -85,7 +85,9 @@ class TestMypyOutcome:
         monkeypatch.setenv("TYPE_CHECK_ENABLE", "true")
         monkeypatch.delenv("TYPE_CHECK_BACKEND", raising=False)
         sink: list[dict[str, object]] = []
-        with patch("mypy.api.run", return_value=(2, "", "error: cannot read file")):
+        # R05：mock 按 mypy.api.run 真实契约 (stdout, stderr, exit_status)——
+        # 命令/文件级失败时错误在 stderr，exit_status=2
+        with patch("mypy.api.run", return_value=("", "error: cannot read file", 2)):
             out = _run_mypy_findings("o", "def f():\n    return x\n", outcome_sink=sink)
         assert out == []
         assert sink[0]["status"] == "error"
@@ -106,7 +108,8 @@ class TestMypyOutcome:
         monkeypatch.delenv("TYPE_CHECK_BACKEND", raising=False)
         out_text = "patched_code.py:2:1: error: Name 'x' is not defined [name-defined]\n"
         sink: list[dict[str, object]] = []
-        with patch("mypy.api.run", return_value=(1, out_text, "")):
+        # R05：真实契约 (stdout, stderr, exit_status)——诊断在 stdout，rc=1
+        with patch("mypy.api.run", return_value=(out_text, "", 1)):
             findings = _run_mypy_findings("o", "def f():\n    return x\n", outcome_sink=sink)
         assert len(findings) == 1
         assert sink == [{"backend": "mypy", "status": "ok", "reason": ""}]
@@ -115,10 +118,36 @@ class TestMypyOutcome:
         monkeypatch.setenv("TYPE_CHECK_ENABLE", "true")
         monkeypatch.delenv("TYPE_CHECK_BACKEND", raising=False)
         sink: list[dict[str, object]] = []
-        with patch("mypy.api.run", return_value=(0, "", "")):
+        with patch("mypy.api.run", return_value=("", "", 0)):
             findings = _run_mypy_findings("o", "def f():\n    return 1\n", outcome_sink=sink)
         assert findings == []
         assert sink == [{"backend": "mypy", "status": "ok", "reason": ""}]
+
+    def test_real_mypy_api_contract_locked(self):
+        """R05 回归锁（M12）：真实 mypy.api.run 返回 (str, str, int)。
+
+        BG 轮的 mock 曾按 (rc, out, err) 顺序模拟——测试绿但真实 API 接错。
+        本用例直接跑一次真实 mypy（venv 已装 1.15.0）锁定公开契约与解包
+        方向一致；未安装时显式 skip（不伪造覆盖）。
+        """
+        pytest.importorskip("mypy.api")
+        from mypy import api
+
+        result = api.run(["-c", 'x: int = "bad"', "--no-error-summary", "--show-column-numbers"])
+
+        assert isinstance(result, tuple) and len(result) == 3
+        stdout, stderr, exit_status = result
+        assert isinstance(stdout, str) and isinstance(stderr, str) and isinstance(exit_status, int)
+        # 解包方向锁：stdout 含 assignment 诊断、exit_status==1（有类型错误）
+        assert exit_status == 1
+        assert "assignment" in stdout
+
+    def test_column_numbers_enabled_in_run_args(self):
+        """R05：诊断正则要求 line:col 三段，调用必须显式开 --show-column-numbers。"""
+        import inspect
+
+        src = inspect.getsource(_run_mypy_findings)
+        assert "--show-column-numbers" in src
 
 
 class TestPyrightOutcome:

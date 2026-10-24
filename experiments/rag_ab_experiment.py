@@ -47,6 +47,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 import sys
 import time
@@ -59,6 +60,13 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.budget.token_usage import row_total_token_reading  # noqa: E402
+
+
+def _finite(v: float | None) -> bool:
+    """统计量是否有限（Welch t 在两臂完全同分布时为 nan；非有限值不可入严格 JSON）。"""
+    return v is not None and math.isfinite(v)
+
+
 from src.utils.process_utils import run_with_timeout  # noqa: E402
 
 logger = logging.getLogger(__name__)
@@ -329,19 +337,22 @@ def compare_ab(
                 if tokens_available
                 else None
             ),
-            "t_stat": round(t_tok, 4) if tokens_available else None,
-            "p_value_welch": round(p_tok, 6) if tokens_available else None,
-            "u_stat": round(u_tok, 2) if tokens_available else None,
-            "p_value_mann_whitney": round(pu_tok, 6) if tokens_available else None,
-            "cohens_d": round(d_tok, 4) if tokens_available else None,
+            "t_stat": round(t_tok, 4) if tokens_available and _finite(t_tok) else None,
+            "p_value_welch": round(p_tok, 6) if tokens_available and _finite(p_tok) else None,
+            "u_stat": round(u_tok, 2) if tokens_available and _finite(u_tok) else None,
+            "p_value_mann_whitney": round(pu_tok, 6) if tokens_available and _finite(pu_tok) else None,
+            "cohens_d": round(d_tok, 4) if tokens_available and _finite(d_tok) else None,
         },
         "iteration_saving": {
             "delta_avg": round(_mean(off_iters) - _mean(on_iters), 2),
-            "t_stat": round(t_it, 4),
-            "p_value_welch": round(p_it, 6),
-            "u_stat": round(u_it, 2),
-            "p_value_mann_whitney": round(pu_it, 6),
-            "cohens_d": round(d_it, 4),
+            # CI 轮补跑（2026-10-24）：两臂迭代完全同分布时 Welch t 为 nan，
+            # 而 json.dump(allow_nan=False) 会崩——非有限统计量统一记 None
+            # （「不可计算」与「算出来是 0」不同形，与 json-strict 门禁口径一致）。
+            "t_stat": round(t_it, 4) if _finite(t_it) else None,
+            "p_value_welch": round(p_it, 6) if _finite(p_it) else None,
+            "u_stat": round(u_it, 2) if _finite(u_it) else None,
+            "p_value_mann_whitney": round(pu_it, 6) if _finite(pu_it) else None,
+            "cohens_d": round(d_it, 4) if _finite(d_it) else None,
         },
         "error_category_shift": error_category_shift,
         "interpretation": {},
@@ -628,8 +639,8 @@ def main(
     )
     print(
         f"\n  迭代节省: Δavg={report['iteration_saving']['delta_avg']}  "
-        f"p_welch={report['iteration_saving']['p_value_welch']:.4f}  "
-        f"Cohen's d={report['iteration_saving']['cohens_d']:.3f}"
+        f"p_welch={_shown(report['iteration_saving']['p_value_welch'], '.4f')}  "
+        f"Cohen's d={_shown(report['iteration_saving']['cohens_d'], '.3f')}"
     )
     print("\n  错误类型偏移（RAG 收益）:")
     for cat, v in report["error_category_shift"].items():

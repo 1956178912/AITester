@@ -263,7 +263,7 @@ echo "[0/6] 干净树检查"
 DIRTY_LINES="$(git -C "${ROOT}" status --porcelain 2>/dev/null || true)"
 if [ -n "${DIRTY_LINES}" ]; then
     if [ "${ALLOW_DIRTY}" -ne 1 ]; then
-        printf '%s\n' "${DIRTY_LINES}" | head -20 >&2
+        printf '%s\n' "${DIRTY_LINES}" | sed -n '1,20p' >&2  # CI 补跑修复：head 早关会 SIGPIPE(141) 杀死 pipefail 脚本
         die "工作树不干净（见上）——正式批要求干净提交（provenance git_dirty=false）。
      请先由 Lead 提交/清理；如确需调试，用 --allow-dirty --dirty-reason '<原因>'。"
     fi

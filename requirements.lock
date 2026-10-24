@@ -129,5 +129,4 @@ websockets==15.0.1
 xxhash==3.8.1
 yarl==1.25.1
 z3-solver==5.1.0.0
-zai-sdk==0.2.3
 zstandard==0.25.0

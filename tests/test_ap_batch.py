@@ -181,5 +181,7 @@ class TestPreregWorksheetRef:
     """AP1 配套：预注册 E7 节双语引用工作表路径（复核入口齐备）。"""
 
     def test_prereg_mentions_worksheet(self) -> None:
+        # 2026-10-24 数据清除：工作表工件随 main_batch 退出，预注册文本的历史引用
+        # 同步改为「已清除」标注——本锁改为钉住"双语都保留复核入口的说明"而不是原路径字面量。
         for text in (PREREG_ZH, PREREG_EN):
-            assert "e7_review_worksheet.md" in text
+            assert "e7_review_worksheet" in text or "工件已清除" in text

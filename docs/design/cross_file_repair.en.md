@@ -41,7 +41,7 @@ A/B gain validation are now explicit:
   real-data gain is stated honestly as "implemented architecture + engine
   capability boundary" — no forced 0/N no-signal A/B.
 
-See `experiments/results/experiment_report_20260925.md` §7.4 (local historical report, not committed).
+See `（工件已清除）` §7.4 (local historical report, not committed).
 
 ## 1. Background and Goals
 
@@ -256,7 +256,7 @@ true and refresh BASELINE.yaml:
 |---|-----------|-----------|---------------------|
 | T1 | Cross-file repair success rate on the synthetic cross-file subset (Level 3 two-module, `--difficulty level3`) vs. the single-file fallback strategy (`CROSS_FILE_ENABLE=false` baseline) | **≥ +15 percentage points (absolute)** | Run ON/OFF pairs of `experiments/run_benchmark.py --dataset synthetic --difficulty level3 --task-count 50` and compare the `passed` rate |
 | T2 | Extra token cost | **Mean per-task `total_tokens` of the cross-file batch ≤ 1.5× the single-file fallback baseline** (≤ 50% increase) | Compare the mean of `token_usage` across the two result JSONs; if exceeded, record as "cost-unacceptable" and do not graduate |
-| T3 | Model-tier validation | T1/T2 conclusions **agree in direction** (both positive) on **≥ 2 model tiers** (e.g. the agnes-3.0-flash free tier + a stronger-model tier) | Reuse the tier matrix of `experiments/model_gradient.py`; cross-file ON/OFF paired per tier |
+| T3 | Model-tier validation | T1/T2 conclusions **agree in direction** (both positive) on **≥ 2 model tiers** (e.g. the current deepseek-flash tier + a stronger-model tier) | Reuse the tier matrix of `experiments/model_gradient.py`; cross-file ON/OFF paired per tier |
 | T4 | No regression | On single-file tasks (Level 1/2), success rate does not drop when `CROSS_FILE_ENABLE=true` is on (the automatic-degradation path is stable) | Single-file subset ON/OFF pairing; a drop > 5pp counts as a degradation-path defect |
 
 **Experiment commands (minimal runnable caliber)**:

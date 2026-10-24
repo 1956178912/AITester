@@ -40,7 +40,7 @@ TEST = ROOT / "tests/test_analysis_flow_by.py"
 
 TRACKED = frozenset(sa._BASELINES)
 SUPPORTED = frozenset(sa._SUPPORTED_DATASETS)
-REGISTRATION_ARCHIVE = {"files": 257, "rows": 11_197}
+REGISTRATION_ARCHIVE = {"files": 250, "rows": 10_907}
 
 
 def _dotted(node: ast.AST) -> str:
@@ -165,21 +165,22 @@ def segment_b() -> bool:
     ok &= mixed["included"]["rows_tracked"] == sum(len(rows) for rows in mixed_data.values())
 
     if archive["files"] == REGISTRATION_ARCHIVE["files"] and archive["rows"] == REGISTRATION_ARCHIVE["rows"]:
+        # 2026-10-23 provider 清理（删除 7 份 benchmark 归档）后重算。
         expected_default = {
-            "scan_files": 246,
-            "scan_rows": 10_659,
+            "scan_files": 239,
+            "scan_rows": 10_369,
             "unsupported_files": 77,
             "unsupported_rows": 886,
-            "schema_files": 59,
-            "schema_rows": 2_463,
-            "included_files": 110,
-            "included_rows_all": 7_310,
-            "included_rows_tracked": 7_010,
-            "loaded_rows": 7_010,
+            "schema_files": 53,
+            "schema_rows": 2_323,
+            "included_files": 109,
+            "included_rows_all": 7_160,
+            "included_rows_tracked": 6_860,
+            "loaded_rows": 6_860,
             "duplicates": 6_449,
-            "unique": 561,
+            "unique": 411,
             "untracked_rows": 300,
-            "none_detection": 45,
+            "none_detection": 43,
             "none_repair": 52,
             "none_passed": 0,
             "archive_non_benchmark_files": 13,
@@ -206,12 +207,12 @@ def segment_b() -> bool:
             "archive_non_benchmark_rows": flow["archive"]["non_benchmark_rows"],
         }
         expected_mixed = {
-            "included_files": 169,
-            "loaded_rows": 9_473,
-            "duplicates": 8_494,
-            "unique": 979,
-            "schema_if_default_files": 59,
-            "schema_if_default_rows": 2_463,
+            "included_files": 162,
+            "loaded_rows": 9_183,
+            "duplicates": 8_358,
+            "unique": 825,
+            "schema_if_default_files": 53,
+            "schema_if_default_rows": 2_323,
         }
         actual_mixed = {
             "included_files": mixed["included"]["files"],

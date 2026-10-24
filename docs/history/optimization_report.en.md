@@ -614,7 +614,7 @@ The user directive "update all docs to the latest and upload to GitHub"; on top 
 ### Design Decisions
 
 - **F-02 cache path**: the redaction_audit item C "known acceptable risk" conclusion is unchanged (local trusted domain; redaction and cache hits are mutually exclusive); only the path and trust-level discussion are aligned with the actual code (`src/cache/` inside the repo and gitignored);
-- **F-04 default output path**: the `analyze_failures.py --output` default changed to `experiments/results/failure_analysis.md` (no test references this script; zero regression surface);
+- **F-04 default output path**: the `analyze_failures.py --output` default changed to `（工件已清除）` (no test references this script; zero regression surface);
 - **Phase 6 push**: the user directive "upload to GitHub"; following the historical-rounds main-direct-push (no feature branch, no PR).
 
 ---
@@ -716,7 +716,7 @@ After the 4.1 circuit breaker cooldown expires, the node directly returns to ful
 - `MULTI_CANDIDATE_EXEC_VALIDATE` converged into `multi_candidate_exec_validate()`.
 
 ### Dead Code Cleanup (4 places) + DRY/Concurrency
-- Removed EXECUTOR_SYSTEM_PROMPT / safe_apply_multi_function_patch / _call_llm_with_fallback (+_is_zai_url) /
+- Removed EXECUTOR_SYSTEM_PROMPT / safe_apply_multi_function_patch / _call_llm_with_fallback (+third-party domain check) /
   the benchmark decorator / cross_file.topo_key.
 - RAG retriever extracted a single `_upsert` write point + serialized with threading.Lock; `refine_failure_category` wiring converged into
   `refine_final_error_category`; the cross_file docstring now truthfully describes the "current lexicographic order".

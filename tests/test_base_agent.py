@@ -3,7 +3,6 @@ BaseAgent 单元测试
 
 测试 base_agent.py 中的：
 - _retry_with_exponential_backoff
-- _is_zai_compatible
 - _get_llm_config
 - _get_or_create_chat_client（客户端复用缓存）
 - BaseAgent 静态方法 (_extract_json, _extract_python_code, truncate_code)
@@ -25,7 +24,6 @@ from src.agents.base_agent import (
     BaseAgent,
     _get_llm_config,
     _get_or_create_chat_client,
-    _is_zai_compatible,
 )
 from src.agents.llm_client import (
     _llm_client_cache,
@@ -95,7 +93,7 @@ class TestRetryWithExponentialBackoff:
         """等待时间按 base_wait * 2^attempt 指数递增（回归：此前误写为 base_wait**attempt）。
 
         base_wait=1 时等待序列应为 1s, 2s, 4s；
-        旧公式 1**attempt 会退化为固定 1s，zai 的 base=5 则膨胀为 5,25,125。
+        旧公式 1**attempt 会退化为固定 1s，base_wait=5 则膨胀为 5,25,125。
         """
         waits = []
 
@@ -107,30 +105,6 @@ class TestRetryWithExponentialBackoff:
                 always_fails, max_retries=3, base_wait=1, retryable_exceptions=(ValueError,)
             )
         assert waits == [1, 2, 4]
-
-
-class TestIsZaiCompatible:
-    """测试 zai SDK 兼容性检测。"""
-
-    def test_bigmodel_domain(self):
-        """智谱域名应返回 True。"""
-        assert _is_zai_compatible("https://open.bigmodel.cn/api/llm/chat") is True
-
-    def test_zhipuai_domain(self):
-        """zhipuai 域名应返回 True。"""
-        assert _is_zai_compatible("https://open.zhipuai.cn/api") is True
-
-    def test_openai_domain(self):
-        """OpenAI 域名应返回 False。"""
-        assert _is_zai_compatible("https://api.openai.com/v1") is False
-
-    def test_empty_url(self):
-        """空 URL 应返回 False。"""
-        assert _is_zai_compatible("") is False
-
-    def test_none_domain(self):
-        """None 域名应返回 False。"""
-        assert _is_zai_compatible("https://example.com") is False
 
 
 class TestGetLlmConfig:

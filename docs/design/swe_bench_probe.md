@@ -34,7 +34,7 @@
 修正为"**数据管道✅修复 + 执行环境✅修复 + 补丁管道✅修复 + LLM 引擎
 修复质量边界（未突破）**"。跨文件任务（13/20 多源）在引擎能力突破前
 无正向信息量（ON/OFF 都会 0/N），跨文件收益验证需更强模型 + 仓库全量
-源码上下文重做。详见 `experiments/results/experiment_report_20260925.md` §7（本地历史报告，不入库）。
+源码上下文重做。详见 `（工件已清除）` §7（本地历史报告，不入库）。
 
 原探路方案（§1–§5.1）作为历史记录保留，下方原文不变。
 
@@ -42,10 +42,10 @@
 
 ### 1.1 现状
 
-历史 SWE-bench 20 任务验证（`experiments/results/swebench_20_summary.json`，2026-08-17）：
+历史 SWE-bench 20 任务验证（`（工件已清除）`，2026-08-17）：
 - 20 任务中 7 完成 / 3 失败 / 10 超时，总耗时 1173.5s；
 - **pass_rate 0/7（0%）**——全部 7 个完成任务均因 API 限流（429）失败；
-- 根因：当时各端点（International Agnes / Domestic Agnes / BigModel）全部限流，
+- 根因：当时配置的各端点全部限流（provider 条目已随 2026-10-23 清理删除），
   非代码缺陷，属于外部配额瓶颈。
 
 ### 1.2 问题
@@ -112,7 +112,7 @@ cd /Users/wangchenyu/Workspace/AITester
 ## 4. 结果归档与对比
 
 - 探路结果输出至 `experiments/results/benchmark_swe_bench_<timestamp>.json`；
-- 与历史 `experiments/results/swebench_20_summary.json` 对比：
+- 与历史 `（工件已清除）` 对比：
   - 若探路 5 任务 pass_rate > 0：记录"配额已恢复"，执行 §3.2 扩大批次；
   - 若仍全 429：记录"配额瓶颈持续"，R-01 维持待配额状态，不扩大。
 
@@ -134,7 +134,7 @@ cd /Users/wangchenyu/Workspace/AITester
    lite/mini/full/unknown 子集文件均为 0 行）；
 2. **加载器静默降级**：lite 子集 0 任务 → 加载器回退到 examples 合成数据集，
    实际跑了 3 个合成任务（`task_id` 前缀 `examples__`），结果归档
-   `experiments/results/benchmark_swe_bench_20260921_175906.json`
+   `（工件已清除）`
    （`total_tasks: 3`，但 dataset 字段标 `swe_bench`/`lite`，具误导性）；
 3. **缺源码字段**：通用文件 225 条无 `instance_code`（SWE-bench 官方 JSONL
    不含被测源码），未配 `SWE_BENCH_ENRICHMENT` → 即使子集文件有任务，

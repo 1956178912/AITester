@@ -41,21 +41,11 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 # BZ 轮（2026-10-23）追加 3 条：AB-11/AB-12「损坏通道」语料——测试契约
 # 锁定的"含损坏 trace"目录（每目录 1 个坏行文件，损坏留痕通道的观测对象），
 # 归档工件不重写；随契约工件入库（见 .gitignore BZ 块）。
+# 2026-10-23 provider 清理：cross_file_off 与 rag_lvl25h_n40_g8batch 两个坏行
+# 文件本身引用非 DeepSeek provider，已随清理删除，对应豁免同步移除。
 _ALLOWLIST: dict[str, str] = {
-    "experiments/results/emse_ult_specir_probe_20261014/traces/"
-    "ult__string_contrast_aitester_1791954227.trace.jsonl": "A20 修复前的历史截断行；归档工件不重写",
-    "experiments/results/spec_ab_scale87_20261012/ult_lite46_replace/traces/"
-    "ult__splitIA2Attribs_aitester_1791812333.trace.jsonl": "同上（A20 修复前的历史截断行）",
-    "experiments/results/cross_file_ab_level3/cross_file_off/traces/"
-    "synthetic__cross_file_type_mismatch_0032_aitester_1790596139.trace.jsonl": (
-        "AB-11 损坏通道语料（测试契约锁定；归档工件不重写）"
-    ),
-    "experiments/results/rag_lvl25h_n40_g8batch/traces/"
-    "synthetic__hard_chained_dict_lookup_0000_aitester_1790669173.trace.jsonl": (
-        "AB-11 损坏通道语料（测试契约锁定；归档工件不重写）"
-    ),
-    "experiments/results/spec_ab_scale87_20261012/ult_lite46_off/traces/"
-    "ult__string_contrast_aitester_1791811390.trace.jsonl": ("AB-11 损坏通道语料（测试契约锁定；归档工件不重写）"),
+    # CI 轮第三批（2026-10-24）：三条历史 trace 豁免随 experiments/results/
+    # 全量数据清除一并删除（「文件消失 ⇒ 删登记」）；重跑生成新工件后按需重建。
 }
 
 _EXCLUDE_PARTS = {

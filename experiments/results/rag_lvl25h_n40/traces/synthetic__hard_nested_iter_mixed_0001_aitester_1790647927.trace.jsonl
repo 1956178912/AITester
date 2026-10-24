@@ -1,6 +1,0 @@
-{"event": "task_start", "task": "<REDACTED_KEY>", "ts": 1790647927.602505, "meta": {"dataset_task_id": "synthetic__hard_nested_iter_mixed_0001", "baseline": "aitester", "target_function": "collect"}}
-{"event": "node", "task": "<REDACTED_KEY>", "node": "planner", "ts": 1790647938.283975, "output": {"function_name": "collect", "test_cases": 0}, "decision": "plan_complete", "duration_ms": 10493.27}
-{"event": "node", "task": "<REDACTED_KEY>", "node": "generator", "ts": 1790647952.6215942, "output": {"generated_test_len": 2657}, "decision": "generated"}
-{"event": "node", "task": "<REDACTED_KEY>", "node": "executor", "ts": 1790647953.17683, "output": {"passed": true, "coverage": 71.0, "failed_cases": 0}, "decision": "PASS", "duration_ms": 553.83, "iteration": 0}
-{"event": "node", "task": "<REDACTED_KEY>", "node": "_should_debug", "ts": 1790647953.2442, "output": {"reason": "test_passed"}, "decision": "done"}
-{"event": "task_end", "task": "<REDACTED_KEY>", "ts": 1790647953.245213, "passed": true, "duration_s": 25.64, "token_usage": {"input_tokens": 1164, "output_tokens": 1585, "total_tokens": 2749, "llm_calls": 2, "by_model": {"agnes-3.0-flash": 2749}}}

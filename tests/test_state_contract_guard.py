@@ -23,6 +23,9 @@ from scripts.gates.check_state_contract import (
     _audit_file,
     _literal_key,
     _rel,
+    _walk_channel_usage,
+    channel_coverage,
+    coverage_lines,
     declared_state_keys,
     scan_files,
 )
@@ -132,3 +135,193 @@ class TestScanSurface:
         assert _rel(PROJECT_ROOT / "README.md") == "README.md"
         outside = Path("/tmp/not-in-repo.py")
         assert _rel(outside) == str(outside)
+
+
+class TestChannelCoverage:
+    """CB 轮（2026-10-23）：判定面覆盖必须与成功语句同时出现。
+
+    旧成功语句「无未声明键读写」把「判过且干净」与「压根没看」说成同一件事：
+    判定面只有就地赋值 + `state.get/state[]` 字面读写，而 LangGraph 的规范写侧
+    是节点返回局部更新 dict（实测 45 键 / 95 站点）——正是 docstring 背景里
+    M14 / O35 静默丢弃事故的路径。本轮只披露、不动判定。
+    """
+
+    def test_declared_matches_runtime_annotations(self):
+        cov = channel_coverage()
+        assert cov.declared == tuple(sorted(declared_state_keys()))
+
+    def test_real_repo_coverage_numbers(self):
+        """真实仓库读数快照：数字变动即须重跑普查并重登记（棘轮式可见）。"""
+        cov = channel_coverage()
+        assert len(cov.declared) == 118
+        assert (len(cov.read_keys), cov.read_sites) == (57, 353)
+        assert (len(cov.inplace_write_keys), cov.inplace_write_sites) == (2, 11)
+        assert (len(cov.update_write_keys), cov.update_write_sites) == (45, 95)
+        assert (len(cov.untouched), len(cov.untouched_elsewhere), len(cov.untouched_nowhere)) == (35, 34, 1)
+        assert (cov.temp_keys, cov.temp_sites, cov.dynamic_sites, cov.undeclared_sites) == (2, 2, 1, 0)
+
+    def test_written_keys_union_and_unaudited_gap(self):
+        """两条写路径互不包含：`gold_fixed_code` 只有就地写（orchestration_search.py），
+        规范 update dict 侧从不写它——审计面看得见、LangGraph 写侧看不见，反之亦然。"""
+        cov = channel_coverage()
+        assert set(cov.written_keys) == set(cov.inplace_write_keys) | set(cov.update_write_keys)
+        assert set(cov.unaudited_write_keys) == set(cov.update_write_keys) - set(cov.inplace_write_keys)
+        assert cov.inplace_write_keys == ("gold_fixed_code", "stop_reason")
+        assert "gold_fixed_code" not in cov.update_write_keys
+        assert "stop_reason" in cov.update_write_keys
+        assert len(cov.unaudited_write_keys) == 44
+
+    def test_untouched_reconciles_with_sets(self):
+        cov = channel_coverage()
+        expected = (
+            {k for k in cov.declared if not k.startswith("_")}
+            - set(cov.read_keys)
+            - set(cov.inplace_write_keys)
+            - set(cov.update_write_keys)
+        )
+        assert set(cov.untouched) == expected
+
+    def test_untouched_partition_is_complete_and_disjoint(self):
+        cov = channel_coverage()
+        assert set(cov.untouched_elsewhere) | set(cov.untouched_nowhere) == set(cov.untouched)
+        assert not set(cov.untouched_elsewhere) & set(cov.untouched_nowhere)
+
+    def test_dead_declaration_is_named(self):
+        """唯一全仓零字面的声明键必须在披露里点名（不是计数摊销掉）。"""
+        assert channel_coverage().untouched_nowhere == ("failure_frequency_applied",)
+
+    def test_apparatus_self_reference_does_not_clear_dead_key(self):
+        """CB 实测的自指缺陷：门禁 docstring 与守卫测试都写了死键字面。
+
+        若把测量装置算作「别处还有出现」，untouched_nowhere 会由 1 变 0——
+        门禁用自己的披露文本把自己的结论证伪。装置提到键名是披露/断言，不是消费者。
+        """
+        from scripts.gates.check_state_contract import _apparatus_paths, _outside_literal_blob
+
+        rel = {p.relative_to(PROJECT_ROOT).as_posix() for p in _apparatus_paths()}
+        assert "scripts/gates/check_state_contract.py" in rel
+        assert "tests/test_state_contract_guard.py" in rel
+        assert "tests/test_ao_batch.py" not in rel, "排除面不得扩大到无关测试"
+        assert "failure_frequency_applied" not in _outside_literal_blob()
+
+    def test_imports_module_matches_only_exact_module(self):
+        import ast
+
+        from scripts.gates.check_state_contract import _imports_module
+
+        dotted = "scripts.gates.check_state_contract"
+        assert _imports_module(ast.parse(f"from {dotted} import x"), dotted)
+        assert _imports_module(ast.parse(f"import {dotted}"), dotted)
+        assert _imports_module(ast.parse("from scripts.gates import check_state_contract"), dotted)
+        assert not _imports_module(ast.parse("from scripts.gates import other"), dotted)
+        assert not _imports_module(ast.parse("import scripts.gates.check_state_contract_v2"), dotted)
+
+    def test_dead_declaration_comment_still_claims_writer(self):
+        """锁定发现本身：声明处注释承诺 `_debugger_node 写入 True`，而全仓零写者。"""
+        state_py = (PROJECT_ROOT / "src" / "graph" / "state.py").read_text(encoding="utf-8")
+        assert "failure_frequency_applied" in state_py
+        assert "_debugger_node 写入 True" in state_py
+        cov = channel_coverage()
+        assert "failure_frequency_applied" in cov.untouched
+        for other in (PROJECT_ROOT / "src").rglob("*.py"):
+            if other.name == "state.py":
+                continue
+            assert "failure_frequency_applied" not in other.read_text(encoding="utf-8"), other
+
+    def test_update_dict_counted_on_probe(self, tmp_path):
+        probe = tmp_path / "probe.py"
+        probe.write_text(
+            'def n(state):\n    state.update({"target_code": 1})\n    return {"error_category": 2}\n',
+            encoding="utf-8",
+        )
+        usage = _walk_channel_usage([probe], {"target_code", "error_category"})
+        assert usage.update == {"target_code": 1, "error_category": 1}
+        assert sum(usage.read.values()) == 0 and sum(usage.inplace.values()) == 0
+
+    def test_update_dict_foreign_keys_not_attributed(self, tmp_path):
+        probe = tmp_path / "probe.py"
+        probe.write_text(
+            'def helper(state):\n    return {"status": 1, "passed": 2}\n',
+            encoding="utf-8",
+        )
+        usage = _walk_channel_usage([probe], {"target_code"})
+        assert usage.foreign_update == 2
+        assert sum(usage.update.values()) == 0
+
+    def test_read_inplace_temp_dynamic_counted_separately(self, tmp_path):
+        probe = tmp_path / "probe.py"
+        probe.write_text(
+            "def n(state, k):\n"
+            '    state["target_code"] = "x"\n'
+            '    _ = state.get("error_category")\n'
+            '    state["_tmp"] = 1\n'
+            "    state[k] = 2\n"
+            '    state["undeclared_z"] = 3\n'
+            '    _ = state.get("undeclared_y")\n',
+            encoding="utf-8",
+        )
+        usage = _walk_channel_usage([probe], {"target_code", "error_category"})
+        assert usage.inplace == {"target_code": 1}
+        assert usage.read == {"error_category": 1}
+        assert usage.temp == {"_tmp": 1}
+        assert usage.dynamic_sites == 1
+        assert usage.undeclared_sites == 2
+
+    def test_update_dicts_are_disclosed_not_judged(self, tmp_path):
+        """边界锁：update dict 只披露不判定——否则辅助函数的普通 dict 会被误判。"""
+        probe = tmp_path / "probe.py"
+        probe.write_text(
+            'def helper(state):\n    return {"not_a_state_key": 1}\n',
+            encoding="utf-8",
+        )
+        assert _audit_file(probe, declared_state_keys()) == []
+
+    def test_coverage_cli_prints_key_table(self):
+        import subprocess
+
+        result = subprocess.run(
+            [sys.executable, str(PROJECT_ROOT / "scripts" / "gates" / "check_state_contract.py"), "--coverage"],
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, result.stderr
+        assert "状态通道逐键覆盖" in result.stdout
+        assert "failure_frequency_applied: 0 / 0 / 0" in result.stdout
+        assert "审计面披露：声明 118 键" in result.stdout
+
+    def test_success_message_carries_disclosure(self):
+        import subprocess
+
+        result = subprocess.run(
+            [sys.executable, str(PROJECT_ROOT / "scripts" / "gates" / "check_state_contract.py")],
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        lines = [ln for ln in result.stdout.splitlines() if ln.strip()]
+        assert lines[0].startswith("状态通道契约审计通过")
+        assert any("审计面披露" in ln for ln in lines)
+        assert any("update dict 45 键 / 95 站点" in ln for ln in lines)
+        assert any("failure_frequency_applied" in ln for ln in lines)
+
+    def test_coverage_lines_are_stable(self):
+        cov = channel_coverage()
+        lines = coverage_lines(cov)
+        assert len(lines) == 4
+        assert all(ln.startswith("  ") for ln in lines)
+
+    def test_module_loads_without_sys_modules_registration(self):
+        """NamedTuple 而不是 dataclass：历史加载器不登记 sys.modules（CA 轮教训）。"""
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "_state_contract_unregistered",
+            PROJECT_ROOT / "scripts" / "gates" / "check_state_contract.py",
+        )
+        assert spec and spec.loader
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        cov = module.channel_coverage()
+        assert len(cov.declared) == 118

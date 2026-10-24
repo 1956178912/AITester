@@ -169,7 +169,7 @@ _attach_postprocess_wall_to_summary(summary, postprocess_stage_durations)
   numpy): timers normal/exception/empty/nested/decorator, exact quantile values
   (even/odd/single/unsorted/duplicates), JSON shape and serialization, threshold and
   env fallback, all-timeout/no-task/inconsistent-data fail-fast, hook sample.
-- Smoke artifact: `experiments/results/q_round_postprocess_wall_20261018/`
+- Smoke artifact: `（工件已清除）`
   (deterministic JSON sample built from synthetic durations + SHA256 manifest; shape
   demo only, not real batch numbers).
 - Integration tests (R-3): `tests/test_run_benchmark_postprocess_hook.py`

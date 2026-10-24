@@ -1,6 +1,0 @@
-{"event": "task_start", "task": "<REDACTED_KEY>", "ts": 1790670061.2774432, "meta": {"dataset_task_id": "<REDACTED_KEY>", "baseline": "aitester", "target_function": "pool_status"}}
-{"event": "node", "task": "<REDACTED_KEY>", "node": "planner", "ts": 1790670061.295533, "output": {"function_name": "pool_status", "test_cases": 4}, "decision": "plan_complete", "duration_ms": 0.52}
-{"event": "node", "task": "<REDACTED_KEY>", "node": "generator", "ts": 1790670061.296125, "output": {"generated_test_len": 704}, "decision": "generated"}
-{"event": "node", "task": "<REDACTED_KEY>", "node": "executor", "ts": 1790670061.809967, "output": {"passed": true, "coverage": 54.0, "failed_cases": 0}, "decision": "PASS", "duration_ms": 513.65, "iteration": 0}
-{"event": "node", "task": "<REDACTED_KEY>", "node": "_should_debug", "ts": 1790670061.810415, "output": {"reason": "test_passed"}, "decision": "done"}
-{"event": "task_end", "task": "<REDACTED_KEY>", "ts": 1790670061.810828, "passed": true, "duration_s": 0.53, "token_usage": {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0, "llm_calls": 0, "by_model": {}}}

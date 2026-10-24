@@ -28,7 +28,7 @@
 
 **根因**（按概率排序）：
 1. API Key 无效或额度用尽（401/403 最常见）；
-2. 限流（429 / APIReachLimitError，zai 系严格）；
+2. 限流（429 / APIReachLimitError）；
 3. 网络出口不通（CI 无外网 / base_url 拼错）；
 4. `LLM_TIMEOUT` 过短遇上深度思考模型。
 

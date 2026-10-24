@@ -59,7 +59,7 @@ experiments/results/failure_knowledge_base.json` 产出结构化知识库。
 - 一致性：该组合下复现步骤 / 建议修复文本相似度 ≥ 阈值（词袋
   余弦，复用 `src/utils/embedding_utils.py` 的 `cosine_similarity`）；
 - 人工签核：每条拟固化模式需记录"签核人 + 批次来源 + 决策日期"
-  （落 `experiments/results/kb_review_log.json`，审计可追溯）。
+  （落 `（工件已清除）`，审计可追溯）。
 
 不通过签核的模式**不进入**③，保留在知识库作观察项。
 
@@ -80,7 +80,7 @@ experiments/results/failure_knowledge_base.json` 产出结构化知识库。
 - 高置信度模式 → 该 `error_category` 对应的针对性 prompt 片段
   （如 `LLM_BREAKS_IMPORT` 在 sqlfluff 插件结构下：强调"保留
   `Rule_L*` 命名契约、仅改方法体不改类名"）；
-- 片段落 `experiments/results/kb_prompt_snippets.json`（人工签核
+- 片段落 `（工件已清除）`（人工签核
   后生成），经 `KB_PROMPT_SNIPPET_ENABLE`（默认 false）在
   `_debugger_node` 注入；
 - 保守口径：片段仅**追加**到既有 prompt 尾部（不替换历史模板），

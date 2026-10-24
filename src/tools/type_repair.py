@@ -202,9 +202,15 @@ def _run_mypy_findings(
             _f.write(patched_code or "")
             _tmp_path = _f.name
         try:
-            # mypy.api.run 返回 (exit_code, out, err)；exit_code 1 = 有错误
-            # 2 = 命令/文件错误（语法不合法等），均保守处理
-            _exit_code, _out, _err = mypy.api.run([_tmp_path, "--no-error-summary"])
+            # R05（2026-10-23 全量集中复审 P1）：mypy.api.run 官方契约是
+            # (stdout, stderr, exit_status)（mypy/api.py 源码可核）——旧实现按
+            # (exit_code, out, err) 解包，真实运行时 _exit_code 拿到的是 stdout
+            # 字符串，`in (0, 1)` 恒不成立（结果恒记 error），stdout 诊断又被
+            # 当 stderr 丢弃。同时显式加 --show-column-numbers：诊断解析正则
+            # 要求 path:line:col 三段，mypy 默认输出无列号，不开启则普通类型
+            # 诊断匹配不到。exit_status 1 = 有错误，2 = 命令/文件错误（语法
+            # 不合法等），均保守处理。
+            _out, _err, _exit_code = mypy.api.run([_tmp_path, "--no-error-summary", "--show-column-numbers"])
             # 解析 mypy 输出（格式：path:line:col: error: message [category]）
             _MYPY_LINE_RE = re.compile(r"^.+?:?(\d+):\d+: (warning|error): (.+?) \[([a-z-]+)\]$")
             findings: list[dict[str, Any]] = []

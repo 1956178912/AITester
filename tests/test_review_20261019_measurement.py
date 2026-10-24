@@ -1,10 +1,7 @@
 """Z 轮（2026-10-19 第四轮第三方全量静态审查）测量与 LLM 参数修复回归锁。
 
-对应审查报告 `/Users/wangchenyu/Desktop/AITester_审查报告(1).md` 的四个 P1：
+对应审查报告的三个 P1：
 
-- **F09**（§G、§M11、§H）：`_call_zai` 未发送 temperature，但缓存身份
-  （`_effective_request_identity`）记录"实际生效采样温度"——请求身份与实际
-  请求分叉。修复后 zai 路径经 ``create(temperature=...)`` 透传 eff_temperature。
 - **F12**（§G、§M5、§H）：`compute_mdo` 把 ``rc==1`` 无差别标
   ``assertion_failed``——"测试无断言 + 变异体抛 ValueError"也产生 MDR
   （报告最小反例）。修复后只有"全部 call 阶段失败均为断言型（AssertionError /
@@ -16,7 +13,7 @@
 - **F14**（§G、§M4、§H）：负 rc（信号终止）穿过守卫，``buggy=-15 ∧ fixed=0``
   推导出 detection=1.0。修复后负 rc 一律判为异常终止/执行错误。
 
-纪律：零 LLM、零网络；zai / 探针无效场景全部 mock；MDO 真实 pytest 子进程只用
+纪律：零 LLM、零网络；探针无效场景全部 mock；MDO 真实 pytest 子进程只用
 最小合成函数（单次 <1s），M1 用例 mock 执行原语（不拉真实套件）。
 """
 
@@ -38,7 +35,7 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 # ═════════════════════════════════════════════════════════════════════════════
-#  F09：zai SDK 必须实际发送 temperature（请求身份 = 实际请求）
+#  F12：断言失败 vs 运行异常（MDR 构念）
 # ═════════════════════════════════════════════════════════════════════════════
 
 
@@ -46,118 +43,6 @@ def _valid_probe_behavior(call_repr: str) -> str:
     """构造一份 schema 合法的行为摘要 JSON（探针 stdout 形态）。"""
     return json.dumps({"calls": [["f", ["1"], "ok", call_repr]], "state": []}, sort_keys=True)
 
-
-def _fake_zai_response(text: str = "ok") -> Any:
-    """构造 zai SDK 响应替身（content 非空 + 无 usage 记账字段）。"""
-    message = mock.MagicMock()
-    message.content = text
-    message.reasoning_content = None
-    response = mock.MagicMock()
-    response.choices = [mock.MagicMock(message=message)]
-    response.usage = None
-    return response
-
-
-@pytest.mark.unit
-class TestF09ZaiTemperatureContract:
-    """F09：zai 路径实际发送 temperature，且与缓存身份记录一致。"""
-
-    def test_sdk_create_receives_caller_temperature(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """调用级断言（§M11）：mock SDK 的 create，0.37 必须原样到达请求体。"""
-        from src.agents import llm_client
-
-        create = mock.Mock(return_value=_fake_zai_response())
-        client = mock.MagicMock()
-        client.chat.completions.create = create
-        monkeypatch.setattr(llm_client, "_get_or_create_zai_client", lambda *a, **k: client)
-
-        out = llm_client._call_zai(
-            "k",
-            "https://open.bigmodel.cn/api/paas/v4",
-            "glm-4.7-flash",
-            "sys",
-            "hi",
-            max_retries=0,
-            temperature=0.37,
-        )
-        assert out == "ok"
-        kwargs = create.call_args.kwargs
-        assert kwargs["temperature"] == 0.37, "F09：SDK create 必须收到调用方 temperature"
-        # 既有请求参数不得被温度透传破坏
-        assert kwargs["model"] == "glm-4.7-flash"
-        assert kwargs["thinking"] == {"type": "disabled"}
-        assert kwargs["max_tokens"] == llm_client._ZAI_MAX_TOKENS
-
-    def test_default_temperature_matches_config_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """不传 temperature 时发送 config.TEMPERATURE（与 OpenAI 路径默认同口径）。"""
-        from src.agents import llm_client
-
-        create = mock.Mock(return_value=_fake_zai_response())
-        client = mock.MagicMock()
-        client.chat.completions.create = create
-        monkeypatch.setattr(llm_client, "_get_or_create_zai_client", lambda *a, **k: client)
-
-        llm_client._call_zai("k", "https://open.bigmodel.cn/api", "m", "s", "u", max_retries=0)
-        assert create.call_args.kwargs["temperature"] == pytest.approx(llm_client.TEMPERATURE)
-
-    def test_base_agent_passes_effective_temperature_and_identity_agrees(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """BaseAgent._call_llm 的 zai 调用点传 eff_temperature，身份记录同值。
-
-        这是 F09 的契约核心：`_effective_request_identity` 记录的温度必须
-        等于 zai 请求实际携带的温度（显式覆盖 0.55）。
-        """
-        from src.agents import base_agent
-
-        captured: dict[str, Any] = {}
-
-        def _fake_call_zai(*args: Any, **kwargs: Any) -> str:
-            captured["args"] = args
-            captured["kwargs"] = kwargs
-            return "zai reply"
-
-        monkeypatch.setattr(base_agent, "_call_zai", _fake_call_zai)
-        monkeypatch.setattr(base_agent, "_is_zai_compatible", lambda url: True)
-        monkeypatch.setattr(
-            base_agent,
-            "_get_all_api_configs",
-            lambda: [("k", "https://open.bigmodel.cn/api", "glm-4")],
-        )
-        monkeypatch.setattr(base_agent, "_get_or_create_chat_client", lambda *a, **k: mock.MagicMock())
-
-        agent = base_agent.BaseAgent("sys prompt")
-        assert agent._call_llm("hello", temperature=0.55) == "zai reply"
-        sent = captured["kwargs"]["temperature"]
-        identity = base_agent._effective_request_identity(
-            0.55, False, complexity_class=None, system_prompt=agent.system_prompt
-        )
-        assert sent == 0.55
-        assert identity["temperature"] == pytest.approx(sent), "F09：缓存身份记录的温度必须等于 zai 请求实际发送的温度"
-
-    def test_base_agent_zai_path_default_temperature(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """未显式覆盖温度时，zai 调用点发送 eff=config.TEMPERATURE（不是丢弃）。"""
-        from src.agents import base_agent
-
-        captured: dict[str, Any] = {}
-
-        def _fake_call_zai(*args: Any, **kwargs: Any) -> str:
-            captured["kwargs"] = kwargs
-            return "ok"
-
-        monkeypatch.setattr(base_agent, "_call_zai", _fake_call_zai)
-        monkeypatch.setattr(base_agent, "_is_zai_compatible", lambda url: True)
-        monkeypatch.setattr(
-            base_agent, "_get_all_api_configs", lambda: [("k", "https://open.bigmodel.cn/api", "glm-4")]
-        )
-        monkeypatch.setattr(base_agent, "_get_or_create_chat_client", lambda *a, **k: mock.MagicMock())
-
-        agent = base_agent.BaseAgent("sys")
-        agent._call_llm("hello")
-        assert captured["kwargs"]["temperature"] == pytest.approx(base_agent.TEMPERATURE)
-
-
-# ═════════════════════════════════════════════════════════════════════════════
-#  F12：断言失败 vs 运行异常（MDR 构念）
-# ═════════════════════════════════════════════════════════════════════════════
 
 _BASE_CODE = "def f(x):\n    if x > 0:\n        return x + 1\n    return 0\n"
 _NO_ASSERT_TEST = "from t import f\n\ndef test_f():\n    f(1)\n"

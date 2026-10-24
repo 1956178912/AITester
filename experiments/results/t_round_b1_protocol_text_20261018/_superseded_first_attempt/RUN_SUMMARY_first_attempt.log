@@ -1,9 +1,0 @@
-T2/B1（2026-10-18）：RT1 协议文本消融 —— 3 格 × 2 seed 真 LLM 跑批
-CUT_SHA=a93c1f60ee31b9582e0146f73e3038e6ce0f01a1
-WORKTREE=/Users/wangchenyu/Workspace/AITester-t-b1-a93c1f6
-OUT=/Users/wangchenyu/Workspace/AITester/experiments/results/t_round_b1_protocol_text_20261018
-PREREG_SHA256=5761901e868672ba15f8884a9b62108ec3c5c25306c41158d85600236acaab7f
-BATCH_START_ISO_UTC=2026-10-18T01:01:42Z BATCH_START_EPOCH=1792285302
-PLAN=C1_seed42,C1_seed44,C2_seed42,C2_seed44,C3_seed42,C3_seed44（cell-major，seed 42→44）
-BUDGET_USD_MAX=2.0 COST_HARD_STOP_USD=1.8 WALL_HARD_STOP_SECONDS=5100 PER_RUN_TIMEOUT=1800s
-================================================================

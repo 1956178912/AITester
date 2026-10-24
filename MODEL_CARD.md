@@ -21,7 +21,7 @@ ADR-0021/0027/0029 测量口径修正后为 **39.31%（v2，57/145 可重放行�
 
 - **模型来源**：本项目不自研/微调模型。全部智能由用户自配的 OpenAI 兼容端点
   提供（`.env.local` 的 `LLM_N_*` 三元组：API Key / Base URL / 模型名，
-  支持任意 OpenAI 兼容 provider 与智谱 zai-sdk 端点）。
+  内置 provider 仅 DeepSeek 官方端点）。
 - **模型角色**：Planner（逻辑分析/规约产出）、Generator（测试代码生成）、
   Debugger/Review（根因诊断与补丁生成）、FaultLocalizer（RGFL 式推理故障
   定位，只定位不修复，2026-10-07 修复引擎批次 I 起）、ExpertPool（可选
@@ -86,13 +86,13 @@ ADR-0021/0027/0029 测量口径修正后为 **39.31%（v2，57/145 可重放行�
   检出/修复指标并列输出。E2 定案批 FL@1 首度可测 19/53=35.8%
   （gold diff 对齐修复后口径）。
 - 成本：aitester $0.0259 / plain_llm_df $0.0045 每任务（价目表 2026-10-06
-  官方登记口径：deepseek-flash 峰时价、qwen-long 标准价；agnes 无公开
-  官方价未登记）。**plain_llm_df 的 $0.0045 是已记录花费的下界，不是精确
+  官方登记口径：deepseek-flash 峰时价——表内唯一登记模型；2026-10-23
+  按"仅保留 DeepSeek 官方"要求删除其余条目）。**plain_llm_df 的 $0.0045 是已记录花费的下界，不是精确
   均值，也不是"免费"**：主批 261 行中 35 行 token 三元组全 0 但
   `generated_test` 非空（其中 3 行 detection=1.0），S11 阈值单侧通过
   （无记账行 13.4% < 50%），改前这些行以 0 进金额分子、仍占任务分母；
   AK 轮起 `cost_caliber="recorded_lower_bound"` 显式披露，真实花费只会更高
-  （`docs/reviews/PARTIAL_ACCOUNTING_AK_2026-10-21.md`）。
+  （`PARTIAL_ACCOUNTING_AK_2026-10-21.md`）。
 - **套件判绿口径（BA→BC 轮，2026-10-21）**：pytest 对全 skip / xfail /
   deselect 的套件同样返回 `rc==0`，故 `rc==0` 不等于"有断言执行的通过"。
   M1 detection / repair、`repair_replay`、`mutation_detection` 与
@@ -102,7 +102,7 @@ ADR-0021/0027/0029 测量口径修正后为 **39.31%（v2，57/145 可重放行�
   真实语料审计：246 份 benchmark / 736 份 gold 套件 / 4895 条 mutation 行、
   3 份 MISGUIDED_REPORT（350 任务行 / 700 侧）零模块级全 skip ⇒ 历史读数
   零影响；该口径只影响派生读数与判定，不改写任何归档工件（详见
-  `docs/reviews/EFFECTIVE_GREEN_BA_2026-10-21.md` /
+  `EFFECTIVE_GREEN_BA_2026-10-21.md` /
   `EFFECTIVE_GREEN_CONSUMERS_BB_2026-10-21.md` /
   `MISGUIDED_REPLAY_EFFECTIVE_GREEN_BC_2026-10-21.md`）。
 - spec_compile_rate 在 logic 档实测恒 0.0（AB1 验证批 12/12）——"逻辑驱动"

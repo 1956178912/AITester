@@ -7,8 +7,9 @@
 > **本文档为 2026-09-14 批次数据快照**（50 任务合成实验 + SWE-bench 仓库级验证
 > P0/P1），**所有数据口径冻结于该批次，不随版本迭代自动刷新**：
 >
-> 1. **所有仓库级验证数据均基于免费档小模型（`agnes-3.0-flash`）**，反映的是该
->    模型能力边界而非 AITester 架构能力；更强模型（GPT-4 级）下的数据单独落
+> 1. **所有仓库级验证数据均基于当时的免费档小模型**（模型条目已随 2026-10-23
+>    provider 清理删除，不属于当前 DeepSeek 官方配置），反映的是该
+>    模型能力边界而非 AITester 架构能力；更强模型下的数据单独落
 >    `experiments/results/experiment_report_<date>_repo_level.md`，不在本文件就地
 >    追加（避免污染免费档基线快照）。
 > 2. **文中错误分类数字（如"12 类/16 类"）为批次内历史口径**。当前错误分类
@@ -20,7 +21,7 @@
 >
 > 快照冻结日：2026-09-14（批次口径）。
 
-> ⚠️ **历史快照**：本文档为 2026-09 批次的数据快照（50 任务合成实验 + SWE-bench 仓库级验证 P0/P1），**数据不随版本迭代自动刷新**。所有仓库级验证数据均基于免费档小模型（`agnes-3.0-flash`），更强模型下的数据单独落盘，不在本文件就地追加。
+> ⚠️ **历史快照**：本文档为 2026-09 批次的数据快照（50 任务合成实验 + SWE-bench 仓库级验证 P0/P1），**数据不随版本迭代自动刷新**。所有仓库级验证数据均基于当时的免费档小模型（条目已随 2026-10-23 provider 清理删除），更强模型下的数据单独落盘，不在本文件就地追加。
 
 ## 概述
 
@@ -36,13 +37,14 @@
 > 失败归因口径以该脚本输出为准；失败知识库→修复策略的闭环设计见
 > [docs/design/failure_knowledge_feedback.md](design/failure_knowledge_feedback.md)。
 >
-> **SWE-bench 0/7 失败归因边界说明**：基于**免费档小模型（agnes-3.0-flash）**
+> **SWE-bench 0/7 失败归因边界说明**：基于**当时的免费档小模型**（条目已随
+> 2026-10-23 provider 清理删除）
 > 的实测结果，反映的是该模型对真实仓库级代码的修复质量边界，而非 AITester
-> 架构本身的局限。使用更强模型（GPT-4 级别）时失败分类与数量预计显著变化；
+> 架构本身的局限。使用更强模型时失败分类与数量预计显著变化；
 > 更强模型仓库级验证数据单独落 `experiments/results/experiment_report_<date>_repo_level.md`，
 > 不在本文件就地追加（避免污染免费档基线快照）。
 
-> **状态说明（2026-09-25，SWE-bench 仓库级验证 P0/P1）**：SWE-bench lite-20 仓库级验证（`RepoExecutor`，`REPO_LEVEL_EXECUTION=true`）首轮 0/20 曾被误诊为"LLM 引擎无法产出可应用补丁"（`repo_verification.llm_applied` 全 False）。**根因已修正**——0/20 是数据管道（`instance_code` 缺失）+ 执行环境（单临时文件 executor 装不下仓库级代码 + 全局 python 跨 commit editable 安装污染）+ 补丁管道（`_diff_codes` 用 difflib 手工拼接在"整文件替换"场景产出 corrupt unified diff，`git apply` 全拒）三层缺陷叠加，**非 LLM 引擎能力**。修复（`SWE_BENCH_ENRICHMENT` 注入真实源码 + `RepoExecutor` 仓库级 clone + pip install -e + venv 隔离 + `_diff_codes` 改用 `git diff --no-index` 生成可应用 unified diff）后，P1 单源任务 0/7 的失败分类为：5/7 `LLM_BREAKS_IMPORT`（LLM 重写破坏 sqlfluff 插件命名契约，`Rule_L*` 类名改坏 → 整个 import 链崩溃）+ 2/7 `EMPTY_LLM_PATCH`（LLM 未产出修复）——**这才是 LLM 引擎修复质量边界的真实测量**（免费档小模型对真实仓库级代码）。跨文件任务（13/20 多源）在引擎能力突破前无正向信息量（ON/OFF 都会 0/N），跨文件收益验证需更强模型 + 仓库全量源码上下文。详见 `experiments/results/experiment_report_20260925.md` §7（本地历史报告，不入库） 与 [docs/design/swe_bench_probe.md](design/swe_bench_probe.md) §0。
+> **状态说明（2026-09-25，SWE-bench 仓库级验证 P0/P1）**：SWE-bench lite-20 仓库级验证（`RepoExecutor`，`REPO_LEVEL_EXECUTION=true`）首轮 0/20 曾被误诊为"LLM 引擎无法产出可应用补丁"（`repo_verification.llm_applied` 全 False）。**根因已修正**——0/20 是数据管道（`instance_code` 缺失）+ 执行环境（单临时文件 executor 装不下仓库级代码 + 全局 python 跨 commit editable 安装污染）+ 补丁管道（`_diff_codes` 用 difflib 手工拼接在"整文件替换"场景产出 corrupt unified diff，`git apply` 全拒）三层缺陷叠加，**非 LLM 引擎能力**。修复（`SWE_BENCH_ENRICHMENT` 注入真实源码 + `RepoExecutor` 仓库级 clone + pip install -e + venv 隔离 + `_diff_codes` 改用 `git diff --no-index` 生成可应用 unified diff）后，P1 单源任务 0/7 的失败分类为：5/7 `LLM_BREAKS_IMPORT`（LLM 重写破坏 sqlfluff 插件命名契约，`Rule_L*` 类名改坏 → 整个 import 链崩溃）+ 2/7 `EMPTY_LLM_PATCH`（LLM 未产出修复）——**这才是 LLM 引擎修复质量边界的真实测量**（免费档小模型对真实仓库级代码）。跨文件任务（13/20 多源）在引擎能力突破前无正向信息量（ON/OFF 都会 0/N），跨文件收益验证需更强模型 + 仓库全量源码上下文。详见 `（工件已清除）` §7（本地历史报告，不入库） 与 [docs/design/swe_bench_probe.md](design/swe_bench_probe.md) §0。
 
 **实验设置**（历史数据快照，非当前版本性能承诺）：
 - 数据集：Synthetic Dataset (50 tasks)
@@ -153,7 +155,7 @@ diagnosis: "JSON 解析失败: Could not find complete JSON: line 1 column 1 (ch
 **解决方案**:
 1. 实现响应后处理管道，标准化输出格式
 2. 添加重试机制，针对格式错误自动重试
-3. 使用更可靠的模型（如gpt-4o替代flash模型）
+3. 使用更可靠的模型（替代当前 flash 档模型）
 
 ---
 

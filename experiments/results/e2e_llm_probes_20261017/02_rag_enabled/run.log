@@ -1,49 +1,0 @@
-=== N-4 02_rag_enabled RAG 开 aitester ×2 ===
-START_ISO_UTC=2026-10-17T15:07:05Z START_EPOCH=1792249625
-CODE_ROOT=/Users/wangchenyu/Workspace/AITester-n4-probe-f194d67 RUNNER_REPO=/Users/wangchenyu/Workspace/AITester
-GIT_HEAD=f194d679aaaba1c2fa97ef80fd53dbf47de203a9
-GIT_DIRTY_LINES=0
-CACHE_NAMESPACE=e2e_llm_probes_20261017_02_rag
-TRACE_DIR=/Users/wangchenyu/Workspace/AITester/experiments/results/e2e_llm_probes_20261017/02_rag_enabled/traces
-ITEM_ENV: AITESTER_PROFILE=logic TEMPERATURE=0.0 LLM_THINKING_MODE=disabled BENCHMARK_PARALLELISM=1 AITESTER_LLM_CACHE=0 MAX_ITERATIONS=1 ENABLE_MUTATION_SCORING=false BRANCH_COVERAGE_INJECT_ENABLE=false MUTATION_ADVISOR_ENABLE=false ENABLE_RAG=true
-CMD: /Users/wangchenyu/Workspace/AITester/.venv/bin/python /Users/wangchenyu/Workspace/AITester-n4-probe-f194d67/experiments/run_main_batch.py --dataset quixbugs --task-limit 2 --seed 42 --baselines aitester --output-dir /Users/wangchenyu/Workspace/AITester/experiments/results/e2e_llm_probes_20261017/02_rag_enabled --skip-stats
-R4 主批次：dataset=quixbugs task_count=None seed=42（全量数据集前 2 个任务）
-基线：aitester；输出：/Users/wangchenyu/Workspace/AITester/experiments/results/e2e_llm_probes_20261017/02_rag_enabled；确定性采样：开（temp=0.0）
-基准测试 [aitester]:   0%|          | 0/2 [00:00<?, ?task/s]executor_runtime：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-测试执行超时（>30s）: Command '['/Users/wangchenyu/Workspace/AITester/.venv/bin/python', '-m', 'pytest', '/var/folders/pj/frxc6s715_x9x19hkk6pj2nh0000gn/T/aitester_sandbox_7lw4swsf/test_generated.py', '-v', '--tb=short', '--cov=/var/folders/pj/frxc6s715_x9x19hkk6pj2nh0000gn/T/aitester_sandbox_7lw4swsf', '--cov-report=term', '-k', 'bitcount']' timed out after 30 seconds
-m1_metrics：执行超时（>60s），已终止整个进程组并返回（文件后端，不会挂死）
-P0 源码补丁证据门：本轮补丁证据等级=none（不足 gold/sbfl），已恢复原文件（拒绝写盘，patch_applied=False）
-executor_runtime：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-测试执行超时（>30s）: Command '['/Users/wangchenyu/Workspace/AITester/.venv/bin/python', '-m', 'pytest', '/var/folders/pj/frxc6s715_x9x19hkk6pj2nh0000gn/T/aitester_sandbox_yifjqhtl/test_generated.py', '-v', '--tb=short', '--cov=/var/folders/pj/frxc6s715_x9x19hkk6pj2nh0000gn/T/aitester_sandbox_yifjqhtl', '--cov-report=term', '-k', 'bitcount']' timed out after 30 seconds
-m1_metrics：执行超时（>120s），已终止整个进程组并返回（文件后端，不会挂死）
-m1_metrics：执行超时（>120s），已终止整个进程组并返回（文件后端，不会挂死）
-基准测试 [aitester]:  50%|█████     | 1/2 [06:09<06:09, 369.18s/task]基准测试 [aitester] - 耗时: 128.8s:  50%|█████     | 1/2 [06:09<06:09, 369.18s/task]第 1 次执行失败，尝试重试...
-第 2 次执行失败，尝试重试...
-M1 包结构判分需 QuixBugs 辅助材料但不可用（AITESTER_QUIXBUGS_DATA 未配置或其目录不存在）——保守记 None（fail-closed，不误判为 0）
-M1 包结构判分需 QuixBugs 辅助材料但不可用（AITESTER_QUIXBUGS_DATA 未配置或其目录不存在）——保守记 None（fail-closed，不误判为 0）
-M1 包结构判分需 QuixBugs 辅助材料但不可用（AITESTER_QUIXBUGS_DATA 未配置或其目录不存在）——保守记 None（fail-closed，不误判为 0）
-M1 包结构判分需 QuixBugs 辅助材料但不可用（AITESTER_QUIXBUGS_DATA 未配置或其目录不存在）——保守记 None（fail-closed，不误判为 0）
-M1 包结构判分需 QuixBugs 辅助材料但不可用（AITESTER_QUIXBUGS_DATA 未配置或其目录不存在）——保守记 None（fail-closed，不误判为 0）
-基准测试 [aitester] - 耗时: 128.8s: 100%|██████████| 2/2 [06:31<00:00, 165.29s/task]基准测试 [aitester] - 耗时: 148.8s: 100%|██████████| 2/2 [06:31<00:00, 165.29s/task]基准测试 [aitester] - 耗时: 148.8s: 100%|██████████| 2/2 [06:31<00:00, 195.87s/task]
-
-============================================================
-基准测试完成！
-============================================================
-  [aitester] 成功率: 50.0%, 平均覆盖率: 49.5%
-  [aitester] 平均每任务Token: 10317.5, LLM调用次数: 8
-总耗时: 148.8s
-结果文件: /Users/wangchenyu/Workspace/AITester/experiments/results/e2e_llm_probes_20261017/02_rag_enabled/benchmark_quixbugs_20261017_231339.json
-============================================================
-批次工件：/Users/wangchenyu/Workspace/AITester/experiments/results/e2e_llm_probes_20261017/02_rag_enabled/benchmark_quixbugs_20261017_231339.json
-
-============================================================
-R4 批次摘要（M1 三指标 + R52/R53/R8）
-============================================================
-  [aitester] success=50.0% (有效 2/2，剔除 harness_invalid=0)
-    M1 三指标（可测 1/2 任务）: detection=100.0% repair=0.0% false_fix=0.0%
-    R4 regression_rate=0.0% / N1 test_error_rate=0.0%
-    R8 FL@1 命中率: 0/1 (0.0%)
---skip-stats：跳过 R14 统计协议
-[watchdog] 子进程正常结束 rc=0 wall=394.8s
-END_ISO_UTC=2026-10-17T15:13:40Z END_EPOCH=1792250020 EXIT_CODE=0 WALL_SECONDS=395
-GIT_STATUS_AFTER_LINES=0

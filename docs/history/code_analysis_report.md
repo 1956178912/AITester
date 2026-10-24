@@ -149,7 +149,7 @@ D 规则总告警数：4945 条
 | 文件 | 行号 | 函数名 | 相似度 |
 |------|------|--------|--------|
 | `src/agents/llm_client.py` | 55-89 | `_get_or_create_chat_client(...)` | 90% 与下方结构一致 |
-| `src/agents/llm_client.py` | 102-140 | `_get_or_create_zai_client(...)` | 同上 |
+| `src/agents/llm_client.py` | 102-140 | `_get_or_create_<third-party>_client(...)` | 同上 |
 
 **相似度说明**：两个函数均为"带锁的 LRU 缓存客户端工厂"，逻辑框架一致（无锁快路径→加锁二次检查→FIFO 淘汰→插入），仅缓存键不同。  
 **修复建议**：可提取公共 `make_cached_client_factory(max_size, lock)` 高阶函数，降低重复维护成本。
@@ -239,7 +239,7 @@ D 规则总告警数：4945 条
 
 | 文件 | 行号 | 问题 | 修复建议 |
 |------|------|------|----------|
-| `src/agents/llm_client.py` | 288 | `_call_zai` 内延迟导入 `zai.core._errors` | 合理（zai 为可选依赖，保持延迟导入） |
+| `src/agents/llm_client.py` | 288 | `_call_<third-party>` 内延迟导入第三方 SDK 错误模块 | 合理（第三方 SDK 为可选依赖，保持延迟导入） |
 | `src/graph/nodes.py` | 544-545 | `_select_multi_candidate_patch` 内延迟导入 `DebuggerAgent`/`ExecutorAgent` | 合理（避免顶层循环依赖） |
 
 **说明**：`src/agents/base_agent.py:152` 的延迟导入 `langchain_core.messages` 是刻意设计（注释明确"避免循环导入（base_agent 被 planner/generator/debugger 导入）"），**不建议**提升至模块顶层。项目内延迟导入均为规避循环依赖或可选依赖，保持现状。
@@ -321,7 +321,7 @@ D 规则总告警数：4945 条
 ### 不建议做（说明原因）
 
 1. **把 `base_agent.py:152` 延迟导入提升顶层**：代码注释明确"避免循环导入（base_agent 被 planner/generator/debugger 导入）"，属刻意设计，提升可能引入循环依赖。
-2. **抽象 LLM 客户端缓存双实现**（`llm_client.py:55/102`）：OpenAI 与 zai SDK 缓存键与淘汰策略存在本质差异（zai 按 `(api_key, base_url)`，OpenAI 按四元组），强行统一会引入不必要的泛型复杂度。
+2. **抽象 LLM 客户端缓存双实现**（`llm_client.py:55/102`）：OpenAI 与第三方 SDK 缓存键与淘汰策略存在本质差异（第三方 SDK 按 `(api_key, base_url)`，OpenAI 按四元组），强行统一会引入不必要的泛型复杂度。
 3. **大规模 docstring 补齐**：4945 条告警中 99.5% 为格式类（可自动修），且 pyproject 未启用 D 规则集、不构成 CI 阻断；剩余 469 条内容缺失需逐条补充，工作量大收益低。
 4. **删除低引用内部辅助函数**（如 `_is_within_allowed_roots`、`_safe_unlink`）：逐一核实均有实际调用点，属正常封装设计，删除风险高于收益。
 
@@ -348,7 +348,7 @@ D 规则总告警数：4945 条
 ### 未落地（维持"不建议做"结论）
 
 1. **`base_agent.py` 延迟导入提升顶层**：刻意设计（避免循环导入），保持现状。
-2. **抽象 LLM 客户端缓存双实现**：OpenAI 与 zai SDK 缓存键与淘汰策略本质不同。
+2. **抽象 LLM 客户端缓存双实现**：OpenAI 与第三方 SDK 缓存键与淘汰策略本质不同。
 3. **大规模 docstring 补齐**：4945 条中 99.5% 格式类且 D 规则未启用（非 CI 阻断），收益低。
 4. **删除低引用内部辅助函数**：均有实际调用点，属正常封装设计。
 

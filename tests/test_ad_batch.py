@@ -4,13 +4,12 @@
 思维链（thinking 默认 enabled、思考模式 max_tokens 默认 64K、思维链按
 输出计费；aitester 臂 5.23M 输出中实际工件仅 ~10%，单任务最高 84k
 输出）。AD1 在 OpenAI 兼容路径接入 thinking / reasoning_effort /
-max_tokens 三参数（默认关思考，对齐 zai 路径硬编码先例）。
+max_tokens 三参数（默认关思考）。
 
 覆盖：
 - _openai_extra_body 解析矩阵（默认值 / 显式开启 / 非法值忽略 / 越界忽略）；
 - 客户端缓存键含 extra_body（环境变更 → 新客户端，测试口径）；
-- 客户端实例携带 extra_body（透传到底层 OpenAI 兼容端点）；
-- zai 路径不受影响（保持自身硬编码 thinking disabled）。
+- 客户端实例携带 extra_body（透传到底层 OpenAI 兼容端点）。
 """
 
 from __future__ import annotations

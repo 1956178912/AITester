@@ -64,9 +64,8 @@ def main():
         sys.exit(1)
 
     # 加载 API Keys：按 models 中实际出现的 provider 推导环境变量名
-    # （与 generate_config 的命名约定 {PROVIDER}_API_KEY 同源，避免此前
-    # 硬编码 ALIYUN_API_KEY 等与 aliyun_bailian/agnes_domestic 等 provider
-    # 键名失配、导致环境变量永远取不到的问题）
+    # （与 generate_config 的命名约定 {PROVIDER}_API_KEY 同源，避免硬编码
+    # 键名与 provider 键名失配、导致环境变量永远取不到的问题）
     api_keys: dict[str, str] = {}
     for model in models:
         provider = model.get("provider", "")

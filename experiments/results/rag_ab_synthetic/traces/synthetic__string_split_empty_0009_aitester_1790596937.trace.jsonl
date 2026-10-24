@@ -1,6 +1,0 @@
-{"event": "task_start", "task": "<REDACTED_KEY>", "ts": 1790596937.158468, "meta": {"dataset_task_id": "synthetic__string_split_empty_0009", "baseline": "aitester", "target_function": null}}
-{"event": "node", "task": "<REDACTED_KEY>", "node": "planner", "ts": 1790596937.1737611, "output": {"function_name": "split_words", "test_cases": 5}, "decision": "plan_complete", "duration_ms": 0.24}
-{"event": "node", "task": "<REDACTED_KEY>", "node": "generator", "ts": 1790597247.6807292, "output": {"generated_test_len": 848}, "decision": "generated"}
-{"event": "node", "task": "<REDACTED_KEY>", "node": "executor", "ts": 1790597248.2004192, "output": {"passed": true, "coverage": 100.0, "failed_cases": 0}, "decision": "PASS", "duration_ms": 518.28, "iteration": 0}
-{"event": "node", "task": "<REDACTED_KEY>", "node": "_should_debug", "ts": 1790597248.200861, "output": {"reason": "test_passed"}, "decision": "done"}
-{"event": "task_end", "task": "<REDACTED_KEY>", "ts": 1790597248.201225, "passed": true, "duration_s": 311.04, "token_usage": {"input_tokens": 901, "output_tokens": 187, "total_tokens": 1088, "llm_calls": 1, "by_model": {"glm-4-flash": 1088}}}

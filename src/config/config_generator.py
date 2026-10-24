@@ -15,28 +15,15 @@ import json
 from pathlib import Path
 from typing import Any
 
-# 常见 LLM API 提供商配置模板
-# PROVIDER_TEMPLATES 是 provider 登记的全量注册表（schema 校验与
-# credential_scrub 动态凭证剔除名单都依赖它，见 validate_llm_configs /
-# src/utils/credential_scrub.py），保留全量 provider 键；
-# 当前项目实际启用的端点见 COMMON_MODELS（仅 DeepSeek 官方 deepseek-flash，
-# 2026-10-09 配置要求：删除其余 API，仅保留用户配置的 DeepSeek）。
+# LLM API 提供商配置模板
+# 当前项目只保留 DeepSeek 官方端点（2026-10-09 配置要求：删除其余 API，
+# 仅保留用户配置的 DeepSeek；2026-10-23 全仓清理：非 DeepSeek provider
+# 模板已删除）。schema 校验与 credential_scrub 动态凭证剔除名单都以本表
+# 为唯一来源，见 validate_llm_configs / src/utils/credential_scrub.py。
 PROVIDER_TEMPLATES = {
-    "aliyun_bailian": {
-        "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-        # S6（2026-10-09 修正）：百炼 compatible-mode 端点可路由多模型
-        # （通义千问 + 第三方 deepseek/glm/kimi 经 OpenAI 兼容端点），
-        # 原"（通义千问）"会让 deepseek-v3/glm-4.7/kimi 等条目误读为
-        # 通义千问系列；改为中性"阿里云百炼"，模型身份由 model_name 表达。
-        "description": "阿里云百炼",
-    },
-    "agnes_domestic": {"base_url": "https://api.agnes-ai.cn/v1", "description": "Agnes AI 国内站"},
-    "agnes_international": {"base_url": "https://apihub.agnes-ai.com/v1", "description": "Agnes AI 国际站"},
-    "bigmodel": {"base_url": "https://open.bigmodel.cn/api/paas/v4/", "description": "BigModel 智谱"},
     "deepseek": {"base_url": "https://api.deepseek.com/v1", "description": "DeepSeek"},
 }
-# 当前项目启用的模型目录（2026-10-09：仅保留用户配置的 DeepSeek V4.1 Flash；
-# 其余 qwen / glm / kimi / agnes / deepseek-chat 等条目已按要求移除。
+# 当前项目启用的模型目录（仅 DeepSeek 官方 deepseek-flash）。
 # generate_config_json / print_model_catalog 以本列表为唯一来源。
 # 注：model_name 使用 DeepSeek 官方 API 当前接受的写法 `deepseek-flash`
 # （历史别名 `deepseek-v4.1-flash` 已弃用，与 .env.local / llm_configs.json 对齐）。
@@ -248,9 +235,8 @@ def main():
         sys.exit(1)
 
     # 加载 API Keys：按 models 中实际出现的 provider 推导环境变量名
-    # （与 generate_config 的命名约定 {PROVIDER}_API_KEY 同源，避免此前
-    # 硬编码 ALIYUN_API_KEY 等与 aliyun_bailian/agnes_domestic 等 provider
-    # 键名失配、导致环境变量永远取不到的问题）
+    # （与 generate_config 的命名约定 {PROVIDER}_API_KEY 同源，避免硬编码
+    # 键名与 provider 键名失配、导致环境变量永远取不到）
     api_keys: dict[str, str] = {}
     for model in models:
         provider = model.get("provider", "")

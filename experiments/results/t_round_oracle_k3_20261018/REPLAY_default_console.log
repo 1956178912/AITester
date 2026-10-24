@@ -1,4 +1,0 @@
-[p1-examples] 复用 20 个任务的既有示例（零 LLM）：experiments/results/t_round_oracle_k3_20261018/K3_REUSE_REPORT.json
-[p1-examples] plain_llm_df_spec 完成：A correct=0 B correct=5；A 可分类=5 B 可分类=12
-[p1-examples] plain_llm_df 完成：A correct=0 B correct=5；A 可分类=5 B 可分类=12
-[p1-examples] JSON 报告: experiments/results/t_round_oracle_k3_20261018/ORACLE_EXAMPLES_REPORT_k3_default.json（墙钟 263.046s）

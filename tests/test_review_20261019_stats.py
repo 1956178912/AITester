@@ -279,6 +279,10 @@ class TestSensitivityBoundsPairedNumerator:
                 assert 0 <= row["sum_b"] <= row["n_common"]
 
     def test_real_main_batch_base_rows_paired(self):
+        pytest.skip(
+            "结果工件不在盘（2026-10-24 用户指令清除历史数据、DeepSeek 重跑前）："
+            "语料前提缺失具名 skip，重跑落盘后自动恢复判定"
+        )
         """真实主批：base 分子=配对阳性（不是整臂阳性）。"""
         from experiments.statistical_analysis import load_experiment_results_with_sources
 

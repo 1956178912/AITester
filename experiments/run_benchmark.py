@@ -329,9 +329,10 @@ def run_single_agent_baseline(
 
     # W6（2026-10-05 审查落地·基线健全性修复）：
     # 1) prompt 注入真实模块名——此前不含模块名，合成任务模块名是 task_id
-    #    末段（如 sqrt_negative_input_0000），LLM 只能猜测（主批次
-    #    benchmark_synthetic_20261001_121523 实测 50/50 猜成 math_utils 等
-    #    错误名）→ M1 干净复跑全部 collection error（test_error_rate=94%），
+    #    末段（如 sqrt_negative_input_0000），LLM 只能猜测（2026-10-01 R4 主批
+    #    实测 50/50 猜成 math_utils 等错误名；该批工件已随 provider 清理删除，
+    #    读数存档于 BASELINE history）
+    #    → M1 干净复跑全部 collection error（test_error_rate=94%），
     #    且失败类别恒误报 execution_trace_missing。plain_llm 走完整工作流
     #    （模块名由 Generator 节点注入），单智能体基线口径应对齐。
     # 2) 移除与"只输出测试代码"自相矛盾的"生成修复补丁"要求——修复轮

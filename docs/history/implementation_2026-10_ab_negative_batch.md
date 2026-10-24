@@ -28,7 +28,7 @@
 | `BUG_PATTERNS_LEVEL25` | 数据集 | 4 个运行时异常模式（boundary/key/attr/type） |
 | `CROSS_FILE_DEEP_PATTERNS` | 数据集 | 3 文件依赖链（module_a→b→c），`difficulty=35` |
 
-**小样本验证**：位置感知 L2.5 A/B（8 任务，`seed=42`，agnes-3.0-flash）
+**小样本验证**：位置感知 L2.5 A/B（8 任务，`seed=42`，当时的免费档模型）
 ——ON/OFF 成功率均 100%（首轮生成即捕获缺陷，定位阶段未激活），指标
 正确显示"未激活"而非误导性的 0%。定位正确率指标已修正为区分
 "无修复轮次"（未激活）与"修复但定位未命中"。
@@ -69,7 +69,7 @@ LLM 成本）。
 
 **小样本验证**：RAG 相关性 L3 A/B（8 任务）——ON/OFF 成功率均 100%，
 RAG ON 平均 token 2260 vs OFF 210（检索注入上下文），RAG 未显著减少
-任何错误类型（L3 双模块在 agnes-3.0-flash 上首轮全过，非 RAG 约束
+任何错误类型（L3 双模块在当时免费档模型上首轮全过，非 RAG 约束
 的瓶颈场景）。
 
 | 开关 | 默认 | 说明 |
@@ -139,4 +139,4 @@ RAG 原始口径、跨文件单入口口径）逐字节不变。回归测试 147
 ---
 
 *生成时间：2026-10；数据源：`experiments/results/{position_aware_ab_l25_small,rag_relevance_ab_l3_small,cross_file_ab_l35_bi_small}/`；
-基线口径：agnes-3.0-flash（LLM_1）+ 合成数据集 + seed=42，小样本 n=8。*
+基线口径：当时免费档模型（LLM_1）+ 合成数据集 + seed=42，小样本 n=8。*

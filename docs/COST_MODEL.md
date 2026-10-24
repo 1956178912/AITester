@@ -151,7 +151,7 @@ _attach_postprocess_wall_to_summary(summary, postprocess_stage_durations)
   计时器正常/异常/空任务/嵌套/装饰器、分位精确值（奇偶/单值/乱序/重复）、JSON
   形状与可序列化、阈值与 env 回退、全超时/无任务/数据不一致 fail-fast、hook
   集成样例。
-- smoke 工件：`experiments/results/q_round_postprocess_wall_20261018/`（构造数据
+- smoke 工件：`（工件已清除）`（构造数据
   的确定性 JSON 样例 + SHA256 清单，仅演示形状，不代表真实批次数字）。
 - 接入测试（R-3）：`tests/test_run_benchmark_postprocess_hook.py`（23 例）：
   mutation 关闭零行为、三调用顺序/入参等价、每基线样本粒度、阈值告警、

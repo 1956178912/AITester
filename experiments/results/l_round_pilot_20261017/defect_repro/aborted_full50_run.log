@@ -1,39 +1,0 @@
-START_EPOCH=1792231869 START_ISO_UTC=2026-10-17T10:11:09Z
-GIT_SHA=8d4f35cc0400cbb168bc503bf79d082bfbdf965f
-GIT_DIRTY_COUNT=0
-CMD: AITESTER_PROFILE=logic TEMPERATURE=0.0 LLM_THINKING_MODE=disabled BENCHMARK_PARALLELISM=2 AITESTER_CACHE_NAMESPACE=l_round_pilot .venv/bin/python experiments/run_main_batch.py --dataset quixbugs --task-count 3 --seed 42 --baselines plain_llm_df --output-dir experiments/results/l_round_pilot_20261017 --skip-stats --allow-dirty --dirty-reason "L-round pilot validation"
-⚠️ AITESTER_LLM_CACHE 未禁用：LLM 文件缓存（TTL 7 天）命中时同 prompt 不再调用 LLM——
-   重跑/重复实验请设 AITESTER_LLM_CACHE=0，否则观测非独立样本（p 值失真）。
-R4 主批次：dataset=quixbugs task_count=3 seed=42
-基线：plain_llm_df；输出：experiments/results/l_round_pilot_20261017；确定性采样：开（temp=0.0）
-基准测试 [plain_llm_df]:   0%|          | 0/50 [00:00<?, ?task/s]第 1 次执行失败，尝试重试...
-第 2 次执行失败，尝试重试...
-executor_runtime：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-测试执行超时（>30s）: Command '['/Users/wangchenyu/Workspace/AITester/.venv/bin/python', '-m', 'pytest', '/var/folders/pj/frxc6s715_x9x19hkk6pj2nh0000gn/T/aitester_sandbox_za1wyge1/test_generated.py', '-v', '--tb=short', '--cov=/var/folders/pj/frxc6s715_x9x19hkk6pj2nh0000gn/T/aitester_sandbox_za1wyge1', '--cov-report=term', '-k', 'bitcount']' timed out after 30 seconds
-mutation_testing：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-基准测试 [plain_llm_df]:   2%|▏         | 1/50 [00:48<39:25, 48.27s/task]基准测试 [plain_llm_df] - 耗时: 7.8s:   2%|▏         | 1/50 [00:48<39:25, 48.27s/task]第 1 次执行失败，尝试重试...
-第 2 次执行失败，尝试重试...
-基准测试 [plain_llm_df] - 耗时: 7.8s:   4%|▍         | 2/50 [01:08<25:21, 31.71s/task]基准测试 [plain_llm_df] - 耗时: 13.1s:   4%|▍         | 2/50 [01:08<25:21, 31.71s/task]第 1 次执行失败，尝试重试...
-第 2 次执行失败，尝试重试...
-第 1 次执行失败，尝试重试...
-第 2 次执行失败，尝试重试...
-基准测试 [plain_llm_df] - 耗时: 13.1s:   6%|▌         | 3/50 [01:27<20:19, 25.94s/task]基准测试 [plain_llm_df] - 耗时: 23.1s:   6%|▌         | 3/50 [01:27<20:19, 25.94s/task]第 1 次执行失败，尝试重试...
-第 2 次执行失败，尝试重试...
-O3 branch 测量：执行超时（>60s），已终止整个进程组并返回（文件后端，不会挂死）
-O3 branch 测量超时（>60s），降级 None
-基准测试 [plain_llm_df] - 耗时: 23.1s:   8%|▊         | 4/50 [01:44<17:19, 22.59s/task]基准测试 [plain_llm_df] - 耗时: 29.4s:   8%|▊         | 4/50 [01:44<17:19, 22.59s/task]第 1 次执行失败，尝试重试...
-第 2 次执行失败，尝试重试...
-executor_runtime：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-测试执行超时（>30s）: Command '['/Users/wangchenyu/Workspace/AITester/.venv/bin/python', '-m', 'pytest', '/var/folders/pj/frxc6s715_x9x19hkk6pj2nh0000gn/T/aitester_sandbox_zhi3d293/test_generated.py', '-v', '--tb=short', '--cov=/var/folders/pj/frxc6s715_x9x19hkk6pj2nh0000gn/T/aitester_sandbox_zhi3d293', '--cov-report=term', '-k', 'bitcount']' timed out after 30 seconds
-基准测试 [plain_llm_df] - 耗时: 29.4s:  10%|█         | 5/50 [02:05<16:25, 21.91s/task]基准测试 [plain_llm_df] - 耗时: 35.2s:  10%|█         | 5/50 [02:05<16:25, 21.91s/task]第 1 次执行失败，尝试重试...
-第 2 次执行失败，尝试重试...
-mutation_testing：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-基准测试 [plain_llm_df] - 耗时: 35.2s:  12%|█▏        | 6/50 [02:49<21:33, 29.41s/task]基准测试 [plain_llm_df] - 耗时: 41.3s:  12%|█▏        | 6/50 [02:49<21:33, 29.41s/task]第 1 次执行失败，尝试重试...
-第 2 次执行失败，尝试重试...
-O3 branch 测量：执行超时（>60s），已终止整个进程组并返回（文件后端，不会挂死）
-O3 branch 测量超时（>60s），降级 None
-基准测试 [plain_llm_df] - 耗时: 41.3s:  14%|█▍        | 7/50 [03:10<18:59, 26.49s/task]基准测试 [plain_llm_df] - 耗时: 47.2s:  14%|█▍        | 7/50 [03:10<18:59, 26.49s/task]mutation_testing：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-executor_runtime：执行超时（>30s），已终止整个进程组并返回（文件后端，不会挂死）
-测试执行超时（>30s）: Command '['/Users/wangchenyu/Workspace/AITester/.venv/bin/python', '-m', 'pytest', '/var/folders/pj/frxc6s715_x9x19hkk6pj2nh0000gn/T/aitester_sandbox_trks5nj9/test_generated.py', '-v', '--tb=short', '--cov=/var/folders/pj/frxc6s715_x9x19hkk6pj2nh0000gn/T/aitester_sandbox_trks5nj9', '--cov-report=term', '-k', 'find_first_in_sorted']' timed out after 30 seconds
-/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/multiprocessing/resource_tracker.py:475: UserWarning: resource_tracker: There appear to be 1 leaked semaphore objects to clean up at shutdown: {'/mp-g_azw3cy'}
-  warnings.warn(

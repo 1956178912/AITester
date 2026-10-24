@@ -47,7 +47,7 @@ S13/S11（2026-10-11 独立评审落地，均为增量；历史数字与默认�
     python experiments/statistical_analysis.py
     python experiments/statistical_analysis.py \
         --results-dir experiments/results \
-        --batches main_batch/benchmark_synthetic_20261001_112528.json,main_batch/benchmark_synthetic_20261001_112801.json
+        --batches main_batch/benchmark_synthetic_20261006_140906.json,main_batch/benchmark_synthetic_20261006_151907.json
     python experiments/statistical_analysis.py --results-dir experiments/results \
         --output experiments/results/statistical_report_cluster_robust.md \
         --pool-seeds --cluster-robust --cluster-max-pattern-repeat 2
@@ -288,8 +288,9 @@ def _batch_is_m1_schema_complete(data: dict) -> bool:
     """X2（2026-10-05 审查 P0-4b）：批次是否携带 M1 诚实指标字段。
 
     判据：任一基线的任一 detail 行的 "detection_rate" **非 None**——键存在
-    但全 None 的批次（如 main_batch/benchmark_synthetic_20261001_112528.json
-    等 n=5 冒烟批次：schema 已落盘但 M1 三指标从未在该批次上计算）与
+    但全 None 的批次（如 cross_file_ab_level3/cross_file_off/
+    benchmark_synthetic_20260928_195540.json 等 n=50 早期批次：schema 已落盘
+    但 M1 三指标从未在该批次上计算）与
     M1 批次混合会把 None 行并入"detection 可测数"分母口径（历史报告
     "60 任务/可测 49"即 2 个 n=5 冒烟批次混入所致），故默认剔除。
     """
@@ -352,7 +353,16 @@ def _load_batch_file(
         # 抛异常时，函数返回 False（不登记来源）却已把前臂写进 results，
         # 形成"无来源的前臂"。任何一步失败都必须零提交。
         staged: dict[str, list[dict]] = {}
-        _batch_tag = _seed_prefix or json_file.stem
+        # R03（2026-10-23 全量集中复审 P1）：_batch_tag 恒取真实批次文件身份
+        # （目录名/stem），不得在 pool_seeds 时退化为 seed 前缀——同 seed 的
+        # 不同批次（不同题）此前得到相同 tag，pass@k 的 batch_scoped 回退身份
+        # `id:{tag}:{tid}` 把它们合成"同题多轮"（真实例：seed44 的 t08 gates
+        # 批次与主批同为 synthetic__task_0016 但 pattern/gold 均不同）。
+        # seed 与批次身份分离：task_id 的 seed 前缀只服务跨 seed 分层（AB4），
+        # 批次内多轮折叠由 task_id 承担，_pair_by_task 不读 _batch_tag（协议
+        # 语义不变）。
+        _batch_dir = json_file.parent.name
+        _batch_tag = f"{_batch_dir}/{json_file.stem}" if _batch_dir else json_file.stem
         for baseline, baseline_data in data.get("results", {}).items():
             if baseline not in results:
                 continue
