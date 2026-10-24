@@ -1,0 +1,1440 @@
+{
+  "script_version": "m-round-m4-v1",
+  "arm": "df",
+  "baseline": "plain_llm_df",
+  "cache_namespace": "emse_docstring_augment_20261017_df",
+  "dataset": "quixbugs",
+  "seed": 42,
+  "parallelism": 4,
+  "planned_tasks_flag": 50,
+  "batch_file": "/Users/wangchenyu/Workspace/AITester/experiments/results/emse_docstring_augment_20261017/benchmark_quixbugs_20261025_003250.json",
+  "batch_bytes": 569075,
+  "batch_sha256": "9fc3b1fdf811da30ebb6aadd6139ff9101e353fe9f217b10e04b2b4375fc052e",
+  "status": "completed",
+  "start_epoch": 1792855805,
+  "end_epoch": 1792859936,
+  "start_iso_utc": "2026-10-24T15:30:05Z",
+  "end_iso_utc": "2026-10-24T16:38:56Z",
+  "wall_seconds": 4131,
+  "log_file": "/Users/wangchenyu/Workspace/AITester/experiments/results/emse_docstring_augment_20261017/log_df.log",
+  "provenance": {
+    "git_sha": "752b3a89727fc7dcc3354f79013ad1537c3ed6c4",
+    "git_dirty": false,
+    "dirty_reason": null,
+    "model_name": "deepseek-flash",
+    "model_fingerprint": {
+      "requested_alias": "deepseek-flash",
+      "returned_model": "deepseek-flash",
+      "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+      "probe_sha256": "fc3d915941b87e39064ba2075b6e2b29fc0de33bd9fd2b046f6857036edefda3",
+      "probe_at": "2026-10-24T16:32:49.162700+00:00",
+      "missing": [],
+      "pinned": true,
+      "error": null,
+      "alias_mismatch": false
+    },
+    "temperature": 0.0,
+    "profile": "logic",
+    "seed": 42,
+    "cache_enabled": true,
+    "cache_namespace": "emse_docstring_augment_20261017_df",
+    "valid_apis": [
+      {
+        "url": "https://api.deepseek.com/v1",
+        "model": "deepseek-flash",
+        "key": "<REDACTED>"
+      }
+    ],
+    "env_snapshot": {
+      "MAX_ITERATIONS": "3",
+      "LLM_TIMEOUT": "60",
+      "EXECUTION_TIMEOUT": "30",
+      "TEMPERATURE": "0.0",
+      "ENABLE_PLANNER": "true",
+      "ENABLE_DEBUGGER": "true",
+      "ENABLE_RAG": "false",
+      "DIAGNOSIS_NODE_ENABLE": null,
+      "TYPE_CHECK_ENABLE": null,
+      "COST_BUDGET_ENABLE": "true",
+      "EXPERT_POOL_ENABLE": null,
+      "MUTATION_TEST_ENABLE": null,
+      "KERNEL_SANDBOX_ENABLE": null,
+      "PATCH_RESAMPLE_ENABLE": null,
+      "REPO_LEVEL_EXECUTION": null,
+      "AITESTER_LLM_CACHE": null,
+      "AITESTER_CACHE_ISOLATE_MODEL": null,
+      "MUTATION_ADVISOR_ENABLE": "true",
+      "LOGIC_SPEC_STRICT_ENABLE": "true",
+      "BOUNDARY_TRIPLETS_ENABLE": null,
+      "FL_SPECTRAL_ENABLE": "true",
+      "FL_SPECTRAL_TOP_K": null,
+      "BRANCH_COVERAGE_INJECT_ENABLE": "true",
+      "RAG_POISONING_FILTER": null,
+      "SPEC_IR_ENABLE": "true",
+      "FLAKY_CHECK_ENABLE": null,
+      "FLAKY_REPEAT_COUNT": null,
+      "PIP_PACKAGE_WHITELIST_ENABLE": null,
+      "SWE_BENCH_P2P_GATE_ENABLE": null,
+      "SWE_BENCH_P2P_GATE_THRESHOLD": null,
+      "DETECTION_FIRST_ENABLE": "true",
+      "AITESTER_CACHE_NAMESPACE": "emse_docstring_augment_20261017_df",
+      "AITESTER_PROFILE": "logic",
+      "LOGIC_SPEC_STRICT_FALLBACK_ENABLE": "true",
+      "LLM_THINKING_MODE": "disabled",
+      "LLM_REASONING_EFFORT": null,
+      "LLM_MAX_OUTPUT_TOKENS": null,
+      "LLM_JSON_MODE": null,
+      "PLAN_STRIP_EXPECTED_OUTPUT_ENABLE": null,
+      "OVER_RED_SECTION_ENABLE": null,
+      "CFG_ANALYSIS_ENABLE": null,
+      "CONTEST_AST_SCAN_ENABLE": null,
+      "M1_PER_TEST_TIMEOUT": null,
+      "DETECTION_FIRST_SECTION_ENABLE": null,
+      "EVENT_BUS_ENABLE": null,
+      "FAULT_LOCALIZER_ENABLE": null,
+      "INJECTION_GUARD_OUTPUT_ENABLE": null,
+      "P2P_GATE_ENABLE": null,
+      "PATCH_EVIDENCE_GATE_ENABLE": null,
+      "POSITION_AWARE_REPAIR_ENABLE": null,
+      "TRACE_MEMORY_BUFFER_ENABLE": null,
+      "SPEC_ORACLE_EXEC_ENABLE": "true",
+      "PYTEST_TIMEOUT_ENABLE": null,
+      "PYTEST_TIMEOUT_SECONDS": null,
+      "AITESTER_CONTAMINATION_STRICT_MAX": null,
+      "API_HEALTH_CHECKER_ENABLE": null,
+      "CREDENTIAL_SCRUB_WHITELIST_ENABLE": null,
+      "ADVERSARIAL_DEBUGGING_ENABLE": null,
+      "AGENT_TELEMETRY_ENABLE": null,
+      "ASSERTION_AUGMENT_ENABLE": null,
+      "BIDIRECTIONAL_DIAGNOSIS_ENABLE": null,
+      "CONTEXT_TIER_DOWNGRADE_ENABLE": null,
+      "CONTRACT_ALIAS_ENABLE": null,
+      "COVERAGE_STALL_DETECT_ENABLE": null,
+      "CROSS_FILE_ENABLE": null,
+      "CROSS_FILE_PLAN_BUILD_ENABLE": null,
+      "CROSS_FILE_PLAN_CONSUME_ENABLE": null,
+      "DETECTION_SPECIFICITY_GATE_ENABLE": "true",
+      "DETERMINISTIC_GUARD_ENABLE": "true",
+      "DETERMINISTIC_REPAIR_FIRST_ENABLE": null,
+      "EDIT_INTENT_ENABLE": null,
+      "EXPERT_POOL_DEBATE_ENABLE": null,
+      "FAILURE_FREQUENCY_ENABLE": null,
+      "FAILURE_KB_ENABLE": null,
+      "FL_GOLD_INJECTION_ENABLE": null,
+      "GRAPH_RAG_ENABLE": null,
+      "HIERARCHICAL_SUMMARY_ENABLE": null,
+      "IMPORT_REPAIR_ENABLE": null,
+      "INJECTION_GUARD_ENABLE": null,
+      "LOCALIZED_EDIT_ENABLE": null,
+      "ORACLE_ENHANCE_ENABLE": null,
+      "ORACLE_VALIDATE_ENABLE": "true",
+      "PATCH_SNAPSHOT_ROLLBACK_ENABLE": "true",
+      "PROBE_SNAPSHOT_LOCATE_ENABLE": null,
+      "RAG_CONDITIONAL_ENABLE": null,
+      "RAG_JUDGE_INSTRUCTION_ENABLE": null,
+      "RAG_KEYWORD_FALLBACK_ENABLE": null,
+      "RAG_RELEVANCE_THRESHOLD_ENABLE": null,
+      "RED_REGRESSION_GATE_ENABLE": "true",
+      "REPRO_TEST_ENABLE": null,
+      "REWARD_PREDICTOR_ENABLE": null,
+      "RISK_APPROVAL_ENABLE": null,
+      "ROGUE_MONITOR_ENABLE": null,
+      "ROUTE_STRUCTURED_ENABLE": "true",
+      "RUNTIME_PROBE_ENABLE": null,
+      "SEMANTIC_CACHE_ENABLE": null,
+      "SPEC_IR_DSL_ENABLE": "true",
+      "SPEC_REFINE_ENABLE": null,
+      "SPEC_SMT_ENABLE": "true",
+      "STRATEGY_BANK_ENABLE": null,
+      "TESTLESS_VALIDATION_ENABLE": null,
+      "TEST_SUITE_DEDUP_ENABLE": null,
+      "TYPE_REPAIR_LLM_ENABLE": null,
+      "EMPTY_PLAN_SHORTCUT_ENABLE": null,
+      "OPERATION_MAP_INJECT_ENABLE": null,
+      "PATH_ENUM_INJECT_ENABLE": null,
+      "FEEDBACK_COMPRESSION_ENABLE": null,
+      "ORCHESTRATION_SEARCH_ENABLE": null,
+      "RAG_RETRIEVAL_RECALL_ENABLE": null,
+      "DETECTION_SPEC_MODE": null,
+      "ENABLE_MUTATION_SCORING": "true",
+      "DF_SPEC_ANCHOR_TABLE": null,
+      "DOC_ANCHOR_TABLE": null,
+      "SPEC_ORACLE_EXAMPLES_ENABLE": null,
+      "AITESTER_POSTPROCESS_WARN_S": null
+    }
+  },
+  "top_level": {
+    "dataset": "quixbugs",
+    "seed": 42,
+    "total_tasks": 50,
+    "parallelism": 4,
+    "baselines": [
+      "plain_llm_df"
+    ],
+    "timestamp": "2026-10-24T23:48:24.817787"
+  },
+  "tasks_total_rows": 50,
+  "token_metrics": {
+    "total_input_tokens": 36231,
+    "total_output_tokens": 52579,
+    "total_tokens": 88810,
+    "total_llm_calls": 56,
+    "total_cache_hits": 5,
+    "total_cache_avoided_tokens": 7955,
+    "cache_hit_rate_pct": 8.2,
+    "uncached_theoretical_tokens": 96765,
+    "avg_tokens_per_task": 1776.2,
+    "output_share_pct": 59.2,
+    "avg_output_per_task": 1051.58,
+    "avg_output_per_call": 938.91
+  },
+  "cost_usd_standard_price": 0.073964,
+  "cost_price_row": {
+    "model": "deepseek-flash",
+    "input_per_mtok": 0.3,
+    "output_per_mtok": 1.2,
+    "currency": "USD",
+    "as_of": "2026-10-06",
+    "source": "https://api-docs.deepseek.com/quick_start/pricing"
+  },
+  "detection": {
+    "measurable": 36,
+    "detected": 32,
+    "detection_rate": 0.8889,
+    "repair_rate": 0.0,
+    "false_fix_rate": 0.0,
+    "defect_41_measurable": 36,
+    "defect_41_detected": 32,
+    "defect_41_detection_rate": 0.8889,
+    "detection_none_task_ids": [
+      "quixbugs__breadth_first_search_test",
+      "quixbugs__depth_first_search_test",
+      "quixbugs__detect_cycle_test",
+      "quixbugs__minimum_spanning_tree_test",
+      "quixbugs__node",
+      "quixbugs__reverse_linked_list_test",
+      "quixbugs__shortest_path_length_test",
+      "quixbugs__shortest_path_lengths_test",
+      "quixbugs__bitcount",
+      "quixbugs__shortest_paths_test",
+      "quixbugs__topological_ordering_test",
+      "quixbugs__find_first_in_sorted",
+      "quixbugs__sqrt",
+      "quixbugs__wrap"
+    ]
+  },
+  "audit": {
+    "caliber": "QuixBugs 50 行（41 缺陷程序 + 9 测试驱动）；主分析集=41 缺陷程序（task_id 非 _test 后缀）",
+    "spec_augment_applied_counts_all50": {},
+    "spec_augment_applied_counts_41": {},
+    "spec_replace_applied_counts_all50": {},
+    "specificity_gate_verdict_counts_41": {
+      "over_red": 5,
+      "specific_red": 34,
+      "unavailable": 2
+    },
+    "over_red_share_41": 0.1282
+  },
+  "per_task": [
+    {
+      "task_id": "quixbugs__bucketsort",
+      "analysis_set": "defect_program",
+      "detection_rate": 1.0,
+      "repair_rate": 0.0,
+      "false_fix_rate": 0.0,
+      "test_error_rate": 0.0,
+      "verdict": "specific_red",
+      "spec_replace_applied": null,
+      "spec_augment_applied": null,
+      "token_usage": {
+        "input_tokens": 508,
+        "output_tokens": 850,
+        "total_tokens": 1358,
+        "llm_calls": 1,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 1358
+        }
+      },
+      "elapsed_seconds": 7.6,
+      "stop_reason": "unknown"
+    },
+    {
+      "task_id": "quixbugs__breadth_first_search_test",
+      "analysis_set": "driver_or_unknown",
+      "detection_rate": null,
+      "repair_rate": null,
+      "false_fix_rate": null,
+      "test_error_rate": null,
+      "verdict": "unavailable",
+      "spec_replace_applied": null,
+      "spec_augment_applied": null,
+      "token_usage": {
+        "input_tokens": 961,
+        "output_tokens": 711,
+        "total_tokens": 1672,
+        "llm_calls": 1,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 1672
+        }
+      },
+      "elapsed_seconds": 7.47,
+      "stop_reason": "unknown"
+    },
+    {
+      "task_id": "quixbugs__depth_first_search",
+      "analysis_set": "defect_program",
+      "detection_rate": 1.0,
+      "repair_rate": 0.0,
+      "false_fix_rate": 0.0,
+      "test_error_rate": 0.0,
+      "verdict": "specific_red",
+      "spec_replace_applied": null,
+      "spec_augment_applied": null,
+      "token_usage": {
+        "input_tokens": 492,
+        "output_tokens": 727,
+        "total_tokens": 1219,
+        "llm_calls": 1,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 1219
+        }
+      },
+      "elapsed_seconds": 6.95,
+      "stop_reason": "unknown"
+    },
+    {
+      "task_id": "quixbugs__depth_first_search_test",
+      "analysis_set": "driver_or_unknown",
+      "detection_rate": null,
+      "repair_rate": null,
+      "false_fix_rate": null,
+      "test_error_rate": null,
+      "verdict": "unavailable",
+      "spec_replace_applied": null,
+      "spec_augment_applied": null,
+      "token_usage": {
+        "input_tokens": 2049,
+        "output_tokens": 1569,
+        "total_tokens": 3618,
+        "llm_calls": 2,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 3618
+        }
+      },
+      "elapsed_seconds": 14.58,
+      "stop_reason": "unknown"
+    },
+    {
+      "task_id": "quixbugs__breadth_first_search",
+      "analysis_set": "defect_program",
+      "detection_rate": 1.0,
+      "repair_rate": 0.0,
+      "false_fix_rate": 0.0,
+      "test_error_rate": 0.0,
+      "verdict": "specific_red",
+      "spec_replace_applied": null,
+      "spec_augment_applied": null,
+      "token_usage": {
+        "input_tokens": 1165,
+        "output_tokens": 1914,
+        "total_tokens": 3079,
+        "llm_calls": 2,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 3079
+        }
+      },
+      "elapsed_seconds": 14.77,
+      "stop_reason": "unknown"
+    },
+    {
+      "task_id": "quixbugs__detect_cycle_test",
+      "analysis_set": "driver_or_unknown",
+      "detection_rate": null,
+      "repair_rate": null,
+      "false_fix_rate": null,
+      "test_error_rate": null,
+      "verdict": "unavailable",
+      "spec_replace_applied": null,
+      "spec_augment_applied": null,
+      "token_usage": {
+        "input_tokens": 862,
+        "output_tokens": 877,
+        "total_tokens": 1739,
+        "llm_calls": 1,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 1739
+        }
+      },
+      "elapsed_seconds": 7.7,
+      "stop_reason": "unknown"
+    },
+    {
+      "task_id": "quixbugs__detect_cycle",
+      "analysis_set": "defect_program",
+      "detection_rate": 1.0,
+      "repair_rate": 0.0,
+      "false_fix_rate": 0.0,
+      "test_error_rate": 0.0,
+      "verdict": "specific_red",
+      "spec_replace_applied": null,
+      "spec_augment_applied": null,
+      "token_usage": {
+        "input_tokens": 489,
+        "output_tokens": 694,
+        "total_tokens": 1183,
+        "llm_calls": 1,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 1183
+        }
+      },
+      "elapsed_seconds": 6.85,
+      "stop_reason": "unknown"
+    },
+    {
+      "task_id": "quixbugs__flatten",
+      "analysis_set": "defect_program",
+      "detection_rate": 1.0,
+      "repair_rate": 0.0,
+      "false_fix_rate": 0.0,
+      "test_error_rate": 0.0,
+      "verdict": "specific_red",
+      "spec_replace_applied": null,
+      "spec_augment_applied": null,
+      "token_usage": {
+        "input_tokens": 502,
+        "output_tokens": 731,
+        "total_tokens": 1233,
+        "llm_calls": 1,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 1233
+        }
+      },
+      "elapsed_seconds": 6.89,
+      "stop_reason": "unknown"
+    },
+    {
+      "task_id": "quixbugs__find_in_sorted",
+      "analysis_set": "defect_program",
+      "detection_rate": 1.0,
+      "repair_rate": 0.0,
+      "false_fix_rate": 0.0,
+      "test_error_rate": 0.0,
+      "verdict": "specific_red",
+      "spec_replace_applied": null,
+      "spec_augment_applied": null,
+      "token_usage": {
+        "input_tokens": 556,
+        "output_tokens": 939,
+        "total_tokens": 1495,
+        "llm_calls": 1,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 1495
+        }
+      },
+      "elapsed_seconds": 7.82,
+      "stop_reason": "unknown"
+    },
+    {
+      "task_id": "quixbugs__gcd",
+      "analysis_set": "defect_program",
+      "detection_rate": 1.0,
+      "repair_rate": 0.0,
+      "false_fix_rate": 0.0,
+      "test_error_rate": 0.0,
+      "verdict": "specific_red",
+      "spec_replace_applied": null,
+      "spec_augment_applied": null,
+      "token_usage": {
+        "input_tokens": 470,
+        "output_tokens": 683,
+        "total_tokens": 1153,
+        "llm_calls": 1,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 1153
+        }
+      },
+      "elapsed_seconds": 7.72,
+      "stop_reason": "unknown"
+    },
+    {
+      "task_id": "quixbugs__get_factors",
+      "analysis_set": "defect_program",
+      "detection_rate": 1.0,
+      "repair_rate": 0.0,
+      "false_fix_rate": 0.0,
+      "test_error_rate": 0.0,
+      "verdict": "specific_red",
+      "spec_replace_applied": null,
+      "spec_augment_applied": null,
+      "token_usage": {
+        "input_tokens": 535,
+        "output_tokens": 889,
+        "total_tokens": 1424,
+        "llm_calls": 1,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 1424
+        }
+      },
+      "elapsed_seconds": 7.82,
+      "stop_reason": "unknown"
+    },
+    {
+      "task_id": "quixbugs__hanoi",
+      "analysis_set": "defect_program",
+      "detection_rate": 1.0,
+      "repair_rate": 0.0,
+      "false_fix_rate": 0.0,
+      "test_error_rate": 0.0,
+      "verdict": "specific_red",
+      "spec_replace_applied": null,
+      "spec_augment_applied": null,
+      "token_usage": {
+        "input_tokens": 676,
+        "output_tokens": 1015,
+        "total_tokens": 1691,
+        "llm_calls": 1,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 1691
+        }
+      },
+      "elapsed_seconds": 8.29,
+      "stop_reason": "unknown"
+    },
+    {
+      "task_id": "quixbugs__kheapsort",
+      "analysis_set": "defect_program",
+      "detection_rate": 1.0,
+      "repair_rate": 0.0,
+      "false_fix_rate": 0.0,
+      "test_error_rate": 0.0,
+      "verdict": "specific_red",
+      "spec_replace_applied": null,
+      "spec_augment_applied": null,
+      "token_usage": {
+        "input_tokens": 680,
+        "output_tokens": 1098,
+        "total_tokens": 1778,
+        "llm_calls": 1,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 1778
+        }
+      },
+      "elapsed_seconds": 8.56,
+      "stop_reason": "unknown"
+    },
+    {
+      "task_id": "quixbugs__is_valid_parenthesization",
+      "analysis_set": "defect_program",
+      "detection_rate": 1.0,
+      "repair_rate": 0.0,
+      "false_fix_rate": 0.0,
+      "test_error_rate": 0.0,
+      "verdict": "specific_red",
+      "spec_replace_applied": null,
+      "spec_augment_applied": null,
+      "token_usage": {
+        "input_tokens": 522,
+        "output_tokens": 796,
+        "total_tokens": 1318,
+        "llm_calls": 1,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 1318
+        }
+      },
+      "elapsed_seconds": 7.9,
+      "stop_reason": "unknown"
+    },
+    {
+      "task_id": "quixbugs__knapsack",
+      "analysis_set": "defect_program",
+      "detection_rate": 0.0,
+      "repair_rate": 0.0,
+      "false_fix_rate": 0.0,
+      "test_error_rate": 0.0,
+      "verdict": "over_red",
+      "spec_replace_applied": null,
+      "spec_augment_applied": null,
+      "token_usage": {
+        "input_tokens": 672,
+        "output_tokens": 825,
+        "total_tokens": 1497,
+        "llm_calls": 1,
+        "cache_hits": 1,
+        "cache_avoided_tokens": 1497,
+        "by_model": {
+          "deepseek-flash": 1497
+        }
+      },
+      "elapsed_seconds": 10.91,
+      "stop_reason": "unknown"
+    },
+    {
+      "task_id": "quixbugs__kth",
+      "analysis_set": "defect_program",
+      "detection_rate": 1.0,
+      "repair_rate": 0.0,
+      "false_fix_rate": 0.0,
+      "test_error_rate": 0.0,
+      "verdict": "specific_red",
+      "spec_replace_applied": null,
+      "spec_augment_applied": null,
+      "token_usage": {
+        "input_tokens": 1141,
+        "output_tokens": 2008,
+        "total_tokens": 3149,
+        "llm_calls": 2,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 3149
+        }
+      },
+      "elapsed_seconds": 11.79,
+      "stop_reason": "unknown"
+    },
+    {
+      "task_id": "quixbugs__lcs_length",
+      "analysis_set": "defect_program",
+      "detection_rate": 1.0,
+      "repair_rate": 0.0,
+      "false_fix_rate": 0.0,
+      "test_error_rate": 0.0,
+      "verdict": "specific_red",
+      "spec_replace_applied": null,
+      "spec_augment_applied": null,
+      "token_usage": {
+        "input_tokens": 530,
+        "output_tokens": 1071,
+        "total_tokens": 1601,
+        "llm_calls": 1,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 1601
+        }
+      },
+      "elapsed_seconds": 8.26,
+      "stop_reason": "unknown"
+    },
+    {
+      "task_id": "quixbugs__levenshtein",
+      "analysis_set": "defect_program",
+      "detection_rate": 1.0,
+      "repair_rate": 0.0,
+      "false_fix_rate": 0.0,
+      "test_error_rate": 0.0,
+      "verdict": "specific_red",
+      "spec_replace_applied": null,
+      "spec_augment_applied": null,
+      "token_usage": {
+        "input_tokens": 624,
+        "output_tokens": 1059,
+        "total_tokens": 1683,
+        "llm_calls": 1,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 1683
+        }
+      },
+      "elapsed_seconds": 8.19,
+      "stop_reason": "unknown"
+    },
+    {
+      "task_id": "quixbugs__lis",
+      "analysis_set": "defect_program",
+      "detection_rate": 1.0,
+      "repair_rate": 0.0,
+      "false_fix_rate": 0.0,
+      "test_error_rate": 0.0,
+      "verdict": "specific_red",
+      "spec_replace_applied": null,
+      "spec_augment_applied": null,
+      "token_usage": {
+        "input_tokens": 564,
+        "output_tokens": 618,
+        "total_tokens": 1182,
+        "llm_calls": 1,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 1182
+        }
+      },
+      "elapsed_seconds": 6.78,
+      "stop_reason": "unknown"
+    },
+    {
+      "task_id": "quixbugs__longest_common_subsequence",
+      "analysis_set": "defect_program",
+      "detection_rate": 1.0,
+      "repair_rate": 0.0,
+      "false_fix_rate": 0.0,
+      "test_error_rate": 0.0,
+      "verdict": "specific_red",
+      "spec_replace_applied": null,
+      "spec_augment_applied": null,
+      "token_usage": {
+        "input_tokens": 600,
+        "output_tokens": 1047,
+        "total_tokens": 1647,
+        "llm_calls": 1,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 1647
+        }
+      },
+      "elapsed_seconds": 7.98,
+      "stop_reason": "unknown"
+    },
+    {
+      "task_id": "quixbugs__max_sublist_sum",
+      "analysis_set": "defect_program",
+      "detection_rate": 1.0,
+      "repair_rate": 0.0,
+      "false_fix_rate": 0.0,
+      "test_error_rate": 0.0,
+      "verdict": "specific_red",
+      "spec_replace_applied": null,
+      "spec_augment_applied": null,
+      "token_usage": {
+        "input_tokens": 558,
+        "output_tokens": 976,
+        "total_tokens": 1534,
+        "llm_calls": 1,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 1534
+        }
+      },
+      "elapsed_seconds": 7.83,
+      "stop_reason": "unknown"
+    },
+    {
+      "task_id": "quixbugs__minimum_spanning_tree",
+      "analysis_set": "defect_program",
+      "detection_rate": 1.0,
+      "repair_rate": 0.0,
+      "false_fix_rate": 0.0,
+      "test_error_rate": 0.0,
+      "verdict": "specific_red",
+      "spec_replace_applied": null,
+      "spec_augment_applied": null,
+      "token_usage": {
+        "input_tokens": 668,
+        "output_tokens": 1570,
+        "total_tokens": 2238,
+        "llm_calls": 1,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 2238
+        }
+      },
+      "elapsed_seconds": 9.47,
+      "stop_reason": "unknown"
+    },
+    {
+      "task_id": "quixbugs__minimum_spanning_tree_test",
+      "analysis_set": "driver_or_unknown",
+      "detection_rate": null,
+      "repair_rate": null,
+      "false_fix_rate": null,
+      "test_error_rate": null,
+      "verdict": "unavailable",
+      "spec_replace_applied": null,
+      "spec_augment_applied": null,
+      "token_usage": {
+        "input_tokens": 775,
+        "output_tokens": 1119,
+        "total_tokens": 1894,
+        "llm_calls": 1,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 1894
+        }
+      },
+      "elapsed_seconds": 8.64,
+      "stop_reason": "unknown"
+    },
+    {
+      "task_id": "quixbugs__mergesort",
+      "analysis_set": "defect_program",
+      "detection_rate": 1.0,
+      "repair_rate": 0.0,
+      "false_fix_rate": 0.0,
+      "test_error_rate": 0.0,
+      "verdict": "specific_red",
+      "spec_replace_applied": null,
+      "spec_augment_applied": null,
+      "token_usage": {
+        "input_tokens": 553,
+        "output_tokens": 1000,
+        "total_tokens": 1553,
+        "llm_calls": 1,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 1553
+        }
+      },
+      "elapsed_seconds": 21.56,
+      "stop_reason": "unknown"
+    },
+    {
+      "task_id": "quixbugs__next_palindrome",
+      "analysis_set": "defect_program",
+      "detection_rate": 1.0,
+      "repair_rate": 0.0,
+      "false_fix_rate": 0.0,
+      "test_error_rate": 0.0,
+      "verdict": "specific_red",
+      "spec_replace_applied": null,
+      "spec_augment_applied": null,
+      "token_usage": {
+        "input_tokens": 1437,
+        "output_tokens": 2208,
+        "total_tokens": 3645,
+        "llm_calls": 2,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 3645
+        }
+      },
+      "elapsed_seconds": 14.4,
+      "stop_reason": "unknown"
+    },
+    {
+      "task_id": "quixbugs__next_permutation",
+      "analysis_set": "defect_program",
+      "detection_rate": 1.0,
+      "repair_rate": 0.0,
+      "false_fix_rate": 0.0,
+      "test_error_rate": 0.0,
+      "verdict": "specific_red",
+      "spec_replace_applied": null,
+      "spec_augment_applied": null,
+      "token_usage": {
+        "input_tokens": 583,
+        "output_tokens": 1137,
+        "total_tokens": 1720,
+        "llm_calls": 1,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 1720
+        }
+      },
+      "elapsed_seconds": 8.21,
+      "stop_reason": "unknown"
+    },
+    {
+      "task_id": "quixbugs__node",
+      "analysis_set": "defect_program",
+      "detection_rate": null,
+      "repair_rate": 0.0,
+      "false_fix_rate": 0.0,
+      "test_error_rate": null,
+      "verdict": "over_red",
+      "spec_replace_applied": null,
+      "spec_augment_applied": null,
+      "token_usage": {
+        "input_tokens": 484,
+        "output_tokens": 825,
+        "total_tokens": 1309,
+        "llm_calls": 1,
+        "cache_hits": 1,
+        "cache_avoided_tokens": 1309,
+        "by_model": {
+          "deepseek-flash": 1309
+        }
+      },
+      "elapsed_seconds": 11.96,
+      "stop_reason": "unknown"
+    },
+    {
+      "task_id": "quixbugs__pascal",
+      "analysis_set": "defect_program",
+      "detection_rate": 1.0,
+      "repair_rate": 0.0,
+      "false_fix_rate": 0.0,
+      "test_error_rate": 0.0,
+      "verdict": "specific_red",
+      "spec_replace_applied": null,
+      "spec_augment_applied": null,
+      "token_usage": {
+        "input_tokens": 573,
+        "output_tokens": 863,
+        "total_tokens": 1436,
+        "llm_calls": 1,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 1436
+        }
+      },
+      "elapsed_seconds": 7.75,
+      "stop_reason": "unknown"
+    },
+    {
+      "task_id": "quixbugs__possible_change",
+      "analysis_set": "defect_program",
+      "detection_rate": 1.0,
+      "repair_rate": 0.0,
+      "false_fix_rate": 0.0,
+      "test_error_rate": 0.0,
+      "verdict": "specific_red",
+      "spec_replace_applied": null,
+      "spec_augment_applied": null,
+      "token_usage": {
+        "input_tokens": 660,
+        "output_tokens": 682,
+        "total_tokens": 1342,
+        "llm_calls": 1,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 1342
+        }
+      },
+      "elapsed_seconds": 6.83,
+      "stop_reason": "unknown"
+    },
+    {
+      "task_id": "quixbugs__powerset",
+      "analysis_set": "defect_program",
+      "detection_rate": 1.0,
+      "repair_rate": 0.0,
+      "false_fix_rate": 0.0,
+      "test_error_rate": 0.0,
+      "verdict": "specific_red",
+      "spec_replace_applied": null,
+      "spec_augment_applied": null,
+      "token_usage": {
+        "input_tokens": 1161,
+        "output_tokens": 1466,
+        "total_tokens": 2627,
+        "llm_calls": 2,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 2627
+        }
+      },
+      "elapsed_seconds": 10.33,
+      "stop_reason": "unknown"
+    },
+    {
+      "task_id": "quixbugs__quicksort",
+      "analysis_set": "defect_program",
+      "detection_rate": 1.0,
+      "repair_rate": 0.0,
+      "false_fix_rate": 0.0,
+      "test_error_rate": 0.0,
+      "verdict": "specific_red",
+      "spec_replace_applied": null,
+      "spec_augment_applied": null,
+      "token_usage": {
+        "input_tokens": 478,
+        "output_tokens": 722,
+        "total_tokens": 1200,
+        "llm_calls": 1,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 1200
+        }
+      },
+      "elapsed_seconds": 6.59,
+      "stop_reason": "unknown"
+    },
+    {
+      "task_id": "quixbugs__reverse_linked_list",
+      "analysis_set": "defect_program",
+      "detection_rate": 1.0,
+      "repair_rate": 0.0,
+      "false_fix_rate": 0.0,
+      "test_error_rate": 0.0,
+      "verdict": "specific_red",
+      "spec_replace_applied": null,
+      "spec_augment_applied": null,
+      "token_usage": {
+        "input_tokens": 491,
+        "output_tokens": 771,
+        "total_tokens": 1262,
+        "llm_calls": 1,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 1262
+        }
+      },
+      "elapsed_seconds": 6.97,
+      "stop_reason": "unknown"
+    },
+    {
+      "task_id": "quixbugs__rpn_eval",
+      "analysis_set": "defect_program",
+      "detection_rate": 1.0,
+      "repair_rate": 0.0,
+      "false_fix_rate": 0.0,
+      "test_error_rate": 0.0,
+      "verdict": "specific_red",
+      "spec_replace_applied": null,
+      "spec_augment_applied": null,
+      "token_usage": {
+        "input_tokens": 615,
+        "output_tokens": 1002,
+        "total_tokens": 1617,
+        "llm_calls": 1,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 1617
+        }
+      },
+      "elapsed_seconds": 7.64,
+      "stop_reason": "unknown"
+    },
+    {
+      "task_id": "quixbugs__reverse_linked_list_test",
+      "analysis_set": "driver_or_unknown",
+      "detection_rate": null,
+      "repair_rate": null,
+      "false_fix_rate": null,
+      "test_error_rate": null,
+      "verdict": "unavailable",
+      "spec_replace_applied": null,
+      "spec_augment_applied": null,
+      "token_usage": {
+        "input_tokens": 727,
+        "output_tokens": 417,
+        "total_tokens": 1144,
+        "llm_calls": 1,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 1144
+        }
+      },
+      "elapsed_seconds": 5.87,
+      "stop_reason": "unknown"
+    },
+    {
+      "task_id": "quixbugs__shortest_path_length",
+      "analysis_set": "defect_program",
+      "detection_rate": 1.0,
+      "repair_rate": 0.0,
+      "false_fix_rate": 0.0,
+      "test_error_rate": 0.0,
+      "verdict": "specific_red",
+      "spec_replace_applied": null,
+      "spec_augment_applied": null,
+      "token_usage": {
+        "input_tokens": 769,
+        "output_tokens": 1113,
+        "total_tokens": 1882,
+        "llm_calls": 1,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 1882
+        }
+      },
+      "elapsed_seconds": 8.22,
+      "stop_reason": "unknown"
+    },
+    {
+      "task_id": "quixbugs__shortest_path_length_test",
+      "analysis_set": "driver_or_unknown",
+      "detection_rate": null,
+      "repair_rate": null,
+      "false_fix_rate": null,
+      "test_error_rate": null,
+      "verdict": "unavailable",
+      "spec_replace_applied": null,
+      "spec_augment_applied": null,
+      "token_usage": {
+        "input_tokens": 741,
+        "output_tokens": 999,
+        "total_tokens": 1740,
+        "llm_calls": 1,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 1740
+        }
+      },
+      "elapsed_seconds": 7.91,
+      "stop_reason": "unknown"
+    },
+    {
+      "task_id": "quixbugs__shortest_path_lengths",
+      "analysis_set": "defect_program",
+      "detection_rate": 0.0,
+      "repair_rate": 0.0,
+      "false_fix_rate": 0.0,
+      "test_error_rate": 0.0,
+      "verdict": "over_red",
+      "spec_replace_applied": null,
+      "spec_augment_applied": null,
+      "token_usage": {
+        "input_tokens": 625,
+        "output_tokens": 1311,
+        "total_tokens": 1936,
+        "llm_calls": 1,
+        "cache_hits": 1,
+        "cache_avoided_tokens": 1936,
+        "by_model": {
+          "deepseek-flash": 1936
+        }
+      },
+      "elapsed_seconds": 12.5,
+      "stop_reason": "unknown"
+    },
+    {
+      "task_id": "quixbugs__shortest_path_lengths_test",
+      "analysis_set": "driver_or_unknown",
+      "detection_rate": null,
+      "repair_rate": null,
+      "false_fix_rate": null,
+      "test_error_rate": null,
+      "verdict": "unavailable",
+      "spec_replace_applied": null,
+      "spec_augment_applied": null,
+      "token_usage": {
+        "input_tokens": 818,
+        "output_tokens": 1386,
+        "total_tokens": 2204,
+        "llm_calls": 1,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 2204
+        }
+      },
+      "elapsed_seconds": 9.36,
+      "stop_reason": "unknown"
+    },
+    {
+      "task_id": "quixbugs__bitcount",
+      "analysis_set": "defect_program",
+      "detection_rate": null,
+      "repair_rate": 0.0,
+      "false_fix_rate": 0.0,
+      "test_error_rate": null,
+      "verdict": "specific_red",
+      "spec_replace_applied": null,
+      "spec_augment_applied": null,
+      "token_usage": {
+        "input_tokens": 467,
+        "output_tokens": 668,
+        "total_tokens": 1135,
+        "llm_calls": 1,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 1135
+        }
+      },
+      "elapsed_seconds": 94.85,
+      "stop_reason": "unknown"
+    },
+    {
+      "task_id": "quixbugs__shortest_paths",
+      "analysis_set": "defect_program",
+      "detection_rate": 0.0,
+      "repair_rate": 0.0,
+      "false_fix_rate": 0.0,
+      "test_error_rate": 0.0,
+      "verdict": "over_red",
+      "spec_replace_applied": null,
+      "spec_augment_applied": null,
+      "token_usage": {
+        "input_tokens": 751,
+        "output_tokens": 1026,
+        "total_tokens": 1777,
+        "llm_calls": 1,
+        "cache_hits": 1,
+        "cache_avoided_tokens": 1777,
+        "by_model": {
+          "deepseek-flash": 1777
+        }
+      },
+      "elapsed_seconds": 12.15,
+      "stop_reason": "unknown"
+    },
+    {
+      "task_id": "quixbugs__shortest_paths_test",
+      "analysis_set": "driver_or_unknown",
+      "detection_rate": null,
+      "repair_rate": null,
+      "false_fix_rate": null,
+      "test_error_rate": null,
+      "verdict": "unavailable",
+      "spec_replace_applied": null,
+      "spec_augment_applied": null,
+      "token_usage": {
+        "input_tokens": 894,
+        "output_tokens": 926,
+        "total_tokens": 1820,
+        "llm_calls": 1,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 1820
+        }
+      },
+      "elapsed_seconds": 7.26,
+      "stop_reason": "unknown"
+    },
+    {
+      "task_id": "quixbugs__sieve",
+      "analysis_set": "defect_program",
+      "detection_rate": 1.0,
+      "repair_rate": 0.0,
+      "false_fix_rate": 0.0,
+      "test_error_rate": 0.0,
+      "verdict": "specific_red",
+      "spec_replace_applied": null,
+      "spec_augment_applied": null,
+      "token_usage": {
+        "input_tokens": 460,
+        "output_tokens": 925,
+        "total_tokens": 1385,
+        "llm_calls": 1,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 1385
+        }
+      },
+      "elapsed_seconds": 8.31,
+      "stop_reason": "unknown"
+    },
+    {
+      "task_id": "quixbugs__shunting_yard",
+      "analysis_set": "defect_program",
+      "detection_rate": 1.0,
+      "repair_rate": 0.0,
+      "false_fix_rate": 0.0,
+      "test_error_rate": 0.0,
+      "verdict": "specific_red",
+      "spec_replace_applied": null,
+      "spec_augment_applied": null,
+      "token_usage": {
+        "input_tokens": 710,
+        "output_tokens": 2040,
+        "total_tokens": 2750,
+        "llm_calls": 1,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 2750
+        }
+      },
+      "elapsed_seconds": 10.98,
+      "stop_reason": "unknown"
+    },
+    {
+      "task_id": "quixbugs__subsequences",
+      "analysis_set": "defect_program",
+      "detection_rate": 0.0,
+      "repair_rate": 0.0,
+      "false_fix_rate": 0.0,
+      "test_error_rate": 0.0,
+      "verdict": "over_red",
+      "spec_replace_applied": null,
+      "spec_augment_applied": null,
+      "token_usage": {
+        "input_tokens": 548,
+        "output_tokens": 888,
+        "total_tokens": 1436,
+        "llm_calls": 1,
+        "cache_hits": 1,
+        "cache_avoided_tokens": 1436,
+        "by_model": {
+          "deepseek-flash": 1436
+        }
+      },
+      "elapsed_seconds": 11.27,
+      "stop_reason": "unknown"
+    },
+    {
+      "task_id": "quixbugs__topological_ordering",
+      "analysis_set": "defect_program",
+      "detection_rate": 1.0,
+      "repair_rate": 0.0,
+      "false_fix_rate": 0.0,
+      "test_error_rate": 0.0,
+      "verdict": "specific_red",
+      "spec_replace_applied": null,
+      "spec_augment_applied": null,
+      "token_usage": {
+        "input_tokens": 514,
+        "output_tokens": 903,
+        "total_tokens": 1417,
+        "llm_calls": 1,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 1417
+        }
+      },
+      "elapsed_seconds": 7.8,
+      "stop_reason": "unknown"
+    },
+    {
+      "task_id": "quixbugs__topological_ordering_test",
+      "analysis_set": "driver_or_unknown",
+      "detection_rate": null,
+      "repair_rate": null,
+      "false_fix_rate": null,
+      "test_error_rate": null,
+      "verdict": "unavailable",
+      "spec_replace_applied": null,
+      "spec_augment_applied": null,
+      "token_usage": {
+        "input_tokens": 2391,
+        "output_tokens": 1294,
+        "total_tokens": 3685,
+        "llm_calls": 2,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 3685
+        }
+      },
+      "elapsed_seconds": 14.61,
+      "stop_reason": "unknown"
+    },
+    {
+      "task_id": "quixbugs__to_base",
+      "analysis_set": "defect_program",
+      "detection_rate": 1.0,
+      "repair_rate": 0.0,
+      "false_fix_rate": 0.0,
+      "test_error_rate": 0.0,
+      "verdict": "specific_red",
+      "spec_replace_applied": null,
+      "spec_augment_applied": null,
+      "token_usage": {
+        "input_tokens": 519,
+        "output_tokens": 1247,
+        "total_tokens": 1766,
+        "llm_calls": 1,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 1766
+        }
+      },
+      "elapsed_seconds": 8.97,
+      "stop_reason": "unknown"
+    },
+    {
+      "task_id": "quixbugs__find_first_in_sorted",
+      "analysis_set": "defect_program",
+      "detection_rate": null,
+      "repair_rate": 0.0,
+      "false_fix_rate": 0.0,
+      "test_error_rate": null,
+      "verdict": "specific_red",
+      "spec_replace_applied": null,
+      "spec_augment_applied": null,
+      "token_usage": {
+        "input_tokens": 571,
+        "output_tokens": 1182,
+        "total_tokens": 1753,
+        "llm_calls": 1,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 1753
+        }
+      },
+      "elapsed_seconds": 95.5,
+      "stop_reason": "unknown"
+    },
+    {
+      "task_id": "quixbugs__sqrt",
+      "analysis_set": "defect_program",
+      "detection_rate": null,
+      "repair_rate": 0.0,
+      "false_fix_rate": 0.0,
+      "test_error_rate": null,
+      "verdict": "unavailable",
+      "spec_replace_applied": null,
+      "spec_augment_applied": null,
+      "token_usage": {
+        "input_tokens": 500,
+        "output_tokens": 901,
+        "total_tokens": 1401,
+        "llm_calls": 1,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 1401
+        }
+      },
+      "elapsed_seconds": 154.63,
+      "stop_reason": "unknown"
+    },
+    {
+      "task_id": "quixbugs__wrap",
+      "analysis_set": "defect_program",
+      "detection_rate": null,
+      "repair_rate": 0.0,
+      "false_fix_rate": 0.0,
+      "test_error_rate": null,
+      "verdict": "unavailable",
+      "spec_replace_applied": null,
+      "spec_augment_applied": null,
+      "token_usage": {
+        "input_tokens": 592,
+        "output_tokens": 891,
+        "total_tokens": 1483,
+        "llm_calls": 1,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 1483
+        }
+      },
+      "elapsed_seconds": 126.39,
+      "stop_reason": "unknown"
+    }
+  ]
+}

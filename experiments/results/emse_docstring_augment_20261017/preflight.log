@@ -1,0 +1,18 @@
+========================================================================
+批次跑批前置闸（EMSE 批次 2026-10-15）
+========================================================================
+工作树：sha=752b3a89727fc7dcc3354f79013ad1537c3ed6c4  dirty=False
+计划任务数=50  并行度=4  估算请求量上界=323
+任务级预算：enabled=True tokens=300000 usd=None
+批次级上限：AITESTER_BATCH_MAX_CALLS=8000
+近期批次指纹（近 5 个）：pinned=true 的有 5 个
+  - experiments/results/emse_docstring_anchor_20261017/benchmark_quixbugs_20261024_233002.json｜alias=deepseek-flash｜pinned=True｜dirty=False
+  - experiments/results/emse_docstring_anchor_20261017/benchmark_quixbugs_20261024_222314.json｜alias=deepseek-flash｜pinned=True｜dirty=False
+  - experiments/results/emse_docstring_anchor_20261017/benchmark_quixbugs_20261024_212034.json｜alias=deepseek-flash｜pinned=True｜dirty=False
+  - experiments/results/spec_ab_scale87_20261024/ult_lite46_replace/benchmark_ult_20261024_190841.json｜alias=deepseek-flash｜pinned=True｜dirty=True
+  - experiments/results/spec_ab_scale87_20261024/ult_lite46_off/benchmark_ult_20261024_190203.json｜alias=deepseek-flash｜pinned=True｜dirty=True
+孤儿进程巡检：扫描 616 个进程，泄漏的嵌套测试子进程 0 个
+配额探测：未执行（加 --check-quota 可消耗 1 次调用探测）
+
+✓ 前置闸全部通过
+========================================================================

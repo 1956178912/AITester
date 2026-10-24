@@ -1,0 +1,16 @@
+M-4 proc hygiene: 每 5min 只读巡检（detect_orphan_procs.py --json --min-age 60）；不自动 kill
+2026-10-24T15:30:05Z phase=pre_batch detector_exit=0 {"available": true, "scanned": 624, "min_age_seconds": 60, "leaked": [], "leaked_count": 0}
+2026-10-24T15:35:06Z phase=in_batch_t304s detector_exit=0 {"available": true, "scanned": 637, "min_age_seconds": 60, "leaked": [], "leaked_count": 0}
+2026-10-24T15:40:06Z phase=in_batch_t604s detector_exit=0 {"available": true, "scanned": 631, "min_age_seconds": 60, "leaked": [], "leaked_count": 0}
+2026-10-24T15:45:07Z phase=in_batch_t905s detector_exit=0 {"available": true, "scanned": 634, "min_age_seconds": 60, "leaked": [], "leaked_count": 0}
+2026-10-24T15:50:07Z phase=in_batch_t1205s detector_exit=0 {"available": true, "scanned": 626, "min_age_seconds": 60, "leaked": [], "leaked_count": 0}
+2026-10-24T15:55:07Z phase=in_batch_t1505s detector_exit=0 {"available": true, "scanned": 626, "min_age_seconds": 60, "leaked": [], "leaked_count": 0}
+2026-10-24T16:00:08Z phase=in_batch_t1806s detector_exit=0 {"available": true, "scanned": 631, "min_age_seconds": 60, "leaked": [], "leaked_count": 0}
+2026-10-24T16:05:08Z phase=in_batch_t2106s detector_exit=0 {"available": true, "scanned": 637, "min_age_seconds": 60, "leaked": [], "leaked_count": 0}
+2026-10-24T16:10:09Z phase=in_batch_t2407s detector_exit=0 {"available": true, "scanned": 631, "min_age_seconds": 60, "leaked": [], "leaked_count": 0}
+2026-10-24T16:15:09Z phase=in_batch_t2707s detector_exit=0 {"available": true, "scanned": 628, "min_age_seconds": 60, "leaked": [], "leaked_count": 0}
+2026-10-24T16:20:09Z phase=in_batch_t3007s detector_exit=0 {"available": true, "scanned": 626, "min_age_seconds": 60, "leaked": [], "leaked_count": 0}
+2026-10-24T16:25:10Z phase=in_batch_t3308s detector_exit=0 {"available": true, "scanned": 630, "min_age_seconds": 60, "leaked": [], "leaked_count": 0}
+2026-10-24T16:30:10Z phase=in_batch_t3608s detector_exit=0 {"available": true, "scanned": 631, "min_age_seconds": 60, "leaked": [], "leaked_count": 0}
+2026-10-24T16:35:11Z phase=in_batch_t3909s detector_exit=0 {"available": true, "scanned": 622, "min_age_seconds": 60, "leaked": [], "leaked_count": 0}
+2026-10-24T16:38:56Z phase=post_batch detector_exit=0 {"available": true, "scanned": 621, "min_age_seconds": 60, "leaked": [], "leaked_count": 0}

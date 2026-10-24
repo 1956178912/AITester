@@ -1,0 +1,20 @@
+========================================================================
+批次跑批前置闸（EMSE 批次 2026-10-15）
+========================================================================
+工作树：sha=00e8c24d685bfff55e92b8a2a5b82e786ffc5103  dirty=True（8454 个未提交变更）
+计划任务数=150  并行度=4  估算请求量上界=968
+任务级预算：enabled=True tokens=300000 usd=None
+批次级上限：AITESTER_BATCH_MAX_CALLS=5000
+近期批次指纹（近 5 个）：pinned=true 的有 5 个
+  - experiments/results/cross_file_ab_level3/cross_file_on/benchmark_synthetic_20261024_181756.json｜alias=deepseek-flash｜pinned=True｜dirty=True
+  - experiments/results/cross_file_ab_level3/cross_file_off/benchmark_synthetic_20261024_181652.json｜alias=deepseek-flash｜pinned=True｜dirty=True
+  - experiments/results/position_aware_on/benchmark_synthetic_20261024_181319.json｜alias=deepseek-flash｜pinned=True｜dirty=True
+  - experiments/results/position_aware_off/benchmark_synthetic_20261024_181241.json｜alias=deepseek-flash｜pinned=True｜dirty=True
+  - experiments/results/rag_ab/rag_off/benchmark_synthetic_20261024_181037.json｜alias=deepseek-flash｜pinned=True｜dirty=True
+孤儿进程巡检：扫描 563 个进程，泄漏的嵌套测试子进程 0 个
+配额探测：未执行（加 --check-quota 可消耗 1 次调用探测）
+
+阻断/告警项：
+  ✗ 工作树不干净：新批次 provenance 将记 git_dirty=true（复现性主张打折）
+========================================================================
+strict 模式：存在阻断项，退出码 1

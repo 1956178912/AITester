@@ -1,0 +1,170 @@
+{
+  "verdict": "not_confirmed",
+  "conditions": {
+    "absolute_line": {
+      "threshold": 0.65,
+      "rate": 0.6571,
+      "met": true
+    },
+    "one_sided_p_lt_0.05": false,
+    "direction_positive": false
+  },
+  "fail_line_triggered": false,
+  "secondary": {
+    "verdict": "not_confirmed",
+    "conditions": {
+      "absolute_line": {
+        "threshold": 0.65,
+        "rate": 0.7353,
+        "met": true
+      },
+      "one_sided_p_lt_0.05": false,
+      "direction_positive": false
+    },
+    "fail_line_triggered": false,
+    "role": "secondary",
+    "note": "次级对比（预注册声明），不参与主判定"
+  },
+  "contrast": {
+    "doc_vs_df": {
+      "n_pairs": 35,
+      "a_only": 4,
+      "b_only": 9,
+      "ratio": "4:9",
+      "delta_pp": -14.29,
+      "p_two_sided": 0.2668,
+      "p_one_sided": 0.9539,
+      "bf10": 0.5811,
+      "mde_pp": 16.57
+    },
+    "union_vs_df": {
+      "n_pairs": 34,
+      "a_only": 3,
+      "b_only": 5,
+      "ratio": "3:5",
+      "delta_pp": -5.88,
+      "p_two_sided": 0.7266,
+      "p_one_sided": 0.8555,
+      "bf10": 0.3516,
+      "mde_pp": 16.81
+    }
+  },
+  "detection": {
+    "df": {
+      "denominator_rows": 41,
+      "measurable": 36,
+      "positive": 29,
+      "rate": 0.8056
+    },
+    "doc": {
+      "denominator_rows": 41,
+      "measurable": 35,
+      "positive": 23,
+      "rate": 0.6571
+    },
+    "union": {
+      "denominator_rows": 41,
+      "measurable": 34,
+      "positive": 25,
+      "rate": 0.7353
+    }
+  },
+  "audit": {
+    "caliber": "QuixBugs 41 缺陷程序（task_id 非 _test 后缀）；可判定子集（detection 非 None）",
+    "denominators": {
+      "arm_rows": 50,
+      "defect_program_ids_41": 41,
+      "measurable_pairs_doc_vs_df": 35
+    },
+    "spec_replace_applied": {
+      "df": {
+        "none": 50
+      },
+      "doc": {
+        "attempted_fallback": 9,
+        "attempted_replaced": 41
+      },
+      "doc_41": {
+        "attempted_replaced": 41
+      },
+      "union": {
+        "attempted_fallback": 9,
+        "attempted_replaced": 41
+      },
+      "union_41": {
+        "attempted_replaced": 41
+      }
+    },
+    "specificity_gate_verdict": {
+      "df_41": {
+        "over_red": 8,
+        "specific_red": 32,
+        "unavailable": 1
+      },
+      "doc_41": {
+        "over_red": 13,
+        "specific_red": 24,
+        "unavailable": 4
+      },
+      "union_41": {
+        "none": 1,
+        "over_red": 9,
+        "specific_red": 27,
+        "unavailable": 4
+      }
+    },
+    "detection_none_rows": {
+      "df_41": 5,
+      "doc_41": 6,
+      "union_41": 7
+    }
+  },
+  "prereg": {
+    "file": "docs/study/DOCSTRING_ANCHOR_PREREG_2026-10-17.md",
+    "constants": {
+      "success_line": 0.65,
+      "fail_line": 0.55,
+      "confirm_p": 0.05,
+      "trend_p": 0.1,
+      "misguided_drop_target": 0.3,
+      "primary_contrast": "doc_vs_df",
+      "secondary_contrast": "union_vs_df"
+    }
+  },
+  "mechanism": {
+    "metric": "misguided_effective_per_test",
+    "status": "external_declared",
+    "producer": "experiments/misguided_metrics.py",
+    "caliber_doc": "docs/design/misguided_effective_metric.md",
+    "classes": [
+      "effective",
+      "misguided",
+      "both_pass",
+      "both_fail"
+    ],
+    "misguided_drop_target": 0.3,
+    "primary_arm": "plain_llm_df_doc",
+    "control_arm": "plain_llm_df",
+    "note": "机制指标为描述性/次级信号，不参与主判定；与 detection 分开报告，不得互相顶替"
+  },
+  "inputs": {
+    "df": {
+      "path": "/Users/wangchenyu/Workspace/AITester/experiments/results/emse_docstring_anchor_20261017/benchmark_quixbugs_20261024_212034.json",
+      "arm": "plain_llm_df",
+      "sha256": "ed28952955b40782f36b6a1c4d9f5226f96514093f0a89e94da7c05b66a75717"
+    },
+    "doc": {
+      "path": "/Users/wangchenyu/Workspace/AITester/experiments/results/emse_docstring_anchor_20261017/benchmark_quixbugs_20261024_222314.json",
+      "arm": "plain_llm_df_doc",
+      "sha256": "28f92cac877a5d17efacb074a9d24e1dba740c8b3ab1d0e35b2495c26d8d0491"
+    },
+    "union": {
+      "path": "/Users/wangchenyu/Workspace/AITester/experiments/results/emse_docstring_anchor_20261017/benchmark_quixbugs_20261024_233002.json",
+      "arm": "plain_llm_df_doc_union",
+      "sha256": "f0bd34a7847ea69ce1eeb8ff2f4d1eae88f12ccfe59a28c33103a5dfdbe3a92a"
+    }
+  }
+}
+[emse_docstring_anchor_analysis] 已落盘 JSON：/Users/wangchenyu/Workspace/AITester/experiments/results/emse_docstring_anchor_20261017/DOCSTRING_ANCHOR_REPORT_20261024T121431Z.json
+[emse_docstring_anchor_analysis] 已落盘 Markdown：/Users/wangchenyu/Workspace/AITester/experiments/results/emse_docstring_anchor_20261017/DOCSTRING_ANCHOR_REPORT_20261024T121431Z.md
+[emse_docstring_anchor_analysis] verdict=not_confirmed fail_line=False secondary=not_confirmed

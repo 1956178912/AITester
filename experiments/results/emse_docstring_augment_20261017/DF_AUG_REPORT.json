@@ -1,0 +1,139 @@
+{
+  "verdict": "not_confirmed",
+  "conditions": {
+    "absolute_line": {
+      "threshold": 0.88,
+      "rate": 0.8571,
+      "met": false
+    },
+    "one_sided_p_lt_0.05": false,
+    "direction_positive": false
+  },
+  "fail_line_triggered": false,
+  "non_inferiority": {
+    "margin_pp": -5.0,
+    "delta_pp": -2.86,
+    "met": true,
+    "role": "independent_marker",
+    "note": "非劣标记独立于三态判定，不改变 verdict；用于保留'代码保留假设'方向证据"
+  },
+  "contrast": {
+    "augment_vs_df": {
+      "n_pairs": 35,
+      "a_only": 1,
+      "b_only": 2,
+      "ratio": "1:2",
+      "delta_pp": -2.86,
+      "p_two_sided": 1.0,
+      "p_one_sided": 0.875,
+      "bf10": 0.5,
+      "mde_pp": 16.57
+    }
+  },
+  "detection": {
+    "df": {
+      "denominator_rows": 41,
+      "measurable": 36,
+      "positive": 32,
+      "rate": 0.8889
+    },
+    "augment": {
+      "denominator_rows": 41,
+      "measurable": 35,
+      "positive": 30,
+      "rate": 0.8571
+    }
+  },
+  "mde": {
+    "reference_n": 35,
+    "mde_pp_at_reference_n": 16.57,
+    "observed_n_pairs": 35,
+    "observed_mde_pp": 16.57,
+    "disclosure": "n≈35（L 轮可判定配对先例）时 80% power / α=0.05 的双比例 MDE≈16.6pp；本设计属边缘功效——小于 MDE 的效应不可判定，阴性结果不得读作'无效应'"
+  },
+  "audit": {
+    "caliber": "QuixBugs 41 缺陷程序（task_id 非 _test 后缀）；可判定子集（detection 非 None）",
+    "denominators": {
+      "arm_rows": 50,
+      "defect_program_ids_41": 41,
+      "measurable_pairs_augment_vs_df": 35
+    },
+    "spec_augment_applied": {
+      "df": {
+        "none": 50
+      },
+      "augment": {
+        "attempted_augmented": 40,
+        "attempted_fallback": 10
+      },
+      "augment_41": {
+        "attempted_augmented": 40,
+        "attempted_fallback": 1
+      }
+    },
+    "spec_replace_applied": {
+      "df": {
+        "none": 50
+      },
+      "augment": {
+        "none": 50
+      }
+    },
+    "specificity_gate_verdict": {
+      "df_41": {
+        "over_red": 5,
+        "specific_red": 34,
+        "unavailable": 2
+      },
+      "augment_41": {
+        "over_red": 6,
+        "specific_red": 33,
+        "unavailable": 2
+      }
+    },
+    "detection_none_rows": {
+      "df_41": 5,
+      "augment_41": 6
+    }
+  },
+  "prereg": {
+    "file": "docs/study/DOCSTRING_AUGMENT_PREREG_2026-10-17.md",
+    "constants": {
+      "success_line": 0.88,
+      "fail_line": 0.78,
+      "confirm_p": 0.05,
+      "trend_p": 0.1,
+      "non_inferiority_margin_pp": -5.0,
+      "mde_reference_n": 35,
+      "primary_contrast": "augment_vs_df"
+    }
+  },
+  "mechanism": {
+    "metric": "misguided_effective_per_test",
+    "status": "external_declared",
+    "producer": "experiments/misguided_metrics.py",
+    "caliber_doc": "docs/design/misguided_effective_metric.md",
+    "classes": [
+      "effective",
+      "misguided",
+      "both_pass",
+      "both_fail"
+    ],
+    "primary_arm": "plain_llm_df_doc_augment",
+    "control_arm": "plain_llm_df",
+    "expectation": "描述性：augment 臂 misguided 占比不高于 df 臂（同一缺陷代码仍在 prompt 中，misguidance 可能无法消除；增广的预期是'不额外增加 misguided 且检出不降'）",
+    "note": "机制指标为描述性/次级信号，不参与主判定；与 detection 分开报告，不得互相顶替"
+  },
+  "inputs": {
+    "df": {
+      "path": "/Users/wangchenyu/Workspace/AITester/experiments/results/emse_docstring_augment_20261017/benchmark_quixbugs_20261025_003250.json",
+      "arm": "plain_llm_df",
+      "sha256": "9fc3b1fdf811da30ebb6aadd6139ff9101e353fe9f217b10e04b2b4375fc052e"
+    },
+    "augment": {
+      "path": "/Users/wangchenyu/Workspace/AITester/experiments/results/emse_docstring_augment_20261017/benchmark_quixbugs_20261025_003844.json",
+      "arm": "plain_llm_df_doc_augment",
+      "sha256": "f60b56d0de33ec93f311feea32cb90fcb50e3a8a7aa07b7d698bf17e9e20c26f"
+    }
+  }
+}
