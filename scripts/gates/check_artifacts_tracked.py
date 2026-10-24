@@ -64,8 +64,9 @@ EVIDENCE_DIR_EXEMPTIONS: dict[str, str] = {
     # CI 轮第三批（2026-10-24）原表随数据清除清空；以下为 DeepSeek 重跑期新批：
     # 证据性批次但按用户口径暂不提交（工作树携带 CA-CI 轮未提交改动）；
     # 提交入库后「已全部入库」漂移判定会自动提醒移除这些登记。
-    "emse_docstring_anchor_20261017": "2026-10-24 DeepSeek 重跑期材料目录（正式批被干净树门禁阻断，残留锚表批材料）；未提交 @experiments/run_docstring_anchor_batch.sh",
-    "emse_docstring_augment_20261017": "2026-10-24 重跑期目录（正式批被干净树门禁阻断，preflight 残留）；未提交 @experiments/run_augment_batch.sh",
+    # docstring_anchor / docstring_augment 两正式批已随 d79a9500 全量入库
+    # （180/128 文件），按「已全部入库 ⇒ 删登记」漂移判定移除其登记。
+    "emse_misguided_augment_20261017": "2026-10-24 augment 正式批的机制重放残留目录（misguided_metrics 重放产物）；未提交 @experiments/run_augment_batch.sh",
     "emse_oracle_enabled_validation_20261017": "2026-10-24 重跑期目录（材料探针 compiled_empty 阻断，PREFLIGHT 残留）；未提交 @experiments/run_oracle_validation_batch.sh",
     "emse_spec_anchor_20261016": "2026-10-24 自 LLM 缓存零成本重建的锚表；未提交 @experiments/build_spec_anchor_table.py",
     "p_round_b8_ablation_20261018": "2026-10-24 DeepSeek 重跑批（重跑 PREREG 已落盘）；未提交 @experiments/run_b8_ablation.sh",
