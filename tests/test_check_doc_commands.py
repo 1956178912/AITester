@@ -116,14 +116,20 @@ def test_glued_heading_is_reported(tmp_path):
     assert problems[0]["kind"] == "heading-not-at-line-start", problems
 
 
-def test_heading_without_blank_line_before_is_reported(tmp_path):
-    """标题在行首但前一行不是空行 ⇒ 判红（段落与标题之间没有分隔）。"""
+def test_heading_without_blank_line_before_is_only_disclosed(tmp_path):
+    """标题在行首但前一行不是空行 ⇒ **只披露，不阻断**。
+
+    GitHub 仍会把它渲染成标题（只是段落与标题之间没有分隔）；真正让渲染失效的是
+    「标题不在行首」。CV 轮第一版判据把这一形态当阻断，负例不红——阻断条件必须
+    对准失效的那一种形态。
+    """
     root = _make_repo(tmp_path, "# T\n")
     readme = root / "README.md"
     readme.write_text("段落末尾\n## 标题\n", encoding="utf-8")
     problems = doc_mod._heading_structure_problems(readme)
-    assert problems, "前无空行的标题未被报出"
-    assert problems[0]["kind"] == "heading-no-blank-before", problems
+    assert problems == [], "前无空行不应阻断"
+    assert doc_mod._LAST_DISCLOSURES, "前无空行应记入披露级问题"
+    assert doc_mod._LAST_DISCLOSURES[0]["kind"] == "heading-no-blank-before", doc_mod._LAST_DISCLOSURES
 
 
 def test_hash_comment_inside_code_fence_is_not_a_heading(tmp_path):
