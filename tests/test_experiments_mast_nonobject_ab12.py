@@ -300,6 +300,8 @@ class TestRealPathInvariants:
                         continue  # 坏行走损坏通道，另有登记
                     if not isinstance(rec, dict):
                         non_object_lines += 1
-        assert files >= 1098, f"扫描面回落：只扫到 {files} 个 trace 文件"  # CI 重建 2026-10-24：新语料下界（原 8216）
+        assert files >= 1106, (
+            f"扫描面回落：只扫到 {files} 个 trace 文件"
+        )  # 收口回钉 2026-10-25：新语料下界（原 8216；重建期 1098）
         assert unreadable == 0
         assert non_object_lines == 0, "非对象行从 0 实例变成非 0——本轮披露块会开始出字，须复核登记"

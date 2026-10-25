@@ -385,7 +385,7 @@ class TestRealCorpusApplicability:
         # 并带实测读数（tests/_corpus_guard.py），不把"没扫到"折成"扫过且干净"。
         require_full_corpus()
         files = sorted(glob.glob(str(ROOT / "experiments" / "results" / "**" / "benchmark_*.json"), recursive=True))
-        assert len(files) >= 25  # CI 重建 2026-10-24 下界：重跑批仍在落盘，收口后回钉（原精确 239）
+        assert len(files) == 27  # 收口回钉 2026-10-25（原精确 239；重建期下界 25）
         marked = 0
         det1 = 0
         for path in files:
@@ -409,5 +409,5 @@ class TestRealCorpusApplicability:
                         marked += 1
                         if row.get("detection_rate") == 1.0:
                             det1 += 1
-        assert marked >= 9  # CI 重建 2026-10-24 下界：重跑批仍在落盘，收口后回钉（原精确 111）
-        assert det1 <= marked  # 原 ==12；新语料 marked 行中 detection_rate=1.0 计数随批次落盘浮动，收口后回钉
+        assert marked == 9  # 收口回钉 2026-10-25（原精确 111；重建期下界 9）
+        assert det1 == 0  # 收口回钉 2026-10-25（原精确 12；新语料 marked 行中无 detection_rate=1.0）

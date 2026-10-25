@@ -737,13 +737,14 @@ class TestComparabilityAndScannedSurface:
 
         require_full_corpus()
         surface = gate.corpus_surface()
-        # CI 重建 2026-10-24：DeepSeek 重跑语料下界（重跑批仍在落盘，收口后回钉精确值；原 239/64/107/122/87/85）
-        assert surface["on_disk"] >= 25, surface
-        assert surface["top_level"] >= 4, surface
-        assert surface["tracked"] >= 5, surface
-        assert surface["with_provenance"] >= 25, surface
-        assert surface["with_fingerprint"] >= 25, surface
-        assert surface["pinned_true"] >= 25, surface
+        # 收口回钉（2026-10-25）：全部批次入库、无进行中批次，语料计数回钉精确值
+        # （CI 重建期下界 25/4/5/25/25/25 → 27/4/9/27/27/27；原历史 239/64/107/122/87/85）
+        assert surface["on_disk"] == 27, surface
+        assert surface["top_level"] == 4, surface
+        assert surface["tracked"] == 9, surface
+        assert surface["with_provenance"] == 27, surface
+        assert surface["with_fingerprint"] == 27, surface
+        assert surface["pinned_true"] == 27, surface
         assert surface["unsupported_alias"] == 0, surface
         assert surface["alias_mismatch_true"] == 0, surface
 

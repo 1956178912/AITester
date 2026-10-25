@@ -396,8 +396,8 @@ class TestExportEndToEnd:
                 assert span["start_time_unix_nano"] >= 0, path
                 assert type(span["duration_unix_nano"]) is int, path
                 assert span["duration_unix_nano"] >= 0, path
-        assert spans >= 7747  # CI 重建 2026-10-24：新语料下界（原精确 126408）——重跑批仍在落盘，收口后回钉精确值
-        assert token_attrs >= 3312  # CI 重建 2026-10-24：新语料下界（原精确 26166）——同上，收口后回钉
+        assert spans == 7751  # 收口回钉 2026-10-25（原精确 126408；重建期下界 7747）
+        assert token_attrs == 3318  # 收口回钉 2026-10-25，按本测试口径实测（原精确 26166；重建期下界 3312）
 
     def test_real_token_attributes_match_raw_task_end_records(self):
         # BZ 轮：checked 下界以全归档 trace 语料为扫描面——同
