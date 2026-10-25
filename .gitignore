@@ -299,3 +299,12 @@ review_report_graph_api.md
 # experiments/emse_gold_conformance_audit.py   （tests/test_2026_10_05_v_batch.py 契约）
 # experiments/emse_testlevel_detection.py      （tests/test_emse_testlevel_detection.py）
 # experiments/emse_ult_gold_diagnosis.py       （tests/test_emse_ult_gold_diagnosis.py）
+
+# ── 发布构建产物（CO 轮 2026-10-25）──────────────────────────────────────────
+# 本地跑 `python -m build` 会生成 dist/ 与 build/；此前未被忽略，一次本地构建
+# 就会让工作树出现未跟踪目录，存在被误提交的风险。*.egg-info 同理。
+dist/
+build/
+*.egg-info/
+.sbom-venv/
+sbom.cyclonedx.json

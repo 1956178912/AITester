@@ -133,8 +133,21 @@ jobs:
         # 锁版本防漂移（与仓库"pip 工具固定版本"口径一致）：
         # - build==1.6.1：PEP 517 构建前端（python -m build）
         # - twine==7.0.0：dist 元数据校验 + PyPI 上传
-        # - cyclonedx-bom==4.5.0：与 ci.yml supply-chain 作业同版本（SBOM 生成）
-        run: pip install "build==1.6.1" "twine==7.0.0" "cyclonedx-bom==4.5.0"
+        #
+        # CO 轮（2026-10-25）修正：**这三个版本原本装在一起，且永远装不上**。
+        # 本地复现（pip 解析器原始报错）：
+        #   build 1.6.1 requires packaging>=24.0
+        #   twine 7.0.0 requires packaging>=26.1
+        #   cyclonedx-bom 4.5.0 requires packaging<25 and >=22
+        #   → ERROR: Cannot install build==1.6.1, cyclonedx-bom==4.5.0 and
+        #     twine==7.0.0 because these package versions have conflicting
+        #     dependencies. (ResolutionImpossible)
+        # twine 与 cyclonedx-bom 对 packaging 的约束互斥，任何 pip 版本都无解。
+        # CI 的 supply-chain 作业只单装 cyclonedx-bom，所以一直绿；Release 这一步
+        # 因前面的「CI 必须绿」关卡先失败而从未真正执行过——**未执行的步骤不算绿灯**。
+        # 处置：build + twine 装在构建环境（packaging 26.3 同时满足两者），
+        # cyclonedx-bom 放到 SBOM 步骤自己的隔离 venv 里（见下）。版本一律不动。
+        run: pip install "build==1.6.1" "twine==7.0.0"
 
       - name: Build sdist and wheel
         # 版本号来自 pyproject [tool.setuptools.dynamic]（src/__init__.py 的
@@ -152,8 +165,15 @@ jobs:
         # 与 ci.yml supply-chain 作业同口径：cyclonedx-bom 4.5.0 的 CLI 为
         # `cyclonedx-py requirements <file>`（旧写法 `cyclonedx-py <file>` 会被判
         # 未知子命令 → 2026-10-18 首次真实 CI 实测该步骤失败，已修正）。
+        #
+        # CO 轮（2026-10-25）：cyclonedx-bom==4.5.0 必须在**自己的 venv** 里装——
+        # 它要求 packaging<25，而同一环境里的 twine==7.0.0 要求 packaging>=26.1，
+        # 两者互斥（详见上一节的 pip 原始报错）。隔离后版本与 CI 保持一致，且
+        # `cyclonedx-py` 只在生成 SBOM 时用到，无需进入发布环境。
         run: |
-          cyclonedx-py requirements requirements.txt -o sbom.cyclonedx.json
+          python -m venv .sbom-venv
+          .sbom-venv/bin/pip install --disable-pip-version-check "cyclonedx-bom==4.5.0"
+          .sbom-venv/bin/cyclonedx-py requirements requirements.txt -o sbom.cyclonedx.json
 
       - name: Upload build artifacts
         # 无论后续发布步骤成败都保留构建产物（90 天，供失败排查/人工发布）
