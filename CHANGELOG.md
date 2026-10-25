@@ -141,6 +141,47 @@ arXiv:2610.30200 则论证了检出的结构性天花板。**这三篇若不出�
 另一个更普适的教训：插入大段文本时，锚点字符串与文件实际文本一旦不一致（哪怕差一个词），整段
 会**静默不落盘**；而判据写了一半被断言中断时，`main()` 未消费新判定面 ⇒ **门禁会「通过」但
 根本没检查**。编辑脚本必须「先断言、后写盘」，且写完立刻用负例验证判据真的被触发（rc=1）。
+**八、前沿对账的回溯补做：检索时窗只盯最新，会漏掉已经占位的前人工作。**
+本轮按上一轮的承诺做了**2026 全年回溯对账**（扫 2026-01-01～10-26 全部 cs.SE 共 6,500 条，
+13,822 条候选池去重后按 11 维加权过滤得 981 条高相关候选，逐篇判读），补回 **12 篇此前
+未收录**的工作。其中四篇直接占位了本稿原本可能主张为「新发现」的论断：
+
+| 本稿原口径 | 已被占位者 | 时间 |
+|---|---|---|
+| F→P 判定不充分 | arXiv:2607.19843（rigorous/lax 分解 + test–fix error coupling） | 2026-07-22 |
+| 「测试通过 ≠ 行为等价」 | arXiv:2609.12012（scoping survey 结论段明写，且点名 denominators） | 2026-09-10 |
+| 独立裁决 / 参考无关验证 | arXiv:2608.19626 + arXiv:2607.23002 + arXiv:2610.02928 | 2026-07～10 |
+| 装置效度审计 + 预注册 | arXiv:2607.23002 | 2026-07-25 |
+
+处置（正文 + 登记册 + 投稿信三处同步）：
+1. **正文 Related Work 补三段**（8 篇新引），逐条说明本稿与占位者的关系，并写明
+   「we claim neither observation as ours」；
+2. **Introduction 的贡献引导句改写**：「Our contribution is not a new observation: several 2026
+   studies already establish that a fail-to-pass check can pass on a wrong patch and that
+   test passing alone does not establish behavioral equivalence. It is a decomposition at the
+   level of denominators, delivered as a pre-registered negative result with an audited
+   measurement device.」；
+3. **投稿信的让渡段再收窄**（点名 4 篇被占位文献），并把增量限定为「上述工作都没有报告的
+   那一项：**条件口径与边际口径并列 + 扰动两者的声明率**」。
+
+**本稿尚可保留的三块增量**（登记册 §9.1 已登记）：① false-fix 的**口径分解**——条件口径与
+边际口径并列报告，上述文献均未做分母分解；② **声明率本身被协议扰动**——把装置伪影从具体
+实现的伪影上升为口径层面的量；③ **测量效度 × 声明率的联立**——效度批评与 false-fix 口径联立。
+
+**覆盖缺口的如实披露**：DBLP / ACM DL / IEEE 官方页在本环境被代理拦截（DBLP API 四次重试均返回
+HTML），非 arXiv 渠道的 2026 年论文只能通过 arXiv comment 字段间接覆盖 ⇒ **可能存在仅在
+ACM DL / IEEE Xplore 上线、未同步 arXiv 的 9/10 月论文未被覆盖**。
+**九、抓到一个长期的判据缺口：LaTeX 稿件的引用键从未参与 bib 存在性检查。**
+本轮正文一次引入 8 个新引键（§八 的重定位所需），而审计器的「引用无效」项**一声不吭**
+——只有投稿信那两条脱节被报出。根因：`audit_bib` 的引用键只从**Typst 风格**的 `@key`
+提取（`_CITE_RE`），LaTeX 的 `\citep{key}` / `\citet{key}` 走的是另一个正则
+（`_CITE_RE_LATEX`），而那个正则**只用于段落级引文覆盖计算**，从未参与 bib 存在性检查
+⇒ 「正文引用了尚不存在的文献」长期不可见（那一轮 PDF 里那 8 处实际渲染成了 `?`）。
+处置：`audit_bib` 的引用键改为 Typst 与 LaTeX 两套的**并集**（并过滤 `sec/tab/fig/eq/ref/label`）；
+修好后立刻报出「引文问题 8 项」；2 例新锁（缺键判红 / 在键不报）。
+**一般化：判据换了一种输入格式（Typst → LaTeX）后，原有判据是否还覆盖新格式，是必须复查的
+一件事——「换了稿式」不只换了渲染，也换了判据的输入。**
+
 
 ### CU 轮补记（2026-10-26）：文档命令可执行性门禁（CS 轮教训的落地）＋投稿信/正文同步（零 LLM，$0）
 

@@ -476,6 +476,34 @@ class TestSubmissionPackageCoherence:
         )
         assert any("submission_abstract_words" in f for f in result["failures"]), result["failures"]
 
+    def test_latex_citation_key_missing_from_bib_fails(self, tmp_path):
+        r"""LaTeX 稿件的 `\citet{key}` 若不在 refs.bib ⇒ 必须报「引用无效」。
+
+        CW 轮实测的判据缺口：审计器过去只从**Typst 风格**的 `@key` 取引用键，
+        LaTeX 的 `\cite{key}` 从未参与 bib 存在性检查 ⇒ 正文一次引入 8 个尚不存在
+        的新键，审计器一声不吭（该轮正文已渲染成 `?`）。
+        """
+        paper = _make_paper(tmp_path)
+        (paper / "refs.bib").write_text(
+            "@misc{known2026,\n  title = {Known},\n  note = {arXiv:2601.00001v1}\n}\n", encoding="utf-8"
+        )
+        draft = "We follow \\citet{known2026} and \\citet{ghost2026}.\n"
+        (paper / "draft.typ").write_text(draft, encoding="utf-8")
+        result = audit_mod.audit_bib(paper / "refs.bib", draft)
+        assert "ghost2026" in result["missing_keys"], result["missing_keys"]
+        assert "known2026" not in result["missing_keys"], result["missing_keys"]
+        assert any("ghost2026" in f for f in result["failures"]), result["failures"]
+
+    def test_latex_citation_key_present_in_bib_passes(self, tmp_path):
+        r"""LaTeX 稿件的 `\citet{key}` 在 refs.bib 中 ⇒ 不报。"""
+        paper = _make_paper(tmp_path)
+        (paper / "refs.bib").write_text(
+            "@misc{known2026,\n  title = {Known},\n  note = {arXiv:2601.00001v1}\n}\n", encoding="utf-8"
+        )
+        draft = "We follow \\citet{known2026}.\n"
+        result = audit_mod.audit_bib(paper / "refs.bib", draft)
+        assert result["missing_keys"] == [], result["missing_keys"]
+
     def test_cover_letter_arxiv_must_be_in_bib_and_cited(self, tmp_path):
         """投稿信提到的 arXiv 号必须既在 refs.bib、又被正文引用。
 
