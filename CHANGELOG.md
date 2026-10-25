@@ -174,6 +174,18 @@ bound 构成本稿「检出优先协议能力上限」的**外部限定证据**�
 另登记 6 篇已核验但未入正文的备选（TestJack / PoC≠开发者测试 / VeeReview / coverage 只证明到达状态 /
 MintEval / 450 注入缺陷只检出 47.6%），避免下轮重复检索。
 
+**七、读数。**
+全量：**12,629 passed / 268 skipped / 0 failed**（collected 12,897；CI 同口径
+`xdist -n 4 --dist loadfile` **135.10s**，单进程 461.78s，零 LLM）；
+干净树门禁链 **27 步 rc=0**（含新增的三个本地工具项：快照 `--check` / 修复覆盖率审计 /
+`paper-audit --strict`）；`ruff format --check .` = 987 files already formatted、`ruff check` 全过、
+`mypy src/ config.py` = Success: no issues found in 137 source files；
+LaTeX 编译 **55 页**（`xdv` 日志口径；PDF 实际 58 页）、0 未定义引用、**缺字符警告 0**；
+`paper-audit --strict` rc=0（数字声明 241 条 / SRC 覆盖 95.0% / 综合可追溯率 100.0% /
+引用无效 0 / strict 块失败 0）；引用键快照 25 行（+5 新引用键），`--check` 一致；
+PDF 文本抽取复核：五篇新文献条目与其 arXiv 号均在参考文献中，全文 CJK 残留 0。
+
+
 ### CN 轮补记（同日）：原生 LaTeX 稿 + 2026 前沿文献对账（零 LLM，$0）
 
 **一、投稿稿改为原生 LaTeX，并修掉转换器带进 PDF 的四类真实缺陷。**

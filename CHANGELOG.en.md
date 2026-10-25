@@ -202,6 +202,19 @@ Six further verified papers are registered as indexed-only alternatives (TestJac
 tests / VeeReview / coverage only proves reachability / MintEval / 47.6% detection on 450 injected
 defects) so the next round does not re-search them.
 
+**七、Readings.**
+Full suite: **12,629 passed / 268 skipped / 0 failed** (collected 12,897; **135.10s** in the CI
+caliber `xdist -n 4 --dist loadfile`, 461.78s single-process, zero LLM);
+clean-tree gate chain **27 steps rc=0** (including the three new local-tool items: snapshot
+`--check`, the fix-coverage audit, `paper-audit --strict`); `ruff format --check .` = 987 files
+already formatted, `ruff check` clean, `mypy src/ config.py` = Success: no issues found in 137
+source files; LaTeX build **55 pages** (`xdv` log caliber; PDF 58), 0 undefined references,
+**0 missing-character warnings**; `paper-audit --strict` rc=0 (241 numeric claims, SRC coverage
+95.0%, 100.0% overall traceability, 0 invalid citations, 0 strict-block failures); the citation-key
+snapshot has 25 rows (+5 new keys) and `--check` reports it identical; PDF text extraction confirms
+all five new entries and their arXiv numbers are in the references, with 0 CJK residue.
+
+
 ### CN round addendum (same day): native LaTeX manuscript + 2026 frontier literature reconciliation (zero LLM, $0)
 
 **1. The submission manuscript is now native LaTeX, and four real defects the converter had
