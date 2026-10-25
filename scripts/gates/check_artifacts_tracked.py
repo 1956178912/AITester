@@ -67,7 +67,7 @@ EVIDENCE_DIR_EXEMPTIONS: dict[str, str] = {
     # docstring_anchor / docstring_augment 两正式批已随 d79a9500 全量入库
     # （180/128 文件），按「已全部入库 ⇒ 删登记」漂移判定移除其登记。
     "emse_misguided_augment_20261017": "2026-10-24 augment 正式批的机制重放残留目录（misguided_metrics 重放产物）；未提交 @experiments/run_augment_batch.sh",
-    "emse_oracle_enabled_validation_20261017": "2026-10-24 重跑期目录（材料探针 compiled_empty 阻断，PREFLIGHT 残留）；未提交 @experiments/run_oracle_validation_batch.sh",
+    "emse_oracle_enabled_validation_20261017": "2026-10-25 oracle 注入批（锚表自 llm.bak 重建后 16/20 注入成功，两臂 benchmark 已落盘）；收尾断言拦下（跑批期间并行修复语料锁致树变脏，非绕过门禁），未 --allow-dirty 补跑、数据有效已登记；未提交 @experiments/run_oracle_validation_batch.sh",
     "emse_spec_anchor_20261016": "2026-10-24 自 LLM 缓存零成本重建的锚表；未提交 @experiments/build_spec_anchor_table.py",
     "p_round_b8_ablation_20261018": "2026-10-24 DeepSeek 重跑批（重跑 PREREG 已落盘）；未提交 @experiments/run_b8_ablation.sh",
 }

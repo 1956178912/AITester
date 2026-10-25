@@ -35,9 +35,13 @@ _ROOT = Path(__file__).resolve().parent.parent
 
 # 全归档实测下界（2026-10-23 provider 清理后本机 macOS，Python 3.14.6；清理
 # 删除了 7 份 benchmark 归档 + 323 份 trace，读数按删除后重算）。
-_FULL_CORPUS_BENCHMARK_FILES = 239
-_FULL_CORPUS_TRACE_DIRS = 138
-_FULL_CORPUS_TRACE_FILES = 8216
+# CI 轮重建（2026-10-24）：历史全量语料（239/138/8216）随数据清除退出，新完整
+# 语料 = DeepSeek 重跑批（基础三批 + 补跑九族 + 两正式批，已全量入库）。下界按
+# 当前实测校准（25/14/1098，`git ls-files` 全跟踪——fresh clone 同口径可达）；
+# 语料再增长时上调本下界（只升不降，防语料静默缩水）。
+_FULL_CORPUS_BENCHMARK_FILES = 25
+_FULL_CORPUS_TRACE_DIRS = 14
+_FULL_CORPUS_TRACE_FILES = 1098
 
 
 def _measure_corpus() -> tuple[int, int, int]:

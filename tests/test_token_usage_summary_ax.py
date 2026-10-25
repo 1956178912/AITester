@@ -247,7 +247,7 @@ class TestRealCorpusCleanPath:
                 if isinstance(value, int) and not isinstance(value, bool):
                     expected[baseline].append(float(value))
                     n_blocks += 1
-        assert n_blocks == 34
+        assert n_blocks == 12  # CI 重建 2026-10-24：新语料（原 34）
         agg = sf._aggregate_group(summaries)
         for baseline, values in expected.items():
             want = round(sum(values) / len(values), 3)

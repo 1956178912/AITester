@@ -519,9 +519,10 @@ class TestAnchorTableBuild:
         union_table, union_stats = build.build_doc_anchor_table(_QUIXBUGS_DATA, planner_table=_PLANNER_ANCHOR_TABLE)
         assert union_stats["programs"] == 41
         assert (
-            union_stats["union_matched"] == 40
-        )  # CI 补跑 2026-10-24：锚表自合并缓存重建后 41→40（51 条 planner 响应解析失败致一 program 锚缺席）
-        assert union_stats["union_missing"] == 1  # CI 补跑 2026-10-24：对应 union_matched 41→40 的那一例
+            union_stats["union_matched"] == 41
+        )  # 2026-10-25：锚表改用 llm.bak 历史缓存重建（328 锚、含 *_expr 子句），
+        # quixbugs 41/41 全匹配（41→40 是旧混合缓存表的状态，已随重建恢复）
+        assert union_stats["union_missing"] == 0
         # CI 补跑 2026-10-24：union 表允许至多一个 program 缺 planner 锚（重建缓存
         # 解析失败 51 条所致）；历史全量锚（41/41）恢复需补齐缓存解析后重建。
         assert (

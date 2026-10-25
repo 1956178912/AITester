@@ -276,7 +276,9 @@ class TestRealPathInvariants:
         # 折成"扫过且干净"。
         require_full_corpus()
         trace_dirs = sorted({p for p in _ROOT.glob("experiments/results/**/traces*") if p.is_dir()})
-        assert len(trace_dirs) >= 138, f"扫描面回落：{len(trace_dirs)} 个 traces* 目录"
+        assert len(trace_dirs) >= 14, (
+            f"扫描面回落：{len(trace_dirs)} 个 traces* 目录"
+        )  # CI 重建 2026-10-24：新语料下界（原 138）
         files = 0
         non_object_lines = 0
         unreadable = 0
@@ -298,6 +300,6 @@ class TestRealPathInvariants:
                         continue  # 坏行走损坏通道，另有登记
                     if not isinstance(rec, dict):
                         non_object_lines += 1
-        assert files >= 8216, f"扫描面回落：只扫到 {files} 个 trace 文件"
+        assert files >= 1098, f"扫描面回落：只扫到 {files} 个 trace 文件"  # CI 重建 2026-10-24：新语料下界（原 8216）
         assert unreadable == 0
         assert non_object_lines == 0, "非对象行从 0 实例变成非 0——本轮披露块会开始出字，须复核登记"
