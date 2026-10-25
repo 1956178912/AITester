@@ -1,0 +1,421 @@
+{
+  "label": "quixbugs_generated",
+  "source": "/Users/wangchenyu/Workspace/AITester/experiments/results/benchmark_quixbugs_20261024_170238.json",
+  "test_kind": "generated",
+  "max_mutants": 10,
+  "timeout_seconds": 120,
+  "aggregate": {
+    "n_tasks": 50,
+    "n_measured": 49,
+    "n_skipped": 1,
+    "skip_reasons": [
+      "cosmic-ray 无有效变异体结果（目标代码无可变异点或全部 pending）"
+    ],
+    "mutants_killed": 451,
+    "mutants_total": 461,
+    "pooled_mutation_score": 0.978308,
+    "mean_mutation_score": 0.979592
+  },
+  "per_task": [
+    {
+      "task_id": "quixbugs__breadth_first_search",
+      "killed": 10,
+      "total": 10,
+      "score": 1.0,
+      "skipped": false,
+      "skip_reason": ""
+    },
+    {
+      "task_id": "quixbugs__breadth_first_search_test",
+      "killed": 10,
+      "total": 10,
+      "score": 1.0,
+      "skipped": false,
+      "skip_reason": ""
+    },
+    {
+      "task_id": "quixbugs__bucketsort",
+      "killed": 10,
+      "total": 10,
+      "score": 1.0,
+      "skipped": false,
+      "skip_reason": ""
+    },
+    {
+      "task_id": "quixbugs__depth_first_search",
+      "killed": 9,
+      "total": 10,
+      "score": 0.9,
+      "skipped": false,
+      "skip_reason": ""
+    },
+    {
+      "task_id": "quixbugs__depth_first_search_test",
+      "killed": 10,
+      "total": 10,
+      "score": 1.0,
+      "skipped": false,
+      "skip_reason": ""
+    },
+    {
+      "task_id": "quixbugs__detect_cycle",
+      "killed": 10,
+      "total": 10,
+      "score": 1.0,
+      "skipped": false,
+      "skip_reason": ""
+    },
+    {
+      "task_id": "quixbugs__detect_cycle_test",
+      "killed": 10,
+      "total": 10,
+      "score": 1.0,
+      "skipped": false,
+      "skip_reason": ""
+    },
+    {
+      "task_id": "quixbugs__bitcount",
+      "killed": 10,
+      "total": 10,
+      "score": 1.0,
+      "skipped": false,
+      "skip_reason": ""
+    },
+    {
+      "task_id": "quixbugs__find_in_sorted",
+      "killed": 9,
+      "total": 10,
+      "score": 0.9,
+      "skipped": false,
+      "skip_reason": ""
+    },
+    {
+      "task_id": "quixbugs__flatten",
+      "killed": 3,
+      "total": 3,
+      "score": 1.0,
+      "skipped": false,
+      "skip_reason": ""
+    },
+    {
+      "task_id": "quixbugs__gcd",
+      "killed": 10,
+      "total": 10,
+      "score": 1.0,
+      "skipped": false,
+      "skip_reason": ""
+    },
+    {
+      "task_id": "quixbugs__get_factors",
+      "killed": 8,
+      "total": 10,
+      "score": 0.8,
+      "skipped": false,
+      "skip_reason": ""
+    },
+    {
+      "task_id": "quixbugs__hanoi",
+      "killed": 10,
+      "total": 10,
+      "score": 1.0,
+      "skipped": false,
+      "skip_reason": ""
+    },
+    {
+      "task_id": "quixbugs__find_first_in_sorted",
+      "killed": 10,
+      "total": 10,
+      "score": 1.0,
+      "skipped": false,
+      "skip_reason": ""
+    },
+    {
+      "task_id": "quixbugs__is_valid_parenthesization",
+      "killed": 9,
+      "total": 10,
+      "score": 0.9,
+      "skipped": false,
+      "skip_reason": ""
+    },
+    {
+      "task_id": "quixbugs__kheapsort",
+      "killed": 2,
+      "total": 2,
+      "score": 1.0,
+      "skipped": false,
+      "skip_reason": ""
+    },
+    {
+      "task_id": "quixbugs__knapsack",
+      "killed": 10,
+      "total": 10,
+      "score": 1.0,
+      "skipped": false,
+      "skip_reason": ""
+    },
+    {
+      "task_id": "quixbugs__kth",
+      "killed": 10,
+      "total": 10,
+      "score": 1.0,
+      "skipped": false,
+      "skip_reason": ""
+    },
+    {
+      "task_id": "quixbugs__lcs_length",
+      "killed": 10,
+      "total": 10,
+      "score": 1.0,
+      "skipped": false,
+      "skip_reason": ""
+    },
+    {
+      "task_id": "quixbugs__levenshtein",
+      "killed": 9,
+      "total": 10,
+      "score": 0.9,
+      "skipped": false,
+      "skip_reason": ""
+    },
+    {
+      "task_id": "quixbugs__lis",
+      "killed": 8,
+      "total": 10,
+      "score": 0.8,
+      "skipped": false,
+      "skip_reason": ""
+    },
+    {
+      "task_id": "quixbugs__longest_common_subsequence",
+      "killed": 10,
+      "total": 10,
+      "score": 1.0,
+      "skipped": false,
+      "skip_reason": ""
+    },
+    {
+      "task_id": "quixbugs__max_sublist_sum",
+      "killed": 10,
+      "total": 10,
+      "score": 1.0,
+      "skipped": false,
+      "skip_reason": ""
+    },
+    {
+      "task_id": "quixbugs__minimum_spanning_tree",
+      "killed": 9,
+      "total": 10,
+      "score": 0.9,
+      "skipped": false,
+      "skip_reason": ""
+    },
+    {
+      "task_id": "quixbugs__mergesort",
+      "killed": 10,
+      "total": 10,
+      "score": 1.0,
+      "skipped": false,
+      "skip_reason": ""
+    },
+    {
+      "task_id": "quixbugs__minimum_spanning_tree_test",
+      "killed": 10,
+      "total": 10,
+      "score": 1.0,
+      "skipped": false,
+      "skip_reason": ""
+    },
+    {
+      "task_id": "quixbugs__next_permutation",
+      "killed": 9,
+      "total": 10,
+      "score": 0.9,
+      "skipped": false,
+      "skip_reason": ""
+    },
+    {
+      "task_id": "quixbugs__next_palindrome",
+      "killed": 10,
+      "total": 10,
+      "score": 1.0,
+      "skipped": false,
+      "skip_reason": ""
+    },
+    {
+      "task_id": "quixbugs__node",
+      "killed": 0,
+      "total": 0,
+      "score": null,
+      "skipped": true,
+      "skip_reason": "cosmic-ray 无有效变异体结果（目标代码无可变异点或全部 pending）"
+    },
+    {
+      "task_id": "quixbugs__pascal",
+      "killed": 10,
+      "total": 10,
+      "score": 1.0,
+      "skipped": false,
+      "skip_reason": ""
+    },
+    {
+      "task_id": "quixbugs__powerset",
+      "killed": 10,
+      "total": 10,
+      "score": 1.0,
+      "skipped": false,
+      "skip_reason": ""
+    },
+    {
+      "task_id": "quixbugs__possible_change",
+      "killed": 10,
+      "total": 10,
+      "score": 1.0,
+      "skipped": false,
+      "skip_reason": ""
+    },
+    {
+      "task_id": "quixbugs__quicksort",
+      "killed": 10,
+      "total": 10,
+      "score": 1.0,
+      "skipped": false,
+      "skip_reason": ""
+    },
+    {
+      "task_id": "quixbugs__reverse_linked_list",
+      "killed": 1,
+      "total": 1,
+      "score": 1.0,
+      "skipped": false,
+      "skip_reason": ""
+    },
+    {
+      "task_id": "quixbugs__reverse_linked_list_test",
+      "killed": 10,
+      "total": 10,
+      "score": 1.0,
+      "skipped": false,
+      "skip_reason": ""
+    },
+    {
+      "task_id": "quixbugs__rpn_eval",
+      "killed": 10,
+      "total": 10,
+      "score": 1.0,
+      "skipped": false,
+      "skip_reason": ""
+    },
+    {
+      "task_id": "quixbugs__shortest_path_length",
+      "killed": 10,
+      "total": 10,
+      "score": 1.0,
+      "skipped": false,
+      "skip_reason": ""
+    },
+    {
+      "task_id": "quixbugs__shortest_path_length_test",
+      "killed": 10,
+      "total": 10,
+      "score": 1.0,
+      "skipped": false,
+      "skip_reason": ""
+    },
+    {
+      "task_id": "quixbugs__shortest_path_lengths_test",
+      "killed": 10,
+      "total": 10,
+      "score": 1.0,
+      "skipped": false,
+      "skip_reason": ""
+    },
+    {
+      "task_id": "quixbugs__shortest_path_lengths",
+      "killed": 10,
+      "total": 10,
+      "score": 1.0,
+      "skipped": false,
+      "skip_reason": ""
+    },
+    {
+      "task_id": "quixbugs__shortest_paths_test",
+      "killed": 10,
+      "total": 10,
+      "score": 1.0,
+      "skipped": false,
+      "skip_reason": ""
+    },
+    {
+      "task_id": "quixbugs__shortest_paths",
+      "killed": 10,
+      "total": 10,
+      "score": 1.0,
+      "skipped": false,
+      "skip_reason": ""
+    },
+    {
+      "task_id": "quixbugs__sieve",
+      "killed": 10,
+      "total": 10,
+      "score": 1.0,
+      "skipped": false,
+      "skip_reason": ""
+    },
+    {
+      "task_id": "quixbugs__shunting_yard",
+      "killed": 10,
+      "total": 10,
+      "score": 1.0,
+      "skipped": false,
+      "skip_reason": ""
+    },
+    {
+      "task_id": "quixbugs__subsequences",
+      "killed": 10,
+      "total": 10,
+      "score": 1.0,
+      "skipped": false,
+      "skip_reason": ""
+    },
+    {
+      "task_id": "quixbugs__to_base",
+      "killed": 10,
+      "total": 10,
+      "score": 1.0,
+      "skipped": false,
+      "skip_reason": ""
+    },
+    {
+      "task_id": "quixbugs__topological_ordering",
+      "killed": 5,
+      "total": 5,
+      "score": 1.0,
+      "skipped": false,
+      "skip_reason": ""
+    },
+    {
+      "task_id": "quixbugs__topological_ordering_test",
+      "killed": 10,
+      "total": 10,
+      "score": 1.0,
+      "skipped": false,
+      "skip_reason": ""
+    },
+    {
+      "task_id": "quixbugs__sqrt",
+      "killed": 10,
+      "total": 10,
+      "score": 1.0,
+      "skipped": false,
+      "skip_reason": ""
+    },
+    {
+      "task_id": "quixbugs__wrap",
+      "killed": 10,
+      "total": 10,
+      "score": 1.0,
+      "skipped": false,
+      "skip_reason": ""
+    }
+  ]
+}
