@@ -426,6 +426,16 @@ jobs:
         if: matrix.python-version == '3.14'
         run: python scripts/gates/check_doc_links.py --strict
 
+      - name: Document command references (CU 轮 文档命令可执行性门禁)
+        # CU 轮（2026-10-26）：文档里出现的 `scripts/....py` 路径与 `make <target>`
+        # 必须真实存在。背景：CS 轮实测抓到引用键快照写着「重跑导出脚本」而该脚本
+        # 并不存在（CK 轮同型：CITATION.cff 写「已备：zenodo_metadata.json」而文件
+        # 不在盘）——文档指向不存在的工件时，维护者按文档操作必然落空，只能手改。
+        # 口径：只认命令位（代码块内 / 行首），英文散文里的 "make the same direction"
+        # 与 `> ` 引言块都不算命令（CU 轮固化时的两类误报已写进判据）。
+        if: matrix.python-version == '3.14'
+        run: python scripts/gates/check_doc_commands.py
+
       - name: Lint with ruff
         run: |
           ruff check .

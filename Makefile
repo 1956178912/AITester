@@ -39,6 +39,9 @@ docs-check:  ## 双语文档同步 + 文档链接完整性门禁（strict，CI �
 	$(PY) scripts/gates/check_bilingual_docs.py --strict
 	$(PY) scripts/gates/check_doc_links.py --strict
 
+doc-commands:  ## 文档命令可执行性门禁（CU 轮：文档引用的脚本路径与 make 目标必须存在；CI 阻断项）
+	$(PY) scripts/gates/check_doc_commands.py
+
 env-budget:  ## 环境变量开关预算棘轮（CI 阻断项）
 	$(PY) scripts/gates/check_env_budget.py --check
 
@@ -124,7 +127,7 @@ perf-check:  ## 性能回归比对（默认 non-blocking 告警；本地同机�
 tool-versions:  ## CI/pre-commit/lock 三方工具版本一致守卫（AK4 接入 CI）
 	$(PY) scripts/gates/check_tool_versions.py
 
-gates: lint format typecheck test docs-check env-budget baseline-check state-contract env-snapshot model-fingerprint tool-versions json-contract-sites json-strict artifact-doc-consistency zero-assert ast-guards status-persistence registration-consistency invocation-caliber flag-effect  ## 本地全部门禁（合并前自检；format = ruff format --check，2026-10-12 质量债清偿批次补入；zero-assert = K 轮补入，此前 CI 阻断但本地 gates 缺席；json-strict = AF 轮补入；ast-guards = BK 轮补入，捕获面棘轮；status-persistence = BN 轮补入，落盘可达性棘轮；registration-consistency = CF 轮补入，登记面当前口径与分册清单对账）
+gates: lint format typecheck test docs-check doc-commands env-budget baseline-check state-contract env-snapshot model-fingerprint tool-versions json-contract-sites json-strict artifact-doc-consistency zero-assert ast-guards status-persistence registration-consistency invocation-caliber flag-effect  ## 本地全部门禁（合并前自检；format = ruff format --check，2026-10-12 质量债清偿批次补入；zero-assert = K 轮补入，此前 CI 阻断但本地 gates 缺席；json-strict = AF 轮补入；ast-guards = BK 轮补入，捕获面棘轮；status-persistence = BN 轮补入，落盘可达性棘轮；registration-consistency = CF 轮补入，登记面当前口径与分册清单对账）
 
 repro:  ## 复现主批次（详见 reproduce.sh；消耗 LLM 配额，勿自动触发）
 	bash reproduce.sh
