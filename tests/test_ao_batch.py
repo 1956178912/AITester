@@ -227,9 +227,14 @@ class TestReadmeEnHeader:
         记过的 BR/BS **误绿形态**（头部再往后退也不会转红）；798d8c72（10-25）
         同样漏推进。误绿存续期 = CI 轮收口（10-24）至 CJ 轮（10-25）收口，
         两轮全量跑批均绿 ⇒ 「测试绿」同样不外推「行锁在钉最新轮次」。
-        单逻辑行剔除行内代码后 `**` 英文 712、中文 710，均为偶。"""
+        单逻辑行剔除行内代码后 `**` 英文 712、中文 710，均为偶。
+        CK 轮（2026-10-25）推进至 "**CK round:"（同一写法：CJ 的标记随之改为
+        "Previously **CJ round:"，带冒号的最新字面在头部唯一命中、历史链首项为
+        "Previously **CJ round:"；中文侧同步推进至 "**CK 轮："，历史链首项为
+        "此前 **CJ 轮："。CK = 1.0.0 程序第一轮：ADR-0036 发布判据 + 复现包
+        REPLICATION.md 与撤回语料对账）。"""
         assert "Current version 0.8.0" in README_EN_HEAD
-        assert "**CJ round:" in README_EN_HEAD
+        assert "**CK round:" in README_EN_HEAD
 
 
 class TestDeprecationTimeline:
