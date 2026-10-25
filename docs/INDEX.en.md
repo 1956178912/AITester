@@ -226,6 +226,7 @@
 | [docs/HUMAN_ADJUDICATION_PROTOCOL.md](HUMAN_ADJUDICATION_PROTOCOL.md) (Chinese) | E7 human-adjudication protocol: sampling frame / five-choice scale / independent double review / conflict resolution. |
 | [docs/COVERAGE_RATCHET_DEVIATION.md](COVERAGE_RATCHET_DEVIATION.md) (Chinese) | Coverage-ratchet deviation record: measured vs water line, attribution checks and disposition paths. |
 | [docs/study/OPTIMIZATION_2026-10-15.md](emse/OPTIMIZATION_2026-10-15.md) (Chinese) | EMSE submission optimization record: reviewability-closure batch. |
+| [docs/study/PAPER_CITATION_KEYS.md](emse/PAPER_CITATION_KEYS.md) (Chinese) | Snapshot of the manuscript's external-reading citation keys: the committed surface proving every registered reading is actually cited (see `tests/test_external_readings_citation_chain.py`). |
 | [REPLICATION.md](../REPLICATION.md) (Chinese) | Replication-package README: directories, artifacts and restore commands. |
 | [CITATION.cff](../CITATION.cff) | Citation metadata (software citation format). |
 | [LICENSE](../LICENSE) | Open-source licence. |

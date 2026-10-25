@@ -111,6 +111,7 @@ v2 的 0.524 单列并标注"v3 已改"），正文同步改写。**教训：版
 | `hamidi2026criteria` | 6,000+ | "We collect 6,000+ faulty program instances" | 同上 |
 | `liu2026testexplora` | 16.06 | "state-of-the-art models achieve a maximum Fail-to-Pass (F2P) rate of only 16.06%" | ICML 2026, PMLR v306 |
 | `liu2026testexplora` | 2,389 / 482 | "2,389 tasks across 482 repositories" | 同上 |
+| `liu2026testexplora` | 17.27 / 29.7 | "SWEAgent instantiated with GPT-5-mini achieves an F2P of 17.27% and an F2P@5 of 29.7%" | 同上（PMLR v306 页面摘要逐字，2026-10-25 一手核验） |
 
 ## 3. 规格锚点与「先测试后编码」（RQ4 的外部对照）
 
@@ -139,3 +140,35 @@ v2 的 0.524 单列并标注"v3 已改"），正文同步改写。**教训：版
 | SWT-Bench 榜单 2026 读数（Lite 89.1% / Verified 84.0%） | 榜单是滚动更新的运行产物，不是同行评审定稿；引用即过期。正文只把 SWT-Bench 作为**任务族**引用，不引榜首数字。 |
 | 「多智能体没有更好」的博客/论坛实测（如 20 任务三组对比） | 非同行评审、无工件，不能作为证据。 |
 | ICLR 2026 CAO workshop 的 prompt-drift 结果 | 与本稿 RQ2 的机制不同（协议漂移 vs 编排预算），且为 workshop poster；不扩范围。 |
+
+## 6. 2026-10 新出前沿（CR 轮一手核验，2026-10-25）
+
+> **核验方式**：`export.arxiv.org/api/query` 官方 Atom 响应的 `summary` 字段逐字取回，
+> 作者名取自 Atom `author/name`，日期取自 `published`，主分类取自 `arxiv:primary_category`。
+> 四篇均**无出版商 DOI**（`arxiv:doi` 缺席），故按 arXiv 口径逐条写明版本。
+>
+> **抓取面错位（本轮实测事故，必读）**：首次核验用 `arxiv.org/html/<id>v1`（**全文**页）
+> 抓「摘要」，抄回的文本混入 `longtable`/`latex` 等 LaTeX 宏名——那是全文不是摘要。
+> 官方 API 的 `summary` 才是本节逐字来源。**教训：arXiv 的「摘要」有三处**
+> （abs 页 HTML、abs 页 PDF、API 的 summary），抓错面会抄进不存在的句子；
+> 登记前必须确认取到的是 `summary` 字段。
+>
+> **来源冲突（留存）**：`charoosaei2026risks` 的二手中文解读（bytenote.net，
+> 2026-10 抓取）给出另一组数字——「60,780 个突变」「官方套件能杀 58.6% / 54.0% / 16.0%」
+> 「真抓到 2.6% / 2.4% / 4.8%」「假错误 16.9% / 8.4% / 16.9%」「异常预言占假错误的 37%–57%」。
+> 官方摘要 v1 里**没有** 60,780 / 58.6% / 54.0% / 16.0% / 16.9% 这一组；
+> 摘要的 2.4%-4.8% 与二手解读的真抓到区间一致，但两者的**指标定义不同**
+> （摘要：reveal faults；二手：真抓到）。本册只登记官方摘要读数；二手那组数字
+> **不入正文、不入登记册**，以免把「全文/其它批次读数」挂到摘要句子上。
+
+| 键 | 读数 | 原文表述 | 出处 |
+|---|---|---|---|
+| `egashira2026testsuitebench` | 165 / 74 / 73 / 60 / 88 / 82 | "a benchmark of 165 open-source applications, each with a structured and detailed specification of intended behavior, a reference implementation, a reference test suite, and on average 74 mutants. Each mutant is generated from a single requirement of the specification and refined to isolate that behavior: 73\% are killed by exactly one reference test and, on average, by only 0.2\% of the remaining tests"；"even frontier coding agents struggle to generate strong test suites given our specifications, achieving mutation scores below 60\%, despite their suites being largely valid and 88\% of their tests passing on the reference implementation"；"implementations generated for the same specifications pass 82\% of the reference tests" | arXiv:2610.13065v1（2026-10-09；Egashira / Mündler-Sasahara / Müller / Vechev；cs.SE；无出版商 DOI） |
+| `charoosaei2026risks` | 145 / 8%-17% / 2.4%-4.8% / 83%-91% / 83%-92% / 14%-30% | "Across 145 pull requests from SciPy, Qiskit, and pandas, 8%-17% of the generated tests are fault-enforcing, while only 2.4%-4.8% reveal faults. Fault-enforcing tests persist over time: after several subsequent commits, 83%-91% of them are still relevant and pass. They also accumulate: when the faults of all pull requests are combined in one codebase, 83%-92% remain enforced at the end of the commit history, and the developer-written test suite detects only 14%-30% of them" | arXiv:2610.11835v1（2026-10-08；Charoosaei / Richter / Papadakis；cs.SE；无出版商 DOI） |
+| `israel2026verifies` | 46 / 0.006 | "a verifier in a fresh context detected more of the 46 seeded faults than the builder's tests (Holm-corrected p = 0.006) and surfaced the ambiguities of the specification, at the price of rare false oracles" | arXiv:2610.28667v1（2026-10-16；Israel Sion / April；cs.SE；无出版商 DOI） |
+| `banik2026allsmoke` | 86,156 / 33,596 / 2,807 / 80.2 / 1.28 | "We conduct an empirical study of 86,156 test-file patches from 33,596 agent-authored PRs across 2,807 GitHub repositories produced by five coding agents"；"Applied at scale, 80.2% of test patches contain weak or no explicit oracle signals"；"strong oracles significantly improve merge likelihood (OR = 1.28, p < 0.001)" | arXiv:2606.18168v1（2026-06-16；Banik / Chowdhury / Shamim；cs.SE；comment: Accepted at the 8th IEEE International Conference on Artificial Intelligence Testing, 2026；无出版商 DOI） |
+
+**口径提醒（引用这四行时必带）**：`egashira2026testsuitebench` 的 mutation score 是
+「agent 生成的测试杀死 mutant 的比例」；本稿的 false-fix 边际率是「声明修复中实际未修的比例」。
+两者数值区间接近但**指标不同、方向相反**，正文不得把两者并列成同一件事。
+`charoosaei2026risks` 的 8%-17% 是「生成的测试中固化缺陷的比例」，也不是 false-fix 率。

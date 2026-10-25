@@ -243,6 +243,7 @@
 | [docs/HUMAN_ADJUDICATION_PROTOCOL.md](HUMAN_ADJUDICATION_PROTOCOL.md) | E7 人工裁决操作协议：抽样框 / 五选一量表 / 双人独立 / 冲突解决。 |
 | [docs/COVERAGE_RATCHET_DEVIATION.md](COVERAGE_RATCHET_DEVIATION.md) | 覆盖率棘轮偏差登记：实测 vs 水位、归因核验与处置路径。 |
 | [docs/study/OPTIMIZATION_2026-10-15.md](emse/OPTIMIZATION_2026-10-15.md) | EMSE 投稿优化记录：审稿可判性收口批次。 |
+| [docs/study/PAPER_CITATION_KEYS.md](emse/PAPER_CITATION_KEYS.md) | 论文外部读数引用键快照：登记册每行是否真被正文引用的**入库承重面**（判据见 `tests/test_external_readings_citation_chain.py`）。 |
 | [REPLICATION.md](../REPLICATION.md) | 复现包说明：目录、工件与还原命令（中文）。 |
 | [CITATION.cff](../CITATION.cff) | 引用元数据（软件引用格式）。 |
 | [LICENSE](../LICENSE) | 开源许可证。 |
