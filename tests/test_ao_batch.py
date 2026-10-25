@@ -260,9 +260,17 @@ class TestReadmeEnHeader:
         "Previously **CS round:"，带冒号的最新字面在头部唯一命中；中文侧同步
         推进至 "**CT 轮："，历史链首项为 "此前 **CS 轮："；单逻辑行剔除行内代码
         后 `**` 中文 1194 / 英文 1104，均为偶）。CT = 摘要投稿超限风险（严格口径
-        247 → 240 词，余量 3 → 10）+ 投稿材料词数/页数失实 + 判据口径显式化。"""
+        247 → 240 词，余量 3 → 10）+ 投稿材料词数/页数失实 + 判据口径显式化。
+        CU 轮（2026-10-26）推进至 "**CU round:"（同一写法：CT 的标记随之改为
+        "Previously **CT round:"，带冒号的最新字面在头部唯一命中；中文侧同步
+        推进至 "**CU 轮："，历史链首项为 "此前 **CT 轮："；单逻辑行剔除行内代码
+        后 `**` 中文 1204 / 英文 1114，均为偶）。CU = 文档命令可执行性门禁
+        （CS 轮教训落地）+ 投稿信/正文前沿同步。**注意**：本轮再次实测到本锁的
+        老毛病——轮换头部后、推进本锁前的那段时间里，断言钉的旧标记
+        （"**CT round:"）只在历史链里命中，**锁照样绿**（8 passed）；即
+        「头部轮换」与「行锁推进」必须同轮完成，否则中间态是误绿。"""
         assert "Current version 1.0.0" in README_EN_HEAD
-        assert "**CT round:" in README_EN_HEAD
+        assert "**CU round:" in README_EN_HEAD
 
 
 class TestDeprecationTimeline:

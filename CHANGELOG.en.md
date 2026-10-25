@@ -101,7 +101,52 @@ success. The scheduled jobs still rest on local-only evidence: perf.yml red thre
 (10-11 / 10-18 / 10-25, fixed after 12:44Z) and mutation.yml red on its first ever run (10-19,
 fixed on 10-25) — their remote turn-green depends on the 2026-11-01 and 2026-10-26 scheduled
 triggers, so **the local reproduction is green but the remote re-verification has not happened
-yet**.
+yet**.### CU round addendum (2026-10-26): a document-command executability gate (landing the CS round's lesson) + cover-letter/body synchronisation (zero LLM, $0)
+
+**一、Turning "the document points at a non-existent artefact" into an executable criterion.**
+The CS round found the citation-key snapshot saying "re-run the export script" while **that script
+did not exist**; the CK round had the same shape (`CITATION.cff` claiming "already prepared:
+experiments/results/zenodo_metadata.json", a file not on disk). Nothing could detect this class:
+the link checker inspects markdown links, not commands inside code blocks, and "the command runs" is
+known only after a reader trips over it. This round commits it as a gate,
+`scripts/gates/check_doc_commands.py`, wired into the blocking CI chain:
+
+- criterion: every `scripts/....py` path appearing in the documentation must exist; the target of
+  every `make <target>` must be a real Makefile target;
+- the criterion **pins two classes of false positive** observed while building it: English prose
+  such as "make the same direction" / "make sure the `target_file` path is correct" is not a
+  command, and a `> ` blockquote is not a shell prompt. Hence only command positions (inside code
+  blocks or at line start) count, and `make` must be a whole-line form (flags only after the
+  target);
+- 9 new cases (including a zero-failure assertion on the real tree); negative self-check: a
+  temporary `python scripts/tools/does_not_exist.py` and `make no-such-target` are both reported
+  precisely, while the existing `make paper-audit --strict` is not flagged.
+
+**二、The positive census is itself a result: every command the documentation references works.**
+The first full census (39 documents, 124 script paths and make targets) found **zero** real
+breakages --- the three "missing" hits were all English prose ("make the/that/sure"), gone once
+the caliber was tightened.
+
+**三、Cover letter / body frontier synchronisation (local artifact, not committed).**
+`paper/cover_letter.tex` still said "Three independent studies published in 2026 reach the same
+direction" while the body now cites **nine** frontier papers (including two independent
+formalisations and one **submitted to the same venue**) ⇒ replaced with an accurate statement
+matching the body: three verifiable primary works cited by arXiv id only (no new numbers, hence
+no new reconciliation burden), and the contribution located as "not the direction but the
+resolution and the unit of analysis" and "we measure *declared* repairs rather than the acceptance
+of candidate patches". Date 25 → 26 October 2026; rebuilt at 2 pages with 0 missing characters,
+and PDF text extraction confirms the three arXiv ids and the new date are present and the old
+wording is gone.
+
+**四、The gate census moves with the new gate (a chain of +1s).**
+One more gate script ⇒ gate scripts 32→33, unique CI gates 30→31, CI call sites 33→34, gate
+steps 31→32, blocking steps 29→30, make targets 20→21, make commands 22→23; `formatted_files`
+987→989. The gate self-check also emitted the decisive note: "on disk 33 / index 32, one untracked
+(`check_doc_commands`) --- read as *not committed this round*, CI's clone will not have these" ---
+which is exactly what the index mechanism is for: **until a new gate is committed, CI does not
+have it**, so "I wrote the gate, therefore CI enforces it" does not hold.
+
+
 ### CT round addendum (2026-10-26): an abstract that was three words from the submission limit + stale word/page counts in the submission files + a criterion whose caliber must be explicit (zero LLM, $0)
 
 **一、A genuine submission-blocking risk: the abstract had three words of headroom.**
