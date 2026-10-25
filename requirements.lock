@@ -21,7 +21,7 @@ DBUtils==3.1.2
 dill==0.4.1
 distro==1.9.0
 durationpy==0.10
-filelock==3.32.2
+filelock==4.2.1
 flatbuffers==25.12.19
 fonttools==4.63.0
 frozenlist==1.8.0
