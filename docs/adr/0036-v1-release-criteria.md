@@ -20,8 +20,8 @@ LLM 配额实验 / D3 全量 Mut@k）均含外部依赖。本 ADR 把「稳定 +
 
 | # | 判据 | 当前状态（2026-10-25 CJ 轮收口） |
 |---|---|---|
-| A1 | 门禁链 20 步干净树 rc=0（**CM 轮实测：20 道门禁全部 rc=0**，见 §7；lint/format/mypy/全量测试/双语文档/env-budget/baseline/state-contract/env-snapshot/model-fingerprint/tool-versions/json-contract-sites/json-strict/artifact-doc-consistency/zero-assert/ast-guards/status-persistence/registration-consistency/invocation-caliber/flag-effect） | **绿**（CJ 轮实测） |
-| A2 | 全量测试零失败（正常口径 collected 与 BASELINE 登记逐位一致） | **绿（CM 轮干净树终跑）**：**12,507 passed / 267 skipped / 0 failed，collected 12,774、155.24s**；与 BASELINE `tests` 节逐键一致 |
+| A1 | 门禁链干净树 rc=0（链的**步数会随门禁增删而变，故本判据不写死步数**；当前步数与逐门 rc 见 `scripts/gates/check_invocation_caliber.py` 的自检报告与 `docs/PROJECT_STATUS_REGISTER.md` §1「门禁总数」行） | **绿**（CS 轮干净树实测：链内 **23 步 rc=0**，含 CI 同口径全量 `xdist -n 4 --dist loadfile`；链外另有 `prompt-artifacts-check` 等非阻断步骤，链长以自检报告为准） |
+| A2 | 全量测试零失败（正常口径 collected 与 BASELINE 登记逐位一致） | **绿（CS 轮干净树终跑）**：**12,603 passed / 268 skipped / 0 failed，collected 12,871**（CI 同口径 `xdist -n 4 --dist loadfile` **146.54s**；单进程跑 463.74s）；与 BASELINE `tests` 节逐键一致。最新读数以 `BASELINE.yaml` `tests` 节为单一事实源（本栏随轮次刷新，不作为查证入口） |
 | A3 | 复现包闭环：零 LLM 复算链 L0/L1 每条命令 ok 或显式 [SKIP] 带实测理由；REPLICATION.md 每项数字/路径指向在盘工件 | **已关闭（CM 轮）**：L0 实测 3 ok / 3 显式 [SKIP] / rc=0；完整性校验改四态后 **8 目录 / 401 文件通过 / 0 失败 / 5 目录缺席披露**（改前「0 通过 / 0 失败 / 6 跳过」仍读作绿）；REPLICATION.md 补路径三类口径 |
 | A4 | 论文数字审计：`paper-audit --strict` 通过（200 条声明可追溯 100%、无效引用 0） | **已关闭（CM 轮）**：210 条声明 / 综合可追溯率 100.0% / SRC 无效 0 / strict 块失败 0。**并发现一处真实断裂**：附录 E 成本表的 SRC 指向不含该数字的工件（路径存在、数字不在，审计仍报 100%）——已改 historical + 表 W-1 落点，工具新增块级数字存在性判据（A/B：错指针 rc=1） |
 | A5 | 三必披露缺口在论文**正文**显式披露：① fixed 臂 53/261 行无 token 记录的成本下界口径；② 合成数据发生器的漂移；③ scale87 SpecExpr 未测 | **已关闭（CM 轮，含勘误）**：① 实为两件事——fixed 材料缺口 53/261（过红上限 69/88）与 df 臂 token 记账下界 35/261（附录 E caption）；② 模板库 30→50 + 6 模板 gold 修复 ⇒ 归档 mutation 值只能以归档件复算；③ scale87 的 `DETECTION_SPEC_MODE=replace` ≠ 完整 SpecExpr 路线。②③ 落 Threats / Instrument provenance |

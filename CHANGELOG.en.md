@@ -103,6 +103,105 @@ fixed on 10-25) — their remote turn-green depends on the 2026-11-01 and 2026-1
 triggers, so **the local reproduction is green but the remote re-verification has not happened
 yet**.
 
+### CS round addendum (same day): snapshot generation path committed + submission-package coherence check + the fix-coverage tool's baseline revived (zero LLM, $0)
+
+**一、Registry-side false statement: the snapshot's "re-generate" instruction points at a script that does not exist.**
+CR round created `docs/study/PAPER_CITATION_KEYS.md` as the committed surface for the
+register→manuscript→refs.bib chain, and the document says "re-run the export script and overwrite
+this file" — **but no such script existed** (the same shape as the CK-round CITATION.cff
+"already prepared: experiments/results/zenodo_metadata.json" false statement: a document pointing
+at a non-existent artifact). Consequence: after any manuscript edit the maintainer follows the
+document, finds nothing, and hand-edits the snapshot instead — so when the snapshot drifts from the
+manuscript the lock turns red with no reproducible repair path.
+
+Remediation: the generation step is committed as `scripts/tools/export_paper_citation_keys.py`; the
+snapshot becomes a **pure-function output** (no generation date — a date would make byte-wise
+comparison fail by construction); a `--check` mode verifies without writing (rc=0 when identical,
+rc=1 when not, ready for CI); `make paper-citation-keys` and the `scripts/README.md` inventory are
+wired in the same round (otherwise the script itself becomes write-only). 9 new cases, including
+**the committed snapshot must equal the script's recomputation** (anti hand-edit drift). Mutation
+evidence: hand-edited count ⇒ 2 red, orphan key injected ⇒ 3 red, hand-edited header ⇒ `--check`
+rc=1; the neutral control (a wording change in the manuscript unrelated to citations) stays green.
+
+**二、The last human checklist before submission had itself drifted from the artifacts (four places).**
+`paper/SUBMISSION.md` is the final manual checklist before submission and it is exactly what a
+reviewer sees. The CS round health check found four false statements, and **nothing could have
+detected that it was stale**: the page count said 54 (measured: `xdv` log 55; PDF 58 — xdvipdfmx appends), the table count said 22 (measured 19 — already 19 in the CN round, so the table was
+never updated), the two submission files' TODO markers said 14 (measured 18: 5 in the cover letter
++ 11 in the title page), and the refs.bib identifier caliber said "every entry has a DOI/arXiv or
+an explicit TODO", missing the `publisher={PMLR}` form introduced in the CR round (PMLR assigns
+no DOI).
+
+Remediation: the data is corrected to the measured values (each with its caliber source); the
+auditor gains a **submission-package coherence** surface (the declared page/table/TODO counts must
+equal the measured source values; the page caliber is the `xdv` log, and when the log is absent the
+check is disclosed as skipped rather than failing; two different declarations of the same item ⇒
+red). 7 new cases. Mutation evidence: page / table / TODO drift each ⇒ `strict` rc=1; neutral
+control green.
+
+**三、The fix-coverage tool's baseline caliber had expired — which is why nobody ran it.**
+`scripts/tools/audit_fix_coverage.py` exists precisely to catch the recurring "the fix covers the
+main path but misses the branch path" pattern, yet its default `--base` was pinned to the V-round
+starting point `ff15a2f`, more than 50 rounds ago ⇒ the default run's "added lines" cover nearly
+all of `src/` and the output is **noise** (measured: dozens of files with all uncovered counts at
+zero hits). No diagnostic value — the main reason it was never run and had no readers (not in
+Makefile / README / CI). Remediation: the default baseline becomes `auto` = **the latest commit
+touching the audited scope** (`git log -1 -- pathspec`), i.e. the semantic start of "this fix"; when
+it cannot be resolved the tool errors out explicitly and **never silently falls back to a pinned
+historical commit**; 5 new cases; `make fix-coverage` and the script inventory are wired in.
+Measured under the new caliber on the current HEAD: **0 added lines in `src/`, 0 unexecuted
+(0.00%)** — `src/` has not changed since the CM round.
+
+**四、Tool reader census (39 tools without an execution-side reader).**
+Census of every tool under `scripts/tools/` for readers (tests / Makefile / CI): 39 have none.
+Classified one by one: 32 are per-round `*_mutation_verify.py` scripts (one-shot mutation evidence;
+their conclusions already live in the register and reports — they are **evidence retention**, not
+live code); the rest are per-round census/probe scripts (e.g. `bm_*_census.py`). Remediation: this
+round does not wire them into the chain (they are historical evidence; wiring them would inflate
+the chain length for no signal), but **the two tools added in this round must have readers** — so
+both are wired into the Makefile and `scripts/README.md` in the same round.
+
+**五、ADR-0036: de-hardcoding the criteria.**
+A1 read "gate chain **20 steps**, clean tree, rc=0" — that was the CM-round chain length (now 31
+steps); **pinning a number that drifts as gates are added or removed** gives a criterion a silent
+expiry point. Remediation: the criterion becomes "gate chain clean tree rc=0" and points at the
+authoritative source (the gate self-check report and status register §1); the step count is no
+longer hard-coded; A2's readings are refreshed to this round, with the note that the latest
+readings live in `BASELINE.yaml`'s `tests` section as the single source of truth.
+
+**六、Second batch of October 2026 frontier work (five papers, verified from primary sources 2026-10-26; the November window is empty).**
+The arXiv API returns `totalResults=0` for `id:2611*` (feed updated 2026-10-25T16:22:36Z), so there is
+nothing to find on the November side. All five were verified verbatim from the official Atom API
+`summary` field and now appear in Related Work, register §7 and `refs.bib`:
+
+- **SWEPatchTest** (arXiv:2610.18004v1): 619 tasks / 82,579 candidate patches; the best configuration
+  reaches only **9.21%** JVR even though it reproduces the reference transition on **59.29%** of tasks.
+- **TestPrism** (arXiv:2610.12289v1): 300 tasks / 3,000 candidate implementations; a Joint Success
+  Function of **28.00%** against **59.67%** single-reference success, with the recovery adding 8.67 to
+  9.00 points to the joint score.
+- **RoboBugBench** (arXiv:2610.16369v1): 33 execution-validated defects; three frontier models repair
+  24.2%-36.4%; **counterfeit patches that suppress a symptom without repairing the defect are accepted
+  11 of 11 times by the rule the system ships with**, while a distributional rule rejects four at no
+  cost in false rejects.
+- **Oracle failures and configuration-dependent measurement** (arXiv:2610.16067v2, **submitted to the
+  same venue**): recorded labels report 4,194/4,320 against 2,883 on replay, success falls from 94.3% to
+  65.5%, and the correction removes 24 to 34 points from every agent and changes which one is strongest.
+- **Specification-oracle gaps** (arXiv:2610.30635v1): 25 of 98 graded milestones contain a scored test
+  that depends on an unstated name or path; such build units fail in 80.6% of runs against 48.4%; and
+  withholding a single hidden name stops the unit's tests from compiling in 126 of 128 cases.
+
+**Three caliber disciplines (annotated in both the register and the manuscript)**: (1) SWEPatchTest's
+9.21% / 59.29% are numerically close to this paper's 59.58% marginal false-fix rate but run in the
+**opposite direction and measure different things** (theirs: share of tasks that pass a single
+reference but fail a joint validity check; ours: share of declared fixes that are not fixes) — they
+must not be presented as the same quantity; (2) the same-venue paper's conclusion points the **same
+way** as this paper's methodological claim (the evaluation device is itself software that needs
+verification), so the submission must address the overlap head-on; (3) RoboBugBench's observability
+bound is **external limiting evidence** for the capability ceiling of any detection-first protocol.
+Six further verified papers are registered as indexed-only alternatives (TestJack / PoC-vs-developer
+tests / VeeReview / coverage only proves reachability / MintEval / 47.6% detection on 450 injected
+defects) so the next round does not re-search them.
+
 ### CN round addendum (same day): native LaTeX manuscript + 2026 frontier literature reconciliation (zero LLM, $0)
 
 **1. The submission manuscript is now native LaTeX, and four real defects the converter had
