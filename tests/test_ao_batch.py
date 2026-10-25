@@ -241,9 +241,18 @@ class TestReadmeEnHeader:
         CM 轮（2026-10-25）推进至 "**CM round:" 并同步版本字面
         "Current version 1.0.0"（CL 的标记随之改为 "Previously **CL round:"；
         中文侧 "**CM 轮：" / "此前 **CL 轮："。CM = 1.0.0 发布轮：论文数字
-        存在性读侧判据 + 复现包完整性四态 + 三处必披露）。"""
+        存在性读侧判据 + 复现包完整性四态 + 三处必披露）。
+        CP / CQ 两轮（2026-10-25）**均未推进本锁**——README.en 头部已至
+        "**CN round:"（CN 轮提交 06381909），而断言仍钉 "**CM round:"，此时该
+        字面只命中历史链里的 "Previously **CM round:" ⇒ 锁**误绿**（与 BC 轮
+        同一形状：行锁指向会在历史链里反复出现的旧轮次名）。
+        CR 轮（2026-10-25）收口：断言推进至 "**CR round:"（CN 的标记随之改为
+        "Previously **CN round:"，带冒号的最新字面在头部唯一命中；中文侧同步
+        推进至 "**CR 轮："，历史链首项为 "此前 **CN 轮："；单逻辑行剔除行内代码
+        后 `**` 中文 1164 / 英文 1078，均为偶）。CR = 前沿四文献对账（2026-10）
+        + 编译期 CJK 缺字符判据 + 登记册→正文→bib 三向读者链锁。"""
         assert "Current version 1.0.0" in README_EN_HEAD
-        assert "**CM round:" in README_EN_HEAD
+        assert "**CR round:" in README_EN_HEAD
 
 
 class TestDeprecationTimeline:
