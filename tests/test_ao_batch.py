@@ -250,9 +250,19 @@ class TestReadmeEnHeader:
         "Previously **CN round:"，带冒号的最新字面在头部唯一命中；中文侧同步
         推进至 "**CR 轮："，历史链首项为 "此前 **CN 轮："；单逻辑行剔除行内代码
         后 `**` 中文 1164 / 英文 1078，均为偶）。CR = 前沿四文献对账（2026-10）
-        + 编译期 CJK 缺字符判据 + 登记册→正文→bib 三向读者链锁。"""
+        + 编译期 CJK 缺字符判据 + 登记册→正文→bib 三向读者链锁。
+        CS 轮（2026-10-26）推进至 "**CS round:"（CR 的标记随之改为
+        "Previously **CR round:"；中文侧同步推进至 "**CS 轮："，历史链首项为
+        "此前 **CR 轮："；单逻辑行剔除行内代码后 `**` 中文 1172 / 英文 1084，
+        均为偶）。CS = 快照生成路径入库化 + 投稿包自洽判据 + 修复覆盖率工具
+        基线口径复活 + 2026-10 第二批五篇前沿。
+        CT 轮（2026-10-26）推进至 "**CT round:"（同一写法：CS 的标记随之改为
+        "Previously **CS round:"，带冒号的最新字面在头部唯一命中；中文侧同步
+        推进至 "**CT 轮："，历史链首项为 "此前 **CS 轮："；单逻辑行剔除行内代码
+        后 `**` 中文 1194 / 英文 1104，均为偶）。CT = 摘要投稿超限风险（严格口径
+        247 → 240 词，余量 3 → 10）+ 投稿材料词数/页数失实 + 判据口径显式化。"""
         assert "Current version 1.0.0" in README_EN_HEAD
-        assert "**CR round:" in README_EN_HEAD
+        assert "**CT round:" in README_EN_HEAD
 
 
 class TestDeprecationTimeline:

@@ -102,6 +102,66 @@ success. The scheduled jobs still rest on local-only evidence: perf.yml red thre
 fixed on 10-25) — their remote turn-green depends on the 2026-11-01 and 2026-10-26 scheduled
 triggers, so **the local reproduction is green but the remote re-verification has not happened
 yet**.
+### CT round addendum (2026-10-26): an abstract that was three words from the submission limit + stale word/page counts in the submission files + a criterion whose caliber must be explicit (zero LLM, $0)
+
+**一、A genuine submission-blocking risk: the abstract had three words of headroom.**
+Checking the submission files, both of them claimed "236 words" for the abstract, while the
+journal's Text formatting limit is **150--250 words**. Measured (LaTeX source, **`%` comment
+lines removed**, hyphenated compounds counted as one word):
+
+| Caliber | Original | After compression | Limit | Headroom |
+|---|---|---|---|---|
+| Normal (hyphen = 1 word) | 231 | **225** | 250 | 25 |
+| Strict (hyphens split) | 247 | **240** | 250 | **3 → 10** |
+
+The original left only **three words** of headroom under the strict reading --- and the
+submission system's tokenisation is not ours to control (hyphenated compounds, dashes, whether
+numbers are words). Three words of headroom means "a different tool rejects it". Remediation:
+the abstract is compressed to 225 / 240 by removing **redundancy only** (the number set is
+identical item by item: 60.0 / 21/35 / 80.6 / 29/36 / -20.6 / 4-6x / 40% / 52% / 16/20 /
+13/15 / 12/15 / 0.978 / 461 / 196-character / 196 all remain), and the **dual-caliber
+limit** becomes a criterion (strict > 250 ⇒ red; headroom < 5 words ⇒ disclosed).
+
+**二、The submission files were themselves stale, and last round's criterion had a blind spot.**
+`paper/title_page.tex` claimed "Abstract: 236 words" and "Manuscript body: 54 pages" --- both
+contradict the measurements (225 words by the normal caliber, 55 pages in the `xdv` log); and
+the **submission-package coherence criterion added in the CS round only inspected
+`SUBMISSION.md`**, not `title_page.tex` / `cover_letter.tex` --- so the blind spot sat on the
+file a reviewer reads first. Remediation: the criterion now also checks the title page (abstract
+word count, page count) and the submission package's abstract word count; 5 new cases. Mutation
+evidence: title-page word drift / page drift / package word drift / abstract over the limit each
+⇒ `strict` rc=1; neutral control green.
+
+**三、A criterion whose caliber is not written down will be counted differently by everyone.**
+Two hand computations of the same abstract this round returned 231 and 244 --- the difference was
+the **`% SRC:` provenance comment inside the abstract block** (the manuscript places it before
+`\end{abstract}`, so without stripping comments the paths and file names are counted as prose:
+29 extra words, measured). Remediation: the criterion now states the caliber explicitly
+("strip `%` comment lines first"), with `abstract_word_counts()` and 5 cases pinning it down.
+**A number whose caliber is unspoken cannot be verified from the document that states it** ---
+the same family as the CR round's "primary source must name its fetch surface".
+
+**四、Two first impressions were overturned by my own verification (recorded as such).**
+(i) Supply chain: `pip-audit -r requirements.lock` reported five chromadb findings and I briefly
+concluded that CI was running with them and that the exemption register pointed at a
+non-existent execution point --- **that was a retrieval error on my side**: BSD grep treats `\|`
+as a literal pipe (repository searches must use the Grep tool). Re-checking with the Grep tool:
+`pip-audit==2.10.1` *is* installed in the security job (blocking since R10), both scans
+(`requirements.txt --no-deps` and `requirements.lock`) carry the four `--ignore-vuln` flags, and
+they match `docs/dependency_exemptions.md` item by item ⇒ the four CVEs (chromadb 1.5.9,
+including the pre-authentication code injection CVE-2026-45829) are **registered exemptions, not
+new findings** (OSV lists no fixed version upstream). Lesson: **"grep found nothing" and "the
+thing does not exist" are separated by one tool correction**; treating a zero-hit search as a
+conclusion reports a governed surface as a bare one.
+(ii) Whether the cover letter used superseded numbers: I suspected the cover letter's 60.0% /
+80.6% / "three independent batches" came from the withdrawn generation --- checking the
+manuscript item by item showed **all consistent** (the abstract and the body use the same
+numbers, with withdrawn-generation figures marked historical). The impression was false. The real
+gap is narrower: the cover letter still says "Three independent studies... reach the same
+direction" while the body now cites **nine** frontier papers (including two independent
+formalisations and one **submitted to the same venue**) ⇒ the synchronisation is left to the
+next round.
+
 
 ### CS round addendum (same day): snapshot generation path committed + submission-package coherence check + the fix-coverage tool's baseline revived (zero LLM, $0)
 
