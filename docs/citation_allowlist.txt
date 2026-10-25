@@ -46,4 +46,26 @@
 # （Huang et al., TOSEM, 2026-02-25 接受）——该误判已在
 # `docs/INDEPENDENT_REVIEW_2026-10-16.md` 内更正，不涉及本清单。
 #
-# 现状：**零豁免**。新增豁免前必须在上述记录格式下登记核验方法与结论。
+# 现状（2026-10-25 起）：**12 条登记，零历史遗留**。全部为 v0.8.0 数据换代时
+# 人工判定的「内部指标/轮次叙述行」（登记册轮次明细、INDEX 分册一句话说明；
+# 行内数字是项目自身指标，不是外部文献引用）。行号漂移后命中会重现、需重新
+# 判定而非无脑续登；**重复键与陈旧条目由 tests/test_citations_gate.py 计红**
+# （登记面此前无任何读者，重复登记曾静默通过）。新增豁免前仍须在上述记录
+# 格式下登记核验方法与结论。
+
+# ── 2026-10-25 v0.8.0 数据换代补登记（12 条）──────────────────────────
+# 以下均为**内部指标/轮次叙述行**（登记册轮次明细、INDEX 分册一句话说明），
+# 行内数字是项目自身指标（12,745 passed、+3 tasks、百分比等），不是外部文献
+# 引用。行号漂移后需重新判定（命中会重现，不会静默失效）。
+docs/INDEX.en.md:201
+docs/INDEX.en.md:214
+docs/INDEX.en.md:215
+docs/INDEX.en.md:220
+docs/INDEX.md:233
+docs/PROJECT_STATUS_REGISTER.md:109
+docs/PROJECT_STATUS_REGISTER.md:210
+docs/PROJECT_STATUS_REGISTER.md:222
+docs/PROJECT_STATUS_REGISTER.md:230
+docs/PROJECT_STATUS_REGISTER.md:247
+docs/PROJECT_STATUS_REGISTER.md:295
+docs/PROJECT_STATUS_REGISTER.md:309

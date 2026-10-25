@@ -217,9 +217,19 @@ class TestReadmeEnHeader:
         中文 66 / 英文 62 为首段偶数读数，全文件按 `text.count` 计 `**` 中文 1166 /
         英文 1074，均为偶。本段刻意不写任何开关名字面：CG 门的读者索引含 `tests/**`，
         行锁文件里多提一个开关名就会多算一个读者，从而把被对账的数改掉——
-        「锁的文本改动不该去动被锁的数」这条与 CH §6⑥ 同源）"""
+        「锁的文本改动不该去动被锁的数」这条与 CH §6⑥ 同源）
+        CJ 轮（2026-10-25）推进至 "**CJ round:"（同一写法：CI 的标记随之改为
+        "Previously **CI round:"，带冒号的最新字面在头部唯一命中、历史链首项为
+        "Previously **CI round:"；中文侧同步推进至 "**CJ 轮："，历史链首项为
+        "此前 **CI 轮："）。**本轮收口时发现存量误绿两轮**：CI 轮（2026-10-24）
+        把头部推进至 "**CI round:" 但未推进本锁（断言仍钉 "**CH round:"），
+        而历史链里的 "Previously **CH round:" 让该断言恒真——即 BC 轮 docstring
+        记过的 BR/BS **误绿形态**（头部再往后退也不会转红）；798d8c72（10-25）
+        同样漏推进。误绿存续期 = CI 轮收口（10-24）至 CJ 轮（10-25）收口，
+        两轮全量跑批均绿 ⇒ 「测试绿」同样不外推「行锁在钉最新轮次」。
+        单逻辑行剔除行内代码后 `**` 英文 712、中文 710，均为偶。"""
         assert "Current version 0.8.0" in README_EN_HEAD
-        assert "**CH round:" in README_EN_HEAD
+        assert "**CJ round:" in README_EN_HEAD
 
 
 class TestDeprecationTimeline:

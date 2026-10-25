@@ -40,17 +40,33 @@ OUT_DIR = REPO / "experiments" / "results"
 REPORT_MD = OUT_DIR / "REPRODUCTION_REPORT.md"
 REPORT_JSON = OUT_DIR / "REPRODUCTION_REPORT.json"
 
-# (显示名, 命令 argv, 输出尾保留行数)
-_L0_COMMANDS: list[tuple[str, list[str], int]] = [
+
+# (显示名, 命令 argv, 输出尾保留行数, 前提探针 | None)
+# 前提探针：源工件撤回（2026-10-24 数据清除）的支路在缺席时显式 [SKIP]——
+# 不硬红（可复算性受损是事实，不是失败）也不谎报 ok。
+def _skip_main_batch() -> str | None:
+    from pathlib import Path as _P
+
+    if not (
+        _P("experiments/results/main_batch").is_dir()
+        and list(_P("experiments/results/main_batch").glob("benchmark_*.json"))
+    ):
+        return "源批次 main_batch 已随 2026-10-24 数据清除撤回，本支路待主批重建后恢复"
+    return None
+
+
+_L0_COMMANDS: list[tuple[str, list[str], int, object]] = [
     (
         "统计扩展（Wilson CI / Cohen's g / OR / bootstrap Δ CI）",
         ["-m", "experiments.emse_stats_extensions"],
         12,
+        None,
     ),
     (
         "统计报告补口（MDE / 功效 / 比例型 bootstrap CI）",
         ["-m", "experiments.emse_stats_report"],
         6,
+        _skip_main_batch,
     ),
     (
         "mutation × detection 交叉验证",
@@ -63,6 +79,7 @@ _L0_COMMANDS: list[tuple[str, list[str], int]] = [
             str(OUT_DIR / "main_batch" / "mutation_detection_correlation.md"),
         ],
         6,
+        _skip_main_batch,
     ),
     (
         "SWE-bench Lite 基础设施失败披露",
@@ -74,16 +91,19 @@ _L0_COMMANDS: list[tuple[str, list[str], int]] = [
             str(OUT_DIR / "emse_swebench_disclosure.md"),
         ],
         6,
+        None,
     ),
     (
         "通过率混淆敏感性分析",
         ["-m", "experiments.pass_matched_sensitivity"],
         6,
+        _skip_main_batch,
     ),
     (
         "引用可追溯性核验",
         ["scripts/gates/check_citations.py", "--traceability"],
         6,
+        None,
     ),
 ]
 
@@ -92,6 +112,7 @@ _L1_COMMANDS: list[tuple[str, list[str], int]] = [
         "QuixBugs 全量 Mut@k 重算（cosmic-ray，小时级）",
         ["-m", "experiments.emse_quixbugs_mutk_full"],
         6,
+        None,
     ),
 ]
 
@@ -175,8 +196,16 @@ def main() -> int:
     sha = _git_sha()
     started = time.strftime("%Y-%m-%dT%H:%M:%S%z")
     results: list[dict[str, Any]] = []
-    for name, cmd, _ in commands:
+    for name, cmd, _, probe in commands:
         print(f"[repro] ▶ {name}", flush=True)
+        if probe is not None:
+            skip_reason = probe()
+            if skip_reason:
+                print(f"[repro]   [SKIP] {skip_reason}", flush=True)
+                results.append(
+                    {"name": name, "command": " ".join(cmd), "status": "skipped", "rc": None, "tail": skip_reason}
+                )
+                continue
         rc, tail = _run(cmd)
         status = "ok" if rc == 0 else "FAILED"
         print(f"[repro]   {status}（rc={rc}）", flush=True)
@@ -189,6 +218,7 @@ def main() -> int:
 
     n_ok = sum(1 for r in results if r["status"] == "ok")
     n_total = len(results)
+    n_skipped = sum(1 for r in results if r["status"] == "skipped")
     cs_ok = sum(1 for c in checksums if c["status"] == "ok")
     cs_fail = sum(1 for c in checksums if c["status"] == "FAILED")
 
@@ -197,7 +227,7 @@ def main() -> int:
         "# AITester 零 LLM 复算报告（REPRODUCTION_REPORT）",
         "",
         f"> 生成时间：{started}；git sha：`{sha}`；Python：{sys.version.split()[0]}；",
-        f"> 层级：{args.level.upper()}；**{n_ok}/{n_total} 条命令通过**；"
+        f"> 层级：{args.level.upper()}；**{n_ok}/{n_total} 条命令通过**（{n_skipped} 条源工件缺席 [SKIP]）；"
         f"SHA256SUMS：{cs_ok} 通过 / {cs_fail} 失败 / {len(checksums) - cs_ok - cs_fail} 跳过。",
         "",
         "本报告由 `scripts/reproduce_zero_llm.py` 生成，零 LLM 逐位复算论文主数字。",
@@ -249,9 +279,12 @@ def main() -> int:
 
     print(f"\n[repro] 报告 → {REPORT_MD}")
     print(f"[repro] JSON  → {REPORT_JSON}")
-    print(f"[repro] 结论：{n_ok}/{n_total} 命令通过；SHA256SUMS {cs_ok} 通过 / {cs_fail} 失败")
+    print(f"[repro] 结论：{n_ok}/{n_total} 命令通过（{n_skipped} skipped）；SHA256SUMS {cs_ok} 通过 / {cs_fail} 失败")
 
-    return 0 if (n_ok == n_total and cs_fail == 0) else 1
+    # v0.8.0：源工件缺席的 [SKIP] 支路不算失败——退出码由「FAILED 命令数 +
+    # SHA256SUMS 失败数」决定（skip 是显式披露的可复算性边界，不是红灯）。
+    n_failed = sum(1 for r in results if r["status"] == "FAILED")
+    return 0 if (n_failed == 0 and cs_fail == 0) else 1
 
 
 if __name__ == "__main__":

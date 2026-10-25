@@ -120,6 +120,20 @@ _TIMEOUT_S = 5.0
 _RETRY_ONCE_HOSTS = ("arxiv.org",)
 
 
+def _rel(path: Path) -> str:
+    """相对仓库根的 posix 路径；仓库外文件退回绝对路径（与 collect_files 同口径）。
+
+    2026-10-25 CJ 轮修复：`scan_traceability` 此前对仓库外文件直接调
+    `path.relative_to(PROJECT_ROOT)` 抛**未捕获的 ValueError**——`collect_files`
+    对 `--files /abs/outside.md` 是容忍的（去重键有 try 兜底），扫描段却没有，
+    一条仓库外 `--files` 就能让整门崩栈而不是出具判定。
+    """
+    try:
+        return path.relative_to(PROJECT_ROOT).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
 def collect_files(extra_files: list[str]) -> list[Path]:
     files: list[Path] = []
     for pattern in dict.fromkeys(DEFAULT_GLOBS):
@@ -135,10 +149,7 @@ def collect_files(extra_files: list[str]) -> list[Path]:
     seen: set[Path] = set()
     unique: list[Path] = []
     for p in files:
-        try:
-            rel = p.relative_to(PROJECT_ROOT).as_posix()
-        except ValueError:
-            rel = p.as_posix()
+        rel = _rel(p)
         if rel in EXCLUDE_RELS:
             continue
         if p not in seen:
@@ -229,7 +240,7 @@ def scan_traceability(files: list[Path], window: int = 3, allowlist: set[str] | 
         try:
             text = path.read_text(encoding="utf-8", errors="replace")
         except OSError as e:  # pragma: no cover - 保守降级
-            findings.append(f"{path.relative_to(PROJECT_ROOT)}: 不可读 ({e})")
+            findings.append(f"{_rel(path)}: 不可读 ({e})")
             continue
         lines = text.splitlines()
         for idx, line in enumerate(lines):
@@ -243,7 +254,7 @@ def scan_traceability(files: list[Path], window: int = 3, allowlist: set[str] | 
             hi = min(len(lines), idx + window + 1)
             if any(TRACEABLE_RE.search(lines[j]) for j in range(lo, hi)):
                 continue
-            key = f"{path.relative_to(PROJECT_ROOT).as_posix()}:{idx + 1}"
+            key = f"{_rel(path)}:{idx + 1}"
             if allowlist and key in allowlist:
                 continue
             findings.append(f"{key}: {line.strip()[:160]}")
@@ -290,7 +301,7 @@ def main(argv: list[str] | None = None) -> int:
         arxiv_ids, dois = extract_refs(path.read_text(encoding="utf-8", errors="replace"))
         all_arxiv |= arxiv_ids
         all_dois |= dois
-        print(f"[INFO] {path.relative_to(PROJECT_ROOT)}: arXiv×{len(arxiv_ids)} DOI×{len(dois)}")
+        print(f"[INFO] {_rel(path)}: arXiv×{len(arxiv_ids)} DOI×{len(dois)}")
 
     print(f"\n[INFO] 去重后引用：arXiv×{len(all_arxiv)} DOI×{len(all_dois)}")
     for aid in sorted(all_arxiv):
