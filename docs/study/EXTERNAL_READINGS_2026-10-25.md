@@ -204,3 +204,39 @@ v2 的 0.524 单列并标注"v3 已改"），正文同步改写。**教训：版
 `arXiv:2610.10150`（PoC 通过 ≠ 开发者测试通过）、`arXiv:2610.29143` VeeReview（EMSE 在审 + 负结果）、
 `arXiv:2610.21570`（coverage 只证明到达状态）、`arXiv:2610.03080` MintEval、`arXiv:2610.27272`
 （450 个注入缺陷只检出 47.6%）。
+
+## 8. CU 轮第二批前沿（六篇，2026-10-26 一手核验）
+
+> **核验方式**：`export.arxiv.org/api/query` 的 `summary` 字段逐字取回（作者名取自 Atom
+> `author/name`，日期取自 `published`）；本批含**上两轮检索窗口遗漏**的 2026-09/10 早期工作
+> （检索时窗与召回策略的盲区，与「11 月窗口为空集」是同一族问题）。
+
+| 键 | 读数 | 原文表述 | 出处 |
+|---|---|---|---|
+| `bai2026silentfailures` | 95 / 3,684 / 93 / 5 / 14 of 19 | "We evaluate SAGE on 95 confirmed silent failures drawn from 3,684 repair traces produced by six agent frameworks and six base models on SecurityEval and CVEfixes. SAGE assigned an origin in 93 cases. Most origins were an unaddressed security requirement or an inadequate defence choice, and only five coincided with the code change itself. When the agent introduced the vulnerable code, the origin preceded the write in 14 of 19 cases" | arXiv:2610.06163v1（2026-10-05；Bai / Waseem / Rasheed / Peltonen / Abrahamsson；cs.SE；无出版商 DOI） |
+| `liang2026testevidence` | 95 / 29 September 2026 | "A test that increases implementation coverage, a test that agrees with a reference program, and a test that detects a requirements violation therefore provide distinct kinds of evidence"；"Drawing on 95 curated source records through 29 September 2026"；"derive a research agenda for independent oracle assessment, budget-aware generation, repository-scale evaluation, and test maintenance" | arXiv:2610.05001v1（2026-10-04；Liang / Gan / Ying / Wei / Cui / Ni；cs.SE；无出版商 DOI） |
+| `hegde2026detectionnotenough` | 0.741 / 1,319 / 71.0 / 60.6 / 31.6 / 45.5 / 66 | "Checking a trace against itself reaches an AUROC of 0.741 and stops there for a structural reason: two thirds of wrong traces state no false equation"；"Valid perturbations exist for 937 of 1,319 test questions (71.0%); among the 847 that also have a parseable first trace, supported traces are correct 60.6% of the time against a 31.6% base rate, although the probe also refutes 45.5% of correct traces"；"even a perfect detector would recover an estimated 66 of 1,319 questions. Repair, not detection, is the open problem" | arXiv:2610.30200v1（2026-10-21；Hegde；cs.SE；abs 页 Comments：17 pages, 8 figures, 9 tables；无出版商 DOI） |
+| `adeniji2026tracedetectors` | 67/67 / 19/19 / 18/18 / 67/81 / 14 / 21/30 → 27/30 | "agrees perfectly with the automated labels for final correctness (67/67), fault impact (19/19), and fault relevance (18/18), but only 67/81 for verification; all 14 disagreements fall into four recurring patterns"；"one ranges from 21/30 to 27/30 correct as step and token budgets change" | arXiv:2610.30491v1（2026-10-21；Adeniji / Shilpika / Papka；cs.SE；无出版商 DOI） |
+| `xiong2026shallowtests` | 75.95% / 84.76% / 69.89% / 122 / 88 / 69 | "with less than half of its lines and branches covered by existing tests"；"achieving 75.95%/84.76% larger line/branch coverage gains and 69.89% larger mutation-score gains"；"detects 122 real-world harness bugs in widely-used agentic systems (e.g., OpenClaw), among which, 88 bugs are previously-unknown bugs and 69 bugs have been confirmed by agent developers" | arXiv:2610.04921v1（2026-10-04；Xiong / Ge / Chen / Lou；cs.SE；无出版商 DOI） |
+| `liang2026oracleconversion` | 506 / 142 / 28.59 / 42.54 / 24.06 / 25.27 / 12.23 / 14.15 / 21.60 | "On an audited TC-Bench split with 506 training and 142 evaluation tasks, three independently trained Qwen3.5-9B runs at step 75 increase full-test correctness from 28.59\% to 42.54\%, input kill from 24.06\% to 25.27\%, and effective full kill from 12.23\% to 14.15\%"；"removing kill rewards yields higher correctness and slightly higher full kill, but lowers input kill to 21.60\%" | arXiv:2609.05879v1（2026-09-05；Liang / Gan / Ying / Wei / Cui / Ni；cs.SE；无出版商 DOI） |
+
+**四处置顶纪律（引用本节时必带）**：
+
+1. **`liang2026testevidence` 是综述，直接把本稿的核心口径表述成了领域共识**：「覆盖率 / 与参考一致 /
+   检出需求违反 = 三类不同证据」，且其研究议程首项即「independent oracle assessment」。⇒ 本稿
+   **不能**再把「检出优先优于覆盖率」写成新发现；可主张的差异化只有：**函数级 + 预注册 + 阴性
+   结果 + 零 LLM 复算包 + 测量装置自身的审计**（综述不含这些）。
+2. **`hegde2026detectionnotenough` 与本稿协议存在张力**：它论证「检出不是终点，修复才是」并给出
+   检出的结构性天花板（AUROC 0.741）。**但问题设置不同**——它判「无参考解的推理轨迹是否正确」，
+   本稿判「已声明的修复在已知 bug–fix 对上是否真修复」（有 gold 参考、执行式裁决）⇒ 它的
+   天花板论证**不覆盖**本稿的测量对象，但本稿也**不得**主张「检出优先能解决修复问题」。
+3. **`bai2026silentfailures` 是本稿 false-fix 现象在安全域的外部对应物**：95 例 silent failure
+   中**只有 5 例**的起因与代码改动本身重合 ⇒ 本稿「声明修复里有多少不是修复」这个问题**已被
+   别人在不同域实证过**，本稿的增量是**口径**（条件率 / 边际率 / 声明率扰动）而非现象的首次发现。
+4. **`adeniji2026tracedetectors` 与本稿同向**（自动标签是测量产物、须带轨迹证据与执行预算说明），
+   但审计对象不同：他们审计 agent 评测的 trace detector，本稿审计**自家流水线报告出的数字**。
+
+**未列入正文的备选（已核验，仅登记索引，避免下轮重复检索）**：`arXiv:2610.30924` REGATTA、
+`arXiv:2610.30495` ARATest、`arXiv:2610.06366` VERA、`arXiv:2610.14443` LEST、
+`arXiv:2610.30499` ARC-AGI-3、`arXiv:2610.14808` Testuary、`arXiv:2610.29549` 快照测试、
+`arXiv:2610.19447` BenchChecker。
