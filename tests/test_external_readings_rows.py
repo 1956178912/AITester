@@ -24,7 +24,11 @@ from pathlib import Path
 
 import pytest
 
-REGISTER = Path(__file__).resolve().parents[1] / "docs" / "emse" / "EXTERNAL_READINGS_2026-10-25.md"
+REGISTER_DIR = Path(__file__).resolve().parents[1] / "docs" / "emse"
+_REGISTER_FILES = sorted(REGISTER_DIR.glob("EXTERNAL_READINGS_*.md"))
+# 读者按**文件名发现**登记册：新一轮若新建一份，下面的「恰有一份」测试当场红，
+# 不会出现「锁还在读上一代登记册、新登记册无人校验」的静默过期。
+REGISTER = _REGISTER_FILES[0] if _REGISTER_FILES else REGISTER_DIR / "EXTERNAL_READINGS_2026-10-25.md"
 
 _ROW = re.compile(r"^\|\s*`(?P<key>[A-Za-z0-9_]+)`\s*\|(?P<reading>.+?)\|(?P<quote>.+?)\|(?P<source>.+?)\|\s*$")
 _NUMBER = re.compile(r"\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+\.\d+|\d{2,}")
@@ -59,6 +63,12 @@ def _absent_numbers(row: tuple[int, str, str, str, str]) -> list[str]:
     _, _, reading, quote, _ = row
     haystack = quote.replace(",", "")
     return [token for token in _numbers(reading) if token.replace(",", "") not in haystack]
+
+
+def test_exactly_one_register_file() -> None:
+    """登记册按文件名发现：两份就要当场红，否则锁会静默地只读上一代。"""
+    names = [path.name for path in _REGISTER_FILES]
+    assert len(names) == 1, f"期望恰有一份 `EXTERNAL_READINGS_*.md`，实测 {names}"
 
 
 def test_register_is_parsed_and_complete() -> None:

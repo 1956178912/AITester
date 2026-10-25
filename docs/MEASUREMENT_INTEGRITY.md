@@ -3877,9 +3877,11 @@ CG 的第一次终跑停在 `test`（rc=2，1 failed / 12649 passed / 5 skipped 
   并把两个「查不到」分别改写成「哪一层查不到」。
 
 **③ 判据：把「同一句话」变成可执行的行级锁。** `tests/test_external_readings_rows.py`
-（**41 例**）四条判据：多位数与小数必须在同行「原文表述」里逐字出现（千分位逗号不计）；
+（**42 例**）五条判据：多位数与小数必须在同行「原文表述」里逐字出现（千分位逗号不计）；
 引文不得自指；引文必须是带引号的抄录；英文数词（`ten` / `thirteen`）按名豁免且
-**豁免表只允许变短**（死条目即红）。变异验证（原字节还原）：
+**豁免表只允许变短**（死条目即红）；**登记册按文件名发现且必须恰有一份**——新开一份
+登记册时锁当场红，不会出现「锁还在读上一代、新登记册无人校验」的静默过期。变异验证
+（原字节还原）：
 
 - 把 CCE 行改回摘要定义句 ⇒ **2 例红**，断言逐字给出 `读数 ['0.320','0.125','0.320']
   在本行「原文表述」里找不到——读数与引文不是同一句话`；
@@ -3896,7 +3898,7 @@ CG 的第一次终跑停在 `test`（rc=2，1 failed / 12649 passed / 5 skipped 
 「摘要/索引的缺席被当成事实缺席」。三者共同形状是**把「我没看到」写成「它不存在」**；
 三次修复都不是「更小心」，而是给两层之间加一条可执行判据。
 
-（复现：`.venv/bin/python -m pytest tests/test_external_readings_rows.py -q` = **41 passed**；
+（复现：`.venv/bin/python -m pytest tests/test_external_readings_rows.py -q` = **42 passed**；
 `env -u CODEBUDDY_SANDBOX_BROKER_IPC_ADDRESS -u CODEBUDDY_SANDBOX_HOST_FILE_OPERATION_COMMAND`
 后同命令需 `--basetemp`；`.venv/bin/python scripts/tools/audit_paper_numbers.py --strict` = rc=0、
 末行读数见 ④。）
