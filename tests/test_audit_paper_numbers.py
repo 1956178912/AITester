@@ -420,6 +420,58 @@ class TestSubmissionPackageCoherence:
         assert result["present"] is False
         assert result["failures"] == []
 
+    def test_abstract_word_count_is_measured_not_asserted(self, tmp_path):
+        """摘要词数必须由源文件实测（口径显式：去 `%` 注释行、连字符复合词）。"""
+        draft = (
+            "\\begin{abstract}\n"
+            "% SRC: docs/study/EXTERNAL_READINGS_2026-10-25.md; experiments/results/x.json\n"
+            "We study one detection-first artifact with three seeds.\n"
+            "\\end{abstract}\n"
+        )
+        normal, strict = audit_mod.abstract_word_counts(draft)
+        # 注释行不得计入（否则路径与文件名被当正文）
+        assert normal == 8, normal
+        assert strict == 9, strict  # detection-first 拆成 2 词
+
+    def test_abstract_over_limit_fails(self, tmp_path):
+        """摘要超过期刊上限 ⇒ 红。"""
+        long_body = " ".join(["word"] * 260)
+        draft = f"\\begin{{abstract}}\n{long_body}\n\\end{{abstract}}\n"
+        paper = self._make_pkg(tmp_path)
+        (paper / "tex" / "manuscript.tex").write_text(draft, encoding="utf-8")
+        result = audit_mod.audit_submission_package(paper, draft)
+        assert any("超过期刊上限" in f for f in result["failures"]), result["failures"]
+
+    def test_abstract_margin_is_disclosed(self, tmp_path):
+        """余量不足 5 词 ⇒ 披露（不阻断，但必须写进 notes）。"""
+        body = " ".join(["word"] * 247)
+        draft = f"\\begin{{abstract}}\n{body}\n\\end{{abstract}}\n"
+        paper = self._make_pkg(tmp_path)
+        result = audit_mod.audit_submission_package(paper, draft)
+        assert not any("超过期刊上限" in f for f in result["failures"]), result["failures"]
+        assert any("只剩" in note for note in result["notes"]), result["notes"]
+
+    def test_title_page_claims_are_checked(self, tmp_path):
+        """title page 的摘要词数 / 页数声明必须与实测一致。"""
+        paper = self._make_pkg(tmp_path)
+        (paper / "title_page.tex").write_text(
+            "\\item Abstract: 999 words (journal limit: 150--250)\n"
+            "\\item Manuscript body: 54 pages including appendices\n",
+            encoding="utf-8",
+        )
+        result = audit_mod.audit_submission_package(paper, (paper / "tex" / "manuscript.tex").read_text(encoding="utf-8"))
+        assert any("title_page_abstract_words" in f for f in result["failures"]), result["failures"]
+        assert any("title_page_pages" in f for f in result["failures"]), result["failures"]
+
+    def test_submission_abstract_words_checked(self, tmp_path):
+        """投稿包说明里的摘要词数声明必须与实测一致。"""
+        paper = self._make_pkg(tmp_path)
+        text = (paper / "SUBMISSION.md").read_text(encoding="utf-8")
+        text = text.replace("- 共 18 处待填标记", "- 稿件 777 词\n- 共 18 处待填标记")
+        (paper / "SUBMISSION.md").write_text(text, encoding="utf-8")
+        result = audit_mod.audit_submission_package(paper, (paper / "tex" / "manuscript.tex").read_text(encoding="utf-8"))
+        assert any("submission_abstract_words" in f for f in result["failures"]), result["failures"]
+
     def test_conflicting_claims_fail(self, tmp_path):
         """同一项出现两个不同声明 ⇒ 红（登记面自相矛盾）。"""
         paper = self._make_pkg(tmp_path)
