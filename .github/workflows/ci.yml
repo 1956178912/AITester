@@ -397,6 +397,17 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: python scripts/gates/check_scheduled_workflows.py
 
+      - name: Check release freshness (CZ 发布新鲜度守卫)
+        # CZ（2026-10-26）：最新 release tag 不得落在 main 后面。改前实测：v1.0.0 tag 指向 dc8285d3，
+        # 而 main 已到 23b35b00 —— 36 个提交没有进入「已发布的 1.0.0」，其中含 perf 定时作业的
+        # 构造期凭据修复、自变异 harness 的沙箱依赖闭包修复、投稿页数测量源四道守卫与两道新门禁。
+        # tag 指向的树就是发布产物的来源（release.yml 由 v* tag push 触发并检出被标记的提交）。
+        # 「要不要前移 tag」是作者的决定（force-update 属外部动作）⇒ 本门不自作主张改 tag，
+        # 但必须让这个事实在 CI 里可见；当前状态已登记进 docs/release_freshness_allowlist.txt。
+        if: matrix.python-version == '3.14'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python scripts/gates/check_release_freshness.py
       - name: Check env budget (X3 开关预算守卫)
         # X3（2026-10-05 审查 P0-5）：环境变量开关冻结棘轮——产品开关面
         #（src/ + config.py）新环境变量须先本地运行 check_env_budget.py

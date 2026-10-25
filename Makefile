@@ -100,6 +100,9 @@ repo-hygiene:  ## 仓库卫生守卫（CX 轮，CI 阻断项：构建/测试临�
 scheduled-workflows:  ## 远端定时作业巡检守卫（CY 轮，CI 阻断项：每周跑一次的作业最近一次必须非红；API 不可达时按 [SKIP] 披露）
 	$(PY) scripts/gates/check_scheduled_workflows.py
 
+release-freshness:  ## 发布新鲜度守卫（CZ 轮，CI 阻断项：最新 release tag 不得落在 main 后面；落后须登记例外）
+	$(PY) scripts/gates/check_release_freshness.py
+
 self-mutation:  ## 自身测试套件变异测试（零 LLM；临时副本内变异；默认 3 个核心模块等距抽样 120/文件）
 
 fix-coverage:  ## 修复覆盖率缺口审计（找出「修复新增但从未被测试执行」的代码行；零 LLM；基线默认 auto = 最近一次改动 src/ 的提交）
@@ -133,7 +136,7 @@ perf-check:  ## 性能回归比对（默认 non-blocking 告警；本地同机�
 tool-versions:  ## CI/pre-commit/lock 三方工具版本一致守卫（AK4 接入 CI）
 	$(PY) scripts/gates/check_tool_versions.py
 
-gates: lint format typecheck test docs-check doc-commands env-budget baseline-check state-contract env-snapshot model-fingerprint tool-versions json-contract-sites json-strict artifact-doc-consistency zero-assert ast-guards status-persistence registration-consistency invocation-caliber flag-effect repo-hygiene scheduled-workflows  ## 本地全部门禁（合并前自检；format = ruff format --check，2026-10-12 质量债清偿批次补入；zero-assert = K 轮补入，此前 CI 阻断但本地 gates 缺席；json-strict = AF 轮补入；ast-guards = BK 轮补入，捕获面棘轮；status-persistence = BN 轮补入，落盘可达性棘轮；registration-consistency = CF 轮补入，登记面当前口径与分册清单对账；repo-hygiene = CX 轮补入，临时/缓存产物不得被跟踪；scheduled-workflows = CY 轮补入，远端定时作业最近一次必须非红）
+gates: lint format typecheck test docs-check doc-commands env-budget baseline-check state-contract env-snapshot model-fingerprint tool-versions json-contract-sites json-strict artifact-doc-consistency zero-assert ast-guards status-persistence registration-consistency invocation-caliber flag-effect repo-hygiene scheduled-workflows release-freshness  ## 本地全部门禁（合并前自检；format = ruff format --check，2026-10-12 质量债清偿批次补入；zero-assert = K 轮补入，此前 CI 阻断但本地 gates 缺席；json-strict = AF 轮补入；ast-guards = BK 轮补入，捕获面棘轮；status-persistence = BN 轮补入，落盘可达性棘轮；registration-consistency = CF 轮补入，登记面当前口径与分册清单对账；repo-hygiene = CX 轮补入，临时/缓存产物不得被跟踪；scheduled-workflows = CY 轮补入，远端定时作业最近一次必须非红）
 
 repro:  ## 复现主批次（详见 reproduce.sh；消耗 LLM 配额，勿自动触发）
 	bash reproduce.sh
@@ -205,6 +208,9 @@ paper-audit:  ## 论文草稿数字-SRC 一致性审计（Q11 独立评审；本
 
 paper-citation-keys:  ## 论文外部读数引用键快照：--check 只校验（不一致 rc=1）；不带 --check 则覆盖写入
 	$(PY) scripts/tools/export_paper_citation_keys.py --check
+
+paper-build:  ## 投稿 PDF 构建（**先跑判据 → 再编译 → 再跑判据**；CZ 轮起，判据不通过就不编译）
+	bash scripts/tools/build_paper.sh
 
 build-check:  ## 发行构建链路冒烟（AS 批 2026-10-07：build wheel → 全新 venv 安装 → CLI/import 冒烟；本地验证用，未接 CI——发布批次 AL9 再定）
 	$(PY) -m build --wheel

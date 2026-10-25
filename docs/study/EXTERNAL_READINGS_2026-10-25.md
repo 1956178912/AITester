@@ -345,3 +345,81 @@ IEEE Xplore 上线、未同步 arXiv 的 9/10 月论文未被本轮覆盖**。
   **cs.CR**、`mukhopadhyay2026assuranceevidence` 主分类 **cs.CV**——它们**结构上不可能**被
   CW 轮的扫描覆盖。⇒ 后续检索**必须**把 cs.CR / cs.CV 纳入同一次扫描，并在登记册里**逐轮
   写明扫描的分类集合**（否则「全年回溯」这个说法会掩盖它其实只覆盖了一个分类）。
+
+## 11. CZ 轮（2026-10-26）跨分类 + **按论断族**召回：八篇新增（**三篇直接占位本稿核心现象**）与累计让渡的再核
+
+> **核验方式**：`export.arxiv.org/api/query`（https）的 `summary` 字段逐字取回（作者名取自 Atom
+> `author/name`，日期取自 `published`）；每段引文**先断言存在于官方 summary 再写入本表**
+> （CZ 轮实测 25 条引文逐字命中，坏引文 0）。
+>
+> **扫描的分类集合与检索词（CY 轮 §10.3 承诺「逐轮写明」的兑现）**：
+> **分类集合 = cs.SE ∪ cs.CR ∪ cs.CV**（CY 轮发现 CW 轮的「全年回溯」**只扫了 cs.SE**，
+> 而本轮最同题的两篇主分类在 cs.CR / cs.CV ⇒ 结构上不可达）；**时间窗 = 2026-01-01～10-26**；
+> **检索式 = 12 条「论断族」查询**（不是领域词）：
+> F1 `all:"fail-to-pass"`｜F2 `all:"behavioral equivalence"`｜F3 `all:"reference-free"` /
+> `all:"independent verification" AND all:"agent"`｜F4 `all:"harness" AND (all:"agent" OR
+> all:"LLM") AND all:"evaluation"`｜F5 `all:"instruction file"` / `all:"AGENTS.md"` /
+> `all:"CLAUDE.md"`｜F6 `all:"stale" AND all:"evidence" AND (all:"reuse" OR all:"pipeline")`｜
+> F7 `all:"declared" AND all:"repair" AND all:"agent"`｜F8 `all:"multi-agent" AND
+> (all:"attribution" OR all:"decompose")`｜F9 `all:"mutation testing" AND (all:"LLM" OR
+> all:"language model")`｜F10 `all:"oracle" AND (all:"generated test" OR all:"test
+> generation")`｜F11 `all:"success claim"` / `all:"self-report" AND all:"agent"`｜F12
+> `all:"specification" AND all:"LLM" AND all:"test generation"`。
+> **命中与分页**：12 条查询共命中 1,100 余条次，**去重后 817 篇**候选（对 F3/F4/F8 翻页至
+> 深度 300，弥补首次扫描的 100 条截断）；剔除登记册已收录的 57 篇后，**未登记候选 791 篇**，
+> 逐条以标题+摘要判读其与本稿论断族的关系。
+
+| 键 | 读数 | 原文表述 | 出处 |
+|---|---|---|---|
+| `tao2026execcritic` | 61.2%→57.3% / 65.3% / 22.2%→62.2% / 72.6% / +11.4 pp | "Agent-generated tests can encode incomplete or incorrect behavioral targets; when the same trajectory writes both the patch and the test, their errors can agree and create false confidence."；"a fail-closed harness qualifies and freezes them, and a Repair agent revises source code from their execution feedback without changing the tests"；"tests from the base Test agent reduce resolved rate from a no-test baseline of 61.2% to 57.3%, whereas tests from GPT-5.6-sol raise it to 65.3%"；"Role-specific post-training raises the Qwen Test agent's Base-to-Gold success from 22.2% to 62.2%; composing the two post-trained Qwen agents reaches 72.6%, an 11.4-point gain over the original no-test baseline" | arXiv:2609.09133v1（2026-09-08；cs.AI；35 页；无出版商 DOI） |
+| `kim2026coherencecollapse` | 16,758 轨迹 / 3 架构 / 7 模型 / 60–69% / 5 例 / +3.0 pp (p=0.08) | "We introduce TRAJEVAL, a training-free decomposition of agent trajectories into reference-patch-aligned search, read, and edit stages, and apply it across 16,758 trajectories spanning three architectures and seven models."；"60-69% of failures on SWE-Agent and OpenHands reach and edit the correct functions yet still produce incorrect patches"；"In 5 cases, the agent produces a patch bit-identical to the gold reference mid-trajectory and destroys it later"；"A reference-free consensus-driven variant yields a directional +3.0 pp Pass@1 measurement on GPT-5 (p=0.08)" | arXiv:2603.24631v2（2026-03-25；cs.SE；无出版商 DOI） |
+| `bhat2026benchmarkingbenchmarks` | 4 个基准族 / 496 任务 / 92 处分歧 / 18.5% / 57.9%–76.8% / 18.9 pp | "We present a systematic validity and reproducibility audit of four major tool-calling benchmark families: BFCL v4, τ2-Bench, LiveMCPBench, and MCP-Atlas."；"Across 496 expert-reviewed benchmark tasks, we find 92 evaluator-human disagreements, corresponding to an 18.5% misalignment rate."；"In LiveMCPBench, 23 repeated evaluations of the same setup produce scores ranging from 57.9% to 76.8%, a spread of 18.9 percentage points, large enough to change leaderboard conclusions."；"progress in tool-using agents requires benchmarks whose evaluators are themselves reproducible, auditable, and aligned with human judgments of task success" | arXiv:2607.02577v1（2026-06-30；cs.SE；无出版商 DOI） |
+| `lewis2026sameharness` | 169 任务 / 20,480 token / 480 秒 / F2PF 28%→49% / 解 43→72 | "The tight-window Verified comparison uses 169 tasks, a 20,480-token window, and a fixed 480-second attempt endpoint; on this cohort, treatment raises mean per-task F2PF from 28 percent to 49 percent and complete solutions from 43 to 72."；"Because changing the harness changed what unchanged model weights could accomplish, coding-agent evaluations should treat the model and harness together as the tested solver." | arXiv:2608.26218v1（2026-08-26；cs.AI；24 页；无出版商 DOI） |
+| `sghaier2026harnesshierarchy` | 35 个连续版本 / 5 个开源 harness | "conducting the first controlled longitudinal study that isolates the agent harness contribution"；"we fix the model and vary only the agent harness, evaluating 35 sequential releases to measure their impact on agent effectiveness and efficiency"；"We first empirically study the development and release evolution of five major open-source agent harnesses (i.e., Codex, Qwen Code, Gemini, OpenCode, and OpenHands), revealing extreme release velocities exceeding two releases per day" | arXiv:2607.03691v2（2026-07-04；cs.SE；无出版商 DOI） |
+| `gloaguen2026whentoact` | 200 个人工核验任务 / 5 模型 / 35%–65% | "we introduce FixedBench, a code benchmark with 200 human-verified coding tasks in which no code changes are required, testing five recent models across four agent harnesses"；"proposing undesirable changes (excluding tests and documentation) in $35$ to $65\%$ of cases"；"Explicit instructions to reproduce the issue before patching partially address this issue but introduce a new failure mode" | arXiv:2605.07769v1（2026-05-08；cs.SE；无出版商 DOI） |
+| `yu2026deceptiveresumes` | 32,000 份描述 / 23.35% / 8 种攻击 / 84.31%→37.25% / >111% | "Among 32,000 descriptions from three public agent marketplaces, most omit input specifications and usage constraints, while at least 23.35% contain content outside these fields."；"We construct eight description-manipulation attack strategies targeting task decomposition, capability grounding, and subtask specification, and evaluate them on GAIA."；"a single manipulated description reduces task success from 84.31% to 37.25%, or increases token consumption or execution time by over 111%" | arXiv:2609.15516v1（2026-09-14；cs.CR；18 页；无出版商 DOI） |
+| `dan2026swepro_v2` | 731 任务中修/废 480 个 / 23 名工程师 / 404 小时 / 642 任务 | "Agentic audits, expert adjudication and blind re-implementation repaired or retired 480 of the 731 tasks: 23 contracted engineers spent 404 hours"；"A hardened protocol restricts network access to the model endpoint and re-grades every patch in a clean container, so agents cannot retrieve upstream fixes or get credit for changes outside their patch."；"On the 642 V2 tasks frontier agents resolve up to 99.4% while other systems stay clearly separated, and a 51-task Hard split spreads systems from 52.9% to 98.0%." | arXiv:2610.24206v1（2026-10-16；cs.SE；无出版商 DOI） |
+
+### 11.1 三篇**直接占位本稿核心现象**的工作（必须正面处理，不可回避）
+
+| 本稿原口径 | 占位者 | 时间 | 后果 |
+|---|---|---|---|
+| **「同一轨迹既写补丁又写测试 ⇒ 两者的错误会互相印证 ⇒ 虚假信心」**——本稿 false-fix 现象的机制表述 | `tao2026execcritic`（2609.09133：**逐字写出了这句话**，并给出解法：测试由独立 Test agent 生成、**fail-closed harness 合格化并冻结**、Repair agent 只读执行反馈且不得改测试；实测 no-test 基线 61.2% → 同轨迹测试 57.3%（**更差**）→ 异源测试 65.3%；两个角色分别后训练后达 72.6%，比无测试基线 +11.4 pp） | 2026-09-08 | **本稿的「现象」与「对策」均已被占位**：不得再声称「补丁与测试同源会互相印证」是新发现，也不得声称「冻结测试 + 独立裁决」是本稿的贡献。 |
+| **「分解」这一方法动作**（把结果拆到可归因的分段/分母上） | `kim2026coherencecollapse`（2603.24631：TRAJEVAL 把轨迹**分解**为 search/read/edit 三段；16,758 轨迹 / 3 架构 / 7 模型；**60–69% 的失败是「到达并编辑了正确函数却仍产出错误补丁」**；5 例轨迹中途产出与金标准逐位相同的补丁、随后被自己破坏） | 2026-03-25 | **本稿的「分解」不再是独有动作**，且其**同类现象已被大规模测量**（60–69%）。本稿剩下的只能是**口径层面的分解**（条件/边际/声明率），不是**轨迹层面**的分解。 |
+| **「审计评测器本身」是正当要求** | `bhat2026benchmarkingbenchmarks`（2607.02577：四个工具调用基准族的效度与可复算性审计；496 个人工核验任务上 **92 处分歧 = 18.5% 错配率**；同一设置重复 23 次得分 57.9%–76.8%，**18.9 pp 摆幅足以改写榜单结论**；结论要求「评测器自身可复算、可审计」） | 2026-06-30 | 「审计装置」在基准评测域已是**常规要求**，不是本稿的增量主张。本稿只能说**自家装置被审计并公开了上限**。 |
+
+### 11.2 三篇**相关/同向**工作（不占位，但改变论文的定位）
+
+- `lewis2026sameharness`（2608.26218）与 `sghaier2026harnesshierarchy`（2607.03691）：固定模型只变 harness
+  ⇒ 结果变（同一 harness 的两种配置把 Verified 的 F2PF 从 28% 抬到 49%、完整解从 43 抬到 72；
+  35 个连续 release 的纵向受控研究）。⇒ 与本稿 RQ1 同向**且更直接**（它们连「harness 应当与
+  模型一起被当作被测求解器」都写成了结论）。本稿的 RQ1 由此**从「独有观察」降级为「同向复现」**。
+- `gloaguen2026whentoact`（2605.07769）：**显式指令能改变行为，但引入新的失效模式**（先复现再打补丁
+  的指令部分缓解了乱改代码，却让「部分已修复」的 issue 被错误地弃权）。⇒ 与本稿 RQ1 的
+  「指令产物携带效应」同族，并给出**副作用**这一侧写。
+- `yu2026deceptiveresumes`（2609.15516，**cs.CR**）：第三方写的 worker 描述被规划器信任 ⇒
+  **注册期注入通道**；32,000 份描述里至少 23.35% 含越界内容；单条被操纵的描述把任务成功率
+  从 84.31% 压到 37.25%，或把 token/执行时间抬高 111% 以上。⇒ 「指令产物是一等因果/攻击对象」
+  在**跨分类**处已被量化。
+- `dan2026swepro_v2`（2610.24206）：731 个任务里**修掉或废掉 480 个**（23 名工程师 404 小时、
+  逐条盲重实现核验）；并把「限制网络访问 + 干净容器重判」写进评测协议。⇒ 「裁决必须机械且独立」
+  已是基准维护方的**实际做法**，不是本稿的呼呼。
+
+### 11.3 累计让渡之后，本稿**剩下的增量**（逐条可核）
+
+1. **口径矩阵**：false-fix 在**条件口径**与**边际口径**下并列报告，并单独报告**声明率**
+   （协议对声明率的扰动）——本轮与前三轮共 18 篇候选中，**未见任何一篇报告「声明率」这个量**。
+2. **预注册 + 零 LLM 可复算**：每个数字都能从归档工件重算，复算不需要新的模型调用。
+3. **同一套判据同时审计系统与装置，并公开装置自身的上限**（可执行预言机 16/20 任务成功但
+   **不**提升检出）。
+4. **功能级、共享分母**的裁决（不是风格级、不是轨迹级），且落在**测试生成**流水线而非修复流水线。
+
+### 11.4 覆盖缺口的**诊断更正**（比上一轮更准确）
+
+- 上一轮登记的是「DBLP / ACM DL / IEEE 官方页**被代理拦截**」。CZ 轮实测更正：**不是代理拦截**，
+  而是 **DBLP 自己的反机器人挑战**（Anubis）——`https://dblp.org/search/publ/api`、
+  `https://dblp.uni-trier.de/…`、`https://dblp.dagstuhl.de/…` 三个入口**一律返回 HTTP 202 +
+  「Making sure you're not a bot!」的 HTML**（不是 JSON），`dblp2.uni-trier.de` 返回 401。
+  ⇒ 这是 DBLP 公开 API 的**常驻属性**，不是本环境的临时故障 ⇒ **非 arXiv 渠道的覆盖缺口无法
+  通过「再试一次」关闭**，只能如实披露（ACM DL / IEEE Xplore 同样未在本环境验证）。
+- 分类集合的覆盖缺口**已在本轮闭合**：cs.SE ∪ cs.CR ∪ cs.CV（CY 轮发现的「只扫 cs.SE」已补）。

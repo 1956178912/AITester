@@ -87,6 +87,84 @@ by name. The manuscript grew from 62 to 65 pages and from 56 to 64 bibliography 
 the CR round's "no CJK in typeset text" criterion caught **8 of 8** on its first run. Fixed to
 Latin text and rebuilt (64 pages, 64 bibitems, zero undefined citations, zero missing glyphs).
 
+### CZ round addendum (2026-10-26): **cross-category + claim-family** recall finds three papers that directly occupy the core phenomenon, narrowing novelty further; the build order is frozen; a release-freshness gate (zero LLM, $0)
+
+**1. Recall follow-up: the CW round's "full-year retrospective" scanned cs.SE only** (as §9
+of the register states). This round scanned **817 unique candidates** with **12 claim-family
+queries x (cs.SE + cs.CR + cs.CV) x the whole of 2026** (paging the three families that had
+been truncated at 100 down to depth 300), removed the 57 already registered, and read every
+remaining title and abstract. Eight new papers surfaced---and **three of them directly occupy
+this manuscript's core phenomenon**:
+
+- `tao2026execcritic` (2609.09133) **states this manuscript's mechanism almost verbatim**:
+  "when the same trajectory writes both the patch and the test, their errors can agree and
+  create false confidence", and ships the remedy (an independent Test agent, a **fail-closed
+  harness that qualifies and freezes** the tests, a Repair agent that may not change them);
+  measured, a no-test baseline of 61.2% becomes **57.3% with tests from the same trajectory
+  (worse)** and 65.3% with tests from a different model, and 72.6% after role-specific
+  post-training (an 11.4-point gain). => **Both the phenomenon and the remedy are occupied.**
+- `kim2026coherencecollapse` (2603.24631) **decomposes 16,758 trajectories** into
+  reference-patch-aligned search/read/edit stages and reports that **60--69% of failures reach
+  and edit the correct functions yet still produce incorrect patches**, plus five cases where a
+  patch bit-identical to the gold reference is produced mid-trajectory and destroyed later.
+  => **The decomposition move and the same class of phenomenon are both measured at scale.**
+- `bhat2026benchmarkingbenchmarks` (2607.02577) audits four tool-calling benchmark families:
+  **92 evaluator--human disagreements across 496 expert-reviewed tasks = an 18.5% misalignment
+  rate**, and 23 repeated evaluations of one setup scoring 57.9%--76.8% (**an 18.9-point
+  spread** large enough to change leaderboard conclusions). => **Auditing the evaluator is now
+  a routine requirement, not this paper's increment.**
+
+Five further papers are related or same-direction: `lewis2026sameharness` (2608.26218, two
+configurations of one harness raising Verified F2PF from 28% to 49%), `sghaier2026harnesshierarchy`
+(2607.03691, 35 sequential releases with the model fixed), `gloaguen2026whentoact` (2605.07769,
+explicit instructions change behaviour but introduce a new failure mode), `yu2026deceptiveresumes`
+(2609.15516, **cs.CR**, third-party instruction text as a registration-time injection channel),
+and `dan2026swepro_v2` (2610.24206, 480 of 731 tasks repaired or retired plus clean-container
+re-grading).
+
+**2. Novelty narrows further, to a measurement discipline.** The Introduction's contribution
+sentence now states that **eleven studies** already establish these phenomena and that what
+remains is not another observation but a **measurement discipline**: the conditional and
+marginal calibers reported side by side **plus the declaration rate**, pre-registration with
+zero-LLM recomputability, and an audit of the measuring device published **together with its
+own ceiling**. The Discussion's "what a negative result contributes" subsection now says
+explicitly that the three phenomena are reported elsewhere, and identifies the **declaration
+rate** as the quantity that none of the 18 candidates across four rounds reports. The cover
+letter concedes the three new occupiers by arXiv number. The manuscript grew from 65 to **68
+pages** and from 64 to **72 bibliography entries** (72 citations <-> 72 bibitems, still a
+bijection, zero undefined citations, zero missing glyphs).
+
+**3. "Run the criterion before compiling" is frozen into the workflow (the same mistake twice).
+** The CY and CZ rounds **both** put Chinese into a `refs.bib` `note` and **both** compiled
+before running the criterion, so LaTeX reported `Unicode character ... not set up for use with
+LaTeX`; the CR round's CJK criterion caught both in the end (8/8 each), but the artefact was
+already broken by then. **A criterion is executable, not automatic** => new
+`scripts/tools/build_paper.sh` (`make paper-build`): **① pre-check (red => refuse to compile)
+-> ② build -> ③ post-check (red => print the readings to update and exit 1)**; page counts are
+read from the build log, never hand-written. The **order itself** is pinned by 6 locks whose
+assertions use the **comment-stripped executable lines** (the script's own header comment says
+"criterion first, then build").
+
+**4. New gate `check_release_freshness.py`: make "the released 1.0.0 and the current 1.0.0 are
+not the same thing" visible in CI.** Measured: the `v1.0.0` tag points at `dc8285d3` while main
+is at `23b35b00`---**36 commits** never reached the released artefact (including both the perf
+and the mutation fixes and two new gates). The tagged tree *is* the source of the release
+artefact, so a stale tag means the artefact lacks the fixes. Whether to move the tag is the
+**author's decision** (a force-update rewrites published references), so the gate does not move
+it: stale and **unregistered** => red; **registered** => green but the number of missing commits
+must still be printed; a registered tag that is no longer the latest => **the exception has
+expired** => red. The current state is **explicitly registered** in
+`docs/release_freshness_allowlist.txt` with the gap listed and the note that the entry becomes
+void once the author agrees to move the tag.
+
+**5. Root-cause correction for the coverage gap.** The register previously said the DBLP / ACM DL
+/ IEEE pages were "blocked by the proxy". Measured correction: **it is not the proxy** but
+DBLP's own anti-bot challenge (Anubis)---`dblp.org`, `dblp.uni-trier.de` and
+`dblp.dagstuhl.de` all return **HTTP 202 with a "Making sure you're not a bot!" HTML page**
+(not JSON), and `dblp2.uni-trier.de` returns 401 => a **standing property**, so the gap cannot
+be closed by retrying and must simply be disclosed. The category-set gap (cs.SE only) **is
+closed** by this round.
+
 ### CW round addendum (2026-10-26): a full-year retrospective reconciliation of 2026 — ten frontier papers enter the manuscript and the register, and the novelty claim becomes "not a new observation" (zero LLM, $0)
 
 The previous two rounds of retrieval only watched the "latest window" (late October) and therefore

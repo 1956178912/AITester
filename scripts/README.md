@@ -9,7 +9,7 @@
 
 > 命名不是判定依据：`tools/check_quota.py` 虽以 `check_` 开头，但它是对 LLM 端点发探测请求的运维工具，不参与门禁；`tools/generate_static_report.py` 虽被 CI 调用，但产物是报告而非判定，故归 `tools/`。
 
-## gates/（35 个）
+## gates/（36 个）
 
 CI / pre-commit 阻断项，`make gates` 跑其中大部分：
 
@@ -41,6 +41,7 @@ CI / pre-commit 阻断项，`make gates` 跑其中大部分：
 | `check_prompt_artifacts.py` | Instruction artifact 清单哈希锁 |
 | `check_registration_consistency.py` | 登记册 §1「当前口径」数字 ↔ `BASELINE.yaml` 双向对账 |
 | `check_repo_hygiene.py` | 仓库卫生：临时/缓存产物不得被 git 跟踪 + 本清单与盘面一致 |
+| `check_release_freshness.py` | 发布新鲜度：最新 release tag 不得落在 main 后面（落后须登记例外） |
 | `check_scheduled_workflows.py` | 远端定时作业巡检：每周跑一次的作业最近一次必须非红（定时红 + 更新的成功手动运行 ⇒ 绿） |
 | `check_state_contract.py` | 未声明 state 键读写 |
 | `check_status_persistence.py` | 状态通道落盘可达性棘轮（声明了却不落盘 = 归档里 0 出现） |
@@ -57,6 +58,7 @@ CI / pre-commit 阻断项，`make gates` 跑其中大部分：
 | --- | --- |
 | `bootstrap_dev.sh` | 开发者环境一键搭建 / 校验 |
 | `smoke_test.sh` | 发布前冒烟（含一次最小 LLM 调用） |
+| `build_paper.sh` | 投稿 PDF 构建（**先跑判据 → 再编译 → 再跑判据**；CZ 轮起） |
 | `check_quota.py` | LLM 端点额度 / 存活探测 |
 | `compare_executor_modes.py` | 执行模式对比 |
 | `download_swe_bench.py` | SWE-bench 数据下载 |
