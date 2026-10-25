@@ -122,6 +122,16 @@ known only after a reader trips over it. This round commits it as a gate,
   temporary `python scripts/tools/does_not_exist.py` and `make no-such-target` are both reported
   precisely, while the existing `make paper-audit --strict` is not flagged.
 
+**Four-b、The full cost of adding one gate with argparse: nine numbers move.**
+Beyond the seven census numbers in (iv), the `invocation` and `flag_effect` sections move too:
+on-disk gates 32→33, chain scripts 18→19, declared flags 73→75, code-locked flags 30→31,
+range/presentation flags without a reader 21→22 (`--json` only emits a report and does not
+change the verdict, hence it counts as a presentation flag); argparse gates 25→26, flag instances
+and live flags 73→75. **This is the real cost of "adding one gate"**: left unwritten, readers
+assume gates are free --- and the gate self-check plus the flag-effect gate itemise all nine
+numbers, so a single missed refresh turns red immediately --- which is exactly how this round
+found them.
+
 **二、The positive census is itself a result: every command the documentation references works.**
 The first full census (39 documents, 124 script paths and make targets) found **zero** real
 breakages --- the three "missing" hits were all English prose ("make the/that/sure"), gone once
