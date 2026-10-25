@@ -109,11 +109,27 @@ class TestScheduledWorkflowRules:
     def test_pending_dispatch_does_not_hide_a_red_schedule(
         self, fake_tree: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """正在跑的手动运行不算「更新且成功」⇒ 仍按定时红判红。"""
+        """正在跑的手动运行 = **结论待定** ⇒ [SKIP]，不是红。
+
+        回归锁的由来（本轮实测）：CY 轮首次实现这道门时，「更新的手动运行还在跑」被判成
+        **红**，于是 CI 在每次作者手动派发验证的期间无理由变红（本轮就撞上一次：
+        门禁步骤在 mutation 派发还在跑时把 CI 拉红）。「作者正在验证修复」与
+        「修复没验证过」是两件事；且手动运行一旦**跑完并失败**，下一次运行就会看到
+        「更新的手动运行 = failure」⇒ 判红，不漏。
+        """
         self._patch_runs(
             monkeypatch,
             schedule=[_run("failure", 1, "2026-10-19T00:00:00Z")],
             dispatch=[_pending(2)],
+        )
+        assert gate.main([]) == 0
+
+    def test_pending_dispatch_that_later_failed_is_red(self, fake_tree: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """手动运行跑完并失败 ⇒ 红（不因「在飞时跳过」而漏判）。"""
+        self._patch_runs(
+            monkeypatch,
+            schedule=[_run("failure", 1, "2026-10-19T00:00:00Z")],
+            dispatch=[_run("failure", 2, "2026-10-25T00:00:00Z")],
         )
         assert gate.main([]) == 1
 

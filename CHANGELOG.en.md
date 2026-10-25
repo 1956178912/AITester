@@ -44,7 +44,7 @@ criterion.** Decision shape: for every registered scheduled workflow, take the l
 successful manual run ⇒ green** (the fix has been verified by a real run); otherwise red. An
 unreachable API is disclosed as `[SKIP]` (never reported as a pass). Two self-consistency
 surfaces: every workflow with a `schedule:` trigger on disk must be registered, and the
-registered cron must match the workflow file verbatim. 13 locks (8 of them negative).
+registered cron must match the workflow file verbatim. 14 locks (9 of them negative).
 **"Fixed but never verified" must be caught by a mechanism, not by someone's memory.**
 
 **4. Eight on-topic frontier papers narrow novelty three more times.** The CW round's

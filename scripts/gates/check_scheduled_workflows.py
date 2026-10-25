@@ -214,6 +214,16 @@ def main(argv: list[str] | None = None) -> int:
 
             scheduled = latest_completed(schedule_runs)
             dispatched = latest_completed(dispatch_runs)
+            # 在飞的手动运行（比定时运行更新）= **结论待定**，不是「红」。
+            # 处置：按 [SKIP] 披露（带 run 号与它已运行时长），**不判红**——
+            # 「作者正在验证修复」与「修复没验证过」是两件事，把前者判成后者会让
+            # CI 在每次手动派发期间无理由变红；而它一旦**跑完并失败**，下一次运行
+            # 就会看到「更新的手动运行 = failure」⇒ 判红，不漏。
+            inflight = None
+            for run in dispatch_runs:
+                if run.get("status") != "completed" and run.get("created_at", "") > scheduled.get("created_at", ""):
+                    inflight = run
+                    break
 
             if scheduled is None:
                 notes.append(f"{name}：尚无已完成的定时运行——[SKIP]")
@@ -224,6 +234,13 @@ def main(argv: list[str] | None = None) -> int:
             s_id = scheduled.get("id")
             if s_conc == "success":
                 print(f"[scheduled-workflows] ✅ {name}：最近一次定时运行 {s_id} = success")
+                continue
+
+            if inflight is not None:
+                notes.append(
+                    f"{name}：定时运行 {s_id} 为 {s_conc}，但更新的手动运行 "
+                    f"{inflight.get('id')} 仍在进行中（结论待定）——[SKIP]"
+                )
                 continue
 
             # 定时运行为红：看有没有**更新的**成功手动运行
