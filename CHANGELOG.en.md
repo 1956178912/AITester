@@ -117,9 +117,9 @@ chain" and "must be in CI").
 escape sequences (`"\begin{abstract}…\end{abstract}"`) — CI never saw an **uncommitted** change, so
 it never surfaced; this round fixed them with the ruff gate.
 
-**5. Readings**: `ruff format --check .` = **991 files already formatted** (+2); `ruff check .`
+**5. Readings**: `ruff format --check .` = **992 files already formatted** (+3); `ruff check .`
 passes; `tests/test_audit_paper_numbers.py` **63 passed** (54 → 63, +9);
-`tests/test_repo_hygiene_cx.py` **30 passed** (new file);
+`tests/test_repo_hygiene_cx.py` **34 passed** (new file);
 `audit_paper_numbers.py --strict` **rc=0** (260 claims / 95.4% SRC coverage / 100% traceable /
 0 invalid citations / 0 citation problems); `check_repo_hygiene.py` **rc=0**.
 

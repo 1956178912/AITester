@@ -93,9 +93,9 @@ tectonic 的日志里根本没有那一行（它写 `.xdv`）⇒ 每次都走跳
 **四、顺带修掉两处 W605。** 上一轮未提交的改动里带进了 2 处无效转义序列（`"\begin{abstract}…
 \end{abstract}"`）——CI 从未见过**未提交**的改动，所以它一直没暴露；本轮随 ruff 门禁一并修掉。
 
-**五、读数**：`ruff format --check .` = **991 files already formatted**（+2）；`ruff check .` 全过；
+**五、读数**：`ruff format --check .` = **992 files already formatted**（+3）；`ruff check .` 全过；
 `tests/test_audit_paper_numbers.py` **63 passed**（54 → 63，+9）；`tests/test_repo_hygiene_cx.py`
-**30 passed**（新文件）；`audit_paper_numbers.py --strict` **rc=0**（260 声明 / SRC 覆盖 95.4% /
+**34 passed**（新文件）；`audit_paper_numbers.py --strict` **rc=0**（260 声明 / SRC 覆盖 95.4% /
 可追溯 100% / 引用无效 0 / 引文问题 0）；`check_repo_hygiene.py` **rc=0**。
 
 ### CR 轮补记（同日）：2026-10 前沿四文献对账 + 编译期 CJK 缺字符判据 + 三向读者链锁（零 LLM，$0）
