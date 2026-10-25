@@ -166,6 +166,88 @@ files; `paper-audit --strict` rc=0; the new document-command gate's first census
 breakages across 39 documents / 56 command references.
 
 
+### CU round addendum (2026-10-26): a document-command executability gate + a second batch of frontier papers (zero LLM, $0)
+
+**一、The "document points at a non-existent artefact" class becomes an executable criterion.**
+New gate `scripts/gates/check_doc_commands.py` (blocking CI chain, `make doc-commands`, 9 new
+cases): every `scripts/....py` path in the documentation must exist; every `make <target>` must be
+a real Makefile target. The criterion **pins the two classes of false positive observed while
+building it**: English prose ("make the same direction", "make sure the `target_file` path is
+correct") is not a command, and a `> ` blockquote is not a shell prompt --- so only command
+positions count and `make` must be a whole-line form. Negative self-check: an injected dead
+script path and a dead make target are both reported precisely, while the existing
+`make paper-audit --strict` is not flagged.
+
+**二、The positive census is a result too: zero breakages.** 39 documents, 124 script paths and
+make targets, **zero** real failures --- a negative result no artifact had recorded before.
+
+**三、Cover letter / body synchronisation (local artifact).** The cover letter still said "Three
+independent studies... reach the same direction" while the body cited nine frontier papers;
+it now matches the body (three primary works by arXiv id only, no new numbers), and the
+contribution is located as "not the direction but the resolution and the unit of analysis" and
+"we measure *declared* repairs". Date 26 October 2026; rebuilt at 2 pages, 0 missing characters.
+
+**四、The gate census moves with the new gate.** Seven numbers move by +1 (gate scripts 32→33,
+unique CI gates 30→31, CI call sites 33→34, gate steps 31→32, blocking steps 29→30, make
+targets 20→21, make commands 22→23) and nine more across the `invocation` and `flag_effect`
+sections (on-disk gates 32→33, chain scripts 18→19, declared flags 73→75, code-locked flags
+30→31, range/presentation flags 21→22, argparse gates 25→26, flag instances and live flags
+73→75). The self-check also made the decisive point: "on disk 33 / index 32, one untracked ---
+read as *not committed this round*, CI's clone will not have these" --- **writing a gate is not
+the same as CI enforcing it**.
+
+**五、Readings.** Full suite: **12,649 passed / 268 skipped / 0 failed** (collected 12,917;
+145.6s in the CI caliber `xdist -n 4 --dist loadfile`, 462.79s single-process, zero LLM); clean-tree
+gate chain **27 steps rc=0**; `ruff format --check .` = 989 files already formatted, `ruff check`
+clean, `mypy src/ config.py` = Success: no issues found in 137 source files; `paper-audit --strict`
+rc=0 (248 numeric claims, SRC coverage 95.2%, 100.0% overall traceability); the document-command
+gate's first census found **zero** breakages across 39 documents / 56 command references;
+manuscript rebuilt at 55 pages with 0 undefined references and 0 missing characters; the
+citation-key snapshot has 31 rows and `--check` reports it identical.
+
+**六、Second batch of frontier papers (six, verified verbatim from the official arXiv Atom API).**
+Including two that the earlier search windows missed entirely:
+
+- **Silent-failure localisation** (arXiv:2610.06163v1): 95 confirmed silent failures / 3,684
+  repair traces; SAGE assigned an origin in 93 cases and **only five** coincided with the code
+  change itself; the origin preceded the write in 14 of 19 cases where the agent introduced the
+  vulnerable code.
+- **A survey of LLM-based test generation** (arXiv:2610.05001v1): a test that raises coverage, a
+  test that agrees with a reference program and a test that detects a requirements violation
+  "provide distinct kinds of evidence", drawn from 95 curated source records through 29 September
+  2026, with the agenda opening on independent oracle assessment.
+- **The structural ceiling of detection** (arXiv:2610.30200v1): checking a trace against itself
+  reaches AUROC 0.741 and stops there because two thirds of wrong traces state no false equation;
+  "Repair, not detection, is the open problem".
+- **Auditing behavioural detectors** (arXiv:2610.30491v1): final correctness 67/67, fault impact
+  19/19 and fault relevance 18/18 agree perfectly, but verification only 67/81, and the reported
+  result moves from 21/30 to 27/30 as execution budgets change.
+- **Test adequacy of the agent harness** (arXiv:2610.04921v1): harness code receives less than half
+  its lines and branches covered; harness-directed generation yields 75.95%/84.76% larger coverage
+  gains and 69.89% larger mutation-score gains while exposing 122 real-world harness bugs (88
+  previously unknown, 69 confirmed).
+- **Oracle conversion as a measurable bottleneck** (arXiv:2609.05879v1): on 506 training and 142
+  evaluation tasks, raising full-test correctness from 28.59% to 42.54% moves input kill only from
+  24.06% to 25.27% and effective full kill from 12.23% to 14.15%.
+
+**Four positioning disciplines (annotated in both the manuscript and the register).** (1) A survey
+already states this paper's core distinction as the field's consensus, so the manuscript must
+**not** present "detection-first beats coverage" as a new finding; the claimable difference is
+narrower --- function-level, pre-registered, negative, zero-LLM recomputable, with the measurement
+device itself audited. (2) The phenomenon has already been demonstrated in the security domain,
+so this study's increment is the **measurement protocol** (conditional caliber, marginal caliber,
+and the declaration rate that perturbs both), not the phenomenon's first observation.
+(3) The "repair, not detection" conclusion is in tension with this protocol and is recorded
+rather than deflected: their question is whether a trace can be verified without a reference
+solution, ours is whether a declared repair holds on a known bug-fix pair, so the ceiling
+argument does not transfer --- and in the other direction, nothing here licenses the claim that
+detection-first protocols solve repair. (4) The detector audit points the same way (an automated
+label must carry its evidence and its execution conditions) but audits a different subject.
+
+Eight further verified papers are registered as indexed-only alternatives to avoid re-searching
+them next round.
+
+
 ### CT round addendum (2026-10-26): an abstract that was three words from the submission limit + stale word/page counts in the submission files + a criterion whose caliber must be explicit (zero LLM, $0)
 
 **一、A genuine submission-blocking risk: the abstract had three words of headroom.**

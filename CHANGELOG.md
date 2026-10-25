@@ -139,11 +139,13 @@ CI clone 拿不到这些」——这正是索引机制的设计意图：**新门
 
 
 **六、读数。**
-全量：**12,643 passed / 268 skipped / 0 failed**（collected 12,911；CI 同口径
-`xdist -n 4 --dist loadfile` 135.80s，单进程 469.16s，零 LLM）；干净树门禁链 **27 步 rc=0**
+全量：**12,649 passed / 268 skipped / 0 failed**（collected 12,917；CI 同口径
+`xdist -n 4 --dist loadfile` 145.6s，单进程 462.79s，零 LLM）；干净树门禁链 **27 步 rc=0**
 （含三个本地工具项）；`ruff format --check .` = 989 files already formatted、`ruff check` 全过、
 `mypy src/ config.py` = Success: no issues found in 137 source files；
-`paper-audit --strict` rc=0；文档命令门禁首次体检 39 份文档 / 56 处命令引用**零失效**。
+`paper-audit --strict` rc=0（数字声明 248 条 / SRC 覆盖 95.2% / 综合可追溯率 100.0%）；
+文档命令门禁首次体检 39 份文档 / 56 处命令引用**零失效**；论文重编译 55 页 / 0 未定义引用 /
+0 缺字符；引用键快照 31 行、`--check` 一致。
 
 
 **七、第二批前沿六篇（CU 轮，2026-10-26 一手核验）——含对本稿 novelty 的直接威胁。**
