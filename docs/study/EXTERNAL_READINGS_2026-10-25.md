@@ -41,15 +41,23 @@ POLITO 机构库与 IEEE CSDL 摘要写 "96.88% versus 96.89%"，ResearchR 会�
 
 | 键 | 读数 | 原文表述 | 出处 |
 |---|---|---|---|
-| `kim2026scaling` | 180 配置；39--70% / 80.8% / 17.2x / 4.4x / 45% / 0.524 | "we perform a controlled evaluation spanning 180 configurations"；"for sequential reasoning tasks, every multi-agent variants degraded performance by 39-70%"；"Centralized coordination improves performance by 80.8% on parallelizable tasks"；"independent agents amplify errors 17.2x, while centralized coordination contains this to 4.4x"；"coordination yields diminishing or negative returns once single-agent baselines exceed ~45%"；"achieves cross-validated R^2=0.524" | arXiv:2512.08296（v1 2025-12-09，v3 2026-04-08），Google Research / DeepMind / MIT，19 位作者，DOI 10.48550/arXiv.2512.08296 |
-| `jwalapuram2026illusion` | 10x | "automatic MAS consistently underperform CoT-SC despite being up to 10x more expensive"；"these comparisons rarely control for inference budgets such as number of LLM calls, total cost, retries, or sampled paths" | arXiv:2606.13003（2026-06-11），Salesforce Research / HKUST(GZ) / UBC / NTU，DOI 10.48550/arXiv.2606.13003 |
+| `kim2026scaling` | 260 配置 / 6 基准 / 5 架构 / 3 族；R² 0.373 / 0.413 | "Across 260 configurations spanning six agentic benchmarks, five canonical architectures (Single-Agent and four Multi-Agent: Independent, Centralized, Decentralized, Hybrid), and three LLM families"；"The resulting model achieves a cross-validated R^2=0.373 across all six benchmarks (R^2=0.413 with a task-grounded capability metric)" | arXiv:2512.08296v3（2026-04-08 最新版），Google Research / DeepMind / MIT，DOI 10.48550/arXiv.2512.08296 |
+| `kim2026scaling` | 180 配置（**成本追踪子集**） | "Data from BrowseComp-Plus, Finance Agent, PlanCraft, and Workbench (180 configurations with full cost tracking; SWE-bench Verified and Terminal-Bench use Docker-based evaluation with different cost structures)"（**v3 全文**；v1/v2 摘要把这 4 个基准写成整个研究面） | 同上（arXiv:2512.08296v3） |
+| `kim2026scaling` | −39%…−70% / +80.8% / 17.2x / 4.4x / 45% | "all multi-agent variants universally degrade performance on tasks requiring sequential constraint satisfaction (planning: −39% to −70%)"；"+80.8% on decomposable financial reasoning"；"Independent systems amplify trace-level errors 17.2× through unchecked error propagation"；"Centralized coordination, however, contains this to 4.4×"；"tasks where single-agent performance already exceeds 45% accuracy experience negative returns from additional agents"（v3 全文，β=−0.236, p=0.004；v2 为 β=−0.408） | 同上（arXiv:2512.08296v3） |
+| `kim2026scaling` | 0.524（**v2 读数，v3 已改**） | "achieves cross-validated R^2=0.524"（v2 摘要；v3 改为 R^2=0.373 / 0.413，见本表第一行——**引用 0.524 必须同时标明 v2**） | arXiv:2512.08296v2（2025-12-17） |
+| `jwalapuram2026illusion` | 10x | "automatic MAS consistently underperform CoT-SC despite being up to 10x more expensive"；"these comparisons rarely control for inference budgets such as number of LLM calls, total cost, retries, or sampled paths" | arXiv:2606.13003v2（2026-06-11 / v2 2026-06-13），Salesforce Research / HKUST(GZ) / UBC / NTU，DOI 10.48550/arXiv.2606.13003 |
 | `shin2026rag` | 6.5% / 28 / 24 / 10 | "While RAG does not enhance correctness, RAG improves line coverage by 6.5% on average"；"28 bugs were detected, 24 unique bugs were reported to developers, ten were confirmed" | ICSE 2026（48th ICSE）Research Track，pp. 767--779，DOI 10.1145/3744916.3773163，arXiv:2409.12682 |
 
-**版本冲突（必须留存）**：`kim2026scaling` 的**配置数与基准数在二手来源之间不一致**——
-论文当前版本（arXiv v3 摘要）写的是 **180 configurations / four benchmarks**
-（Finance-Agent、BrowseComp-Plus、PlanCraft、Workbench），而多篇中文/英文二手博客写
-「260 配置 / 6 个基准」。本登记册与正文一律采用 **arXiv 摘要的一手读数**；引用该文时
-不要采信博客数字。这是本项目「二手来源只作线索、读数必须回原文」的又一例。
+**版本与来源冲突（必须留存）**：`kim2026scaling` 的**配置数与基准数在 v1/v2 与 v3 之间换过**——
+v1（2025-12-09）/v2（2025-12-17）摘要写 **180 configurations / four benchmarks**
+（Finance-Agent、BrowseComp-Plus、PlanCraft、Workbench）与 **R²=0.513 / 0.524**；v3（2026-04-08）
+把研究面扩到 **260 configurations / six benchmarks**（新增 SWE-bench Verified 与 Terminal-Bench），
+R² 重估为 **0.373 / 0.413**，并把 180/4 降为"带完整成本追踪的子集"。**CP→CQ 轮的更正**：本册
+上一版把「260 配置 / 6 基准」记成二手博客的错数字、把「180 / 4」记成 arXiv 一手读数——方向
+反了：那是读了 v2（或更早）的摘要后当成"当前版本"。处置：本表按版本分行登记（v3 为主，
+v2 的 0.524 单列并标注"v3 已改"），正文同步改写。**教训：版本也是一种口径——"一手"必须
+连版本一起说**，「最新版里没有」既不等于「论文里没有」（45% / 17.2x / 4.4x 在 v3 全文仍在），
+也不等于「旧版里有」。
 
 ## 1c. 编排与协作上限（CP 轮补登记，2026-10-25 一手核验）
 
@@ -99,7 +107,7 @@ POLITO 机构库与 IEEE CSDL 摘要写 "96.88% versus 96.89%"，ResearchR 会�
 | `sun2026swemutation` | 10.20 / 36.15 | "even DeepSeek-V3.1 achieves only 10.20% verification and 36.15% detection rates" | Findings of ACL 2026, pp. 39651–39674（DOI 10.18653/v1/2026.findings-acl.1976） |
 | `sun2026swemutation` | 71.04 / 39.81 | "reducing average detection rates from 71.04% to 39.81% compared to conventional methods" | 同上 |
 | `sun2026swemutation` | 2,636 / 800 | "2,636 mutated variants derived from 800 original instances" | 同上 |
-| `hamidi2026criteria` | ~99% | "traditional test criteria fail to trigger and detect almost all faults examined (approximately miss approximately 99% of them)" | arXiv:2609.09315 |
+| `hamidi2026criteria` | ~99% | "traditional test criteria fail to trigger and detect almost all faults examined (approximately miss approximately 99% of them)" | arXiv:2609.09315v1（2026-09-08） |
 | `hamidi2026criteria` | 6,000+ | "We collect 6,000+ faulty program instances" | 同上 |
 | `liu2026testexplora` | 16.06 | "state-of-the-art models achieve a maximum Fail-to-Pass (F2P) rate of only 16.06%" | ICML 2026, PMLR v306 |
 | `liu2026testexplora` | 2,389 / 482 | "2,389 tasks across 482 repositories" | 同上 |
@@ -112,7 +120,7 @@ POLITO 机构库与 IEEE CSDL 摘要写 "96.88% versus 96.89%"，ResearchR 会�
 | `tufano2026specops` | 2.5 | "a 2.5 percentage point (p = 0.0034) improvement in branch coverage" | 同上 |
 | `tufano2026specops` | 0.0352 / 0.0034 | "a 9.8 percentage points (p = 0.0352) improvement in bug detection rate"；"a 2.5 percentage point (p = 0.0034) improvement in branch coverage" | 同上 |
 | `tufano2026specops` | 90 | "a dataset of 90 historical production bugs from Google's Issue Tracking System" | 同上 |
-| `konstantinou2026coding` | 25 / 14 | "a fault detection rate of 25% for a test-driven workflow versus approximately 14% when tests follow code generation" | arXiv:2607.05139 |
+| `konstantinou2026coding` | 25 / 14 | "a fault detection rate of 25% for a test-driven workflow versus approximately 14% when tests follow code generation" | arXiv:2607.05139v1（2026-07-06） |
 | `konstantinou2026coding` | 13.2 | "Providing both sources reduces fault detection by 13.2% on average relative to the description alone" | 同上 |
 | `konstantinou2026coding` | 15.1 | "providing only the implementation reduces it by 15.1%" | 同上 |
 

@@ -26,7 +26,7 @@ from unittest.mock import patch
 
 import pytest
 
-from src.utils.env_utils import env_flag, env_flag_opt_out, env_float, env_int
+from src.utils.env_utils import env_flag, env_flag_opt_out, env_float, env_int, postprocess_warn_seconds
 
 
 @pytest.mark.unit
@@ -417,3 +417,48 @@ class TestModuleLevelNumericEnvHardening:
         )
         assert proc.returncode == 0, proc.stderr[-800:]
         assert "OK" in proc.stdout
+
+
+@pytest.mark.unit
+class TestPostprocessWarnSeconds:
+    """Q-3 `postprocess_warn_seconds` 的取值口径（CQ 轮补）。
+
+    为什么补在**这个文件**：每周自变异门禁（`.github/workflows/mutation.yml`）的
+    `--test-map` 把 `src/utils/env_utils.py` 映射到 `tests/test_env_utils.py` +
+    `tests/test_self_mutation_targets.py`，自动发现只匹配 `test_<stem>.py`。
+    该函数 2026-10-18 加入时没有任何测试落在这个映射面里——门禁从上线起就红
+    （实测 env_utils 0.7273 / atomic_io 0.8000、合计 0.7467 < 0.85），
+    其中 10 个存活变异体全部落在本函数与它读取的环境变量名上。
+
+    口径（与 `build_postprocess_wall` 的 `warn_s` 一致）：未设置 / 空串 / 全空白 /
+    非数值 / NaN / ±inf / ≤0 → `default`；合法正有限数 → 该值。
+    """
+
+    ENV = "AITESTER_POSTPROCESS_WARN_S"
+
+    def test_unset_returns_builtin_default(self, monkeypatch):
+        monkeypatch.delenv(self.ENV, raising=False)
+        assert postprocess_warn_seconds() == 600.0
+
+    def test_unset_honours_caller_default(self, monkeypatch):
+        """调用方显式给 default 时必须回它——而不是硬编码 600。"""
+        monkeypatch.delenv(self.ENV, raising=False)
+        assert postprocess_warn_seconds(default=42.5) == 42.5
+
+    @pytest.mark.parametrize("raw", ["", "   ", "abc", "NaN", "nan", "inf", "-inf", "0", "-1", "0.0"])
+    def test_bad_values_fall_back_to_caller_default(self, monkeypatch, raw):
+        monkeypatch.setenv(self.ENV, raw)
+        assert postprocess_warn_seconds(default=42.5) == 42.5
+
+    @pytest.mark.parametrize(
+        "raw,expected", [("300", 300.0), ("120.5", 120.5), (" 120 ", 120.0), ("1e3", 1000.0), ("0.5", 0.5)]
+    )
+    def test_valid_positive_values_pass_through(self, monkeypatch, raw, expected):
+        monkeypatch.setenv(self.ENV, raw)
+        assert postprocess_warn_seconds(default=42.5) == expected
+
+    def test_env_name_literal_is_the_contract(self, monkeypatch):
+        """名字本身是契约：常量被改名/改字面量后，带字面量名的环境变量必须仍被读到。"""
+        monkeypatch.delenv(self.ENV, raising=False)
+        monkeypatch.setenv("AITESTER_POSTPROCESS_WARN_S", "777")
+        assert postprocess_warn_seconds() == 777.0

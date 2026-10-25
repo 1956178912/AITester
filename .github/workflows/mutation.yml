@@ -73,10 +73,15 @@ jobs:
           pip install -r requirements.txt
 
       - name: Self-mutation gate (env_utils + atomic_io, threshold 0.85)
-        # 门禁口径（WP-A 实测建议）：选"稳定叶子模块"——env_utils 修正后 0.9467、
-        # atomic_io 0.8095，合并 88/96 = 0.9167；阈值 0.85 留约 6.7pp 余量，低于
-        # 抽样方差上界（每文件 60 变异体、2 worker）。invalid/timeout 不进分母，
-        # 因此慢 runner 不会制造假阴；只有"真正变弱"才会跌破阈值。
+        # 门禁口径（CQ 轮 2026-10-25 复测）：env_utils 50/55 = 0.9091、
+        # atomic_io 18/20 = 0.9000，合并 68/75 = 0.9067；阈值 0.85 留约 5.7pp 余量。
+        # 本作业自 2026-10-19 首次运行起一直红：不是阈值太高，而是
+        # `postprocess_warn_seconds`（2026-10-18 新增）的测试没有落在 --test-map
+        # 的映射面里（自动发现只匹配 test_<stem>.py）。CQ 轮在
+        # tests/test_env_utils.py 与 tests/test_atomic_io.py 补齐口径表后转绿，
+        # 阈值未动。剩余 7 个存活体里 3 个可证明等价（`or "."` 在 abspath 下
+        # 不可达；对 fd 而言 fdopen(fd,"x") 与 "w" 语义相同），不作为上调阈值的依据。
+        # invalid/timeout 不进分母，因此慢 runner 不会制造假阴；只有"真正变弱"才会跌破阈值。
         # --test-map 必须显式接入 tests/test_self_mutation_targets.py（击杀批次）：
         # 自动发现只匹配 test_<stem>.py 命名族，漏接会让门禁回退到击杀前分数。
         run: |

@@ -33,6 +33,8 @@ REGISTER = _REGISTER_FILES[0] if _REGISTER_FILES else REGISTER_DIR / "EXTERNAL_R
 _ROW = re.compile(r"^\|\s*`(?P<key>[A-Za-z0-9_]+)`\s*\|(?P<reading>.+?)\|(?P<quote>.+?)\|(?P<source>.+?)\|\s*$")
 _NUMBER = re.compile(r"\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+\.\d+|\d{2,}")
 _SELF_REFERENCE = re.compile(r"quoted above|as quoted above|as above", re.IGNORECASE)
+_ARXIV = re.compile(r"arXiv:(\d{4}\.\d{4,5})(v\d+)?")
+_PUBLISHER_DOI = re.compile(r"10\.(?!48550/)\d{4,}/")
 
 #: 原文用英文数词写出的读数：只收这一类，且每条必须给理由；表只允许变短。
 SPELLED_OUT_EXEMPTIONS: dict[tuple[str, str], str] = {
@@ -94,6 +96,28 @@ def test_reading_number_appears_in_its_own_quote(row: tuple[int, str, str, str, 
         f"第 {lineno} 行 {key}：读数 {missing} 在本行「原文表述」里找不到——"
         "读数与引文不是同一句话（摘要级引文抄不了全文读数）"
     )
+
+
+def test_arxiv_rows_state_their_version() -> None:
+    """只以 arXiv 标识为出处的行必须写版本（vN），且一个读数只能对应一个版本。
+
+    为什么需要：`kim2026scaling` 曾把 v2 摘要的 R²=0.524 与 v3 的 260 配置写在同一行，
+    出处只列「v1…v3」——按最新版核对找不到该 R²，按旧版核对又对不上配置数。
+    **「一手」必须连版本一起说**；有出版商 DOI（10.1145/… / 10.1109/…）的行按定稿口径，
+    不强制 arXiv 版本。
+    """
+    offenders = []
+    for lineno, key, _reading, _quote, source in _ROWS:
+        if _PUBLISHER_DOI.search(source):
+            continue
+        ids = _ARXIV.findall(source)
+        if not ids:
+            continue
+        versions = {version for _pid, version in ids if version}
+        missing = [pid for pid, version in ids if not version]
+        if missing or len(versions) > 1:
+            offenders.append((lineno, key, missing, sorted(versions)))
+    assert offenders == [], f"arXiv 行必须写且只写一个版本（缺版本 / 多版本）：{offenders}"
 
 
 def test_quotes_are_not_self_referential() -> None:

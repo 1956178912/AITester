@@ -13,6 +13,8 @@ import contextlib
 import json
 import threading
 
+import pytest
+
 from src.utils.atomic_io import atomic_write_json, atomic_write_text
 
 
@@ -65,6 +67,52 @@ class TestAtomicWriteText:
             atomic_write_text(str(target), "new-content")
         assert target.read_text(encoding="utf-8") == "old-content", "替换失败后目标被破坏"
         assert not list(tmp_path.glob(".aitester_tmp_*")), "失败后临时文件未清理"
+
+    def test_relative_path_uses_cwd(self, tmp_path, monkeypatch):
+        """无目录分量时目录回落到 cwd（`os.path.dirname(...) or "."` 分支）。
+
+        CQ 轮补：自变异门禁在 `atomic_io.py:47` 的 `"."` 常量上留了一个存活体——
+        既有用例全部传绝对路径（tmp_path），`or "."` 从未被走到。
+        """
+        monkeypatch.chdir(tmp_path)
+        atomic_write_text("relative.txt", "rel-content")
+        assert (tmp_path / "relative.txt").read_text(encoding="utf-8") == "rel-content"
+
+    def test_fd_zero_is_closed_when_fdopen_fails(self, monkeypatch):
+        """fd == 0 也必须被 finally 关闭（`if fd >= 0` 的下边界）。
+
+        fd 0 是合法描述符（stdin 被关掉时 mkstemp 可能返回它）；把边界写成
+        `> 0` 会在该情形下泄漏描述符。用桩替掉 mkstemp/fdopen/close，
+        只验判定本身。
+        """
+        import src.utils.atomic_io as mod
+
+        closed: list[int] = []
+        monkeypatch.setattr(mod.tempfile, "mkstemp", lambda **_kw: (0, "/nonexistent/aitester.tmp"))
+
+        def _fdopen_boom(*_a, **_kw):
+            raise RuntimeError("fdopen failed")
+
+        monkeypatch.setattr(mod.os, "fdopen", _fdopen_boom)
+        monkeypatch.setattr(mod.os, "close", lambda fd: closed.append(fd))
+        with pytest.raises(RuntimeError):
+            atomic_write_text("/nonexistent/out.txt", "x")
+        assert closed == [0], "fd == 0 未被关闭（边界写成 > 0 即泄漏）"
+
+    def test_mkstemp_failure_never_closes_negative_fd(self, monkeypatch):
+        """mkstemp 失败时 fd 仍是哨兵 -1：不得调用 os.close(-1)。"""
+        import src.utils.atomic_io as mod
+
+        closed: list[int] = []
+
+        def _mkstemp_boom(**_kw):
+            raise OSError("no space left")
+
+        monkeypatch.setattr(mod.tempfile, "mkstemp", _mkstemp_boom)
+        monkeypatch.setattr(mod.os, "close", lambda fd: closed.append(fd))
+        with pytest.raises(OSError):
+            atomic_write_text("/nonexistent/out.txt", "x")
+        assert closed == [], f"哨兵 fd 被当成真描述符关闭：{closed}"
 
 
 class TestAtomicWriteJson:
