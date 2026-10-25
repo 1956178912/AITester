@@ -240,3 +240,60 @@ v2 的 0.524 单列并标注"v3 已改"），正文同步改写。**教训：版
 `arXiv:2610.30495` ARATest、`arXiv:2610.06366` VERA、`arXiv:2610.14443` LEST、
 `arXiv:2610.30499` ARC-AGI-3、`arXiv:2610.14808` Testuary、`arXiv:2610.29549` 快照测试、
 `arXiv:2610.19447` BenchChecker。
+
+## 9. 2026 全年回溯对账新增十篇（CW 轮，2026-10-26 一手核验）
+
+> **核验方式**：`export.arxiv.org/api/query` 的 `summary` 字段逐字取回（作者名取自 Atom
+> `author/name`，日期取自 `published`），每段引文先断言存在于官方 summary 再写入本表。
+>
+> **为什么是回溯**：前两轮检索只盯「最新窗口」（10 月下旬），因而**漏掉了 2026 年 9/10 月
+> 已发表、且直接占位本稿核心论断**的工作。本轮按「扫 2026-01-01～10-26 全部 cs.SE 共
+> 6,500 条，13,822 条候选池去重后按 11 维加权过滤得 981 条高相关候选，逐篇判读」做完全年回溯，
+> 补回下表十篇；另有**安全域 silent failures**（arXiv:2610.06163v1）与**测试生成综述**
+> （arXiv:2610.05001v1）两篇已在 §8 登记，此处不重复，只在 §9.1 引用其 novelty 含义。
+
+| 键 | 读数 | 原文表述 | 出处 |
+|---|---|---|---|
+| `tan2026beyondfailtopass` | 69.4 / 78.9 / 9.6 / 7.9 | "Experiments show that CoHarden reaches 69.4% Resolved and 78.9% F->P on SWE-bench Verified, outperforming the strongest fix-only and cogeneration baselines by +9.6 and +7.9 percentage points in Resolved, respectively We show that F->P alone is insufficient when the goal of a BRT is to improve downstream repair some F->P BRTs are lax, reproducing the observed symptom yet still admitting plausible-but-incorrect patches separating F->P BRTs into rigorous and lax ones, and show empirically that only the former consistently improve repair success the in-trajectory fail-to-pass (F->P) check" | arXiv:2607.19843v1（2026-07-22；Tan / Yang / Yang / Yao / Kang / Wang / Zhao / Zhang / Ma / Lin / Rajmohan / Zhang；cs.SE；无出版商 DOI） |
+| `liang2026tddsurvey` | 87 / 83 | "The review integrates 87 research and supporting records, with method- or protocol-level extraction for 83 records aggregate improvements can also conceal different outcomes across models, tasks, and denominators" | arXiv:2609.12012v1（2026-09-10；Liang / Gan / Ying / Wei / Cui / Ni；cs.SE；无出版商 DOI） |
+| `liang2026oracleaudit` | 142 / 114 / 138 / 27.79 / 50.12 / 9.46-14.85 / 6.01-18.83 | "We audit this failure mode in feedback-driven test generation using 142 development tasks, 114 locked external tasks, and 138 held-out tasks generated outputs match the panel on only 27.79% and 50.12% of cases A single-reference oracle inflates the measured gain from evolution by 9.46-14.85 percentage points after auditing, equal-budget independent resampling outperforms mutation-based evolution by 6.01-18.83 points" | arXiv:2608.19626v1（2026-08-20；Liang / Gan / Ying / Wei / Cui / Ni；cs.SE；无出版商 DOI） |
+| `yu2026sweabs` | 78.80 / 50.2 / 25.1x / 19.71 / 62.20 | "the top system achieving 78.80% On SWE-Bench Verified (500 instances), SWE-ABS strengthens 50.2% of instances, a 25.1x improvement over prior work, and rejects 19.71% of previously passing patches the top agent's score decreases from 78.80% to 62.20%" | arXiv:2603.00520v1（2026-02-28；Yu / Cao / Zhang / Lin / Xu / Zhong / Xu / Wang / Cao / Cheung / He / Briand；cs.SE；无出版商 DOI） |
+| `paul2026behaviouralgaps` | 8,922 / 20,729 / 93.1 / 17.5 / 20.6 / 27.1 | "across ten popular open-source Java libraries comprising 8,922 methods, extracting 20,729 behaviours with 93.1% precision Our empirical analysis conservatively estimates that 17.5% of detected expected behaviours remain entirely untested they similarly fail to validate at least 20.6% / 27.1% of detected expected behaviours" | arXiv:2606.10417v1（2026-06-09；Paul / Holmes；cs.SE；无出版商 DOI） |
+| `alahmad2026classleveltests` | 无数字 | "high structural coverage does not establish that those tests execute reliably or detect faults Human and LLM suites are evaluated on unequal executable subsets, so their relative mutation scores do not establish superiority Structural coverage is consistently near its ceiling and offers little discrimination among configurations" | arXiv:2609.24341v1（2026-09-21；Al-Ahmad / Harshvardhan / El-Fakih / AlSobeh；cs.SE；无出版商 DOI） |
+| `liang2026sectdd` | 2,705 / 31 / 16 / 19.3 / 80 / 83 / 453 | "Across 2,705 trajectories, 31 task instances, three secure-code benchmarks, 16 CWE categories, and two model families showing all visible tests upfront increases hidden functional-and-security joint success by 19.3 percentage points on average structured feedback repairs 80 initially unsuccessful candidates with no joint regressions; fixed raw feedback repairs 83 but causes three regressions six wins, six losses, and 453 ties" | arXiv:2608.09740v2（2026-08-10 提交 / 2026-08-11 v2；Liang / Gan / Ying / Wei / Cui / Ni；cs.SE；无出版商 DOI） |
+| `smyth2026overclaim` | 67.9 / 80.4 / 59-96 / 1.8 | "agents fail to read every file they were asked to review in 67.9% of runs among these incomplete runs, agents are misleading 80.4% of the time (59-96% per model) agents that falsely claim a complete review miss planted defects at about 1.8 times the rate of agents that read every file" | arXiv:2609.20812v3（2026-09-17 提交 / 2026-09-22 v3；Smyth / Mantilla-Ramos / Notsawo / Helbling / Tosato / Merzouk / Dziri / Gidel / Tosato；cs.SE；无出版商 DOI） |
+| `otterson2026instrumentautopsy` | 105 / 9.5e-66 / 78 / 0.783 / 0.592 / 0.935 | "the loop killed 105 mutants that one-shot generation missed and lost none an earlier analysis reported a cross-lineage effect at p = 9.5e-66 that was an instrument artifact, an output cap silently truncating the verbose model killed 78% of the survivors the frozen initial suite left standing (mean incremental kill rate 0.783, 95% cluster-bootstrap interval [0.592, 0.935])" | arXiv:2607.23002v1（2026-07-25；Otterson；cs.SE；abs 页 Comments：26 pages, two pre-registered experiments；无出版商 DOI） |
+| `xu2026discriminatingfixtures` | 无数字 | "the evidence offered for any particular suite is almost always a single observation: it passes an implementation believed correct and fails one believed broken neither is visible from a pass/fail report we enumerate seven discriminating dimensions of the input space, register in advance which are uncovered and which survivors they should explain" | arXiv:2610.02928v1（2026-10-02；Xu / Tao；cs.SE；abs 页 Comments：10 pages, 1 figure, 2 tables. NeurIPS 2026 Workshop: Who Verifies the Agents?；无出版商 DOI） |
+
+
+### 9.1 对本稿 novelty 的影响（必读）
+
+| 本稿原口径 | 已被占位者 | 时间 |
+|---|---|---|
+| F→P 判定不充分 | arXiv:2607.19843（rigorous/lax 分解 + test–fix error coupling） | 2026-07-22 |
+| 「测试通过 ≠ 行为等价」是领域共识 | arXiv:2609.12012（scoping survey 结论段明写，且点名 denominators） | 2026-09-10 |
+| 独立裁决 / 参考无关验证 | arXiv:2608.19626（audit-and-placebo）+ arXiv:2607.23002（机械裁决 + 装置尸检）+ arXiv:2610.02928（登记式判别维度） | 2026-07～10 |
+| 装置效度审计 + 预注册 | arXiv:2607.23002 | 2026-07-25 |
+
+**本稿尚可保留的三块增量**（上述文献均未报告）：
+
+1. **false-fix 的口径分解**——条件口径与边际口径**并列**报告（分母分解）；被占位者报告的是
+   单一口径下的比例，未做分母分解。
+2. **声明率本身被协议扰动**——把装置伪影从「某个具体实现的伪影」上升为「口径层面的量」：
+   同一批数据在两个声明率下给出两个不同的假修复率，读者据此无法脱离声明率引用该数。
+3. **测量效度 × 声明率的联立**——效度批评（覆盖率/变异分数不足以代表检出能力）与
+   false-fix 口径在**同一份数据**上联立，而不是两篇论文各说一半。
+
+**本轮已据此改正文与投稿信**：正文 Related Work 补三段（八篇新引），Introduction 的贡献
+引导句改为「Our contribution is not a new observation … It is a decomposition at the level of
+denominators」，投稿信点名四篇被占位文献并把增量限定为「上述工作都没有报告的那一项」。
+
+### 9.2 覆盖缺口（如实说明，不让「没搜到」冒充「不存在」）
+
+DBLP / ACM DL / IEEE 官方页在本环境被代理拦截（DBLP API 四次重试均返回 HTML 而非 JSON），
+非 arXiv 渠道的 2026 年论文只能通过 arXiv comment 字段间接覆盖 ⇒ **可能存在仅在 ACM DL /
+IEEE Xplore 上线、未同步 arXiv 的 9/10 月论文未被本轮覆盖**。
+
+**备选索引（已核验，未列入正文，避免下轮重复检索）**：`arXiv:2608.17214`、`2609.28896`、
+`2608.17177`、`2606.08588`、`2604.21579`、`2608.13404`、`2602.03585`、`2605.02096`、
+`2610.03969`、`2609.34752`、`2608.23341`、`2603.07520`。
