@@ -92,6 +92,9 @@ flag-effect:  ## 门禁开关有效性对账（CH 轮，CI 阻断项：命令行
 	$(PY) scripts/gates/check_flag_effect.py
 
 self-mutation:  ## 自身测试套件变异测试（零 LLM；临时副本内变异；默认 3 个核心模块等距抽样 120/文件）
+
+fix-coverage:  ## 修复覆盖率缺口审计（找出「修复新增但从未被测试执行」的代码行；零 LLM；基线默认 auto = 最近一次改动 src/ 的提交）
+	$(PY) scripts/tools/audit_fix_coverage.py
 	$(PY) scripts/tools/self_mutation.py
 
 self-mutation-ci:  ## 自身变异测试 CI 门禁口径（env_utils+atomic_io，阈值 0.85，约 2-4 分钟）
@@ -190,6 +193,9 @@ e2e-probe-llm:  ## 全功能端到端探针（含真实 LLM 探针；消耗配�
 
 paper-audit:  ## 论文草稿数字-SRC 一致性审计（Q11 独立评审；本地工具，paper/ 不入库，缺失时跳过）
 	$(PY) scripts/tools/audit_paper_numbers.py --md docs/study/PAPER_CONSISTENCY_AUDIT_2026-10-25.md --strict
+
+paper-citation-keys:  ## 论文外部读数引用键快照：--check 只校验（不一致 rc=1）；不带 --check 则覆盖写入
+	$(PY) scripts/tools/export_paper_citation_keys.py --check
 
 build-check:  ## 发行构建链路冒烟（AS 批 2026-10-07：build wheel → 全新 venv 安装 → CLI/import 冒烟；本地验证用，未接 CI——发布批次 AL9 再定）
 	$(PY) -m build --wheel

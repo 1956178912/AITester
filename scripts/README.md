@@ -65,6 +65,8 @@ CI / pre-commit 阻断项，`make gates` 跑其中大部分：
 | `verify_swe_bench_export.py` | 源码导出结果校验 |
 | `verify_synthetic_templates.py` | 合成模板三重不变量自验证 |
 | `audit_paper_numbers.py` | 论文数字 `// SRC:` 与工件对账（`make paper-audit`；paper/ 为本地件） |
+| `audit_fix_coverage.py` | 修复覆盖率缺口审计：找出「修复新增但从未被测试执行」的代码行（`make fix-coverage`；基线默认 auto） |
+| `export_paper_citation_keys.py` | 论文外部读数引用键快照生成 / 校验（`make paper-citation-keys`；paper/ 为本地件，缺失时明确失败） |
 | `convert_ult_manifest.py` | ULT 官方 manifest 转换 / 适配 |
 | `detect_orphan_procs.py` | 孤儿嵌套测试进程巡检（`make proc-hygiene`；preflight 阻断项） |
 | `e2e_probe.py` | 全功能端到端探针运行器（`make e2e-probe` / `make e2e-probe-llm`） |

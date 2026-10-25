@@ -172,3 +172,35 @@ v2 的 0.524 单列并标注"v3 已改"），正文同步改写。**教训：版
 「agent 生成的测试杀死 mutant 的比例」；本稿的 false-fix 边际率是「声明修复中实际未修的比例」。
 两者数值区间接近但**指标不同、方向相反**，正文不得把两者并列成同一件事。
 `charoosaei2026risks` 的 8%-17% 是「生成的测试中固化缺陷的比例」，也不是 false-fix 率。
+
+## 7. 2026-10-08～10-22 新出（CS 轮第二次前沿对账，2026-10-26 一手核验）
+
+> **核验方式**：`export.arxiv.org/api/query` 的 `summary` 字段 + arXiv abs 页逐字；
+> 作者名取自 Atom `author/name`，日期取自 `published`。**11 月窗口为空集**——arXiv API
+> 查 `id:2611*` 返回 `totalResults=0`（feed updated 2026-10-25T16:22:36Z），故本轮
+> 「10 月中下旬至 11 月」在 11 月侧无文献可查。五篇均无出版商 DOI，逐条写明版本。
+
+| 键 | 读数 | 原文表述 | 出处 |
+|---|---|---|---|
+| `lu2026swepatchtest` | 619 / 82,579 / 9.21 / 59.29 | "a test-generation benchmark with 619 tasks from SWE-bench Pro, SWE-bench Multilingual, and DeepSWE and 82,579 candidate patches collected from coding-agent trajectories"；"the best-performing configuration achieves only 9.21% JVR despite reproducing the reference transition on 59.29% of tasks" | arXiv:2610.18004v1（2026-10-13；Lu / Wang / Li / Tian / Chen / He / Chen；cs.SE；无出版商 DOI） |
+| `li2026testprism` | 300 / 3000 / 28.00 / 59.67 / 8.67 to 9.00 | "comprising 300 test tasks from 17 sources and 3000 candidate implementations, evenly split between valid and invalid solutions"；"Joint Success Function reaches only 28.00%, whereas single reference success reaches 59.67%"；"TestHelix improves Joint Success Function by 8.67 to 9.00 percentage points" | arXiv:2610.12289v1（2026-10-08；Li / Hu / Huang / Jiang / Luo / Gao / Tan / Wang / Liu；cs.SE；无出版商 DOI） |
+| `tuzikov2026robobugbench` | 33 / 24.2%-36.4% / 66.7 / 22.2 / 0.0027 / 11/11 / 4 | "a benchmark of 33 real, execution-validated defects in a pinned ROS 2 navigation stack"；"Three frontier models, each given 1 attempt per instance, repair 24.2%-36.4%"；"at 66.7% on instances graded by process survival against 22.2% on those graded by what the robot did (instance-level p = 0.0027)"；"counterfeit patches which suppress a failure without repairing the defect are accepted by the shipped rule 11/11, while a distributional rule over the same data rejects 4 at no cost in false rejects" | arXiv:2610.16369v1（2026-10-12；Tuzikov；cs.RO；已接收为 NeurIPS 2026 Verify-Agents workshop 非存档论文；无出版商 DOI） |
+| `chen2026oraclefailures` | 4,194 / 4,320 / 2,883 / 94.3 / 65.5 / 24 to 34 / 57 / 54 / 3,240 | "recorded labels report 4,194 database passes over 4,320 episodes, replay gives 2,883, and success falls from 94.3% to 65.5%"；"it removes 24 to 34 points from each agent and changes which agent this matrix measures as strongest"；"on the 57 separable variant-target combinations it detects 54"；"a 3,240-episode ablation" | arXiv:2610.16067v2（2026-10-12 提交 / 2026-10-21 v2；Chen；cs.SE; cs.AI；abs 页 Comments：Submitted to Empirical Software Engineering；无出版商 DOI） |
+| `ding2026specoracle` | 89.2 / 92.9 / 98 / 35 / 25 / 80.6 / 48.4 / 126 of 128 | "build a static audit for five languages that classifies every name-, path- and literal-level dependency of every scored test (held-out precision 89.2%, recall 92.9%)"；"On SWE-Milestone (98 graded milestones, 35 published runs), 25 milestones contain a test that depends on an unstated, non-inferable name or path"；"Build units with such a dependency fail in 80.6% of runs, against 48.4% for comparable units without one"；"withholding a single hidden name from the reference stops its unit's tests from compiling in 126 of 128 cases" | arXiv:2610.30635v1（2026-10-22；Ding；cs.CL；无出版商 DOI） |
+
+**口径提醒（三处，引用这些行时必带）**：
+
+1. `lu2026swepatchtest` 的 **9.21% vs 59.29%** 与本稿 false-fix 边际率 **59.58%** 数字相近但
+   **方向相反、指标不同**：前者是「能复现参考补丁转换、但三重联合校验（JVR）不通过」的任务比例，
+   后者是「声明修复中实际未修的比例」。**不得并列成同一件事**。
+2. `chen2026oraclefailures` 与本稿**同投 EMSE**（abs 页 Comments 自陈 Submitted to Empirical
+   Software Engineering），且其结论（评测装置本身是需要被审计的软件）**与本稿的方法学主张同向**
+   ——投稿差异化须正面处理，不可回避。
+3. `tuzikov2026robobugbench` 的 counterfeit patch（抑制症状而未修复缺陷）是**本稿 false-fix
+   现象的机器人域外部对应物**，其「11/11 被现有规则接受」与「判别力受观测通道约束（observability
+   bound）」两条，对本稿「检出优先协议的能力上限」构成**外部限定证据**（部分反驳「协议设计得当即可检出」）。
+
+**未列入正文的备选（已核验，仅登记索引）**：`arXiv:2610.10619` TestJack（34.4% 被判正确的试验违反任务要求）、
+`arXiv:2610.10150`（PoC 通过 ≠ 开发者测试通过）、`arXiv:2610.29143` VeeReview（EMSE 在审 + 负结果）、
+`arXiv:2610.21570`（coverage 只证明到达状态）、`arXiv:2610.03080` MintEval、`arXiv:2610.27272`
+（450 个注入缺陷只检出 47.6%）。
