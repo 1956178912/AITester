@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -30,6 +31,32 @@ assert _spec and _spec.loader
 audit_mod = importlib.util.module_from_spec(_spec)
 sys.modules["_audit_paper_numbers"] = audit_mod
 _spec.loader.exec_module(audit_mod)
+
+
+def _write_build(base_dir: Path, stem: str, pages: int, inputs: tuple[str, ...] = ()) -> int:
+    """写一份**PDF 口径**的成功构建产物（log + pdf），返回 PDF 字节数。
+
+    为什么夹具必须用 PDF 口径：CX 轮实测发现，原判据读的是 tectonic 的 `.xdv`
+    日志，而那一行「Output written on … (N pages」在 tectonic 日志里**根本不存在**
+    ⇒ 判据永远走「跳过」分支 ⇒ 一次也没红过；场上的日志甚至是一份**失败构建**
+    的残留。旧夹具把这条坏口径固化了下来，等于把缺陷锁进了测试。
+    """
+    payload = b"%PDF-1.7\n" + b"x" * (100 + pages)
+    nbytes = len(payload)
+    (base_dir / f"{stem}.pdf").write_bytes(payload)
+    log = base_dir / f"{stem}.log"
+    log.write_text(
+        f"Output written on {stem}.pdf ({pages} pages, {nbytes} bytes).\n",
+        encoding="utf-8",
+    )
+    newest = log.stat().st_mtime
+    for name in inputs:
+        src = base_dir / name
+        if src.exists():
+            newest = max(newest, src.stat().st_mtime)
+    os.utime(log, (newest + 1, newest + 1))
+    return nbytes
+
 
 _DRAFT = """// TODO(submit): author block
 
@@ -345,19 +372,31 @@ class TestSubmissionPackageCoherence:
     """
 
     @staticmethod
-    def _make_pkg(tmp_path, pages=55, tables=19, todos=18, draft_tables=19, cover_todos=5, title_todos=13):
+    def _make_pkg(
+        tmp_path,
+        pages=62,
+        tables=19,
+        todos=18,
+        draft_tables=19,
+        cover_todos=5,
+        title_todos=13,
+        cover_pages=3,
+        title_doc_pages=2,
+    ):
         paper = tmp_path / "paper"
         (paper / "tex").mkdir(parents=True)
         body = "\n".join(r"\begin{table}" for _ in range(draft_tables))
         (paper / "tex" / "manuscript.tex").write_text(body, encoding="utf-8")
-        (paper / "tex" / "manuscript.log").write_text(
-            f"Output written on manuscript.xdv ({pages} pages, 200 bytes).\n", encoding="utf-8"
-        )
+        _write_build(paper / "tex", "manuscript", pages, inputs=("manuscript.tex",))
         (paper / "cover_letter.tex").write_text("TODO x\n" * cover_todos, encoding="utf-8")
         (paper / "title_page.tex").write_text("TODO y\n" * title_todos, encoding="utf-8")
+        _write_build(paper, "cover_letter", cover_pages, inputs=("cover_letter.tex",))
+        _write_build(paper, "title_page", title_doc_pages, inputs=("title_page.tex",))
         (paper / "SUBMISSION.md").write_text(
             "| `tex/manuscript.tex` | `tex/manuscript.pdf` | "
             f"{pages}（含附录） |\n"
+            f"| `cover_letter.tex` | `cover_letter.pdf` | {cover_pages} |\n"
+            f"| `title_page.tex` | `title_page.pdf` | {title_doc_pages} |\n"
             f"| 表格 | 稿件 {tables} 张表全部编号 |\n"
             f"- 共 {todos} 处待填标记\n",
             encoding="utf-8",
@@ -476,6 +515,26 @@ class TestSubmissionPackageCoherence:
         )
         assert any("submission_abstract_words" in f for f in result["failures"]), result["failures"]
 
+    def test_bib_entry_count_claim_must_match_actual(self, tmp_path):
+        """`refs.bib` N 条 的声明必须等于实测条目数（CX 轮新增）。
+
+        动机：CW 轮给 refs.bib 加了十条后，投稿包对照表仍写「35 条」；CX 轮手改时
+        先写成 46，而实测是 56 ⇒ **手写数字本身就是失实来源**，必须由机器对账。
+        """
+        paper = self._make_pkg(tmp_path)
+        (paper / "refs.bib").write_text(
+            "@misc{a2026,\n  title = {A}\n}\n@misc{b2026,\n  title = {B}\n}\n", encoding="utf-8"
+        )
+        (paper / "tex" / "refs.bib").write_text(
+            "@misc{a2026,\n  title = {A}\n}\n@misc{b2026,\n  title = {B}\n}\n", encoding="utf-8"
+        )
+        (paper / "SUBMISSION.md").write_text("`refs.bib` 5 条：条目说明\n", encoding="utf-8")
+        result = audit_mod.audit_submission_package(paper, "\begin{abstract}word\\end{abstract}")
+        assert any("bib_entries" in f for f in result["failures"]), result["failures"]
+        (paper / "SUBMISSION.md").write_text("`refs.bib` 2 条：条目说明\n", encoding="utf-8")
+        result = audit_mod.audit_submission_package(paper, "\begin{abstract}word\\end{abstract}")
+        assert not [f for f in result["failures"] if "bib_entries" in f], result["failures"]
+
     def test_latex_citation_key_missing_from_bib_fails(self, tmp_path):
         r"""LaTeX 稿件的 `\citet{key}` 若不在 refs.bib ⇒ 必须报「引用无效」。
 
@@ -579,3 +638,108 @@ class TestSubmissionPackageCoherence:
             paper, (paper / "tex" / "manuscript.tex").read_text(encoding="utf-8")
         )
         assert any("多个不同值" in f for f in result["failures"]), result["failures"]
+
+
+class TestSubmissionPageCountSource:
+    """CX 轮（2026-10-26）：页数声明的**测量源**判据。
+
+    CS 轮定的口径是「从 `tex/manuscript.log` 取 `Output written on … (N pages`；
+    取不到 ⇒ 披露跳过，不判红」。CX 轮实测这道判据**一次也没红过**：
+      - tectonic 的日志里根本没有那一行（它写的是 `.xdv`）⇒ 每次都走跳过分支；
+      - 场上的日志恰是**失败构建**的残留（`Fatal error occurred, no output PDF
+        file produced!`）⇒ 一个失败产物被当成「测量源在场」，把「缺测量」伪装
+        成「无差异」；
+      - 于是 SUBMISSION.md 里「55 页」从写下起**没有任何机制在核**，而真 LaTeX
+        编译的实测值是 **62 页**。
+    """
+
+    @staticmethod
+    def _audit(paper):
+        return audit_mod.audit_submission_package(paper, (paper / "tex" / "manuscript.tex").read_text(encoding="utf-8"))
+
+    def test_pdf_page_count_is_measured_from_build(self, tmp_path):
+        """PDF 口径的构建日志 ⇒ 页数被实测并与声明对上。"""
+        paper = TestSubmissionPackageCoherence._make_pkg(tmp_path, pages=62)
+        result = self._audit(paper)
+        assert result["failures"] == [], result["failures"]
+        assert result["claims"]["pages"] == {"claimed": 62, "measured": 62}
+
+    def test_xdv_output_is_rejected(self, tmp_path):
+        """日志写的是 `.xdv`（DVI 口径）⇒ 红：DVI 页数不是投稿 PDF 页数。"""
+        paper = TestSubmissionPackageCoherence._make_pkg(tmp_path)
+        (paper / "tex" / "manuscript.log").write_text(
+            "Output written on manuscript.xdv (55 pages, 200 bytes).\n", encoding="utf-8"
+        )
+        result = self._audit(paper)
+        assert any("DVI/xdv 口径" in f for f in result["failures"]), result["failures"]
+
+    def test_failed_build_log_is_rejected(self, tmp_path):
+        """构建日志是失败构建 ⇒ 红（失败产物不得充当测量源）。"""
+        paper = TestSubmissionPackageCoherence._make_pkg(tmp_path)
+        (paper / "tex" / "manuscript.log").write_text(
+            "! Emergency stop.\n!  ==> Fatal error occurred, no output PDF file produced!\n",
+            encoding="utf-8",
+        )
+        result = self._audit(paper)
+        assert any("失败构建" in f for f in result["failures"]), result["failures"]
+
+    def test_log_without_output_line_is_rejected(self, tmp_path):
+        """日志在场但没有 pdftex 的收尾行 ⇒ 红（不得静默跳过）。"""
+        paper = TestSubmissionPackageCoherence._make_pkg(tmp_path)
+        (paper / "tex" / "manuscript.log").write_text("nothing useful here\n", encoding="utf-8")
+        result = self._audit(paper)
+        assert any("页数声明无来源" in f for f in result["failures"]), result["failures"]
+
+    def test_log_and_pdf_must_be_the_same_build(self, tmp_path):
+        """日志字节数 ≠ PDF 实际字节数 ⇒ 红（日志与 PDF 不是同一次产物）。"""
+        paper = TestSubmissionPackageCoherence._make_pkg(tmp_path)
+        (paper / "tex" / "manuscript.pdf").write_bytes(b"%PDF-1.7\nsomething else")
+        result = self._audit(paper)
+        assert any("不是同一次构建" in f for f in result["failures"]), result["failures"]
+
+    def test_stale_build_is_rejected(self, tmp_path):
+        """输入源比构建日志新 ⇒ 红（PDF 对应旧稿，页数声明是旧的）。"""
+        paper = TestSubmissionPackageCoherence._make_pkg(tmp_path)
+        tex = paper / "tex" / "manuscript.tex"
+        future = tex.stat().st_mtime + 3600
+        os.utime(tex, (future, future))
+        result = self._audit(paper)
+        assert any("过期" in f for f in result["failures"]), result["failures"]
+
+    def test_missing_build_is_disclosed_not_failed(self, tmp_path):
+        """没有构建产物 ⇒ 只披露，不判红（无物可核 ≠ 声明失实）。"""
+        paper = TestSubmissionPackageCoherence._make_pkg(tmp_path)
+        for name in (
+            "tex/manuscript.log",
+            "tex/manuscript.pdf",
+            "cover_letter.log",
+            "cover_letter.pdf",
+            "title_page.log",
+            "title_page.pdf",
+        ):
+            (paper / name).unlink()
+        result = self._audit(paper)
+        assert result["failures"] == [], result["failures"]
+        assert any("无物可核" in n for n in result["notes"]), result["notes"]
+
+    def test_cover_letter_pages_claim_must_match(self, tmp_path):
+        """投稿信页数声明与实测不符 ⇒ 红（CW 轮加段后已从 2 页变 3 页）。"""
+        paper = TestSubmissionPackageCoherence._make_pkg(tmp_path, cover_pages=3)
+        text = (paper / "SUBMISSION.md").read_text(encoding="utf-8")
+        (paper / "SUBMISSION.md").write_text(
+            text.replace("| `cover_letter.pdf` | 3 |", "| `cover_letter.pdf` | 2 |"),
+            encoding="utf-8",
+        )
+        result = self._audit(paper)
+        assert any("cover_letter_pages" in f for f in result["failures"]), result["failures"]
+
+    def test_title_page_doc_pages_claim_must_match(self, tmp_path):
+        """title page 自身页数声明与实测不符 ⇒ 红。"""
+        paper = TestSubmissionPackageCoherence._make_pkg(tmp_path, title_doc_pages=2)
+        text = (paper / "SUBMISSION.md").read_text(encoding="utf-8")
+        (paper / "SUBMISSION.md").write_text(
+            text.replace("| `title_page.pdf` | 2 |", "| `title_page.pdf` | 5 |"),
+            encoding="utf-8",
+        )
+        result = self._audit(paper)
+        assert any("title_page_doc_pages" in f for f in result["failures"]), result["failures"]

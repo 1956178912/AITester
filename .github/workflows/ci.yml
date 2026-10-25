@@ -374,6 +374,16 @@ jobs:
         if: matrix.python-version == '3.14'
         run: python scripts/gates/check_flag_effect.py
 
+      - name: Check repo hygiene (CX 仓库卫生守卫)
+        # CX（2026-10-26）：被 git 跟踪的路径里不得出现缓存/临时形态。改前实测：CW 轮的一次 pytest
+        # 运行把 --basetemp 落在仓库内的 .tmp_pytest/，而 .gitignore 只登记了 .pytest_tmp/ 与
+        # .pytest_tmp*/（模式覆盖不到它）⇒ 12 个 pytest 临时文件（含 .lock 与 pytest-current
+        # 符号链接）被提交进仓库并随 v1.0.0 发布。符号链接跨平台检出会炸，且每次跑测试都在变。
+        # 本门按路径分量判定（不按后缀）：experiments/results/ 下的 .log 是故意入库的证据工件，
+        # docs/tmp_trace_notes.md 这类普通文件也不该被误伤。
+        if: matrix.python-version == '3.14'
+        run: python scripts/gates/check_repo_hygiene.py
+
       - name: Check env budget (X3 开关预算守卫)
         # X3（2026-10-05 审查 P0-5）：环境变量开关冻结棘轮——产品开关面
         #（src/ + config.py）新环境变量须先本地运行 check_env_budget.py

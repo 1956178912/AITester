@@ -9,7 +9,7 @@
 
 > 命名不是判定依据：`tools/check_quota.py` 虽以 `check_` 开头，但它是对 LLM 端点发探测请求的运维工具，不参与门禁；`tools/generate_static_report.py` 虽被 CI 调用，但产物是报告而非判定，故归 `tools/`。
 
-## gates/（27 个）
+## gates/（34 个）
 
 CI / pre-commit 阻断项，`make gates` 跑其中大部分：
 
@@ -17,6 +17,7 @@ CI / pre-commit 阻断项，`make gates` 跑其中大部分：
 | --- | --- |
 | `check_artifact_doc_consistency.py` | 报告→工件数值对账（mutation×detection 表 / T-10 匹配子集声明 / 登记册覆盖率） |
 | `check_artifacts_tracked.py` | 报告引用的证据工件必须已 git 入库 |
+| `check_ast_parse_guards.py` | ast.parse 守卫捕获面棘轮（新增单腿守卫 = 抛穿 ValueError 族） |
 | `check_baseline.py` | `BASELINE.yaml` 健全性 |
 | `check_baseline_numbers.py` | 核心文档不得内嵌过期基线数字 |
 | `check_bilingual_docs.py` | 中英文档配对 / 日期 / 章节对齐 |
@@ -24,10 +25,13 @@ CI / pre-commit 阻断项，`make gates` 跑其中大部分：
 | `check_citations.py` | 文档引用真实性 |
 | `check_credential_scrub.py` | 静态枚举与动态接口漂移 |
 | `check_dependency_exemptions.py` | pip-audit 漏洞豁免登记 |
+| `check_doc_commands.py` | 文档引用的 `scripts/….py` 路径与 `make <target>` 目标必须真实存在 |
 | `check_doc_links.py` | 文档相对链接 / 行锚 / 标题锚点静态完整性 |
 | `check_docs_history_drift.py` | 核心文档与 `docs/history/` 归档口径漂移 |
 | `check_env_budget.py` | 环境变量开关预算棘轮 |
 | `check_env_snapshot_keys.py` | 环境开关 provenance 快照完备性 |
+| `check_flag_effect.py` | 门禁开关有效性对账（dest 活性：传了却不改变行为的死开关判红） |
+| `check_invocation_caliber.py` | 门禁调用口径对账（同一道门在 `make` 链与各 workflow 是否以同一口径在跑） |
 | `check_json_contract_sites.py` | JSON 契约调用点计数一致性 |
 | `check_json_strict.py` | 工件严格 JSON（RFC 8259，拒绝裸 `NaN`/`Infinity`）+ 源码写入点 `allow_nan=False` |
 | `check_llm_configs_schema.py` | `llm_configs.json` schema |
@@ -35,7 +39,10 @@ CI / pre-commit 阻断项，`make gates` 跑其中大部分：
 | `check_model_fingerprint.py` | 模型版本指纹锁定 |
 | `check_perf_regression.py` | 性能基线回归 |
 | `check_prompt_artifacts.py` | Instruction artifact 清单哈希锁 |
+| `check_registration_consistency.py` | 登记册 §1「当前口径」数字 ↔ `BASELINE.yaml` 双向对账 |
+| `check_repo_hygiene.py` | 仓库卫生：临时/缓存产物不得被 git 跟踪 + 本清单与盘面一致 |
 | `check_state_contract.py` | 未声明 state 键读写 |
+| `check_status_persistence.py` | 状态通道落盘可达性棘轮（声明了却不落盘 = 归档里 0 出现） |
 | `check_swe_bench_pro_ready.py` | SWE-bench Pro 数据前置校验 |
 | `check_tool_versions.py` | 工具版本三方一致（CI / pre-commit / lock） |
 | `check_zero_assert_tests.py` | 零断言测试 / 裸异常捕获 |

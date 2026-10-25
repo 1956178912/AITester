@@ -244,6 +244,7 @@
 | [docs/COVERAGE_RATCHET_DEVIATION.md](COVERAGE_RATCHET_DEVIATION.md) | 覆盖率棘轮偏差登记：实测 vs 水位、归因核验与处置路径。 |
 | [docs/study/OPTIMIZATION_2026-10-15.md](emse/OPTIMIZATION_2026-10-15.md) | EMSE 投稿优化记录：审稿可判性收口批次。 |
 | [docs/study/PAPER_CITATION_KEYS.md](emse/PAPER_CITATION_KEYS.md) | 论文外部读数引用键快照：登记册每行是否真被正文引用的**入库承重面**（判据见 `tests/test_external_readings_citation_chain.py`）。 |
+| [docs/study/PAPER_BUILD.md](emse/PAPER_BUILD.md) | 投稿 PDF 构建配方的**入库副本**（`paper/` 按双盲纪律不入库 ⇒ 配方必须随仓库走）：TeX Live 2026 工具链、TinyTeX 补包的四处静默失败、pdflatex+bibtex 三遍流程、产物读数与「页数声明 ↔ 构建产物」对账口径。 |
 | [REPLICATION.md](../REPLICATION.md) | 复现包说明：目录、工件与还原命令（中文）。 |
 | [CITATION.cff](../CITATION.cff) | 引用元数据（软件引用格式）。 |
 | [LICENSE](../LICENSE) | 开源许可证。 |

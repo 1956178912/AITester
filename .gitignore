@@ -91,6 +91,10 @@ rag_data/
 # 全量回归日志与 TMPDIR 实验目录（本地一次性产物）
 .pytest_full_*.log
 .tmp_run/
+# basetemp 的另一种写法：`.tmp_pytest/`（CX 轮 2026-10-26 实测被误提交 12 个
+# pytest 临时文件——含 .lock 与 pytest-current 符号链接，随 v1.0.0 一同发布）。
+# `.pytest_tmp*/` 的模式不覆盖它，故必须单独登记。
+.tmp_pytest/
 
 # WorkBuddy 沙箱工具的工作记忆目录（第三方工具运行时产物，非项目内容，
 # 历史上曾误入库 2026-10-08 一份；目录整体不入库，避免再次污染 git status）
