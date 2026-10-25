@@ -527,3 +527,27 @@ class TestRealTree:
         assert problems == [], problems
         assert len(ok) == len(gate.OWNERS)
         assert gate.self_check_wiring(make_text=make_text, ci_text=ci_text) == []
+
+    def test_ci_snapshot_step_runs_after_pytest(self):
+        """CL 轮：CI 树变异步骤必须排在 pytest 之后（顺序锁）。
+
+        改前实测（2026-10-25）：`Generate static-check snapshot` 在 pytest **之前**
+        把 `docs/history/static_report_<日期>.md` 写进树，该文件计入 ruff 格式化面
+        （+1）⇒ 本门「已格式化」复算漂移（BASELINE 975 vs 复算 976）⇒
+        `test_gate_passes_on_real_tree` 与本例邻居两条真树锁在 CI 三档全红，
+        而本地 fresh clone 全绿——**差异不是代码，是步骤顺序造成的树状态差**。
+        锁语义：快照生成步骤的序号必须大于 pytest 步骤的序号。
+        """
+        ci_text = (PROJECT_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+        names = [
+            line.strip()[len("- name:") :].strip()
+            for line in ci_text.splitlines()
+            if line.strip().startswith("- name:")
+        ]
+        pytest_idx = next(i for i, n in enumerate(names) if n.startswith("Run tests with coverage"))
+        snapshot_idx = next(i for i, n in enumerate(names) if n.startswith("Generate static-check snapshot"))
+        assert snapshot_idx > pytest_idx, (
+            f"CI 步骤顺序回退：Generate static-check snapshot（#{snapshot_idx}）又排到了 "
+            f"Run tests with coverage（#{pytest_idx}）之前——它写入的 static_report_*.md "
+            "会改变 ruff 格式化计数，使登记门禁在 pytest 内漂移红（CL 轮实测）"
+        )

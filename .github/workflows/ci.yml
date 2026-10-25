@@ -416,21 +416,6 @@ jobs:
         if: matrix.python-version == '3.14'
         run: python scripts/gates/check_doc_links.py --strict
 
-      - name: Generate static-check snapshot (5a. 归档 docs/history/)
-        # 批次落地后把 ruff / mypy 实测输出归档为带时间戳的 Markdown 快照，
-        # 取代 docs/code_analysis_report.md 的过期人肉快照；同日重跑覆盖同名文件
-        run: python scripts/tools/generate_static_report.py
-
-      - name: Upload static snapshot (main branch)
-        if: matrix.python-version == '3.14' && github.ref == 'refs/heads/main'
-        # O10：SHA 固定——actions/upload-artifact@v4 →
-        # 694cdabd8bdb0f10b2cea11669e1bf5453eed0a6（v4.2.0, 2024-02）
-        uses: actions/upload-artifact@694cdabd8bdb0f10b2cea11669e1bf5453eed0a6
-        with:
-          name: static-report-${{ github.run_number }}
-          path: docs/history/static_report_*.md
-          retention-days: 30
-
       - name: Lint with ruff
         run: |
           ruff check .
@@ -500,7 +485,10 @@ jobs:
         run: |
           # 重跑套件（--tb=no 只要失败清单，30s 内完成）；
           # 注解可被 check-runs annotations API 公开读取，无需 admin 权限
-          LIST=$(pytest tests/ -q --tb=no -rf --no-cov 2>/dev/null | grep -E '^(FAILED|ERROR)' | head -30 | tr '\n' ' | ')
+          # CL 轮（2026-10-25）：grep 容忍 xdist 的 `[gwN] ` 前缀——原 `^(FAILED|ERROR)`
+          # 锚行首，`-n 4 --dist loadfile` 下失败汇总行带 worker 前缀，3.14 档因此
+          # 漏捕整份清单（"无失败用例行"假象）。锚 `tests/` 兼顾两种前缀。
+          LIST=$(pytest tests/ -q --tb=no -rf --no-cov 2>/dev/null | grep -E '(FAILED|ERROR) tests/' | head -30 | tr '\n' ' | ')
           echo "失败用例清单: ${LIST:-（未捕获到 FAILED/ERROR 行，可能是收集错误或进程崩溃，请查完整日志）}"
           if [ -n "$LIST" ]; then
             echo "::error title=AITester 测试失败清单::$LIST"
@@ -570,6 +558,29 @@ jobs:
         # 步骤必红）。CI 本步骤以 --check 模式阻断任何回退。消除
         # "贴基线设门槛 + 为门槛写测试"的动机（门禁从"不退化"变"单调提升"）。
         run: python scripts/gates/coverage_ratchet.py --check --coverage-xml coverage.xml
+
+      # CL 轮（2026-10-25）：以下两步**必须排在本作业所有读树步骤之后**（含
+      # `if: failure()` 的诊断重跑）——它们在树里写入
+      # `docs/history/static_report_<日期>.md`，而该文件计入 ruff 格式化面（+1），
+      # 登记门禁（`check_registration_consistency` 的「已格式化」复算，由 pytest
+      # 内的两条真树锁与诊断重跑执行）会当场漂移红：改前 CI test 3.12/3.13/3.14
+      # 三档全红即此因（快照步骤曾排在 pytest 之前，BASELINE 975 vs 复算 976）。
+      # 本地 fresh clone 绿、CI 红的差异从来不是代码，是**步骤顺序造成的树状态差**。
+      # 回归锁：`tests/test_registration_readers_cf.py` 的步骤顺序断言。
+      - name: Generate static-check snapshot (5a. 归档 docs/history/)
+        # 批次落地后把 ruff / mypy 实测输出归档为带时间戳的 Markdown 快照，
+        # 取代 docs/code_analysis_report.md 的过期人肉快照；同日重跑覆盖同名文件
+        run: python scripts/tools/generate_static_report.py
+
+      - name: Upload static snapshot (main branch)
+        if: matrix.python-version == '3.14' && github.ref == 'refs/heads/main'
+        # O10：SHA 固定——actions/upload-artifact@v4 →
+        # 694cdabd8bdb0f10b2cea11669e1bf5453eed0a6（v4.2.0, 2024-02）
+        uses: actions/upload-artifact@694cdabd8bdb0f10b2cea11669e1bf5453eed0a6
+        with:
+          name: static-report-${{ github.run_number }}
+          path: docs/history/static_report_*.md
+          retention-days: 30
 
   # R10（2026-10-05 审查批次）：security 作业升级为 push/PR 即跑且阻断的
   # 安全门禁（此前仅周日 schedule / 手动触发、部分检查 info-only）：
