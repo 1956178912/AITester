@@ -138,6 +138,14 @@ CI clone 拿不到这些」——这正是索引机制的设计意图：**新门
 所以「写完门禁就以为 CI 有了」是不成立的。
 
 
+**六、读数。**
+全量：**12,643 passed / 268 skipped / 0 failed**（collected 12,911；CI 同口径
+`xdist -n 4 --dist loadfile` 135.80s，单进程 469.16s，零 LLM）；干净树门禁链 **27 步 rc=0**
+（含三个本地工具项）；`ruff format --check .` = 989 files already formatted、`ruff check` 全过、
+`mypy src/ config.py` = Success: no issues found in 137 source files；
+`paper-audit --strict` rc=0；文档命令门禁首次体检 39 份文档 / 56 处命令引用**零失效**。
+
+
 ### CT 轮补记（2026-10-26）：摘要投稿超限风险 + 投稿材料词数/页数失实 + 判据口径必须显式（零 LLM，$0）
 
 **一、一处真实的投稿阻断风险：摘要只剩 3 词余量。**

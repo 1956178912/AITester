@@ -157,6 +157,15 @@ which is exactly what the index mechanism is for: **until a new gate is committe
 have it**, so "I wrote the gate, therefore CI enforces it" does not hold.
 
 
+**Six、Readings.**
+Full suite: **12,643 passed / 268 skipped / 0 failed** (collected 12,911; 135.80s in the CI caliber
+`xdist -n 4 --dist loadfile`, 469.16s single-process, zero LLM); clean-tree gate chain **27 steps
+rc=0** (including the three local-tool items); `ruff format --check .` = 989 files already
+formatted, `ruff check` clean, `mypy src/ config.py` = Success: no issues found in 137 source
+files; `paper-audit --strict` rc=0; the new document-command gate's first census found **zero**
+breakages across 39 documents / 56 command references.
+
+
 ### CT round addendum (2026-10-26): an abstract that was three words from the submission limit + stale word/page counts in the submission files + a criterion whose caliber must be explicit (zero LLM, $0)
 
 **一、A genuine submission-blocking risk: the abstract had three words of headroom.**
