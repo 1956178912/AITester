@@ -2,7 +2,9 @@ cff-version: 1.2.0
 # DOI pending deposit / DOI 待归档：CFF 1.2.0 不允许空的 doi 字段，故此处仅以
 # 注释登记。[待补充：Zenodo DOI / 归档计划] —— 归档完成后在顶层补充
 # `doi: 10.5281/zenodo.<id>`（该字段为可选字段，未归档前不得猜测填入）。
-# 归档元数据已备：experiments/results/zenodo_metadata.json。
+# 归档元数据待投稿/归档时随 DOI 一并生成（Zenodo 上传元数据）。
+# 2026-10-25 CK 轮更正：本行原写「已备：experiments/results/zenodo_metadata.json」，
+# 实测该文件不在盘、git 历史无此路径——属登记面失实，改为如实待补充。
 message: >-
   If you use AITester in your research, please cite this software.
 # 2026-10-16 定位对齐（R2/R26 叙事重构的漏网点）：标题不再以 multi-agent

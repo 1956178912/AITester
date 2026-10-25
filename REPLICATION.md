@@ -87,8 +87,19 @@
 
 ## 2. 模型与执行设置（Model and Execution Settings）
 
-主批次工件：`experiments/results/main_batch/benchmark_synthetic_20261006_140906.json`
-（2,339,376 字节，已入库）。以下字段均直接读取自该文件的 `provenance` 块：
+> **历史口径横幅（2026-10-25 CK 轮补）**：本节原文逐字段描述的主批次工件
+> `experiments/results/main_batch/benchmark_synthetic_20261006_140906.json`
+> 已随 2026-10-24 数据清除**撤回**（文件不在盘；撤回映射见
+> `docs/study/WITHDRAWN_ARTIFACTS_2026-10-24.md`）。以下字段值作为**历史记录**
+> 保留（论文中引用该批数字处均已标 historical）；**当前语料**的模型与执行口径
+> 以 v0.8.0 重建批为准：DeepSeek 官方单端点（`https://api.deepseek.com` /
+> `deepseek-flash`）、`temperature=0`、 provenance 带模型指纹与 SHA256SUMS
+> 冻结（`git_dirty=False`），逐批读数见 `BASELINE.yaml` 与各批
+> `experiments/results/<批次>/` 工件。
+
+主批次工件（已撤回）：`experiments/results/main_batch/benchmark_synthetic_20261006_140906.json`
+（原 2,339,376 字节，原已入库）。以下字段均直接读取自该文件（撤回前）的
+`provenance` 块：
 
 | 字段 | 值 | 来源 |
 |------|----|------|
@@ -190,27 +201,46 @@ valid_apis, harness}`。因此：
 
 ## 4. 零 LLM 可复算路径（Offline Path, no API key）
 
-以下 6 个 Makefile 目标**不需要任何 LLM 调用、不需要 API Key、不读取
-`.env.local`**：其离线性由 Makefile 目标的注释（"零 LLM"）与脚本 import 面
-共同保证——`experiments/repair_replay.py`、`experiments/corrected_metrics.py`、
-`experiments/target_quality_replay.py`、`experiments/cpr_idr_report.py`、
-`experiments/emse_optimization.py` 的 import 面**仅为标准库**
-（`argparse` / `json` / `sys` / `pathlib` / `typing` / `collections` / `glob`
-/ `os` / `math` / `random` / `subprocess` / `tempfile`），不导入 `config`、
-`dotenv` 或任何 LLM 客户端；它们只读取 `experiments/results/main_batch/` 下
-已入库的批次工件并重算指标。
+**当前官方零 LLM 复算链**（2026-10-25 CJ 轮起口径）：`scripts/reproduce_zero_llm.py`，
+两个 Makefile 入口（`Makefile:130,133`）：
 
-| Makefile 目标 | 重算什么 | 产物去向 |
+- `make reproduce-zero-llm`（层级 `l0`）：统计扩展（Wilson CI / Cohen's g / OR /
+  bootstrap Δ CI）、统计报告补口（MDE / 功效 / 比例型 bootstrap CI）、mutation ×
+  detection 交叉验证、SWE-bench Lite 基础设施失败披露、通过率混淆敏感性分析、
+  引用可追溯性核验，外加逐目录 SHA256SUMS 校验；
+- `make reproduce-zero-llm-l1`（层级 `l1`）：在 L0 之上增加 QuixBugs 全量
+  Mut@k 重算（cosmic-ray，小时级）。
+
+**三态结果与退出码口径**（v0.8.0 后数据重置的直接后果）：每条命令的结果为
+`ok` / `FAILED` / `skipped` 三态之一；源工件已随 2026-10-24 数据清除撤回的支路
+输出显式 `[SKIP]` 并附理由（如「源批次 main_batch 已随 2026-10-24 数据清除撤回，
+本支路待主批重建后恢复」）——**可复算性受损是事实，不谎报 ok、也不计红**；报告
+顶部明示「N/M 条命令通过（K 条源工件缺席 [SKIP]）」。脚本退出码只由
+「FAILED 命令数 + SHA256SUMS 失败数」决定（`scripts/reproduce_zero_llm.py`
+的 `main()` 收尾段）。2026-10-25 实测（L0）：**3 ok / 3 [SKIP] / rc=0**
+（回撤支路 = 统计报告补口、mutation × detection 交叉验证、通过率混淆敏感性分析，
+三者共用已撤回的 `main_batch`；SHA256SUMS 校验目录同步按缺席记 skipped）。
+本链的结构契约（命令集完整性 / 四元组形态 / 数据集分支）由
+`tests/test_reproduce_zero_llm.py` 锁定。
+
+**遗留存量重放目标（历史口径，当前无输入）**：以下 Makefile 目标在
+2026-10-24 数据重置前基于已入库主批次工件做零 LLM 重算；其输入目录
+`experiments/results/main_batch/` 随该次清除撤回（撤回清单与替代映射见
+`docs/study/WITHDRAWN_ARTIFACTS_2026-10-24.md`），**在当前树上没有可读取的
+输入**，作为历史能力保留（脚本与回归测试仍在盘，主批重建后即可恢复）：
+
+| Makefile 目标 | 重算什么 | 当前状态 |
 |---------------|----------|----------|
-| `repair-replay` | `repair=0` 围栏伪影的存量重放：修正口径 `correct` vs 原口径伪影（`Makefile:76-77`，批次 VII/ADR-0021） | 命令为 `python -m experiments.repair_replay experiments/results/main_batch --arm aitester`；脚本 `--out` 默认 `None`，**打印到 stdout**（`experiments/repair_replay.py:181`） |
-| `corrected-metrics` | 修正口径重估总报告：repair / false_fix / CPR / 弃权精确率 + bug_type 分层解混杂（`Makefile:82-83`，批次 XIII/ADR-0027） | 命令为 `python -m experiments.corrected_metrics experiments/results/main_batch --arm aitester`；`--out` 默认 `None`，**打印到 stdout**（`experiments/corrected_metrics.py:263`） |
-| `target-quality` | 目标质量存量重放：被测代码覆盖率 / 变异得分 / 规约可编译率（`Makefile:85-86`，R5 审查批次） | 命令为 `python -m experiments.target_quality_replay experiments/results/main_batch`；写出 `experiments/results/main_batch/target_quality_report.md`（`--out` 默认 `target_quality_report.md`，相对路径按 results_dir 解析，`experiments/target_quality_replay.py:255-257, 268-270`） |
-| `mutation-det-correlation` | mutation × detection 交叉验证（构念效度辅助证据 + 饱和纪律）（`Makefile:88-89`，EMSE 批次 2026-10-15） | 命令为 `python -m experiments.emse_optimization --mutation-correlation experiments/results/main_batch --out experiments/results/main_batch/mutation_detection_correlation.md`；产物即该 `--out` 路径（`Makefile:89`） |
-| `swebench-disclosure` | SWE-bench Lite 基础设施失败披露：四分账 + 无有效能力结论（`Makefile:91-92`，EMSE 批次 2026-10-15） | 命令为 `python -m experiments.emse_optimization --swebench-disclosure --out experiments/results/emse_swebench_disclosure.md`；产物即该 `--out` 路径（`Makefile:92`） |
-| `cpr-idr` | 补丁检测有效性 + 弃权视角报告：IDR / CPR + would-be abstention（`Makefile:73-74`，批次 II/V） | 命令为 `python experiments/cpr_idr_report.py --results-dir experiments/results/main_batch --arm aitester`；脚本无 `--out` 参数，**打印到 stdout**（`experiments/cpr_idr_report.py:220-223`） |
+| `repair-replay` | `repair=0` 围栏伪影的存量重放（`Makefile:76-77`，批次 VII/ADR-0021） | 输入已撤回；命令形态 `python -m experiments.repair_replay <results_dir> --arm aitester`，`--out` 默认 `None` 打印到 stdout |
+| `corrected-metrics` | 修正口径重估总报告（`Makefile:82-83`，批次 XIII/ADR-0027） | 输入已撤回；同上 stdout 口径 |
+| `target-quality` | 目标质量存量重放（`Makefile:85-86`，R5 审查批次） | 输入已撤回；写出 `<results_dir>/target_quality_report.md` |
+| `mutation-det-correlation` | mutation × detection 交叉验证（`Makefile:88-89`，EMSE 批次 2026-10-15） | 输入已撤回；产物为 `--out` 指定路径 |
+| `swebench-disclosure` | SWE-bench Lite 基础设施失败披露（`Makefile:91-92`，EMSE 批次 2026-10-15） | **仍可执行**（不依赖主批；产物 `experiments/results/emse_swebench_disclosure.md` 在盘且已随 L0 复算） |
+| `cpr-idr` | 补丁检测有效性 + 弃权视角报告（`Makefile:73-74`，批次 II/V） | 输入已撤回；stdout 口径 |
 
-上述目标均可用 `make <target>` 直接调用（`Makefile:10`：`PY := .venv/bin/python`），
-前提是本地已安装仓库锁定依赖（`.venv`）。
+上述目标的离线性由脚本 import 面保证（仅标准库，不导入 `config` / `dotenv` /
+LLM 客户端）；均可用 `make <target>` 调用（`Makefile:10`：`PY := .venv/bin/python`），
+前提是本地已安装仓库锁定依赖（`.venv`）且指定目录含相应批次工件。
 
 ## 5. 含 LLM 的实验路径（Requires API Key）
 
@@ -268,7 +298,8 @@ quick 模式为 3 任务）。与主批**完整协议**（3 seed 42/43/44 × 3 �
 不同 seed 批次不可直接合并统计。回归锁定：
 `tests/test_reproduce_zero_llm.py::TestReproduceShDatasetBranch`。
 
-结果文件位置（`reproduce.sh:345-351`）：`experiments/results/benchmark_*.json`、
+结果文件位置（`reproduce.sh:345-351`，**运行为产、不入库**——干净检出中不存在，
+由 Step 5/6 现场生成）：`experiments/results/benchmark_*.json`、
 `experiments/results/charts/baseline_comparison.png`、
 `experiments/results/charts/statistical_significance.png`、
 `experiments/results/charts/results_table.csv`、
@@ -290,23 +321,21 @@ reproduce.sh --dataset synthetic --full`），故需将 `.env.local` 只读挂�
 
 ## 6. 预期产物与已知偏差（Expected Artifacts and Known Deviations）
 
-**逐目录校验和（SHA256SUMS）**（`find` / `git ls-files` / 校验实测，2026-10-18）：
+**逐目录校验和（SHA256SUMS）**（`find` / `git ls-files` / 逐条计数实测，
+2026-10-25 CJ 轮，数据重置后口径）：
 
-- 全仓共 **69** 个校验和文件：**62** 个名为 `SHA256SUMS`、**7** 个名为
-  `SHA256SUMS.txt`（外部 `shasum -a 256` 风格）；其中 `experiments/results/`
-  下 68 个（61 + 7）、`docs/reviews/review_recompute/` 下 1 个；
-- 其中 **64** 个已被 git 跟踪（58 `SHA256SUMS` + 6 `SHA256SUMS.txt`），
-  **5** 个未跟踪（`experiments/results/analysis/SHA256SUMS`、
-  `prompt_artifacts_2026-10-15/SHA256SUMS`、`emse_d2_profile_smoke_20261013/SHA256SUMS`、
-  `spec_ab_scale87_20261012/SHA256SUMS`、`emse_quixbugs_mutk_20261014/SHA256SUMS.txt`）；
-- 未跟踪原因：`.gitignore` 的 `experiments/results/**` 规则（`git check-ignore -v`
-  实证命中）；未跟踪目录为本地留档，不在干净检出中（clean clone 不校验）；
-- 已跟踪清单共记录 **7,048** 条；本机全仓（含 5 个未跟踪清单）共 **7,639** 条；
-  **2026-10-18 复核结果：0 缺失 / 0 内容不符 / 0 仅换行差异（macOS 原始字节
-  逐条一致）**；用 `git archive HEAD` 模拟干净检出（叠加本次修复文件）校验：
-  64 份清单、7,048 条全部原始字节一致、0 缺失，64/64 目录 `--verify` 通过；
-- 主批次校验文件：`experiments/results/main_batch/SHA256SUMS`（2,029 行，已跟踪）；
-- **跨平台字节口径（A17 修复）**：仓库根 `.gitattributes` 对
+- 全仓共 **4** 个校验和文件，全部位于 `experiments/results/` 下、**全部已被
+  git 跟踪**（`git ls-files` 逐条实证），无未跟踪清单（2026-10-18 旧口径的
+  69 个文件 / 7,048 条记录随 2026-10-24 数据清除整体退出，撤回映射见
+  `docs/study/WITHDRAWN_ARTIFACTS_2026-10-24.md`）；
+- 在盘清单逐条计数（`grep -c '^[0-9a-f]\{64\}'`，2026-10-25 实测）：
+  `emse_docstring_anchor_20261017/run_artifacts_20261024T121431Z/SHA256SUMS`
+  **17** 条、`emse_docstring_augment_20261017/SHA256SUMS` **127** 条、
+  `emse_misguided_augment_20261017/SHA256SUMS` **3** 条、
+  `p_round_b8_ablation_20261018/SHA256SUMS` **34** 条，合计 **181** 条；
+- 这些清单覆盖的是**重建语料的正式批工件**（docstring 锚/增广三臂 + b8 消融），
+  即 v0.8.0 数据换代后按历轮惯例 `git add -f` 入库的部分；
+- **跨平台字节口径（A17 修复，仍然有效）**：仓库根 `.gitattributes` 对
   `experiments/results/**` 与 `docs/reviews/review_recompute/**` 设 `-text`
   （证据工件按二进制保真，检出字节 = 入库字节 = LF；不使用 `text eol=lf`，
   以免改写历史 CRLF 字节）。Windows `core.autocrlf=true` 的干净检出因此同样
@@ -315,26 +344,22 @@ reproduce.sh --dataset synthetic --full`），故需将 `.env.local` 只读挂�
   **原始字节 / 仅 EOL 差异 / 内容不符** 三类：EOL 差异单独报告且默认不判
   （不再把换行约定误报为篡改），内容不符仍失败；`--strict-bytes` 可把 EOL
   差异升级为失败（发布/归档字节闸）；
-- **清单只覆盖分发文件（A18 修复）**：`--write`/`--verify` 统一排除
-  `__pycache__` / `*.pyc` 等解释器缓存（历史 p/r/s 轮清单曾记录 4 个未分发的
-  `_helpers/__pycache__/*.pyc`，已在本次清除）；本次同时清除
-  `docs/reviews/review_recompute/recompute_run.log` 与
-  `spec_ab_scale87_20261012/logs/*.log`（4 个 gitignored 日志）等失效条目，
-  并为 3 个已分发但漏记的文件补条目（`emse_d1_quixbugs_ab_20261013/README.md`、
-  `r4_batches/README.md`、`r4_batches/replay_r4_ab_arm_a_v2.md`）。其余
-  `--exclude` 可排除本机留档文件。仍存在的本机差异：3 个本地工作树未入库
-  文件（`emse_d2_profile_smoke_20261013/README.md`、`spec_ab_scale87_20261012/README.md`、
-  `emse_ult_mutk_20261014/MUTK_RECOMPUTE.json`）会被工作树 `--verify` 报
-  "清单外新增"——它们不入 git、干净检出中不存在，故不影响干净检出校验。
-- 校验入口：`python scripts/gates/checksum_results.py --write`（生成/刷新，
-  只写规范名 `SHA256SUMS`）/ `--verify`（按清单校验；对外部工具生成的
-  `SHA256SUMS.txt` 变体同样支持）/ `--verify --strict-bytes`（严格字节闸）。
+- **清单只覆盖分发文件（A18 修复，仍然有效）**：`--write`/`--verify` 统一排除
+  `__pycache__` / `*.pyc` 等解释器缓存；校验入口：
+  `python scripts/gates/checksum_results.py --write`（生成/刷新，只写规范名
+  `SHA256SUMS`）/ `--verify`（按清单校验；对外部工具生成的 `SHA256SUMS.txt`
+  变体同样支持）/ `--verify --strict-bytes`（严格字节闸），默认
+  `--results-dir experiments/results`；回归：
+  `tests/test_checksum_results_gate.py`。
 
 **已知偏差（如实声明）**：
 
-1. **主批次 `git_dirty = true`**：`benchmark_synthetic_20261006_140906.json`
-   provenance 记录 `git_dirty: true`，且无 `model_fingerprint`
-   （见第 2 节）——代码树状态与模型版本均无法事后完整核验。
+1. **历史主批次已撤回（2026-10-24），其偏差记录降为历史口径**：原第 1/3/4 条
+   所述的 `benchmark_synthetic_20261006_140906.json`（`git_dirty: true`、无
+   `model_fingerprint`、实际运行环境 Python 3.14.6/macOS 而复现镜像为
+   `python:3.12-slim`）随数据清除撤回，**不在当前复现包内**；撤回规模、逐目录
+   映射与保留判定见 `docs/study/WITHDRAWN_ARTIFACTS_2026-10-24.md`。引用该批
+   历史数字时（论文中以 historical 标注处）应同时声明这三条偏差。
 2. **未归档原始 LLM 响应**：LLM 响应只落盘到本地文件缓存，且缓存路径被
    `.gitignore` 排除——`.gitignore:66-67` 原文为
    `# LLM 文件缓存（本地优化产物，避免重复提交）` 与 `src/cache/`
@@ -343,16 +368,11 @@ reproduce.sh --dataset synthetic --full`），故需将 `.env.local` 只读挂�
    `src/cache/` 迁出源码树，改为用户缓存目录
    （`XDG_CACHE_HOME` 或 `~/.cache/aitester/llm`，第 567-571 行），即**默认
    路径本就在仓库之外**。两种情形下仓库内均不含原始 LLM 响应。
-3. **主批次实际运行环境与复现镜像不同**：该 JSON 的
-   `environment.python_version = "3.14.6"`、
-   `environment.platform = "macOS-27.0.1-arm64-arm-64bit-Mach-O"`、
-   `in_docker_repro = false`，而 `Dockerfile.repro:32` 基准为
-   `python:3.12-slim` —— 主批次并非在复现容器内执行。
-4. **任务数口径（已对账，F17 更正 2026-10-22）**：`benchmark_synthetic_20261006_140906.json`
-   的 `total_tasks = 87`，与 `docs/DATA_CARD.md:21` 的"50 个唯一 pattern / 当前主批
-   87 任务"是**两个不同量**（模板数与实例数），不存在待补充的对应关系；n=50/seed42
-   是历史主批。
-5. **校验和文件的生成/校验入口（A17/A18 修复后口径）**：仓库提供
+3. **重建语料的 provenance 口径**：v0.8.0 重建批（27 批 / 14 traces 目录 /
+   1,106 traces，`git_dirty=False`）带模型指纹与 SHA256SUMS 冻结；论文表 1
+   主数字与 RQ1 配对对比均出自该重建语料（`spec_ab_scale87_20261024` 等），
+   与撤回前的历史读数**不混池**。
+4. **校验和文件的生成/校验入口（A17/A18 修复后口径）**：仓库提供
    `python scripts/gates/checksum_results.py --write`（生成/刷新，排除
    `__pycache__` 等非分发文件，只写规范名 `SHA256SUMS`）与 `--verify`
    （按清单校验：缺失/清单外新增/内容不符判失败；**仅换行差异**单独报告、
@@ -362,41 +382,39 @@ reproduce.sh --dataset synthetic --full`），故需将 `.env.local` 只读挂�
    （`scripts/gates/checksum_results.py`；回归：
    `tests/test_checksum_results_gate.py`）。证据工件换行策略见仓库根
    `.gitattributes`（上方 A17 条目）。
-6. **轨迹 JSONL 一处历史损坏（A20，如实保留）**：
-   `experiments/results/emse_ult_specir_probe_20261014/traces/
-   ult__string_contrast_aitester_1791954227.trace.jsonl` 第 10 行为非法 JSON
-   （未闭合字符串，第 201 列起，行尾停在 `...min(s, key=<REDACTED>`）。
-   该文件**未修补、未删除**，原始字节与所在目录 `SHA256SUMS` 记录一致；
-   损坏位置/根因/影响范围/复核命令见该批次
-   `experiments/results/emse_ult_specir_probe_20261014/README.md` 的"勘误"节。
-   根因（`TraceSession._append` 对已序列化 JSON 整行做文本脱敏，`key=<值>`
-   模式贪婪吞掉 JSON 闭合定界符）已于 2026-10-18 修复，未来轨迹逐行保证
-   合法 JSON（`tests/test_trace_jsonl_integrity.py` 锁定）；该损坏行不参与
-   任何指标复算（复算消费同批汇总 JSON `benchmark_ult_*.json`）。
+5. **零 LLM 复算链的三态口径**：`scripts/reproduce_zero_llm.py` 对源工件缺席
+   的支路输出显式 `[SKIP]`（第 4 节），退出码只由 FAILED 与 SHA256SUMS 失败
+   决定——`[SKIP]` 是披露，不是通过；主批重建后这些支路自动恢复判定。
 
 ## 7. 引用与许可（Citation and License）
 
 - **软件许可**：MIT License（`LICENSE:1` "MIT License"；`LICENSE:3`
   "Copyright (c) 2026 AITester Contributors"）。
 - **引用元数据**：`CITATION.cff`（CFF 1.2.0；`cff-version: 1.2.0`，第 1 行）；
-  当前 `version: 0.7`（第 15 行）、`date-released: "2026-10-06"`（第 16 行）、
-  `license: MIT`（第 17 行）、`repository-code:
-  https://github.com/1956178912/AITester`（第 18 行）——行号为本文件所引用的
-  当前工作树版本（`CITATION.cff` 33 行）。
+  当前 `version: 0.8.0`（第 19 行）、`date-released: "2026-10-25"`（第 20 行）、
+  `license: MIT`（第 21 行）、`repository-code:
+  https://github.com/1956178912/AITester`（第 22 行）——行号为本文件所引用的
+  当前工作树版本（`CITATION.cff` 25+ 行）。
 - **归档**：`[待补充：Zenodo DOI / 归档计划]`（`CITATION.cff` 内已同步以
-  YAML 注释登记 DOI 待归档，见该文件第 2-4 行；CFF 1.2.0 的 `doi` 字段需
-  真实 DOI，占位值不可用）。
+  YAML 注释登记 DOI 待归档，见该文件第 2-5 行；CFF 1.2.0 的 `doi` 字段需
+  真实 DOI，占位值不可用）。归档元数据**尚未生成**（2026-10-25 CK 轮更正：
+  该处原写「已备：`experiments/results/zenodo_metadata.json`」，实测该文件
+  不在盘、git 历史亦无——属登记面失实，已改为待补充项；Zenodo 上传元数据
+  将在投稿/归档时随 DOI 一并生成）。
 - 数据集许可按来源分别登记，见第 3 节与 `docs/DATA_CARD.md` §4。
 
 ## 8. 已知限制与后续（Known Limitations and Follow-up Work）
 
 - **原始 LLM 执行不可离线重放**：仓库内不含原始 LLM 响应（第 6 节第 2 条），
   故第 5 节的含 LLM 路径必须重新消耗 API 配额才能重跑；重跑结果受模型服务端
-  版本变化影响，且主批次无 `model_fingerprint` 可作对照。
-- **可离线复算的只有指标**：第 4 节的 6 个目标可基于已入库工件重算报告数字
-  （repair / false_fix / CPR / IDR / 目标质量 / mutation-detection 相关性 /
-  SWE-bench 基础设施披露），不需要 API Key，也不产生新的 LLM 调用。
-- **主批次代码树状态不可重建**（`git_dirty = true`）：引用主批次数字时应同时
-  声明该偏差与"无模型指纹"两条限制。
+  版本变化影响。v0.8.0 重建批带模型指纹（`git_dirty=False`），撤回前的历史
+  主批无 `model_fingerprint` 可作对照（第 6 节第 1 条）。
+- **可离线复算的只有指标，且以三态披露**：第 4 节的零 LLM 复算链基于已入库
+  工件重算（统计扩展 / 引用核验 / SWE-bench 披露 / 重建批 Mut@k 等），不需要
+  API Key、不产生新的 LLM 调用；源工件缺席的支路显式 `[SKIP]`——**跳过不等于
+  通过**，缺席清单见第 4 节实测读数与 `docs/study/WITHDRAWN_ARTIFACTS_2026-10-24.md`。
+- **历史主批次代码树状态不可重建**（`git_dirty = true`，已撤回）：引用其历史
+  数字时应同时声明该偏差与"无模型指纹"两条限制（论文中相关数字已标
+  historical）。
 - 后续补充项：`[待补充：Zenodo DOI / 归档计划]`、
   `[待补充：原始 LLM 响应归档方案（当前不入库）]`。
