@@ -101,7 +101,66 @@ success. The scheduled jobs still rest on local-only evidence: perf.yml red thre
 (10-11 / 10-18 / 10-25, fixed after 12:44Z) and mutation.yml red on its first ever run (10-19,
 fixed on 10-25) — their remote turn-green depends on the 2026-11-01 and 2026-10-26 scheduled
 triggers, so **the local reproduction is green but the remote re-verification has not happened
-yet**.### CU round addendum (2026-10-26): a document-command executability gate (landing the CS round's lesson) + cover-letter/body synchronisation (zero LLM, $0)
+yet**.
+
+### CV round addendum (2026-10-26): the cover letter's differentiation, a cover-letter/body citation check, and a Markdown heading-structure check (zero LLM, $0)
+
+**一、The differentiation is drafted as an explicit concession, not a dodge.** The previous round
+found that a survey (arXiv:2610.05001) states this paper's core distinction as the field's
+consensus (with independent oracle assessment at the head of its agenda), that silent failures
+have already been localised in the security domain (arXiv:2610.06163), and that detection has
+been shown to have a structural ceiling when no reference solution exists (arXiv:2610.30200).
+**If those three do not appear in the cover letter, a reviewer who finds them will react worse**;
+if they appear without a boundary, the paper has effectively conceded the novelty. Remediation:
+the cover letter gains a "What this study adds, given the current literature" paragraph that
+
+- names the converging work and **concedes two points on purpose**: it does not claim the
+  three-kinds-of-evidence distinction as new, and it does not claim the false-fix phenomenon as a
+  first observation;
+- then states the increment as four checkable items: (i) with the success definition held
+  fixed, the protocol text is separated from the regeneration budget it authorises and the two are
+  priced separately; (ii) the false-fix rate is reported under a conditional and a marginal
+  caliber together with the declaration rate that perturbs both, so the number is interpretable
+  rather than quotable; (iii) the measurement device is audited like the system under test --- six
+  artefacts moved reported numbers in directions unrelated to capability, each traced, fixed and
+  re-run over the old data; (iv) every reported number is recomputable from archived artefacts
+  with zero additional model calls;
+- closes by anchoring the review on the narrow claim: "We would rather be judged on that
+  narrower claim than on a novelty we do not hold."
+
+Rebuilt at 2 pages with 0 missing characters; PDF text extraction confirms the six arXiv ids
+and the new paragraph are present.
+
+**二、Cover-letter / body synchronisation becomes executable.** `paper/` is excluded by the
+double-blind discipline, so **editing the body does not move the cover letter**: the previous
+round synchronised it by hand once, and the next round would inevitably drift. Remediation: the
+auditor's submission-package coherence surface gains a **cover-letter citation check** --- every
+`arXiv:XXXX.XXXXX` appearing in the cover letter must (a) have an entry in `refs.bib` and
+(b) have that entry's key **cited in the body**; otherwise the check turns red. 4 new cases
+(including a real-tree assertion: all six arXiv ids in the cover letter are in the bib and all
+are cited). Mutation evidence: a dead arXiv id in the letter ⇒ rc=1; the body no longer citing
+a letter-mentioned work ⇒ rc=1; neutral control green.
+
+**三、A rendering defect introduced by this very round (which also surfaced historical kin).** While
+diagnosing rendering, the CV round found the CU round's own heading **glued to the end of the
+preceding paragraph** --- and since an ATX heading must start the line, such a line is **not
+rendered as a heading at all**: the whole section becomes a continuation of the previous
+paragraph, so a reader never sees that section's heading. Five more glued headings sit in the
+BJ / L / EMSE batch 4 / AB-11 / BP sections. Remediation: all are split (heading on its own
+line, preceded by a blank line), and the check is **folded into the existing gate**
+`check_doc_commands.py` as a second surface --- **no new gate script**, so the sixteen census
+numbers do not have to move again. The criterion **blocks only the shape that actually breaks rendering** --- a heading
+not at line start (`heading-not-at-line-start`); "no blank line before" is disclosed rather than
+blocked (GitHub still renders such a heading); `#` comments inside code fences and `##` inside
+inline code are not headings. 4 new cases plus a negative self-check (real rc=1). **Lesson: when inserting
+large blocks, an anchor that differs from the file's actual text by even one word makes the
+whole block land silently nowhere --- and here the criterion was half-written before an
+assertion aborted it, so `main()` never consumed the new surface and **the gate would have
+"passed" without checking anything**. Both failures surfaced only through the negative case
+(rc=1). Editing scripts must assert before writing and must be validated with a negative case
+afterwards: "the script did not error" is not "the change took effect".**
+
+### CU round addendum (2026-10-26): a document-command executability gate (landing the CS round's lesson) + cover-letter/body synchronisation (zero LLM, $0)
 
 **一、Turning "the document points at a non-existent artefact" into an executable criterion.**
 The CS round found the citation-key snapshot saying "re-run the export script" while **that script

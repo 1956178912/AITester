@@ -102,6 +102,46 @@ def test_make_with_flags_reports_full_target(tmp_path):
     assert [m["ref"] for m in result["missing"]] == ["make no-such-target"], result["missing"]
 
 
+def test_glued_heading_is_reported(tmp_path):
+    """标题粘在上一段末尾（不在行首）⇒ ATX 标题根本不会生效 ⇒ 判红。
+
+    CV 轮实测到一处真实粘连：CU 轮补记的标题被粘在上一段末尾，整节被渲染成
+    上一段的延续。
+    """
+    root = _make_repo(tmp_path, "# T\n")
+    readme = root / "README.md"
+    readme.write_text("段落末尾### 粘连标题\n", encoding="utf-8")
+    problems = doc_mod._heading_structure_problems(readme)
+    assert problems, "行内粘连的标题未被报出"
+    assert problems[0]["kind"] == "heading-not-at-line-start", problems
+
+
+def test_heading_without_blank_line_before_is_reported(tmp_path):
+    """标题在行首但前一行不是空行 ⇒ 判红（段落与标题之间没有分隔）。"""
+    root = _make_repo(tmp_path, "# T\n")
+    readme = root / "README.md"
+    readme.write_text("段落末尾\n## 标题\n", encoding="utf-8")
+    problems = doc_mod._heading_structure_problems(readme)
+    assert problems, "前无空行的标题未被报出"
+    assert problems[0]["kind"] == "heading-no-blank-before", problems
+
+
+def test_hash_comment_inside_code_fence_is_not_a_heading(tmp_path):
+    """代码围栏内的 `#` 注释不是标题（bash 注释以 # 开头）。"""
+    root = _make_repo(tmp_path, "# T\n")
+    readme = root / "README.md"
+    readme.write_text("```bash\n# a normal shell comment\n## not a heading\n```\n", encoding="utf-8")
+    assert doc_mod._heading_structure_problems(readme) == []
+
+
+def test_inline_code_hash_is_not_a_heading(tmp_path):
+    """行内代码里的 `##` 不是标题。"""
+    root = _make_repo(tmp_path, "# T\n")
+    readme = root / "README.md"
+    readme.write_text("见 `## 14` 一节。\n", encoding="utf-8")
+    assert doc_mod._heading_structure_problems(readme) == []
+
+
 def test_scanner_finds_the_real_documents():
     """扫描面塌了要当场红——否则判据会在空集上「零用例通过」。"""
     root = doc_mod.PROJECT_ROOT

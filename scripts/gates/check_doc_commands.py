@@ -11,7 +11,7 @@ CS 轮实测抓到一处**登记面失实**：`docs/study/PAPER_CITATION_KEYS.md
 这类失实**没有任何机制**能发现：链接检查器只查 markdown 链接，不查代码块里的命令；
 「命令能跑」是读者在踩坑之后才会知道的���本轮把它变成可执行判据。
 
-## 判据
+## 判据（两项）
 
 1. **脚本路径**：文档中出现的 `scripts/....py` 形态路径必须存在于仓库；
 2. **`make` 目标**：文档中出现的 `make <target>` 的 `<target>` 必须是 Makefile 里真实存在的目标；
@@ -59,6 +59,14 @@ _SCRIPT_PATH = re.compile(r"(?<![\w/])((?:\./)?scripts/[\w./-]+\.py)")
 _MAKE_CMD = re.compile(r"^make\s+([a-z][a-z0-9_-]*)\s*((?:-{1,2}[^\s]+\s*)*)$")
 _MAKE_TARGET_DEF = re.compile(r"^([a-zA-Z][a-zA-Z0-9_-]*):", re.M)
 _CODE_FENCE = re.compile(r"^\s*```")
+#: 最近一次扫描的「披露级」问题（前一行非空）——不阻断，仅报告。
+_LAST_DISCLOSURES: list[dict[str, object]] = []
+#: 行内代码（其中的 `##` 不是标题）。
+_INLINE_CODE = re.compile(r"`[^`]*`")
+#: 行内出现的 ATX 标记（`## ` / `### `）——ATX 标题必须在行首，行内出现即不会生效。
+#: 行内出现的 ATX 标记——ATX 标题必须在行首，行内出现即不会生效。
+#: 要求 `#{2,6} ` **前面是非空白字符**（否则行首标题会被误判为行内）。
+_INLINE_HEADING = re.compile(r"(?<=\S)(?<!#)#{2,6}\s")
 
 
 def _command_lines(text: str) -> list[tuple[int, str]]:
@@ -107,6 +115,59 @@ def _doc_files(root: Path) -> list[Path]:
     return files
 
 
+def _heading_structure_problems(path: Path) -> list[dict[str, object]]:
+    """标题粘连问题：标题未独占行，或前一行不是空行。
+
+    CV 轮实测：CU 轮补记的标题被粘在上一段末尾 ⇒ 整节被渲染成上一段的延续、
+    标题失效；另在 BJ / L / EMSE batch4 / AB-11 / BP 五轮的历史节里各有一处。
+    **代码围栏内的 `#` 注释不算标题**（bash 注释以 `#` 开头，GitHub 在代码块里
+    不会把它渲染成标题）。
+    """
+    problems: list[dict[str, object]] = []
+    disclosures: list[dict[str, object]] = []
+    in_fence = False
+    lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    for index, raw in enumerate(lines):
+        stripped = raw.strip()
+        if stripped.startswith("```"):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
+        if stripped.startswith("## ") or stripped.startswith("### "):
+            # 形态一：标题在行首，但前一行不是空行 ⇒ Markdown 仍会渲染成标题，
+            # 但段落与标题之间没有分隔（部分渲染器下前段会被吞进标题）。
+            if index > 0 and lines[index - 1].strip():
+                # 前一行非空不阻断（GitHub 仍会渲染成标题，只是段落与标题之间
+                # 没有分隔）；只有「标题不在行首」才是真缺陷（根本不会被渲染
+                # 成标题 ⇒ 整节变成上一段的延续）。
+                disclosures.append(
+                    {
+                        "file": str(path),
+                        "line": index + 1,
+                        "kind": "heading-no-blank-before",
+                        "ref": stripped[:80],
+                    }
+                )
+            continue
+        # 形态二：标题**不在行首**（粘在上一段末尾）——ATX 标题必须行首，
+        # 这种写法**根本不会被渲染成标题**，整节会变成上一段的延续。CV 轮实测到
+        # 一处真实粘连（CU 轮补记的标题粘在上一段末尾）。
+        body = _INLINE_CODE.sub(" ", raw)
+        if _INLINE_HEADING.search(body):
+            problems.append(
+                {
+                    "file": str(path),
+                    "line": index + 1,
+                    "kind": "heading-not-at-line-start",
+                    "ref": body.strip()[:80],
+                    "context": body.strip()[:80],
+                }
+            )
+    _LAST_DISCLOSURES[:] = disclosures
+    return problems
+
+
 def check(root: Path = PROJECT_ROOT) -> dict[str, object]:
     """返回 {"missing": [...], "checked": int, "docs": [...]}。"""
     targets = _makefile_targets(root)
@@ -143,7 +204,18 @@ def check(root: Path = PROJECT_ROOT) -> dict[str, object]:
                             "context": line[:120],
                         }
                     )
-    return {"missing": missing, "checked": checked, "docs": docs, "makefile_targets": len(targets)}
+    structure: list[dict[str, object]] = []
+    for path in _doc_files(root):
+        for item in _heading_structure_problems(path):
+            item["file"] = str(path.relative_to(root))
+            structure.append(item)
+    return {
+        "missing": missing,
+        "checked": checked,
+        "docs": docs,
+        "structure": structure,
+        "makefile_targets": len(targets),
+    }
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -158,6 +230,7 @@ def main(argv: list[str] | None = None) -> int:
         f"[doc-commands] 扫了 {result['checked']} 处命令引用（{len(result['docs'])} 份文档，"
         f"Makefile {result['makefile_targets']} 个目标）"
     )
+    structure = result.get("structure") or []
     if missing:
         print(f"[doc-commands] 阻断：{len(missing)} 处引用指向不存在的工件/目标")
         for item in missing:
@@ -165,12 +238,22 @@ def main(argv: list[str] | None = None) -> int:
             print(f"      ← {item['context']}")
     else:
         print("[doc-commands] 通过：文档引用的脚本与 make 目标全部存在")
+    if structure:
+        print(f"[doc-commands] 阻断：{len(structure)} 处 Markdown 标题未独占行（渲染时标题失效）")
+        for item in structure:
+            print(f"  {item['file']}:L{item['line']}  {item['kind']}  {item['ref']}")
+            print(f"      ← 前行尾: {item['context']}")
+    else:
+        print("[doc-commands] 通过：无标题被粘在行内（ATX 标题必须在行首）")
+    disclosures = list(doc_mod_disclosures := [])
+    if disclosures:
+        print(f"[doc-commands] 披露：{len(disclosures)} 处标题前一行非空（不阻断）")
     if args.json and args.json != "-":
         Path(args.json).write_text(
             json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False),
             encoding="utf-8",
         )
-    return 1 if missing else 0
+    return 1 if (missing or structure) else 0
 
 
 if __name__ == "__main__":
