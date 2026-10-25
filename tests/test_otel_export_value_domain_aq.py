@@ -396,8 +396,8 @@ class TestExportEndToEnd:
                 assert span["start_time_unix_nano"] >= 0, path
                 assert type(span["duration_unix_nano"]) is int, path
                 assert span["duration_unix_nano"] >= 0, path
-        assert spans >= 9502  # 收口上调 2026-10-25 v0.8.0（b1_lite 七格入库后；原精确 126408）
-        assert token_attrs >= 3318  # 收口上调（b1_lite 入库后回钉精确值）
+        assert spans == 9502  # v0.8.0 语料稳态回钉（原精确 126408）
+        assert token_attrs == 4368  # v0.8.0 语料稳态回钉，按本测试口径实测（原精确 26166）
 
     def test_real_token_attributes_match_raw_task_end_records(self):
         # BZ 轮：checked 下界以全归档 trace 语料为扫描面——同
