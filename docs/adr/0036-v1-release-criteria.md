@@ -103,3 +103,17 @@ LLM 配额实验 / D3 全量 Mut@k）均含外部依赖。本 ADR 把「稳定 +
 seed=42 重建哈希不符）；③ 在同段披露 scale87 的 `replace` 臂不执行 SpecExpr
 通道。两处均以 `BASELINE.yaml#synthetic_templates`、`CHANGELOG.md` 与
 `docs/design/spec_replace_ab_scale87_prereg.md` §2.2 为证据。
+
+### 7.5 外部定位核验（只取一手来源）
+
+1.0.0 的「前沿」主张按 §2 只覆盖 A 组（测量装置），不以外部榜单加冕。做过的
+外部核验与**拒绝引入**的读数：
+
+- **已核**：EMSE「Replications and Negative Results」专刊为官方 CFP
+  （`emsejournal.github.io/special_issues/2024_SI_RENE.html`，截稿 2025-06-20），
+  论文的投稿定位以此为据；
+- **未引入**：检索到的 SWE-bench Lite 聚合榜单/博客读数互相矛盾，同一页面出现
+  无法核实的模型命名与版本，**一个数字都没有进本仓库或论文**；本项目对
+  SWE-bench Lite 的结论仍只有「20 次尝试全为基础设施故障，无能力结论」；
+- **纪律**：外部数字只在能追到一手页面（官方 CFP / 论文 DOI / 官方榜单）时引用；
+  聚合站排名不作为「前沿」证据。
