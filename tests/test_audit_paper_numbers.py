@@ -476,6 +476,72 @@ class TestSubmissionPackageCoherence:
         )
         assert any("submission_abstract_words" in f for f in result["failures"]), result["failures"]
 
+    def test_cover_letter_arxiv_must_be_in_bib_and_cited(self, tmp_path):
+        """投稿信提到的 arXiv 号必须既在 refs.bib、又被正文引用。
+
+        CV 轮：`paper/` 按双盲纪律不入库 ⇒ 改正文不会自动带动投稿信。上一轮手工
+        同步过一次，下一轮必然漂——此判据把「投稿信引了正文没引的文献」变成红线。
+        """
+        paper = self._make_pkg(tmp_path)
+        (paper / "tex" / "refs.bib").write_text(
+            "@misc{alpha2026,\n  title = {A},\n  note = {arXiv:2601.00001v1}\n}\n", encoding="utf-8"
+        )
+        (paper / "tex" / "manuscript.tex").write_text(
+            "\\begin{abstract}\nword word word word word word word word\n\\end{abstract}\n"
+            "We follow \\citet{alpha2026}.\n",
+            encoding="utf-8",
+        )
+        (paper / "cover_letter.tex").write_text("See arXiv:2601.00001 for context.\n", encoding="utf-8")
+        result = audit_mod.audit_submission_package(
+            paper, (paper / "tex" / "manuscript.tex").read_text(encoding="utf-8")
+        )
+        assert not [f for f in result["failures"] if "arXiv" in f], result["failures"]
+
+    def test_cover_letter_arxiv_absent_from_bib_fails(self, tmp_path):
+        """投稿信提到 refs.bib 里没有的 arXiv ⇒ 红。"""
+        paper = self._make_pkg(tmp_path)
+        (paper / "tex" / "refs.bib").write_text(
+            "@misc{alpha2026,\n  note = {arXiv:2601.00001v1}\n}\n", encoding="utf-8"
+        )
+        (paper / "tex" / "manuscript.tex").write_text(
+            "\\begin{abstract}\nword word word word word word word word word\n\\end{abstract}\n"
+            "We follow \\citet{alpha2026}.\n",
+            encoding="utf-8",
+        )
+        (paper / "cover_letter.tex").write_text("See arXiv:2699.99999 for context.\n", encoding="utf-8")
+        result = audit_mod.audit_submission_package(
+            paper, (paper / "tex" / "manuscript.tex").read_text(encoding="utf-8")
+        )
+        assert any("2699.99999" in f for f in result["failures"]), result["failures"]
+
+    def test_cover_letter_arxiv_not_cited_in_body_fails(self, tmp_path):
+        """投稿信提到、正文却没引的文献 ⇒ 红。"""
+        paper = self._make_pkg(tmp_path)
+        (paper / "tex" / "refs.bib").write_text(
+            "@misc{alpha2026,\n  note = {arXiv:2601.00001v1}\n}\n", encoding="utf-8"
+        )
+        (paper / "tex" / "manuscript.tex").write_text(
+            "\\begin{abstract}\nword word word word word word word word word\n\\end{abstract}\nWe follow nobody.\n",
+            encoding="utf-8",
+        )
+        (paper / "cover_letter.tex").write_text("See arXiv:2601.00001 for context.\n", encoding="utf-8")
+        result = audit_mod.audit_submission_package(
+            paper, (paper / "tex" / "manuscript.tex").read_text(encoding="utf-8")
+        )
+        assert any("正文没有引用" in f for f in result["failures"]), result["failures"]
+
+    def test_real_cover_letter_arxiv_are_all_cited(self):
+        """真树：投稿信提到的每个 arXiv 号都必须在 refs.bib 且被正文引用。"""
+        paper = Path(__file__).resolve().parents[1] / "paper"
+        draft = paper / "tex" / "manuscript.tex"
+        if not (paper / "cover_letter.tex").exists() or not draft.exists():
+            pytest.skip("paper/ 不入库（.gitignore 双盲纪律）——真树校验仅在本地稿件在场时执行")
+        result = audit_mod.audit_submission_package(paper, draft.read_text(encoding="utf-8"))
+        surface = result.get("cover_letter_arxiv")
+        assert surface, "投稿信里应有 arXiv 号（若为 0 则本判据面未被触发，需重新设计）"
+        assert all(surface["cited"].values()), surface
+        assert all(key for key in surface["in_bib"].values()), surface
+
     def test_conflicting_claims_fail(self, tmp_path):
         """同一项出现两个不同声明 ⇒ 红（登记面自相矛盾）。"""
         paper = self._make_pkg(tmp_path)
