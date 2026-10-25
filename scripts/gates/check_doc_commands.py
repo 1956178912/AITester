@@ -245,9 +245,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"      ← 前行尾: {item['context']}")
     else:
         print("[doc-commands] 通过：无标题被粘在行内（ATX 标题必须在行首）")
-    disclosures = list(doc_mod_disclosures := [])
-    if disclosures:
-        print(f"[doc-commands] 披露：{len(disclosures)} 处标题前一行非空（不阻断）")
+    if _LAST_DISCLOSURES:
+        print(f"[doc-commands] 披露：{len(_LAST_DISCLOSURES)} 处标题前一行非空（不阻断）")
     if args.json and args.json != "-":
         Path(args.json).write_text(
             json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False),
