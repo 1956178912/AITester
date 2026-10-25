@@ -1264,10 +1264,10 @@ invocation:                  # CG 轮（2026-10-24）新增节：`scripts/gates/
   faces: 5                   # 调用面数 = make 目标面 ∪ workflow 步骤面：['make:gates', 'make:perf-check', 'make:prompt-artifacts-check', 'wf:ci.yml', 'wf:perf.yml']
   declared_flags: 73         # 25 道有 argparse 的门禁声明的开关总数（`add_argument` 复算，不是 grep 文本；CH 轮 +2 = 新门自己的 `--list` 与 `--quiet`）
   passed_flags: 14           # 真的被某个调用面传上去的开关数（`--f=v` 拆值、`store_true` 记 "set"、argparse 默认值用 `ast` 复算后才可比）
-  locked_flags: 29           # 有代码锁（测试/工装文件里既出现该开关、又点名这道门）的声明开关数——读者敏感，随文本变；CH 轮 +3 = 新门的 `--list`/`--quiet`（由 `tests/test_flag_effect_ch.py` 点名）与 `check_docs_history_drift --strict`（同文件点名，令那条 manual-only 登记失效并删除）
+  locked_flags: 30           # 有代码锁（测试/工装文件里既出现该开关、又点名这道门）的声明开关数——读者敏感，随文本变；**CJ 轮（2026-10-25）29 → 30**：`tests/test_citations_gate.py` 以 `gate.main(["--files", ...])` 调 `check_citations.py`，令其 `--files` 从「范围呈现档无读者」转入本类（同轮 presentation_unread 22 → 21，恒等式 73 = 14 + 30 + 8 + 0 + 21 两侧各自成立）；CH 轮 +3 = 新门的 `--list`/`--quiet`（由 `tests/test_flag_effect_ch.py` 点名）与 `check_docs_history_drift --strict`（同文件点名，令那条 manual-only 登记失效并删除）
   registered_unread: 8       # 只在登记表 `docs/invocation_caliber_allowlist.txt` 里被认领的开关数（CH 轮 9 → 8：删掉上一条已失效的 manual-only 登记）
   caliber_unread: 0          # **判据档无读者**（改变判定方向的开关没人传、没人锁）——记红档，本轮实测 0
-  presentation_unread: 22    # 范围与呈现档无读者（只影响披露/呈现面，不改判定）——只记数不记红，数字锁在本节
+  presentation_unread: 21    # 范围与呈现档无读者（只影响披露/呈现面，不改判定）——只记数不记红，数字锁在本节；**CJ 轮（2026-10-25）22 → 21**：`check_citations.py --files` 因新锁 `tests/test_citations_gate.py` 的 `main(["--files", ...])` 调用转入代码锁类（见 `locked_flags` 注）
   flag_diffs: 3              # 同一门禁在两个调用面之间的**有效值**不等处数（全部落登记表，无登记即红）
   swallow_steps: 1           # 门禁命令被 shell 兜底（`||` 或 `set +e` 生效区）吞掉失败的非阻断步骤数
   dynamic_steps: 1           # 开关值由运行时变量注入（perf.yml `$STRICT_FLAG`）、静态普查看不到实际口径的步骤数
