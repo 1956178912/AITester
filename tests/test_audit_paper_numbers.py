@@ -459,7 +459,9 @@ class TestSubmissionPackageCoherence:
             "\\item Manuscript body: 54 pages including appendices\n",
             encoding="utf-8",
         )
-        result = audit_mod.audit_submission_package(paper, (paper / "tex" / "manuscript.tex").read_text(encoding="utf-8"))
+        result = audit_mod.audit_submission_package(
+            paper, (paper / "tex" / "manuscript.tex").read_text(encoding="utf-8")
+        )
         assert any("title_page_abstract_words" in f for f in result["failures"]), result["failures"]
         assert any("title_page_pages" in f for f in result["failures"]), result["failures"]
 
@@ -469,7 +471,9 @@ class TestSubmissionPackageCoherence:
         text = (paper / "SUBMISSION.md").read_text(encoding="utf-8")
         text = text.replace("- 共 18 处待填标记", "- 稿件 777 词\n- 共 18 处待填标记")
         (paper / "SUBMISSION.md").write_text(text, encoding="utf-8")
-        result = audit_mod.audit_submission_package(paper, (paper / "tex" / "manuscript.tex").read_text(encoding="utf-8"))
+        result = audit_mod.audit_submission_package(
+            paper, (paper / "tex" / "manuscript.tex").read_text(encoding="utf-8")
+        )
         assert any("submission_abstract_words" in f for f in result["failures"]), result["failures"]
 
     def test_conflicting_claims_fail(self, tmp_path):
