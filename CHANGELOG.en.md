@@ -84,12 +84,16 @@ API `summary`) — fetching the wrong surface silently invents sentences, and "p
 the surface as well as the version.
 
 **五、Health-check and patrol readings.**
-Full suite: **12,603 passed / 268 skipped / 0 failed** (collected 12,871, ~463s, zero LLM);
+Full suite: **12,603 passed / 268 skipped / 0 failed** (collected 12,871; 463.74s single-process,
+**146.54s** in the CI caliber `xdist -n 4 --dist loadfile`, zero LLM);
 `ruff format --check .` = 984 files already formatted, `ruff check` clean,
 `mypy src/ config.py` = Success: no issues found in 137 source files;
 `paper-audit --strict` rc=0 (233 numeric claims, SRC coverage 94.8%, 100.0% overall traceability,
-0 invalid citations, 0 strict-block failures); LaTeX build 55 pages, 0 undefined references,
-0 missing-character warnings.
+0 invalid citations, 0 strict-block failures); LaTeX build **55 pages** (`xdv` log caliber; the PDF
+has 57 — xdvipdfmx appends 2, a long-standing caliber gap), 0 undefined references,
+**0 missing-character warnings**; clean-tree gate chain **23 steps rc=0** (including the xdist
+run); PDF text extraction confirms all four new entries and the `PMLR 306:77728-77771` page
+range are present in the references, with 0 CJK residue.
 
 Remote patrol: the CI run for `7ea831ef` **completed success** (3.12/3.13/3.14 plus
 Security/SBOM/E2E/Docker/Smoke all green); tag `v1.0.0` → `dc8285d3` has both CI and Release

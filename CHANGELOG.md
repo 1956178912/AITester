@@ -80,11 +80,15 @@ PDF 参考文献处留下缺字符。**这类缺陷 180 轮无人看见，因为
 PDF / API 的 summary），抓错面就会抄进不存在的句子；「一手」必须连抓取面一起说。
 
 **五、体检与巡检读数。**
-全量：**12,603 passed / 268 skipped / 0 failed**（collected 12,871，约 463s，零 LLM）；
+全量：**12,603 passed / 268 skipped / 0 failed**（collected 12,871；单进程跑 463.74s、
+CI 同口径 `xdist -n 4 --dist loadfile` **146.54s**，零 LLM）；
 `ruff format --check .` = 984 files already formatted、`ruff check` 全过、
 `mypy src/ config.py` = Success: no issues found in 137 source files；
 `paper-audit --strict` rc=0（数字声明 233 条 / SRC 覆盖 94.8% / 综合可追溯率 100.0% /
-引用无效 0 / strict 块失败 0）；LaTeX 编译 55 页、0 未定义引用、缺字符警告 0。
+引用无效 0 / strict 块失败 0）；LaTeX 编译 **55 页**（`xdv` 日志口径；PDF 实际 57 页——
+xdvipdfmx 阶段追加 2 页，两者长期存在此口径差）、0 未定义引用、**缺字符警告 0**；
+干净树门禁链 **23 步 rc=0**（含 xdist 口径全量）；PDF 文本抽取复核：四篇新文献条目与
+`PMLR 306:77728-77771` 页码均在参考文献中，全文 CJK 残留 0。
 
 远端巡检：`7ea831ef` 的 CI **completed success**（3.12/3.13/3.14 + Security/SBOM/
 E2E/Docker/Smoke 全绿）；tag `v1.0.0` → `dc8285d3` 的 CI 与 Release 均 success。
