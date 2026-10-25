@@ -39,7 +39,12 @@ jobs:
   ci-green:
     name: Require CI green on tagged commit
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # CO 轮（2026-10-25）：10 → 40。实测 ci.yml 在标签提交上的完整耗时为
+    # **11.4 分钟**（8.4–11.4 分钟区间，随运行器负载波动），而绿门只等 10 分钟
+    # ⇒ 标签推送后 CI 尚在跑就被判超时，发布恒失败（run 40196237363 实测）。
+    # 等待预算必须大于被等待对象的实测耗时（含波动余量），否则这道门就成了
+    # 「发布竞态制造器」。作业超时同样放宽，避免脚本自身的 deadline 先被 runner 砍掉。
+    timeout-minutes: 40
     # 读 Actions 运行/作业需要 actions: read（旧实现查 check-runs/status 的
     # 权限口径不适用于 workflow runs API；缺权限会 403，绿门永远不放行）。
     permissions:
@@ -60,7 +65,8 @@ jobs:
           token = os.environ["GH_TOKEN"]
           api = f"https://api.github.com/repos/{repo}"
           headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"}
-          deadline = time.time() + 600
+          # 30 分钟：实测 CI 最慢 11.4 分钟，留 ~2.6 倍余量
+          deadline = time.time() + 1800
           last = "尚未查询"
 
           def get(url):
@@ -68,7 +74,7 @@ jobs:
               with urllib.request.urlopen(req, timeout=30) as resp:
                   return json.load(resp)
 
-          print(f"检查 commit {sha} 上 ci.yml 的运行状态（最多 10 分钟）...")
+          print(f"检查 commit {sha} 上 ci.yml 的运行状态（最多 30 分钟）...")
           while True:
               try:
                   runs = get(f"{api}/actions/workflows/ci.yml/runs?head_sha={sha}&per_page=20").get(
@@ -98,7 +104,7 @@ jobs:
               if time.time() > deadline:
                   print(
                       "::error title=CI 绿门超时::"
-                      f"ci.yml 未在 10 分钟内完成且全绿（最后状态：{last}），保守阻断发布"
+                      f"ci.yml 未在 30 分钟内完成且全绿（最后状态：{last}），保守阻断发布"
                   )
                   sys.exit(1)
               print(f"等待中：{last}")
