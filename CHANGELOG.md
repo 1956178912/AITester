@@ -6,7 +6,20 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
-## [Unreleased] — 2026-10-24 CI 轮：收口声明与树分裂——「12749 passed 收口实测」先于收口跑被写下，而那次跑只会显示 4 红（零 LLM，$0）
+## [0.8.0] - 2026-10-25 测量廉洁重置 + DeepSeek 单端点语料重建 + PROMPT-SE 投稿版（180 轮）
+
+> **本版本主题**：以 180 轮逐轮评审-修复完成 measurement-integrity reset——
+> ① 运行面收敛到 DeepSeek 官方单端点（provider 面与第三方 SDK 路径移除，破坏性配置变更）；
+> ② 历史证据工件全量撤回并重建（239 批次/138 traces 目录/82 份评审分册撤回，重建 27 批次
+> /1,106 traces/约 $4 记账成本，quixbugs 50 任务三臂 + synthetic 20 + spec_ab 四臂 + 锚/增广
+> 五臂 + oracle 注入对 + Mut@k 461 变异体 0.978）；③ 门禁面扩到 32 道（新增 flag-effect /
+> invocation-caliber / registration-consistency 三道 CI 阻断门）+ 测试底座 12,745 例
+> （约 300 例语料前提具名 skip）；④ 论文 v0.5/v0.6 按新语料重写并迁移到 PROMPT-SE 2026
+> 叙事（instruction artifact 为第一研究问题）；⑤ Mimosa 深扫 160 项全分诊（0 项需改产品代码）
+> + filelock 4.2.1 漏洞升级。**破坏性**：引用旧工件路径或旧 provider 配置的下游全部失效
+> （撤回族索引见 docs/study/WITHDRAWN_ARTIFACTS_2026-10-24.md）。以下 180 轮为逐轮明细。
+
+### [Unreleased] — 2026-10-24 CI 轮：收口声明与树分裂——「12749 passed 收口实测」先于收口跑被写下，而那次跑只会显示 4 红（零 LLM，$0）
 
 > 归因对象 = **实测读数与登记声明的落差**。CA–CH 六轮完成但未提交，对这批工作做全量回归验证（`make test`）时
 > 实测 **12,745 passed / 5 skipped / 4 failed**（collected 12754、224.78s），而 BASELINE `tests` 节与 §1「全量测试」行
@@ -59,7 +72,7 @@
 - 全量确认跑 = **12,735 passed / 19 skipped / 0 failed、214.85s**；三份内容命中判为误报保留
   （被测代码 input_args / 诊断文本 / 纯文本提及）。详见 CI 分册 §7。
 
-## [Unreleased] — 2026-10-24 CH 轮：命令行上传了的开关，有两个从来没被读过——「判据档无读者 0」是真绿但误导（零 LLM，$0）
+### [Unreleased] — 2026-10-24 CH 轮：命令行上传了的开关，有两个从来没被读过——「判据档无读者 0」是真绿但误导（零 LLM，$0）
 
 > 归因对象 = `add_argument` 声明的开关在**门禁源码里有没有接线**。CG 轮收口时交来的边界 ① 正是本族入口：
 > 「只判静态调用面，不执行任何门禁——『传了这个开关』不等于『那个开关真改变了行为』」。
@@ -152,7 +165,7 @@
   「dest 被读只是必要非充分」、`$STRICT_FLAG` 实际值、`--verify-mypy`、注释命中算读的假绿方向、盘 **32** / 索引 **29** 口径差、
   「变异只证明判据被锁住、不证明判据充分」）。
 
-## [Unreleased] — 2026-10-24 CG 轮：门禁「挂在链上」不等于「以同一口径在跑」——调用面归属、开关有效值与阻断写法从未跨面复算（零 LLM，$0）
+### [Unreleased] — 2026-10-24 CG 轮：门禁「挂在链上」不等于「以同一口径在跑」——调用面归属、开关有效值与阻断写法从未跨面复算（零 LLM，$0）
 
 > 归因对象 = `make` 链与 `.github/workflows/*.yml` 的**调用口径**。CF 轮收口时交来的边界里有一条正是本族入口：
 > `check_registration_consistency` 只答「这道门有没有人调用」（在场性），不答「**以什么口径**调用」。
@@ -257,7 +270,7 @@ BP §6⑤ 立的配对口径是「单逻辑行 + 剔除行内代码后看奇偶�
   规矩入册 `docs/MEASUREMENT_INTEGRITY.md` §78。
 - 分册：INVOCATION_CALIBER_CG_2026-10-24（分册已删除）。
 
-## [Unreleased] — 2026-10-24 CF 轮：登记面的「当前口径」数字与分册清单只被写、不被读（零 LLM，$0）
+### [Unreleased] — 2026-10-24 CF 轮：登记面的「当前口径」数字与分册清单只被写、不被读（零 LLM，$0）
 
 > 归因对象 = `docs/PROJECT_STATUS_REGISTER.md` §1 的**派生数字读侧**与 `docs/INDEX.md` / `docs/INDEX.en.md`
 > 的**清单反方向**。本轮把「写了没人查」这一族从运行面推进到文档面：前面 14 轮立的门禁查代码，
@@ -328,7 +341,7 @@ M36/M38 的处置被写成「拆成两条独立判据」（实为各补一条直
   晚于 CE 回填标记的命中 **0**，`src/` 本轮零改动）。
 - 分册：REGISTRATION_READER_CF_2026-10-24（分册已删除）；规矩入册：`docs/MEASUREMENT_INTEGRITY.md` §77。
 
-## [Unreleased] — 2026-10-23 CE 轮：模型指纹门禁把 `pinned=true` 说成「可比」、把窗口计数说成语料结论（零 LLM，$0）
+### [Unreleased] — 2026-10-23 CE 轮：模型指纹门禁把 `pinned=true` 说成「可比」、把窗口计数说成语料结论（零 LLM，$0）
 
 > 归因对象 = `scripts/gates/check_model_fingerprint.py` 的**判定面**与**成功语句的分母**。
 > 本轮测量在 2026-10-23 深夜完成、文档回填与终跑跨入 2026-10-24（轮次标签仍记测量日）。
@@ -392,7 +405,7 @@ M36/M38 的处置被写成「拆成两条独立判据」（实为各补一条直
 - 终跑（登记文本落盘后单独执行，不与其他 pytest 重叠）与逐项读数见
   `BASELINE.yaml` 与本册 §3.3；分册 MODEL_FINGERPRINT_COMPARABILITY_CE_2026-10-23（分册已删除）。
 
-## [Unreleased] — 2026-10-23 CD 轮：运行面与文档面收敛到「仅保留 DeepSeek 官方」，历史归档删除后派生读数按存盘语料重算（零 LLM，$0）
+### [Unreleased] — 2026-10-23 CD 轮：运行面与文档面收敛到「仅保留 DeepSeek 官方」，历史归档删除后派生读数按存盘语料重算（零 LLM，$0）
 
 > 归因对象 = 全仓的 **provider 面**。用户指令「项目中只保留 DeepSeek 官方的那个，其他的删除」
 > 分四层落地：运行时配置、脚本与实验入口、测试面、文档与历史归档。
@@ -461,7 +474,7 @@ M36/M38 的处置被写成「拆成两条独立判据」（实为各补一条直
 - 文档门禁：`check_doc_links` 867 条链接 0 错误；`check_citations` rc=0；`check_artifacts_tracked`
   188/188（豁免 14 条、遮蔽 155）；`ruff format --check .` 1044 文件。
 
-## [Unreleased] — 2026-10-23 CA 轮：门禁豁免登记从不被审计，也不披露它遮蔽了什么（零 LLM，$0）
+### [Unreleased] — 2026-10-23 CA 轮：门禁豁免登记从不被审计，也不披露它遮蔽了什么（零 LLM，$0）
 
 > 归因对象 = `scripts/gates/check_artifacts_tracked.py` 的证据目录覆盖扫描。豁免表只有
 > 一处读者（`if name in EVIDENCE_DIR_EXEMPTIONS: continue`）——只在「抑制报错」时被
@@ -507,7 +520,7 @@ M36/M38 的处置被写成「拆成两条独立判据」（实为各补一条直
   未对齐，本轮按新契约对齐（`tests/test_type_repair_more_branches.py`，仅 mock 顺序），
   属继承态收口、不计入本族。
 
-## [Unreleased] — 2026-10-23 BZ 轮：CI 历史三族红的归因与修复——测试契约工件入库、三类前提缺失显式 skip、依赖升级清零 45 漏洞（零 LLM，$0）
+### [Unreleased] — 2026-10-23 BZ 轮：CI 历史三族红的归因与修复——测试契约工件入库、三类前提缺失显式 skip、依赖升级清零 45 漏洞（零 LLM，$0）
 
 > 归因对象 = run `39905189493`（head `5eb51607`）：test 3.12/3.13 在「Run tests with coverage (parallel)」
 > 失败、3.14 作业 30min 超时被 cancel、Security 在 pip-audit lock 审计失败；失败清单逐字取自
@@ -573,7 +586,7 @@ M36/M38 的处置被写成「拆成两条独立判据」（实为各补一条直
 - README「已知失败」行的 CI 声明曾有近一周失实（10-19 起 push run 全红而该行写「全绿」）；
   失实窗口登记于分册 §5，不悄悄抹平。
 
-## [Unreleased] — 2026-10-23 BY 轮：报告的「分析集流量」从未披露——载入行数不是 n、整份剔除与行内折叠是两种剔除、`## 数据来源` 只列纳入文件（零 LLM，$0）
+### [Unreleased] — 2026-10-23 BY 轮：报告的「分析集流量」从未披露——载入行数不是 n、整份剔除与行内折叠是两种剔除、`## 数据来源` 只列纳入文件（零 LLM，$0）
 
 > 归档实测（扫描面 246 份 `benchmark_*.json` / 10,659 行）：数据集白名单剔除 **77 份 / 886 行**、schema 不完备剔除 **59 份 / 2,463 行**、未登记基线 **300 行**，载入 **110 份 / 7,010 行**；随后 `latest_rows_by_task` 折叠 **6,449 行（91.997%）**，唯一 task 行 **561**，缺 `task_id` 0；字段 None：`passed` 0 / `detection_rate` 45 / `repair_rate` 52。全归档带 `results` 的 JSON **257 份 / 11,197 行**，其中非 `benchmark_*` 命名 **13 份 / 538 行**不进扫描面；混批口径 **169 份 / 9,473 行**、重复 8,494、唯一 979，与默认口径之差恰为 schema 层 2,463 行。
 
@@ -599,7 +612,7 @@ M36/M38 的处置被写成「拆成两条独立判据」（实为各补一条直
 - **字段 None 不折成 0**：45 / 52 个不可测任务不进配对分母，也不参与均值。
 - **不回填历史行、不动判定**：所有剔除层只记账，归档行一个字节不改。
 
-## [Unreleased] — 2026-10-23 BX 轮：写而不读键池最后两键的读侧从未披露——通道关闭与全低风险、五层输入域与 `None`/`0` 在任何报告面都不出现（零 LLM，$0）
+### [Unreleased] — 2026-10-23 BX 轮：写而不读键池最后两键的读侧从未披露——通道关闭与全低风险、五层输入域与 `None`/`0` 在任何报告面都不出现（零 LLM，$0）
 
 > 归档实测（257 批次 / 11197 行）：`risk_summary` 8,864 行**全部 `enabled=False`**（`enabled=True` 0、`risk_level` 非空 0、键缺席 2,333、`contract_status` 在场 0），「通道没开」与「全部低风险」同形；`mdo_crash_rate` 4,044 行五层输入域（未跑 2,312 / 材料缺 122 / 不可测 986 / 暂定池 530 / 实测 94）共用一个 `None`，`mdo_pool_floor_ok=False` 1,516 行是两义键（暂定池 530 + `MDOResult` 默认值 986）。键池闭合：41,545（BV）+ 22,035（BW）+ 12,908（BX）= 76,488，**BX 之后全树零读者池为空**。
 
@@ -627,7 +640,7 @@ M36/M38 的处置被写成「拆成两条独立判据」（实为各补一条直
 - **两义键不改写**：`mdo_pool_floor_ok=False` 的 986 行不可测是 `MDOResult` 默认值，读侧只分解，不读成「池不足」。
 - **键池已清空**：BU 登记的最后两键由本轮收口；后续轮次转向其它缺陷族，不以「清空键池」代替新证据。
 
-## [Unreleased] — 2026-10-23 BW 轮：补丁接收链的覆盖率与分母从未披露——精确率三口径、弃权四桶与验证输入可达域在任何报告面都不出现（零 LLM，$0）
+### [Unreleased] — 2026-10-23 BW 轮：补丁接收链的覆盖率与分母从未披露——精确率三口径、弃权四桶与验证输入可达域在任何报告面都不出现（零 LLM，$0）
 
 > 归档实测（257 批次 / 11197 行）：`patch_precision`（R53 预注册 E3）、`patch_plausible_evidence` / `patch_plausible_invariant_violation`（P0-2）、`patch_abstain_signals`（批次 V）自写入起报告面读端 **0**，`patch_validated` / `patch_validate_verdict`（批次 XVI）只有测试读者。存下来的是判定值，缺的是**分母**：存储精确率 45.6048%（607/1331）与 gold 口径 57.9198%（607/1048）差 12.32pp，并集口径 50.7483%（746/1470）居中；`None`（plausible=0）与 `0.0` 在读者侧同形。弃权精确率有 93.9753%（1825/1942，gold 分母）与 93.1122%（1825/1960，全部分母）两个口径，117 行「抑制但判对」、18 行无 gold 材料在任何报告面都不出现。验证只有 `patch_evidence_level` 在归档有可达输入（1007 行；sbfl 594 / null 3037 / none 387 / keyword 26），`repo_verification` / `deterministic_repair_status` 全归档可达域为空——「验证跑过且干净」与「验证从没拿到输入」同形。
 
@@ -654,7 +667,7 @@ M36/M38 的处置被写成「拆成两条独立判据」（实为各补一条直
 - **可达域为空是事实**：`repo_verification` / `deterministic_repair_status` 在整个归档 0 行输入，不得写成「验证已排除」。
 - **键池剩余 2 项**（`risk_summary` 8864 行、`mdo_crash_rate` 4044 行）⇒ 后续轮候选。
 
-## [Unreleased] — 2026-10-23 BV 轮：批次 VIII / XIV 两份判定核的「沉默」从未披露——20 行 test-hacking 判 True 与 4442 行 FL 未求值在任何报告面都不出现（零 LLM，$0）
+### [Unreleased] — 2026-10-23 BV 轮：批次 VIII / XIV 两份判定核的「沉默」从未披露——20 行 test-hacking 判 True 与 4442 行 FL 未求值在任何报告面都不出现（零 LLM，$0）
 
 > 归档实测（257 批次 / 11197 行）：批次 VIII（ADR-0022）的 `test_hacking_suspected` / `_signals` 与批次 XIV（ADR-0028）的 `fl_constraint_verdict` / `_hit_rank` / `_changed_functions` 自写入起报告面读端 **0**，而两者的沉默都是「多成因、同取值」——判定核四种早退（无原码 / 无补丁 / 两侧解析失败）与「三信号都跑过且零命中」返回同一个 `{"suspected": False, "signals": []}`（5915 行分不清判干净还是没看），FL 六种早退 + 异常共用一个 `not_evaluable`（4442/5935）。详见 DETECTOR_SILENCE_BV_2026-10-23（分册已删除）。
 
@@ -685,7 +698,7 @@ M36/M38 的处置被写成「拆成两条独立判据」（实为各补一条直
 - **键池其余 6 项未动**（`risk_summary` 8864 行、`patch_precision` 8012、`patch_abstain_signals` 5935、`patch_plausible_evidence` / `patch_plausible_invariant_violation` / `mdo_crash_rate` 各 4044）⇒ BW 轮候选池。
 - **未跑真实批次**：本轮零 LLM、$0；新批次才会真正产出两列，归档里这两列将始终是「未记录」——这是设计，不是缺陷。
 
-## [Unreleased] — 2026-10-23 BU 轮：Self-Repair Trap 判定核的输入可达域从未披露——5935 行恒判「不怀疑」，其中两个信号在全归档拿到过 0 行输入（零 LLM，$0）
+### [Unreleased] — 2026-10-23 BU 轮：Self-Repair Trap 判定核的输入可达域从未披露——5935 行恒判「不怀疑」，其中两个信号在全归档拿到过 0 行输入（零 LLM，$0）
 
 > 归档实测：`self_repair_trap_suspected` / `self_repair_trap_signals` 自批次 XIV（ADR-0028）写入 **5935** 行，取值恒 `False` / `[]`，报告面读端 **0**。判定核 `src/tools/self_repair_trap.py:104/:106/:113` 的三个信号各带最少点数门槛（**3 / 2 / 2**），而门槛从不写进报告 ⇒「**3200** 行只有 1 个点、进不了任何门」「**2723** 行进得了 collapse 门且确实判干净」「declining 与 score 两个信号**全域 0 行输入**」三种事实在报告面上是同一个读数。详见 TRAP_INPUT_DOMAIN_BU_2026-10-23（分册已删除）。
 
@@ -705,7 +718,7 @@ M36/M38 的处置被写成「拆成两条独立判据」（实为各补一条直
 - 覆盖率：行 **19526/20040 = 97.4351%**、弧 **7150/7582 = 94.3023%** 与 BT 逐位相同。依据是 `git status --porcelain src/` 命中 **0**，本轮 `src/` 零改动。口径注：预登记跑执行 `make test-cov` 体内的 pytest 行但**未设 `COVERAGE_FILE`**（分母与 BT 逐位相同、无 coverage INTERNALERROR），按实际命令登记。
 - `make gates`：全链 **rc=0**，单独执行、不接管道、与其他 pytest 不重叠（`date +%s` 成对采集：墙钟 **199s**，1792689206→1792689405，链内 **19** 条目标回显）。链内 pytest 为 xdist `-n 4 --dist loadfile` 且**不带 `--cov`**：**12184 passed / 5 skipped / 0 failed、193.35s、53 warnings**，12184 + 5 = **12189** 与预登记 predicted collected 逐位相符；用时不可与含 `--cov` 的预登记跑（200.51s）相减。链首 `ruff check .` All checks passed、`ruff format --check .` **1015 files already formatted**、`mypy src/ config.py` **137** 源文件 0 错。链尾分步读数：双语 strict **0 失败 / 0 警告**、链接 strict **189 份文档 / 913 条链接（内部 904 / 外链 9）/ 0 错误**、env-budget **253/253** 无未登记新增、`check_baseline` 结构校验通过、基线数字检查报「当前基线块零硬编码」、状态契约 **136** 文件无未声明键读写、env-snapshot 快照 **115** 键 / 开关全集 **84** / 已覆盖 **84** / 缺失 **0**（另 31 个键不在扫描面，信息项不阻断）、model-fingerprint 无新批次可验（通过）、工具版本 mypy **1.15.0** / ruff **0.16.3** 一致、JSON 契约调用点口径 A **7** 处（期望 7）+ 文档数量表述 **9** 处全 OK、json-strict 工件 **7274 = 严格 7272 + 登记豁免 2 + 违规 0** / 源码 **335** 份写入点违规 **0**、报告→工件三臂对账 **0** 项不一致（T-10 严格 **29 行 / 25 可测**、宽松 **62 / 55**）且**状态登记册覆盖率对账 [OK]**（§1 声明 97.44% / 94.30% 与 `coverage.xml` 实测在 ±0.20pp 内）、零断言门扫 **468** 个测试文件 0 违规、`ast.parse` 守卫站点 **79** / 未覆盖 ValueError 族 **20** / 豁免命中 **20** / EXEMPT 条目 **19** / 违规 **0**、落盘可达性声明 **10** 个通道 / 落盘面 **3** 处全覆盖。口径注：本地链**不加 `--require-coverage`**，登记册那支读的是 **2026-10-23 00:44:37** 那份 `coverage.xml`（预登记跑的产物），不是本链生成。本条描述的是**回填之前**那一跑——回填后未再跑全链；若要让门禁再见这三处文本，须另起一跑并如实标成第二次读数。
 
-## [Unreleased] — 2026-10-22 BT 轮：验收 oracle 来源与可见性——写入端说反了、读端为 0（零 LLM，$0）
+### [Unreleased] — 2026-10-22 BT 轮：验收 oracle 来源与可见性——写入端说反了、读端为 0（零 LLM，$0）
 
 > 归档实测：`oracle_type` / `test_visible_to_system` 写入 **8012** 行（全 `generated_test/True`），全仓读取方 **0**；写入端把 SWE-bench 仓库级验收（gold F2P，测试对系统不可见）标成生成测试 + 可见。详见 ORACLE_PROVENANCE_BT_2026-10-22（分册已删除）。
 
@@ -725,7 +738,7 @@ M36/M38 的处置被写成「拆成两条独立判据」（实为各补一条直
 - 覆盖率：行 19526/20040 = 97.4351% 与 BS 逐位相同；弧 7150/7582 = 94.3023%（BS 7148，+2 在 ±2 抖动内）。依据是 `git status --porcelain src/` 命中 0，本轮 `src/` 零改动。
 - `make gates` 全链 **rc=0**（两跑同判，`date +%s` 成对采集）：首跑墙钟 **199s**（1792681705→1792681904，链内 **12105 passed / 5 skipped / 0 failed、193.44s / 41 warnings**）——跑在 BP 段落补回之前；终跑墙钟 **200s**（1792682426→1792682626，链内 **193.76s / 42 warnings**、collected **12110**），跑在本轮全部登记文本完成、本条门禁句回填之前。链内 pytest 口径为 xdist `-n 4 --dist loadfile` 且**不带 `--cov`**，与确认跑同一采集面；链首 ruff `check` 全过 / `format --check` **1010 files already formatted**、mypy **137** 源文件 0 错；链尾分步读数：零断言门扫 **467** 个测试文件 0 违规、`ast-guards` **136/79/20/0/20/19**（站点 78→79 归因 **BR** 在 `src/agents/executor_imports.py::_insert_sys_path_prefix` 新增一处 `except AST_UNREADABLE_ERRORS` 守卫，BT 的 `src/` 零改动，BK/BL 登记的「链内读数逐位相同」就此过期、登记不追改）、`env-budget` 253/253、状态通道落盘可达性 10 通道 / 3 落盘面全覆盖。本条只改文档：回填后重跑文档面锁 `tests/test_markdown_table_integrity.py` + `test_ao_batch.py` + `test_2026_10_10_optimization_batch.py` + `test_prompt_artifacts_gate.py` 与门禁 `ruff format --check .` / `check_bilingual_docs.py --strict` / `check_doc_links.py --strict`，读数见分册 §3。
 
-## [Unreleased] — 2026-10-22 BS 轮：覆盖率口径写进配置（branch=true）+ 基线复算（零 LLM，$0）
+### [Unreleased] — 2026-10-22 BS 轮：覆盖率口径写进配置（branch=true）+ 基线复算（零 LLM，$0）
 
 > 发现：`pytest --cov=src --cov-branch -n 4` 在本机直接崩在 combine——`.coverage`（控制进程）lines 1 / arcs 0，四个 worker 2.4k–23k 弧，同一命令行两种口径。详见 COVERAGE_CONFIG_BS_2026-10-22（分册已删除）。
 
@@ -740,7 +753,7 @@ M36/M38 的处置被写成「拆成两条独立判据」（实为各补一条直
 - collected **12070** = passed **12065** + skipped 5 + failed 0（规范口径）；沙箱确认跑 **12051 passed / 19 skipped / 0 failed、202.70s / rc=0**。
 - 棘轮：行 97.44 ≥ 96.40（余量 1.04pp）、分支 94.28 ≥ 92.50（余量 1.78pp），`rc=0`；`check_branch_coverage` 门槛达标；**水位不上调**（AA-4：只认 CI ubuntu 口径）。
 
-## [Unreleased] — 2026-10-22 BR 轮：第三方集中复审 27 项全部确认并收口（零 LLM，$0）
+### [Unreleased] — 2026-10-22 BR 轮：第三方集中复审 27 项全部确认并收口（零 LLM，$0）
 
 > 报告 HEAD `53bbbbd4`，收口 HEAD `f49959b2`；P1=14 / P2=13、P0=0，逐项在收口 HEAD 复核，**零误报**。详见 BR_ROUND_CENTRAL_REVIEW_2026-10-22（分册已删除）。
 
@@ -759,7 +772,7 @@ M36/M38 的处置被写成「拆成两条独立判据」（实为各补一条直
 - 全量：collected **12069** = passed **12064** + skipped 5 + failed 0（规范口径）；本会话沙箱确认跑 **12050 passed / 19 skipped / 0 failed、537.77s / rc=0**（19 = 5 + 14 环境能力 skip）。
 - 门禁：baseline / doc-links / bilingual / citations / artifact-consistency / zero-assert / env-budget / ast-guards 全绿。
 
-## [Unreleased] — 2026-10-22 BQ 轮：报告读侧把四个 status 通道当作不存在——BN 落盘的结果行四键零行读者（零 LLM，$0）
+### [Unreleased] — 2026-10-22 BQ 轮：报告读侧把四个 status 通道当作不存在——BN 落盘的结果行四键零行读者（零 LLM，$0）
 
 > 缺陷族（BH→BP 系列第 10 面）。BM 给 `contract_status` 接的是生产侧透传、BN 把四通道写进结果行两分支与 raw 白名单，但报告面对四键**零行读者**。
 
@@ -874,7 +887,7 @@ P14 首跑存活（0 红），补一例「全部臂都不可对照」后才击�
    报告面；`outcome_sink=None` 的调用方；额度里"collapse shape"仍是文本；D/D2 类普查缺 BL 之前的
    历史读数，差值不可减。
 
-## [Unreleased] — 2026-10-22 BP 轮：统计对照面把「这一行没记录污染级别」折成沉默——两种缺席在两个消费者手里去向不同（零 LLM，$0）
+### [Unreleased] — 2026-10-22 BP 轮：统计对照面把「这一行没记录污染级别」折成沉默——两种缺席在两个消费者手里去向不同（零 LLM，$0）
 > 缺陷族（BH→BN 系列第 9 面）。BO 收的是 raw 落盘面的读侧，本轮收同一批 `details` 行在**统计对照面**的读法：`analysis_parts/cross_analysis` 的 `if not level: continue` 对未记录行**一个都不记**，而 `statistical_analysis.contamination_view_summary` 的 `recorded or "unknown"` 把它们**并计进 `unknown`**（与"检测跑了但判不了"同一个数）；渲染层 5.3 的「未入对照任务」按前者加、脚注却按后一种口径解释前一种。详见 CONTAMINATION_ABSENT_BUCKET_DISCLOSURE_BP_2026-10-22（分册已删除）。
 
 ### 改了什么
@@ -892,7 +905,7 @@ P14 首跑存活（0 红），补一例「全部臂都不可对照」后才击�
 - 预登记跑（`make test-cov`）collected **11927** = 11921 passed + **1 failed** + 5 skipped、201.21s / rc=2（唯一红 = 基线数对账守卫）；刷新后确认跑（`make test`，不带 `--cov`）**11922 passed / 5 skipped / 0 failed、195.48s / rc=0**（collected 11927，墙钟 197s）。
 - `make gates` 全链 rc=0（回填后终跑墙钟 203s）。
 
-## [Unreleased] — 2026-10-22 BO 轮：raw 落盘面的读侧把三种缺席折成实测——落盘开关态自己也不落盘（零 LLM，$0）
+### [Unreleased] — 2026-10-22 BO 轮：raw 落盘面的读侧把三种缺席折成实测——落盘开关态自己也不落盘（零 LLM，$0）
 
 > BN 把四值 `status` 落到了盘，本轮问的是这些工件**被读成了什么**。普查到五处站点共用一个写法：
 > `x = state.get(key) or []` 再 `len(x) == 0`——"读到空"与"没读到"在同一个 `if` 里；
@@ -985,7 +998,7 @@ P14 首跑存活（0 红），补一例「全部臂都不可对照」后才击�
    `statistical_analysis` 的 `unknown` 桶不一致；`EXEMPT` 里 20 处 `ast.parse` 站点与 `experiments/`+`scripts/` 报告面；
    `outcome_sink=None` 的调用方；额度里"collapse shape"仍是文本；D/D2 类普查缺 BL 之前的历史读数，差值不可减。
 
-## [Unreleased] — 2026-10-22 BN 轮：状态通道运行时披露、归档工件里 0 出现——"读法"在两道落盘边界被丢弃（零 LLM，$0）
+### [Unreleased] — 2026-10-22 BN 轮：状态通道运行时披露、归档工件里 0 出现——"读法"在两道落盘边界被丢弃（零 LLM，$0）
 
 > BH→BM 五轮把"读不懂 ⇒ 判优"逐个收成四值 `status` 并接上双读，本轮问的是更靠前的一步：
 > **这些通道到底有没有落盘**。答案是三道都不落——`src/graph/state.py::AITesterState` 声明的
@@ -1060,7 +1073,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
 不接 `status_for_check` 判档；⑤ 门对 `**helper(...)` 的解析是静态的；⑥ 历史归档不回填。
 详见 STATUS_PERSISTENCE_BN_2026-10-22（分册已删除）。
 
-## [Unreleased] — 2026-10-22 BM 轮：实验/报告读侧把"检测没发生 / 检测崩了"折成最有利判定——崩溃记进"干净组"、未测记进"零回归"（零 LLM，$0）
+### [Unreleased] — 2026-10-22 BM 轮：实验/报告读侧把"检测没发生 / 检测崩了"折成最有利判定——崩溃记进"干净组"、未测记进"零回归"（零 LLM，$0）
 
 > BL 把双读口径收在 `src/`，登记边界明写 `experiments/` 未做——本轮就是那块。一句话：
 > **实验与报告这两张读侧的桌上，"这条腿没测成"仍被写成"测过了，而且没问题"**，
@@ -1166,7 +1179,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
 - `risk_summary["contract_status"]` 在归档 8865 行里 **0 次**出现（BL 才把键写进 `build_risk_summary`）
   ⇒ ②对历史 JSON 零影响，只影响此后新跑的批次。
 
-## [Unreleased] — 2026-10-22 BL 轮：发布侧已经带 status、判定侧仍按空值判定——"没测成"被读成"测过了且没问题"（零 LLM，$0）
+### [Unreleased] — 2026-10-22 BL 轮：发布侧已经带 status、判定侧仍按空值判定——"没测成"被读成"测过了且没问题"（零 LLM，$0）
 
 > BH→BK 四轮把「读不懂」写进了观测键，但**没人验过判定侧读不读**。本轮实测：
 > `contract_status` 三个通道的**键名判定读点改前全是 0**，`assess_task_risk` 的形参表里根本没有
@@ -1228,7 +1241,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
 - **`make gates` 全链 rc=0，两跑**（首跑在本条回填之前、终跑在回填之后，两次都单独执行、不与其他 pytest / 文档编辑重叠）：墙钟 **213s / 214s**、链内 **18 步命令全绿**；链内 pytest（xdist `-n 4 --dist loadfile`、**不带 `--cov`**）两跑同判 **11704 passed / 5 skipped / 0 failed**（用时 207.16s / 208.34s、warnings 54 / 46；collected **11709**），链尾各门禁分步读数两跑逐字节相同，差异全在 hypothesis 警告计数；回填后复验**读文档与 `BASELINE.yaml` 的测试面**（38 个文件）**1037 passed / 52.43s**（两跑同树 ⇒ 采集面同为 collected **11709**；终跑之后 `src/`+`tests/`+`scripts/` 最新 mtime 08:25:19 早于链起于 08:38:36 ⇒ 差异面只剩文档与注释）——判读数与上面的确认跑一致，用时口径不同（那个带 `--cov`）。链首 `ruff check` 全绿、`ruff format --check .` **974 files already formatted**（与链外复测逐位相同）、`mypy src/ config.py` **137 source files** 0 错；`ast-guards` 在链内给出 **136/78/20/0/20/19**，与 BK 轮链外自测逐位相同（BL 未动 `ast.parse` 守卫面）；`check_artifact_doc_consistency.py` 的登记册覆盖率对账支路 `[OK]`（`coverage.xml` 取 `make test-cov` 全口径工件；先前那份无分支工件已按口径事故登记）。手册 CONSUMER_SIDE_STATUS_READERS_BL_2026-10-22（分册已删除）；
   教训入 `docs/MEASUREMENT_INTEGRITY.md` §56。
 
-## [Unreleased] — 2026-10-22 BK 轮：`ast.parse` 守卫的捕获面棘轮——"读不懂"有两种异常，逐点收敛收不完，于是把口径交给门禁（零 LLM，$0）
+### [Unreleased] — 2026-10-22 BK 轮：`ast.parse` 守卫的捕获面棘轮——"读不懂"有两种异常，逐点收敛收不完，于是把口径交给门禁（零 LLM，$0）
 
 > BG→BJ 五轮各收了一个模块的静态判定面，但**没有人守着"下一处单腿守卫"**：`src/` 78 个含
 > `ast.parse` 的 `try` 站点里，改前有 35 个只捕 `SyntaxError`；本轮实测孤立代理位文本抛的是
@@ -1285,7 +1298,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
   `expert_pool` 181/198、`deterministic_repair` 113/114；**未覆盖行与本轮新增行交集为空**。
 - **`make gates` 全链 rc=0**（首跑墙钟 242s、链内 pytest 193.90s / 47 warnings；18 步命令全绿，链尾门禁分步读数按本册 47 行口径逐条登记；新门 `ast-guards` 在链内给出与链外自测逐位相同的 136/78/20/0/20/19。终跑 rc=0、墙钟 198s、链内 192.95s / 44 warnings，与首跑的链尾 47 行分步读数逐字节相同、差异全在 hypothesis 警告计数）。手册
   AST_PARSE_GUARD_CAPTURE_BK_2026-10-22（分册已删除）；教训入 `docs/MEASUREMENT_INTEGRITY.md` §55。
-## [Unreleased] — 2026-10-22 BJ 轮：AST 断言一致性检查的「读不懂 ⇒ 无疑点」收口——两腿各带 status、消费侧取最差者优先，`findings=[]` 不再单独算"扫过且干净"的证据（零 LLM，$0）
+### [Unreleased] — 2026-10-22 BJ 轮：AST 断言一致性检查的「读不懂 ⇒ 无疑点」收口——两腿各带 status、消费侧取最差者优先，`findings=[]` 不再单独算"扫过且干净"的证据（零 LLM，$0）
 
 > BI 之后，generator 侧还剩一条把四件事折成一个返回值的通道：
 > `src/tools/oracle_validator.check_assertions` 的 `findings=[]` 同时是"扫过且无疑点"、
@@ -1362,7 +1375,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
 
 手册：ORACLE_VALIDATOR_MEASURABILITY_BJ_2026-10-22（分册已删除）。
 
-## [Unreleased] — 2026-10-22 BI 轮：写盘前两道静态预检的「读不懂 → 通过」收口——两守卫各带 status、消费侧取最差者优先，空结果不再单独算"预检通过"的证据（零 LLM，$0）
+### [Unreleased] — 2026-10-22 BI 轮：写盘前两道静态预检的「读不懂 → 通过」收口——两守卫各带 status、消费侧取最差者优先，空结果不再单独算"预检通过"的证据（零 LLM，$0）
 
 > BD–BH 收口了 pytest 摘要与外部检查器的空 findings 之后，"补丁已应用"与"写盘"
 > 之间的两道守卫——`src/tools/patch_applier.check_naming_contract`（P0 1.3 符号
@@ -1450,7 +1463,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
 
 手册：STATIC_PRECHECK_MEASURABILITY_BI_2026-10-22（分册已删除）。
 
-## [Unreleased] — 2026-10-21 BH 轮：G5 testless 验证四层的「不可测量 → 验证通过」收口——每层带 status、顶层取最差层，`passed=True` 不再单独算证据（零 LLM，$0）
+### [Unreleased] — 2026-10-21 BH 轮：G5 testless 验证四层的「不可测量 → 验证通过」收口——每层带 status、顶层取最差层，`passed=True` 不再单独算证据（零 LLM，$0）
 
 > BA–BG 收口了 pytest 摘要与外部检查器的空结果之后，`src/tools/testless_validation.py`
 > 的四层（AST 符号守卫 / mypy / 命名契约 / 导入冒烟）仍把"这层根本没测成"与
@@ -1505,7 +1518,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
 
 手册：TESTLESS_VALIDATION_STATUS_BH_2026-10-21（分册已删除）。
 
-## [Unreleased] — 2026-10-21 BG 轮：静态类型检查的「不可测量 → 假干净」收口——mypy / pyright outcome 四值化，空 findings 不再是免费证据（零 LLM，$0）
+### [Unreleased] — 2026-10-21 BG 轮：静态类型检查的「不可测量 → 假干净」收口——mypy / pyright outcome 四值化，空 findings 不再是免费证据（零 LLM，$0）
 
 > BA–BF 收口了 pytest 侧的 rc==0 判绿后，`src/tools/type_repair.py` 的
 > 外部静态检查器仍有一条同族通道：开关关 / 未安装 / 超时 / 崩溃 / rc
@@ -1552,7 +1565,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
 
 手册：STATIC_CHECK_OUTCOME_BG_2026-10-21（分册已删除）。
 
-## [Unreleased] — 2026-10-21 BF 轮：脚本工具链的 rc==0 判绿收口——self-mutation 与模板验证器接"有效通过"，空套件不再记成存活 / 自洽（零 LLM，$0）
+### [Unreleased] — 2026-10-21 BF 轮：脚本工具链的 rc==0 判绿收口——self-mutation 与模板验证器接"有效通过"，空套件不再记成存活 / 自洽（零 LLM，$0）
 
 > BA–BE 逐层收口 M1 / experiments / MDO / 生产路径后，`scripts/tools/`
 > 仍有两处以裸 `rc==0` 判绿：`self_mutation.py` 的 preflight 基线门与
@@ -1603,7 +1616,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
 
 手册：TOOLCHAIN_EFFECTIVE_GREEN_BF_2026-10-21（分册已删除）。
 
-## [Unreleased] — 2026-10-21 BE 轮：生产路径的 rc==0 判绿收口——六处判绿点接"有效通过"，空套件不再记成修复正确（零 LLM，$0）
+### [Unreleased] — 2026-10-21 BE 轮：生产路径的 rc==0 判绿收口——六处判绿点接"有效通过"，空套件不再记成修复正确（零 LLM，$0）
 
 > BA–BD 逐层收口 M1 / experiments / MDO 后，生产路径仍有六处以裸
 > `rc==0` 判绿：检测门 `_run_test_against_code`、本地执行器、venv 沙箱、
@@ -1648,7 +1661,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
 
 手册：PRODUCTION_EFFECTIVE_GREEN_BE_2026-10-21（分册已删除）。
 
-## [Unreleased] — 2026-10-21 BD 轮：测量模块自己的 rc==0 判绿收口——MDO 基线与变异体接"有效通过"，谓词上移单一事实源（零 LLM，$0）
+### [Unreleased] — 2026-10-21 BD 轮：测量模块自己的 rc==0 判绿收口——MDO 基线与变异体接"有效通过"，谓词上移单一事实源（零 LLM，$0）
 
 > BA–BC 逐层收口 experiments 侧后，`src/measurement/mdo.py` 仍以裸
 > `rc==0` 判绿。两处：基线全 skip / xfail / deselect 时同样 `rc==0`，
@@ -1684,7 +1697,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
 
 手册：MDO_EFFECTIVE_GREEN_BD_2026-10-21（分册已删除）。
 
-## [Unreleased] — 2026-10-21 BC 轮：重放对账工具的 rc==0 判绿收口——misguided_metrics 三处任务级判据接"有效通过"（零 LLM，$0）
+### [Unreleased] — 2026-10-21 BC 轮：重放对账工具的 rc==0 判绿收口——misguided_metrics 三处任务级判据接"有效通过"（零 LLM，$0）
 
 > BA 轮 §7.2 登记项。本模块逐测试四分类早已把 skip 单列为"无 pass/fail
 > 信号"，任务级重放判绿却只看 `rc==0`——同一工具内两层口径不一致：全
@@ -1721,7 +1734,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
 
 手册：MISGUIDED_REPLAY_EFFECTIVE_GREEN_BC_2026-10-21（分册已删除）。
 
-## [Unreleased] — 2026-10-21 BB 轮：rc==0 判绿消费点的剩余收口——experiments 侧 11 处接共享"有效通过"谓词（零 LLM，$0）
+### [Unreleased] — 2026-10-21 BB 轮：rc==0 判绿消费点的剩余收口——experiments 侧 11 处接共享"有效通过"谓词（零 LLM，$0）
 
 > BA 轮建立 `_suite_has_effective_pass` 后，本轮把同一判据传播到
 > `experiments/` 全部剩余的 pytest 套件判绿点（全仓普查 11 处）。pytest 对
@@ -1753,7 +1766,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
 
 手册：EFFECTIVE_GREEN_CONSUMERS_BB_2026-10-21（分册已删除）。
 
-## [Unreleased] — 2026-10-21 BA 轮（补记）：rc==0 不是有效通过——全 skip / xfail 的套件没有断言执行（零 LLM，$0）
+### [Unreleased] — 2026-10-21 BA 轮（补记）：rc==0 不是有效通过——全 skip / xfail 的套件没有断言执行（零 LLM，$0）
 
 > pytest 对没有任何断言执行的套件同样返回 `rc==0`（摘要 `passed==0`）。
 > 四个 M1 同源消费点（detection 的 fixed 侧、repair 的 gold 侧、
@@ -1767,7 +1780,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
 > 9358 条生成测试 / 114 条含标记 / 12 条 detection=1.0（均条件性标记）。
 > 手册：EFFECTIVE_GREEN_BA_2026-10-21（分册已删除）。
 
-## [Unreleased] — 2026-10-21 AZ 轮：统计量的量纲与尾部不得被实现改写——Cohen's g 回 0–0.5，精确 p 去除 epsilon（零 LLM，$0）
+### [Unreleased] — 2026-10-21 AZ 轮：统计量的量纲与尾部不得被实现改写——Cohen's g 回 0–0.5，精确 p 去除 epsilon（零 LLM，$0）
 
 > 本轮不加能力：修正 `emse_stats_extensions.py` 两处与声称口径不一致的
 > 统计定义。`cohens_g` 返回的是 **2g**（0–1），不是 Cohen's g（0–0.5）；
@@ -1826,7 +1839,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
 
 ---
 
-## [Unreleased] — 2026-10-21 AY 轮（补记）：run_b8 载荷装配保留 `token_metrics` 原始形状（零 LLM，$0）
+### [Unreleased] — 2026-10-21 AY 轮（补记）：run_b8 载荷装配保留 `token_metrics` 原始形状（零 LLM，$0）
 
 > `_load_arm` / `_load_harness_smoke` 的 `rd.get("token_metrics") or {}`
 > 把假值非对象（`[]` / `""` / `0` / `False`）改写成 `{}`——"载荷坏了"
@@ -1836,7 +1849,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
 > 两臂成本与四行冒烟逐位复现。`tests/test_run_b8_payload_ay.py` 27 例 +
 > 6/6 变异锚点。手册：RUN_B8_PAYLOAD_AY_2026-10-21（分册已删除）。
 
-## [Unreleased] — 2026-10-21 AX 轮：基准/全栈汇总的呈现与聚合读点也有值域——呈现可以折历史 0，均值不可以（零 LLM，$0）
+### [Unreleased] — 2026-10-21 AX 轮：基准/全栈汇总的呈现与聚合读点也有值域——呈现可以折历史 0，均值不可以（零 LLM，$0）
 
 > 本轮不加能力：AW 收口逐臂统计后，基准与全栈汇总仍有三处把聚合
 > `token_metrics` 原值直出。终端 Token 效率两行用 `%d` / `%.2f`，上游
@@ -1864,7 +1877,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
 
 ---
 
-## [Unreleased] — 2026-10-21 AW 轮：T1/B2 逐臂统计的 `token_metrics` 形状与事件计数也有值域——坏形状不中止分析，事件计数不是免检通道（零 LLM，$0）
+### [Unreleased] — 2026-10-21 AW 轮：T1/B2 逐臂统计的 `token_metrics` 形状与事件计数也有值域——坏形状不中止分析，事件计数不是免检通道（零 LLM，$0）
 
 > 本轮不加能力：AV 收口 `add_cost` 后，同一份载荷在进入金额门之前仍先经过
 > `arm_stats`。`tm = res.get("token_metrics") or {}` 让真值非对象在 `.get` 上
@@ -1889,7 +1902,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
 
 ---
 
-## [Unreleased] — 2026-10-21 AV 轮：T1/B2 分析侧的成本入口同样有值域——单侧未知不是部分和，未知金额不是字符串 `None`（零 LLM，$0）
+### [Unreleased] — 2026-10-21 AV 轮：T1/B2 分析侧的成本入口同样有值域——单侧未知不是部分和，未知金额不是字符串 `None`（零 LLM，$0）
 
 > 本轮不加能力：AU 收口实验侧三个聚合器后，`analyze_t1_b2_main_batch.add_cost`
 > 仍用 `stats.get("token_metrics") or {}` + `tm.get(...) or 0` 折数。上游
@@ -1916,7 +1929,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
 
 ---
 
-## [Unreleased] — 2026-10-21 AU 轮：实验侧成本/用量聚合器的未知不是零——读不动不给数字、部分和不冒充全额、写拒绝标记不得丢失（零 LLM，$0）
+### [Unreleased] — 2026-10-21 AU 轮：实验侧成本/用量聚合器的未知不是零——读不动不给数字、部分和不冒充全额、写拒绝标记不得丢失（零 LLM，$0）
 
 > 本轮不加能力：AI–AT 已把共享读取器与报告侧读端逐层收口，实验侧仍有三个
 > 活聚合器自己 `int/float(... or 0)` 折数：`estimate_cost_usd` 对 usage 无值域门、
@@ -1965,7 +1978,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
   （本轮 `src/` 零改动，十项核心模块逐位不变）。
 - AB-17 ② 登记勘误：run_b8 本地数字门已在 AE/AG 处置，AU 补日期化更正。
 
-## [Unreleased] — 2026-10-21 AT 轮：写入侧的 token 计数同样有值域——被拒绝的写入不是零，且必须可追溯（零 LLM，$0）
+### [Unreleased] — 2026-10-21 AT 轮：写入侧的 token 计数同样有值域——被拒绝的写入不是零，且必须可追溯（零 LLM，$0）
 
 > 本轮不加能力：读端在 AI–AS 各轮把「零 / 缺席 / 读不动」逐层分开后，写入端
 > 仍在用 `int(... or 0)` 把坏值静默转成计数：bool 记 1、float 截断、数字字符串
@@ -2014,7 +2027,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
   （`base_agent.py` 98.53%，其余九项核心模块逐位不变）。
 
 
-## [Unreleased] — 2026-10-21 AS 轮：生产端标识先写对——32/16 位、root、parent 指向（零 LLM，$0）
+### [Unreleased] — 2026-10-21 AS 轮：生产端标识先写对——32/16 位、root、parent 指向（零 LLM，$0）
 
 > 本轮不加能力：AR 在导出端把标识规范化、缺失派生、单 trace 收口之后，生产端
 > 仍写 16 位 `run_id`、12 位 `span_id`，`task_start`/`task_end` 无标识，
@@ -2057,7 +2070,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
   （`trace.py` 181 statements / 58 branches / 0 miss / 0 partial = 100%）。
 
 
-## [Unreleased] — 2026-10-21 AR 轮：OTel 导出的标识先合法再谈稳定——单 trace、32/16 位 hex、确定性派生（零 LLM，$0）
+### [Unreleased] — 2026-10-21 AR 轮：OTel 导出的标识先合法再谈稳定——单 trace、32/16 位 hex、确定性派生（零 LLM，$0）
 
 > 本轮不加能力：AQ 收口数值值域后，同一个标识事实在导出边界仍有三种命运——
 > 原样泄漏（`run_id` 16 位当 trace_id、`span_id` 12 位、大写、非 hex、全零）、
@@ -2108,7 +2121,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
   （collected 10956）；覆盖率 18898/19424 行 = 97.29% / 6902/7338 弧 = 94.06%。
 
 
-## [Unreleased] — 2026-10-21 AQ 轮：OTel 导出器只导出可核验的数值——坏 token 不泄漏、坏时间戳不炸整份文件（零 LLM，$0）
+### [Unreleased] — 2026-10-21 AQ 轮：OTel 导出器只导出可核验的数值——坏 token 不泄漏、坏时间戳不炸整份文件（零 LLM，$0）
 
 > 本轮不加能力：导出边界把记录里的数值原样写进 span 属性。同一个坏值在这里
 > 有三种命运——原样泄漏（NaN/Inf/字符串/bool）、静默丢弃（非对象 `token_usage`、
@@ -2150,7 +2163,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
   （collected 10908）；覆盖率 18819/19343 行 = 97.29% / 6862/7296 弧 = 94.05%。
 
 
-## [Unreleased] — 2026-10-21 AP 轮：五处报告侧聚合 token 汇总也只认一种读数——池化、冒烟、A/B、分组均值、成本表不得各算一遍（零 LLM，$0）
+### [Unreleased] — 2026-10-21 AP 轮：五处报告侧聚合 token 汇总也只认一种读数——池化、冒烟、A/B、分组均值、成本表不得各算一遍（零 LLM，$0）
 
 > 本轮不加能力：AO 收口行级总量读端后，写盘 `token_metrics` 的**聚合对象**仍有五个
 > 消费端各自折叠。同一个坏字段在 t1_b2 池化里静默折 0、在 b8 README 里崩、在
@@ -2200,7 +2213,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
   （新增 +43 行 / +28 弧全部被锁执行）。
 
 
-## [Unreleased] — 2026-10-21 AO 轮：报告级 token 汇总也只认一种读数——档位、翻转对比、收敛曲线不得各算一遍（零 LLM，$0）
+### [Unreleased] — 2026-10-21 AO 轮：报告级 token 汇总也只认一种读数——档位、翻转对比、收敛曲线不得各算一遍（零 LLM，$0）
 
 > 本轮不新增能力：AN 把成本三元组与三个聚合读端收口后，三个**报告级总量**
 > 读端仍在各自折叠 `total_tokens`。同一个坏行在档位表里静默变 0、在翻转对比里
@@ -2243,7 +2256,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
 - 收口确认跑 **10775 passed / 5 skipped / 0 failed、177.09s、rc=0**（collected 10780）；
   覆盖率 18717/19241 行 = 97.28% / 6797/7234 弧 = 93.96%（新行与新弧全部被锁执行）。
 
-## [Unreleased] — 2026-10-21 AN 轮：三个 token 聚合读端也持有 `or 0`——读不动不是零，部分和不是总量（零 LLM，$0）
+### [Unreleased] — 2026-10-21 AN 轮：三个 token 聚合读端也持有 `or 0`——读不动不是零，部分和不是总量（零 LLM，$0）
 
 > 本轮不新增能力：AM 把行级策略收进共享读取器后，三个**聚合读端**仍各自用
 > `(r.get("token_usage") or {}).get(..., 0)` 求一遍。同一个坏行在写盘侧崩溃、
@@ -2287,7 +2300,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
   （分母 +77 行 / +38 弧 = 新增读取器与聚合器，未覆盖 524 / 缺弧 437 与 AM
   逐位相同；`coverage report` 偏弧 383 与缺弧是不同口径，不据此声称回收）。
 
-## [Unreleased] — 2026-10-21 AM 轮：成本表聚合的行级 token 读取也有值域——呈现层不得替聚合层兜底（零 LLM，$0）
+### [Unreleased] — 2026-10-21 AM 轮：成本表聚合的行级 token 读取也有值域——呈现层不得替聚合层兜底（零 LLM，$0）
 
 > 本轮不新增能力：`statistical_analysis.cost_analysis`（`$/task` / `$/solved` 的唯一聚合口）
 > 仍在用 `tu.get(...) or 0`：在场坏值被折成可计价数字，正 token 行缺拆分时编出 $0，
@@ -2331,7 +2344,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
   行 **18585/19109 = 97.26%** / 分支 **6727/7164 = 93.90%**
   （分母 +10 行 / +8 弧 = `by_model_reason`，未覆盖 524 / 偏弧 437 与 AL 逐位相同）。
 
-## [Unreleased] — 2026-10-21 AL 轮：报告侧逐行 token 算术也有值域——一行读不动不是零（零 LLM，$0）
+### [Unreleased] — 2026-10-21 AL 轮：报告侧逐行 token 算术也有值域——一行读不动不是零（零 LLM，$0）
 
 > 本轮不新增能力：`cost_effectiveness_block` 改前自持第二套行级算术（`usage.get(...) or 0`），
 > 同一行在 ext 读不动、在 §4.1 却被折成 0 并计价；读不动的行还在检出计数前被跳过，
@@ -2372,7 +2385,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
   （分母 +22 行 / +12 弧 = 读取器迁入 `src/`，落抖动域；`src/` 有改动，
   佐证为改动面清单）。
 
-## [Unreleased] — 2026-10-21 AK 轮：少数无记账行不是免费，也不是精确值——成本读数是已记录花费的下界（零 LLM，$0）
+### [Unreleased] — 2026-10-21 AK 轮：少数无记账行不是免费，也不是精确值——成本读数是已记录花费的下界（零 LLM，$0）
 
 > 本轮不新增能力：S11 的 50% 断裂阈值单侧通过时（`0 < 无记账行 < 50%`），零 token 行
 > 以 0 进入金额分子、仍占任务分母，`$/task` 被按精确值渲染。只增加披露与口径键，
@@ -2407,7 +2420,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
   行 **18554/19077 = 97.26%** / 分支 **6708/7144 = 93.90%**（较 AJ +1 行 / +1 弧，
   落抖动域；`src/` 零改动，佐证为改动面清单）。
 
-## [Unreleased] — 2026-10-21 AJ 轮（补记）：缓存命中是第三种记账状态——不是记账断裂，也不是免费（零 LLM，$0）
+### [Unreleased] — 2026-10-21 AJ 轮（补记）：缓存命中是第三种记账状态——不是记账断裂，也不是免费（零 LLM，$0）
 
 > 本节在 AK 轮收口时补记：AJ 轮已更新头部摘要行与登记册，但未落本文件的分节。
 > 内容与 CACHE_CALIBER_AJ_2026-10-21（分册已删除） 一致。
@@ -2431,7 +2444,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
   行 **18553/19077 = 97.25%** / 分支 **6707/7144 = 93.88%**（较预登记 −1 行 / −1 弧，
   落抖动域）。
 
-## [Unreleased] — 2026-10-21 AI 轮：token 计数也有值域——不完整的 token 和不是 token 读数（零 LLM，$0）
+### [Unreleased] — 2026-10-21 AI 轮：token 计数也有值域——不完整的 token 和不是 token 读数（零 LLM，$0）
 
 > 本轮不新增能力：处置 AH §7 第 1~3 条（`tokens_per_task` 两态 / `by_model` 形状域 /
 > `input+output` 与 `total_tokens` 一致性）——AH 把「三种不完整的和」判在金额侧，读入侧仍是
@@ -2467,7 +2480,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
 - AH 旧锁改写 1 例（`test_zero_tasks_has_no_denominator` 的 `tpt == 0.0` → `is None`），
   净 0 例；真批次三臂读数与 bootstrap CI 逐位不变，受保护归档一字未动。
 
-## [Unreleased] — 2026-10-20 AH 轮：不完整的和不是金额——$/task 的覆盖、归因与分母闭合（零 LLM，$0）
+### [Unreleased] — 2026-10-20 AH 轮：不完整的和不是金额——$/task 的覆盖、归因与分母闭合（零 LLM，$0）
 
 > 本轮不新增能力：处置 AE 评审 §5.2 候选 B（AB-15 / AB-16 / AB-17 / AE / AG
 > 多轮登记未修的那一条）——`emse_stats_extensions._cost_per_task` 把"不完整的和"
@@ -2510,7 +2523,7 @@ literal`、以及 pytest 自身汇总计时行），**门禁读数逐项相同**
   10412 passed / 5 skipped / 0 failed、173.61s / 174.40s / 182.16s，不带 `--cov`，
   与上面的覆盖率口径不可互换引用）。
 
-## [Unreleased] — 2026-10-20 AF 轮：JSON 落盘收口到 RFC 8259 + 全仓严格 JSON 门禁（零 LLM，$0）
+### [Unreleased] — 2026-10-20 AF 轮：JSON 落盘收口到 RFC 8259 + 全仓严格 JSON 门禁（零 LLM，$0）
 
 > 本轮不新增能力：处置 AE 评审 §5.6（全仓非严格 JSON 工件且无门禁）与 §5.7
 > （`run_b8._write_json` 的 `allow_nan=True`），并把 §5.6 的一处计量误读以日期化勘误更正。
@@ -2577,7 +2590,7 @@ AE 的"68 份"是文本 grep 计数，不等于 JSON 裸 token 违规：严格�
 - 边界：门禁只认字面 `allow_nan=False`（运行期拼装不在静态扫描面）；`tests/` 不在
   写入点扫描面；字符串内 `NaN` 文本合法；trace 丢弃语义见分册 §7。
 
-## [Unreleased] — 2026-10-20 AG 轮：未计价归因收口到单一机制索引（零 LLM，$0）
+### [Unreleased] — 2026-10-20 AG 轮：未计价归因收口到单一机制索引（零 LLM，$0）
 
 > 本轮不新增能力：处置 AE 评审 §5「登记未修 / 口径边界」第 2 条（候选 C）——
 > `cost_analysis` 的 `missing_models` 桶把「未登记 / 价格域坏 / 形状坏」三种事实混在
@@ -2629,7 +2642,7 @@ AE 的"68 份"是文本 grep 计数，不等于 JSON 裸 token 违规：严格�
 - 边界：行级归因只在条目全可用时出现（条目缺陷优先）；`missing_models` 语义变窄；
   `allow_non_usd` 只放行可判定非 USD；归档报告不重写。详见分册 §8。
 
-## [Unreleased] — 2026-10-20 AE 轮：价目条目准入接共享谓词（run_b8 聚合器）+ 测试侧域收口 + 入库报告陈旧差值登记更新（零 LLM，$0）
+### [Unreleased] — 2026-10-20 AE 轮：价目条目准入接共享谓词（run_b8 聚合器）+ 测试侧域收口 + 入库报告陈旧差值登记更新（零 LLM，$0）
 
 > 本轮不新增能力：处置 AB-17 §4/§5 登记的成本/价目残余准入候选中的 A、D 两项，
 > 更新 F 项登记数字与成因；B / C / E / G 维持并登记边界。
@@ -2690,7 +2703,7 @@ AE 的"68 份"是文本 grep 计数，不等于 JSON 裸 token 违规：严格�
   token（无严格 JSON 门禁）、`_write_json` 的 `allow_nan=True` 仍在、`run_b8` 拒绝路径按内置
   标准价兜底而非 `None`。逐项见 COST_ADMISSION_AE_2026-10-20（分册已删除） §5。
 
-## [Unreleased] — 2026-10-20 AD 轮：统计量渲染量级保持 + 正态尾部补集模式消除 + 数值精度丢失模式全仓普查（零 LLM，$0）
+### [Unreleased] — 2026-10-20 AD 轮：统计量渲染量级保持 + 正态尾部补集模式消除 + 数值精度丢失模式全仓普查（零 LLM，$0）
 
 > 本轮不新增能力：沿 AC-1 的缺陷类做全仓普查，处置 AC 轮登记的两项，同族其余点位逐点判定。
 
@@ -2730,7 +2743,7 @@ AE 的"68 份"是文本 grep 计数，不等于 JSON 裸 token 违规：严格�
 回归锁 `tests/test_ad_round_stat_display.py` **11 例**（AD-1 渲染 7 + AD-2 尾部 3 +
 端到端 1）；变异验证：两个修复分别回退，7 例目标转红、还原全绿。
 
-## [Unreleased] — 2026-10-20 AC 轮：McNemar p 的 `1−cdf` 浮点下溢修复 + E7 工具链干跑 + AB-17 接线核查（零 LLM，$0）
+### [Unreleased] — 2026-10-20 AC 轮：McNemar p 的 `1−cdf` 浮点下溢修复 + E7 工具链干跑 + AB-17 接线核查（零 LLM，$0）
 
 > 本轮不新增能力：一次独立复算审计抓到统计层一处数值缺陷并修复，另对 E7 裁决工具链与
 > AB-17 收口质量做干跑/接线核查（均通过，无新缺陷）。
@@ -2777,7 +2790,7 @@ AE 的"68 份"是文本 grep 计数，不等于 JSON 裸 token 违规：严格�
   18440/18963 行 = 97.24%、6652/7090 弧 = 93.82%（与 AB-17 各差 1，
   落在已登记的竞态分支 ±2 抖动域）；ruff / mypy / 全部门禁绿。
 
-## [Unreleased] — 2026-10-20 Z→AB 收口轮：约 18 轮滞留工作一次提交 + README 双语轮换补做 + E7 录入表"不可能入库"缺口修复（零 LLM，$0）
+### [Unreleased] — 2026-10-20 Z→AB 收口轮：约 18 轮滞留工作一次提交 + README 双语轮换补做 + E7 录入表"不可能入库"缺口修复（零 LLM，$0）
 
 > 本轮不新增能力：把 2026-10-19 傍晚起滞留工作区的 Z / AA / 工程质量 / AB-1~17 全部工作
 > 一次收口提交，并补上该批漏做的两项收尾——README 行轮换与 E7 录入表入库缺口。
@@ -2815,7 +2828,7 @@ AE 的"68 份"是文本 grep 计数，不等于 JSON 裸 token 违规：严格�
   口径 10269 / 19 / 0）；行 **97.24%** / 分支 **93.84%**；ruff / mypy（134 源文件）/
   全部门禁绿。
 
-## [Unreleased] — 2026-10-20 AB 轮：真实语料否证合成枚举前提 + 文档判据变成可执行工件 + 数据集适配层容错补口 + 表格静默丢格修复与全仓判定锁 + `json.loads` 返回域非对象行与主键域六处收口 + `experiments/` 层 68 处返回域普查与一处计数披露 + 缺席与零命中分界收口 + 三种缺席分三桶与归因塌缩收口 + 覆盖率证据化收口 + 竞态改锁执行与五处登记一次收口 + 价目表币种闸门、返回域与 `None` 哨兵三态收口 + 币种判定收口为单一谓词且五站点全部接过去 + 被拒绝的金额不披金额形状且归因与判定同源 + 价目条目的准入域一处写一遍 + 价目表表级读侧准入一处写一遍（零 LLM，$0）
+### [Unreleased] — 2026-10-20 AB 轮：真实语料否证合成枚举前提 + 文档判据变成可执行工件 + 数据集适配层容错补口 + 表格静默丢格修复与全仓判定锁 + `json.loads` 返回域非对象行与主键域六处收口 + `experiments/` 层 68 处返回域普查与一处计数披露 + 缺席与零命中分界收口 + 三种缺席分三桶与归因塌缩收口 + 覆盖率证据化收口 + 竞态改锁执行与五处登记一次收口 + 价目表币种闸门、返回域与 `None` 哨兵三态收口 + 币种判定收口为单一谓词且五站点全部接过去 + 被拒绝的金额不披金额形状且归因与判定同源 + 价目条目的准入域一处写一遍 + 价目表表级读侧准入一处写一遍（零 LLM，$0）
 
 > 本轮的三条主张都是"把一种弱证据换成一种强证据"：① 把**全称命题**（"恒不可达"）
 > 换成**观测 + 机制**（真实语料 0 次触发，且给出"为什么必然救不活"的结构性论证）；
@@ -3691,7 +3704,7 @@ AE 的"68 份"是文本 grep 计数，不等于 JSON 裸 token 违规：严格�
   覆盖率声明 ±0.20pp）。收口后为验证末次文档改写又复跑一次（**189s 墙钟 / 184.22s 链内**，
   单独跑、无并发），同样 10283 passed / 5 skipped / 0 failed、三项对账 `[OK]`。
 
-## [Unreleased] — 2026-10-19 AA 轮：棘轮跨平台误上调处置 + 静默回退收口 + 覆盖率证据化登记 + D3b Step B 边界锁定 + E7 裁决执行面 + 跨文件顺序依赖修复（零 LLM，$0）
+### [Unreleased] — 2026-10-19 AA 轮：棘轮跨平台误上调处置 + 静默回退收口 + 覆盖率证据化登记 + D3b Step B 边界锁定 + E7 裁决执行面 + 跨文件顺序依赖修复（零 LLM，$0）
 
 > 本轮不是功能轮，是**测量口径守卫**轮：找出让"绿"失去意义的通道并使其在结构上不可
 > 能发生。四条主张：① 门禁**与测试仪器自身**不可能再"静默失效判绿"（AA-8 就是这条主张
@@ -3821,7 +3834,7 @@ AE 的"68 份"是文本 grep 计数，不等于 JSON 裸 token 违规：严格�
   AA-8 只动 `tests/`，覆盖率分母与读数**逐位不变**（同一 coverage.xml 复算确认）。
 - 水位 `96.40 / 92.50` 仍不动（跨平台口径待 CI 校准）；`make gates` 全绿；原始实验数据未改写。
 
-## [Unreleased] — 2026-10-19 工程质量轮：三节点复杂度拆分 + 四模块可达分支补口（零 LLM，$0）
+### [Unreleased] — 2026-10-19 工程质量轮：三节点复杂度拆分 + 四模块可达分支补口（零 LLM，$0）
 
 > Z 轮收口后的技术债清理，只动**结构与测试**，不动判定语义：`src/graph/nodes.py` 三个
 > 巨型节点按职责拆为可测单元，并把四个模块里**可达但未锁**的分支补成回归锁。
@@ -3861,7 +3874,7 @@ AE 的"68 份"是文本 grep 计数，不等于 JSON 裸 token 违规：严格�
 - 口径分层照旧声明：本机 macOS 3.14 读数 ≠ CI ubuntu 3.14 阻断档（历史跨平台差 ≤0.13pp），
   推送后按 CI 校准；`make gates` 全绿。
 
-## [Unreleased] — 2026-10-19 Z 轮：第四轮第三方全量静态审查 20 项修复收口（零 LLM，$0）
+### [Unreleased] — 2026-10-19 Z 轮：第四轮第三方全量静态审查 20 项修复收口（零 LLM，$0）
 
 > 第三方在 Windows 环境对提交 `55bb711` 的 8,491 个文件做了全量静态审查（报告
 > `AITester_审查报告(1).md`），结论 **P0=0 / P1=14 / P2=6 共 20 项**。本轮对 20 项
@@ -3948,7 +3961,7 @@ AE 的"68 份"是文本 grep 计数，不等于 JSON 裸 token 违规：严格�
 - 全量回归 **9338 passed / 5 skipped / 0 failed**（collected 9343）；`make gates` 全绿。
 - 收口报告：THIRD_PARTY_REVIEW_2026-10-19_FIX_CLOSURE（分册已删除）。
 
-## [Unreleased] — 2026-10-19 Y5 轮：E7 三路径备料齐备 + 嵌套性回归锁（零 LLM，$0）
+### [Unreleased] — 2026-10-19 Y5 轮：E7 三路径备料齐备 + 嵌套性回归锁（零 LLM，$0）
 
 > E7 人工裁决的三条路径此前只备了 A（n=8）与 B（n=41），而统计上最推荐的
 > 全框普查（n=72）没有备料——用户若选它还要再等一轮。本轮补齐，并修正一处
@@ -3981,7 +3994,7 @@ AE 的"68 份"是文本 grep 计数，不等于 JSON 裸 token 违规：严格�
   抽样框上锁定三路径的**样本量（8/41/72）+ 集合嵌套 + 顺序一致 + 无重复**。
 - 变异验证：把抽样实现从「取前 k 个」改为「取后 k 个」后测试转红，其余 22 例不受影响。
 
-## [Unreleased] — 2026-10-19 Y4 轮：第三轮评审待澄清事项回应（零 LLM，$0）
+### [Unreleased] — 2026-10-19 Y4 轮：第三轮评审待澄清事项回应（零 LLM，$0）
 
 > 第三轮独立评审 §15 列了 8 个待澄清问题，答案此前散落在登记册、ADR、论文与
 > 各轮审计报告中，评审方需跨 4+ 份文档拼合。本轮收敛为单一权威入口。
@@ -4004,7 +4017,7 @@ AE 的"68 份"是文本 grep 计数，不等于 JSON 裸 token 违规：严格�
   之后即是回应，避免下一轮评审重复提问）；核心文档表补登 Y/Y2/Y3 三份审计报告。
 - 英文索引「最后更新」此前停在 2026-10-18（U 轮），本轮一并刷至 2026-10-19。
 
-## [Unreleased] — 2026-10-19 Y3 轮：审计收尾与全仓未覆盖地图（零 LLM，$0）
+### [Unreleased] — 2026-10-19 Y3 轮：审计收尾与全仓未覆盖地图（零 LLM，$0）
 
 > Y2 轮遗留项收口，并把审计视野从"修复新增行"扩展到全仓。真实 LLM 花费：**$0**。
 > 详细报告：FIX_COVERAGE_AUDIT_ROUND3_2026-10-19（分册已删除）。
@@ -4038,7 +4051,7 @@ AE 的"68 份"是文本 grep 计数，不等于 JSON 裸 token 违规：严格�
   真实需求）；② `spec_ir_v2` 的 SMT 见证 4 条保守边界（有明确 docstring 契约）；
   ③ 数据集适配层（需先确认本地数据集可用性）。
 
-## [Unreleased] — 2026-10-19 Y2 轮：审计收口与 experiments 侧首次审计（零 LLM，$0）
+### [Unreleased] — 2026-10-19 Y2 轮：审计收口与 experiments 侧首次审计（零 LLM，$0）
 
 > Y 轮审计的收口：补齐 `src/` 剩余的 A20 守卫缺口，并把同一方法首次应用到
 > `experiments/`（Y 轮明确披露未覆盖的领域）。真实 LLM 花费：**$0**。
@@ -4089,7 +4102,7 @@ AE 的"68 份"是文本 grep 计数，不等于 JSON 裸 token 违规：严格�
   `run_benchmark.py` 的 provenance 读取失败/格式不符/git 异常共 6 行（错误处理，
   建议下轮补）。
 
-## [Unreleased] — 2026-10-19 Y 轮：修复覆盖率缺口审计（零 LLM，$0）
+### [Unreleased] — 2026-10-19 Y 轮：修复覆盖率缺口审计（零 LLM，$0）
 
 > 针对前两轮评审暴露的复发模式（"修复覆盖主路径、漏掉分支路径"）做系统审计：
 > 以 `coverage.xml` 行集合为权威口径，审计 `ff15a2f`→HEAD 的 `src/` 修复新增代码。
@@ -4128,7 +4141,7 @@ AE 的"68 份"是文本 grep 计数，不等于 JSON 裸 token 违规：严格�
   （A20 三处"坏行不落盘"守卫——**建议下轮补**，可用非法 JSON 注入锁定）、`api_manager.py`
   4 行（早退 / 极边界）、`base_agent.py` 2 行（宽泛 `except`）、`llm_client.py` 2 行（空身份返回值）。
 
-## [Unreleased] — 2026-10-19 X 轮：论文复现性闭环与系统评审（零 LLM，$0）
+### [Unreleased] — 2026-10-19 X 轮：论文复现性闭环与系统评审（零 LLM，$0）
 
 > 论文定稿核对的前置工作：对论文引用的核心数字逐一零 LLM 复算（12 项全吻合），
 > 并审计附录 A 引用的复算入口。真实 LLM 花费：**$0**。详细报告：
@@ -4175,7 +4188,7 @@ AE 的"68 份"是文本 grep 计数，不等于 JSON 裸 token 违规：严格�
 - **T 轮 README 重写隐患闭环**：`analyze_t1_b2_main_batch.py` 增设 `<!-- MANUAL:BEGIN/END -->` 生成-保留机制（`_preserve_manual_sections`：成对闭合块 --write 时原样保留；未闭合不保留；多块按原序）；归档"0.6 T 轮发现"节已包标记；/tmp 副本端到端实证手工节存活（此前必丢 32 行）。
 - **回归锁**：`tests/test_analyze_t1_b2_manual_sections.py` 5 例（hermetic：归档报告直接渲染，含未闭合标记不保留 / 无标记不追加 / 多块保序 / 关键表述存活）。
 
-## [Unreleased] — 2026-10-19 W 轮（第二轮第三方复核：A07/A09/A10 三项 P1 残留补修）
+### [Unreleased] — 2026-10-19 W 轮（第二轮第三方复核：A07/A09/A10 三项 P1 残留补修）
 
 > 第二轮第三方复核（Windows 只读静态审查，提交 `73481bb`）结论：P0=0、P1=3、P2=0、P3=0。三项均为 V 轮修复的**未覆盖子场景**，不是新缺陷；本轮回溯最小反例逐项补修，并把反例固化为回归锁。
 > 真实 LLM 花费：**$0**（零网络、零模型调用）。
@@ -4215,7 +4228,7 @@ AE 的"68 份"是文本 grep 计数，不等于 JSON 裸 token 违规：严格�
 - **AO3 行锁随批推进（W 轮文档同步批次收口）**：`tests/test_ao_batch.py::TestReadmeEnHeader` 的 en README 头部日期行锁由 `Last updated: 2026-10-07` + `repair-engine batch XIV` 更新为 `Last updated: 2026-10-19` + W 轮表述——U/V 两轮均未按该锁"随最新批次推进"的约定维护头部日期行与行锁（二者一致地停留在 10-07，故 73481bb 的 CI 测试矩阵仍绿）；本批刷新日期行后 CI test 矩阵三档首跑暴露（诊断注解唯一失败项），本批同步收口。
 - **CI Security 门禁修复（W 轮文档同步批次实测发现，属 V 轮推送即存在的失败）**：`gitleaks detect --no-git`（v8.28.0 + 仓库配置，干净检出精确复现）命中 `tests/test_trace_jsonl_integrity.py`（V 轮新增）的 **9 条 generic-api-key**——全部为"必须被 `<REDACTED>` 脱敏"断言的夹具假值（`abcdefgh123456` ×6 / `placeholderSecret123` / `supersecretvalue` / `sk-ws-ABCDEFGH1234567890xy`）。按 `.gitleaks.toml` 既定治理口径**逐字面量**登记豁免并注明用途（非整目录豁免，真实泄漏仍会检出）；干净检出复扫 **0 findings / 退出码 0**。
 
-## [Unreleased] — 2026-10-18 V 轮（第三方独立评审 23 项修复：A08 P0 凭证隔离 + A01–A07/A09–A17 P1 + A18–A23 P2）
+### [Unreleased] — 2026-10-18 V 轮（第三方独立评审 23 项修复：A08 P0 凭证隔离 + A01–A07/A09–A17 P1 + A18–A23 P2）
 
 > V 轮响应第三方独立评审（Windows 环境静态审查，评审报告：`AITester_审查报告.md`；用户确认 23 项结论 **100% 准确**）。评审提交 `ff15a2f` 与本轮起点逐位一致；逐项修复 + 回归锁 + 评审 M1–M9 验收脚本复跑，另有独立收口报告 THIRD_PARTY_REVIEW_2026-10-18_FIX_CLOSURE（分册已删除）。
 > 真实 LLM 花费：**$0**（全部为代码/文档/工件层修复与零 LLM 验证；不调用模型、不构建容器）。
@@ -4276,7 +4289,7 @@ AE 的"68 份"是文本 grep 计数，不等于 JSON 裸 token 违规：严格�
 - 评审 M1–M9 复跑：M1 数值逐位一致（38/240/21、4/261/0、117/261/0、12:80、31 归档模板）；M2 清单 69 份 / 7,639 条 raw / 0 缺失 / 0 不符（修复前 9 missing）；M3 CSV 12/12、损坏 JSONL 有书面归因且后续写入受守卫；M4/M6/M7/M8/M9 对应断言全部通过（M5 Windows 分支以 Mock 单测覆盖）。
 - 门禁：`make docs-check`、`check_baseline_numbers`、`check_baseline`、`check_artifact_doc_consistency`、`check_checksum`、`check_zero_assert_tests`、`check_env_budget --check` 等全绿（完整命令与结果见 THIRD_PARTY_REVIEW_2026-10-18_FIX_CLOSURE（分册已删除））。
 
-## [Unreleased] — 2026-10-18 U 轮（第三轮独立评审收口：A-05/A-06/A-08/A-09 + A-03/A-17 漂移论文化 + P3 评测诚信 checklist + D3b Step A 接线，零 LLM）
+### [Unreleased] — 2026-10-18 U 轮（第三轮独立评审收口：A-05/A-06/A-08/A-09 + A-03/A-17 漂移论文化 + P3 评测诚信 checklist + D3b Step A 接线，零 LLM）
 
 > U 轮执行第三轮独立系统性评审（INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-18（分册已删除））中不依赖 LLM 配额/人力授权的收口项，并把该轮评审报告入库：
 > ① **A-05 门禁数量口径统一**——五处分裂（README 文件树 23/18、论文 24、登记册 headline 25、git 记录 25、实测 26 脚本/27 调用）收敛为 `BASELINE.yaml` `gates` 节三个可复算数字；
@@ -4431,7 +4444,7 @@ AE 的"68 份"是文本 grep 计数，不等于 JSON 裸 token 违规：严格�
 - **定向测试**：受影响 5 文件 **142 passed / 14 skipped / 0 failed**（沙箱宿主口径）；P3 校验器 12 例、D3b 接线 13 例 + 消费关对偶 2 例全过。
 - **文档同步**：README 中英「最新优化 / 已知失败 / 文件树」、`BASELINE.yaml`（tests/coverage/gates）、登记册 headline + §1 + §3.2 + §4、`docs/INDEX.md` + `INDEX.en.md`（第三轮评审报告与 P3 checklist 登记）、`scripts/README.md` 脚本清单、`docs/design/cross_file_plan_wiring_prereg.md`（Step A 状态）、CHANGELOG 中英本轮节同步刷新；第三轮独立评审报告入库（16 节 + 2 附录，含同日收口状态附录）。
 
-## [Unreleased] — 2026-10-18 T 轮（真实 LLM 配额解锁：B2 锁指纹复现 + B1 协议文本指纹级复现 + 语义修复 + 仪器自检）
+### [Unreleased] — 2026-10-18 T 轮（真实 LLM 配额解锁：B2 锁指纹复现 + B1 协议文本指纹级复现 + 语义修复 + 仪器自检）
 
 > T 轮在用户授权充足 LLM 配额后，回答此前**因配额被阻断**的问题，并修掉一轮"探针驱动"发现的真实语义/仪器缺陷：
 > ① **B2 主批次锁指纹复现**（3 seed × 3 臂 × 87 任务，干净树 + `model_fingerprint.pinned=true`）；
@@ -4566,7 +4579,7 @@ AE 的"68 份"是文本 grep 计数，不等于 JSON 裸 token 违规：严格�
   T3b 7 项、T3c 9 项、T4 语义修复 11 项、A-19 默认门 34 项、文档审计 1 项、独立复核 1 项、e2e 矩阵 5 项）；
   `check_artifacts_tracked` 的 `*_round_*` 覆盖扫描与 MANIFEST 同步登记（175 项）。
 
-## [Unreleased] — 2026-10-18 S 轮（A-19 失败注入重做 + 多采样示例治理 + 3-seed 生产化决策）
+### [Unreleased] — 2026-10-18 S 轮（A-19 失败注入重做 + 多采样示例治理 + 3-seed 生产化决策）
 
 > S 轮回答两个悬而未决的问题：① A-19 覆盖率停滞检测在**确实多轮失败**时是否真提前
 > 停止（P-2/B8 的"无触发"限制）；② 示例幻觉能否用多采样自一致性治理。同时跑
@@ -4667,7 +4680,7 @@ B=均 true；预注册决策规则跑前冻结：`enable_candidate` = oracle-cor
 - **S 轮真实 LLM 花费**：S-1 $0.27884 + S-2 $0.140324 + S-3 $0.010912 ≈ **$0.43**
   （S 轮预算 $0.8 ✓）。
 
-## [Unreleased] — 2026-10-18 R 轮（Q-2 损失诊断/复现 + 示例自校验 + 后处理墙钟接线）
+### [Unreleased] — 2026-10-18 R 轮（Q-2 损失诊断/复现 + 示例自校验 + 后处理墙钟接线）
 
 > R 轮回答 Q 轮留下的核心问题：Q-2 示例通道的 **LLM-suite 检出下降 20pp** 是真实
 > trade-off 还是单次运行噪声？同时补"示例幻觉期望"的确定性防线，并把 Q-3 的
@@ -4760,7 +4773,7 @@ direction_consistent=False）→ Q-2 的 −20pp 检出损失**视为单次运�
 - **R 轮真实 LLM 花费**：R-1 $0.285957 + 探针 ≈$0.02 ≈ **$0.31**（R 轮预算 $0.8 ✓）；
   Q+R 轮累计 ≈**$0.77–0.82**（含 Q 轮事故粗估 $0.15–0.20）。
 
-## [Unreleased] — 2026-10-18 Q 轮（示例通道生产化 + 预注册二臂 A/B + 后处理墙钟可观测）
+### [Unreleased] — 2026-10-18 Q 轮（示例通道生产化 + 预注册二臂 A/B + 后处理墙钟可观测）
 
 > Q 轮承接 P 轮"示例通道重放有检出能力但未接生产"：把示例通道接入真实链路（Planner
 > 契约 + 双门开关 + 可审计行字段），在干净切点上跑**预注册同批二臂 A/B**（aitester
@@ -4869,7 +4882,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
 - **Q 轮真实 LLM 花费**：Q-2 $0.275878 + 准备期事故粗估 $0.15–0.20 + 探针/其它
   ≈$0.05 ≈ **$0.48–0.53**（上限 $0.7 ✓）。
 
-## [Unreleased] — 2026-10-18 P 轮（oracle 示例通道探索 + A-19 纸面功能修复 + doctor 自检命令）
+### [Unreleased] — 2026-10-18 P 轮（oracle 示例通道探索 + A-19 纸面功能修复 + doctor 自检命令）
 
 > P 轮从 O 轮"仪器可判定但 correct 仍 0"继续向**语义质量**推进，同时把配额解锁的
 > A-19 消融做"先查机制、再谈效果"，并交付用户侧零 LLM 自检入口。核心诚实结论：
@@ -4994,7 +5007,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
   `git_sha=fae8f45`/`git_dirty=false`/指纹 pinned；prompt 一等证据 43 vs 42；
   15 次孤儿巡检 0 泄漏）；L 轮链路/批次工件保持入库可复算。
 
-## [Unreleased] — 2026-10-18 O 轮（oracle 仪器治疗 + 跨文件路径实证 + CI 发布工程 + 运行期卫生）
+### [Unreleased] — 2026-10-18 O 轮（oracle 仪器治疗 + 跨文件路径实证 + CI 发布工程 + 运行期卫生）
 
 > O 轮承接 N 轮"全功能验证"暴露的两条主线继续收口：① 把 M-2 发现、N-3 部分修复的
 > "确定性 oracle 通道净损伤"从**仪器可判定性**方向治疗（崩溃/前件违反不再冒充假阳），
@@ -5146,7 +5159,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
 - **成本**：O 轮真实 LLM ≈ **$0.24**（O-2 ≈$0.23 + O-3 $0.0035 + 探针 ≈$0.02，
   含 O-2 invalid/partial attempt 的已发生成本；O 轮豁免上限 $0.30）。
 
-## [Unreleased] — 2026-10-17 N 轮（全功能端到端验证 + 8 个功能缺陷修复 + oracle 独立判读 + 真实 LLM 重型路径）
+### [Unreleased] — 2026-10-17 N 轮（全功能端到端验证 + 8 个功能缺陷修复 + oracle 独立判读 + 真实 LLM 重型路径）
 
 > N 轮回应"对项目**所有功能**全面优化、配额足够测试所有内容"：不再只盯研究链路，
 > 而是把**每个用户可见功能**变成一行可执行探针（56 探针 / 14 功能组 / 12 个真实
@@ -5280,7 +5293,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
 - **真实 LLM 花费**：探针矩阵（12 次）≈$0.02 + N-4 重型 $0.0463 + N-3 冒烟
   $0.0009 + N-5 复验 $0.005 + 探针缺陷诊断 ≈$0.02 → **合计 < $0.1**。
 
-## [Unreleased] — 2026-10-17 M 轮（真 LLM：规格增广二臂 not_confirmed / 非劣成立 + oracle 质量度量揭示仪器净损伤 + 孤儿根因修复 + Q11 论文审计）
+### [Unreleased] — 2026-10-17 M 轮（真 LLM：规格增广二臂 not_confirmed / 非劣成立 + oracle 质量度量揭示仪器净损伤 + 孤儿根因修复 + Q11 论文审计）
 
 > M 轮承接 L 轮（P1 replace 三臂阴性、代理指标失效修正）继续"全面优化至前沿水准"：
 > ① 用**同批二臂**回答 L 轮留下的机制问题——保留缺陷代码 + 并列人类规格（augment）
@@ -5425,7 +5438,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
   --df <df.json> --augment <aug.json>` → `verdict=not_confirmed`、`fail_line=false`、
   `non_inferiority=true`；两臂工件 `shasum -a 256 -c SHA256SUMS` **127/127 OK**；
   机制重放 `misguided_metrics` 两臂（零 LLM）body_digest `0df41d24…`；
-## [Unreleased] — 2026-10-17 L 轮（真 LLM：P1 独立锚三臂阴性判定 + 代理指标失效修正 + runner 语义缺陷修复 + 测试强度提升）
+### [Unreleased] — 2026-10-17 L 轮（真 LLM：P1 独立锚三臂阴性判定 + 代理指标失效修正 + runner 语义缺陷修复 + 测试强度提升）
 
 > L 轮与 K 轮同日，是"全面优化至前沿水准"的**真 LLM 配额批次**：完成三件此前只能
 > 登记为"待配额度"的工作，并给出两条**改变研究叙事**的实测结论——① 独立评审 §6 P1
@@ -5615,7 +5628,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
   `model_fingerprint.pinned=true`；worktree 跑前/跑后 `git status` 0 dirty；锚表
   sha256 与主仓逐字节一致；合计成本 **$0.3170**。
 
-## [Unreleased] — 2026-10-17 K 轮（全面优化：JSON 围栏内容篡改 P0 修复 + 覆盖率 96.47%/92.57% + 自身变异测试 0.6419→0.7674 + 文档链接门禁 + 运行期卫生；零 LLM）
+### [Unreleased] — 2026-10-17 K 轮（全面优化：JSON 围栏内容篡改 P0 修复 + 覆盖率 96.47%/92.57% + 自身变异测试 0.6419→0.7674 + 文档链接门禁 + 运行期卫生；零 LLM）
 
 > K 轮是"全面优化至前沿水准"批次：一次真缺陷修复（P0，静默数据篡改）、
 > 一次元层能力建设（项目自身测试套件的变异强度首次可度量）、一次测量伪影
@@ -5733,7 +5746,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
   存量 mutation_score/MDO 指标为旧口径下界；覆盖率对账容差 ±0.10pp 仍偏宽
   （本轮实测逐位一致，收紧留待 ubuntu 档连续观测）。
 
-## [Unreleased] — 2026-10-17 J 轮（聚合器外提 + 开关口径二次复现收口 + 覆盖率收口/死代码清理 + 停滞检测消融臂；零 LLM）
+### [Unreleased] — 2026-10-17 J 轮（聚合器外提 + 开关口径二次复现收口 + 覆盖率收口/死代码清理 + 停滞检测消融臂；零 LLM）
 
 > J 轮是一次"工程债收口"批次：J-1b 把 `run_benchmark()` 内三个聚合器外提为
 > 模块级（口径首次可被单测钉住），J-2 修复 ADR-0003 环境开关预算门禁的
@@ -5804,7 +5817,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
   16 臂 bandit，Q6 未澄清前不投入）；`agents/debugger.py` 76 行（LLM 调用链，
   mock 成本 > 测试价值，登记低优先）。
 
-## [Unreleased] — 2026-10-17 df_spec 实验（P1 主实验实跑：判定 not_confirmed，方向为负的显著证据）
+### [Unreleased] — 2026-10-17 df_spec 实验（P1 主实验实跑：判定 not_confirmed，方向为负的显著证据）
 
 > 独立评审 §6 P1 / 投稿骨架 §8 T-6 主实验执行（LLM 授权批次）。预注册与
 > 判定口径于**结果产出前**落盘/入库；QuixBugs 双臂同批实跑（单变量 =
@@ -5842,7 +5855,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
 - 两臂 provenance `git_dirty=false`；cache namespace 互异
   （`emse_df_spec_20261016_dfspec` / `_df`）。
 
-## [Unreleased] — 2026-10-16 I 轮（失败归因链接线：五桶终局分类落盘 + m10_leaf_fallback 可机读 + 两处读侧分支修复；零 LLM）
+### [Unreleased] — 2026-10-16 I 轮（失败归因链接线：五桶终局分类落盘 + m10_leaf_fallback 可机读 + 两处读侧分支修复；零 LLM）
 
 > I 轮把失败归因链从"只写不读"接到批次落盘端：`failure_taxonomy` 框架
 > 自 U11 落地以来零生产调用点，本轮补齐末端；接线过程中又实测暴露两处
@@ -5890,7 +5903,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
   在规约层"，强行钉交互边/故障侧属编造归因）；`run_benchmark()` 内 3 个
   既有聚合器仍为嵌套函数（口径无法被单测钉住，触及冻结实验文件 diff 面）。
 
-## [Unreleased] — 2026-10-16 H 轮（覆盖率测量确定性收口：三处噪声源定位消除 + 脱敏运行期盲区 + 观测信号落盘；零 LLM）
+### [Unreleased] — 2026-10-16 H 轮（覆盖率测量确定性收口：三处噪声源定位消除 + 脱敏运行期盲区 + 观测信号落盘；零 LLM）
 
 > H 轮把 G 轮登记的"覆盖率测量非确定性（成因未定位）"完整收口：三处独立
 > 噪声源逐个定位到零（H1 env 泄漏 → H5 晚期 parse 门 → H6 竞态弧），连跑
@@ -5950,7 +5963,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
   4 文件（批次驱动、已冻结用于既有发表数字；干净环境下新旧写法逐位等价）；
   装饰守卫残余 2 项属死代码（处置需清理授权）。
 
-## [Unreleased] — 2026-10-16 G 轮（安全守卫实效化 + 三处门禁假绿修复 + 归因链断裂修复；零 LLM）
+### [Unreleased] — 2026-10-16 G 轮（安全守卫实效化 + 三处门禁假绿修复 + 归因链断裂修复；零 LLM）
 
 > G 轮按"有实现 + 有单测 + 有开关，但零生产调用点"口径全仓审计装饰
 > 守卫/开关，把安全守卫接到生产路径；同时修掉两处门禁假绿（G1/G2）与
@@ -5997,7 +6010,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
   `Status register coverage reconciliation`；
   `pytest tests/test_artifact_doc_consistency_gate.py -q`。
 
-## [Unreleased] — 2026-10-16 F 轮（开关治理收口：env 预算门禁盲区 + 布尔口径统一 + env_int 加固 + 原子落盘；零 LLM）
+### [Unreleased] — 2026-10-16 F 轮（开关治理收口：env 预算门禁盲区 + 布尔口径统一 + env_int 加固 + 原子落盘；零 LLM）
 
 > F 轮收口环境变量治理链：修掉 env 预算门禁假绿（+25 个不可见开关）、
 > 布尔开关解析口径统一（修一处 fail-open 安全缺陷，60 处 / 27 文件）、
@@ -6030,7 +6043,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
 - 明确排除（未授权不动）：死代码项（`event_bus.publish_workflow_completed` /
   `process_utils._close_quietly`）、`rag/retriever.py` 克隆合并。
 
-## [Unreleased] — 2026-10-15 EMSE 批次八（全量 Mut@k 收口：三项测量缺陷修复 + 测试有效性前置门 + M4 四臂闭环；零 LLM + 授权 LLM 跑 C/D）
+### [Unreleased] — 2026-10-15 EMSE 批次八（全量 Mut@k 收口：三项测量缺陷修复 + 测试有效性前置门 + M4 四臂闭环；零 LLM + 授权 LLM 跑 C/D）
 
 > 本批次把 Mut@k 从 `max_mutants=10` 截断面切到 cosmic-ray 全变异体口径，
 > 过程中发现并修复**三项测量有效性缺陷**与**一项上游数据问题**；全部对外
@@ -6120,7 +6133,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
 - 残余：D3 全量（ULT 3,909 任务）仍属长期算力项；自递归 DSL 扩展设计评审
   待启动（零 LLM）。
 
-## [Unreleased] — 2026-10-15 EMSE 批次七（M4 C/D 复跑链修复 + 投稿材料收口，零 LLM）
+### [Unreleased] — 2026-10-15 EMSE 批次七（M4 C/D 复跑链修复 + 投稿材料收口，零 LLM）
 
 > 本批次零 LLM（用户约束"先不考虑需要 LLM 的工程"）：修复 M4 C/D 复跑
 > 编排链的整体断裂 + 投稿工作流收口。C/D 复跑臂实跑本身（~$0.15）仍待
@@ -6204,7 +6217,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
   已并入本批次提交前检查；.gitignore 立规"有入库测试锁定契约的脚本
   必须入库"。
 
-## [Unreleased] — 2026-10-15 EMSE 批次六（SpecExpr DSL 覆盖率提升：冒号/切片 + 白名单扩容 + lambda/海象护栏，零 LLM）
+### [Unreleased] — 2026-10-15 EMSE 批次六（SpecExpr DSL 覆盖率提升：冒号/切片 + 白名单扩容 + lambda/海象护栏，零 LLM）
 
 > 本批次落地分层叙事收口后自述的下一优化方向——扩受限表达式 DSL 覆盖率
 > （非换数据集刷显著性）。全程零 LLM：语料=本地 Planner 缓存，对账=纯本地。
@@ -6277,7 +6290,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
 - 语料边界：只含"有 `*_expr` 产出的计划"，衡量编译器接受率，不衡量
   LLM 形式化意愿（后者=spec_expr_coverage，正交指标）。
 
-## [Unreleased] — 2026-10-14 EMSE 批次五（M4 QuixBugs SpecExpr 扩样实跑 + 全量 Mut@k 实测 + 过红 P1-P4 分类）
+### [Unreleased] — 2026-10-14 EMSE 批次五（M4 QuixBugs SpecExpr 扩样实跑 + 全量 Mut@k 实测 + 过红 P1-P4 分类）
 
 > 本批次交付 M4 4 臂扩样的 A/B 实跑（~$0.25）+ 全量 cosmic-ray Mut@k（ULT 复算 +
 > QuixBugs 首测）+ 过红 P1-P4 零 LLM 复跑。M4 结果**阴性**（SpecExpr 在
@@ -6353,7 +6366,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
   bug 行为耦合的断言"写死，bug 修复后原断言反红；P3 实现耦合 1/5。非测试
   生成质量缺陷，属评测口径问题（过红行本就该"修复后仍红"）。
 
-## [Unreleased] — 2026-10-14 EMSE 批次四（M1 M10 可观测性 + M2 ULT Mut@k 收口 + M3 分层叙事 + M4 QuixBugs 扩样预注册）+ emse 脚本重建（零 LLM，全量 5912 collected）
+### [Unreleased] — 2026-10-14 EMSE 批次四（M1 M10 可观测性 + M2 ULT Mut@k 收口 + M3 分层叙事 + M4 QuixBugs 扩样预注册）+ emse 脚本重建（零 LLM，全量 5912 collected）
 
 > 本批次四个优化项 + 5 个 emse 脚本重建。零 LLM 实跑成本（M4 仅预注册与分析
 > 脚本交付，4 臂跑批待用户授权 LLM 配额）。
@@ -6446,7 +6459,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
   primary_pooled 补 only_specir/only_replace 别名键（build_analysis
   消费）；
 
-## [Unreleased] — 2026-10-14 EMSE 批次三连（SpecExpr 确认性 + DSL 度量门修复 + Mut@k）+ LLM 结构化输出加固
+### [Unreleased] — 2026-10-14 EMSE 批次三连（SpecExpr 确认性 + DSL 度量门修复 + Mut@k）+ LLM 结构化输出加固
 
 > 本日五个批次：① SpecExpr 确认性实验（预注册 → 4 臂实跑 → 分析，
 > ~$0.6）；② SpecExpr DSL 度量门修复（零 LLM）；③ 三数据集新门可编译率
@@ -6526,7 +6539,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
 - `docs/design/stvr_empirical_study_design.md` §7/§8：cosmic-ray 安装 +
   Mut@k 子集实测勾选（`requirements.lock` 钉锁为剩余项）。
 
-## [Unreleased] — 2026-10-13 EMSE 投稿优化批次（期刊适配五项硬伤离线收口 + 零 LLM 复算工具 + 工件归档 T-10，零 LLM 成本）
+### [Unreleased] — 2026-10-13 EMSE 投稿优化批次（期刊适配五项硬伤离线收口 + 零 LLM 复算工具 + 工件归档 T-10，零 LLM 成本）
 
 > 依据：EMSE（Empirical Software Engineering）投稿导向的期刊适配分析
 > （Negative Results 征稿类别 / Registered Reports 机制 / Prompt-SE
@@ -6694,7 +6707,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
 - **BASELINE 刷新**：collected 5815、passed 5811（推导值，沙箱全量实跑受
   删除守卫阻断，提交前须提权前台确认）、last_verified→2026-10-13。
 
-## [Unreleased] — 2026-10-12 STVR 实证研究设计批次（研究问题可归因性重塑 + 检索质量 Recall@k 观测 + 6 臂消融矩阵骨架，零 LLM 成本）
+### [Unreleased] — 2026-10-12 STVR 实证研究设计批次（研究问题可归因性重塑 + 检索质量 Recall@k 观测 + 6 臂消融矩阵骨架，零 LLM 成本）
 
 > 依据：STVR（Software: Testing, Verification & Reliability）投稿导向优化——
 > 把 AITester 从"展示一个工具"转向"报告一项关于测试技术有效性的严谨研究"，
@@ -6825,7 +6838,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
   版本钉锁（`requirements.lock`）+ `experiments/ult_adapter.py`
   （`ult_bridge_plan.md` §4.2，P2 级）。
 
-## [Unreleased] — 2026-10-12 spec_replace A/B 首跑 + ULT 基准接线批次（三臂探索性实验 + 官方仓库勘误 + 加载器格式/字段修复 + 转换脚本）
+### [Unreleased] — 2026-10-12 spec_replace A/B 首跑 + ULT 基准接线批次（三臂探索性实验 + 官方仓库勘误 + 加载器格式/字段修复 + 转换脚本）
 
 > 依据：`PHASE1_PRECHECK_2026-10-12.md`（阶段 1 前置核查：QuixBugs/ULT 数据源
 > 就位确认、LLM 凭证就绪、n=41 功效分析预警）+ `SPEC_REPLACE_AB_REPORT_2026-10-12.md`
@@ -6948,7 +6961,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
   无 API key（DEEPSEEK_API_KEY 未配），外部核验未做，登记为待后续批次
   处理。
 
-## [Unreleased] — 2026-10-12 P0-A-2 可审计观测字段批次（spec_replace_applied 三态字段 + 键集合同构测试 +8 例）
+### [Unreleased] — 2026-10-12 P0-A-2 可审计观测字段批次（spec_replace_applied 三态字段 + 键集合同构测试 +8 例）
 
 > 依据：`SPEC_REPLACE_AB_REPORT_2026-10-12.md` §5 建议——"扩样前应先修复
 > spec_oracle_injected provenance 字段回填，使 replace 臂'是否真正注入了
@@ -6985,7 +6998,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
 - 守卫测试 `TestBaselineNumbersConsistency` 通过（total_passed 5703 与
   collected 5706 差额 3 = skipped 3 + xfailed 0 + 余量 1，恰好在 slack 内）
 
-## [Unreleased] — 2026-10-12 ULT M1 判分归一化 + spec_replace 87 扩样实跑预注册批次（裸断言包装为 pytest 函数 + 预注册 + 4 臂实跑脚本）
+### [Unreleased] — 2026-10-12 ULT M1 判分归一化 + spec_replace 87 扩样实跑预注册批次（裸断言包装为 pytest 函数 + 预注册 + 4 臂实跑脚本）
 
 > 依据：首跑报告 §5 建议"扩样前"须使 spec_replace 在真实复杂函数上可审计
 > + ULT 官方测试材料（裸断言片段）此前 M1 三段判定无法直接判分（缺 pytest
@@ -7060,7 +7073,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
   "87"为总可测任务数（41 F2P + 46 ULT 描述性），非 87 对 F2P 配对功效；
   确认性结论需后续补 87 对 F2P 可配对任务（如扩充 QuixBugs / BugsInPy）。
 
-## [Unreleased] — 2026-10-12 独立评审优化批次·终版（SpecExpr v3 文法升阶 + 规格优先生成 + 变异算子 v3 + 编排自动搜索 + 去污染 + MTTR-A + 观测级压缩）
+### [Unreleased] — 2026-10-12 独立评审优化批次·终版（SpecExpr v3 文法升阶 + 规格优先生成 + 变异算子 v3 + 编排自动搜索 + 去污染 + MTTR-A + 观测级压缩）
 
 > 依据：`INDEPENDENT_REVIEW_2026-10-12.md`（根目录，独立评审）的 §6 超越前沿路径 P1/P2/P3/P4/P5
 > 与 §10 建议表 S-05/S-06/S-08/S-09/S-10/S-16。本批次为**功能落地批次**（对比 2026-10-11
@@ -7256,7 +7269,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
 - 零 LLM 调用（全部为纯文本渲染 / 纯函数 / 子进程层改造；编排搜索本批次
   只落原语 + 桩评估器测试路径，不烧真实 LLM 预算）
 
-## [Unreleased] — 2026-10-11 全面优化批次·第二批（run_with_timeout 全量接线，孤儿子进程风险面清零）
+### [Unreleased] — 2026-10-11 全面优化批次·第二批（run_with_timeout 全量接线，孤儿子进程风险面清零）
 
 > 依据：2026-10-09 批后挂死事故根因（孙进程持管道写端 → 裸 `subprocess.run(timeout=)` 的
 > `communicate()` 永久阻塞；审计发现 3 个孤儿进程存活 16.5h）+ 本批次全仓体检发现剩余
@@ -7368,7 +7381,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
 - `ruff check .` 全绿；`ruff format --check .` 611 文件已格式化；`mypy src/ config.py` 0 错误（125 源文件）
 - 新增测试 0 例（本批次为漂移风险消除与判据修复，无新功能）
 
-## [Unreleased] — 2026-10-11 全面优化批次（门禁接入 + 测试伪影消除 + 工作区卫生）
+### [Unreleased] — 2026-10-11 全面优化批次（门禁接入 + 测试伪影消除 + 工作区卫生）
 
 > 依据：上一批"独立评审落地批次"（同日）的遗留项（OPTIMIZATION_LANDED_2026-10-11.md §5）+ 全仓体检发现。
 > 本批次不新增功能，**把已交付但游离在门禁体系外的资产接入正式防线**，并消除两处测试收集伪影。
@@ -7408,7 +7421,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
 - `ruff check .` 全绿；`ruff format --check .` 611 文件已格式化；`mypy src/ config.py` 0 错误（125 源文件）
 - 新增测试 0 例（本批次为接线与清理，无新功能）
 
-## [Unreleased] — 2026-10-11 独立评审落地批次（P0 可信度修复：门槛条件 + 死代码 + 统计口径 + 管道闸门）
+### [Unreleased] — 2026-10-11 独立评审落地批次（P0 可信度修复：门槛条件 + 死代码 + 统计口径 + 管道闸门）
 
 > 依据：三份独立评审（`INDEPENDENT_AUDIT_2026-10-11.md` / `EXTERNAL_REVIEW_PACKAGE_AITester.md` / `CONSOLIDATED_REVIEW_AND_PLAN.md`，均在仓库根，未跟踪）。
 > 本批次的最高优先级不是提升指标，而是**让实验能产出可信数据**：先锁模型快照，再修管道与死代码，最后修统计口径。
@@ -7452,7 +7465,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
 - `ruff check` 全绿；`ruff format --check` 491 文件已格式化；`mypy src/ config.py` 0 错误（125 源文件）
 - 真实 API 验证：`model_fingerprint` 端到端 `pinned=true` 且探针哈希三次一致
 
-## [Unreleased] — 2026-10-10 文档清理批次（过时文档与孤儿报告删除 + 本地文档安全网）
+### [Unreleased] — 2026-10-10 文档清理批次（过时文档与孤儿报告删除 + 本地文档安全网）
 
 ### Removed
 
@@ -7490,7 +7503,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
   `main` 保持与 `origin/main` 同步未被污染。**该分支禁止推送**——远端
   `1956178912/AITester` 实测为 public（GitHub API `"visibility": "public"`）。
 
-## [Unreleased] — 2026-10-09 D1 修复 + CI 三红清零批次
+### [Unreleased] — 2026-10-09 D1 修复 + CI 三红清零批次
 
 ### Fixed
 
@@ -7548,7 +7561,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
   artifacts_tracked / lock_sync / dependency_exemptions / state_contract / tool_versions /
   credential_scrub）全部 exit 0。
 
-## [Unreleased] — 2026-10-09 R5 审查修订落地批次（2026 前沿修订版审查 + P0 执行 + LLM 端点收拢）
+### [Unreleased] — 2026-10-09 R5 审查修订落地批次（2026 前沿修订版审查 + P0 执行 + LLM 端点收拢）
 
 > 承接 2026-10-09 修订版审查报告（结合 2026 年前沿研究；报告原文
 > `docs/review/review_2026_10_09_revision.md` 已随 2026-10-09 清理批次删除，
@@ -7610,7 +7623,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
 > 打开 arXiv / DOI 一手核验并补全 URL/DOI（核验清单原载于已删除的
 > `docs/review/review_2026_10_09_revision.md` §12.1，见上方承接说明）。
 
-## [Unreleased] — 2026-10-09 R4 审查落地批次（逻辑驱动反例精化闭环 + 模块化续拆 + 数据质量/污染防控加固）
+### [Unreleased] — 2026-10-09 R4 审查落地批次（逻辑驱动反例精化闭环 + 模块化续拆 + 数据质量/污染防控加固）
 
 > 承接第四轮系统审查 R4 可落地项（全部默认关、零 LLM
 > 成本、离线单测验证；默认行为不变——新增能力均为默认关开关或独立可调用模块）：
@@ -7679,7 +7692,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
 > 经 check_env_budget.py 自动登记，默认关零变化）；`docs/env_budget.yaml` 与
 > `docs/preregistration.{md,en.md}` 随批同步（工作树）；BASELINE/README 本批收口。
 
-## [Unreleased] — 2026-10-09 R3 评审落地批次（spec_smt 去裸 eval + nodes.py 三簇拆分 + PGH003 门禁重启用）
+### [Unreleased] — 2026-10-09 R3 评审落地批次（spec_smt 去裸 eval + nodes.py 三簇拆分 + PGH003 门禁重启用）
 
 > 承接 R3 系统审查报告落地项（全部零 LLM、离线
 > 单测/回放验证；默认行为不变）：
@@ -7712,7 +7725,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
 > 验证：mypy 全仓 114+ 文件 0 错误；ruff check 全仓通过；spec 85 /
 > graph 226 / embedding 118 相关测试全过。
 
-## [Unreleased] — 2026-10-08 R2 落地批次（测量伪影第三起根修 + 存量批次入库 + 对外口径 v2 收口）
+### [Unreleased] — 2026-10-08 R2 落地批次（测量伪影第三起根修 + 存量批次入库 + 对外口径 v2 收口）
 
 > 承接第十三/十四轮审查报告 R2 落地项（全部零 LLM、离线回放/单测验证；
 > 默认行为不变——除明确修复的测量口径与新增默认关开关）：
@@ -7744,7 +7757,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
 > src/tools/patch_localized.py 的 LOCALIZED_EDIT_ENABLE / LOCALIZED_EDIT_WINDOW
 > 两处历史漏登记，非新增开关）；mypy 113 文件 0；ruff 0.16.3 0 警告。
 
-## [Unreleased] — 2026-10-07 修复引擎批次 XIV（外部报告净新增收割 ADR-0028：FL Top-k 约束观测门 + Self-Repair Trap 观测器 + Frame Lifetime Trace 设计输入）
+### [Unreleased] — 2026-10-07 修复引擎批次 XIV（外部报告净新增收割 ADR-0028：FL Top-k 约束观测门 + Self-Repair Trap 观测器 + Frame Lifetime Trace 设计输入）
 
 > 第三份外部「前沿对齐审查报告」对照评估净新增五条的离线收割（全部
 > 零 LLM、观测层先行，passed 历史口径零变化）：
@@ -7776,7 +7789,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
 > 全量 4669/0（+35 = tests/test_batch_xiv.py）；mypy 112 文件 0（+1 =
 > src/tools/self_repair_trap.py）；env 预算 168 不变（纯观测零新开关）。
 
-## [Unreleased] — 2026-10-07 修复引擎批次 XIII（修正口径重估收口 ADR-0027：false_fix/CPR/弃权精确率首次非平凡 + 归因解混杂 + 对外文档勘误）
+### [Unreleased] — 2026-10-07 修复引擎批次 XIII（修正口径重估收口 ADR-0027：false_fix/CPR/弃权精确率首次非平凡 + 归因解混杂 + 对外文档勘误）
 
 > ADR-0021 勘误义务的执行收口（全部零 LLM 存量回放，`make
 > corrected-metrics` 一键重估）：
@@ -7812,7 +7825,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
 >   tests/test_batch_xiii.py；AL5 锁随勘误推进重写）；ADR-0027 + 索引
 >   同步（下一个 0028）。
 
-## [Unreleased] — 2026-10-07 修复引擎批次 VIII–XII（第十七轮审查对标五连批：test-hacking 守卫 + 评估口径收口 + 反事实 FL 上界 + oracle 消融档 + 交互中心归因）
+### [Unreleased] — 2026-10-07 修复引擎批次 VIII–XII（第十七轮审查对标五连批：test-hacking 守卫 + 评估口径收口 + 反事实 FL 上界 + oracle 消融档 + 交互中心归因）
 
 > 第十七轮审查（2026-10-07 前沿对标报告）对照评估后确认有效的增量建议
 > 全部落地（每批 ADR + 测试锁；审查中"时机不对/需拍板"项未做，见
@@ -7857,7 +7870,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
 >   ADR-0021–0026 六份 + ADR-0017 修订记录 3（动机勘误）+ 索引
 >   同步（下一个 0027）。
 
-## [Unreleased] — 2026-10-07 修复引擎批次 VII（repair=0 围栏伪影定案修复 ADR-0021 + 存量重放工具 + make repair-replay）
+### [Unreleased] — 2026-10-07 修复引擎批次 VII（repair=0 围栏伪影定案修复 ADR-0021 + 存量重放工具 + make repair-replay）
 
 > **P0 测量口径修复——"repair 全线 0"的最大单一成分系伪影**（第十七轮
 > 审查落地侦察中发现，决定性重放定案）：
@@ -7893,7 +7906,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
 >   （+19 = tests/test_batch_vii.py：清理八态 / 测量口径修复 /
 >   apply 行为回归锁 / 重放五态 + 汇总数学 + CLI）。
 
-## [Unreleased] — 2026-10-07 修复引擎批次 VI（--staging-dir 跑批运营收口 + make cpr-idr 入口 + R16-8 陈旧建议回收）
+### [Unreleased] — 2026-10-07 修复引擎批次 VI（--staging-dir 跑批运营收口 + make cpr-idr 入口 + R16-8 陈旧建议回收）
 
 > 多种子顺序跑批的运营摩擦代码化 + 验证段报告入口：
 > - **run_main_batch 新增 `--staging-dir`**：跑前递归快照输出目录既有
@@ -7912,7 +7925,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
 > - 全量回归 **4530 → 4537 passed / 0 failed**（+7 =
 >   tests/test_batch_vi.py：路径校验/快照差集外移/双出口接线/Makefile 目标锁）。
 
-## [Unreleased] — 2026-10-07 修复引擎批次 V（补丁弃权门观测层 ADR-0020 + 弃权视角存量回放）
+### [Unreleased] — 2026-10-07 修复引擎批次 V（补丁弃权门观测层 ADR-0020 + 弃权视角存量回放）
 
 > 验证段对症（R16-4；IDR 27.78%——72% plausible-but-wrong 零负信号
 > 通过 + Abstain-and-Validate +39pp 依据）：
@@ -7937,7 +7950,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
 > - ADR-0020 + 索引同步（下一个 0021）；全量回归 **4520 → 4530
 >   passed / 0 failed**（+10 = tests/test_batch_v.py）。
 
-## [Unreleased] — 2026-10-07 修复引擎批次 IV（确定性优先修复路由 ADR-0019）
+### [Unreleased] — 2026-10-07 修复引擎批次 IV（确定性优先修复路由 ADR-0019）
 
 > 第二阶段"合成"段第二块（R16-5 落地；PAGENT 针对性确定性层 + To Run
 > or Not to Run 成本调度依据）：
@@ -7959,7 +7972,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
 > - env 预算 167→168；全量回归 **4502 → 4520 passed / 0 failed**
 >   （+18 = tests/test_batch_iv.py）。
 
-## [Unreleased] — 2026-10-07 修复引擎批次 III（结构化编辑意图确定性落盘 ADR-0018 + AC2 过红再生成计数补漏）
+### [Unreleased] — 2026-10-07 修复引擎批次 III（结构化编辑意图确定性落盘 ADR-0018 + AC2 过红再生成计数补漏）
 
 
 
@@ -8027,7 +8040,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
 > - 全量回归 **4453 → 4478 passed / 0 failed**（+25 =
 >   test_fault_localizer.py 排序组 +14、test_cpr_idr_report.py +11）。
 
-## [Unreleased] — 2026-10-07 修复引擎批次 I（范式转向：独立 FaultLocalizer 落地 + 局部化独立指标首测通过）
+### [Unreleased] — 2026-10-07 修复引擎批次 I（范式转向：独立 FaultLocalizer 落地 + 局部化独立指标首测通过）
 
 > 用户 scope 级决策"立即转向修复引擎"（前沿 APR 范式：局部化→合成→
 > 验证；引用核验：RGFL arXiv 2601.18044 / Hunk-SWE 多 Hunk 研究 /
@@ -8057,7 +8070,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
 >   tests/test_fault_localizer.py：解析容错/gold 函数提取/命中
 >   判定/开关缺省四组行为锁）。
 
-## [Unreleased] — 2026-10-07 E2 迭代批（"恰好一次"迭代前置三缺陷修复：fl_at_k gold diff 对齐 + recursion_limit 56 + mutation 口径定性）
+### [Unreleased] — 2026-10-07 E2 迭代批（"恰好一次"迭代前置三缺陷修复：fl_at_k gold diff 对齐 + recursion_limit 56 + mutation 口径定性）
 
 > 用户批准动用预注册"恰好一次"门参数/路由修正迭代；本批为迭代重跑
 > 前置修复（修正均为 harness/测量口径，不触碰主终点判定规则与统计
@@ -8085,7 +8098,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
 > 迭代重跑：同 prereg 命令同种子（42/44），重跑后按预注册停止规则
 > 最终判定（本次迭代为恰好一次，无论结果如何不再迭代）。
 
-## [Unreleased] — 2026-10-07 E1 执行批次（E1 契约冒烟通过生死门 + recursion_limit 上界后置修复）
+### [Unreleased] — 2026-10-07 E1 执行批次（E1 契约冒烟通过生死门 + recursion_limit 上界后置修复）
 
 > 用户预算续费（DeepSeek V4.1 Flash）+ 终端提交七批（059343f）后，按
 > 预注册就绪命令原样执行 E1。批次工件 `（工件已清除）`
@@ -8110,7 +8123,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
 > prereg 就绪命令中 E1 验证 glob 路径与 run_main_batch 实际写盘路径的
 > 偏差已随工件归位（experiments/results/）消除。
 
-## [Unreleased] — 2026-10-07 AT 批次（第十五轮审查续五：make 目标与 workflow 运行时全量自检——零改动纯验证，自主优化系列收官）
+### [Unreleased] — 2026-10-07 AT 批次（第十五轮审查续五：make 目标与 workflow 运行时全量自检——零改动纯验证，自主优化系列收官）
 
 > 用户第六次"继续优化"。本批**零代码/工件改动**，纯运行时健康自检，
 > 测试数与门禁状态不变（4429）：
@@ -8126,7 +8139,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
 > "证实系统健康"形态——剩余全部为用户侧六决策（终端提交七批 / 密钥
 > 轮换 / E1 预算 / E7 人工比对 / L2 许可 / 价目与作者）。
 
-## [Unreleased] — 2026-10-07 AS 批次（第十五轮审查续四：发行构建链路首次全链取证 + PEP 639 license 现代化 + make build-check）
+### [Unreleased] — 2026-10-07 AS 批次（第十五轮审查续四：发行构建链路首次全链取证 + PEP 639 license 现代化 + make build-check）
 
 > 用户第五次"继续优化"。全部离线零 LLM 成本。全量回归
 > **4425 → 4429 passed / 0 failed**（+4 = tests/test_as_batch.py）。
@@ -8156,7 +8169,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
 批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可三选一 / 价目表补齐
 + CITATION 真实作者。
 
-## [Unreleased] — 2026-10-07 AR 批次（第十五轮审查续三：hypothesis extras 缺口补齐 + README CI 矩阵声称勘误 + prereg 双语结构奇偶锁）
+### [Unreleased] — 2026-10-07 AR 批次（第十五轮审查续三：hypothesis extras 缺口补齐 + README CI 矩阵声称勘误 + prereg 双语结构奇偶锁）
 
 > 用户"继续优化"后第十五轮审查续三批。全部离线零 LLM 成本。全量回归
 > **4420 → 4425 passed / 0 failed**（+5 = tests/test_ar_batch.py）。
@@ -8187,7 +8200,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
 E1 最小预算批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可三选一 /
 价目表补齐 + CITATION 真实作者。
 
-## [Unreleased] — 2026-10-07 AQ 批次（第十五轮审查续二：E7 工作表 v2 逐行差异 + E7 工件纳入入库守卫 + survey 打包陈旧结论勘误）
+### [Unreleased] — 2026-10-07 AQ 批次（第十五轮审查续二：E7 工作表 v2 逐行差异 + E7 工件纳入入库守卫 + survey 打包陈旧结论勘误）
 
 > 用户"继续优化"后第十五轮审查续二批。全部离线零 LLM 成本。全量回归
 > **4415 → 4420 passed / 0 failed**（+5 = tests/test_aq_batch.py）。
@@ -8220,7 +8233,7 @@ E1 最小预算批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可
 E1 最小预算批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可三选一 /
 价目表补齐 + CITATION 真实作者。
 
-## [Unreleased] — 2026-10-07 AP 批次（第十五轮审查续：E7 复核工作表生成器 + E6 提取命令端到端验证 + B-05 检查器缩进盲区修复 + survey 文档陈旧行更新）
+### [Unreleased] — 2026-10-07 AP 批次（第十五轮审查续：E7 复核工作表生成器 + E6 提取命令端到端验证 + B-05 检查器缩进盲区修复 + survey 文档陈旧行更新）
 
 > 用户"继续优化"后第十五轮审查续批。全部离线零 LLM 成本；付费实验
 > 与用户专属项（提交/密钥/许可）维持待决。全量回归
@@ -8255,7 +8268,7 @@ E1 最小预算批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可
 比对（工作表已备，~1 人日）** / L2 许可三选一 / 价目表补齐 + CITATION
 真实作者。
 
-## [Unreleased] — 2026-10-07 AO 批次（第十五轮审查落地：E6 matched cap 来源修订 + CI 按 lock 安装 + E7 候选清单生成 + 文档日期同步）
+### [Unreleased] — 2026-10-07 AO 批次（第十五轮审查落地：E6 matched cap 来源修订 + CI 按 lock 安装 + E7 候选清单生成 + 文档日期同步）
 
 > 第十五轮系统性审查（AN 批后独立复测 4396 全绿核实）可自主执行项落地。
 > 全部离线零 LLM 成本；不触碰付费实验（E1–E6 跑批维持待预算状态）。
@@ -8302,7 +8315,7 @@ E1 最小预算批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可
 "逻辑驱动"主张生死门）/ L2 许可三选一（BugsInPy+TestGenEval）/
 价目表补齐 + CITATION 真实作者。
 
-## [Unreleased] — 2026-10-07 AN 批次（第十四轮审查落地：报告层呈现性增补 $/detection 与测试套件可靠性 + TestGenEval L2 候补许可登记 + E1 失败出口骨架 + 工件卫生）
+### [Unreleased] — 2026-10-07 AN 批次（第十四轮审查落地：报告层呈现性增补 $/detection 与测试套件可靠性 + TestGenEval L2 候补许可登记 + E1 失败出口骨架 + 工件卫生）
 
 > 第十四轮系统性审查（AM 批后独立复测 4374 全绿核实）五项自主执行项
 > 落地。全部离线零 LLM 成本；报告层改动均为**呈现性增补**（主终点/
@@ -8346,7 +8359,7 @@ E1 最小预算批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可
   （防抢跑指控）；AK/AL/AM 批次未追记全局决策日志，由本批以"补记"
   形式补齐（源 = CHANGELOG 权威记录，不重构决策过程）。
 
-## [Unreleased] — 2026-10-06 AM 批次（第十三轮审查落地续：E6 执行前置 --per-task-token-caps 全链实现 + 预注册就绪命令）
+### [Unreleased] — 2026-10-06 AM 批次（第十三轮审查落地续：E6 执行前置 --per-task-token-caps 全链实现 + 预注册就绪命令）
 
 > 预注册 E6（预算匹配四臂）的最后一块工程前置补齐：旗标、注入、观测、
 > 透传、预注册一致性五层同批落地。全部离线零 LLM 成本；默认口径零变化
@@ -8382,7 +8395,7 @@ E1 最小预算批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可
   稳定性优先）；Mimosa 弱随机告警为误报（抽样确定性要求，非加密用途，
   cost_budget/repair_sample_selection 均已注释声明）。
 
-## [Unreleased] — 2026-10-06 AL 批次（第十三轮审查落地：红线守卫勘误回绿 + 对外定位去"自修复"主张 + E6/E7 预注册 + E7 抽样脚本）
+### [Unreleased] — 2026-10-06 AL 批次（第十三轮审查落地：红线守卫勘误回绿 + 对外定位去"自修复"主张 + E6/E7 预注册 + E7 抽样脚本）
 
 > **勘误（AL1）**：AK 批次"4327 passed / 0 failed"声明与事实不符——AK
 > 补注落盘后工作树实测 4326 passed + 1 failed（`tests/test_aj_batch.py`
@@ -8420,7 +8433,7 @@ E1 最小预算批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可
   发布（待用户终端提交与真实作者信息）；AL2 提交 / AL3 密钥轮换 /
   AL4 E1 执行仍待用户（预算与终端操作）。
 
-## [Unreleased] — 2026-10-06 AK 批次（第十二轮审查落地：修复上限归因 + provenance 勘误 + 双界敏感性 + 价目/守卫接线）
+### [Unreleased] — 2026-10-06 AK 批次（第十二轮审查落地：修复上限归因 + provenance 勘误 + 双界敏感性 + 价目/守卫接线）
 
 > 四项落地全部离线零 LLM 成本：repair=0 首次有漏斗级归因（补丁产出
 > 94% / plausible 47% / correct 0——上限卡在合理性与 gold 正确性而非
@@ -8460,7 +8473,7 @@ E1 最小预算批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可
   自述接线未兑现）——现接入 ci.yml test 作业 + `make gates`；
   Makefile 新增 state-contract / tool-versions 目标。
 
-## [Unreleased] — 2026-10-06 AJ 批次（E4 数据前置完成 + 三实验就绪命令齐备）
+### [Unreleased] — 2026-10-06 AJ 批次（E4 数据前置完成 + 三实验就绪命令齐备）
 
 > E4 的数据前置已零成本完成：QuixBugs（MIT）克隆至 data/（gitignore
 > 区）并做零 LLM 加载器冒烟。E1/E2/E4 三实验的执行命令全部预置进
@@ -8481,7 +8494,7 @@ E1 最小预算批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可
   齐备性、E2 去重警示、`--allow-dirty` 红线（行级禁止语境判定）、
   data/ gitignore 隔离。
 
-## [Unreleased] — 2026-10-06 AI 批次（logic 档漏配审计：FL 谱定位补齐——fl_at_k 0/87 根因）
+### [Unreleased] — 2026-10-06 AI 批次（logic 档漏配审计：FL 谱定位补齐——fl_at_k 0/87 根因）
 
 > 证据驱动：ab1_validation env 快照 `FL_SPECTRAL_ENABLE=None` 与生死
 > 实验 fl_at_k 0/87 全空互为因果实证——fl_spectral（Ochiai）经第四轮
@@ -8504,7 +8517,7 @@ E1 最小预算批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可
   默认档零变化）；`AGENT_TELEMETRY_ENABLE` 刻意不注入的文档化决策
   （MAST 已由 AG1 离线分析覆盖，避免运行时双重口径）。
 
-## [Unreleased] — 2026-10-06 AH 批次（实验前置条件收口：上游许可权威核实 + E1 就绪命令预置）
+### [Unreleased] — 2026-10-06 AH 批次（实验前置条件收口：上游许可权威核实 + E1 就绪命令预置）
 
 > 纯核查与文档批次（零 API / 零代码行为变更，测试数不变）：E1 复跑被
 > 预注册自身门槛卡住（git_dirty 必须为 False——run_main_batch 默认拒绝
@@ -8528,7 +8541,7 @@ E1 最小预算批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可
 - **AH3 工程卫生**：`.hypothesis/`（hypothesis 示例库缓存，可再生）补入
   .gitignore；论文骨架（.private）补 MAST 分布实证与 BugsInPy 许可门槛。
 
-## [Unreleased] — 2026-10-06 AG 批次（telemetry 展平修复 + MAST trace 分布分析——论文 C2 轴素材）
+### [Unreleased] — 2026-10-06 AG 批次（telemetry 展平修复 + MAST trace 分布分析——论文 C2 轴素材）
 
 > 零 API 成本批次：对生死实验 963 个既有 trace 做 MAST 失效模式离线
 > 聚合，过程中发现并修复一个真实观测缺陷。全量回归 **4290 → 4303
@@ -8556,7 +8569,7 @@ E1 最小预算批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可
   含诚实警示：plain_llm/df 零命中反映 trace schema（无 debugger 节点
   不落 error_category）而非零失败；SHA256SUMS 已刷新（971→972）。
 
-## [Unreleased] — 2026-10-06 AF 批次（第十一轮第二轮自主收口：两项陈旧结论更正 + N12 阻塞登记 + 泄漏通道不变量锁定）
+### [Unreleased] — 2026-10-06 AF 批次（第十一轮第二轮自主收口：两项陈旧结论更正 + N12 阻塞登记 + 泄漏通道不变量锁定）
 
 > 核查驱动批次：第十一轮报告 N10/N11 经本轮读码核实**已由存量批次完成**
 > （P1-7 lock 全量审计 / S3 容器默认加固），N12 被安全扫描器结构性阻塞
@@ -8596,7 +8609,7 @@ E1 最小预算批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可
   侧消费必须显式更新 DATA_CARD 登记与本测试（防"泄漏通道现状"登记
   静默失真）。
 
-## [Unreleased] — 2026-10-06 AE 批次（第十一轮审查落地：预注册文档 + $/task 成本口径 + 追踪残留治理 + 论文骨架）
+### [Unreleased] — 2026-10-06 AE 批次（第十一轮审查落地：预注册文档 + $/task 成本口径 + 追踪残留治理 + 论文骨架）
 
 > 第十一轮系统性审查（AC/AD 批次后状态全面复核 + 前沿基线刷新）的自主
 > 执行项收口；预算依赖项（E1/E2/E4 复跑）与用户专属项（终端提交、密钥
@@ -8634,7 +8647,7 @@ E1 最小预算批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可
   AssertFlip 需先捕获 buggy 行为）+ 统计与效度框架；落位 .private/
   遵循隐私隔离约定（论文材料不推 GitHub）。
 
-## [Unreleased] — 2026-10-06 输出成本控制批次 AD（LLM 思考链治理：输出 token 成本 ↓ 一至两个数量级）
+### [Unreleased] — 2026-10-06 输出成本控制批次 AD（LLM 思考链治理：输出 token 成本 ↓ 一至两个数量级）
 
 > R-P0-2 生死实验后基于用量账单的诊断修复：2026-10-06 API 用量
 > 12.13M tokens 中**输出 10.05M（83%）**；逐臂拆解实证 aitester 臂输出
@@ -8672,7 +8685,7 @@ E1 最小预算批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可
 - 若质量敏感场景需保留思考链：`LLM_REASONING_EFFORT=low`（官方档位）
   折中，或仅对 aitester 臂开启并作臂间成本注记。
 
-## [Unreleased] — 2026-10-06 第十轮审查落地批次 AC（规约契约修复 + 检出优先双门 + 编排定位重述 + 聚类稳健统计）
+### [Unreleased] — 2026-10-06 第十轮审查落地批次 AC（规约契约修复 + 检出优先双门 + 编排定位重述 + 聚类稳健统计）
 
 > R-P0-2 生死实验合并报告（statistical_report_3seed_pooled.md）与第十轮
 > 系统性审查（T-P0-2/3/4/5）四项落地。全量回归 **4226 → 4247 passed /
@@ -8737,7 +8750,7 @@ E1 最小预算批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可
   .env.example 补双门口径说明；.gitignore 增 .mimosa 运行时状态排除
   （hook-state/hook-status 含会话 ID，已跟踪 4 文件退跟踪待终端提交）。
 
-## [Unreleased] — 2026-10-06 生死实验根因修复批次 AB（M10 降级出口 + provenance/行级观测补齐 + 统计多种子拼接）
+### [Unreleased] — 2026-10-06 生死实验根因修复批次 AB（M10 降级出口 + provenance/行级观测补齐 + 统计多种子拼接）
 
 > R-P0-2 生死实验（n=87×3 臂×3 种子，全量工件见 main_batch/）三项根因/
 > 观测缺口的修复落地。全量回归 **4210 → 4226 passed / 0 failed**
@@ -8782,7 +8795,7 @@ E1 最小预算批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可
   repair 全线 0；交叉分析定位两条机制通道（88 行过红测试 F2P 不通过、
   28 行修复循环抹红）+ M10 杀任务（AB1 修复）。
 
-## [Unreleased] — 2026-10-06 主批次 runner 透传补齐（R-P0-2 生死实验前置）
+### [Unreleased] — 2026-10-06 主批次 runner 透传补齐（R-P0-2 生死实验前置）
 
 > 生死实验（R-P0-2 预注册：强模型 × 三臂 × 3 种子 × n=87）发车前置改动：
 > run_main_batch 补 `--max-pattern-repeat` 透传（R-P0-4 批次内 pattern 去重
@@ -8796,7 +8809,7 @@ E1 最小预算批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可
   可在 R4 脚手架的干净树硬门禁 + temp=0 确定性协议 + R14 统计白名单下使用
   同池模板重复上限，无需绕行 run_benchmark 直调而失去复现性门禁。
 
-## [Unreleased] — 2026-10-06 代码优化批次 AA（审查优化项落地：logic 档补检出优先 + 合成集采样上限 + 文档矩阵守卫）
+### [Unreleased] — 2026-10-06 代码优化批次 AA（审查优化项落地：logic 档补检出优先 + 合成集采样上限 + 文档矩阵守卫）
 
 > 来源：2026-10-06 系统性审查报告 R-P0-3 残余缺口 / R-P0-4a / R-P2-5 三项
 > "无需预算 / 无破坏性"代码优化。全量回归 **4195 → 4207 passed / 0 failed**
@@ -8833,7 +8846,7 @@ E1 最小预算批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可
   test_patch_rollback / test_planner 共 5 用例（xdist 下环境变量泄漏是横向
   污染源）。
 
-## [Unreleased] — 2026-10-06 优化批次 Z（第八轮独立系统性审查落地：代码级修复四项 + 统计方法学升级 + 文档治理扩围 + 工程入口补齐）
+### [Unreleased] — 2026-10-06 优化批次 Z（第八轮独立系统性审查落地：代码级修复四项 + 统计方法学升级 + 文档治理扩围 + 工程入口补齐）
 
 > 本轮审查（2026-10-06，全新独立执行：工作树文件实读 + 外部文献检索）结论：评估诚实性与工程
 > 纪律达标，但核心科学主张仍无阳性实证（detection 2.0% / repair 0.0% / false_fix 89.8%，
@@ -8899,7 +8912,7 @@ E1 最小预算批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可
   表）；密钥轮换 + git 历史重写（runbook 就绪，破坏性操作）；ADR-0016"多智能体降为
   消融维度"定位决策。
 
-## [Unreleased] — 2026-10-06 优化批次 Y（X 批次真实冒烟补遗：检出优先终态三值 + 再生成计数透出 + MAST 对齐 + README 瘦身）
+### [Unreleased] — 2026-10-06 优化批次 Y（X 批次真实冒烟补遗：检出优先终态三值 + 再生成计数透出 + MAST 对齐 + README 瘦身）
 
 > 2026-10-05 深夜—10-06 凌晨：用免费档存活模型对 X 批次新链路做**真实 LLM 端到端冒烟**
 > （examples/calculator_divide，plain_llm_df 基线）：trace 实证
@@ -8937,7 +8950,7 @@ E1 最小预算批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可
   ——改指向 BASELINE.yaml `static_checks.mypy_source_files`，历轮 lint
   叙事归档 CHANGELOG）；"最近改动"行双语更新至 X/Y 批次。
 
-## [Unreleased] — 2026-10-05 优化批次 X（第七轮独立系统性审查落地：复现性机制 + 归因基线 + 统计口径 + repo 守卫 + 开关冻结）
+### [Unreleased] — 2026-10-05 优化批次 X（第七轮独立系统性审查落地：复现性机制 + 归因基线 + 统计口径 + repo 守卫 + 开关冻结）
 
 > 同日第七轮独立全量审查（忽略此前审查；子代理额度耗尽改主会话直读）
 > 落地其全部可自主执行项；需要付费 API / 危险操作的项（强模型生死实验、
@@ -9000,7 +9013,7 @@ E1 最小预算批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可
   tests/test_2026_10_05_n_batch.py 的批次 fixture 补非 None
   detection_rate 字段（新口径下不带该字段的 fixture 会被过滤）。
 
-## [Unreleased] — 2026-10-05 优化批次 W（第四轮独立系统性审查的可执行项落地：检出优先协议 + 基线健全性修复 + 真实基准加载器 + ratchet 门禁 + 安全文档）
+### [Unreleased] — 2026-10-05 优化批次 W（第四轮独立系统性审查的可执行项落地：检出优先协议 + 基线健全性修复 + 真实基准加载器 + ratchet 门禁 + 安全文档）
 
 > 同日第四轮独立系统性审查（3 路并行深查 + 文献核验，忽略此前审查）落地其
 > 可自动化子集；需要 API 预算 / GPU / 危险操作的项（强模型多种子复跑、
@@ -9062,7 +9075,7 @@ E1 最小预算批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可
   `--enable-rag` / `--multi-candidate` 显式开启（--no-* 参数保留为兼容
   空操作）；README 双语对应描述同步。
 
-## [Unreleased] — 2026-10-05 优化批次 V（第三轮独立审查落地：科学性修复 + 实验基建 + 模板库扩容 + 工程加固）
+### [Unreleased] — 2026-10-05 优化批次 V（第三轮独立审查落地：科学性修复 + 实验基建 + 模板库扩容 + 工程加固）
 
 > 同日第三轮**全新独立系统性审查**（忽略此前审查，四路并行深查 src 链路 /
 > 实验方法学 / 测试与 CI / 文档合规，载荷性结论均二次读码核验）的可执行
@@ -9122,7 +9135,7 @@ E1 最小预算批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可
   基线数字守卫 / 引用守卫 / 工件 SHA256 校验全过。
 - 主批次统计报告已按可复算管线再生成（含诚实指标节 + 复算命令）。
 
-## [Unreleased] — 2026-10-05 优化批次 U（独立系统性审查落地：证据链入库 + 零断言治理 + 并发原子性 + 预算分层下沉 + 终局失效分类框架）
+### [Unreleased] — 2026-10-05 优化批次 U（独立系统性审查落地：证据链入库 + 零断言治理 + 并发原子性 + 预算分层下沉 + 终局失效分类框架）
 
 > 同日第二轮**独立系统性审查**（13 节报告：前沿基线对照 + Python/领域专项诊断）
 > 的可执行项落地。审查三条结构性发现驱动本批次：
@@ -9205,7 +9218,7 @@ E1 最小预算批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可
   漂移，如 base_agent 100% vs 实测 70）；守卫新增
   `module.py (N%)` 模式防回填。
 
-## [Unreleased] — 2026-10-05 优化批次 T（独立系统审查落地：SMT 见证层 + 属性测试 + 引用/工件守卫 + 0/20 根因分析，默认行为不变）
+### [Unreleased] — 2026-10-05 优化批次 T（独立系统审查落地：SMT 见证层 + 属性测试 + 引用/工件守卫 + 0/20 根因分析，默认行为不变）
 
 > 同日**独立全量审查**（未沿用历史批次结论，全部重新取证）的可执行项落地。
 > 审查同时修正两处误判：G5 Docker 加固（`--network=none`/`--read-only`/
@@ -9257,7 +9270,7 @@ E1 最小预算批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可
 - **`.env.example`**：补 `logic` profile 条目（config.py 已有而文档漂移）、
   `SPEC_SMT_*` 三开关说明、MUTATION_MAX_MUTANTS 新默认值说明。
 
-## [Unreleased] — 2026-10-05 系统审查修复批次（S 系列：FL 定位修复 + 守卫防绕过 + 回滚事务化 + 记账传播 + 记忆验证门）
+### [Unreleased] — 2026-10-05 系统审查修复批次（S 系列：FL 定位修复 + 守卫防绕过 + 回滚事务化 + 记账传播 + 记忆验证门）
 
 > 对同日系统性审查 P0/P1 缺口的直接修复批次（C3/C4/C6/C8/C10/W12 + O1/O6/C7）。
 > 本批次不新增默认开关行为（与 ADR-0003 一致，`AITESTER_PROFILE=logic` 为显式预设）；
@@ -9291,7 +9304,7 @@ E1 最小预算批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可
 
 - 新增 `tests/test_2026_10_05_review_fixes_batch.py`（21 用例：C6a restored_out ×3 + W12 fail-closed ×2 + C6b A-03 磁盘恢复节点级 ×3 + C8 记账传播 ×5 + C10 验证门 ×5 + O1 logic 预设 ×2 + executor 接线锁 ×1）；`test_fl_spectral.py` 重构（+6：经典公式方向锁 / 逐上下文计数 / 端到端判别力 / junit 全通过降级）；`test_patch_applier_dynamic_bypass.py` +8（from-import 别名四形态 / 差集不误伤既有 / 安全导入不误报）；`test_packaging.py` +1（extras 守卫）；`test_workflow_extended.py` 的 `test_debugger_rag_ingestion` 按 C10 新口径改写（add_repair 不得在 debugger 直接调用）。
 
-## [Unreleased] — 2026-10-05 复审批次（N 系列：口径诚实化 + R 批次潜伏门禁修复 + 打包漂移守卫）
+### [Unreleased] — 2026-10-05 复审批次（N 系列：口径诚实化 + R 批次潜伏门禁修复 + 打包漂移守卫）
 
 > 对同日 R1-R18 批次的复核收尾：**评估口径诚实化**（N5/N7/N10）+ **R 批次
 > 遗留的两处必红 CI 门禁修复**（mypy 1.15.0 下 nodes.py len(None) 隐患、
@@ -9321,7 +9334,7 @@ E1 最小预算批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可
 
 - 新增 `tests/test_2026_10_05_n_batch.py`（6 用例：N5 mtime 去重 ×2 + N7 污染 not_applicable ×4）与 `tests/test_packaging.py` 漂移守卫（1 用例）；更新 `test_run_benchmark` / `test_roadmap_13_22_21_mypy_5` 的污染口径断言（"low" → "not_applicable"，golden 正例 high 断言不变）。
 
-## [Unreleased] — 2026-10-05 审查优化批次（R1-R18：规约 oracle 接线 + 统计报告完整化 + 变异检出率 + CI 硬化，默认行为不变）
+### [Unreleased] — 2026-10-05 审查优化批次（R1-R18：规约 oracle 接线 + 统计报告完整化 + 变异检出率 + CI 硬化，默认行为不变）
 
 > 本批次为 2026-10-05 系统性审查（R1–R18 建议）落地的第一批：**科学内核修复
 > + 评估口径完整化 + 工程门禁硬化**，全部"默认开关不变 + 新能力独立开关"口径；
@@ -9408,7 +9421,7 @@ E1 最小预算批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可
 > （19 用例）；`tests/test_spec_ir_branches.py` 两处锁定旧缺陷行为的用例
 > 更新为新口径（NL-only 材料返回空串 / 恒真断言封堵）。
 
-## [Unreleased] — 2026-10-04 优化批次·续四（P0-4 内核沙箱启用路径自验证 + P2 注入警示注入 LLM query 闭环 + 威胁模型更新，默认行为不变）
+### [Unreleased] — 2026-10-04 优化批次·续四（P0-4 内核沙箱启用路径自验证 + P2 注入警示注入 LLM query 闭环 + 威胁模型更新，默认行为不变）
 
 > 本批次为 2026-10-04 系统性审查后第四批可自验证优化项（紧接续三 P2 注入基准
 > + P1-1 嵌入钩子）；全部改动"默认开关不变 + 新能力独立开关"口径，全量回归
@@ -9457,7 +9470,7 @@ E1 最小预算批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可
 > - **验证**：全量 3870 用例通过 + ruff/mypy/check_lock_sync/
 >   check_branch_coverage/check_baseline_numbers/check_bilingual_docs 全绿。
 
-## [Unreleased] — 2026-10-04 优化批次·续三（P2 注入扫描回归基准 + P1-1 污染嵌入钩子 + injection_findings 状态接线，默认行为不变）
+### [Unreleased] — 2026-10-04 优化批次·续三（P2 注入扫描回归基准 + P1-1 污染嵌入钩子 + injection_findings 状态接线，默认行为不变）
 
 > 本批次为 2026-10-04 系统性审查后第三批可自验证优化项（紧接续二 P2-1/2/3
 > + 威胁模型双语）；全部改动"默认开关不变 + 新能力独立开关"口径，全量回归
@@ -9497,7 +9510,7 @@ E1 最小预算批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可
 > - **验证**：全量 3862 用例通过 + ruff/mypy/check_lock_sync/
 >   check_branch_coverage/check_baseline_numbers/check_bilingual_docs 全绿。
 
-## [Unreleased] — 2026-10-04 优化批次·续二（P2-1 OTel 导出器 + P2-2 专家池维度条件化 + P2-3 策略银行 outcome 积累 + 威胁模型双语，默认行为不变）
+### [Unreleased] — 2026-10-04 优化批次·续二（P2-1 OTel 导出器 + P2-2 专家池维度条件化 + P2-3 策略银行 outcome 积累 + 威胁模型双语，默认行为不变）
 
 > 本批次为 2026-10-04 系统性审查后第二批可自验证优化项（紧接首次批次
 > P2-7 / P2-4 / P2-5 / P1 Docker 化 / P2-6）；全部改动"默认开关不变 +
@@ -9553,7 +9566,7 @@ E1 最小预算批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可
 > 验证：全量 3815 用例通过 + ruff/mypy/check_lock_sync/check_branch_coverage/
 > check_baseline_numbers/check_bilingual_docs 全绿。
 
-## [Unreleased] — 2026-10-04 优化批次·续（P2-5 内核沙箱 venv 链路接线 + P0-4 缺口关闭，默认行为不变）
+### [Unreleased] — 2026-10-04 优化批次·续（P2-5 内核沙箱 venv 链路接线 + P0-4 缺口关闭，默认行为不变）
 
 > 本批次为 2026-10-04 首次优化批次（P2-7/P2-4/P2-5 依赖分组/P1 Docker 化/P2-6 威胁模型）
 > 的延续落地：补上 `docs/threat_model.md` 登记的 **P0-4 缺口**（内核级沙箱此前仅接
@@ -9590,7 +9603,7 @@ E1 最小预算批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可
 > 验证：新增 4 用例 + 全量回归零失败 + ruff 0 告警（mypy 95 文件 0 错误，
 > CI 口径）。
 
-## [Unreleased] — 2026-10-04 优化批次（P2-7 无 oracle 接线 + P2-4 停滞检测 + P2-5 依赖分组 + P1 Docker 化复现 + 威胁模型文档，默认行为不变）
+### [Unreleased] — 2026-10-04 优化批次（P2-7 无 oracle 接线 + P2-4 停滞检测 + P2-5 依赖分组 + P1 Docker 化复现 + 威胁模型文档，默认行为不变）
 
 > 本批次为 2026-10-04 系统性审查后的低风险可自验证优化项（P0 强模型证据类
 > 因涉及 API 成本/预算未在本批次执行）；全部改动"默认开关不变 + 新能力独立
@@ -9635,7 +9648,7 @@ E1 最小预算批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可
 > 验证：全量 3793 用例通过 + ruff/mypy/check_lock_sync/check_branch_coverage/
 > check_baseline_numbers 全绿。
 
-## [Unreleased] — 2026-10-02 继续优化批次·七～十四（纯逻辑 / mock 隔离分支补齐 + 两处真实缺陷修复，默认行为不变）
+### [Unreleased] — 2026-10-02 继续优化批次·七～十四（纯逻辑 / mock 隔离分支补齐 + 两处真实缺陷修复，默认行为不变）
 
 > 八批次累计（2026-10-02），聚焦 18 个低覆盖模块的纯逻辑 / mock 隔离分支补齐
 > （零 LLM / 零网络 / 零子进程调用），并修复 2 处真实缺陷；全量回归
@@ -9665,7 +9678,7 @@ E1 最小预算批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可
 >   `check_baseline` / `check_baseline_numbers` / `check_branch_coverage` /
 >   ruff / mypy 全绿。
 
-## [Unreleased] — 2026-09-30 全面审查优化轮（O32–O34：静态门禁扩充 + 安全审计扩面 + CI 真门禁修复）
+### [Unreleased] — 2026-09-30 全面审查优化轮（O32–O34：静态门禁扩充 + 安全审计扩面 + CI 真门禁修复）
 
 > 本批次为独立"全面审查 + 优化"轮（忽略既往审查记录、从零复核），聚焦四类
 > 工程质量问题：**静态检查规则陈旧**（ruff 10 个规则集、T201/安全/现代写法类
@@ -9723,7 +9736,7 @@ E1 最小预算批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可
 > 默认行为不变（无新开关、无默认值变更）；`raise e` 仅影响"直接调用 handler 且
 > fallback 禁用"的边缘路径（生产链路 `call()` 内语义等价）。
 
-## [Unreleased] — 2026-10-02 审查优化轮（CI 分支覆盖门禁回绿 + 密钥守卫自锁修复 + 三处真实缺陷 + 恒真断言清零）
+### [Unreleased] — 2026-10-02 审查优化轮（CI 分支覆盖门禁回绿 + 密钥守卫自锁修复 + 三处真实缺陷 + 恒真断言清零）
 
 > 本批次为"审查 + 优化"轮：全面复核基线状态后，修复 **CI 红灯**
 > （`scripts/check_branch_coverage.py` 门槛 77% vs 实测 73%、`graph/workflow.py`
@@ -9788,7 +9801,7 @@ E1 最小预算批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可
 >   `test_mutation_advisor` / `test_rag_keyword_fallback` /
 >   `test_logic_spec_type_repair_branches` + 既有测试文件的断言收紧。
 
-## [Unreleased] — 2026-10-01 全面审查批次（P0 密钥泄漏守卫 + P1/P2 缺陷修复 + 文档/基线同步）
+### [Unreleased] — 2026-10-01 全面审查批次（P0 密钥泄漏守卫 + P1/P2 缺陷修复 + 文档/基线同步）
 
 > 本批次为全仓全面代码审查（6 模块并行子代理交叉验证 + 主代理复核）的
 > 落地修复。**默认行为不变**原则贯穿：所有 opt-in 特性开关默认值未变，
@@ -9887,7 +9900,7 @@ E1 最小预算批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可
 > 0 告警（含 ruff format 已格式化的 9 个本次触碰文件），mypy 86 文件
 > 0 错误。
 
-## [Unreleased] — 2026-09-29 P0/P1/P2 缺口执行批次（G8 全开链路重测 + 默认关功能验证 + 文档一致性）
+### [Unreleased] — 2026-09-29 P0/P1/P2 缺口执行批次（G8 全开链路重测 + 默认关功能验证 + 文档一致性）
 
 > 本批次执行 `docs/gap_report_2026-09-28_frontier_recommendations.md` §9 缺口清单
 > 的 P0/P1/P2 条目，默认行为不变（各开关保持原默认值）：
@@ -9936,7 +9949,7 @@ E1 最小预算批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可
 > - 本批次无生产代码变更（仅实验 + 文档 + 数据门禁修复），全量测试 /
 >   ruff / mypy 基线不变（2418 测试 / ruff 全仓 0 告警 / 覆盖率 94%）。
 
-## [Unreleased] — 2026-09-28 真实功能缺口实验补齐批次（A/B 对照 + 死循环修复 + 跨文件脚手架）
+### [Unreleased] — 2026-09-28 真实功能缺口实验补齐批次（A/B 对照 + 死循环修复 + 跨文件脚手架）
 
 > 本批次补齐论文实验章节的证据缺口（位置感知 / RAG / 跨文件三组 A/B），
 > 并修复实验过程中暴露的两处真实缺陷。**默认行为不变**（各开关保持原默认值）：
@@ -9968,7 +9981,7 @@ E1 最小预算批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可
 >   + seed=42 口径，可复现。
 > - 全量 2418 测试通过 / 零回归。
 
-## [Unreleased] — 2026-09-29 审查优化轮（项目审查：P0 运行时探针缺陷修复 + 测试套件 0 告警）
+### [Unreleased] — 2026-09-29 审查优化轮（项目审查：P0 运行时探针缺陷修复 + 测试套件 0 告警）
 
 > 本轮为全项目审查（静态检查 + 测试告警 + 核心模块代码走查）的修复批次，
 > **默认行为不变**（探针模块默认关，`RUNTIME_PROBE_ENABLE=false` 时零差异）：
@@ -10011,7 +10024,7 @@ E1 最小预算批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可
 >   当前实测加权 77.34%（`scripts/check_branch_coverage.py` + 同步守卫测试）；
 >   `BASELINE.yaml` 刷新（total_passed 2502 → 2538；line_total_pct 注释 0.8665）。
 
-## [Unreleased] — 2026-09-28 前沿推荐批次（gap_report P0/P1/P2 缺口落地，默认行为不变 + 新能力独立开关）
+### [Unreleased] — 2026-09-28 前沿推荐批次（gap_report P0/P1/P2 缺口落地，默认行为不变 + 新能力独立开关）
 
 > 本批次基于 `docs/gap_report_2026-09-28_frontier_recommendations.md` 的
 > G1–G8 共 8 项缺口 + 文档一致性 P2 缺口逐项落地，**默认行为不变**
@@ -10150,7 +10163,7 @@ E1 最小预算批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可
 > - `tests/test_kernel_sandbox.py`（9 用例：G3 内核沙箱）；
 > - `tests/test_experiments_ab_scaffolds.py`（12 用例：A/B 对照聚合 + 全链路汇总 verdict + 七开关注入）。
 
-## [Unreleased] — 2026-09-28 优化轮（Agent 实例复用缓存 + LLM 客户端热路径记忆，默认行为不变）
+### [Unreleased] — 2026-09-28 优化轮（Agent 实例复用缓存 + LLM 客户端热路径记忆，默认行为不变）
 
 > 代码审查后的性能优化批次，默认行为不变（新增能力均带独立开关，
 > 未启用时历史口径逐字节等价）：
@@ -10199,7 +10212,7 @@ E1 最小预算批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可
 >   记忆清除语义）；全量回归 2453 passed / 0 failed（ruff 0
 >   warning / mypy 0 error，81 源文件）。
 
-## [Unreleased] — 2026-09-29 改进批次（缓存隔离 / 注入防御 / 可解释性 / 确定性守卫 / 流氓监控 / 关键词兜底）
+### [Unreleased] — 2026-09-29 改进批次（缓存隔离 / 注入防御 / 可解释性 / 确定性守卫 / 流氓监控 / 关键词兜底）
 
 > 基于 2026 年行业数据（Clinejection、KeyPooling、LiteLLM
 > CVE-2026-89032、Spring AI CVE-2026-59308、DO-178C、特斯拉
@@ -10278,7 +10291,7 @@ E1 最小预算批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可
 >     四段式故障排查手册）；
 >   - `CHANGELOG.md` 批次记录。
 
-## [Unreleased] — 2026-09-28 改进清单全量批次（P0/P1/P2/P3，默认行为不变，新能力均带独立开关）
+### [Unreleased] — 2026-09-28 改进清单全量批次（P0/P1/P2/P3，默认行为不变，新能力均带独立开关）
 
 > 本批次基于用户提交的 24 项改进清单（跨 7 个维度：架构算法 / 工程实践 /
 > 测试质量 / 文档 UX / 性能扩展 / 安全合规 / 特性生态），按 P0→P3 优先级
@@ -10353,7 +10366,7 @@ E1 最小预算批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可
 > `test_llm_format_anomaly.py`（17）/ `test_smoke_llm.py`（11）/
 > `test_branch_coverage_gates.py`（26）/ `test_check_baseline_numbers.py`（7）。
 
-## [Unreleased] — 2026-09-28 改进清单落地批次（文档一致 / 基础设施 / 评估实验 / 可观测性 / 安全，默认行为不变）
+### [Unreleased] — 2026-09-28 改进清单落地批次（文档一致 / 基础设施 / 评估实验 / 可观测性 / 安全，默认行为不变）
 
 > 本批次基于用户提交的改进清单（文档一致性 / 基础设施 / 核心算法 / 用户体验 /
 > 评估实验 / 安全 / 可观测性）逐项核实并落地，**默认行为不变**：
@@ -10441,7 +10454,7 @@ E1 最小预算批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可
 > 2 用例因 `_run_single_task` 签名加 `dump_trace_on_failure` 参数
 > （**kwargs 透传）同步更新。全量测试通过 / ruff 0 告警 / mypy 0 错误。
 
-## [Unreleased] — 2026-09-28 改进清单落地批次（健康检查并发 / CI 3.13 / 文档口径对齐 / 多进程缓存说明 / D 规则分阶段路线，默认行为不变）
+### [Unreleased] — 2026-09-28 改进清单落地批次（健康检查并发 / CI 3.13 / 文档口径对齐 / 多进程缓存说明 / D 规则分阶段路线，默认行为不变）
 
 > 本批次基于改进清单（核心算法 / 工程实践 / 评估与实验 / 文档协作 / 基础设施）
 > 逐项核实并落地可实施项，**默认行为不变**：
@@ -10520,7 +10533,7 @@ E1 最小预算批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可
 >
 > 全量测试通过（新增 2 用例）/ ruff 0 告警 / mypy 0 错误。
 
-## [Unreleased] — 2026-09-28 改进批次扩展（CFG 控制流分析 / 事件总线 / trace 可视化 / ADR / 双语同步检查 / CLI 增强，默认行为不变）
+### [Unreleased] — 2026-09-28 改进批次扩展（CFG 控制流分析 / 事件总线 / trace 可视化 / ADR / 双语同步检查 / CLI 增强，默认行为不变）
 
 > 本批次推进 P2/P3 改进项，**默认行为不变**：
 >
@@ -10553,7 +10566,7 @@ E1 最小预算批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可
 > 新增 `tests/test_new_modules_2026_09_28.py`（36 用例）；全量 2044 测试
 > 通过（此前 2008，+36）/ ruff 全仓 0 告警 / mypy 70 源文件 0 错误。
 
-## [Unreleased] — 2026-09-28 P0/P1 改进批次（后处理层 / 策略映射 / 预算上限 / 语义缓存 / 冒烟脚本，默认行为不变）
+### [Unreleased] — 2026-09-28 P0/P1 改进批次（后处理层 / 策略映射 / 预算上限 / 语义缓存 / 冒烟脚本，默认行为不变）
 
 > 本批次落地改进建议中的 P0/P1 五项，**默认行为不变**（新能力均有
 > 独立环境变量开关，关闭时与历史口径完全一致）：
@@ -10605,7 +10618,7 @@ E1 最小预算批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可
 > mypy 67 源文件 0 错误 / 覆盖率 88%（TOTAL，新模块 patch_postprocess
 > 92% / cost_budget 93% / semantic_cache 90% / error_classifier 94%）。
 
-## [Unreleased] — 2026-09-27 路线图剩余缺口落地（SWE-bench Pro / CodeBERT / pyright，默认行为不变）
+### [Unreleased] — 2026-09-27 路线图剩余缺口落地（SWE-bench Pro / CodeBERT / pyright，默认行为不变）
 
 > 本批次补齐 2026-09-27 前十一轮之后路线图核对出的 3 个剩余缺口，
 > **默认行为不变**（新后端 / 新数据集均有独立环境变量开关或同构复用，
@@ -10664,7 +10677,7 @@ E1 最小预算批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可
   mypy / pyright 层，pyright 不可用时保守回退 mypy 口径，全失败路径降级
   为 ast 静态层（不阻断修复主流程）。
 
-## [Unreleased] — 2026-09-27 第十一轮：错误分类 16→17 类 + 2.2 补丁重采样 + 1.3 降级链透传 + 五污染检测 + 2.1 mypy 静态层（默认行为不变）
+### [Unreleased] — 2026-09-27 第十一轮：错误分类 16→17 类 + 2.2 补丁重采样 + 1.3 降级链透传 + 五污染检测 + 2.1 mypy 静态层（默认行为不变）
 
 > 本批次为 2026-09-27 第十轮全项目审查（commit `a1a06ec`）之后的功能
 > 批次，包含 6 个方向的功能增强与类型/lint 修复，**默认行为不变**
@@ -10757,7 +10770,7 @@ E1 最小预算批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可
   `dict[str, Any] | None` union-attr（mypy 全绿，零行为变化）。
 - 全仓 ruff 8 个 lint 问题清零 + mypy 12 个类型错误清零（64 源文件）。
 
-## [Unreleased] — 2026-09-27 第九轮并行子代理深审 + 第十轮全项目 P1/P2 收敛（默认行为不变）
+### [Unreleased] — 2026-09-27 第九轮并行子代理深审 + 第十轮全项目 P1/P2 收敛（默认行为不变）
 
 > 本轮为 2026-09-26 六批次全面审查（commit `9526fd0`）之后，基于 4 路并行子代理
 > （agents / tools / cli+reports+config+utils+db / experiments）深度审查报告
@@ -10982,7 +10995,7 @@ E1 最小预算批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可
 
 ---
 
-## [Unreleased] — 全面审查与保守优化轮（2026-09-26：静态检查清零 + 死代码清理 + 线程卫生 + 项目卫生 + 性能 / 正确性补强 + CF-3 跨文件修复缺陷修复 + 第五轮 P0 批次：变异测试判定 / API 轮询可复现 / 缓存原子写 / 写盘安全检查 / 状态 schema + 第六轮节点层路由语义与鲁棒性 + 第七轮性能热路径深扫：AST 解析复用 / O(1) 任务索引 / 合并文本共享 / 关键词预编译正则 + 第八轮收尾审计：lint/format 清零 + 类型修复层契约参照口径 + 状态键传播 + 示例文件修复 + 第九轮并行子代理深审：difficulty_level 归一口径 + _should_debug 分支顺序 + 半开探测双计 + async def 补丁 + executor_repo 临时文件竞争 + 第十轮全项目 P1/P2 收敛：JSON 叶子降级语义回归 + 路由分支遮蔽 + 完整文件补丁静默回退 + venv 缓存标记不对称 + 超时穿透 + 行号错位 + TOCTOU 竞态 + 第十一轮遗留债务收敛：cost_weight 注册时序 + async 安全检查误拒 + 死代码 / 幽灵配置 / 线程竞态 6 项落地）
+### [Unreleased] — 全面审查与保守优化轮（2026-09-26：静态检查清零 + 死代码清理 + 线程卫生 + 项目卫生 + 性能 / 正确性补强 + CF-3 跨文件修复缺陷修复 + 第五轮 P0 批次：变异测试判定 / API 轮询可复现 / 缓存原子写 / 写盘安全检查 / 状态 schema + 第六轮节点层路由语义与鲁棒性 + 第七轮性能热路径深扫：AST 解析复用 / O(1) 任务索引 / 合并文本共享 / 关键词预编译正则 + 第八轮收尾审计：lint/format 清零 + 类型修复层契约参照口径 + 状态键传播 + 示例文件修复 + 第九轮并行子代理深审：difficulty_level 归一口径 + _should_debug 分支顺序 + 半开探测双计 + async def 补丁 + executor_repo 临时文件竞争 + 第十轮全项目 P1/P2 收敛：JSON 叶子降级语义回归 + 路由分支遮蔽 + 完整文件补丁静默回退 + venv 缓存标记不对称 + 超时穿透 + 行号错位 + TOCTOU 竞态 + 第十一轮遗留债务收敛：cost_weight 注册时序 + async 安全检查误拒 + 死代码 / 幽灵配置 / 线程竞态 6 项落地）
 
 > 全仓代码审查与保守优化批次（默认行为不变）：静态检查全绿、死代码清理、
 > 线程卫生修复、项目卫生补全、未深审模块的性能 / 正确性修复、CF-3
@@ -11731,7 +11744,7 @@ E1 最小预算批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可
   变异测试 e2e 用例的 import 名错配使其断言真正生效，新增 2 条
   报告解析回归用例）。
 
-## [Unreleased] — P0 改进批次：13 项落地（分层代码压缩 / 复杂度感知路由 / 命名契约验证 / 合成数据集分层难度 / 跨文件合成任务 / SWE-bench 导出质量验证 / RAG A/B 实验脚本 / 多候选自适应触发 / 变异体难度升级 / 错误分类子类+响应重试 / 追踪层默认启用 / venv 按仓库复用）
+### [Unreleased] — P0 改进批次：13 项落地（分层代码压缩 / 复杂度感知路由 / 命名契约验证 / 合成数据集分层难度 / 跨文件合成任务 / SWE-bench 导出质量验证 / RAG A/B 实验脚本 / 多候选自适应触发 / 变异体难度升级 / 错误分类子类+响应重试 / 追踪层默认启用 / venv 按仓库复用）
 
 > 对应实验数据缺口（SWE-bench 0/20、合成集统计已覆盖但真实集 A/B 缺失）与
 > `docs/assessment_2026-09-25_improvement_directions.md` 的改进路线。
@@ -11848,7 +11861,7 @@ E1 最小预算批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可
   test_debugger（38）/ test_workflow_extended（37）/ test_executor_repo（17）/
   test_synthetic_dataset（5）/ test_api_manager + extended（152）/ test_code_analyzer（17）
 
-## [Unreleased] — 改进方向批次：5 项落地（3.3 位置感知迭代修复 + 5.2 错误分类 14 类文档同步 + 5.1 单批次边界测试 + 4.2 脱敏自动检查钩子 + 2.1 真实嵌入钩子）
+### [Unreleased] — 改进方向批次：5 项落地（3.3 位置感知迭代修复 + 5.2 错误分类 14 类文档同步 + 5.1 单批次边界测试 + 4.2 脱敏自动检查钩子 + 2.1 真实嵌入钩子）
 
 > 对应 `docs/assessment_2026-09-25_improvement_directions.md` 的"真实剩余工作"清单
 > （16 个改进子方向逐项核实后，其中 10 项已实现、6 项有剩余工作；本批次落地其中 5 项，
@@ -11911,7 +11924,7 @@ E1 最小预算批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可
 > `ruff check` 改动文件 0 告警。详见
 > `docs/implementation_2026-09-25_improvement_directions.md`。
 
-## [Unreleased] — 0.10 轮次 0.9 批次深度审查修复（LLM 缓存负缓存 TTL 正确性回归 + 白名单根归一口径修正 + 追踪层冗余摘要消除 + 统计接口免重扫 + 2 条回归用例）
+### [Unreleased] — 0.10 轮次 0.9 批次深度审查修复（LLM 缓存负缓存 TTL 正确性回归 + 白名单根归一口径修正 + 追踪层冗余摘要消除 + 统计接口免重扫 + 2 条回归用例）
 
 > 基线：0.9 批次（未提交工作区）1665 passed / ruff 全仓 0 告警 / mypy 0 错误（58 源文件）。
 > 本轮为对 0.9 批次的深度审查 + 回修：**1667 passed / 0 failed**（+2 条回归用例，无功能回归），
@@ -11980,7 +11993,7 @@ record_task_end 入口），`_append` 仅做脱敏 + 写盘。
 
 ---
 
-## [Unreleased] — 0.9 轮次性能与一致性优化（LLM 文件缓存 LRU 快路径 + 双套缓存漂移消除 + 补丁应用正则预编译 + 节点纯函数口径修复 + 深度审查修复）
+### [Unreleased] — 0.9 轮次性能与一致性优化（LLM 文件缓存 LRU 快路径 + 双套缓存漂移消除 + 补丁应用正则预编译 + 节点纯函数口径修复 + 深度审查修复）
 
 > 基线：ruff 全仓 0 告警 / mypy 全仓 0 错误 / pytest 1678 通过。优化后 **1665 通过**
 > （删除 16 个已移除死模块 `src/graph/llm_cache` 用例 + 更新 2 个统计口径用例 + 新增 3 条回归用例，无功能回归），
@@ -12041,7 +12054,7 @@ record_task_end 入口），`_append` 仅做脱敏 + 写盘。
 
 ---
 
-## [Unreleased] — 0.8 轮次全面审查修复（脱敏逻辑去重 + 半开探测失败路径消费 + LLM 缓存 makedirs 短路 + 温度键闭环 + 执行轨迹重复计算消除 + 白名单根预归一化 + `__main__` 自诊断 bug 修复 + 4 条回归用例）
+### [Unreleased] — 0.8 轮次全面审查修复（脱敏逻辑去重 + 半开探测失败路径消费 + LLM 缓存 makedirs 短路 + 温度键闭环 + 执行轨迹重复计算消除 + 白名单根预归一化 + `__main__` 自诊断 bug 修复 + 4 条回归用例）
 
 > 本轮为"审查 + 优化"双驱动：按 docs/0.7_audit_findings.md 清单与 0.8 新发现逐项落地，**零回归**。
 > 全量基线由 1672 升至 **1678 passed / 0 failed**（新增 6 条回归用例：LLM 缓存温度键 1 +

@@ -385,7 +385,7 @@ class TestRealCorpusApplicability:
         # 并带实测读数（tests/_corpus_guard.py），不把"没扫到"折成"扫过且干净"。
         require_full_corpus()
         files = sorted(glob.glob(str(ROOT / "experiments" / "results" / "**" / "benchmark_*.json"), recursive=True))
-        assert len(files) == 27  # 收口回钉 2026-10-25（原精确 239；重建期下界 25）
+        assert len(files) == 34  # v0.8.0 收拢后实测（b1_lite 七格入库）
         marked = 0
         det1 = 0
         for path in files:
@@ -409,5 +409,5 @@ class TestRealCorpusApplicability:
                         marked += 1
                         if row.get("detection_rate") == 1.0:
                             det1 += 1
-        assert marked == 9  # 收口回钉 2026-10-25（原精确 111；重建期下界 9）
+        assert marked == 11  # v0.8.0 二次回钉（b1_lite 入库；原精确 111）
         assert det1 == 0  # 收口回钉 2026-10-25（原精确 12；新语料 marked 行中无 detection_rate=1.0）

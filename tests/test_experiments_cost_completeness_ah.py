@@ -132,18 +132,20 @@ class TestIncompleteSumsAreNotAmounts:
 
 class TestRealBatchUnchanged:
     def test_real_readings_are_bit_identical(self) -> None:
+        # 2026-10-25 输入面换代：实测值回钉重建 synthetic 批（历史 0.0259/0.0034/0.0045 随撤回退役）
         got = {
-            arm: ext._cost_per_task(ext.MAIN_BATCH_FILES, arm)[1] for arm in ("aitester", "plain_llm", "plain_llm_df")
+            arm: ext._cost_per_task(ext.MAIN_BATCH_FILES, arm)[1] for arm in ("aitester", "plain_llm", "single_agent")
         }
         assert got == {
-            "aitester": 0.025884977011494247,
-            "plain_llm": 0.003358973563218391,
-            "plain_llm_df": 0.004543231034482759,
+            "aitester": 0.00216645,
+            "plain_llm": 0.0008745149999999999,
+            "single_agent": 0.000997275,
         }
 
     def test_real_batches_have_closed_attribution(self) -> None:
         """锁住"真读数不变"的前提：三臂 by_model 合计 = total_tokens（delta 0）。"""
-        for arm in ("aitester", "plain_llm", "plain_llm_df"):
+        # v0.6 输入面换代：按重建批实际臂遍历
+        for arm in ("aitester", "plain_llm", "single_agent"):
             rows = [r for rel in ext.MAIN_BATCH_FILES for r in ext._arm_detection_rows(ext._load(rel), arm)]
             total = sum((r.get("token_usage") or {}).get("total_tokens", 0) or 0 for r in rows)
             attributed = sum(

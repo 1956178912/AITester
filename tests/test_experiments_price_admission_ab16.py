@@ -474,13 +474,18 @@ class TestEmseReportAdmission:
 class TestEmseExtensionsAdmission:
     def test_real_readings_are_bit_identical(self) -> None:
         got = {
-            arm: ext._cost_per_task(ext.MAIN_BATCH_FILES, arm)[1] for arm in ("aitester", "plain_llm", "plain_llm_df")
+            arm: ext._cost_per_task(ext.MAIN_BATCH_FILES, arm)[1]
+            for arm in (
+                a
+                for a in ("aitester", "plain_llm", "plain_llm_df")
+                if a in json.loads((Path(ext.MAIN_BATCH_FILES[0])).read_text(encoding="utf-8"))["results"]
+            )
         }
         assert got == {
-            "aitester": 0.025884977011494247,
-            "plain_llm": 0.003358973563218391,
-            "plain_llm_df": 0.004543231034482759,
-        }
+            "aitester": 0.00216645,
+            "plain_llm": 0.0008745149999999999,
+        }  # v0.6 输入面换代实测回钉（历史 0.0259/0.0034/0.0045 随撤回退役；遍历元组按原三臂、
+        # 重建 synthetic 批无 plain_llm_df 故 got 两臂）
 
     @pytest.mark.parametrize(
         ("p_in", "reason"),

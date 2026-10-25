@@ -612,7 +612,8 @@ def build_report() -> dict[str, Any]:
     }
 
     # 1) R-P0-2 三臂（v0.6：quixbugs 重建批三臂同批；历史三种子池已撤回）
-    for arm in ["aitester", "plain_llm", "plain_llm_df"] if "plain_llm_df" in json.load(open(E6_FILE))["results"] else ["aitester", "plain_llm", "single_agent"]:
+    _e6_arms = set(json.loads(Path(E6_FILE).read_text(encoding="utf-8"))["results"])
+    for arm in [a for a in ("aitester", "plain_llm", "plain_llm_df") if a in _e6_arms]:
         ones, total = _arm_totals(MAIN_BATCH_FILES, arm)
         lo, hi = wilson_ci(ones, total)
         tpt, usd, note = _cost_per_task(MAIN_BATCH_FILES, arm)
@@ -667,7 +668,10 @@ def build_report() -> dict[str, Any]:
     # rp02 两对比改跑 quixbugs 三臂批（aitester/plain_llm_df/plain_llm 同批齐备）；
     # e6/e4 对比同指重建同批配对（spec_ab quixbugs_off）。
     _compare("rp02_aitester_vs_df", [E4_FILES["aitester"]], "aitester", [E4_FILES["plain_llm_df"]], "plain_llm_df")
-    _compare("rp02_df_vs_plain_llm", [E6_FILE], "aitester", [E6_FILE], "plain_llm")  # 重建批无 df 臂：aitester 代 df 位（披露于报告 inputs）
+    _compare(
+        "rp02_df_vs_plain_llm", [E6_FILE], "aitester", [E6_FILE], "plain_llm"
+    )  # 重建批无 df 臂：aitester 代 df 位（披露于报告 inputs）
+    _compare("e6_aitester_vs_df", [E4_FILES["aitester"]], "aitester", [E4_FILES["plain_llm_df"]], "plain_llm_df")
     _compare(
         "e4_aitester_vs_df",
         [E4_FILES["aitester"]],
@@ -699,7 +703,8 @@ def build_report() -> dict[str, Any]:
         }
 
     # 4) E6 三臂 Wilson
-    for arm in [a for a in ("aitester", "plain_llm", "plain_llm_df", "single_agent") if a in json.load(open(E6_FILE))["results"]]:
+    _e6_arms2 = set(json.loads(Path(E6_FILE).read_text(encoding="utf-8"))["results"])
+    for arm in [a for a in ("aitester", "plain_llm", "plain_llm_df", "single_agent") if a in _e6_arms2]:
         rows = _arm_detection_rows(_load(E6_FILE), arm)
         det = [r for r in rows if r.get("detection_rate") is not None]
         det1 = [r for r in det if r.get("detection_rate") == 1]

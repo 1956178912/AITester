@@ -37,11 +37,11 @@ _ROOT = Path(__file__).resolve().parent.parent
 # 删除了 7 份 benchmark 归档 + 323 份 trace，读数按删除后重算）。
 # CI 轮重建（2026-10-24）：历史全量语料（239/138/8216）随数据清除退出，新完整
 # 语料 = DeepSeek 重跑批（基础三批 + 补跑九族 + 两正式批，已全量入库）。下界按
-# 当前实测校准（收口回钉 27/14/1106，`git ls-files` 全跟踪——fresh clone 同口径可达）；
+# 当前实测校准（收口回钉 34/21/1456，`git ls-files` 全跟踪——fresh clone 同口径可达）；
 # 语料再增长时上调本下界（只升不降，防语料静默缩水）。
-_FULL_CORPUS_BENCHMARK_FILES = 27
-_FULL_CORPUS_TRACE_DIRS = 14
-_FULL_CORPUS_TRACE_FILES = 1106
+_FULL_CORPUS_BENCHMARK_FILES = 34
+_FULL_CORPUS_TRACE_DIRS = 21
+_FULL_CORPUS_TRACE_FILES = 1456
 
 
 def _measure_corpus() -> tuple[int, int, int]:

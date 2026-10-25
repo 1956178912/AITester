@@ -102,6 +102,7 @@ _CHECKSUM_DIRS: list[str] = [
     # 当前代码默认重发到 20261021。
     "experiments/results/emse_stats_extensions_20261016",
     "experiments/results/emse_stats_extensions_20261021",
+    "experiments/results/emse_stats_extensions_20261025",
     "experiments/results/emse_quixbugs_mutk_full_20261015",
     "experiments/results/emse_ult_mutk_full_20261015",
 ]

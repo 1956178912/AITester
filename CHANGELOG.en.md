@@ -6,7 +6,19 @@
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-## [Unreleased] — 2026-10-24 CI round: a closing statement and the tree split apart — "12,749 passed closing measurement" was written before the closing run happened, and that run would have shown 4 failures (zero LLM, $0)
+## [0.8.0] - 2026-10-25 Measurement-integrity reset + DeepSeek single-endpoint corpus rebuild + PROMPT-SE submission rewrite (180 rounds)
+
+> **Theme**: 180 review-repair rounds completing a measurement-integrity reset---
+> (1) runtime collapsed to the official DeepSeek single endpoint (breaking config change);
+> (2) the full archived evidence corpus withdrawn and rebuilt (239 batches/138 trace dirs/82
+> review booklets withdrawn; 27 batches/1,106 traces/approx USD 4 rebuilt); (3) gate surface
+> grown to 32 (three new CI-blocking gates) with a 12,745-test base; (4) the paper rewritten
+> against the regenerated corpus and re-framed for PROMPT-SE 2026; (5) Mimosa deep scan
+> fully triaged (0 product-code fixes) + filelock 4.2.1 CVE upgrade. **Breaking**: anything
+> referencing withdrawn artifact paths or the old provider config must migrate (index:
+> docs/study/WITHDRAWN_ARTIFACTS_2026-10-24.md). The 180 rounds below are the per-round detail.
+
+### [Unreleased] — 2026-10-24 CI round: a closing statement and the tree split apart — "12,749 passed closing measurement" was written before the closing run happened, and that run would have shown 4 failures (zero LLM, $0)
 
 > Object of attribution = **the gap between a measured number and a registered claim**. Rounds CA–CH were completed but
 > uncommitted; a full regression run over that batch (`make test`) measured **12,745 passed / 5 skipped / 4 failed**
@@ -73,7 +85,7 @@ All notable changes to this project will be documented in this file. Format foll
 - Full confirmation run = **12,735 passed / 19 skipped / 0 failed, 214.85s**; three content hits judged false
   positives and kept (tested-code input_args / diagnostic text / prose mention). See CI booklet §7.
 
-## [Unreleased] — 2026-10-24 CH round: two flags that CI passes on every run were never read by their own gate — "zero unread criterion flags" was a true green that misled (zero LLM, $0)
+### [Unreleased] — 2026-10-24 CH round: two flags that CI passes on every run were never read by their own gate — "zero unread criterion flags" was a true green that misled (zero LLM, $0)
 
 > Object of attribution = whether the switches declared by `add_argument` are **wired inside the gate source**. The boundary
 > CG handed over, item ①, is exactly the entry to this family: "only the static call surface is judged, no gate is executed —
@@ -217,7 +229,7 @@ a re-runnable construction.
   false-green direction, the 32-on-disk vs 29-in-index caliber gap, and "mutation proves the criterion is locked, not that it is
   sufficient").
 
-## [Unreleased] — 2026-10-24 CG round: "wired into the chain" never meant "running with the same caliber" — call-face attribution, effective flag values and blocking style were never reconciled across faces (zero LLM, $0)
+### [Unreleased] — 2026-10-24 CG round: "wired into the chain" never meant "running with the same caliber" — call-face attribution, effective flag values and blocking style were never reconciled across faces (zero LLM, $0)
 
 > Object of attribution = the **call caliber** of the `make` chain and `.github/workflows/*.yml`. One of the boundaries CF
 > handed over is exactly the entry to this family: `check_registration_consistency` answers "does anyone call this gate"
@@ -350,7 +362,7 @@ recorded as boundary ⑪ in the booklet §5.
   rules registered at `docs/MEASUREMENT_INTEGRITY.md` §78.
 - Booklet: INVOCATION_CALIBER_CG_2026-10-24（分册已删除）.
 
-## [Unreleased] — 2026-10-24 CF round: the registration face wrote its "current caliber" numbers and its booklet list, and nothing read them (zero LLM, $0)
+### [Unreleased] — 2026-10-24 CF round: the registration face wrote its "current caliber" numbers and its booklet list, and nothing read them (zero LLM, $0)
 
 > Object of attribution = the **derived-number read side** of `docs/PROJECT_STATUS_REGISTER.md` §1 and the
 > **reverse direction** of `docs/INDEX.md` / `docs/INDEX.en.md`. Fourteen earlier rounds put readers on code;
@@ -415,7 +427,7 @@ the bare-number count registered as 811 printed as **830** once the terminal rea
 - Terminal run (executed alone once all registration text was on disk, never overlapping another pytest): **`make gates` rc=0, chain wall clock 212.81s**; in-chain pytest (`-n 4 --dist loadfile`, **without** `--cov`) **12,584 passed / 5 skipped / 0 failed, 34 warnings, 205.78s** (collected 12,589). Chain tail: ruff format **1050** files already formatted, mypy **137** source files 0 issues, bilingual 0 warnings / 0 failures, doc-link strict **199** files / **886** links / 0 errors, this gate 15 items green + 6 `[SURFACE]` lines; `suite_seconds` takes this terminal reading. Coverage **19522/20036 lines = 97.4346%** and **7159/7590 arcs = 94.3215%** is inherited — of 136 `src/**/*.py` files, **0** have an mtime later than the CE backfill marker, i.e. `src/` was untouched this round.
 - Booklet: REGISTRATION_READER_CF_2026-10-24（分册已删除）; rules registered at `docs/MEASUREMENT_INTEGRITY.md` §77.
 
-## [Unreleased] — 2026-10-23 CE round: the model-fingerprint gate called `pinned=true` "comparable" and called a window count a corpus verdict (zero LLM, $0)
+### [Unreleased] — 2026-10-23 CE round: the model-fingerprint gate called `pinned=true` "comparable" and called a window count a corpus verdict (zero LLM, $0)
 
 > Subject = the **judgment surface** of `scripts/gates/check_model_fingerprint.py` and the
 > **denominator of its success line**. Measurements were taken late on 2026-10-23; the
@@ -491,7 +503,7 @@ got their own mutation anchor (M24 / M28) so this degradation cannot quietly ret
 - The final chain run and per-gate readings are in `BASELINE.yaml` and the booklet
   MODEL_FINGERPRINT_COMPARABILITY_CE_2026-10-23（分册已删除）.
 
-## [Unreleased] — 2026-10-23 CD round: runtime and documentation surfaces converge on "DeepSeek official only", and derived readings are recomputed against the on-disk corpus after the historical archives were deleted (zero LLM, $0)
+### [Unreleased] — 2026-10-23 CD round: runtime and documentation surfaces converge on "DeepSeek official only", and derived readings are recomputed against the on-disk corpus after the historical archives were deleted (zero LLM, $0)
 
 > Subject = the repository-wide **provider surface**. The instruction "keep only the official DeepSeek
 > provider in the project, delete the others" landed on four layers: runtime configuration, scripts and
@@ -576,7 +588,7 @@ batch entries in `BASELINE.yaml` likewise). The synthetic `tmp_path` filenames i
 - Documentation gates: `check_doc_links` 867 links 0 errors; `check_citations` rc=0;
   `check_artifacts_tracked` 188/188 (14 exemptions, 155 masked); `ruff format --check .` 1044 files.
 
-## [Unreleased] — 2026-10-23 CA round: a gate's exemption registry is never audited and never discloses what it hides (zero LLM, $0)
+### [Unreleased] — 2026-10-23 CA round: a gate's exemption registry is never audited and never discloses what it hides (zero LLM, $0)
 
 > Subject = the evidence-directory coverage scan in `scripts/gates/check_artifacts_tracked.py`. The exemption
 > table has exactly one reader (`if name in EVIDENCE_DIR_EXEMPTIONS: continue`), i.e. it is only consulted while
@@ -623,7 +635,7 @@ batch entries in `BASELINE.yaml` likewise). The synthetic `tmp_path` filenames i
   unaligned; this round aligned them (`tests/test_type_repair_more_branches.py`, mock order only). Registered as
   inherited completion, not as part of this family.
 
-## [Unreleased] — 2026-10-23 BZ round: attributing and fixing the three historical CI red families - contract-locked artifacts committed, explicit named skips for three classes of missing preconditions, 45 vulnerabilities cleared by upgrade (zero LLM, $0)
+### [Unreleased] — 2026-10-23 BZ round: attributing and fixing the three historical CI red families - contract-locked artifacts committed, explicit named skips for three classes of missing preconditions, 45 vulnerabilities cleared by upgrade (zero LLM, $0)
 
 > Attributed target = run `39905189493` (head `5eb51607`): test 3.12/3.13 failed at "Run tests with coverage
 > (parallel)", the 3.14 job hit the 30-minute cap and was cancelled, and Security failed at the pip-audit lock
@@ -707,7 +719,7 @@ batch entries in `BASELINE.yaml` likewise). The synthetic `tmp_path` filenames i
   10-19 while the row claimed "all green"); the inaccurate window is registered in the memo's section 5
   rather than quietly erased.
 
-## [Unreleased] — 2026-10-23 BY round: the report's analysis-set flow was never disclosed - the loaded row count is not n, whole-file exclusion and row-level collapsing are two different exclusions, and `## 数据来源` lists included files only (zero LLM, $0)
+### [Unreleased] — 2026-10-23 BY round: the report's analysis-set flow was never disclosed - the loaded row count is not n, whole-file exclusion and row-level collapsing are two different exclusions, and `## 数据来源` lists included files only (zero LLM, $0)
 
 > Archive-wide (scan face 246 `benchmark_*.json` files / 10,659 rows): the dataset whitelist drops **77 files / 886 rows**, the schema layer **59 / 2,463** and untracked baselines **300 rows**, leaving **110 files / 7,010 rows** loaded; `latest_rows_by_task` then collapses **6,449 rows (91.997%)** into **561** unique task rows (missing `task_id`: 0); field None: `passed` 0 / `detection_rate` 45 / `repair_rate` 52. All JSON files carrying `results` total **257 / 11,197**, of which **13 / 538** are not `benchmark_*`-named and never enter the scan face; mixed mode **169 / 9,473** (duplicates 8,494, unique 979) differs from the default by exactly the schema layer 2,463 rows.
 
@@ -733,7 +745,7 @@ batch entries in `BASELINE.yaml` likewise). The synthetic `tmp_path` filenames i
 - **Field None is not 0**: the 45 / 52 not-measurable tasks stay out of the pairing denominator and out of any mean.
 - **No backfill and no judgment change**: every exclusion layer only keeps books; archived rows stay byte-identical.
 
-## [Unreleased] — 2026-10-23 BX round: the last two write-only keys' read sides were never disclosed - channel-off vs all-low-risk and the five-layer input domain vs `None`/`0` appear in no report (zero LLM, $0)
+### [Unreleased] — 2026-10-23 BX round: the last two write-only keys' read sides were never disclosed - channel-off vs all-low-risk and the five-layer input domain vs `None`/`0` appear in no report (zero LLM, $0)
 
 > Archive-wide (257 batch files / 11,197 rows): all 8,864 rows carrying `risk_summary` have `enabled=False` (`enabled=True` 0, non-null `risk_level` 0, key absent 2,333, `contract_status` present 0), so "the channel never opened" is indistinguishable from "everything is low risk"; the 4,044 rows carrying `mdo_crash_rate` fold five input layers (not run 2,312 / material absent 122 / not measurable 986 / provisional pool 530 / measured 94) into one `None`, and `mdo_pool_floor_ok=False` is a two-meaning key on 1,516 rows (provisional pool 530 + `MDOResult` default 986). Pool closure: 41,545 (BV) + 22,035 (BW) + 12,908 (BX) = 76,488, and **the zero-reader pool is empty after BX**.
 
@@ -761,7 +773,7 @@ batch entries in `BASELINE.yaml` likewise). The synthetic `tmp_path` filenames i
 - **The two-meaning key is not redefined**: not-measurable 986 rows with `mdo_pool_floor_ok=False` carry the `MDOResult` default; the read side only decomposes it and never reads it as "pool too small".
 - **The key pool is now empty**: BX closes the last two keys BU registered; later rounds move to other defect families rather than treating an empty pool as new evidence.
 
-## [Unreleased] — 2026-10-23 BW round: the patch acceptance chain's coverage and denominators were never disclosed - three precision calibers, four abstention buckets and the validation input domain appear in no report (zero LLM, $0)
+### [Unreleased] — 2026-10-23 BW round: the patch acceptance chain's coverage and denominators were never disclosed - three precision calibers, four abstention buckets and the validation input domain appear in no report (zero LLM, $0)
 
 > Archive-wide (257 batch files / 11,197 rows): `patch_precision` (R53, preregistered E3), `patch_plausible_evidence` / `patch_plausible_invariant_violation` (P0-2) and `patch_abstain_signals` (batch V) have had **0** readers in the report surface since they were written, and `patch_validated` / `patch_validate_verdict` (batch XVI) had test-only readers. What was stored is the judgment value; what was missing is the **denominator**: stored precision 45.6048% (607/1331) differs from the gold caliber 57.9198% (607/1048) by 12.32pp, with the union caliber 50.7483% (746/1470) in between; `None` (plausible=0) and `0.0` were indistinguishable to every reader. Suppression precision has two calibers, 93.9753% (1825/1942, gold denominator) and 93.1122% (1825/1960, all), and the 117 suppressed-but-correct rows plus 18 no-gold rows appeared nowhere. Only `patch_evidence_level` had reachable validation input (1,007 rows; sbfl 594 / null 3,037 / none 387 / keyword 26); `repo_verification` / `deterministic_repair_status` were empty archive-wide - "validation ran and was clean" and "validation never received input" were the same reading.
 
@@ -788,7 +800,7 @@ batch entries in `BASELINE.yaml` likewise). The synthetic `tmp_path` filenames i
 - **An empty reachable domain is a fact**: `repo_verification` / `deterministic_repair_status` received 0 rows archive-wide and must not be written as "validation ruled out".
 - **Two keys remain in the pool** (`risk_summary` 8,864 rows, `mdo_crash_rate` 4,044 rows) - candidates for later rounds.
 
-## [Unreleased] — 2026-10-23 BV round: the silence of two batch-VIII/XIV judges was never disclosed - 20 test-hacking positives and 4442 never-evaluated FL rows appear in no report (zero LLM, $0)
+### [Unreleased] — 2026-10-23 BV round: the silence of two batch-VIII/XIV judges was never disclosed - 20 test-hacking positives and 4442 never-evaluated FL rows appear in no report (zero LLM, $0)
 
 > Archive-wide (257 batch files / 11197 rows): `test_hacking_suspected` / `_signals` (batch VIII, ADR-0022) and `fl_constraint_verdict` / `_hit_rank` / `_changed_functions` (batch XIV, ADR-0028) have had **0** readers in the report surface since they were written, and both silences are "many causes, one value": the judge's four early exits (no original code / no patch / either side unparseable) return the same `{"suspected": False, "signals": []}` as "all three signals ran and hit nothing" (5915 rows cannot be told apart), while the FL gate folds six early exits plus exceptions into one `not_evaluable` (4442/5935). See DETECTOR_SILENCE_BV_2026-10-23（分册已删除）.
 
@@ -819,7 +831,7 @@ batch entries in `BASELINE.yaml` likewise). The synthetic `tmp_path` filenames i
 - **The other six keys in the pool are untouched** (`risk_summary` 8864 rows, `patch_precision` 8012, `patch_abstain_signals` 5935, `patch_plausible_evidence` / `patch_plausible_invariant_violation` / `mdo_crash_rate` 4044 each) - the BW round's candidate pool.
 - **No real batch was run**: this round is zero-LLM, $0; only new batches will actually produce the two columns, so in the archive they will stay "not recorded" - by design, not a defect.
 
-## [Unreleased] — 2026-10-23 BU round: the Self-Repair Trap judge's input reachability domain was never disclosed - 5935 rows all say "not suspected", and two of its three signals received 0 rows of input archive-wide (no LLM, $0)
+### [Unreleased] — 2026-10-23 BU round: the Self-Repair Trap judge's input reachability domain was never disclosed - 5935 rows all say "not suspected", and two of its three signals received 0 rows of input archive-wide (no LLM, $0)
 
 > Archive: `self_repair_trap_suspected` / `self_repair_trap_signals` were written on **5935** rows since batch XIV (ADR-0028), always `False` / `[]`, with **0** readers in the report. The judge (`src/tools/self_repair_trap.py:104/:106/:113`) gates each signal on a minimum point count (**3 / 2 / 2**) that never reached the report, so "3200 rows carry a single point and cannot enter any gate", "2723 rows do reach the collapse gate and really read clean" and "the declining and score signals were fed **0** rows archive-wide" all render as the same number. See TRAP_INPUT_DOMAIN_BU_2026-10-23（分册已删除）.
 
@@ -839,7 +851,7 @@ batch entries in `BASELINE.yaml` likewise). The synthetic `tmp_path` filenames i
 - Coverage: lines **19526/20040 = 97.4351%** and arcs **7150/7582 = 94.3023%**, bit-identical to BT, on the evidence that `git status --porcelain src/` returns **0** rows. Caliber note: the pre-registration run executed the pytest line inside `make test-cov` but **without `COVERAGE_FILE`** (denominators identical to BT, no coverage INTERNALERROR); it is registered under the command actually run.
 - `make gates`: full chain **rc=0**, run alone, no pipes, not overlapping any other pytest (`date +%s` pair: wall clock **199s**, 1792689206→1792689405, **19** echoed targets in the chain). The in-chain pytest is xdist `-n 4 --dist loadfile` **without `--cov`**: **12184 passed / 5 skipped / 0 failed, 193.35s, 53 warnings**; 12184 + 5 = **12189** matches the pre-registered predicted collected count digit for digit; its duration is not comparable with the `--cov` pre-registration run (200.51s). Chain head: `ruff check .` All checks passed, `ruff format --check .` **1015 files already formatted**, `mypy src/ config.py` **0 errors in 137 source files**. Chain tail, step by step: bilingual strict **0 failures / 0 warnings**, link strict **189 documents / 913 links (904 internal / 9 external) / 0 errors**, env-budget **253/253** with no unregistered additions, `check_baseline` structure OK, the baseline-number gate reporting "the current baseline block hard-codes nothing", state contract **136** files with no undeclared key reads or writes, env-snapshot **115** keys in the snapshot / **84** switches in full / **84** covered / **0** missing (31 further keys simply never appear in the scanned surface - informational), model-fingerprint with no new batch to verify (pass), tool versions consistent (mypy **1.15.0** / ruff **0.16.3**), JSON contract call sites caliber A **7** (expected 7) plus **9** documented counts all OK, json-strict artifacts **7274 = 7272 strict + 2 registered exemptions + 0 violations** over **335** source files with **0** write-site violations, report-to-artifact reconciliation across three arms with **0** mismatches (T-10 strict **29 rows / 25 measurable**, relaxed **62 / 55**) and **status-register coverage reconciliation [OK]** (the §1 declarations 97.44% / 94.30% sit within ±0.20pp of `coverage.xml`), the zero-assertion gate over **468** test files with 0 violations, `ast.parse` guard sites **79** / ValueError family uncovered **20** / exemptions hit **20** / EXEMPT entries **19** / violations **0**, and persistence reachability covering all **10** declared channels against **3** write surfaces. Caliber note: the local chain **does not pass `--require-coverage`**, so the register step read the `coverage.xml` written at **2026-10-23 00:44:37** (the pre-registration run's artifact), not one produced by this chain. This entry describes the run taken **before** the backfill - the chain was not run again afterwards; a second run would have to be registered as a second reading.
 
-## [Unreleased] — 2026-10-22 BT round: acceptance-oracle provenance and visibility - stated backwards, zero readers (zero LLM, $0)
+### [Unreleased] — 2026-10-22 BT round: acceptance-oracle provenance and visibility - stated backwards, zero readers (zero LLM, $0)
 
 > Archive: `oracle_type` / `test_visible_to_system` were written on **8012** rows (all `generated_test/True`) with **0** readers; the writer labelled SWE-bench repo-level acceptance (gold F2P, hidden from the system) as generated-test + visible. See ORACLE_PROVENANCE_BT_2026-10-22（分册已删除）.
 
@@ -859,7 +871,7 @@ batch entries in `BASELINE.yaml` likewise). The synthetic `tmp_path` filenames i
 - Coverage: lines 19526/20040 = 97.4351%, identical to BS; branches 7150/7582 = 94.3023% (BS recorded 7148, **+2 inside the registered ±2 jitter**). The basis is `git status --porcelain src/` returning no hits - no `src/` changes this round.
 - `make gates` full chain **rc=0** (two runs agreeing, wall clock captured in pairs): first run wall **199s** (1792681705->1792681904; in-chain **12105 passed / 5 skipped / 0 failed, 193.44s / 41 warnings**) - taken before the BP section was restored; final run wall **200s** (1792682426->1792682626; in-chain **193.76s / 42 warnings**, collected **12110**) - taken after all registration text of this round was written but before this very gates bullet was backfilled. The in-chain pytest caliber is xdist `-n 4 --dist loadfile` **without `--cov`**, i.e. the same collection face as the confirming run; chain head: ruff `check` clean and `format --check` **1010 files already formatted**, mypy **137** source files with 0 issues; chain tail: the zero-assert gate scanned **467** test files with 0 violations, `ast-guards` read **136/79/20/0/20/19** (the 78->79 site change is attributable to **BR**, which added one `except AST_UNREADABLE_ERRORS` guard in `src/agents/executor_imports.py::_insert_sys_path_prefix`; BT changed no `src/` file, so the BK/BL claim that the in-chain reading was bit-identical is now stale - registered, not retro-edited), `env-budget` 253/253, and status-persistence covering all 10 declared channels across the 3 persistence faces. This bullet touches docs only: after backfill the doc-face locks (`tests/test_markdown_table_integrity.py`, `test_ao_batch.py`, `test_2026_10_10_optimization_batch.py`, `test_prompt_artifacts_gate.py`) plus `ruff format --check .`, `check_bilingual_docs.py --strict` and `check_doc_links.py --strict` were re-run; readings in handbook section 3.
 
-## [Unreleased] — 2026-10-22 BS round: coverage caliber pinned in config (branch=true) + baseline recomputation (zero LLM, $0)
+### [Unreleased] — 2026-10-22 BS round: coverage caliber pinned in config (branch=true) + baseline recomputation (zero LLM, $0)
 
 > Finding: `pytest --cov=src --cov-branch -n 4` crashed at combine - `.coverage` (controller) had 1 line / 0 arcs while the four workers had 2.4k-23k arcs: one command line, two calibers. See COVERAGE_CONFIG_BS_2026-10-22（分册已删除）.
 
@@ -874,7 +886,7 @@ batch entries in `BASELINE.yaml` likewise). The synthetic `tmp_path` filenames i
 - collected **12070** = passed **12065** + skipped 5 + failed 0 (canonical); sandbox confirmation run **12051 passed / 19 skipped / 0 failed, 202.70s, rc=0**.
 - Ratchet: lines 97.44 >= 96.40 (1.04pp headroom), branches 94.28 >= 92.50 (1.78pp headroom), `rc=0`; `check_branch_coverage` passes; water levels are **not** raised (AA-4: only the CI ubuntu caliber may raise them).
 
-## [Unreleased] — 2026-10-22 BR round: all 27 items of the third-party central review confirmed and closed (zero LLM, $0)
+### [Unreleased] — 2026-10-22 BR round: all 27 items of the third-party central review confirmed and closed (zero LLM, $0)
 
 > Report HEAD `53bbbbd4`, closure HEAD `f49959b2`; P1=14 / P2=13, P0=0, every item re-checked at the closure HEAD, **zero false positives**. See BR_ROUND_CENTRAL_REVIEW_2026-10-22（分册已删除）.
 
@@ -893,7 +905,7 @@ batch entries in `BASELINE.yaml` likewise). The synthetic `tmp_path` filenames i
 - Full suite: collected **12069** = passed **12064** + skipped 5 + failed 0 (canonical); sandbox confirmation run **12050 passed / 19 skipped / 0 failed, 537.77s, rc=0** (19 = 5 + 14 environment-capability skips).
 - Gates: baseline / doc-links / bilingual / citations / artifact-consistency / zero-assert / env-budget / ast-guards all green.
 
-## [Unreleased] — 2026-10-22 BQ round: the report read side treated the four status channels as if they did not exist - the four result-row keys persisted by BN had zero row readers (zero LLM, $0)
+### [Unreleased] — 2026-10-22 BQ round: the report read side treated the four status channels as if they did not exist - the four result-row keys persisted by BN had zero row readers (zero LLM, $0)
 
 > Defect family (10th face of the BH-to-BP series). BM wired `contract_status` on the production side and BN persisted the four channels into both result-row branches and the raw allowlist, but the report faces had **zero row readers** for the four keys.
 
@@ -1027,7 +1039,7 @@ collection face check -> affected surface -> `finally` restore by sha256. Every 
    quota's "collapse shape" still being text; the D/D2 censuses having no pre-BL reading, so deltas cannot be
    subtracted.
 
-## [Unreleased] — 2026-10-22 BP round: the statistical comparison side folded "this row never recorded a contamination level" into silence - and the same absence went two ways in two consumers (zero LLM, $0)
+### [Unreleased] — 2026-10-22 BP round: the statistical comparison side folded "this row never recorded a contamination level" into silence - and the same absence went two ways in two consumers (zero LLM, $0)
 > Defect family (9th face of the BH-to-BN series). BO closed the read side of the raw persistence surface; this round closes how the same `details` rows are read on the **statistical comparison surface**: `if not level: continue` in `analysis_parts/cross_analysis` records **nothing** for an unrecorded row, while `recorded or "unknown"` in `statistical_analysis.contamination_view_summary` **merges those rows into `unknown`** (the same number as "the check ran but could not decide"); section 5.3 then adds the "未入对照任务" column from the former and explains it with the latter. See CONTAMINATION_ABSENT_BUCKET_DISCLOSURE_BP_2026-10-22（分册已删除）.
 
 ### What changed
@@ -1045,7 +1057,7 @@ collection face check -> affected surface -> `finally` restore by sha256. Every 
 - Pre-registration run (`make test-cov`): collected **11927** = 11921 passed + **1 failed** + 5 skipped, 201.21s / rc=2 (the single red = the baseline-number guard); confirming run after the refresh (`make test`, no `--cov`): **11922 passed / 5 skipped / 0 failed, 195.48s / rc=0** (collected 11927, wall 197s).
 - `make gates` full chain rc=0 (final run after backfill, wall 203s).
 
-## [Unreleased] — 2026-10-22 BO round: the raw read side folded three kinds of absence into a measurement - and the persistence switch was never recorded either (zero LLM, $0)
+### [Unreleased] — 2026-10-22 BO round: the raw read side folded three kinds of absence into a measurement - and the persistence switch was never recorded either (zero LLM, $0)
 
 > BN filed the four-valued `status` on disk. This round asked what those artifacts are **read as**: five sites share the
 > idiom `x = state.get(key) or []` then `len(x) == 0`, so "read an empty" and "never read" live in one `if`, and the very
@@ -1156,7 +1168,7 @@ behaviour** (disclosure退回 silence or attribution).
    and the report-only `experiments/` + `scripts/` face; callers passing `outcome_sink=None`; the quota's "collapse
    shape" still being text; the D/D2 censuses having no pre-BL reading, so their deltas cannot be subtracted.
 
-## [Unreleased] — 2026-10-22 BN round: the status channels were disclosed at runtime and appeared 0 times in the archived artifacts — the "how to read it" was dropped at both persistence boundaries (zero LLM, $0)
+### [Unreleased] — 2026-10-22 BN round: the status channels were disclosed at runtime and appeared 0 times in the archived artifacts — the "how to read it" was dropped at both persistence boundaries (zero LLM, $0)
 
 > Five rounds (BH→BM) turned each "unreadable ⇒ favourable" face into a four-valued `status` and wired the
 > double read into the judgment side. This round asks the question one step earlier: **do those channels ever
@@ -1256,7 +1268,7 @@ this round closes both boundaries but does not change the "no raw by default" sw
 fed to `status_for_check`; ⑤ the gate's resolution of `**helper(...)` is static; ⑥ historical archives are not backfilled.
 See STATUS_PERSISTENCE_BN_2026-10-22（分册已删除） (Chinese).
 
-## [Unreleased] — 2026-10-22 BM round: the experiment and report read sides folded "the check never ran / the check crashed" into the most favourable value of their domain — a crash filed into the "clean" group, an unmeasured row filed into "zero regressions" (zero LLM, $0)
+### [Unreleased] — 2026-10-22 BM round: the experiment and report read sides folded "the check never ran / the check crashed" into the most favourable value of their domain — a crash filed into the "clean" group, an unmeasured row filed into "zero regressions" (zero LLM, $0)
 
 > BL closed the double-read caliber inside `src/` and its registered boundary said out loud that
 > `experiments/` was not done — this round is that piece. In one line: **on the two read-side tables
@@ -1404,7 +1416,7 @@ See STATUS_PERSISTENCE_BN_2026-10-22（分册已删除） (Chinese).
   round that wrote the key into `build_risk_summary`) ⇒ ② changes no historical JSON, only batches
   run from now on.
 
-## [Unreleased] — 2026-10-22 BL round: the publish side already carried a status, the judgment side still read the empty value — "never measured" was read as "measured and clean" (zero LLM, $0)
+### [Unreleased] — 2026-10-22 BL round: the publish side already carried a status, the judgment side still read the empty value — "never measured" was read as "measured and clean" (zero LLM, $0)
 
 > Rounds BH→BK wrote "unreadable" into observability keys, but nobody ever checked whether the
 > judgment side reads them. Measured this round: before the fix, the key-name judgment reads of the
@@ -1484,7 +1496,7 @@ See STATUS_PERSISTENCE_BN_2026-10-22（分册已删除） (Chinese).
 - **`make gates` ran green end to end, rc=0, twice** (first run before this backfill, second run after it, each executed alone and never overlapping another pytest run or a doc edit): wall clock **213s / 214s**, **all 18 commands in the chain green**; the chain's pytest (xdist `-n 4 --dist loadfile`, **no `--cov`**) returned the same verdict both times - **11704 passed / 5 skipped / 0 failed** (207.16s / 208.34s, 54 / 46 warnings; collected **11709**) - and the per-step gate readings at the tail of the chain are byte-identical between the two runs, the only difference being the hypothesis warning count; after the backfill, every test that reads the docs or `BASELINE.yaml` (38 files, selected by grepping for `BASELINE.yaml|CHANGELOG|README|docs/INDEX|PROJECT_STATUS_REGISTER|MEASUREMENT_INTEGRITY`) re-ran **1037 passed in 52.43s** (both chain runs saw the same tree, so the collection face was collected **11709** in each; after the final run the newest mtime under `src/`, `tests/` and `scripts/` was 08:25:19, earlier than that run's 08:38:36 start, so what still differs from it is only prose and comments) — the same verdict counts as the confirming run above, a different elapsed-time caliber. Chain head: `ruff check` clean, `ruff format --check .` → **974 files already formatted** (digit-for-digit with the out-of-chain re-measure), `mypy src/ config.py` → 0 errors over **137 source files**; `ast-guards` inside the chain reported **136/78/20/0/20/19**, digit-for-digit with BK's out-of-chain self-test (BL touched no `ast.parse` guard surface); `check_artifact_doc_consistency.py`'s register-coverage branch reported `[OK]` (`coverage.xml` is the full-caliber `make test-cov` artifact; the earlier branch-less one is registered above as a caliber incident). Booklet
   CONSUMER_SIDE_STATUS_READERS_BL_2026-10-22（分册已删除）; lessons in `docs/MEASUREMENT_INTEGRITY.md` §56.
 
-## [Unreleased] — 2026-10-22 BK round: a capture-surface ratchet for the `ast.parse` guards — "unreadable" has two exception faces, so the caliber gets a gate instead of another memory (zero LLM, $0)
+### [Unreleased] — 2026-10-22 BK round: a capture-surface ratchet for the `ast.parse` guards — "unreadable" has two exception faces, so the caliber gets a gate instead of another memory (zero LLM, $0)
 
 > Rounds BG→BJ each converged one module's static judgment surface, but nobody was watching
 > "the next single-leg guard": of the 78 `try` sites in `src/` that call `ast.parse`, 35 caught only
@@ -1552,7 +1564,7 @@ See STATUS_PERSISTENCE_BN_2026-10-22（分册已删除） (Chinese).
   uncovered lines and this round's added lines do not intersect**.
 - **The `make gates` full chain is rc=0** (first run 242s wall; in-chain pytest 193.90s / 47 warnings; all 18 step commands green; the tail gate-reading block is 47 lines under the caliber stated in §9 of the manual; the new `ast-guards` gate prints 136/78/20/0/20/19 in-chain, identical to its out-of-chain self-test; the final run is rc=0 at 198s wall / 192.95s in-chain / 44 warnings, its 47-line gate-reading tail byte-identical to the first run, the only differences living in the hypothesis warning count).
   Manual: AST_PARSE_GUARD_CAPTURE_BK_2026-10-22（分册已删除）; lessons in `docs/MEASUREMENT_INTEGRITY.md` §55.
-## [Unreleased] — 2026-10-22 BJ round: closing the "unreadable ⇒ no findings" path in the AST assertion-consistency checker — both legs carry a status and the roll-up takes the worst one (zero LLM, $0)
+### [Unreleased] — 2026-10-22 BJ round: closing the "unreadable ⇒ no findings" path in the AST assertion-consistency checker — both legs carry a status and the roll-up takes the worst one (zero LLM, $0)
 
 > BI gave the write-time guards a status, but one folding was still open on the
 > generator side: `src/tools/oracle_validator.check_assertions` returned
@@ -1657,7 +1669,7 @@ See STATUS_PERSISTENCE_BN_2026-10-22（分册已删除） (Chinese).
 
 Manual: ORACLE_VALIDATOR_MEASURABILITY_BJ_2026-10-22（分册已删除）.
 
-## [Unreleased] — 2026-10-22 BI round: closing the "unreadable ⇒ passed" path in the two write-time static prechecks — both guards carry a status and the roll-up takes the worst one (zero LLM, $0)
+### [Unreleased] — 2026-10-22 BI round: closing the "unreadable ⇒ passed" path in the two write-time static prechecks — both guards carry a status and the roll-up takes the worst one (zero LLM, $0)
 
 > BD–BH closed the pytest summaries and the checkers' empty findings, but the two
 > guards that run between "patch applied" and "written to disk" —
@@ -1767,7 +1779,7 @@ Manual: ORACLE_VALIDATOR_MEASURABILITY_BJ_2026-10-22（分册已删除）.
 
 Booklet: STATIC_PRECHECK_MEASURABILITY_BI_2026-10-22（分册已删除）.
 
-## [Unreleased] — 2026-10-21 BH round: closing the "unmeasurable ⇒ verified" path in the four G5 testless validation layers — each layer carries a status and the roll-up takes the worst one (zero LLM, $0)
+### [Unreleased] — 2026-10-21 BH round: closing the "unmeasurable ⇒ verified" path in the four G5 testless validation layers — each layer carries a status and the roll-up takes the worst one (zero LLM, $0)
 
 > After BA–BG closed the pytest-side summaries and the external checkers' empty
 > results, the four layers of `src/tools/testless_validation.py` (AST symbol
@@ -1840,7 +1852,7 @@ Booklet: STATIC_PRECHECK_MEASURABILITY_BI_2026-10-22（分册已删除）.
 
 Booklet: TESTLESS_VALIDATION_STATUS_BH_2026-10-21（分册已删除）.
 
-## [Unreleased] — 2026-10-21 BG round: closing the "unmeasurable ⇒ fake clean" path in static type checking — mypy/pyright outcomes are four-valued, so an empty finding list is not free evidence (zero LLM, $0)
+### [Unreleased] — 2026-10-21 BG round: closing the "unmeasurable ⇒ fake clean" path in static type checking — mypy/pyright outcomes are four-valued, so an empty finding list is not free evidence (zero LLM, $0)
 
 > After BA–BF closed the pytest-side rc==0 verdicts, the external static
 > checkers in `src/tools/type_repair.py` still had a sibling channel:
@@ -1897,7 +1909,7 @@ Booklet: TESTLESS_VALIDATION_STATUS_BH_2026-10-21（分册已删除）.
 
 Manual: STATIC_CHECK_OUTCOME_BG_2026-10-21（分册已删除）.
 
-## [Unreleased] — 2026-10-21 BF round: closing the rc==0 verdict in the script toolchain — self-mutation and the template verifier wired to "effective pass", empty suites no longer recorded as survived / self-consistent (zero LLM, $0)
+### [Unreleased] — 2026-10-21 BF round: closing the rc==0 verdict in the script toolchain — self-mutation and the template verifier wired to "effective pass", empty suites no longer recorded as survived / self-consistent (zero LLM, $0)
 
 > After BA–BE closed M1 / experiments / MDO and the production paths layer
 > by layer, `scripts/tools/` still had two sites judging green on bare
@@ -1958,7 +1970,7 @@ Manual: STATIC_CHECK_OUTCOME_BG_2026-10-21（分册已删除）.
 
 Manual: TOOLCHAIN_EFFECTIVE_GREEN_BF_2026-10-21（分册已删除）.
 
-## [Unreleased] — 2026-10-21 BE round: closing the rc==0 verdict on production paths — six green points wired to "effective pass", empty suites no longer recorded as a correct fix (zero LLM, $0)
+### [Unreleased] — 2026-10-21 BE round: closing the rc==0 verdict on production paths — six green points wired to "effective pass", empty suites no longer recorded as a correct fix (zero LLM, $0)
 
 > After BA–BD closed M1 / experiments / MDO layer by layer, six production
 > sites still judged green on bare `rc==0`: the detection gate
@@ -2013,7 +2025,7 @@ Manual: TOOLCHAIN_EFFECTIVE_GREEN_BF_2026-10-21（分册已删除）.
 
 Manual: PRODUCTION_EFFECTIVE_GREEN_BE_2026-10-21（分册已删除）.
 
-## [Unreleased] — 2026-10-21 BD round: closing the rc==0 verdict inside the measurement module itself — MDO baseline and mutants wired to "effective pass", predicate moved to a single source of truth (zero LLM, $0)
+### [Unreleased] — 2026-10-21 BD round: closing the rc==0 verdict inside the measurement module itself — MDO baseline and mutants wired to "effective pass", predicate moved to a single source of truth (zero LLM, $0)
 
 > After BA–BC closed the experiments side layer by layer,
 > `src/measurement/mdo.py` still judged green on bare `rc==0`. Two sites: an
@@ -2058,7 +2070,7 @@ Manual: PRODUCTION_EFFECTIVE_GREEN_BE_2026-10-21（分册已删除）.
 
 Manual: MDO_EFFECTIVE_GREEN_BD_2026-10-21（分册已删除）.
 
-## [Unreleased] — 2026-10-21 BC round: closing the rc==0 verdict in the replay reconciliation tool — three task-level criteria in misguided_metrics wired to "effective pass" (zero LLM, $0)
+### [Unreleased] — 2026-10-21 BC round: closing the rc==0 verdict in the replay reconciliation tool — three task-level criteria in misguided_metrics wired to "effective pass" (zero LLM, $0)
 
 > The BA round §7.2 registered item. This module's **per-test** four-class
 > taxonomy has long listed skip as "no pass/fail signal"
@@ -2104,7 +2116,7 @@ Manual: MDO_EFFECTIVE_GREEN_BD_2026-10-21（分册已删除）.
 
 Manual: MISGUIDED_REPLAY_EFFECTIVE_GREEN_BC_2026-10-21（分册已删除）.
 
-## [Unreleased] — 2026-10-21 BB round: closing the remaining rc==0 verdict consumers — 11 sites in experiments/ wired to the shared "effective pass" predicate (zero LLM, $0)
+### [Unreleased] — 2026-10-21 BB round: closing the remaining rc==0 verdict consumers — 11 sites in experiments/ wired to the shared "effective pass" predicate (zero LLM, $0)
 
 > After the BA round introduced `_suite_has_effective_pass`, this round
 > propagates the same predicate to every remaining pytest-suite verdict
@@ -2138,7 +2150,7 @@ Manual: MISGUIDED_REPLAY_EFFECTIVE_GREEN_BC_2026-10-21（分册已删除）.
 
 Manual: EFFECTIVE_GREEN_CONSUMERS_BB_2026-10-21（分册已删除）.
 
-## [Unreleased] — 2026-10-21 BA round (backfill): rc==0 is not an effective pass — an all-skip / xfail suite executes no assertion (zero LLM, $0)
+### [Unreleased] — 2026-10-21 BA round (backfill): rc==0 is not an effective pass — an all-skip / xfail suite executes no assertion (zero LLM, $0)
 
 > pytest returns `rc==0` for suites that execute no assertion at all
 > (summary `passed==0`). Four M1 sibling consumers (detection's fixed
@@ -2153,7 +2165,7 @@ Manual: EFFECTIVE_GREEN_CONSUMERS_BB_2026-10-21（分册已删除）.
 > 9358 generated tests / 114 with markers / 12 with detection=1.0 (all
 > conditional markers). Manual: EFFECTIVE_GREEN_BA_2026-10-21（分册已删除）.
 
-## [Unreleased] — 2026-10-21 AZ round: a statistic's scale and tail must not be rewritten by the implementation — Cohen's g back to 0–0.5, exact p without an epsilon (zero LLM, $0)
+### [Unreleased] — 2026-10-21 AZ round: a statistic's scale and tail must not be rewritten by the implementation — Cohen's g back to 0–0.5, exact p without an epsilon (zero LLM, $0)
 
 > This round adds no capability: it fixes two statistical definitions in
 > `emse_stats_extensions.py` that disagreed with the definition they claim.
@@ -2226,7 +2238,7 @@ Manual: EFFECTIVE_GREEN_CONSUMERS_BB_2026-10-21（分册已删除）.
 
 ---
 
-## [Unreleased] — 2026-10-21 AY round (backfill): run_b8 payload assembly preserves the raw shape of `token_metrics` (zero LLM, $0)
+### [Unreleased] — 2026-10-21 AY round (backfill): run_b8 payload assembly preserves the raw shape of `token_metrics` (zero LLM, $0)
 
 > `_load_arm` / `_load_harness_smoke` used `rd.get("token_metrics") or {}`,
 > rewriting falsy non-objects (`[]` / `""` / `0` / `False`) into `{}` —
@@ -2238,7 +2250,7 @@ Manual: EFFECTIVE_GREEN_CONSUMERS_BB_2026-10-21（分册已删除）.
 > `tests/test_run_b8_payload_ay.py` 27 cases + 6/6 mutation anchors.
 > Manual: RUN_B8_PAYLOAD_AY_2026-10-21（分册已删除）.
 
-## [Unreleased] — 2026-10-21 AX round: the benchmark/full-stack summary presentation and aggregation read points have a value domain too — presentation may fold absent to the historical 0, averaging may not (zero LLM, $0)
+### [Unreleased] — 2026-10-21 AX round: the benchmark/full-stack summary presentation and aggregation read points have a value domain too — presentation may fold absent to the historical 0, averaging may not (zero LLM, $0)
 
 > This round adds no capability: after AW closed the per-arm statistics, the
 > benchmark and full-stack summaries still passed aggregate `token_metrics`
@@ -2276,7 +2288,7 @@ Manual: EFFECTIVE_GREEN_CONSUMERS_BB_2026-10-21（分册已删除）.
 
 ---
 
-## [Unreleased] — 2026-10-21 AW round: the T1/B2 per-arm statistics' `token_metrics` shape and event count have a value domain too — a bad shape does not abort the analysis, and an event count is not a check-free pass-through (zero LLM, $0)
+### [Unreleased] — 2026-10-21 AW round: the T1/B2 per-arm statistics' `token_metrics` shape and event count have a value domain too — a bad shape does not abort the analysis, and an event count is not a check-free pass-through (zero LLM, $0)
 
 > This round adds no capability: after AV closed `add_cost`, the same payload
 > still went through `arm_stats` before reaching the money gate.
@@ -2304,7 +2316,7 @@ Manual: EFFECTIVE_GREEN_CONSUMERS_BB_2026-10-21（分册已删除）.
 
 ---
 
-## [Unreleased] — 2026-10-21 AV round: the T1/B2 analysis-side cost entry has a value domain too — a one-sided unknown is not a partial sum, and unknown money is not the string `None` (zero LLM, $0)
+### [Unreleased] — 2026-10-21 AV round: the T1/B2 analysis-side cost entry has a value domain too — a one-sided unknown is not a partial sum, and unknown money is not the string `None` (zero LLM, $0)
 
 > This round adds no capability: after AU closed the three experiment-side
 > aggregators, `analyze_t1_b2_main_batch.add_cost` still folded with
@@ -2338,7 +2350,7 @@ Manual: EFFECTIVE_GREEN_CONSUMERS_BB_2026-10-21（分册已删除）.
 
 ---
 
-## [Unreleased] — 2026-10-21 AU round: on the experiment side, unknown is not zero — no number when unreadable, no partial sums posing as full sums, and AT write-rejection markers must not be lost (zero LLM, $0)
+### [Unreleased] — 2026-10-21 AU round: on the experiment side, unknown is not zero — no number when unreadable, no partial sums posing as full sums, and AT write-rejection markers must not be lost (zero LLM, $0)
 
 > This round adds no capability: after AI–AT closed the shared readers and
 > report-side reading layer, three live experiment aggregators still folded with
@@ -2402,7 +2414,7 @@ Manual: EFFECTIVE_GREEN_CONSUMERS_BB_2026-10-21（分册已删除）.
 - AB-17 ② register erratum: run_b8's local numeric gate was already handled in
   AE/AG; AU adds the dated correction.
 
-## [Unreleased] — 2026-10-21 AT round: token counting on the write side has a value domain too — a rejected write is not zero, and every rejection must be traceable (zero LLM, $0)
+### [Unreleased] — 2026-10-21 AT round: token counting on the write side has a value domain too — a rejected write is not zero, and every rejection must be traceable (zero LLM, $0)
 
 > This round adds no capability: after rounds AI–AS separated "zero / absent /
 > unreadable" on the read side layer by layer, the write side still turned bad
@@ -2459,7 +2471,7 @@ Manual: EFFECTIVE_GREEN_CONSUMERS_BB_2026-10-21（分册已删除）.
   arcs = 94.10% (`base_agent.py` 98.53%, the other nine core modules bit-identical).
 
 
-## [Unreleased] — 2026-10-21 AS round: the producer must write legal identifiers first — 32/16 hex, root, parent links (zero LLM, $0)
+### [Unreleased] — 2026-10-21 AS round: the producer must write legal identifiers first — 32/16 hex, root, parent links (zero LLM, $0)
 
 > This round adds no capability: after AR canonicalised identifiers, derived missing
 > ones and enforced one trace per file at the export boundary, the producer still
@@ -2511,7 +2523,7 @@ Manual: EFFECTIVE_GREEN_CONSUMERS_BB_2026-10-21（分册已删除）.
   arcs = 94.06% (`trace.py` 181 statements / 58 branches / 0 miss / 0 partial = 100%).
 
 
-## [Unreleased] — 2026-10-21 AR round: the OTel exporter's identifiers must be legal before they can be stable — one trace, 32/16 hex, deterministic derivation (zero LLM, $0)
+### [Unreleased] — 2026-10-21 AR round: the OTel exporter's identifiers must be legal before they can be stable — one trace, 32/16 hex, deterministic derivation (zero LLM, $0)
 
 > This round adds no capability: after AQ closed the numeric value domain, the same
 > identifier fact still had three fates at the export boundary — leaked verbatim
@@ -2575,7 +2587,7 @@ Manual: EFFECTIVE_GREEN_CONSUMERS_BB_2026-10-21（分册已删除）.
   arcs = 94.06%.
 
 
-## [Unreleased] — 2026-10-21 AQ round: the OTel exporter exports only verifiable numbers — bad tokens do not leak, bad timestamps do not abort a whole file (zero LLM, $0)
+### [Unreleased] — 2026-10-21 AQ round: the OTel exporter exports only verifiable numbers — bad tokens do not leak, bad timestamps do not abort a whole file (zero LLM, $0)
 
 > This round adds no capability: the export boundary wrote record numbers into span
 > attributes verbatim. The same bad value had three fates here — leaked verbatim
@@ -2628,7 +2640,7 @@ Manual: EFFECTIVE_GREEN_CONSUMERS_BB_2026-10-21（分册已删除）.
   arcs = 94.05%.
 
 
-## [Unreleased] — 2026-10-21 AP round: five report-side aggregate token summarisers also read one way — pooling, smoke, A/B, group averages and the cost table must not each fold their own (zero LLM, $0)
+### [Unreleased] — 2026-10-21 AP round: five report-side aggregate token summarisers also read one way — pooling, smoke, A/B, group averages and the cost table must not each fold their own (zero LLM, $0)
 
 > This round adds no capability: after AO collapsed the row-level total readers,
 > the **aggregate** objects written as `token_metrics` still had five consumers
@@ -2691,7 +2703,7 @@ Manual: EFFECTIVE_GREEN_CONSUMERS_BB_2026-10-21（分册已删除）.
   arcs = 93.98% (all +43 lines / +28 arcs executed by locks).
 
 
-## [Unreleased] — 2026-10-21 AO round: report-level token totals also read one way — tier, flip comparison and convergence curves must not each sum their own (zero LLM, $0)
+### [Unreleased] — 2026-10-21 AO round: report-level token totals also read one way — tier, flip comparison and convergence curves must not each sum their own (zero LLM, $0)
 
 > This round adds no capability: after AN collapsed the cost triple and three
 > aggregation readers, three **report-level total** readers still folded
@@ -2747,7 +2759,7 @@ Manual: EFFECTIVE_GREEN_CONSUMERS_BB_2026-10-21（分册已删除）.
   rc=0** (collected 10780); coverage 18717/19241 lines = 97.28% / 6797/7234
   arcs = 93.96% (all new lines and arcs executed by locks).
 
-## [Unreleased] — 2026-10-21 AN round: three token aggregation readers held their own `or 0` too — unreadable is not zero, and a partial sum is not a total (zero LLM, $0)
+### [Unreleased] — 2026-10-21 AN round: three token aggregation readers held their own `or 0` too — unreadable is not zero, and a partial sum is not a total (zero LLM, $0)
 
 > This round adds no capability: after AM collapsed the row-level policy into the
 > shared reader, the three **aggregation** consumers still summed
@@ -2806,7 +2818,7 @@ Manual: EFFECTIVE_GREEN_CONSUMERS_BB_2026-10-21（分册已删除）.
   524 / missing arcs 437 bit-identical to AM; `coverage report`'s 383 partial
   arcs is a different caliber and no recovery is claimed).
 
-## [Unreleased] — 2026-10-21 AM round: row-level token reads in the cost table have a value domain too — the rendering layer must not cover for the aggregator (zero LLM, $0)
+### [Unreleased] — 2026-10-21 AM round: row-level token reads in the cost table have a value domain too — the rendering layer must not cover for the aggregator (zero LLM, $0)
 
 > This round adds no capability: `statistical_analysis.cost_analysis` (the only
 > aggregator behind `$/task` and `$/solved`) still used `tu.get(...) or 0`, folding
@@ -2865,7 +2877,7 @@ Manual: EFFECTIVE_GREEN_CONSUMERS_BB_2026-10-21（分册已删除）.
   (denominator +10 lines / +8 arcs from `by_model_reason`; 524 missed / 437
   partial identical to AL).
 
-## [Unreleased] — 2026-10-21 AL round: row-level token arithmetic in the report has a value domain too — an unreadable row is not zero (zero LLM, $0)
+### [Unreleased] — 2026-10-21 AL round: row-level token arithmetic in the report has a value domain too — an unreadable row is not zero (zero LLM, $0)
 
 > This round adds no capability: `cost_effectiveness_block` kept a second copy of the
 > row-level arithmetic (`usage.get(...) or 0`), so the same row was unreadable in ext
@@ -2916,7 +2928,7 @@ Manual: EFFECTIVE_GREEN_CONSUMERS_BB_2026-10-21（分册已删除）.
   (denominator +22 lines / +12 arcs from moving the reader into `src/`, within the
   registered jitter band; `src/` changed, so the change-surface list is the evidence).
 
-## [Unreleased] — 2026-10-21 AK round: a handful of unaccounted rows is neither free nor exact — cost readings are lower bounds on recorded spend (zero LLM, $0)
+### [Unreleased] — 2026-10-21 AK round: a handful of unaccounted rows is neither free nor exact — cost readings are lower bounds on recorded spend (zero LLM, $0)
 
 > This round adds no capability: when S11's 50% breakage threshold passes on the
 > one-sided side (`0 < unaccounted rows < 50%`), zero-token rows enter the amount
@@ -2960,7 +2972,7 @@ Manual: EFFECTIVE_GREEN_CONSUMERS_BB_2026-10-21（分册已删除）.
   +1 arc vs AJ, within the registered jitter; `src/` untouched, evidenced by the
   change-surface list only).
 
-## [Unreleased] — 2026-10-21 AJ round (backfilled): a cache hit is a third accounting state — neither broken accounting nor "free" (zero LLM, $0)
+### [Unreleased] — 2026-10-21 AJ round (backfilled): a cache hit is a third accounting state — neither broken accounting nor "free" (zero LLM, $0)
 
 > Backfilled during the AK close-out: round AJ updated the header summary and the
 > register but left no section in this file. The content matches
@@ -2990,7 +3002,7 @@ Manual: EFFECTIVE_GREEN_CONSUMERS_BB_2026-10-21（分册已删除）.
   lines **18553/19077 = 97.25%** / branches **6707/7144 = 93.88%** (−1 line / −1 arc vs
   the pre-registration run, registered jitter).
 
-## [Unreleased] — 2026-10-21 AI round: token counts also have a value domain — an incomplete token sum is not a token reading (zero LLM, $0)
+### [Unreleased] — 2026-10-21 AI round: token counts also have a value domain — an incomplete token sum is not a token reading (zero LLM, $0)
 
 > This round adds no capability: it disposes AH section 7 items 1–3 (the `tokens_per_task`
 > two-state reading / the `by_model` shape domain / `input+output` versus `total_tokens`
@@ -3035,7 +3047,7 @@ Manual: EFFECTIVE_GREEN_CONSUMERS_BB_2026-10-21（分册已删除）.
   net 0 cases; the three arms' readings and bootstrap CIs are bit-identical and the protected
   archive is untouched.
 
-## [Unreleased] — 2026-10-20 AH round: an incomplete sum is not an amount — coverage, attribution and denominator closure for $/task (zero LLM, $0)
+### [Unreleased] — 2026-10-20 AH round: an incomplete sum is not an amount — coverage, attribution and denominator closure for $/task (zero LLM, $0)
 
 > This round adds no capability: it disposes AE review section 5.2 candidate B (the item
 > AB-15 / AB-16 / AB-17 / AE / AG kept registering unfixed) —
@@ -3086,7 +3098,7 @@ Manual: EFFECTIVE_GREEN_CONSUMERS_BB_2026-10-21（分册已删除）.
   189s wall; in-chain pytest 10412 passed / 5 skipped / 0 failed in 173.61s / 174.40s /
   182.16s, without `--cov`, not interchangeable with the coverage caliber above).
 
-## [Unreleased] — 2026-10-20 AG round: unpriced attribution closed to a single mechanism index (zero LLM, $0)
+### [Unreleased] — 2026-10-20 AG round: unpriced attribution closed to a single mechanism index (zero LLM, $0)
 
 > This round adds no capability: it disposes AE review section 5, item 2 (candidate C) —
 > `cost_analysis`'s `missing_models` bucket conflated "not registered / bad price domain /
@@ -3150,7 +3162,7 @@ Manual: EFFECTIVE_GREEN_CONSUMERS_BB_2026-10-21（分册已删除）.
   take precedence); `missing_models` narrows in meaning; `allow_non_usd` admits only
   decidable non-USD entries; archived reports are not rewritten. See booklet §8.
 
-## [Unreleased] — 2026-10-20 AF round: JSON writes closed to RFC 8259 + a repo-wide strict-JSON gate (zero LLM, $0)
+### [Unreleased] — 2026-10-20 AF round: JSON writes closed to RFC 8259 + a repo-wide strict-JSON gate (zero LLM, $0)
 
 > This round adds no capability: it disposes AE review sections 5.6 (non-strict JSON
 > artifacts repo-wide, no gate) and 5.7 (`run_b8._write_json`'s `allow_nan=True`), and
@@ -3240,7 +3252,7 @@ text as a violation, and the serializer neither escapes nor deletes it.
   `NaN` text inside strings stays legal; trace drop semantics are detailed in booklet
   section 7.
 
-## [Unreleased] — 2026-10-20 AE round: entry-level price admission of the run_b8 aggregator delegated to the shared predicate + test-side domain closure + stale-diff registration update (zero LLM, $0)
+### [Unreleased] — 2026-10-20 AE round: entry-level price admission of the run_b8 aggregator delegated to the shared predicate + test-side domain closure + stale-diff registration update (zero LLM, $0)
 
 > This round adds no capability: it disposes items A and D of the cost/price residual-admission
 > candidates registered in AB-17 sections 4/5, updates the registered numbers and attribution of
@@ -3320,7 +3332,7 @@ text as a violation, and the serializer neither escapes nor deletes it.
   the builtin standard price rather than `None`. See
   COST_ADMISSION_AE_2026-10-20（分册已删除） section 5.
 
-## [Unreleased] — 2026-10-20 AD round: statistical-quantity rendering preserves magnitude + the normal-tail complement pattern eliminated + a repo-wide census of silent precision-loss patterns (zero LLM, $0)
+### [Unreleased] — 2026-10-20 AD round: statistical-quantity rendering preserves magnitude + the normal-tail complement pattern eliminated + a repo-wide census of silent precision-loss patterns (zero LLM, $0)
 
 > This round adds no capability: a repo-wide census along the AC-1 defect class, disposing the two items registered in round AC, with every remaining same-family site judged individually.
 
@@ -3349,7 +3361,7 @@ text as a violation, and the serializer neither escapes nor deletes it.
 
 Regression locks: `tests/test_ad_round_stat_display.py`, **11 cases** (7 AD-1 rendering + 3 AD-2 tail + 1 end to end); mutation-verified: reverting each fix turns 7 targeted cases red, all green after restore.
 
-## [Unreleased] — 2026-10-20 AC round: fix for the McNemar p `1−cdf` floating-point underflow + E7 toolchain dry run + AB-17 wiring audit (zero LLM, $0)
+### [Unreleased] — 2026-10-20 AC round: fix for the McNemar p `1−cdf` floating-point underflow + E7 toolchain dry run + AB-17 wiring audit (zero LLM, $0)
 
 > This round adds no capability: an independent recompute audit found one numerical defect in the statistics layer and fixed it, plus a dry run of the E7 adjudication toolchain and a wiring audit of the AB-17 close-out (both pass, no new defects).
 
@@ -3368,7 +3380,7 @@ Regression locks: `tests/test_ad_round_stat_display.py`, **11 cases** (7 AD-1 re
 - AB-17: all seven price-table read sites are wired through the shared `src/budget/pricing.py` helpers (`pricing` itself + `spec_examples_generator` / `emse_stats_report` / `emse_stats_extensions` / `statistical_analysis` / `analyze_t1_b2_main_batch` / `run_b8_injection`), with no "declared but unconsumed" gap.
 - Baseline: collected **10294** = passed **10289** + skipped 5 + failed 0 (net +6 cases; sandbox-host measurement on this machine: 10275 passed / 19 skipped / 0 failed); `experiments/` is outside the `--cov=src` scope, and `coverage.xml` measures 18440/18963 lines = 97.24% and 6652/7090 arcs = 93.82% (each 1 off the AB-17 registration, inside the registered race-branch ±2 jitter band); ruff / mypy / all gates green.
 
-## [Unreleased] — 2026-10-20 Z→AB close-out round: ~18 rounds of pending work committed in one go + the README bilingual rotation done late + the E7 entry sheets' "can never be committed" gap fixed (zero LLM, $0)
+### [Unreleased] — 2026-10-20 Z→AB close-out round: ~18 rounds of pending work committed in one go + the README bilingual rotation done late + the E7 entry sheets' "can never be committed" gap fixed (zero LLM, $0)
 
 > This round adds no capability: it commits, in one go, all the work from rounds Z / AA /
 > engineering-quality / AB-1~17 that had sat in the working tree since the evening of
@@ -3413,7 +3425,7 @@ Regression locks: `tests/test_ad_round_stat_display.py`, **11 cases** (7 AD-1 re
   (sandbox-host caliber 10269 / 19 / 0); lines **97.24%** / branches **93.84%**;
   ruff / mypy (134 source files) / all gates green.
 
-## [Unreleased] — 2026-10-20 Round AB: real-corpus replay falsifies a synthetic-enumeration premise, a documented criterion becomes an executable artifact, dataset-adapter tolerance backfill, silently-dropped table cells fixed under a repo-wide criterion, the `json.loads` return domain closed at six sites, the `experiments/` return domain censused with one silent denominator turned into disclosed counts, absence and unreadability separated from zero hits, the three shapes of absence split into three buckets at three analysis sites, evidence-based coverage close-out, five registered sites closed in one go (a race branch locked instead of pragma-ed, three absence mechanisms named, non-object trace rows out of the denominator, loader row-set collapse made visible, the price-table `None` sentinel split three ways, the currency gate that `total_usd` never asserted, and the currency judgement collapsed into one predicate wired into all five sites, a rejected amount never wearing the shape of an amount with its attribution from the same decision, and the price-admission domain written once, and the table-level read-side admission written once) (zero LLM, $0)
+### [Unreleased] — 2026-10-20 Round AB: real-corpus replay falsifies a synthetic-enumeration premise, a documented criterion becomes an executable artifact, dataset-adapter tolerance backfill, silently-dropped table cells fixed under a repo-wide criterion, the `json.loads` return domain closed at six sites, the `experiments/` return domain censused with one silent denominator turned into disclosed counts, absence and unreadability separated from zero hits, the three shapes of absence split into three buckets at three analysis sites, evidence-based coverage close-out, five registered sites closed in one go (a race branch locked instead of pragma-ed, three absence mechanisms named, non-object trace rows out of the denominator, loader row-set collapse made visible, the price-table `None` sentinel split three ways, the currency gate that `total_usd` never asserted, and the currency judgement collapsed into one predicate wired into all five sites, a rejected amount never wearing the shape of an amount with its attribution from the same decision, and the price-admission domain written once, and the table-level read-side admission written once) (zero LLM, $0)
 
 > Every claim in this round replaces one kind of weak evidence with a stronger one:
 > ① a **universal proposition** ("permanently unreachable") replaced by
@@ -4563,7 +4575,7 @@ Regression locks: `tests/test_ad_round_stat_display.py`, **11 cases** (7 AD-1 re
   rewrites (189s wall clock / 184.22s in-chain, run alone with nothing else concurrent) read the
   same 10283 passed / 5 skipped / 0 failed with all three reconciliations `[OK]`.
 
-## [Unreleased] — 2026-10-19 Round AA: cross-platform ratchet guard, silent-fallback close-out, evidence-based coverage registration, D3b Step B boundary locks, E7 adjudication execution surface, cross-file order-dependency fix (zero LLM, $0)
+### [Unreleased] — 2026-10-19 Round AA: cross-platform ratchet guard, silent-fallback close-out, evidence-based coverage registration, D3b Step B boundary locks, E7 adjudication execution surface, cross-file order-dependency fix (zero LLM, $0)
 
 > Not a feature round — a **measurement-integrity guard** round: find the channels that
 > make "green" meaningless and make them structurally impossible. Four claims:
@@ -4744,7 +4756,7 @@ Regression locks: `tests/test_ad_round_stat_display.py`, **11 cases** (7 AD-1 re
 - Watermark `96.40 / 92.50` still untouched (cross-platform caliber awaits CI); `make gates`
   green; raw experiment data untouched.
 
-## [Unreleased] — 2026-10-19 Round engineering-quality: three-node complexity split + reachable-branch backfill in four modules (zero LLM, $0)
+### [Unreleased] — 2026-10-19 Round engineering-quality: three-node complexity split + reachable-branch backfill in four modules (zero LLM, $0)
 
 > Technical-debt clean-up after round Z, touching **structure and tests only**, not decision
 > semantics: the three oversized nodes in `src/graph/nodes.py` were split into testable units by
@@ -4790,7 +4802,7 @@ Regression locks: `tests/test_ad_round_stat_display.py`, **11 cases** (7 AD-1 re
 - Caliber layering unchanged: local macOS 3.14 readings ≠ the CI ubuntu 3.14 blocking tier
   (historical cross-platform gap ≤0.13pp), recalibrated after push; `make gates` green.
 
-## [Unreleased] — 2026-10-19 Round Z: remediation of the fourth third-party full static review (20 findings, zero LLM, $0)
+### [Unreleased] — 2026-10-19 Round Z: remediation of the fourth third-party full static review (20 findings, zero LLM, $0)
 
 > A third party statically reviewed all 8,491 files of commit `55bb711` in a Windows
 > environment (report `AITester_审查报告(1).md`) and reported **P0=0 / P1=14 / P2=6**.
@@ -4893,7 +4905,7 @@ Regression locks: `tests/test_ad_round_stat_display.py`, **11 cases** (7 AD-1 re
 - Full suite **9338 passed / 5 skipped / 0 failed** (collected 9343); `make gates` green.
 - Closure report: THIRD_PARTY_REVIEW_2026-10-19_FIX_CLOSURE（分册已删除）.
 
-## [Unreleased] — 2026-10-19 Round Y5: E7's three paths fully provisioned + a nesting regression lock (zero LLM, $0)
+### [Unreleased] — 2026-10-19 Round Y5: E7's three paths fully provisioned + a nesting regression lock (zero LLM, $0)
 
 > Only paths A (n=8) and B (n=41) had been provisioned for E7 adjudication, while the
 > statistically recommended full-frame census (n=72) had not — choosing it would have meant
@@ -4932,7 +4944,7 @@ Regression locks: `tests/test_ad_round_stat_display.py`, **11 cases** (7 AD-1 re
 - Mutation-verified: switching the selection implementation from "take the first k" to "take
   the last k" turns this test red while the other 22 stay green.
 
-## [Unreleased] — 2026-10-19 Round Y4: responses to the third round's open questions (zero LLM, $0)
+### [Unreleased] — 2026-10-19 Round Y4: responses to the third round's open questions (zero LLM, $0)
 
 > The third independent review's §15 listed eight open questions, but the answers were
 > scattered across the register, ADRs, the paper and earlier audit reports — a reviewer had
@@ -4962,7 +4974,7 @@ Regression locks: `tests/test_ad_round_stat_display.py`, **11 cases** (7 AD-1 re
 - The English index's "Last updated" had been stuck at 2026-10-18 (round U); refreshed to
   2026-10-19.
 
-## [Unreleased] — 2026-10-19 Round Y3: audit wrap-up and a repo-wide uncovered-line map (zero LLM, $0)
+### [Unreleased] — 2026-10-19 Round Y3: audit wrap-up and a repo-wide uncovered-line map (zero LLM, $0)
 
 > Closure of the round-Y2 leftovers, and the audit scope widened from "lines added by fixes"
 > to the whole repository. Real LLM spend: **$0**.
@@ -5003,7 +5015,7 @@ Regression locks: `tests/test_ad_round_stat_display.py`, **11 cases** (7 AD-1 re
   documented conservative boundaries of `spec_ir_v2`'s SMT witness; ③ dataset adapters
   (after confirming local dataset availability).
 
-## [Unreleased] — 2026-10-19 Round Y2: audit closure and first audit of experiments/ (zero LLM, $0)
+### [Unreleased] — 2026-10-19 Round Y2: audit closure and first audit of experiments/ (zero LLM, $0)
 
 > Closure of the round-Y audit: the remaining `src/` A20 guard gaps are closed, and the
 > same method is applied to `experiments/` for the first time — the area round Y
@@ -5061,7 +5073,7 @@ Regression locks: `tests/test_ad_round_stat_display.py`, **11 cases** (7 AD-1 re
   six lines in `run_benchmark.py` covering provenance read failures / malformed markers /
   git exceptions (error handling; recommended next round).
 
-## [Unreleased] — 2026-10-19 Round Y: fix-coverage gap audit (zero LLM, $0)
+### [Unreleased] — 2026-10-19 Round Y: fix-coverage gap audit (zero LLM, $0)
 
 > Systematic audit of the recurrence pattern exposed by the last two review rounds
 > ("fixes cover the main path but miss a branch"): per-line coverage of every fix
@@ -5117,7 +5129,7 @@ Regression locks: `tests/test_ad_round_stat_display.py`, **11 cases** (7 AD-1 re
   `api_manager.py` 4 lines (early return / extreme edge), `base_agent.py` 2 lines
   (broad `except`), `llm_client.py` 2 lines (empty-identity returns).
 
-## [Unreleased] — 2026-10-19 Round X: paper reproducibility closure and systematic review (zero LLM, $0)
+### [Unreleased] — 2026-10-19 Round X: paper reproducibility closure and systematic review (zero LLM, $0)
 
 > Preparatory audit for paper finalization: every core number cited in the paper was
 > recomputed with zero LLM calls (12/12 reproduce), and the recompute entry points
@@ -5165,7 +5177,7 @@ Regression locks: `tests/test_ad_round_stat_display.py`, **11 cases** (7 AD-1 re
 - **T-round README rewrite hazard closed**: `analyze_t1_b2_main_batch.py` gained a `<!-- MANUAL:BEGIN/END -->` generation-preservation mechanism (`_preserve_manual_sections`: paired blocks preserved verbatim on `--write`; unclosed markers not preserved; multiple blocks kept in order); the archived "0.6 T-round findings" section is now wrapped; end-to-end proof on a /tmp copy shows the manual section survives (it was previously always lost, 32 lines).
 - **Regression locks**: `tests/test_analyze_t1_b2_manual_sections.py` (5 cases, hermetic — renders from the archived report; unclosed markers not preserved / no markers no append / multi-block ordering / key phrasings survive).
 
-## [Unreleased] — 2026-10-19 Round W (second-round third-party review residuals: A07/A09/A10 P1 fixes)
+### [Unreleased] — 2026-10-19 Round W (second-round third-party review residuals: A07/A09/A10 P1 fixes)
 
 > The second-round third-party review (read-only static audit on Windows, commit `73481bb`) reports P0=0, P1=3, P2=0, P3=0. All three are **uncovered sub-scenarios** of the round-V fixes, not new defects; this round reproduces each minimal counterexample, fixes it, and freezes the counterexample as a regression lock.
 > Real LLM spend: **$0** (no network, no model calls).
@@ -5205,7 +5217,7 @@ Regression locks: `tests/test_ad_round_stat_display.py`, **11 cases** (7 AD-1 re
 - **AO3 line-lock advanced with the batch (closed during the round-W doc sync)**: the en-README header-date lock in `tests/test_ao_batch.py::TestReadmeEnHeader` moved from `Last updated: 2026-10-07` + `repair-engine batch XIV` to `Last updated: 2026-10-19` + round-W wording — rounds U/V left both the header line and the lock stale under the lock's own "advance with the latest batch" convention (consistently stale at 10-07, which is why the 73481bb CI test matrix stayed green); the first CI test-matrix run after this batch refreshed the header line exposed it (the single item in the failure-diagnosis annotation), and this batch closes it.
 - **CI Security gate fix (found while verifying the round-W doc sync; the failure pre-dates this batch and was introduced by the round-V push)**: `gitleaks detect --no-git` (v8.28.0 + repo config, reproduced bit-for-bit on a clean checkout) flagged **9 generic-api-key findings** in `tests/test_trace_jsonl_integrity.py` (added in round V) — all fixed fixture literals for "must be `<REDACTED>`" assertions (`abcdefgh123456` ×6 / `placeholderSecret123` / `supersecretvalue` / `sk-ws-ABCDEFGH1234567890xy`). Registered **per-literal** allowlist entries in `.gitleaks.toml` with justification per the file's governance (no directory-wide exemption; genuine leaks still detected); clean-checkout rescan gives **0 findings / exit 0**.
 
-## [Unreleased] — 2026-10-18 Round V (third-party independent review — 23-item remediation: A08 P0 credential isolation + A01–A07/A09–A17 P1 + A18–A23 P2)
+### [Unreleased] — 2026-10-18 Round V (third-party independent review — 23-item remediation: A08 P0 credential isolation + A01–A07/A09–A17 P1 + A18–A23 P2)
 
 > Round V responds to the third-party independent review (static audit on Windows; report: `AITester_审查报告.md`; the user confirmed all 23 findings as **100% accurate**). The reviewed commit `ff15a2f` is bit-for-bit identical to this round's starting point; each item is fixed with regression locks and the review's M1–M9 acceptance scripts are re-run. A standalone closure report is at THIRD_PARTY_REVIEW_2026-10-18_FIX_CLOSURE（分册已删除）.
 > Real LLM spend: **$0** (all fixes and verification are at the code / documentation / artifact level; no model calls, no container builds).
@@ -5266,7 +5278,7 @@ Regression locks: `tests/test_ad_round_stat_display.py`, **11 cases** (7 AD-1 re
 - Review M1–M9 rerun: M1 numbers bit-identical (38/240/21, 4/261/0, 117/261/0, 12:80, 31 archived templates); M2 manifests 69 / 7,639 raw matches / 0 missing / 0 mismatch (pre-fix 9 missing); M3 CSV 12/12, corrupted JSONL documented and future writes guarded; M4/M6/M7/M8/M9 assertions all pass (M5 Windows branch covered by Mock unit tests).
 - Gates: `make docs-check`, `check_baseline_numbers`, `check_baseline`, `check_artifact_doc_consistency`, `check_checksum`, `check_zero_assert_tests`, `check_env_budget --check` etc. all green (full commands and results in THIRD_PARTY_REVIEW_2026-10-18_FIX_CLOSURE（分册已删除）).
 
-## [Unreleased] — 2026-10-18 Round U (third-round independent-review close-out: A-05/A-06/A-08/A-09 + A-03/A-17 drift write-up + P3 evaluation-integrity checklist + D3b Step A wiring, zero LLM)
+### [Unreleased] — 2026-10-18 Round U (third-round independent-review close-out: A-05/A-06/A-08/A-09 + A-03/A-17 drift write-up + P3 evaluation-integrity checklist + D3b Step A wiring, zero LLM)
 
 > Round U executes the items of the third independent systematic review (INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-18（分册已删除）) that do not require LLM quota or human adjudication, and lands that review report:
 > (1) **A-05 gate-count caliber unification** — the five-way split (README tree 23/18, paper 24, register headline 25, git record 25, measured 26 scripts / 27 call sites) is collapsed into three recomputable numbers in the `BASELINE.yaml` `gates` section;
@@ -5381,7 +5393,7 @@ Regression locks: `tests/test_ad_round_stat_display.py`, **11 cases** (7 AD-1 re
 - **Targeted tests**: the 5 affected files **142 passed / 14 skipped / 0 failed** (sandbox-host caliber); P3 validator 12 cases and D3b wiring 13 cases + 2 consume-off dual cases all pass.
 - **Documentation sync**: README zh/en "latest optimization / known failures / file tree", `BASELINE.yaml` (tests/coverage/gates), register headline + §1 + §3.2 + §4, `docs/INDEX.md` + `INDEX.en.md` (third-round review report and P3 checklist registered), `scripts/README.md` script inventory, `docs/design/cross_file_plan_wiring_prereg.md` (Step A status), CHANGELOG zh/en current round — all refreshed; the third-round independent review report is landed (16 sections + 2 appendices, including the same-day close-out status appendix).
 
-## [Unreleased] — 2026-10-18 Round T (LLM-quota unlock: B2 fingerprint-locked replication + B1 protocol-text fingerprint-grade replication + semantic fixes + instrument self-audit)
+### [Unreleased] — 2026-10-18 Round T (LLM-quota unlock: B2 fingerprint-locked replication + B1 protocol-text fingerprint-grade replication + semantic fixes + instrument self-audit)
 
 > With a sufficient LLM quota authorized by the user, round T answers the questions previously blocked on quota and fixes a class of real semantic/instrument defects found by the probe-driven audit:
 > (1) **B2 fingerprint-locked main-batch replication** (3 seeds × 3 arms × 87 tasks, clean worktree, `model_fingerprint.pinned=true`);
@@ -5448,7 +5460,7 @@ Regression locks: `tests/test_ad_round_stat_display.py`, **11 cases** (7 AD-1 re
 - e2e feature matrix: `make e2e-probe` **56 pass / 0 fail / 0 error / 12 skip (68 total)**; `AITESTER_E2E_LLM=true make e2e-probe-llm` **68/68 pass** (12 real-LLM probes, 97.5 s aggregate); `python main.py doctor` exit=0 (12 LLM probes skipped by the forced zero-LLM rule).
 - Artifacts: all **10** T-round evidence directories pass `SHA256SUMS --write/--verify` (B2 804 entries, B1 557, K3 22, SMT 7, SMT-alias 9, semantic-fixes 11, A-19 default-gate 34, doc audit 1, independent verification 1, e2e matrix 5); the `*_round_*` coverage scan and MANIFEST are registered (175 entries).
 
-## [Unreleased] — 2026-10-18 Round S (A-19 failure-injection redo + multi-sample example governance + 3-seed production decision)
+### [Unreleased] — 2026-10-18 Round S (A-19 failure-injection redo + multi-sample example governance + 3-seed production decision)
 
 > Round S answers two open questions: ① whether A-19 coverage-stall detection really
 > stops early when tasks **do** fail for multiple rounds (the "no trigger" limitation of
@@ -5569,7 +5581,7 @@ EXAMPLES=false, B=both true; pre-registered decision rule frozen before the run:
 - **Round-S real LLM spend**: S-1 $0.27884 + S-2 $0.140324 + S-3 $0.010912 ≈ **$0.43**
   (round-S cap $0.8 ✓).
 
-## [Unreleased] — 2026-10-18 Round R (Q-2 loss diagnosis/reproduction + example self-validation + postprocess wall hook)
+### [Unreleased] — 2026-10-18 Round R (Q-2 loss diagnosis/reproduction + example self-validation + postprocess wall hook)
 
 > Round R answers the core question left by Q: is the Q-2 examples channel's
 > **20pp LLM-suite detection drop** a real trade-off or single-run noise? It also adds a
@@ -5680,7 +5692,7 @@ set as seed-42).
 - **Round-R real LLM spend**: R-1 $0.285957 + probes ≈$0.02 ≈ **$0.31** (round-R cap $0.8 ✓);
   Q+R cumulative ≈**$0.77–0.82** (including the Q-round incident estimate $0.15–0.20).
 
-## [Unreleased] — 2026-10-18 Round Q (examples production wiring + pre-registered two-arm A/B + postprocess wall observability)
+### [Unreleased] — 2026-10-18 Round Q (examples production wiring + pre-registered two-arm A/B + postprocess wall observability)
 
 > Round Q continues from P's "examples channel detects in replay but is not wired into
 > production": wire it into the real pipeline (Planner contract + double-gate switch +
@@ -5813,7 +5825,7 @@ SHA256SUMS `e4b1dd5f…` 101 entries verified). Round-Q budget reconciliation: i
 - **Round-Q real LLM spend**: Q-2 $0.275878 + preparation incident rough estimate
   $0.15–0.20 + probes/other ≈$0.05 ≈ **$0.48–0.53** (cap $0.7 ✓).
 
-## [Unreleased] — 2026-10-18 Round P (oracle examples channel exploration + A-19 paper-feature fix + doctor self-check)
+### [Unreleased] — 2026-10-18 Round P (oracle examples channel exploration + A-19 paper-feature fix + doctor self-check)
 
 > Round P continues from O's "instrument is judgeable but correct is still 0" toward
 > **semantic quality**, while handling the quota-unlocked A-19 ablation as "check the
@@ -5948,7 +5960,7 @@ SHA256SUMS `e4b1dd5f…` 101 entries verified). Round-Q budget reconciliation: i
 - **Real LLM spend**: round P ≈ **$0.054** (examples generation 20 calls $0.006195 +
   B8 two arms $0.047272 + probe matrix 12 calls ≈$0.02; within the $0.8 budget).
 
-## [Unreleased] — 2026-10-18 Round O (oracle instrument treatment + cross-file path evidence + CI release engineering + runtime hygiene)
+### [Unreleased] — 2026-10-18 Round O (oracle instrument treatment + cross-file path evidence + CI release engineering + runtime hygiene)
 
 > Round O continues the two lines exposed by round N's full-feature verification:
 > (1) treating the "deterministic oracle channel is net-negative" finding from the
@@ -6140,7 +6152,7 @@ SHA256SUMS `e4b1dd5f…` 101 entries verified). Round-Q budget reconciliation: i
 - **Cost**: round O real LLM ≈ **$0.24** (O-2 ≈$0.23 + O-3 $0.0035 + probes ≈$0.02,
   including already-spent O-2 invalid/partial attempt costs; round-O exemption $0.30).
 
-## [Unreleased] — 2026-10-17 Round N (full-feature end-to-end verification + 8 functional-defect fixes + oracle independent judging + real-LLM heavy paths)
+### [Unreleased] — 2026-10-17 Round N (full-feature end-to-end verification + 8 functional-defect fixes + oracle independent judging + real-LLM heavy paths)
 
 > Round N answers "optimize **all** features, the quota is enough to test everything":
 > instead of only watching research pipelines, every user-visible feature becomes one
@@ -6307,7 +6319,7 @@ SHA256SUMS `e4b1dd5f…` 101 entries verified). Round-Q budget reconciliation: i
 - **Real LLM spend**: probe matrix (12 calls) ~$0.02 + N-4 heavy $0.0463 + N-3 smoke
   $0.0009 + N-5 re-verification $0.005 + probe-defect diagnosis ~$0.02 → **< $0.1 total**.
 
-## [Unreleased] — 2026-10-17 Round M (real LLM: spec-augmentation two-arm `not_confirmed` / non-inferiority holds + oracle-quality measurement exposing a net-negative instrument + orphan root-cause fix + Q11 paper audit)
+### [Unreleased] — 2026-10-17 Round M (real LLM: spec-augmentation two-arm `not_confirmed` / non-inferiority holds + oracle-quality measurement exposing a net-negative instrument + orphan root-cause fix + Q11 paper audit)
 
 > Round M continues "comprehensive optimization to frontier level" after round L
 > (P1 replacement negative, proxy-metric invalidation): (1) a **same-batch two-arm**
@@ -6503,7 +6515,7 @@ SHA256SUMS `e4b1dd5f…` 101 entries verified). Round-Q budget reconciliation: i
   `git_sha=fae8f45`/`git_dirty=false`/fingerprint pinned; prompt-level evidence 43 vs 42;
   15 orphan patrols with 0 leaks); round-L batch artifacts remain tracked and recomputable.
 
-## [Unreleased] — 2026-10-17 Round L (real LLM: P1 independent-anchor three-arm negative verdict + proxy-metric invalidation + runner semantics fix + test-strength improvement)
+### [Unreleased] — 2026-10-17 Round L (real LLM: P1 independent-anchor three-arm negative verdict + proxy-metric invalidation + runner semantics fix + test-strength improvement)
 
 > Round L lands on the same day as round K and is the "comprehensive optimization to
 > frontier level" **real-LLM-quota batch**: it completes three work items that had only
@@ -6742,7 +6754,7 @@ SHA256SUMS `e4b1dd5f…` 101 entries verified). Round-Q budget reconciliation: i
   `git_dirty=false`, `model_fingerprint.pinned=true`; worktree `git status` 0 dirty
   before and after; anchor-table sha256 matches the main tree; total cost **$0.3170**.
 
-## [Unreleased] — 2026-10-17 Round K (comprehensive optimization: P0 JSON-fence content corruption fix + coverage 96.47%/92.57% + self-mutation 0.6419→0.7674 + documentation link gate + runtime hygiene; zero LLM)
+### [Unreleased] — 2026-10-17 Round K (comprehensive optimization: P0 JSON-fence content corruption fix + coverage 96.47%/92.57% + self-mutation 0.6419→0.7674 + documentation link gate + runtime hygiene; zero LLM)
 
 > Round K is the "comprehensive optimization to frontier level" batch: one real
 > defect fix (P0, silent data corruption), one meta-level capability build (the
@@ -6896,7 +6908,7 @@ SHA256SUMS `e4b1dd5f…` 101 entries verified). Round-Q budget reconciliation: i
   tolerance is still loose (this round matched digit-for-digit; tightening
   awaits consecutive zero-drift ubuntu observations).
 
-## [Unreleased] — 2026-10-17 Round J (aggregator extraction + second recurrence of switch-budget blind spot + coverage closeout / dead-code removal + stagnation ablation arm; zero LLM)
+### [Unreleased] — 2026-10-17 Round J (aggregator extraction + second recurrence of switch-budget blind spot + coverage closeout / dead-code removal + stagnation ablation arm; zero LLM)
 
 > Round J is an "engineering-debt closeout" batch: J-1b extracts the three
 > aggregators nested inside `run_benchmark()` to module level (their calibers
@@ -6988,7 +7000,7 @@ SHA256SUMS `e4b1dd5f…` 101 entries verified). Round-Q budget reconciliation: i
   76 lines in `agents/debugger.py` (LLM call chain, mock cost > test value,
   registered as low priority).
 
-## [Unreleased] — 2026-10-17 df_spec experiment (P1 main experiment executed: `not_confirmed`, significant negative-direction evidence)
+### [Unreleased] — 2026-10-17 df_spec experiment (P1 main experiment executed: `not_confirmed`, significant negative-direction evidence)
 
 > Execution of the independent review §6 P1 / skeleton §8 T-6 main experiment
 > (LLM-authorized batch). Pre-registration and decision caliber were landed
@@ -7035,7 +7047,7 @@ SHA256SUMS `e4b1dd5f…` 101 entries verified). Round-Q budget reconciliation: i
 - Both arms provenance `git_dirty=false`; cache namespaces distinct
   (`emse_df_spec_20261016_dfspec` / `_df`).
 
-## [Unreleased] — 2026-10-16 Round I (failure-attribution wiring: five-bucket final-state classes dumped + machine-readable m10_leaf_fallback + two unreachable read-side branches fixed; zero-LLM)
+### [Unreleased] — 2026-10-16 Round I (failure-attribution wiring: five-bucket final-state classes dumped + machine-readable m10_leaf_fallback + two unreachable read-side branches fixed; zero-LLM)
 
 > Round I wires the failure-attribution chain from "written but never read"
 > into batch artifacts: the `failure_taxonomy` framework had zero production
@@ -7097,7 +7109,7 @@ SHA256SUMS `e4b1dd5f…` 101 entries verified). Round-Q budget reconciliation: i
   nested functions (calibers cannot be unit-pinned; would touch frozen
   experiment files).
 
-## [Unreleased] — 2026-10-16 Round H (coverage-measurement determinism closure: three noise sources located and eliminated + runtime redaction blind spots + observation signals dumped; zero-LLM)
+### [Unreleased] — 2026-10-16 Round H (coverage-measurement determinism closure: three noise sources located and eliminated + runtime redaction blind spots + observation signals dumped; zero-LLM)
 
 > Round H fully closes the "coverage-measurement non-determinism (root cause
 > unlocated)" item registered in Round G: three independent noise sources
@@ -7178,7 +7190,7 @@ SHA256SUMS `e4b1dd5f…` 101 entries verified). Round-Q budget reconciliation: i
   under clean environments); 2 residual decorative guards are dead code
   (disposal needs authorization).
 
-## [Unreleased] — 2026-10-16 Round G (security-guard actuation + three gate false-greens fixed + attribution-chain break fixed; zero-LLM)
+### [Unreleased] — 2026-10-16 Round G (security-guard actuation + three gate false-greens fixed + attribution-chain break fixed; zero-LLM)
 
 > Round G audits decorative guards/switches repo-wide under the criterion
 > "implementation + unit tests + env switch, but zero production call
@@ -7244,7 +7256,7 @@ SHA256SUMS `e4b1dd5f…` 101 entries verified). Round-Q budget reconciliation: i
   Verify: CI step `Status register coverage reconciliation`;
   `pytest tests/test_artifact_doc_consistency_gate.py -q`.
 
-## [Unreleased] — 2026-10-16 Round F (switch-governance closure: env-budget gate blind spot + boolean caliber unification + env_int hardening + atomic persists; zero-LLM)
+### [Unreleased] — 2026-10-16 Round F (switch-governance closure: env-budget gate blind spot + boolean caliber unification + env_int hardening + atomic persists; zero-LLM)
 
 > Round F closes the environment-variable governance chain: the env-budget
 > gate false-green (+25 invisible switches), boolean switch parsing unified
@@ -7286,7 +7298,7 @@ SHA256SUMS `e4b1dd5f…` 101 entries verified). Round-Q budget reconciliation: i
   (`event_bus.publish_workflow_completed` / `process_utils._close_quietly`),
   `rag/retriever.py` clone merge.
 
-## [Unreleased] — 2026-10-15 EMSE batch 8 (full-mutant Mut@k closure: three measurement-defect fixes + test-validity pre-gate + four-arm M4 closure; zero-LLM + authorized-LLM C/D)
+### [Unreleased] — 2026-10-15 EMSE batch 8 (full-mutant Mut@k closure: three measurement-defect fixes + test-validity pre-gate + four-arm M4 closure; zero-LLM + authorized-LLM C/D)
 
 > This batch switches Mut@k from the `max_mutants=10` truncation to the
 > cosmic-ray full-mutant caliber; in the process it uncovers and fixes
@@ -7404,7 +7416,7 @@ SHA256SUMS `e4b1dd5f…` 101 entries verified). Round-Q budget reconciliation: i
   compute item; the self-recursive DSL extension design review is pending
   (zero-LLM).
 
-## [Unreleased] — 2026-10-15 EMSE batch 7 (M4 C/D repeat-chain repair + submission material closure, zero-LLM)
+### [Unreleased] — 2026-10-15 EMSE batch 7 (M4 C/D repeat-chain repair + submission material closure, zero-LLM)
 
 > This batch is zero-LLM (user constraint: "first skip projects that need LLM"):
 > repairs the wholesale breakage of the M4 C/D repeat orchestration chain +
@@ -7522,7 +7534,7 @@ SHA256SUMS `e4b1dd5f…` 101 entries verified). Round-Q budget reconciliation: i
 >   "contract-locked scripts must be tracked with their tests" is
 >   established.
 
-## [Unreleased] — 2026-10-15 EMSE batch 6 (SpecExpr DSL coverage improvement: colon/slices + whitelist extensions + lambda/walrus guardrails, zero-LLM)
+### [Unreleased] — 2026-10-15 EMSE batch 6 (SpecExpr DSL coverage improvement: colon/slices + whitelist extensions + lambda/walrus guardrails, zero-LLM)
 
 > This batch implements the next optimization direction self-identified after the
 > layered-narrative closure — extending the restricted-expression DSL coverage
@@ -7614,7 +7626,7 @@ SHA256SUMS `e4b1dd5f…` 101 entries verified). Round-Q budget reconciliation: i
   measures compiler acceptance, not LLM formalization willingness
   (the latter = spec_expr_coverage, an orthogonal metric).
 
-## [Unreleased] — 2026-10-14 EMSE batch 5 (M4 QuixBugs SpecExpr expansion run + full Mut@k measurement + over-red P1-P4 classification)
+### [Unreleased] — 2026-10-14 EMSE batch 5 (M4 QuixBugs SpecExpr expansion run + full Mut@k measurement + over-red P1-P4 classification)
 
 > This batch delivers the M4 4-arm expansion A/B run (~$0.25) + full
 > cosmic-ray Mut@k (ULT recompute + QuixBugs first measurement) + over-red
@@ -7714,7 +7726,7 @@ SHA256SUMS `e4b1dd5f…` 101 entries verified). Round-Q budget reconciliation: i
   goes red; P3 implementation-coupling 1/5. Not a test-generation quality
   defect — it is an evaluation-caliber issue (over-red rows are
   *supposed* to stay red after the fix).
-## [Unreleased] — 2026-10-14 EMSE batch 4 (M10 observability + ULT Mut@k closure + layered narrative + QuixBugs expansion pre-registration) + EMSE script rebuilds (zero-LLM, 5912 collected)
+### [Unreleased] — 2026-10-14 EMSE batch 4 (M10 observability + ULT Mut@k closure + layered narrative + QuixBugs expansion pre-registration) + EMSE script rebuilds (zero-LLM, 5912 collected)
 
 > This batch delivers four optimization items plus five rebuilt EMSE scripts,
 > with zero LLM runtime cost (M4 ships only the pre-registration and analysis
@@ -7838,7 +7850,7 @@ SHA256SUMS `e4b1dd5f…` 101 entries verified). Round-Q budget reconciliation: i
   significance is not effect-size adequacy); primary_pooled gains the
   `only_specir`/`only_replace` alias keys consumed by `build_analysis`.
 
-## [Unreleased] — 2026-10-14 Triple EMSE batch (SpecExpr confirmatory + DSL measurement-gate fixes + Mut@k) + LLM structured-output hardening
+### [Unreleased] — 2026-10-14 Triple EMSE batch (SpecExpr confirmatory + DSL measurement-gate fixes + Mut@k) + LLM structured-output hardening
 
 > Five batches today: ① SpecExpr confirmatory experiment (pre-registration →
 > 4-arm run → analysis, ~$0.6); ② SpecExpr DSL measurement-gate fixes
@@ -7941,7 +7953,7 @@ SHA256SUMS `e4b1dd5f…` 101 entries verified). Round-Q budget reconciliation: i
 - `docs/design/stvr_empirical_study_design.md` §7/§8: cosmic-ray install +
   Mut@k subset measurement checked off (`requirements.lock` pinning remains).
 
-## [Unreleased] — 2026-10-13 EMSE submission-optimization batch (offline closure of the five journal-fit hard problems + zero-LLM recompute tooling + T-10 artifact archival, zero LLM cost)
+### [Unreleased] — 2026-10-13 EMSE submission-optimization batch (offline closure of the five journal-fit hard problems + zero-LLM recompute tooling + T-10 artifact archival, zero LLM cost)
 
 > Basis: the EMSE (Empirical Software Engineering) submission-oriented journal-fit
 > analysis (Negative Results call / Registered Reports mechanism / Prompt-SE
@@ -8160,7 +8172,7 @@ SHA256SUMS `e4b1dd5f…` 101 entries verified). Round-Q budget reconciliation: i
   run blocked by the sandbox delete guard, needs elevated confirmation before
   commit), last_verified→2026-10-13.
 
-## [Unreleased] — 2026-10-12 STVR empirical-study design batch (research-question attributability reshape + retrieval-quality Recall@k observation + 6-arm ablation-matrix skeleton, zero LLM cost)
+### [Unreleased] — 2026-10-12 STVR empirical-study design batch (research-question attributability reshape + retrieval-quality Recall@k observation + 6-arm ablation-matrix skeleton, zero LLM cost)
 
 > Basis: STVR (Software: Testing, Verification & Reliability) submission-
 > oriented optimization — reshape AITester from "show a tool" into "report
@@ -8330,7 +8342,7 @@ dimensions this batch)
   cosmic-ray install + version pinning (`requirements.lock`) +
   `experiments/ult_adapter.py` (`ult_bridge_plan.md` §4.2, P2-level).
 
-## [Unreleased] — 2026-10-12 spec_replace A/B first run + ULT benchmark wiring batch (three-arm exploratory experiment + official-repo erratum + loader format/field fixes + conversion script)
+### [Unreleased] — 2026-10-12 spec_replace A/B first run + ULT benchmark wiring batch (three-arm exploratory experiment + official-repo erratum + loader format/field fixes + conversion script)
 
 > Basis: `PHASE1_PRECHECK_2026-10-12.md` (Phase-1 pre-check: QuixBugs/ULT
 > data-source readiness, LLM credentials, n=41 power-analysis warning) +
@@ -8486,7 +8498,7 @@ dimensions this batch)
   no API key (DEEPSEEK_API_KEY not configured); logged for a subsequent
   batch.
 
-## [Unreleased] — 2026-10-12 P0-A-2 auditability-observability batch (spec_replace_applied tri-state field + key-set-isomorphism tests, +8 cases)
+### [Unreleased] — 2026-10-12 P0-A-2 auditability-observability batch (spec_replace_applied tri-state field + key-set-isomorphism tests, +8 cases)
 
 > Basis: `SPEC_REPLACE_AB_REPORT_2026-10-12.md` §5 recommendation — "before
 > scaling up, fix the spec_oracle_injected provenance field backfill so the
@@ -8530,7 +8542,7 @@ dimensions this batch)
   collected 5706 delta 3 = skipped 3 + xfailed 0 + slack 1, exactly within
   slack)
 
-## [Unreleased] — 2026-10-12 ULT M1-scoring normalization + spec_replace 87-scale expansion preregistration batch (bare-assertion wrapping into pytest functions + preregistration + 4-arm run script)
+### [Unreleased] — 2026-10-12 ULT M1-scoring normalization + spec_replace 87-scale expansion preregistration batch (bare-assertion wrapping into pytest functions + preregistration + 4-arm run script)
 
 > Basis: first-run report §5 recommendation — before scaling up, make
 > spec_replace auditable on real complex functions, and fix the ULT
@@ -8626,7 +8638,7 @@ dimensions this batch)
   conclusion requires a future supplement of 87 F2P-pairable tasks (e.g.
   expanding QuixBugs / BugsInPy).
 
-## [Unreleased] — 2026-10-12 independent-review optimization batch, final (SpecExpr v3 grammar + spec-first generation + mutation operators v3 + orchestration auto-search + decontamination + MTTR-A + observation-level compression)
+### [Unreleased] — 2026-10-12 independent-review optimization batch, final (SpecExpr v3 grammar + spec-first generation + mutation operators v3 + orchestration auto-search + decontamination + MTTR-A + observation-level compression)
 
 > Basis: `INDEPENDENT_REVIEW_2026-10-12.md` (root, independent review) §6
 > surpass-the-frontier paths P1/P2/P3/P4/P5 and §10 recommendation table
@@ -8898,7 +8910,7 @@ dimensions this batch)
   work only; the orchestration search lands primitives + stubbed evaluator
   test paths in this batch, burning no real LLM budget)
 
-## [Unreleased] — 2026-10-11 comprehensive-optimization batch #2 (run_with_timeout fully wired, orphan-subprocess surface cleared to zero)
+### [Unreleased] — 2026-10-11 comprehensive-optimization batch #2 (run_with_timeout fully wired, orphan-subprocess surface cleared to zero)
 
 > Basis: root cause of the 2026-10-09 post-batch hang incident (a grandchild process
 > holding the write end of a pipe → `communicate()` on a bare
@@ -9066,7 +9078,7 @@ dimensions this batch)
 - Gates: **18/19 green** (`check_swe_bench_pro_ready` remains a data-preflight entry point by design, not a code gate)
 - `--collect-only`: 5489 (identity 5485+3+1 holds)
 
-## [Unreleased] — 2026-10-11 comprehensive-optimization batch (gate wiring + test-artifact cleanup + workspace hygiene)
+### [Unreleased] — 2026-10-11 comprehensive-optimization batch (gate wiring + test-artifact cleanup + workspace hygiene)
 
 > Basis: leftovers from the same-day "independent-review landing batch" (OPTIMIZATION_LANDED_2026-10-11.md §5) + repo-wide health check.
 > This batch adds **no new feature** — it wires already-delivered-but-unwired assets into the formal gate defense and removes two test-collection artifacts.
@@ -9112,7 +9124,7 @@ dimensions this batch)
 - `ruff check .` clean; `ruff format --check .` 611 files formatted; `mypy src/ config.py` 0 errors (125 source files)
 - New tests: 0 (wiring and hygiene batch, no new functionality)
 
-## [Unreleased] — 2026-10-11 independent-review landing batch (P0 credibility fixes: gating prerequisite, dead code, statistical caliber, pipeline gate)
+### [Unreleased] — 2026-10-11 independent-review landing batch (P0 credibility fixes: gating prerequisite, dead code, statistical caliber, pipeline gate)
 
 > Basis: three independent reviews (`INDEPENDENT_AUDIT_2026-10-11.md` / `EXTERNAL_REVIEW_PACKAGE_AITester.md` / `CONSOLIDATED_REVIEW_AND_PLAN.md`, all at repo root, untracked).
 > The top priority of this batch is **not raising metrics but making experiments produce trustworthy data**: pin the model snapshot first, then fix the pipeline and dead code, then fix the statistical caliber.
@@ -9149,7 +9161,7 @@ dimensions this batch)
 - `ruff check` clean; `ruff format --check` 491 files formatted; `mypy src/ config.py` 0 errors (125 source files)
 - Live API check: `model_fingerprint` pins end-to-end with a reproducible probe hash
 
-## [Unreleased] — 2026-10-10 documentation-cleanup batch (outdated docs & orphaned reports removed + local document safety net)
+### [Unreleased] — 2026-10-10 documentation-cleanup batch (outdated docs & orphaned reports removed + local document safety net)
 
 ### Removed
 
@@ -9196,7 +9208,7 @@ dimensions this batch)
   must never be pushed** — the remote `1956178912/AITester` is public (GitHub API
   `"visibility": "public"`).
 
-## [Unreleased] — 2026-10-09 D1 fix + CI three-reds cleared
+### [Unreleased] — 2026-10-09 D1 fix + CI three-reds cleared
 
 ### Fixed
 
@@ -9261,7 +9273,7 @@ dimensions this batch)
   artifacts_tracked / lock_sync / dependency_exemptions / state_contract / tool_versions /
   credential_scrub) exit 0.
 
-## [Unreleased] — 2026-10-09 Batch R5 (2026 frontier-revised review + P0 execution + LLM endpoint consolidation)
+### [Unreleased] — 2026-10-09 Batch R5 (2026 frontier-revised review + P0 execution + LLM endpoint consolidation)
 
 > Follow-up to the 2026-10-09 revised review report (2026 frontier
 > evidence; the report file `docs/review/review_2026_10_09_revision.md`
@@ -9320,7 +9332,7 @@ dimensions this batch)
 > was in `docs/review/review_2026_10_09_revision.md` §12.1, deleted in the
 > 2026-10-09 cleanup batch; see the follow-up note above).
 
-## [Unreleased] — 2026-10-09 Batch R4 (counterexample-guided refinement loop + continued modularization + data-quality / contamination-control hardening)
+### [Unreleased] — 2026-10-09 Batch R4 (counterexample-guided refinement loop + continued modularization + data-quality / contamination-control hardening)
 
 > Landing items from the 4th systematic review (R4). All
 > additions are default-off, zero-LLM-cost, and offline unit-test verified;
@@ -9421,7 +9433,7 @@ dimensions this batch)
 > `docs/env_budget.yaml` and `docs/preregistration.{md,en.md}` synced in-tree;
 > BASELINE/README closed in this batch.
 
-## [Unreleased] — 2026-10-09 Batch R3 (bare-eval removal from spec_smt + nodes.py three-cluster split + PGH003 gate re-armed)
+### [Unreleased] — 2026-10-09 Batch R3 (bare-eval removal from spec_smt + nodes.py three-cluster split + PGH003 gate re-armed)
 
 > R3 review-landing items. All zero-LLM,
 > offline unit-test / replay verified; default behavior unchanged:
@@ -9461,7 +9473,7 @@ dimensions this batch)
 > Verified: mypy 114+ files repo-wide 0 errors; ruff clean; related suites —
 > spec 85 / graph 226 / embedding 118 — all pass.
 
-## [Unreleased] — 2026-10-08 Batch R2 (third measurement artifact root-fix + legacy-batch archival + external caliber v2 closure)
+### [Unreleased] — 2026-10-08 Batch R2 (third measurement artifact root-fix + legacy-batch archival + external caliber v2 closure)
 
 > R2 landing items from the 13th/14th review reports (all zero-LLM,
 > offline replay / unit-test verified; default behavior unchanged —
@@ -9505,7 +9517,7 @@ dimensions this batch)
 > LOCALIZED_EDIT_ENABLE / LOCALIZED_EDIT_WINDOW — not new switches); mypy
 > 113 source files 0; ruff 0.16.3 0 warnings.
 
-## [Unreleased] — 2026-10-07 Batch RepairEngine-XIV (external-report net-new harvest per ADR-0028: FL Top-k constraint gate + Self-Repair Trap observer + Frame Lifetime Trace design input)
+### [Unreleased] — 2026-10-07 Batch RepairEngine-XIV (external-report net-new harvest per ADR-0028: FL Top-k constraint gate + Self-Repair Trap observer + Frame Lifetime Trace design input)
 
 > Offline harvest of the five net-new items from the third external
 > frontier-alignment report's cross-evaluation (all zero-LLM,
@@ -9550,7 +9562,7 @@ dimensions this batch)
 > (+1 = src/tools/self_repair_trap.py); env budget unchanged at 168
 > (pure observability, zero new switches).
 
-## [Unreleased] — 2026-10-07 Batch RepairEngine-XIII (corrected-caliber re-estimation closure per ADR-0027: false_fix/CPR/abstention precision non-trivial for the first time + attribution confound check + external-doc errata)
+### [Unreleased] — 2026-10-07 Batch RepairEngine-XIII (corrected-caliber re-estimation closure per ADR-0027: false_fix/CPR/abstention precision non-trivial for the first time + attribution confound check + external-doc errata)
 
 > Executes ADR-0021's chained-errata obligations (all zero-LLM replay,
 > `make corrected-metrics`):
@@ -9595,7 +9607,7 @@ dimensions this batch)
 > - Full regression **4542 → 4555 passed / 0 failed** (+13 =
 >   tests/test_batch_xiii.py); ADR-0027 + index synced (next 0028).
 
-## [Unreleased] — 2026-10-07 Batches RepairEngine-VII–XII (17th-review alignment: repair=0 artifact fix + test-hacking guard + eval pass@k/cost/contamination + counterfactual FL upper bound + oracle context tier + interaction-centric attribution)
+### [Unreleased] — 2026-10-07 Batches RepairEngine-VII–XII (17th-review alignment: repair=0 artifact fix + test-hacking guard + eval pass@k/cost/contamination + counterfactual FL upper bound + oracle context tier + interaction-centric attribution)
 
 > Six batches landing every confirmed-effective increment from the 17th
 > review round (each with ADR + test locks; items ruled out for timing or
@@ -9649,7 +9661,7 @@ dimensions this batch)
 >   strip); ADR-0021–0026 + ADR-0017 revision-3 + index synced (next
 >   0027); env budget registered to 168.
 
-## [Unreleased] — 2026-10-07 Batch RepairEngine-VI (--staging-dir batch-run operations + make cpr-idr entry + stale R16-8 recalled)
+### [Unreleased] — 2026-10-07 Batch RepairEngine-VI (--staging-dir batch-run operations + make cpr-idr entry + stale R16-8 recalled)
 
 > Codifying the multi-seed sequential-run friction plus a verification-report
 > entry point:
@@ -9675,7 +9687,7 @@ dimensions this batch)
 >   tests/test_batch_vi.py: path validation / snapshot-diff staging /
 >   dual-exit wiring / Makefile target lock).
 
-## [Unreleased] — 2026-10-07 Batch RepairEngine-V (patch abstention gate observability layer per ADR-0020 + would-be abstention replay)
+### [Unreleased] — 2026-10-07 Batch RepairEngine-V (patch abstention gate observability layer per ADR-0020 + would-be abstention replay)
 
 > Verification-stage countermeasure (R16-4; IDR 27.78% — 72% of
 > plausible-but-wrong patches pass with zero negative signals, plus the
@@ -9708,7 +9720,7 @@ dimensions this batch)
 > - ADR-0020 + index sync (next 0021); full regression **4520 -> 4530
 >   passed / 0 failed** (+10 = tests/test_batch_v.py).
 
-## [Unreleased] — 2026-10-07 Batch RepairEngine-IV (deterministic-first repair routing per ADR-0019)
+### [Unreleased] — 2026-10-07 Batch RepairEngine-IV (deterministic-first repair routing per ADR-0019)
 
 > Second piece of the Phase-2 "synthesize" stage (landing R16-5; grounded in
 > PAGENT's targeted deterministic layer and To Run or Not to Run's
@@ -9736,7 +9748,7 @@ dimensions this batch)
 > - env budget 167->168; full regression **4502 -> 4520 passed / 0
 >   failed** (+18 = tests/test_batch_iv.py).
 
-## [Unreleased] — 2026-10-07 Batch RepairEngine-III (structured edit intents with deterministic landing per ADR-0018 + AC2 over-red regenerate counter fix)
+### [Unreleased] — 2026-10-07 Batch RepairEngine-III (structured edit intents with deterministic landing per ADR-0018 + AC2 over-red regenerate counter fix)
 
 > Phase-2 core (the "synthesize" stage of ADR-0017) + root-cause fix for
 > the E2 recursion-limit hits; first landing of ADR-0018:
@@ -9775,7 +9787,7 @@ dimensions this batch)
 >   syntax gate / pre-existing-syntax exemption / switch default / debug
 >   wiring four states / counter fix / state contract).
 
-## [Unreleased] — 2026-10-07 Batch RepairEngine-II (Top-3 ranked localization candidates + element-level Hit@3/MRR + offline CPR/IDR + citation verification)
+### [Unreleased] — 2026-10-07 Batch RepairEngine-II (Top-3 ranked localization candidates + element-level Hit@3/MRR + offline CPR/IDR + citation verification)
 
 > Driven by round-16 systematic review (~80 frontier references verified
 > online across 3 agents) and the user's three-phase quantified targets
@@ -9822,7 +9834,7 @@ dimensions this batch)
 > - Full regression **4453 -> 4478 passed / 0 failed** (+25 = 14 in
 >   test_fault_localizer.py ranking groups + 11 in test_cpr_idr_report.py).
 
-## [Unreleased] — 2026-10-07 Batch RepairEngine-I (paradigm pivot: standalone FaultLocalizer + localization as a first-class metric, first smoke passed)
+### [Unreleased] — 2026-10-07 Batch RepairEngine-I (paradigm pivot: standalone FaultLocalizer + localization as a first-class metric, first smoke passed)
 
 > User scope-level decision: "pivot to a repair engine now" (frontier
 > APR paradigm: localize → synthesize → verify; citation verification:
@@ -9858,7 +9870,7 @@ dimensions this batch)
 >   tests/test_fault_localizer.py: parse tolerance / gold function
 >   extraction / hit adjudication / switch default locks).
 
-## [Unreleased] — 2026-10-07 Batch E2-iter (three defect fixes as preconditions of the "exactly one" iteration: fl_at_k gold-diff alignment + recursion_limit 56 + mutation semantics classified)
+### [Unreleased] — 2026-10-07 Batch E2-iter (three defect fixes as preconditions of the "exactly one" iteration: fl_at_k gold-diff alignment + recursion_limit 56 + mutation semantics classified)
 
 > The user approved spending the pre-registered "exactly one" gate/
 > routing-fix iteration; this batch lands the iteration preconditions
@@ -9895,7 +9907,7 @@ dimensions this batch)
 > adjudication (this is the exactly-once iteration — no further
 > iterations regardless of outcome).
 
-## [Unreleased] — 2026-10-07 Batch E1-exec (E1 contract smoke passed the life-or-death gate + post-E1 recursion_limit cap fix)
+### [Unreleased] — 2026-10-07 Batch E1-exec (E1 contract smoke passed the life-or-death gate + post-E1 recursion_limit cap fix)
 
 > After the user renewed the model budget (DeepSeek V4.1 Flash) and
 > committed the seven pending batches at the terminal (059343f), E1 was
@@ -9929,7 +9941,7 @@ dimensions this batch)
 > path vs. run_main_batch's actual write path mismatch is resolved by
 > relocating the artifacts under experiments/results/.
 
-## [Unreleased] — 2026-10-07 Batch AT (Round-15 review continued V: full runtime self-check of make targets and workflows — zero-change pure verification; autonomous-optimization series closed)
+### [Unreleased] — 2026-10-07 Batch AT (Round-15 review continued V: full runtime self-check of make targets and workflows — zero-change pure verification; autonomous-optimization series closed)
 
 > The user's sixth "keep optimizing". **Zero code/artifact changes** in
 > this batch — pure runtime health verification; test count and gate
@@ -9952,7 +9964,7 @@ dimensions this batch)
 > batches / key rotation / E1 budget / E7 manual comparison / L2
 > license / pricing and authors).
 
-## [Unreleased] — 2026-10-07 Batch AS (Round-15 review continued IV: first end-to-end release-build verification + PEP 639 license modernization + make build-check)
+### [Unreleased] — 2026-10-07 Batch AS (Round-15 review continued IV: first end-to-end release-build verification + PEP 639 license modernization + make build-check)
 
 > The user's fifth "keep optimizing". All offline, zero LLM cost. Full
 > regression **4425 → 4429 passed / 0 failed** (+4 = tests/test_as_batch.py).
@@ -9989,7 +10001,7 @@ key rotation / minimal E1 budget approval / **E7 manual comparison
 (worksheet v2 ready)** / L2 license three-way decision / price-table completion +
 real CITATION authors.
 
-## [Unreleased] — 2026-10-07 Batch AR (Round-15 review continued III: hypothesis extras gap closed + README CI-matrix claim errata + prereg bilingual structure-parity lock)
+### [Unreleased] — 2026-10-07 Batch AR (Round-15 review continued III: hypothesis extras gap closed + README CI-matrix claim errata + prereg bilingual structure-parity lock)
 
 > Continuation batch III after the user's "keep optimizing". All offline,
 > zero LLM cost. Full regression **4420 → 4425 passed / 0 failed**
@@ -10029,7 +10041,7 @@ artifacts) / key rotation / minimal E1 budget approval / **E7 manual
 comparison (worksheet v2 ready)** / L2 license three-way decision /
 price-table completion + real CITATION authors.
 
-## [Unreleased] — 2026-10-07 Batch AQ (Round-15 review continued II: E7 worksheet v2 line-level diffs + E7 artifacts into the tracked-artifacts guard + survey packaging stale-conclusion errata)
+### [Unreleased] — 2026-10-07 Batch AQ (Round-15 review continued II: E7 worksheet v2 line-level diffs + E7 artifacts into the tracked-artifacts guard + survey packaging stale-conclusion errata)
 
 > Continuation batch II after the user's "keep optimizing". All offline,
 > zero LLM cost. Full regression **4415 → 4420 passed / 0 failed**
@@ -10072,7 +10084,7 @@ Terminal commits (AM+AN+AO+AP+AQ batches, including the two E7 artifacts)
 (worksheet v2 ready)** / L2 license three-way decision / price-table completion +
 real CITATION authors.
 
-## [Unreleased] — 2026-10-07 Batch AP (Round-15 review continued: E7 review worksheet generator + E6 extraction command verified end-to-end + B-05 checker indentation-blindspot fix + survey doc stale row updated)
+### [Unreleased] — 2026-10-07 Batch AP (Round-15 review continued: E7 review worksheet generator + E6 extraction command verified end-to-end + B-05 checker indentation-blindspot fix + survey doc stale row updated)
 
 > Continuation batch after the user's "keep optimizing". All offline, zero
 > LLM cost; paid experiments and user-owned items (commits/keys/licensing)
@@ -10120,7 +10132,7 @@ Terminal commits (AM+AN+AO+AP batches) / key rotation / minimal E1 budget
 approval / **E7 manual comparison (worksheet ready, ~1 person-day)** /
 L2 license three-way decision / price-table completion + real CITATION authors.
 
-## [Unreleased] — 2026-10-07 Batch AO (Round-15 review landing: E6 matched-cap source amendment + CI installs from lock + E7 candidate list generated + doc date sync)
+### [Unreleased] — 2026-10-07 Batch AO (Round-15 review landing: E6 matched-cap source amendment + CI installs from lock + E7 candidate list generated + doc date sync)
 
 > Autonomous items from the round-15 systematic review (independent re-verification
 > after batch AN: 4396 all green) are landed. All offline, zero LLM cost; paid
@@ -10184,7 +10196,7 @@ approval (≈0.1M tokens, the life-or-death gate of the logic-driven claim) /
 L2 license three-way decision (BugsInPy+TestGenEval) / price-table completion +
 real CITATION authors.
 
-## [Unreleased] — 2026-10-07 Batch AN (Round-14 review landing: presentation-only report additions — $/detection & test-suite reliability — + TestGenEval L2-candidate license registration + E1-fallback route skeleton + artifact hygiene)
+### [Unreleased] — 2026-10-07 Batch AN (Round-14 review landing: presentation-only report additions — $/detection & test-suite reliability — + TestGenEval L2-candidate license registration + E1-fallback route skeleton + artifact hygiene)
 
 > Five self-executable items from the Round-14 systematic review (which
 > independently re-verified the 4374-green AM state) landed. All offline,
@@ -10245,7 +10257,7 @@ real CITATION authors.
   by this batch as explicitly-marked "补记" (sourced from the authoritative
   CHANGELOG record, without reconstructing the decision process).
 
-## [Unreleased] — 2026-10-06 Batch AM (Round-13 review continuation: E6 run precondition `--per-task-token-caps` implemented end-to-end + prereg ready commands)
+### [Unreleased] — 2026-10-06 Batch AM (Round-13 review continuation: E6 run precondition `--per-task-token-caps` implemented end-to-end + prereg ready commands)
 
 > The last engineering precondition for pre-registered E6 (budget-matched
 > four arms) is in place: flag, injection, observability, plumbing, and
@@ -10291,7 +10303,7 @@ real CITATION authors.
   crypto use — noted in comments in cost_budget /
   repair_sample_selection).
 
-## [Unreleased] — 2026-10-06 Batch AL (Round-13 review: red-line-guard erratum restored to green + external positioning de-emphasizes the self-repair claim + E6/E7 pre-registration + E7 sampling script)
+### [Unreleased] — 2026-10-06 Batch AL (Round-13 review: red-line-guard erratum restored to green + external positioning de-emphasizes the self-repair claim + E6/E7 pre-registration + E7 sampling script)
 
 > **Erratum (AL1)**: the AK batch claim "4327 passed / 0 failed" did not
 > hold — after the AK annotation landed, the working tree measured 4326
@@ -10343,7 +10355,7 @@ real CITATION authors.
   user's terminal commit and real author info); AL2 commit / AL3 key
   rotation / AL4 E1 execution remain with the user (budget + terminal).
 
-## [Unreleased] — 2026-10-06 Batch AK (Round-12 review: repair-ceiling attribution + provenance erratum + sensitivity bounds + price/guard wiring)
+### [Unreleased] — 2026-10-06 Batch AK (Round-12 review: repair-ceiling attribution + provenance erratum + sensitivity bounds + price/guard wiring)
 
 > All four items landed offline at zero LLM cost: repair=0 gets its first
 > funnel-level attribution (patch produced 94% / plausible 47% / correct 0
@@ -10397,7 +10409,7 @@ real CITATION authors.
   scripts' own claims — now steps in the ci.yml test job + `make gates`;
   Makefile gains state-contract / tool-versions targets.
 
-## [Unreleased] — 2026-10-06 Batch AJ (E4 data precondition complete + all three experiments ready-to-run)
+### [Unreleased] — 2026-10-06 Batch AJ (E4 data precondition complete + all three experiments ready-to-run)
 
 > E4's data precondition is complete at zero cost: QuixBugs (MIT) cloned
 > into data/ (gitignored) with a zero-LLM loader smoke. Execution commands
@@ -10426,7 +10438,7 @@ real CITATION authors.
   `--allow-dirty` red line (line-level prohibitive-context check), and
   data/ gitignore isolation.
 
-## [Unreleased] — 2026-10-06 Batch AI (logic-profile omission audit: FL spectral added — root cause of fl_at_k 0/87)
+### [Unreleased] — 2026-10-06 Batch AI (logic-profile omission audit: FL spectral added — root cause of fl_at_k 0/87)
 
 > Evidence-driven: the ab1_validation provenance env snapshot
 > (`FL_SPECTRAL_ENABLE=None`) and the lifespan experiment's all-empty
@@ -10456,7 +10468,7 @@ real CITATION authors.
   `AGENT_TELEMETRY_ENABLE` is deliberately absent (MAST is covered by the
   AG1 offline analysis, avoiding a runtime double basis).
 
-## [Unreleased] — 2026-10-06 Batch AH (experiment preconditions closed out: upstream licenses verified + E1 ready-to-run commands preset)
+### [Unreleased] — 2026-10-06 Batch AH (experiment preconditions closed out: upstream licenses verified + E1 ready-to-run commands preset)
 
 > A pure verification-and-docs batch (zero API / zero behavior change, test
 > count unchanged): the E1 rerun is gated by the pre-registration's own rule
@@ -10489,7 +10501,7 @@ real CITATION authors.
   added to .gitignore; the paper skeleton (.private) updated with the MAST
   distribution evidence and the BugsInPy license gate.
 
-## [Unreleased] — 2026-10-06 Batch AG (telemetry flatten fix + MAST trace distribution analysis)
+### [Unreleased] — 2026-10-06 Batch AG (telemetry flatten fix + MAST trace distribution analysis)
 
 > A zero-API-cost batch: offline MAST failure-mode aggregation over the
 > 963 existing traces of the lifespan experiment, which surfaced and fixed
@@ -10524,7 +10536,7 @@ real CITATION authors.
   error_category emitted), not zero failures; SHA256SUMS refreshed
   (971→972).
 
-## [Unreleased] — 2026-10-06 Batch AF (Round-11 second pass: two stale findings corrected + N12 blocker registered + leak-channel invariant locked)
+### [Unreleased] — 2026-10-06 Batch AF (Round-11 second pass: two stale findings corrected + N12 blocker registered + leak-channel invariant locked)
 
 > A verification-driven batch: Round-11 items N10/N11 were verified by code
 > reading to be **already satisfied by existing batches** (P1-7 lock
@@ -10575,7 +10587,7 @@ real CITATION authors.
   registration and this test (prevents silent drift of the "leak-channel
   status" registration).
 
-## [Unreleased] — 2026-10-06 Batch AE (Round-11 review: pre-registration document + $/task cost basis + trace-residue cleanup + paper skeleton)
+### [Unreleased] — 2026-10-06 Batch AE (Round-11 review: pre-registration document + $/task cost basis + trace-residue cleanup + paper skeleton)
 
 > Closing the autonomously executable items of the Round-11 systematic
 > review (full state re-verification after the AC/AD batches + refreshed
@@ -10625,7 +10637,7 @@ real CITATION authors.
   framework; placed under .private/ per the privacy-isolation convention
   (paper material never pushed to GitHub).
 
-## [Unreleased] — 2026-10-06 Output-cost control batch AD (LLM thinking governance: output token cost ↓ 1-2 orders of magnitude)
+### [Unreleased] — 2026-10-06 Output-cost control batch AD (LLM thinking governance: output token cost ↓ 1-2 orders of magnitude)
 
 > Diagnostic fix following the R-P0-2 lifespan experiment and its API
 > billing: of the 12.13M tokens used on 2026-10-06, **output was 10.05M
@@ -10674,7 +10686,7 @@ real CITATION authors.
   `LLM_REASONING_EFFORT=low` (official tier) as a compromise, or enable
   it for the aitester arm only and annotate the per-arm cost.
 
-## [Unreleased] — 2026-10-06 Round-10 review batch AC (spec contract fix + detection-first double gates + orchestration repositioning + cluster-robust statistics)
+### [Unreleased] — 2026-10-06 Round-10 review batch AC (spec contract fix + detection-first double gates + orchestration repositioning + cluster-robust statistics)
 
 > Four items landed from the R-P0-2 pooled report
 > (statistical_report_3seed_pooled.md) and the round-10 systematic review
@@ -10762,7 +10774,7 @@ real CITATION authors.
   .mimosa runtime state (hook-state/hook-status carry session IDs;
   untracking the 4 tracked files awaits a terminal commit).
 
-## [Unreleased] — 2026-10-06 Life-or-death experiment root-cause fix batch AB (M10 degraded exit + provenance/row-level observability + seed-pooled statistics)
+### [Unreleased] — 2026-10-06 Life-or-death experiment root-cause fix batch AB (M10 degraded exit + provenance/row-level observability + seed-pooled statistics)
 
 > Fixes for three root-cause/observability gaps found in the R-P0-2
 > life-or-death experiment (n=87 × 3 arms × 3 seeds; full artifacts in
@@ -10818,7 +10830,7 @@ real CITATION authors.
   two mechanism channels (88 over-red rows failing F2P, 28 rows whose repair
   loop erased the red) plus the M10 task-kill (fixed by AB1).
 
-## [Unreleased] — 2026-10-06 Main-batch runner passthrough (life-or-death experiment prerequisite)
+### [Unreleased] — 2026-10-06 Main-batch runner passthrough (life-or-death experiment prerequisite)
 
 > Prerequisite change before launching the preregistered experiment (R-P0-2:
 > strong model × three arms × 3 seeds × n=87): run_main_batch now passes
@@ -10836,7 +10848,7 @@ real CITATION authors.
   hard gate + temp=0 deterministic protocol + R14 stats whitelist, without
   bypassing to run_benchmark directly and losing the reproducibility gates.
 
-## [Unreleased] — 2026-10-06 Code optimization batch AA (review follow-ups: detection-first in logic profile + synthetic sampling cap + doc matrix guard)
+### [Unreleased] — 2026-10-06 Code optimization batch AA (review follow-ups: detection-first in logic profile + synthetic sampling cap + doc matrix guard)
 
 > Source: three "no-budget / non-destructive" code optimizations from the
 > 2026-10-06 systematic review report (R-P0-3 residual gap / R-P0-4a / R-P2-5).
@@ -10883,7 +10895,7 @@ real CITATION authors.
   5 cases in test_patch_rollback / test_planner (env leakage is a cross-test
   pollution vector under xdist).
 
-## [Unreleased] — 2026-10-06 Optimization batch Z (eighth independent systematic review: four code-level fixes + statistical methodology + doc-governance expansion + engineering entry points)
+### [Unreleased] — 2026-10-06 Optimization batch Z (eighth independent systematic review: four code-level fixes + statistical methodology + doc-governance expansion + engineering entry points)
 
 > This review round (2026-10-06, fully independent: working-tree file reads + external
 > literature scan) concluded: evaluation honesty and engineering discipline are on par,
@@ -10972,7 +10984,7 @@ real CITATION authors.
   destructive); ADR-0016 "demote multi-agent to an ablation dimension" positioning
   decision.
 
-## [Unreleased] — 2026-10-06 Optimization batch Y (post-X real-LLM smoke follow-ups: three-valued detection-first terminal status + regeneration-count passthrough + MAST alignment + README slimming)
+### [Unreleased] — 2026-10-06 Optimization batch Y (post-X real-LLM smoke follow-ups: three-valued detection-first terminal status + regeneration-count passthrough + MAST alignment + README slimming)
 
 > A **real-LLM end-to-end smoke** of the X-batch chain (examples/
 > calculator_divide, plain_llm_df baseline) using live free-tier models
@@ -11025,7 +11037,7 @@ real CITATION authors.
   CHANGELOG); "Recent Changes" row updated to batches X/Y in both
   languages.
 
-## [Unreleased] — 2026-10-05 Optimization batch X (seventh independent systematic review: reproducibility mechanics + attribution baseline + statistics scope + repo guard + switch freeze)
+### [Unreleased] — 2026-10-05 Optimization batch X (seventh independent systematic review: reproducibility mechanics + attribution baseline + statistics scope + repo guard + switch freeze)
 
 > Executable items from the same-day seventh independent full review
 > (ignoring prior reviews; subagent quota exhausted, main-session direct
@@ -11110,7 +11122,7 @@ real CITATION authors.
   tests/test_2026_10_05_n_batch.py gained a non-None detection_rate field
   (under the new scope, fixtures without the field would be filtered).
 
-## [Unreleased] — 2026-10-05 Optimization batch W (fourth independent systematic review: detection-first protocol + baseline sanity fix + real-bug loaders + ratchet + security docs)
+### [Unreleased] — 2026-10-05 Optimization batch W (fourth independent systematic review: detection-first protocol + baseline sanity fix + real-bug loaders + ratchet + security docs)
 
 > Executable items from the same-day fourth independent systematic review
 > (3 parallel deep audits + literature verification, ignoring prior reviews).
@@ -11183,7 +11195,7 @@ real CITATION authors.
   `--enable-rag` / `--multi-candidate` opt in (--no-* flags kept as no-op
   compatibility); README descriptions updated in both languages.
 
-## [Unreleased] — 2026-10-05 Optimization batch V (third independent review: scientific fixes + experiment infrastructure + template expansion + hardening)
+### [Unreleased] — 2026-10-05 Optimization batch V (third independent review: scientific fixes + experiment infrastructure + template expansion + hardening)
 
 > Executable items from the same-day **third fully independent systematic
 > review** (four parallel deep audits of src pipeline / experiment methodology /
@@ -11257,7 +11269,7 @@ real CITATION authors.
   gate green); bilingual-doc / baseline-numbers / citations / artifact SHA256
   guards all green.
 
-## [Unreleased] — 2026-10-05 Optimization Batch U (Independent Systematic Review Landing: Evidence Chain VCS + Zero-Assertion Cleanup + Concurrency & Atomicity + Budget Layer Sink + Terminal Failure Taxonomy)
+### [Unreleased] — 2026-10-05 Optimization Batch U (Independent Systematic Review Landing: Evidence Chain VCS + Zero-Assertion Cleanup + Concurrency & Atomicity + Budget Layer Sink + Terminal Failure Taxonomy)
 
 > Second same-day **independent systematic review** (13-section report: frontier
 > baseline comparison + Python/domain-specific diagnosis) executable items.
@@ -11353,7 +11365,7 @@ real CITATION authors.
   percentages had drifted from reality, e.g. base_agent 100% vs measured 70);
   guard adds a `module.py (N%)` pattern to prevent re-inlining.
 
-## [Unreleased] — 2026-10-05 Optimization batch T (independent systematic review follow-up: SMT witness layer + property tests + citation/artifact guards + 0/20 root-cause analysis, default behavior unchanged)
+### [Unreleased] — 2026-10-05 Optimization batch T (independent systematic review follow-up: SMT witness layer + property tests + citation/artifact guards + 0/20 root-cause analysis, default behavior unchanged)
 
 > Landing of the executable items from the same-day **independent full review**
 > (no reuse of prior batch conclusions; all evidence re-collected). The review
@@ -11422,7 +11434,7 @@ real CITATION authors.
   config.py but drifted from docs), `SPEC_SMT_*` flag docs, and the new
   MUTATION_MAX_MUTANTS default note.
 
-## [Unreleased] — 2026-10-05 Review-fix batch S (FL localization repair + guard bypass sealing + transactional rollback + accounting propagation + memory verification gate)
+### [Unreleased] — 2026-10-05 Review-fix batch S (FL localization repair + guard bypass sealing + transactional rollback + accounting propagation + memory verification gate)
 
 > Direct fixes for P0/P1 findings from the same-day systematic review (C3/C4/C6/C8/C10/W12 + O1/O6/C7).
 > No new default-switch behavior (per ADR-0003; `AITESTER_PROFILE=logic` is an explicit opt-in preset);
@@ -11457,7 +11469,7 @@ real CITATION authors.
 
 - New `tests/test_2026_10_05_review_fixes_batch.py` (21 cases: C6a restored_out ×3 + W12 fail-closed ×2 + C6b A-03 node-level disk restore ×3 + C8 accounting propagation ×5 + C10 verification gate ×5 + O1 logic preset ×2 + executor wiring lock ×1); `test_fl_spectral.py` reworked (+6: classic-formula direction lock / per-context counting / end-to-end discrimination / all-passed junit degradation); `test_patch_applier_dynamic_bypass.py` +8 (four from-import alias forms / diff not flagging pre-existing calls / safe imports not over-flagged); `test_packaging.py` +1 (extras guard); `test_workflow_extended.py::test_debugger_rag_ingestion` rewritten for the C10 policy (add_repair must not be called directly in the debugger node).
 
-## [Unreleased] — 2026-10-05 Re-audit batch N (measurement honesty + latent R-batch CI gate repairs + packaging drift guard)
+### [Unreleased] — 2026-10-05 Re-audit batch N (measurement honesty + latent R-batch CI gate repairs + packaging drift guard)
 
 > Follow-up audit of the same-day R1–R18 batch: **measurement-honesty fixes**
 > (N5/N7/N10) + **two latent CI-breaking gate issues left by the R batch**
@@ -11489,7 +11501,7 @@ real CITATION authors.
 
 - Added `tests/test_2026_10_05_n_batch.py` (6 cases: N5 mtime dedup ×2 + N7 contamination not_applicable ×4) and a drift guard case in `tests/test_packaging.py`; updated contamination assertions in `test_run_benchmark` / `test_roadmap_13_22_21_mypy_5` ("low" → "not_applicable"; the golden-positive "high" assertion is unchanged).
 
-## [Unreleased] — 2026-10-05 Review-optimization batch R1–R18 (spec-oracle execution wiring + complete statistical reports + mutation detection + CI hardening, default behavior unchanged)
+### [Unreleased] — 2026-10-05 Review-optimization batch R1–R18 (spec-oracle execution wiring + complete statistical reports + mutation detection + CI hardening, default behavior unchanged)
 
 > First landing batch of the 2026-10-05 systematic review (recommendations
 > R1–R18): **scientific-core fixes + evaluation-pipeline completeness +
@@ -11575,7 +11587,7 @@ real CITATION authors.
 > `tests/test_r5_mutation_detection.py` (19); two legacy cases in
 > `tests/test_spec_ir_branches.py` updated to the fixed semantics.
 
-## [Unreleased] — 2026-10-04 Optimization batch, continuation 4 (P0-4 kernel-sandbox enabled-path self-verification + P2 injection-warning closed loop into the LLM query + threat-model update, default behavior unchanged)
+### [Unreleased] — 2026-10-04 Optimization batch, continuation 4 (P0-4 kernel-sandbox enabled-path self-verification + P2 injection-warning closed loop into the LLM query + threat-model update, default behavior unchanged)
 
 > Fourth self-verifiable batch after the 2026-10-04 systematic review (following
 > continuation 3's P2 injection benchmark + P1-1 embedding hook); all changes
@@ -11616,7 +11628,7 @@ real CITATION authors.
 > - **Verification**: full suite 3870 passed + ruff/mypy/check_lock_sync/
 >   check_branch_coverage/check_baseline_numbers/check_bilingual_docs all green.
 
-## [Unreleased] — 2026-10-04 Optimization batch, continuation 3 (P2 injection-scan regression benchmark + P1-1 contamination-embedding hook + injection_findings state wiring, default behavior unchanged)
+### [Unreleased] — 2026-10-04 Optimization batch, continuation 3 (P2 injection-scan regression benchmark + P1-1 contamination-embedding hook + injection_findings state wiring, default behavior unchanged)
 
 > Third self-verifiable batch after the 2026-10-04 systematic review; full
 > regression **3815 → 3862 passed / 0 failed** (+47 new cases), ruff 0
@@ -11643,7 +11655,7 @@ real CITATION authors.
 >   embedding boundaries (empty text → None), and cosine edge cases;
 > - **Verification**: full suite 3862 passed + all gates green.
 
-## [Unreleased] — 2026-10-04 Optimization batch, continuation 2 (P2-1 OTel exporter + P2-2 expert-pool dimension conditioning + P2-3 strategy-bank outcome accumulation + bilingual threat model, default behavior unchanged)
+### [Unreleased] — 2026-10-04 Optimization batch, continuation 2 (P2-1 OTel exporter + P2-2 expert-pool dimension conditioning + P2-3 strategy-bank outcome accumulation + bilingual threat model, default behavior unchanged)
 
 > Second self-verifiable batch after the 2026-10-04 systematic review; full
 > regression **3797 → 3815 passed / 0 failed** (+18 new cases), ruff 0
@@ -11677,7 +11689,7 @@ real CITATION authors.
 > - **Doc sync**: BASELINE.yaml (3815 / 88% / 83% / 96 files); `.env.example`
 >   gains `EXPERT_POOL_CATEGORY_CONDITIONED`.
 
-## [Unreleased] — 2026-10-04 Optimization batch, continuation (P2-5 kernel-sandbox venv-chain wiring + P0-4 gap closed, default behavior unchanged)
+### [Unreleased] — 2026-10-04 Optimization batch, continuation (P2-5 kernel-sandbox venv-chain wiring + P0-4 gap closed, default behavior unchanged)
 
 > Continuation of the first 2026-10-04 batch; closes the **P0-4 gap** logged
 > in the threat model (the kernel sandbox was wired only into the local chain
@@ -11704,7 +11716,7 @@ real CITATION authors.
 > Verification: +4 cases + full regression zero failures + ruff 0 warnings
 > (mypy clean on 95 files, CI caliber).
 
-## [Unreleased] — 2026-10-04 Optimization batch (P2-7 oracle-less wiring + P2-4 stall detection + P2-5 dependency grouping + P1 Dockerized repro + threat-model doc, default behavior unchanged)
+### [Unreleased] — 2026-10-04 Optimization batch (P2-7 oracle-less wiring + P2-4 stall detection + P2-5 dependency grouping + P1 Dockerized repro + threat-model doc, default behavior unchanged)
 
 > First low-risk self-verifiable batch after the 2026-10-04 systematic review
 > (P0 strong-model evidence items deferred — they need API budget); full
@@ -11744,7 +11756,7 @@ real CITATION authors.
 >
 > Verification: full suite 3793 passed + all gates green.
 
-## [Unreleased] — 2026-10-02 Continue-optimization batches 7–14 (pure-logic / mock-isolated branch coverage + two real defect fixes, default behavior unchanged)
+### [Unreleased] — 2026-10-02 Continue-optimization batches 7–14 (pure-logic / mock-isolated branch coverage + two real defect fixes, default behavior unchanged)
 
 > Eight batches cumulative (2026-10-02), focused on pure-logic / mock-isolated
 > branch coverage across 18 low-coverage modules (zero LLM / zero network /
@@ -11779,7 +11791,7 @@ real CITATION authors.
 >   gate 77% green; `check_baseline` / `check_baseline_numbers` /
 >   `check_branch_coverage` / ruff / mypy all green.
 
-## [Unreleased] — 2026-09-30 Full review & optimization round (O32–O34: static-gate expansion + security-audit widening + CI real-gating fixes)
+### [Unreleased] — 2026-09-30 Full review & optimization round (O32–O34: static-gate expansion + security-audit widening + CI real-gating fixes)
 
 > An independent "full review + optimization" round (prior review records ignored,
 > audited from scratch) targeting four classes of engineering-quality issues:
@@ -11858,7 +11870,7 @@ real CITATION authors.
 > `raise e` change only affects the edge path of "calling the handler directly with
 > fallback disabled" (semantically equivalent inside the production `call()` chain).
 
-## [Unreleased] - 2026-10-02 Review/Optimization Round (CI branch-coverage gate back to green + secret-guard self-lock fix + three real defects + tautological-assert purge)
+### [Unreleased] - 2026-10-02 Review/Optimization Round (CI branch-coverage gate back to green + secret-guard self-lock fix + three real defects + tautological-assert purge)
 
 > This round is a "review + optimize" pass: after a full baseline re-check it
 > fixes **CI going red** (`scripts/check_branch_coverage.py` threshold 77% vs
@@ -11935,7 +11947,7 @@ real CITATION authors.
 >   `test_logic_spec_type_repair_branches` + assertion tightening in existing
 >   test files.
 
-## [Unreleased] - 2026-10-01 Comprehensive Review Batch (P0 secret-leak guard + P1/P2 defect fixes + doc/baseline sync)
+### [Unreleased] - 2026-10-01 Comprehensive Review Batch (P0 secret-leak guard + P1/P2 defect fixes + doc/baseline sync)
 
 > This batch lands the fixes from a full-repo comprehensive code review
 > (6-module parallel subagent cross-validation + Lead re-verification).
@@ -12054,7 +12066,7 @@ real CITATION authors.
 > across the repo (incl. ruff format on the 9 files touched this batch),
 > mypy 86 files 0 errors.
 
-## [Unreleased] - 2026-10-01 Comprehensive Review Batch (P0 secret-leak guard + P1/P2 defect fixes + doc/baseline sync)
+### [Unreleased] - 2026-10-01 Comprehensive Review Batch (P0 secret-leak guard + P1/P2 defect fixes + doc/baseline sync)
 
 > **Language**: [简体中文](CHANGELOG.md) — see the corresponding entry in the Chinese changelog for the full detail; this entry mirrors its structure.
 
@@ -12169,7 +12181,7 @@ real CITATION authors.
 > across the repo (incl. ruff format on the 9 files touched this batch),
 > mypy 86 files 0 errors.
 
-## [Unreleased] — 2026-09-29 P0/P1/P2 gap-execution batch (G8 full-stack retest + default-off capability verification + doc consistency)
+### [Unreleased] — 2026-09-29 P0/P1/P2 gap-execution batch (G8 full-stack retest + default-off capability verification + doc consistency)
 
 > Executes the P0/P1/P2 items of the gap list in
 > `docs/gap_report_2026-09-28_frontier_recommendations.md` §9, default
@@ -12225,7 +12237,7 @@ real CITATION authors.
 >   repair only); full-suite / ruff / mypy baselines unchanged (2418 tests /
 >   ruff 0 warnings repo-wide / coverage 94%).
 
-## [Unreleased] - 2026-09-28 Gap-closure A/B batch (position-aware / RAG / cross-file experiments + dead-loop fix + cross-file scaffold)
+### [Unreleased] - 2026-09-28 Gap-closure A/B batch (position-aware / RAG / cross-file experiments + dead-loop fix + cross-file scaffold)
 
 > This batch closes the paper-experiment evidence gaps (three A/B contrasts:
 > position-aware / RAG / cross-file) and fixes two real defects surfaced while
@@ -12266,7 +12278,7 @@ real CITATION authors.
 >   T4). All data are free-tier small model + synthetic + seed=42, reproducible.
 > - Full suite of 2418 tests passes / zero regression.
 
-## [Unreleased] - 2026-09-29 Review/optimization round (project audit: P0 runtime-probe defect fix + test-suite 0 warnings)
+### [Unreleased] - 2026-09-29 Review/optimization round (project audit: P0 runtime-probe defect fix + test-suite 0 warnings)
 
 > This round is a full-project audit (static checks + test warnings +
 > core-module code walk) repair batch. **Default behavior unchanged**
@@ -12329,7 +12341,7 @@ real CITATION authors.
 >   `BASELINE.yaml` refreshed (total_passed 2502 → 2538;
 >   line_total_pct note 0.8665).
 
-## [Unreleased] - 2026-09-28 Frontier-recommendation batch (gap_report P0/P1/P2 gaps G1–G8 fully landed, default behavior unchanged + new capabilities all behind independent switches)
+### [Unreleased] - 2026-09-28 Frontier-recommendation batch (gap_report P0/P1/P2 gaps G1–G8 fully landed, default behavior unchanged + new capabilities all behind independent switches)
 
 > This batch is based on the G1–G8 gaps in
 > `docs/gap_report_2026-09-28_frontier_recommendations.md` plus the
@@ -12458,7 +12470,7 @@ real CITATION authors.
 > - `tests/test_experiments_ab_scaffolds.py` (12 cases: A/B contrast
 >   aggregation + full-stack summary verdict + seven-switch injection).
 
-## [Unreleased] - 2026-09-28 Optimization round (Agent instance-reuse cache + LLM-client hot-path memoization, default behavior unchanged)
+### [Unreleased] - 2026-09-28 Optimization round (Agent instance-reuse cache + LLM-client hot-path memoization, default behavior unchanged)
 
 > Performance-optimization batch following a code review. **Default behavior
 > unchanged** (all new capabilities behind independent switches; when
@@ -12521,7 +12533,7 @@ real CITATION authors.
 >   passed / 0 failed (ruff 0 warnings / mypy 0 errors, 81 source
 >   files).
 
-## [Unreleased] - 2026-09-29 Improvement batch (cache isolation / injection defense / explainability / deterministic guard / rogue-agent monitoring / keyword fallback)
+### [Unreleased] - 2026-09-29 Improvement batch (cache isolation / injection defense / explainability / deterministic guard / rogue-agent monitoring / keyword fallback)
 
 > Systemic improvements grounded in 2026 industry data
 > (Clinejection, KeyPooling, LiteLLM CVE-2026-89032, Spring AI
@@ -12619,7 +12631,7 @@ real CITATION authors.
 >     resolution → prevention four-section troubleshooting manual);
 >   - `CHANGELOG.md` batch record.
 
-## [Unreleased] - 2026-09-28 Improvement checklist landing batch (health-check concurrency / CI 3.13 / docs alignment / multi-process cache notes / D-rules staged roadmap, default behavior unchanged)
+### [Unreleased] - 2026-09-28 Improvement checklist landing batch (health-check concurrency / CI 3.13 / docs alignment / multi-process cache notes / D-rules staged roadmap, default behavior unchanged)
 
 > This batch verifies and lands the actionable items from the
 > improvement checklist (core algorithm / engineering practice /
@@ -12740,7 +12752,7 @@ real CITATION authors.
 > Full test suite passing (2 new cases) / ruff 0 warnings / mypy 0
 > errors.
 
-## [Unreleased] - 2026-09-28 Improvement batch extension (CFG control-flow analysis / event bus / trace visualization / ADR / bilingual-sync check / CLI enhancement, default behavior unchanged)
+### [Unreleased] - 2026-09-28 Improvement batch extension (CFG control-flow analysis / event bus / trace visualization / ADR / bilingual-sync check / CLI enhancement, default behavior unchanged)
 
 > This batch advances P2/P3 improvement items, **default behavior
 > unchanged**:
@@ -12786,7 +12798,7 @@ real CITATION authors.
 > tests passing (previously 2008, +36) / ruff repo-wide 0 warnings /
 > mypy 70 source files 0 errors.
 
-## [Unreleased] - 2026-09-28 P0/P1 improvement batch (post-processing layer / strategy mapping / budget caps / semantic cache / smoke script, default behavior unchanged)
+### [Unreleased] - 2026-09-28 P0/P1 improvement batch (post-processing layer / strategy mapping / budget caps / semantic cache / smoke script, default behavior unchanged)
 
 > This batch lands five P0/P1 improvement items. **Default behavior
 > unchanged** (all new capabilities behind independent env-var
@@ -12861,7 +12873,7 @@ real CITATION authors.
 > coverage 88% (TOTAL; new modules: patch_postprocess 92% /
 > cost_budget 93% / semantic_cache 90% / error_classifier 94%).
 
-## [Unreleased] - 2026-09-28 Improvement checklist full batch (P0/P1/P2/P3, default behavior unchanged, new capabilities all behind independent switches)
+### [Unreleased] - 2026-09-28 Improvement checklist full batch (P0/P1/P2/P3, default behavior unchanged, new capabilities all behind independent switches)
 
 > This batch implements the user-submitted 24-item improvement checklist
 > (across 7 dimensions: architecture/algorithm, engineering practice, test
@@ -12958,7 +12970,7 @@ real CITATION authors.
 > `test_smoke_llm.py` (11) / `test_branch_coverage_gates.py` (26) /
 > `test_check_baseline_numbers.py` (7).
 
-## [Unreleased] - 2026-09-28 Improvement checklist batch (doc consistency / infra / eval / observability / security, default behavior unchanged)
+### [Unreleased] - 2026-09-28 Improvement checklist batch (doc consistency / infra / eval / observability / security, default behavior unchanged)
 
 > This batch implements the user-submitted improvement checklist
 > (doc consistency / infra / core algorithm / UX / eval / security /
@@ -13065,7 +13077,7 @@ real CITATION authors.
 > (`**kwargs` passthrough) on `_run_single_task`. Full test suite
 > passing / ruff 0 / mypy 0.
 
-## [Unreleased] - 2026-09-27 Roadmap gap-closing batch (SWE-bench Pro / CodeBERT / pyright, default behavior unchanged)
+### [Unreleased] - 2026-09-27 Roadmap gap-closing batch (SWE-bench Pro / CodeBERT / pyright, default behavior unchanged)
 
 > This batch closes the 3 remaining roadmap gaps identified after the
 > 2026-09-27 Round 11 audit, **default behavior unchanged** (new
@@ -13136,7 +13148,7 @@ real CITATION authors.
   convention when pyright is unavailable, and degrades to the ast
   static layer on all failure paths.
 
-## [Unreleased] - 2026-09-27 Round 11: Error classification 16→17 + 2.2 patch resample + 1.3 downgrade-chain propagation + V contamination detection + 2.1 mypy static layer (default behavior unchanged)
+### [Unreleased] - 2026-09-27 Round 11: Error classification 16→17 + 2.2 patch resample + 1.3 downgrade-chain propagation + V contamination detection + 2.1 mypy static layer (default behavior unchanged)
 
 > This batch follows the 2026-09-27 Round 10 full-project audit
 > (commit `a1a06ec`). It contains 6 directions of feature enhancements
@@ -13248,7 +13260,7 @@ real CITATION authors.
 - Whole-repo ruff 8 lint issues + mypy 12 type errors zeroed (64
   source files).
 
-## [Unreleased] - 2026-09-27 Ninth-batch parallel subagent deep-audit + Tenth-batch full-project P1/P2 convergence (default behavior unchanged)
+### [Unreleased] - 2026-09-27 Ninth-batch parallel subagent deep-audit + Tenth-batch full-project P1/P2 convergence (default behavior unchanged)
 
 > This round follows the 2026-09-26 six-batch full audit (commit `9526fd0`),
 > consolidating a conservative-optimization batch driven by 4 parallel subagents
@@ -13364,7 +13376,7 @@ real CITATION authors.
 
 ---
 
-## [Unreleased] - Full-audit & conservative-optimization round (2026-09-26: static-check zeroing + dead-code removal + thread hygiene + project hygiene + perf / correctness hardening + CF-3 cross-file repair defect fix + fifth-batch P0: mutation-test judging / API-poll reproducibility / atomic cache writes / single-agent baseline write guard + state schema + sixth-batch node-layer routing semantics & robustness + seventh-batch hot-path deep scan: AST-parse reuse / O(1) task index + shared combined text + precompiled keyword regex + eighth-batch closing audit: lint/format zeroing + type-repair contract-reference caliber + state-key propagation + example-file fixes + ninth-batch parallel subagent deep audit: difficulty_level normalization + _should_debug branch order + half-open probe double-count + async def patches + executor_repo temp-file race + tenth-batch repo-wide P1/P2 convergence: JSON leaf-fallback semantic regression + routing branch masking + full-file patch silent fallback + venv cache marker asymmetry + timeout leak + line-number offset + TOCTOU race + eleventh-batch legacy-debt convergence: cost_weight registration ordering + async safety-check rejection + 6 dead-code / ghost-config / thread-race items landed)
+### [Unreleased] - Full-audit & conservative-optimization round (2026-09-26: static-check zeroing + dead-code removal + thread hygiene + project hygiene + perf / correctness hardening + CF-3 cross-file repair defect fix + fifth-batch P0: mutation-test judging / API-poll reproducibility / atomic cache writes / single-agent baseline write guard + state schema + sixth-batch node-layer routing semantics & robustness + seventh-batch hot-path deep scan: AST-parse reuse / O(1) task index + shared combined text + precompiled keyword regex + eighth-batch closing audit: lint/format zeroing + type-repair contract-reference caliber + state-key propagation + example-file fixes + ninth-batch parallel subagent deep audit: difficulty_level normalization + _should_debug branch order + half-open probe double-count + async def patches + executor_repo temp-file race + tenth-batch repo-wide P1/P2 convergence: JSON leaf-fallback semantic regression + routing branch masking + full-file patch silent fallback + venv cache marker asymmetry + timeout leak + line-number offset + TOCTOU race + eleventh-batch legacy-debt convergence: cost_weight registration ordering + async safety-check rejection + 6 dead-code / ghost-config / thread-race items landed)
 
 > Repo-wide code audit and conservative optimization batch (default behavior
 > unchanged): static checks all green, dead-code removal, thread-hygiene fix,
@@ -14197,7 +14209,7 @@ diagnosis-keyword routing to regenerate + regeneration-cap protection).
   case's import-name mismatch so its assertion actually works, and added 2
   report-parsing regression cases).
 
-## [Unreleased] - P0 improvement batch: 13 items landed (layered code compression / complexity-aware routing / naming-contract validation / stratified synthetic difficulty / cross-file synthetic tasks / SWE-bench export quality verification / RAG A/B experiment script / adaptive multi-candidate trigger / mutation difficulty upgrade / error sub-classes + response retry / default trace layer / per-repo venv reuse)
+### [Unreleased] - P0 improvement batch: 13 items landed (layered code compression / complexity-aware routing / naming-contract validation / stratified synthetic difficulty / cross-file synthetic tasks / SWE-bench export quality verification / RAG A/B experiment script / adaptive multi-candidate trigger / mutation difficulty upgrade / error sub-classes + response retry / default trace layer / per-repo venv reuse)
 
 > Corresponds to the experiment data gaps (SWE-bench 0/20, synthetic stats covered but real-dataset A/B missing)
 > and the improvement roadmap in `docs/assessment_2026-09-25_improvement_directions.md`.
@@ -14339,7 +14351,7 @@ diagnosis-keyword routing to regenerate + regeneration-cap protection).
   test_debugger (38) / test_workflow_extended (37) / test_executor_repo (17) /
   test_synthetic_dataset (5) / test_api_manager + extended (152) / test_code_analyzer (17)
 
-## [Unreleased] - Improvement-direction batch: 5 items landed (3.3 position-aware iterative repair + 5.2 error-classifier 14-category doc sync + 5.1 single-batch boundary tests + 4.2 redaction auto-check hook + 2.1 real-embedding hook)
+### [Unreleased] - Improvement-direction batch: 5 items landed (3.3 position-aware iterative repair + 5.2 error-classifier 14-category doc sync + 5.1 single-batch boundary tests + 4.2 redaction auto-check hook + 2.1 real-embedding hook)
 
 > Corresponds to the "real remaining work" list in
 > `docs/assessment_2026-09-25_improvement_directions.md` (after verifying 16
@@ -14421,7 +14433,7 @@ diagnosis-keyword routing to regenerate + regeneration-cap protection).
 > test_embedding_utils 12) all pass; `ruff check` on changed files is clean.
 > See `docs/implementation_2026-09-25_improvement_directions.md`.
 
-## [Unreleased] - 0.8 Full-audit & fix round (credential-scrub logic dedup + half-open probe failure-path consumption + LLM cache makedirs short-circuit + temperature-key closed-loop + execution-trace duplicate computation elimination + whitelist root pre-normalization + `__main__` self-diagnosis bug fix + 4 regression test cases)
+### [Unreleased] - 0.8 Full-audit & fix round (credential-scrub logic dedup + half-open probe failure-path consumption + LLM cache makedirs short-circuit + temperature-key closed-loop + execution-trace duplicate computation elimination + whitelist root pre-normalization + `__main__` self-diagnosis bug fix + 4 regression test cases)
 
 > Baseline: 0.9 batch (uncommitted worktree) 1665 passed / ruff 0 / mypy 0 (58 source files).
 > This round is a deep-audit + backport of the 0.9 batch: **1667 passed / 0 failed**
@@ -14486,7 +14498,7 @@ semantics (glob real-time value) unchanged; only repeated scans are saved.
 - negative-cache TTL benchmark: in-window hit = zero file IO (only the LLM call
   itself remains), post-expiry recheck = disk-cache hit with zero LLM calls.
 
-## [Unreleased] - Full-audit fixes + code-quality round (credential scrubbing factored into dynamic-pattern module + CLI `finally`-block fragile code eliminated + multi-candidate node made side-effect-free + patch function-location regex→AST + mypy real-semantic errors zeroed + analyze_results theme split)
+### [Unreleased] - Full-audit fixes + code-quality round (credential scrubbing factored into dynamic-pattern module + CLI `finally`-block fragile code eliminated + multi-candidate node made side-effect-free + patch function-location regex→AST + mypy real-semantic errors zeroed + analyze_results theme split)
 
 > This round is a pure code-quality pass: 26 real mypy semantic errors
 > (not missing-stub) zeroed to 0, and `experiments/analyze_results.py`

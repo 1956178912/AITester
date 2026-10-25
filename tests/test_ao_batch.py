@@ -218,7 +218,7 @@ class TestReadmeEnHeader:
         英文 1074，均为偶。本段刻意不写任何开关名字面：CG 门的读者索引含 `tests/**`，
         行锁文件里多提一个开关名就会多算一个读者，从而把被对账的数改掉——
         「锁的文本改动不该去动被锁的数」这条与 CH §6⑥ 同源）"""
-        assert "Last updated: 2026-10-24" in README_EN_HEAD
+        assert "Current version 0.8.0" in README_EN_HEAD
         assert "**CH round:" in README_EN_HEAD
 
 

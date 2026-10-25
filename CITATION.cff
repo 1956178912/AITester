@@ -16,13 +16,14 @@ authors:
   # 仅登记待补充项。[待补充：作者 ORCID iD（如需按个人署名提交）]
   - name: AITester Contributors
     website: https://github.com/1956178912/AITester
-version: 0.7
-date-released: "2026-10-06"
+version: 0.8.0
+date-released: "2026-10-25"
 license: MIT
 repository-code: https://github.com/1956178912/AITester
 abstract: >-
   A Python system for attribution-aware evaluation of LLM-based unit test
-  generation and repair, with the detection-first protocol ("red before
+  generation and repair, regenerated end-to-end on a single-provider corpus
+  (DeepSeek), with the detection-first protocol ("red before
   green") as the primary success criterion, SpecIR specification oracles,
   paired attribution baselines (plain_llm / plain_llm_df), and M1 honest
   metrics (detection / repair / false-fix) adjudicated by held-out gold

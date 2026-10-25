@@ -52,24 +52,6 @@
       "usd_per_task": 0.0008745149999999999,
       "usd_note": "价目加权（in:out=8969:12333）；未计价模型：无；缓存口径：命中 0 次、避免 0 tokens（20/20 行带缓存字段；真实 API 消耗不含避免 token，$/task 仍为真实花费口径）"
     },
-    "rp02_single_agent": {
-      "detection": {
-        "killed": 3,
-        "denominator": 20,
-        "rate": 0.15,
-        "wilson95": [
-          0.05236874588403395,
-          0.36041886479734614
-        ]
-      },
-      "tokens_per_task": 1291.9,
-      "tokens_per_task_bootstrap95": [
-        1115.75,
-        1504.95
-      ],
-      "usd_per_task": 0.000997275,
-      "usd_note": "价目加权（in:out=12289:13549）；未计价模型：无；缓存口径：命中 0 次、避免 0 tokens（20/20 行带缓存字段；真实 API 消耗不含避免 token，$/task 仍为真实花费口径）"
-    },
     "e4_aitester": {
       "detection": {
         "killed": 21,
@@ -188,6 +170,28 @@
       ],
       "rate_a": 0.5714285714285714,
       "rate_b": 0.7142857142857143
+    },
+    "e6_aitester_vs_df": {
+      "arm_a": "aitester",
+      "arm_b": "plain_llm_df",
+      "n10_a_only": 2,
+      "n01_b_only": 9,
+      "n_paired": 35,
+      "cohens_g": 0.3181818181818182,
+      "odds_ratio": {
+        "point": 0.2631578947368421,
+        "ci95": [
+          0.06533809508719716,
+          1.059903529019422
+        ]
+      },
+      "mcnemar_exact_p": 0.0654296875,
+      "paired_bootstrap_diff95": [
+        -0.37142857142857144,
+        -0.02857142857142857
+      ],
+      "rate_a": 0.6,
+      "rate_b": 0.8
     },
     "e4_aitester_vs_df": {
       "arm_a": "aitester",

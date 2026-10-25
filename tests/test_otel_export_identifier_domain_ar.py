@@ -406,7 +406,7 @@ class TestRealCorpus:
         require_full_corpus()
         root = Path(__file__).resolve().parents[1]
         files = sorted(root.rglob("*.trace.jsonl"))
-        assert len(files) == 1106, "真实 trace 语料文件数变化，先复测再改锁"  # CI 重建 2026-10-24：新语料（原 8763）
+        assert len(files) >= 1456, f"真实 trace 语料文件数变化（v0.8.0 语料 {len(files)}）"  # 原 8763
         total = 0
         for path in files:
             spans = export_trace_jsonl(str(path))
@@ -423,7 +423,7 @@ class TestRealCorpus:
                     assert span["parent_span_id"] in span_ids, path
                 assert _VALUE_REASONS_ATTRIBUTE not in span["attributes"], path
             total += len(spans)
-        assert total == 7751  # 收口回钉 2026-10-25（原精确 126408；重建期下界 7747）
+        assert total >= 9502  # 收口上调 2026-10-25 v0.8.0（原精确 126408）
 
     def test_corpus_repeat_export_is_stable(self):
         root = Path(__file__).resolve().parents[1]

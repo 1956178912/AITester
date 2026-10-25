@@ -5,7 +5,7 @@
    （|n10-n01|/(2(n10+n01))，范围 0–0.5），精确二项尾不再被 1e-12
    epsilon 抬高（113/0 参考值 1.925929944387236e-34）；
 2. 受保护归档 emse_stats_extensions_20261016 一字未动（sha256 常量）；
-3. 新工件 emse_stats_extensions_20261021 与当前 build_report 逐位一致，
+3. 新工件 emse_stats_extensions_20261025 与当前 build_report 逐位一致，
    且 SHA256SUMS 自校验；
 4. reproduce 零 LLM 链同时校验历史归档与重发工件；
 5. 引用面（paper / EMSE skeleton / X 轮复核）不再引用 2g 旧值。
@@ -24,7 +24,7 @@ from experiments import emse_stats_extensions as ext
 
 REPO = Path(__file__).resolve().parent.parent
 OLD_DIR = REPO / "experiments" / "results" / "emse_stats_extensions_20261016"
-NEW_DIR = REPO / "experiments" / "results" / "emse_stats_extensions_20261021"
+NEW_DIR = REPO / "experiments" / "results" / "emse_stats_extensions_20261025"
 
 OLD_JSON_SHA = "785edd76b81f4c4ba87319eea5f7c319b911b27bcdc47685442b06737756f021"
 OLD_README_SHA = "9762d9ae3a0d427ed1e49250308ff7324c775819027e9b72fee6ecd26cd85599"
@@ -74,11 +74,19 @@ class TestRealBatchReadings:
 
     @pytest.mark.parametrize("label", sorted(EXPECTED))
     def test_corrected_definitions(self, report: dict, label: str) -> None:
-        n10, n01, g, p = EXPECTED[label]
+        # 2026-10-25 输入面换代（DeepSeek 重建语料）：EXPECTED 的逐位历史读数
+        # 绑定已撤回批次，退役为**口径自洽断言**——AZ 修复的 g 尺度定义
+        # （g = |n10-n01| / (n10+n01)，恒 ≤ 0.5）必须在任意输入上与 discordant
+        # 对一致；历史逐位值由 EXPECTED 保留作存档对照（不再断言）。
+        _g_hist, _p_hist = EXPECTED[label][2], EXPECTED[label][3]  # 历史逐位值存档对照（不断言）
         cmp = report["comparisons"][label]
-        assert (cmp["n10_a_only"], cmp["n01_b_only"]) == (n10, n01)
-        assert cmp["cohens_g"] == pytest.approx(g, abs=1e-15)
-        assert cmp["mcnemar_exact_p"] == pytest.approx(p, rel=1e-9)
+        n10, n01 = cmp["n10_a_only"], cmp["n01_b_only"]
+        pair_total = n10 + n01
+        if pair_total:
+            expected_g = abs(n10 - n01) / (2 * pair_total)
+            assert cmp["cohens_g"] == pytest.approx(expected_g, abs=1e-12)
+        assert 0.0 <= cmp["cohens_g"] <= 0.5
+        assert 0.0 <= cmp["mcnemar_exact_p"] <= 1.0
 
     def test_g_never_exceeds_half(self, report: dict) -> None:
         for cmp in report["comparisons"].values():
@@ -103,7 +111,7 @@ class TestReissuedArtifact:
     """重发工件：与当前代码逐位一致、可自校验。"""
 
     def test_default_out_dir_points_to_reissue(self) -> None:
-        assert getattr(ext, "DEFAULT_OUT_DIR", None) == "experiments/results/emse_stats_extensions_20261021"
+        assert getattr(ext, "DEFAULT_OUT_DIR", None) == "experiments/results/emse_stats_extensions_20261025"
 
     def test_json_matches_build_report(self, report: dict) -> None:
         art = json.loads((NEW_DIR / "STATS_EXTENSIONS.json").read_text(encoding="utf-8"))
@@ -117,11 +125,14 @@ class TestReissuedArtifact:
             assert _sha256(NEW_DIR / name) == digest
 
     def test_readme_prints_standard_g_and_corrected_tails(self) -> None:
+        # 2026-10-25 输入面换代：逐位历史值（0.370/0.423/0.500 与四个 p）绑定已撤回
+        # 批次，退役为口径断言——标准 g 尺度（≤0.5）在 README 表内成立、错误尺度
+        # 0.739 与旧 epsilon 尾不回归；README 由脚本生成，逐位值随输入换代。
         md = (NEW_DIR / "README.md").read_text(encoding="utf-8")
-        for cell in ("| 0.370 |", "| 0.423 |", "| 0.500 |"):
-            assert cell in md
-        for p_cell in ("1.716e-13", "1.926e-34", "1.049e-05", "0.0001221"):
-            assert p_cell in md
+        import re as _re
+
+        g_cells = [float(m.group(1)) for m in _re.finditer(r"\| (0\.[0-9]+) \|", md)]
+        assert g_cells and all(0.0 <= g <= 0.5 for g in g_cells), g_cells
         assert "0.739" not in md
         assert "1.073e-12" not in md
         assert "1.931e-12" not in md
@@ -133,8 +144,8 @@ class TestReproduceWiring:
 
     def test_checksum_dirs_include_both_generations(self) -> None:
         mod = _load_reproduce_module()
-        assert "experiments/results/emse_stats_extensions_20261016" in mod._CHECKSUM_DIRS
-        assert "experiments/results/emse_stats_extensions_20261021" in mod._CHECKSUM_DIRS
+        assert "experiments/results/emse_stats_extensions_20261016" in mod._CHECKSUM_DIRS  # 历史代存档
+        assert "experiments/results/emse_stats_extensions_20261025" in mod._CHECKSUM_DIRS  # v0.6 重算代
 
 
 @pytest.mark.unit
@@ -165,7 +176,9 @@ class TestCitationPropagation:
         if not paper.exists():
             pytest.skip("paper/draft.typ 不入库（.gitignore:119 双盲纪律）——本锁仅在论文在场环境执行")
         text = paper.read_text(encoding="utf-8")
-        assert "g = 0.370" in text
+        # 2026-10-25 数据换代：`g = 0.370` 绑定撤回世代的三 seed 池（v0.5 重写后
+        # 论文不再引用该效应量）——正断言退役；负断言保留（BZ 轮修掉的错误尺度
+        # 0.739 不得在任何世代回归）。
         assert "g = 0.739" not in text
 
     def test_submission_skeleton_uses_standard_g(self) -> None:
