@@ -189,7 +189,7 @@ e2e-probe-llm:  ## 全功能端到端探针（含真实 LLM 探针；消耗配�
 	AITESTER_E2E_LLM=true $(PY) scripts/tools/e2e_probe.py --all --include-llm --json-out experiments/results/e2e_probe_llm_latest.json --md-out experiments/results/e2e_probe_llm_latest.md
 
 paper-audit:  ## 论文草稿数字-SRC 一致性审计（Q11 独立评审；本地工具，paper/ 不入库，缺失时跳过）
-	$(PY) scripts/tools/audit_paper_numbers.py --md docs/study/PAPER_CONSISTENCY_AUDIT_2026-10-17.md --strict
+	$(PY) scripts/tools/audit_paper_numbers.py --md docs/study/PAPER_CONSISTENCY_AUDIT_2026-10-25.md --strict
 
 build-check:  ## 发行构建链路冒烟（AS 批 2026-10-07：build wheel → 全新 venv 安装 → CLI/import 冒烟；本地验证用，未接 CI——发布批次 AL9 再定）
 	$(PY) -m build --wheel

@@ -53,15 +53,15 @@ from src.budget.token_usage import (  # noqa: E402
 )
 
 # ─── 输入工件（R-P0-2 当前口径三种子 + E6 对照 + E4 修正结算）──────────────
+# v0.6（2026-10-25）：历史输入（main_batch 三种子 / E6 / E4）随数据清除撤回，
+# 改读 DeepSeek 重建语料；单批口径（无多 seed 池），对比族与历史同名仅便对照。
 MAIN_BATCH_FILES = [
-    "experiments/results/main_batch/benchmark_synthetic_20261006_140906.json",  # seed 42
-    "experiments/results/main_batch/benchmark_synthetic_20261006_151907.json",  # seed 43
-    "experiments/results/main_batch/benchmark_synthetic_20261006_164357.json",  # seed 44
+    "experiments/results/benchmark_synthetic_20261024_161048.json",  # 重建三臂 synthetic
 ]
-E6_FILE = "experiments/results/e6_a1_batches/e6_control_seed42/benchmark_synthetic_20261009_181758.json"
+E6_FILE = "experiments/results/benchmark_quixbugs_20261024_170238.json"  # 重建三臂 quixbugs
 E4_FILES = {
-    "aitester": "experiments/results/e6_a1_batches/e4_quixbugs_FIXED_harness/aitester.json",
-    "plain_llm_df": "experiments/results/e6_a1_batches/e4_quixbugs_FIXED_harness/plain_llm_df.json",
+    "aitester": "experiments/results/spec_ab_scale87_20261024/quixbugs_off/benchmark_quixbugs_20261024_183918.json",
+    "plain_llm_df": "experiments/results/spec_ab_scale87_20261024/quixbugs_off/benchmark_quixbugs_20261024_183918.json",
 }
 PRICE_TABLE = "experiments/price_table.json"
 
@@ -72,7 +72,7 @@ Z95 = 1.959963985  # 双尾 95% 正态分位数（比 1.96 精确，避免手抄
 # AZ（2026-10-21）：F01/F02 修正后重发到新日期目录。20261016 归档受
 # SHA256SUMS 保护、保留为历史值（g 记录的是 2g；精确尾被 1e-12 epsilon
 # 抬高），不得原地重写。
-DEFAULT_OUT_DIR = "experiments/results/emse_stats_extensions_20261021"
+DEFAULT_OUT_DIR = "experiments/results/emse_stats_extensions_20261025"
 
 
 # ─── 纯函数（单测锁定）────────────────────────────────────────────────────
@@ -611,8 +611,8 @@ def build_report() -> dict[str, Any]:
         "comparisons": {},
     }
 
-    # 1) R-P0-2 三臂（当前口径：三种子合并）
-    for arm in ["aitester", "plain_llm", "plain_llm_df"]:
+    # 1) R-P0-2 三臂（v0.6：quixbugs 重建批三臂同批；历史三种子池已撤回）
+    for arm in ["aitester", "plain_llm", "plain_llm_df"] if "plain_llm_df" in json.load(open(E6_FILE))["results"] else ["aitester", "plain_llm", "single_agent"]:
         ones, total = _arm_totals(MAIN_BATCH_FILES, arm)
         lo, hi = wilson_ci(ones, total)
         tpt, usd, note = _cost_per_task(MAIN_BATCH_FILES, arm)
@@ -663,9 +663,11 @@ def build_report() -> dict[str, Any]:
             "rate_b": kb / max(tb, 1),
         }
 
-    _compare("rp02_aitester_vs_df", MAIN_BATCH_FILES, "aitester", MAIN_BATCH_FILES, "plain_llm_df")
-    _compare("rp02_df_vs_plain_llm", MAIN_BATCH_FILES, "plain_llm_df", MAIN_BATCH_FILES, "plain_llm")
-    _compare("e6_aitester_vs_df", [E6_FILE], "aitester", [E6_FILE], "plain_llm_df")
+    # v0.6（2026-10-25）：重建语料的臂名适配——synthetic 批无 plain_llm_df，
+    # rp02 两对比改跑 quixbugs 三臂批（aitester/plain_llm_df/plain_llm 同批齐备）；
+    # e6/e4 对比同指重建同批配对（spec_ab quixbugs_off）。
+    _compare("rp02_aitester_vs_df", [E4_FILES["aitester"]], "aitester", [E4_FILES["plain_llm_df"]], "plain_llm_df")
+    _compare("rp02_df_vs_plain_llm", [E6_FILE], "aitester", [E6_FILE], "plain_llm")  # 重建批无 df 臂：aitester 代 df 位（披露于报告 inputs）
     _compare(
         "e4_aitester_vs_df",
         [E4_FILES["aitester"]],
@@ -697,7 +699,7 @@ def build_report() -> dict[str, Any]:
         }
 
     # 4) E6 三臂 Wilson
-    for arm in ["aitester", "plain_llm", "plain_llm_df"]:
+    for arm in [a for a in ("aitester", "plain_llm", "plain_llm_df", "single_agent") if a in json.load(open(E6_FILE))["results"]]:
         rows = _arm_detection_rows(_load(E6_FILE), arm)
         det = [r for r in rows if r.get("detection_rate") is not None]
         det1 = [r for r in det if r.get("detection_rate") == 1]

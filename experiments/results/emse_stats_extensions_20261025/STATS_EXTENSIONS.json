@@ -1,0 +1,215 @@
+{
+  "caliber": "Wilson CI / Cohen's g / OR / 配对 bootstrap（第十九轮评审 A-15）",
+  "bootstrap": {
+    "n": 10000,
+    "seed": 42,
+    "z95": 1.959963985
+  },
+  "inputs": {
+    "main_batch": [
+      "experiments/results/benchmark_synthetic_20261024_161048.json"
+    ],
+    "e6": "experiments/results/benchmark_quixbugs_20261024_170238.json",
+    "e4": {
+      "aitester": "experiments/results/spec_ab_scale87_20261024/quixbugs_off/benchmark_quixbugs_20261024_183918.json",
+      "plain_llm_df": "experiments/results/spec_ab_scale87_20261024/quixbugs_off/benchmark_quixbugs_20261024_183918.json"
+    }
+  },
+  "arms": {
+    "rp02_aitester": {
+      "detection": {
+        "killed": 0,
+        "denominator": 20,
+        "rate": 0.0,
+        "wilson95": [
+          0.0,
+          0.16112515811625733
+        ]
+      },
+      "tokens_per_task": 3230.9,
+      "tokens_per_task_bootstrap95": [
+        3020.6,
+        3429.9
+      ],
+      "usd_per_task": 0.00216645,
+      "usd_note": "价目加权（in:out=38014:26604）；未计价模型：无；缓存口径：命中 0 次、避免 0 tokens（20/20 行带缓存字段；真实 API 消耗不含避免 token，$/task 仍为真实花费口径）"
+    },
+    "rp02_plain_llm": {
+      "detection": {
+        "killed": 1,
+        "denominator": 20,
+        "rate": 0.05,
+        "wilson95": [
+          0.008881448797866148,
+          0.23613119350676545
+        ]
+      },
+      "tokens_per_task": 1065.1,
+      "tokens_per_task_bootstrap95": [
+        971.7,
+        1174.1
+      ],
+      "usd_per_task": 0.0008745149999999999,
+      "usd_note": "价目加权（in:out=8969:12333）；未计价模型：无；缓存口径：命中 0 次、避免 0 tokens（20/20 行带缓存字段；真实 API 消耗不含避免 token，$/task 仍为真实花费口径）"
+    },
+    "rp02_single_agent": {
+      "detection": {
+        "killed": 3,
+        "denominator": 20,
+        "rate": 0.15,
+        "wilson95": [
+          0.05236874588403395,
+          0.36041886479734614
+        ]
+      },
+      "tokens_per_task": 1291.9,
+      "tokens_per_task_bootstrap95": [
+        1115.75,
+        1504.95
+      ],
+      "usd_per_task": 0.000997275,
+      "usd_note": "价目加权（in:out=12289:13549）；未计价模型：无；缓存口径：命中 0 次、避免 0 tokens（20/20 行带缓存字段；真实 API 消耗不含避免 token，$/task 仍为真实花费口径）"
+    },
+    "e4_aitester": {
+      "detection": {
+        "killed": 21,
+        "denominator": 35,
+        "rate": 0.6,
+        "wilson95": [
+          0.4357270900919623,
+          0.7444927114347912
+        ]
+      },
+      "repair": {
+        "killed": 2,
+        "denominator": 20,
+        "rate": 0.1,
+        "wilson95": [
+          0.02786648120626875,
+          0.30103364528673715
+        ]
+      }
+    },
+    "e4_plain_llm_df": {
+      "detection": {
+        "killed": 29,
+        "denominator": 36,
+        "rate": 0.8055555555555556,
+        "wilson95": [
+          0.6497195700074787,
+          0.9024690458264719
+        ]
+      },
+      "repair": {
+        "killed": 0,
+        "denominator": 41,
+        "rate": 0.0,
+        "wilson95": [
+          0.0,
+          0.08566757022119471
+        ]
+      }
+    },
+    "e6_aitester": {
+      "detection": {
+        "killed": 20,
+        "denominator": 35,
+        "rate": 0.5714285714285714,
+        "wilson95": [
+          0.4085741114037501,
+          0.7201543182582167
+        ]
+      }
+    },
+    "e6_plain_llm": {
+      "detection": {
+        "killed": 26,
+        "denominator": 36,
+        "rate": 0.7222222222222222,
+        "wilson95": [
+          0.5600750999864115,
+          0.8415166206200979
+        ]
+      }
+    },
+    "e6_single_agent": {
+      "detection": {
+        "killed": 29,
+        "denominator": 36,
+        "rate": 0.8055555555555556,
+        "wilson95": [
+          0.6497195700074787,
+          0.9024690458264719
+        ]
+      }
+    }
+  },
+  "comparisons": {
+    "rp02_aitester_vs_df": {
+      "arm_a": "aitester",
+      "arm_b": "plain_llm_df",
+      "n10_a_only": 2,
+      "n01_b_only": 9,
+      "n_paired": 35,
+      "cohens_g": 0.3181818181818182,
+      "odds_ratio": {
+        "point": 0.2631578947368421,
+        "ci95": [
+          0.06533809508719716,
+          1.059903529019422
+        ]
+      },
+      "mcnemar_exact_p": 0.0654296875,
+      "paired_bootstrap_diff95": [
+        -0.37142857142857144,
+        -0.02857142857142857
+      ],
+      "rate_a": 0.6,
+      "rate_b": 0.8
+    },
+    "rp02_df_vs_plain_llm": {
+      "arm_a": "aitester",
+      "arm_b": "plain_llm",
+      "n10_a_only": 3,
+      "n01_b_only": 8,
+      "n_paired": 35,
+      "cohens_g": 0.22727272727272727,
+      "odds_ratio": {
+        "point": 0.4117647058823529,
+        "ci95": [
+          0.11858909725947273,
+          1.4297281700307165
+        ]
+      },
+      "mcnemar_exact_p": 0.2265625,
+      "paired_bootstrap_diff95": [
+        -0.3142857142857143,
+        0.02857142857142857
+      ],
+      "rate_a": 0.5714285714285714,
+      "rate_b": 0.7142857142857143
+    },
+    "e4_aitester_vs_df": {
+      "arm_a": "aitester",
+      "arm_b": "plain_llm_df",
+      "n10_a_only": 2,
+      "n01_b_only": 9,
+      "n_paired": 35,
+      "cohens_g": 0.3181818181818182,
+      "odds_ratio": {
+        "point": 0.2631578947368421,
+        "ci95": [
+          0.06533809508719716,
+          1.059903529019422
+        ]
+      },
+      "mcnemar_exact_p": 0.0654296875,
+      "paired_bootstrap_diff95": [
+        -0.37142857142857144,
+        -0.02857142857142857
+      ],
+      "rate_a": 0.6,
+      "rate_b": 0.8
+    }
+  }
+}
