@@ -79,6 +79,20 @@ LaTeX 编译 55 页、0 未定义引用/文献、0 致命错误；`paper-audit -
 一个依赖论文稿的测试因此转为具名 skip：**12,513/267 → 12,512 passed / 268 skipped**。
 投稿信目前只有 Typst 版，若仍要用，需要按 SVJour3 另写一份 LaTeX 投稿信。
 
+**七、EMSE 投稿材料补齐（原生 LaTeX，零 LLM，$0）**：新增 `paper/cover_letter.tex`（2 页）与
+`paper/title_page.tex`（2 页），外加 `paper/SUBMISSION.md`（要求逐条对照表 + 待填清单 + 上传前复核命令）。
+依据 EMSE submission guidelines（2026-10-25 逐条核验）：① 投稿信的唯一硬性要求是通讯作者须披露
+**材料复用**与**未发表材料（如在印）**（Role of the Corresponding Author）——信里单列一段回应；
+② 声明须放在**与正文分开的 title page**，小节名 Declarations，含 Funding / Competing interests /
+Ethics approval / Consent / Data, Materials and/or Code availability / Authors' contribution，
+缺声明的投稿按不完整退回；③ 原创研究必须有 data availability statement；④ 生成式 AI 政策：LLM
+不可署名、实质性使用须记入 Methods、AI 辅助润色无须声明、最终文本由人类负责——稿件内
+「Generative AI use」段目前仍是 TODO，已在信与 title page 中标为必须由作者最终确认的阻断项。
+另：2017 年 EMSE 负结果特刊（vol 22 issue 5，Paige/Cabot/Ernst，DOI 10.1007/s10664-017-9498-0）
+经 SpringerLink 一手核验后作为期刊契合论据引用（此前旧 Typst 信里的同一说法同样成立）。
+信中每个数字都取自本仓库登记值；邮箱、ORCID、单位官方英文名、资助、CRediT 确认、归档 DOI、
+预印本、审稿人、致谢共 14 处标记**一律不预填**。
+
 ### A3 复现包闭环（零 LLM，$0）
 
 - **完整性校验改四态**：`ok` / `FAILED`（校验不符**或在盘却没有清单**）/ `absent`（目录

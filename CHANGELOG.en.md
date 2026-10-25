@@ -98,6 +98,27 @@ to both markups). One paper-dependent test therefore turns into a named skip:
 **12,513/267 -> 12,512 passed / 268 skipped**. The cover letter exists only in Typst today; if
 it is still needed it must be rewritten as LaTeX for SVJour3.
 
+**7. EMSE submission materials completed (native LaTeX, zero LLM, $0).** New
+`paper/cover_letter.tex` (2 pages) and `paper/title_page.tex` (2 pages), plus `paper/SUBMISSION.md`
+(requirement-by-requirement mapping, the list of items the authors must fill, and the pre-upload
+recheck commands). Based on the EMSE submission guidelines, verified line by line on 2026-10-25:
+(1) the only hard requirement on the cover letter is that the corresponding author state
+**transparency on re-use of material** and **any unpublished material (e.g. manuscripts in press)**
+(Role of the Corresponding Author) — the letter answers this in its own paragraph;
+(2) declarations belong on a **title page separate from the manuscript**, under a "Declarations"
+heading, covering Funding / Competing interests / Ethics approval / Consent / Data, Materials
+and/or Code availability / Authors' contribution, and submissions without relevant declarations are
+returned as incomplete; (3) all original research must carry a data availability statement;
+(4) the generative-AI policy: an LLM cannot be an author, substantive use must be documented in
+Methods, AI-assisted copy editing need not be declared, and humans remain accountable — the
+manuscript's "Generative AI use" paragraph is still a TODO and is flagged in both new documents as
+a blocking item for the authors. Also: EMSE's 2017 special section on negative results (vol. 22,
+issue 5; Paige, Cabot and Ernst; DOI 10.1007/s10664-017-9498-0) was verified first-hand on
+SpringerLink and is cited as the journal-fit argument (the same claim in the retired Typst letter
+holds). Every number in the letter comes from this repository's registered readings; 14
+placeholders --- e-mail, ORCID, official English institution names, funding, CRediT confirmation,
+archive DOI, preprint, reviewers, acknowledgements --- are deliberately left unfilled.
+
 ### A3 Replication-package closure (zero LLM, $0)
 
 - **Integrity checking is now four-state**: `ok` / `FAILED` (mismatch **or an on-disk
