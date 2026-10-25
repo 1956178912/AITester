@@ -1,6 +1,6 @@
 # AITester 模型卡（MODEL CARD）
 
-最后更新：2026-10-21（2026-10-21 测量口径批次：§4 新增「有效通过」口径——BA/BB/BC 三轮把 `rc==0` ≠ 有断言执行的通过写入派生读数判据。此前 2026-10-14 LLM 结构化输出加固批次：§2 新增"调用配置"节——thinking 默认 disabled〔成本保护〕+ `LLM_JSON_MODE` 默认 on〔DeepSeek 官方 JSON Output，七处 JSON 契约调用点〕+ finish_reason 守卫 + 数值表达式解析层修复〔ADR-0031〕。此前 2026-10-08 R2 落地批次：叙事对齐 ADR-0016——§1 去"多智能体"主断言，"多智能体编排"降为可消融容器；repair 数字更新为修正口径 v2）
+最后更新：2026-10-25（1.0.0 发布轮：§4 加世代横幅——261 行/臂池数字属 2026-10-24 撤回世代，当前世代读数指向 `BASELINE.yaml` 与重建批；已知限制与 README「已知限制（1.0.0）」行、论文 Threats 段同源。此前 2026-10-21 测量口径批次：§4 新增「有效通过」口径——BA/BB/BC 三轮把 `rc==0` ≠ 有断言执行的通过写入派生读数判据。此前 2026-10-14 LLM 结构化输出加固批次：§2 新增"调用配置"节——thinking 默认 disabled〔成本保护〕+ `LLM_JSON_MODE` 默认 on〔DeepSeek 官方 JSON Output，七处 JSON 契约调用点〕+ finish_reason 守卫 + 数值表达式解析层修复〔ADR-0031〕。此前 2026-10-08 R2 落地批次：叙事对齐 ADR-0016——§1 去"多智能体"主断言，"多智能体编排"降为可消融容器；repair 数字更新为修正口径 v2）
 
 ## 1. 系统概述
 
@@ -67,9 +67,17 @@ ADR-0021/0027/0029 测量口径修正后为 **39.31%（v2，57/145 可重放行�
 
 ## 4. 评估口径与已知局限（诚实声明）
 
-- 当前口径 = R-P0-2 生死实验三种子合并（2026-10-06，n=261/臂，logic 档、
+> **世代横幅（1.0.0，2026-10-25）**：本节以下以「n=261/臂」为口径的数字属于
+> **已撤回的多 seed 池**（2026-10-24 数据清除），保留为历史记录；论文 v0.5/v0.6
+> 已按重建语料重写，并把这些数字标为 historical。**当前世代**的读数在
+> `BASELINE.yaml` `benchmark` 节与各重建批（`b1_lite_20261025` /
+> `spec_ab_scale87_20261024` / `emse_docstring_*_20261017`）里，单批、不与
+> 261 行池混池。撤回映射与冻结读数（含成本表 W-1）见
+> `docs/study/WITHDRAWN_ARTIFACTS_2026-10-24.md`。
+
+- 历史口径（已撤回世代）= R-P0-2 生死实验三种子合并（2026-10-06，n=261/臂，logic 档、
   deepseek-flash、McNemar+BH-FDR 全显著；详见 `BASELINE.yaml` benchmark 节
-  与 `statistical_report_3seed_pooled.md`）：detection plain_llm_df 44.8% >
+  与 `docs/study/WITHDRAWN_ARTIFACTS_2026-10-24.md`；`statistical_report_3seed_pooled.md` 随该批撤回）：detection plain_llm_df 44.8% >
   aitester 15.8% > plain_llm 1.5%；aitester vs df **−28pp**——完整系统在
   强模型下显著劣于纯提示协议（编排净负贡献；21 行缺失双界下结论稳健）。
 - **repair 经测量口径修正后 = 39.31%（57/145 可重放行）**：历史"全线

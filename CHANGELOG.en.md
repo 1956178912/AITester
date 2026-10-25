@@ -6,6 +6,89 @@
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.0.0] - 2026-10-25 Measurement-surface and traceability close-out (CM round)
+
+> **Theme**: released after every criterion in `docs/adr/0036-v1-release-criteria.md`
+> group A (measurement frontier, 7 items) and group C (release mechanics, 5 items) was
+> closed. 1.0.0 adds no features---it is the **convergence release of measurement and
+> release discipline**: "the path exists" becomes "the number is in the artifact",
+> "no manifest" moves from *skip* to *fail*, and three gaps that lived only in the
+> register are now in the paper body.
+
+### A3 Replication-package closure (zero LLM, $0)
+
+- **Integrity checking is now four-state**: `ok` / `FAILED` (mismatch **or an on-disk
+  directory without a manifest**) / `absent` (directory withdrawn, disclosed).
+  Measured before the fix: 5 of 6 listed directories had been withdrawn on 2026-10-24
+  and the only on-disk one had no `SHA256SUMS`, so the report read
+  "0 passed / 0 failed / 6 skipped"---**an integrity claim over zero checked files
+  was still green**.
+- Checked surface = everything except `traces/` (paper numbers come from benchmark /
+  stats / raw artifacts; raw traces are a side channel). New `--write-checksums`
+  generates/refreshes the manifests.
+- **Measured**: 8 directories verified / **401 checked files** / 0 failed / 5 absent
+  (`main_batch` plus four 20261014--20261016 historical batches).
+- Command-level `[SKIP]` is rendered ⬜ skipped instead of ❌, separated from FAILED
+  (absence is neither failure nor success).
+- `REPLICATION.md` gains a three-class path convention (on disk / withdrawn /
+  runtime product); three bare `run_benchmark.py:line` references now carry the full path.
+
+### A4 A read-side check for paper numbers (one real traceability break found and fixed)
+
+- **Found**: the `// SRC:` of Appendix E's cost table pointed at
+  `experiments/results/emse_stats_extensions_20261025/`, an artifact whose arms are
+  single-batch (n=20/36/41) and which does **not contain the 261-row readings**
+  (26,114.9 tokens/task, $0.025885, 35-of-261 rows without usage records). The path
+  existed, the numbers did not, and `paper-audit --strict` still reported "200+
+  declarations, 100% traceable". Existence was standing in for content.
+- **Fix**: Appendix E is labelled historical and lands on
+  `docs/study/WITHDRAWN_ARTIFACTS_2026-10-24.md` **table W-1** (values frozen from
+  commit `d5bda23e`: per-arm tokens/task, bootstrap CIs, $/task, in:out mixes, and the
+  35/261 zero-usage note), which now carries `// SRC-CHECK: strict`.
+- **Tool**: `scripts/tools/audit_paper_numbers.py` gains a **block-level number
+  existence** criterion---precise numbers (≥2 decimals or thousands-separated) must be
+  findable in the referenced JSON / withdrawal index; p-values, CIs and z constants are
+  **derived** and are disclosure only, unless the author marks a block with
+  `// SRC-CHECK: strict`.
+- **A/B evidence**: the wrong pointer returns `rc=1` and names all 16 missing numbers;
+  the fixed tree returns `rc=0`. 11 new test locks
+  (`tests/test_paper_audit_number_check.py`: 4 pure functions / 5 block-level / 2 wiring).
+- Current readings: **210 numeric declarations / 100.0% traceable / 0 invalid SRC /
+  0 strict-block failures / 14 open to-dos**; the 12 derived-statistics blocks and 7
+  blocks with no checkable artifact are counted as disclosure, not as verification.
+
+### A5 Three mandatory limitations in the paper body
+
+- ① **Fixed-material gap**: 53 of 261 rows (20.3%) lack `task_metadata.fixed`, capping
+  the over-red mechanism analysis at 69/88 rows → Threats / Internal validity, labelled
+  historical. **Erratum to ADR-0036**: its A5 ① merged "53/261 fixed material" with
+  "35/261 token accounting lower bound" into one item (and mislabelled it as the fixed
+  arm's tokens); the ADR now carries a dated erratum.
+- ② **Synthetic template drift**: 30→50 patterns, six templates' gold material
+  repaired, so `SyntheticDataset(seed=42)` no longer rebuilds the archived tasks
+  byte-identically; archived mutation values are authoritative only from the archived
+  artifacts → Threats / Instrument provenance.
+- ③ **scale87 `DETECTION_SPEC_MODE=replace` ≠ full SpecExpr specification-first**: its
+  null contrasts bound the document-replacement variant only → same paragraph.
+
+### A7 Known-limitation alignment
+
+- README (both languages) gains a "Known Limitations (1.0.0)" row with seven items
+  (no human adjudication / single model family / multi-seed pool not rebuilt /
+  template drift / scale87 caliber / no SWE-bench capability conclusion /
+  research-side items awaiting authorisation).
+- `MODEL_CARD.md` §4 gains a generation banner: the 261-row numbers are the withdrawn
+  generation; current readings live in `BASELINE.yaml` and the rebuilt batches.
+
+### Release mechanics
+
+- `src/__init__.py` `__version__` → `1.0.0`; `CITATION.cff` `version: 1.0.0`
+  (DOI still pending, honestly left as a to-do); README / README.en / MODEL_CARD /
+  QUICKSTART version lines synchronised.
+- Group B (research side: LLM-budget experiments / full D3 Mut@k / E7 human
+  adjudication / submission and DOI) does not block 1.0.0; each item is registered in
+  ADR-0036 §3 and in the README limitation row, and is carried into 1.x.
+
 ## [0.8.0] - 2026-10-25 Measurement-integrity reset + DeepSeek single-endpoint corpus rebuild + PROMPT-SE submission rewrite (180 rounds)
 
 > **Theme**: 180 review-repair rounds completing a measurement-integrity reset---

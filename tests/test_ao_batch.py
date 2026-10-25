@@ -237,9 +237,13 @@ class TestReadmeEnHeader:
         "Previously **CK round:"，带冒号的最新字面在头部唯一命中、历史链首项为
         "Previously **CK round:"；中文侧同步推进至 "**CL 轮："，历史链首项为
         "此前 **CK 轮："。CL = 1.0.0 程序第二轮：远端 CI 三档全红归因——快照
-        步骤写在 pytest 前造成格式化计数 +1 漂移，修复 + 顺序回归锁）。"""
-        assert "Current version 0.8.0" in README_EN_HEAD
-        assert "**CL round:" in README_EN_HEAD
+        步骤写在 pytest 前造成格式化计数 +1 漂移，修复 + 顺序回归锁）。
+        CM 轮（2026-10-25）推进至 "**CM round:" 并同步版本字面
+        "Current version 1.0.0"（CL 的标记随之改为 "Previously **CL round:"；
+        中文侧 "**CM 轮：" / "此前 **CL 轮："。CM = 1.0.0 发布轮：论文数字
+        存在性读侧判据 + 复现包完整性四态 + 三处必披露）。"""
+        assert "Current version 1.0.0" in README_EN_HEAD
+        assert "**CM round:" in README_EN_HEAD
 
 
 class TestDeprecationTimeline:

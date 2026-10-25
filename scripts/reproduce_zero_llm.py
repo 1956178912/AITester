@@ -116,17 +116,81 @@ _L1_COMMANDS: list[tuple[str, list[str], int]] = [
     ),
 ]
 
-# 需校验 SHA256SUMS 的工件目录（存在即校验，缺失则标记 skipped）
+# 需校验 SHA256SUMS 的工件目录（存在即校验；缺席登记为 absent 披露）
+#
+# CM 轮（2026-10-25）修正两处「清单比现实长、现实比清单空」：
+#   ① 原清单 6 条里 5 条已随 2026-10-24 数据清除消失，只剩 20261025 一条在盘，
+#      而它没有清单 ⇒ 完整性校验长期是「0 通过 / 0 失败 / 6 跳过」，报告仍读作
+#      「通过」。缺席是事实（披露即可），**存在却没有清单**才是不可复算的缺陷。
+#   ② 论文当前引用的批次（b1_lite / spec_ab_scale87 / 锚与增广批）不在清单里，
+#      等于主数字的载体从未被完整性覆盖。
 _CHECKSUM_DIRS: list[str] = [
+    # 当前重建世代（论文 v0.5/v0.6 的数字载体）
+    "experiments/results/emse_stats_extensions_20261025",
+    "experiments/results/spec_ab_scale87_20261024",
+    "experiments/results/b1_lite_20261025",
+    "experiments/results/emse_docstring_anchor_20261017",
+    "experiments/results/emse_docstring_augment_20261017",
+    "experiments/results/emse_misguided_augment_20261017",
+    "experiments/results/p_round_b8_ablation_20261018",
+    "experiments/results/emse_spec_anchor_20261016",
+    # 已撤回世代：保留在册，缺席要被看见（不得静默从清单消失）
     "experiments/results/main_batch",
-    # AZ（2026-10-21）：20261016 为 F01/F02 修正前的历史归档（只校验、不重写）；
-    # 当前代码默认重发到 20261021。
     "experiments/results/emse_stats_extensions_20261016",
     "experiments/results/emse_stats_extensions_20261021",
-    "experiments/results/emse_stats_extensions_20261025",
     "experiments/results/emse_quixbugs_mutk_full_20261015",
     "experiments/results/emse_ult_mutk_full_20261015",
 ]
+
+# 完整性清单的受检面：除原始 trace 外的全部文件。
+# 论文数字来自 benchmark / stats / raw 工件；trace 是 LLM 原始响应的旁路记录，
+# 体积与条数都大两个数量级，纳入清单会把「完整性」稀释成「日志归档」。
+_CHECKSUM_EXCLUDED_PARTS = frozenset({"traces"})
+
+
+def _checksum_files(directory: Path) -> list[str]:
+    """列出受检文件（相对路径，排序稳定，排除 trace / 隐藏文件 / 清单自身）。"""
+    files: list[str] = []
+    for path in sorted(directory.rglob("*")):
+        if not path.is_file():
+            continue
+        rel = path.relative_to(directory)
+        if _CHECKSUM_EXCLUDED_PARTS.intersection(rel.parts):
+            continue
+        if any(part.startswith(".") for part in rel.parts):
+            continue  # 运行时标记（.arm_*.pid/.rc/.start）不是分发工件
+        if rel.name in {"SHA256SUMS", "SHA256SUMS.tmp"}:
+            continue
+        files.append(rel.as_posix())
+    return files
+
+
+def write_checksums() -> list[dict[str, Any]]:
+    """为**尚无清单**的在盘目录生成 SHA256SUMS（原子写）。
+
+    已有清单一律不覆盖：既有清单是历史归档的一部分（可能由
+    `scripts/gates/checksum_results.py` 以不同受检面生成），生成器改写它
+    等于改写归档——CM 轮首版实测把两份既有清单改写（一份 100 行被删），
+    已回退并改为「只补缺、不重写」。
+    """
+    import hashlib
+
+    written: list[dict[str, Any]] = []
+    for rel in _CHECKSUM_DIRS:
+        directory = REPO / rel
+        if not directory.is_dir():
+            continue
+        if (directory / "SHA256SUMS").is_file():
+            continue
+        files = _checksum_files(directory)
+        if not files:
+            continue
+        lines = [f"{hashlib.sha256((directory / name).read_bytes()).hexdigest()}  {name}" for name in files]
+        tmp = directory / "SHA256SUMS.tmp"
+        tmp.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        tmp.replace(directory / "SHA256SUMS")
+        written.append({"dir": rel, "files": len(files)})
+    return written
 
 
 def _run(cmd: list[str]) -> tuple[int, str]:
@@ -145,13 +209,29 @@ def _run(cmd: list[str]) -> tuple[int, str]:
 
 
 def _verify_checksums() -> list[dict[str, Any]]:
-    """校验关键工件目录 SHA256SUMS。"""
+    """校验关键工件目录 SHA256SUMS。
+
+    四态（CM 轮）：`ok` 全通过 / `FAILED` 校验失败 / `FAILED` 存在但无清单 /
+    `absent` 目录缺席（撤回或未生成，披露不判红）。「无清单」必须判红——
+    把「没清单」读成「跳过」会让完整性声明在 0 份受检文件时也是绿的。
+    """
     out: list[dict[str, Any]] = []
     for rel in _CHECKSUM_DIRS:
         d = REPO / rel
+        if not d.is_dir():
+            out.append({"dir": rel, "status": "absent", "detail": "目录缺席（已撤回或未生成）", "files": 0})
+            continue
+        files = _checksum_files(d)
         sums = d / "SHA256SUMS"
         if not sums.is_file():
-            out.append({"dir": rel, "status": "skipped", "detail": "无 SHA256SUMS 文件"})
+            out.append(
+                {
+                    "dir": rel,
+                    "status": "FAILED",
+                    "detail": f"在盘 {len(files)} 个受检文件，但无 SHA256SUMS 清单",
+                    "files": len(files),
+                }
+            )
             continue
         proc = subprocess.run(
             ["shasum", "-a", "256", "-c", "SHA256SUMS"],
@@ -161,11 +241,13 @@ def _verify_checksums() -> list[dict[str, Any]]:
             timeout=300,
         )
         ok = proc.returncode == 0
+        listed = len([ln for ln in (sums.read_text(encoding="utf-8").splitlines()) if ln.strip()])
         out.append(
             {
                 "dir": rel,
                 "status": "ok" if ok else "FAILED",
-                "detail": (proc.stdout or proc.stderr or "").strip().splitlines()[-1][:120] if not ok else "全部通过",
+                "detail": ("全部通过" if ok else (proc.stdout or proc.stderr or "").strip().splitlines()[-1][:120]),
+                "files": listed,
             }
         )
     return out
@@ -187,7 +269,16 @@ def main() -> int:
     ap.add_argument(
         "--level", choices=["l0", "l1"], default="l0", help="复算层级：l0（默认，五分钟级）/ l1（含小时级 Mut@k）"
     )
+    ap.add_argument(
+        "--write-checksums",
+        action="store_true",
+        help="先为在盘工件目录生成/刷新 SHA256SUMS 再校验（发布轮用；不改变校验口径）",
+    )
     args = ap.parse_args()
+
+    if args.write_checksums:
+        for item in write_checksums():
+            print(f"[repro] ▶ 清单已写 {item['dir']}（{item['files']} 个受检文件）", flush=True)
 
     commands = list(_L0_COMMANDS)
     if args.level == "l1":
@@ -214,13 +305,15 @@ def main() -> int:
     checksums = _verify_checksums()
     print("[repro] ▶ SHA256SUMS 校验", flush=True)
     for c in checksums:
-        print(f"[repro]   {c['status']} {c['dir']}", flush=True)
+        print(f"[repro]   {c['status']} {c['dir']}（{c.get('files', 0)} 文件）", flush=True)
 
     n_ok = sum(1 for r in results if r["status"] == "ok")
     n_total = len(results)
     n_skipped = sum(1 for r in results if r["status"] == "skipped")
     cs_ok = sum(1 for c in checksums if c["status"] == "ok")
     cs_fail = sum(1 for c in checksums if c["status"] == "FAILED")
+    cs_absent = sum(1 for c in checksums if c["status"] == "absent")
+    cs_files = sum(c.get("files", 0) for c in checksums if c["status"] == "ok")
 
     # 写 markdown 报告
     lines = [
@@ -228,7 +321,7 @@ def main() -> int:
         "",
         f"> 生成时间：{started}；git sha：`{sha}`；Python：{sys.version.split()[0]}；",
         f"> 层级：{args.level.upper()}；**{n_ok}/{n_total} 条命令通过**（{n_skipped} 条源工件缺席 [SKIP]）；"
-        f"SHA256SUMS：{cs_ok} 通过 / {cs_fail} 失败 / {len(checksums) - cs_ok - cs_fail} 跳过。",
+        f"SHA256SUMS：{cs_ok} 个目录通过（{cs_files} 个受检文件）/ {cs_fail} 失败 / {cs_absent} 目录缺席。",
         "",
         "本报告由 `scripts/reproduce_zero_llm.py` 生成，零 LLM 逐位复算论文主数字。",
         "每条命令的输出尾供审稿人核对复现值。",
@@ -240,19 +333,24 @@ def main() -> int:
     ]
     for r in results:
         tail_md = (r["tail"] or "（无输出）").replace("|", "\\|").replace("\n", "<br>")
-        mark = "✅" if r["status"] == "ok" else "❌"
-        lines.append(f"| {r['name']} | {mark}（rc={r['rc']}） | {tail_md} |")
+        if r["status"] == "skipped":
+            mark, state = "⬜", "skipped（前提缺席，显式披露）"
+        elif r["status"] == "ok":
+            mark, state = "✅", f"rc={r['rc']}"
+        else:
+            mark, state = "❌", f"rc={r['rc']}"
+        lines.append(f"| {r['name']} | {mark} {state} | {tail_md} |")
 
     lines += [
         "",
         "## 工件完整性（SHA256SUMS）",
         "",
-        "| 目录 | 状态 | 明细 |",
-        "|---|---|---|",
+        "| 目录 | 状态 | 受检文件 | 明细 |",
+        "|---|---|---|---|",
     ]
     for c in checksums:
-        mark = {"ok": "✅", "FAILED": "❌", "skipped": "⬜"}[c["status"]]
-        lines.append(f"| {c['dir']} | {mark} {c['status']} | {c['detail']} |")
+        mark = {"ok": "✅", "FAILED": "❌", "absent": "⬜"}[c["status"]]
+        lines.append(f"| {c['dir']} | {mark} {c['status']} | {c.get('files', 0)} | {c['detail']} |")
 
     lines += [
         "",
@@ -271,7 +369,14 @@ def main() -> int:
         "git_sha": sha,
         "python": sys.version.split()[0],
         "level": args.level,
-        "summary": {"commands_ok": n_ok, "commands_total": n_total, "checksums_ok": cs_ok, "checksums_failed": cs_fail},
+        "summary": {
+            "commands_ok": n_ok,
+            "commands_total": n_total,
+            "checksums_ok": cs_ok,
+            "checksums_failed": cs_fail,
+            "checksums_absent": cs_absent,
+            "checksums_files": cs_files,
+        },
         "commands": results,
         "checksums": checksums,
     }
@@ -279,7 +384,10 @@ def main() -> int:
 
     print(f"\n[repro] 报告 → {REPORT_MD}")
     print(f"[repro] JSON  → {REPORT_JSON}")
-    print(f"[repro] 结论：{n_ok}/{n_total} 命令通过（{n_skipped} skipped）；SHA256SUMS {cs_ok} 通过 / {cs_fail} 失败")
+    print(
+        f"[repro] 结论：{n_ok}/{n_total} 命令通过（{n_skipped} skipped）；"
+        f"SHA256SUMS {cs_ok} 目录通过（{cs_files} 文件）/ {cs_fail} 失败 / {cs_absent} 缺席"
+    )
 
     # v0.8.0：源工件缺席的 [SKIP] 支路不算失败——退出码由「FAILED 命令数 +
     # SHA256SUMS 失败数」决定（skip 是显式披露的可复算性边界，不是红灯）。

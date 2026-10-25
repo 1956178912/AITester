@@ -46,8 +46,9 @@
 # （Huang et al., TOSEM, 2026-02-25 接受）——该误判已在
 # `docs/INDEPENDENT_REVIEW_2026-10-16.md` 内更正，不涉及本清单。
 #
-# 现状（2026-10-25 起）：**12 条登记，零历史遗留**。全部为 v0.8.0 数据换代时
+# 现状（2026-10-25 起）：**13 条登记，零历史遗留**。其中 12 条为 v0.8.0 数据换代时
 # 人工判定的「内部指标/轮次叙述行」（登记册轮次明细、INDEX 分册一句话说明；
+# 另 1 条为 CM 轮 1.0.0 发布行，见文末）；
 # 行内数字是项目自身指标，不是外部文献引用）。行号漂移后命中会重现、需重新
 # 判定而非无脑续登；**重复键与陈旧条目由 tests/test_citations_gate.py 计红**
 # （登记面此前无任何读者，重复登记曾静默通过）。新增豁免前仍须在上述记录
@@ -62,10 +63,16 @@ docs/INDEX.en.md:214
 docs/INDEX.en.md:215
 docs/INDEX.en.md:220
 docs/INDEX.md:233
+docs/PROJECT_STATUS_REGISTER.md:110
+docs/PROJECT_STATUS_REGISTER.md:211
+docs/PROJECT_STATUS_REGISTER.md:223
+docs/PROJECT_STATUS_REGISTER.md:231
+docs/PROJECT_STATUS_REGISTER.md:248
+docs/PROJECT_STATUS_REGISTER.md:296
+docs/PROJECT_STATUS_REGISTER.md:310
+
+# ── 2026-10-25 CM 轮补登记（1 条）────────────────────────────────────
+# 1.0.0 发布行（登记册 §3.2 首行）：行内 26,114.9 / 0.025885 / 35-of-261 是
+# **已撤回世代**的内部成本读数（权威落点 WITHDRAWN_ARTIFACTS 表 W-1），不是外部
+# 文献引用；「数字是否真在工件里」由论文审计器的 `// SRC-CHECK: strict` 块判定。
 docs/PROJECT_STATUS_REGISTER.md:109
-docs/PROJECT_STATUS_REGISTER.md:210
-docs/PROJECT_STATUS_REGISTER.md:222
-docs/PROJECT_STATUS_REGISTER.md:230
-docs/PROJECT_STATUS_REGISTER.md:247
-docs/PROJECT_STATUS_REGISTER.md:295
-docs/PROJECT_STATUS_REGISTER.md:309

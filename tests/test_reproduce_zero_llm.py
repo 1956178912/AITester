@@ -56,6 +56,64 @@ def test_checksum_dirs_are_relative(mod):
         assert d.startswith("experiments/results/")
 
 
+# ─── CM 轮（2026-10-25）：完整性校验的四态与受检面 ───────────────────────────
+# 改前实测：6 条清单里 5 条目录已撤回、唯一在盘目录没有 SHA256SUMS，报告
+# 仍是「0 通过 / 0 失败 / 6 跳过」——把「没清单」读成「跳过」使完整性声明
+# 在 0 份受检文件时也是绿的。以下四例锁住：缺席披露 / 无清单判红 / 清单通过 /
+# 篡改判红 / trace 不入受检面。
+
+
+def test_checksum_files_excludes_traces_and_manifests(tmp_path, mod):
+    """受检面排除 traces/ 与清单自身（否则清单自我引用、日志稀释完整性）。"""
+    d = tmp_path / "d"
+    (d / "traces").mkdir(parents=True)
+    (d / "traces" / "a.jsonl").write_text("x", encoding="utf-8")
+    (d / "b.json").write_text("{}", encoding="utf-8")
+    (d / "SHA256SUMS").write_text("old", encoding="utf-8")
+    assert mod._checksum_files(d) == ["b.json"]
+
+
+def _synthetic_results(tmp_path: Path, monkeypatch, dirs: list[str]):
+    module = _load_module()
+    monkeypatch.setattr(module, "REPO", tmp_path)
+    monkeypatch.setattr(module, "_CHECKSUM_DIRS", dirs)
+    for rel in dirs:
+        target = tmp_path / rel
+        target.mkdir(parents=True, exist_ok=True)
+        (target / "artifact.json").write_text('{"n": 1}', encoding="utf-8")
+    return module
+
+
+def test_write_then_verify_roundtrip(tmp_path, monkeypatch):
+    """生成清单 → 校验 ok；篡改受检文件 → FAILED。"""
+    module = _synthetic_results(tmp_path, monkeypatch, ["experiments/results/x"])
+    written = module.write_checksums()
+    assert written == [{"dir": "experiments/results/x", "files": 1}]
+    out = module._verify_checksums()
+    assert out[0]["status"] == "ok"
+    assert out[0]["files"] == 1
+    (tmp_path / "experiments/results/x/artifact.json").write_text('{"n": 2}', encoding="utf-8")
+    assert module._verify_checksums()[0]["status"] == "FAILED"
+
+
+def test_missing_manifest_is_failed_not_skipped(tmp_path, monkeypatch):
+    """在盘但无清单 ⇒ FAILED（不是 skipped）：0 份受检文件不能读作通过。"""
+    module = _synthetic_results(tmp_path, monkeypatch, ["experiments/results/y"])
+    out = module._verify_checksums()
+    assert out[0]["status"] == "FAILED"
+    assert "无 SHA256SUMS" in out[0]["detail"]
+
+
+def test_absent_directory_is_disclosed(tmp_path, monkeypatch):
+    """目录缺席（撤回/未生成）⇒ absent：披露，不冒充失败也不冒充通过。"""
+    module = _load_module()
+    monkeypatch.setattr(module, "REPO", tmp_path)
+    monkeypatch.setattr(module, "_CHECKSUM_DIRS", ["experiments/results/gone"])
+    out = module._verify_checksums()
+    assert out[0]["status"] == "absent"
+    assert out[0]["files"] == 0
+
+
 def test_run_trivial_captures_tail(mod):
     """_run 以本解释器执行并捕获输出尾。"""
     rc, tail = mod._run(["-c", "print('repro-ok')"])

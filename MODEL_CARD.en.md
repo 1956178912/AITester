@@ -1,6 +1,6 @@
 # AITester Model Card
 
-Last updated: 2026-10-21 (2026-10-21 measurement-caliber batch: §4 gains an "effective pass" caliber — the BA/BB/BC rounds write "rc==0 is not assertions-executed pass" into derived-reading criteria. Previously the 2026-10-14 LLM structured-output hardening batch: §2 gains an "Invocation configuration" bullet — thinking disabled by default [cost protection] + `LLM_JSON_MODE` on by default [DeepSeek official JSON Output at seven JSON-contract call sites] + finish_reason guard + parse-layer numeric-expression repair [ADR-0031]; previously 2026-10-08 R2 landing batch: narrative alignment with ADR-0016 — §1 drops "multi-agent" as the primary claim; "multi-agent orchestration" demoted to an ablatable container; repair numbers updated to corrected caliber v2)
+Last updated: 2026-10-25 (1.0.0 release round: §4 gains a generation banner — the 261-rows-per-arm numbers belong to the generation withdrawn on 2026-10-24, and current readings point at `BASELINE.yaml` and the rebuilt batches; the known limitations share their source with the README "Known Limitations (1.0.0)" row and the paper's Threats section. Previously 2026-10-21 measurement-caliber batch: §4 gains an "effective pass" caliber — the BA/BB/BC rounds write "rc==0 is not assertions-executed pass" into derived-reading criteria. Previously the 2026-10-14 LLM structured-output hardening batch: §2 gains an "Invocation configuration" bullet — thinking disabled by default [cost protection] + `LLM_JSON_MODE` on by default [DeepSeek official JSON Output at seven JSON-contract call sites] + finish_reason guard + parse-layer numeric-expression repair [ADR-0031]; previously 2026-10-08 R2 landing batch: narrative alignment with ADR-0016 — §1 drops "multi-agent" as the primary claim; "multi-agent orchestration" demoted to an ablatable container; repair numbers updated to corrected caliber v2)
 
 ## 1. System Overview
 
@@ -72,7 +72,7 @@ system is research code, not a deployed product).
 - Current caliber = R-P0-2 lifespan experiment, three seeds pooled
   (2026-10-06, n=261/arm, logic profile, deepseek-flash, McNemar + BH-FDR
   all significant; see the `benchmark` section of `BASELINE.yaml` and
-  `statistical_report_3seed_pooled.md`): detection plain_llm_df 44.8% >
+  `docs/study/WITHDRAWN_ARTIFACTS_2026-10-24.md`; `statistical_report_3seed_pooled.md` was withdrawn with that batch): detection plain_llm_df 44.8% >
   aitester 15.8% > plain_llm 1.5%; aitester vs df **−28pp** — the full
   system is significantly worse than the plain prompting protocol on a
   strong model (net-negative orchestration contribution; robust under dual

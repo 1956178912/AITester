@@ -6,6 +6,71 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [1.0.0] - 2026-10-25 测量面收口与可追溯性收口（CM 轮）
+
+> **本版本主题**：按 `docs/adr/0036-v1-release-criteria.md` 的判据 A（测量面前沿 7 项）与
+> 判据 C（发布机械 5 项）全部关闭后发布。1.0.0 不引入新功能——它是**测量与发布纪律的
+> 收敛版**：把「路径存在」升级为「数字在工件里」，把「没清单算跳过」升级为「没清单算失败」，
+> 把三处只在登记册里的缺口写进论文正文。
+
+### A3 复现包闭环（零 LLM，$0）
+
+- **完整性校验改四态**：`ok` / `FAILED`（校验不符**或在盘却没有清单**）/ `absent`（目录
+  缺席，披露）。改前实测：6 条清单里 5 条目录已随 2026-10-24 数据清除撤回、唯一在盘目录
+  没有 `SHA256SUMS` ⇒ 报告「0 通过 / 0 失败 / 6 跳过」仍被读作绿——**0 份受检文件的完整性
+  声明也是绿的**。
+- 受检面 = 除 `traces/` 外全部文件（论文数字来自 benchmark / stats / raw 工件；原始 trace
+  是旁路记录）；新增 `--write-checksums` 生成/刷新清单。
+- **实测**：8 个目录通过 / **401 个受检文件** / 0 失败 / 5 目录缺席（`main_batch` +
+  四个 20261014–20261016 历史批）。
+- 报告把命令级 `[SKIP]` 由 ❌ 改为 ⬜ skipped，与 FAILED 分列（缺席不是失败，也不是通过）。
+- `REPLICATION.md` 补「路径三类口径」（在盘 / 已撤回 / 运行产物），三处裸
+  `run_benchmark.py:行号` 引用补全为 `experiments/run_benchmark.py`。
+
+### A4 论文数字审计补读侧（发现并修复一处真实溯源断裂）
+
+- **发现**：论文附录 E 成本表的 `// SRC:` 指向
+  `experiments/results/emse_stats_extensions_20261025/`，而该工件只有 n=20/36/41 的单批臂，
+  **不含表里的 261 行池读数**（26,114.9 tokens/task、$0.025885、35-of-261 零记账行）。
+  路径存在、数字不在，`paper-audit --strict` 仍报「200+ 条声明、可追溯率 100%」。这是
+  「存在性冒充内容」，与历轮收口的沉默分叉同形。
+- **修复**：附录 E 改 historical 标注 + 落点
+  `docs/study/WITHDRAWN_ARTIFACTS_2026-10-24.md` **表 W-1**（从 commit `d5bda23e` 冻结原值：
+  三臂 tokens/task、bootstrap CI、$/task、in:out 混合比、35/261 零记账行说明），并给该表加
+  `// SRC-CHECK: strict`。
+- **工具**：`scripts/tools/audit_paper_numbers.py` 新增**块级数字存在性**判据——高精度数字
+  （≥2 位小数或千分位整数）必须能在所指 JSON / 撤回索引里找到；p 值、CI、z 常数等**派生量
+  只披露**（不字面存盘），作者用 `// SRC-CHECK: strict` 显式声明「这块是存盘读数」时才阻断。
+- **A/B 实证**：错指针 `rc=1` 并逐条点名 16 个缺失数字；修正后 `rc=0`。11 例测试锁
+  （`tests/test_paper_audit_number_check.py`：纯函数 4 / 块级 5 / 接线 2）。
+- 当前读数：**210 条数字声明 / 综合可追溯率 100.0% / SRC 无效 0 / strict 块失败 0 /
+  待办 14 项**；存在的 12 段派生量块与 7 段无可判定工件块按披露计（不冒充核实）。
+
+### A5 三处必披露写进论文正文
+
+- ① **fixed 材料缺口** 53/261 行（20.3%）缺 `task_metadata.fixed`、过红机制分析上限
+  69/88 → Threats / Internal validity，标 historical。
+  **ADR-0036 原文勘误**：A5 ① 把「53/261 fixed 材料缺口」与「35/261 token 记账下界」
+  合并成一条（且误标为 fixed 臂 token），二者是不同事实；ADR 已加 errata。
+- ② **合成模板库漂移**：pattern 30→50、6 个模板 gold 材料修复 ⇒ `SyntheticDataset(seed=42)`
+  重建与归档元数据哈希不符，存量 mutation 值只能以归档工件复算 → Threats / Instrument provenance。
+- ③ **scale87 `DETECTION_SPEC_MODE=replace` ≠ 完整 SpecExpr 规格优先**：其零对比只界定
+  「文档替换」变体，不是完整规格优先路线的检验 → 同段。
+
+### A7 已知限制对齐
+
+- README 双语新增「已知限制（1.0.0）」行 7 条（无人工裁决 / 单一模型族 / 多 seed 池未重建 /
+  模板漂移 / scale87 口径 / SWE-bench 无能力结论 / 研究面待授权项）。
+- `MODEL_CARD.md` §4 加世代横幅：261 行池数字属撤回世代，当前世代读数指向
+  `BASELINE.yaml` 与重建批。
+
+### 发布机械
+
+- `src/__init__.py` `__version__` → `1.0.0`；`CITATION.cff` `version: 1.0.0`
+  （DOI 仍待归档，如实留待补充项）；README / README.en / MODEL_CARD / QUICKSTART 版本行同步。
+- 判据 B（研究面：LLM 配额实验 / D3 全量 Mut@k / E7 人工裁决 / 投稿与 DOI）不阻塞 1.0.0，
+  逐项登记在 ADR-0036 §3 与 README 已知限制行，编入 1.x 计划。
+
 ## [0.8.0] - 2026-10-25 测量廉洁重置 + DeepSeek 单端点语料重建 + PROMPT-SE 投稿版（180 轮）
 
 > **本版本主题**：以 180 轮逐轮评审-修复完成 measurement-integrity reset——

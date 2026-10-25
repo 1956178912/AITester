@@ -18,7 +18,7 @@ authors:
   # 仅登记待补充项。[待补充：作者 ORCID iD（如需按个人署名提交）]
   - name: AITester Contributors
     website: https://github.com/1956178912/AITester
-version: 0.8.0
+version: 1.0.0
 date-released: "2026-10-25"
 license: MIT
 repository-code: https://github.com/1956178912/AITester

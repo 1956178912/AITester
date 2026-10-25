@@ -21,12 +21,32 @@
 | emse_gold_conformance_20261015 / emse_ult_gold_diagnosis_20261015 | gold 物化体检与 ULT gold 诊断 | 未复刻 |
 | emse_dsl_diag*/extend_recheck/fix_smoke | DSL 诊断系列 | 未复刻 |
 | emse_calib_quixbugs/ult/synth_20261014 | 校准批 | 未复刻 |
-| emse_stats_2026-10-15 / emse_stats_extensions_20261016/20261021 | 统计扩展（Wilson/g/OR/CI） | 以重建批重算（emse_stats_extensions_20261025/，就绪后回填） |
+| emse_stats_2026-10-15 / emse_stats_extensions_20261016/20261021 | 统计扩展（Wilson/g/OR/CI） | 部分重算（`emse_stats_extensions_20261025/` 只覆盖单批臂，**未复刻 261 行池**；池化成本见下表 W-1） |
 | emse_df_spec_20261016 | 规格锚主批 | spec_ab_scale87_20261024（quixbugs replace 臂）替代 |
 | emse_docstring_anchor/augment_20261017 的 DF_DOC/DF_AUG_REPORT | 锚/增广裁决报告 | 批次已重建（benchmark_quixbugs_20261024/25_*），报告文件未重生成 |
 | emse_oracle_quality/independent_judging/instrument_hardening | oracle 质量轮 | 注入批已重建（16/20） |
 | pilot_mdo_full50 / swe_bench_lite_20 / e6_a1_batches / r4_batches | 探索与 E 系批 | 未复刻 |
 | docs/reviews/*（82 份分册） | 逐轮评审分册 | 已删除（docs/reviews/README.md 占位） |
+
+## 表 W-1：撤回世代池化成本读数（论文附录 E 的权威落点）
+
+来源：`experiments/results/emse_stats_extensions_20261021/STATS_EXTENSIONS.json`
+（2026-10-21 重发版，commit `d5bda23e`；2026-10-24 随全部历史批次撤回）。
+口径：3 seeds × 87 任务 = **261 行/臂**；bootstrap n=10000、seed=42；价目加权
+（in:out 取各臂自身混合比）。`35/261` = df 臂 `token_usage` 全 0 且
+`generated_test` 非空的行数（有产出、无花费记录）⇒ 该臂 tokens/task 与
+$/task 是**已记录下界**，不是账单。
+
+| 臂 | tokens/task | 95% CI | $/task | in:out |
+|---|---|---|---|---|
+| aitester | 26,114.854406130267 | [24,226.31, 28,086.02] | 0.025884977011494247 | 1,581,326:5,234,651 |
+| plain_llm | 3,209.44061302682 | [2,964.02, 3,474.23] | 0.003358973563218391 | 142,783:694,881 |
+| plain_llm_df | 4,223.103448275862 | [3,822.94, 4,642.52] | 0.004543231034482759 | 152,103:950,127 |
+
+**重建覆盖边界（2026-10-25 实测）**：`emse_stats_extensions_20261025/STATS_EXTENSIONS.json`
+只含单批臂（rp02 n=20、e4 n=36/41、e6 n=35/36），**不含 261 行池的成本表**。
+因此附录 E 的池化成本行没有被重建世代替代，引用时只能落到本表；论文附录 E
+已按 historical 标注。
 
 ## 引用纪律
 

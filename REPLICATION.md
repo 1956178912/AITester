@@ -9,6 +9,15 @@
 `[待补充：<所需信息>]`，不作推测。历史批次的原始 LLM 执行不可离线重放，
 可离线复算的只有基于已入库工件的指标（见第 4、8 节）。
 
+**路径口径（CM 轮补，2026-10-25）**：本文反引号里的路径分三类，读者可按类复核：
+
+1. **在盘文件**（默认）：可直接 `ls`/读取；
+2. **已撤回的历史工件**：同句标「已撤回」并指向
+   `docs/study/WITHDRAWN_ARTIFACTS_2026-10-24.md`（表 W-1 为冻结读数落点）；
+3. **运行时产物**：同句标「运行为产、不入库」，干净检出中本就不存在。
+
+`path:line` 的行号指当前工作树版本；文件改动后行号会漂移，以路径 + 内容为准。
+
 ## 1. 环境（Environment）
 
 **Python 版本要求**（各处声明的精确字符串）：
@@ -123,9 +132,9 @@
 
 **seed 的作用域（读源码核实）**：`experiments/run_benchmark.py:2945-2946`
 的注释原文为"LLM 文件缓存键不含 seed（seed 只作用于任务采样，不传 API）"。
-即：seed 用于合成任务采样（`run_benchmark.py:2972-2973`：
+即：seed 用于合成任务采样（`experiments/run_benchmark.py:2972-2973`：
 `SyntheticDataset(task_count=tc, seed=seed, ...)`）与缓存命名空间隔离
-（`run_benchmark.py:2952-2953`：缓存开启且未显式设 `AITESTER_CACHE_NAMESPACE`
+（`experiments/run_benchmark.py:2952-2953`：缓存开启且未显式设 `AITESTER_CACHE_NAMESPACE`
 时自动设为 `f"seed{seed}"`，故主批次命名空间为 `seed42`），**不会**作为
 采样参数发送给 LLM API。佐证（读该 JSON 的 `env_snapshot`）：命名空间
 `AITESTER_CACHE_NAMESPACE = seed42` 已记录在快照中，而快照里与 API 采样
@@ -140,7 +149,7 @@ env_snapshot, cache_enabled, cache_isolate_model, cache_namespace,
 valid_apis, harness}`。因此：
 
 1. 仅凭 `git_sha` 无法重建当时的代码树（存在未提交改动）；
-2. 无法事后核验 API 实际返回的模型版本（`run_benchmark.py:2627-2734` 存在
+2. 无法事后核验 API 实际返回的模型版本（`experiments/run_benchmark.py:2627-2734` 存在
    模型指纹探针实现，但本批次工件未落盘该块）。
 
 即本批次的模型版本锁定不完整，属**已知复现性缺口**，不作"完全可复现"
@@ -217,10 +226,26 @@ valid_apis, harness}`。因此：
 本支路待主批重建后恢复」）——**可复算性受损是事实，不谎报 ok、也不计红**；报告
 顶部明示「N/M 条命令通过（K 条源工件缺席 [SKIP]）」。脚本退出码只由
 「FAILED 命令数 + SHA256SUMS 失败数」决定（`scripts/reproduce_zero_llm.py`
-的 `main()` 收尾段）。2026-10-25 实测（L0）：**3 ok / 3 [SKIP] / rc=0**
+的 `main()` 收尾段）。2026-10-25 实测（L0，CM 轮）：**3 ok / 3 [SKIP] / rc=0**
 （回撤支路 = 统计报告补口、mutation × detection 交叉验证、通过率混淆敏感性分析，
-三者共用已撤回的 `main_batch`；SHA256SUMS 校验目录同步按缺席记 skipped）。
-本链的结构契约（命令集完整性 / 四元组形态 / 数据集分支）由
+三者共用已撤回的 `main_batch`）。
+
+**工件完整性四态（CM 轮收口）**：`SHA256SUMS` 校验此前只有「有清单就校验 /
+没清单就跳过」两态，于是「6 条清单里 5 条目录已撤回、唯一在盘目录没有清单」
+被读成「0 通过 / 0 失败 / 6 跳过」——完整的 0 份受检文件也是绿的。现分四态：
+
+| 状态 | 含义 | 是否计红 |
+|---|---|---|
+| `ok` | 清单存在且逐文件校验通过 | 否 |
+| `FAILED` | 校验不符，**或目录在盘却没有清单** | **是** |
+| `absent` | 目录缺席（已撤回 / 未生成） | 否（披露） |
+
+受检面 = 除 `traces/` 外的全部文件（论文数字来自 benchmark / stats / raw 工件；
+原始 trace 是旁路记录，纳入会把完整性稀释成日志归档）。发布轮用
+`python scripts/reproduce_zero_llm.py --write-checksums` 生成/刷新清单。
+2026-10-25 实测：**8 个目录通过 / 401 个受检文件 / 0 失败 / 5 目录缺席**
+（缺席 = `main_batch` 与四个 20261014–20261016 历史批）。
+本链的结构契约（命令集完整性 / 四元组形态 / 数据集分支 / 完整性四态）由
 `tests/test_reproduce_zero_llm.py` 锁定。
 
 **遗留存量重放目标（历史口径，当前无输入）**：以下 Makefile 目标在
