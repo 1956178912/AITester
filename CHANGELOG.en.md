@@ -119,6 +119,37 @@ holds). Every number in the letter comes from this repository's registered readi
 placeholders --- e-mail, ORCID, official English institution names, funding, CRediT confirmation,
 archive DOI, preprint, reviewers, acknowledgements --- are deliberately left unfilled.
 
+**8. CO round (same day): a second frontier reconciliation and the generative-AI statement finalized
+(zero LLM, $0).** (1) Retrieval added three further first-hand-verified results (2026-10-25):
+Kim et al. (arXiv:2512.08296, Google/DeepMind/MIT; 180 configurations --- every multi-agent variant
+degraded sequential-reasoning performance by 39--70%, centralized coordination gained 80.8% on
+parallelizable tasks, error amplification 17.2x for independent agents against 4.4x for centralized),
+Jwalapuram et al. (arXiv:2606.13003, Salesforce and collaborators: automatically generated multi-agent
+systems underperform a compute-matched single-agent baseline (CoT-SC) at up to ten times the cost,
+and they note that existing comparisons "rarely control for inference budgets"), and Shin et al.
+(ICSE'26, DOI 10.1145/3744916.3773163: retrieval-augmented generation leaves correctness unchanged
+while line coverage rises by 6.5% on average). The related-work evidence base grew from three
+external results to five, with one new methodological bridge --- a reported gain can be a compute
+effect wearing an architectural costume. (2) A version conflict is registered: secondary sources
+report Kim et al. as "260 configurations / six benchmarks", while the arXiv v3 abstract says
+"180 configurations / four benchmarks"; the text and the register use the abstract, and the conflict
+itself is recorded in `docs/study/EXTERNAL_READINGS_2026-10-25.md` §1b. (3) The generative-AI statement
+is finalized (a submission-compliance blocker closed): the manuscript's "We have not stated one" TODO
+is replaced by a factual statement written to the journal's policy --- an LLM is the object of study;
+an LLM assisted in drafting and revising the manuscript text and the analysis, reporting, and audit
+code; the authors checked every reported number against the archived artifacts and take full
+responsibility; an LLM cannot be an author, its use is documented in the study design, and humans
+account for the final text. The study-design section gains a "Tooling disclosure" paragraph, which is
+where the policy asks substantive use to be recorded. The manuscript's open items drop from 14 to 13.
+(4) A template ambiguity is documented: the guidelines' "LaTeX and Online Submission" section still
+ships the LaTeX macro package (i.e. `svjour3`, re-downloaded and verified on 2026-10-25), while the
+same page's "Text Formatting" section generically recommends Springer Nature's LaTeX template without
+saying that it supersedes the former; the manuscript keeps the journal's own package and records the
+evidence plus a rollback path in `paper/tex/README.md` §1. (5) Readings: manuscript 55 pages, 0
+undefined references/citations, 0 errors; `paper-audit --strict` 221 claims / 100.0% traceable / rc=0;
+the zero-LLM recomputation chain 3/6 commands ok (3 disclosed as absent) with 8 directories / 489 files
+verified and 0 failed; full suite 12,512 passed / 268 skipped / 0 failed.
+
 ### A3 Replication-package closure (zero LLM, $0)
 
 - **Integrity checking is now four-state**: `ok` / `FAILED` (mismatch **or an on-disk

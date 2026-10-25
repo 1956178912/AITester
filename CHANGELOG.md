@@ -93,6 +93,28 @@ Ethics approval / Consent / Data, Materials and/or Code availability / Authors' 
 信中每个数字都取自本仓库登记值；邮箱、ORCID、单位官方英文名、资助、CRediT 确认、归档 DOI、
 预印本、审稿人、致谢共 14 处标记**一律不预填**。
 
+**八、CO 轮（同日）：前沿再对账 + 生成式 AI 使用声明定稿（零 LLM，$0）**：
+① **检索补入三条一手核验的新证据**（2026-10-25）：Kim et al.（arXiv:2512.08296，
+Google/DeepMind/MIT，180 配置：顺序推理任务上所有多智能体变体退化 39–70%、并行任务集中式协调
++80.8%、独立智能体误差放大 17.2× vs 集中式 4.4×）、Jwalapuram et al.（arXiv:2606.13003，
+Salesforce 等：自动生成的多智能体系统对算力对齐的单智能体基线（CoT-SC）最多十倍成本仍不占优，
+并明确指出既有比较「很少控制推理预算」）、Shin et al.（ICSE'26，DOI 10.1145/3744916.3773163：
+检索增强不提升正确性、行覆盖却平均 +6.5%）。相关工作由三条外部证据扩为五条，并新增一处方法论
+对接——「被报告出来的收益，可能是穿着架构外衣的算力效应」。
+② **版本冲突登记**：Kim 等文的配置数与基准数在二手来源被写成「260 配置 / 6 基准」，与 arXiv v3
+摘要的「180 配置 / 4 基准」不符；正文与登记册一律采用摘要的一手读数，冲突本身登记在
+`docs/study/EXTERNAL_READINGS_2026-10-25.md` §1b。
+③ **生成式 AI 使用声明定稿**（投稿合规阻断项关闭）：稿件原为「We have not stated one」的 TODO，
+现按 EMSE 政策写成事实陈述——LLM 是研究对象；LLM 作为助手参与了稿件文本与分析/报告/审计代码的
+撰写与修订；作者逐项对账归档工件并负全责；LLM 不可署名、使用记入研究设计、人类负最终责任。
+研究设计节新增 Tooling disclosure 段，对应政策「须记入 Methods（或其等效部分）」。稿件待办 14 → 13。
+④ **模板歧义留档**：EMSE 指南的 “LaTeX and Online Submission” 仍提供 LaTeX macro package
+（即 `svjour3`，2026-10-25 重新下载核验），同页 “Text Formatting” 另泛泛推荐 Springer Nature 的
+LaTeX 模板且未言取代关系；本稿保留期刊自带包，证据与回退路径记在 `paper/tex/README.md` §1。
+⑤ 读数：稿件 55 页、0 未定义引用/文献、0 错误；`paper-audit --strict` 221 声明 / 100.0% 可追溯 /
+rc=0；零 LLM 复现链 3/6 命令 ok（3 缺席披露）+ 8 目录 489 文件校验通过 / 0 失败；全量
+12,512 passed / 268 skipped / 0 failed。
+
 ### A3 复现包闭环（零 LLM，$0）
 
 - **完整性校验改四态**：`ok` / `FAILED`（校验不符**或在盘却没有清单**）/ `absent`（目录

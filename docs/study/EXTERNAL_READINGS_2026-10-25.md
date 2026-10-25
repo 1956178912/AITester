@@ -32,6 +32,20 @@ POLITO 机构库与 IEEE CSDL 摘要写 "96.88% versus 96.89%"，ResearchR 会�
 跨版本稳定的定性结论**（执行成功率无可测差异、token 三到四倍），不引用这两组
 小数。这是「同一结论、不同快照」的典型，登记在此以免日后被当成新数据。
 
+## 1b. 编排与上下文增强（CO 轮补登记，2026-10-25 一手核验）
+
+| 键 | 读数 | 原文表述 | 出处 |
+|---|---|---|---|
+| `kim2026scaling` | 180 配置；39--70% / 80.8% / 17.2x / 4.4x / 45% / 0.524 | "we perform a controlled evaluation spanning 180 configurations"；"for sequential reasoning tasks, every multi-agent variants degraded performance by 39-70%"；"Centralized coordination improves performance by 80.8% on parallelizable tasks"；"independent agents amplify errors 17.2x, while centralized coordination contains this to 4.4x"；"coordination yields diminishing or negative returns once single-agent baselines exceed ~45%"；"achieves cross-validated R^2=0.524" | arXiv:2512.08296（v1 2025-12-09，v3 2026-04-08），Google Research / DeepMind / MIT，19 位作者，DOI 10.48550/arXiv.2512.08296 |
+| `jwalapuram2026illusion` | 10x | "automatic MAS consistently underperform CoT-SC despite being up to 10x more expensive"；"these comparisons rarely control for inference budgets such as number of LLM calls, total cost, retries, or sampled paths" | arXiv:2606.13003（2026-06-11），Salesforce Research / HKUST(GZ) / UBC / NTU，DOI 10.48550/arXiv.2606.13003 |
+| `shin2026rag` | 6.5% / 28 / 24 / 10 | "While RAG does not enhance correctness, RAG improves line coverage by 6.5% on average"；"28 bugs were detected, 24 unique bugs were reported to developers, ten were confirmed" | ICSE 2026（48th ICSE）Research Track，pp. 767--779，DOI 10.1145/3744916.3773163，arXiv:2409.12682 |
+
+**版本冲突（必须留存）**：`kim2026scaling` 的**配置数与基准数在二手来源之间不一致**——
+论文当前版本（arXiv v3 摘要）写的是 **180 configurations / four benchmarks**
+（Finance-Agent、BrowseComp-Plus、PlanCraft、Workbench），而多篇中文/英文二手博客写
+「260 配置 / 6 个基准」。本登记册与正文一律采用 **arXiv 摘要的一手读数**；引用该文时
+不要采信博客数字。这是本项目「二手来源只作线索、读数必须回原文」的又一例。
+
 ## 2. 评测任务族与检出上限（RQ1 的外部对照）
 
 | 键 | 读数 | 原文表述 | 出处 |
