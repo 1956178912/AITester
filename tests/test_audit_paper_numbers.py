@@ -266,3 +266,70 @@ class TestEndToEnd:
         monkeypatch.setattr(audit_mod, "PROJECT_ROOT", tmp_path)
         rc = audit_mod.main(["--paper-dir", str(paper), "--window", "5", "--strict", "--min-coverage", "0.5"])
         assert rc == 0
+
+
+class TestCjkUnrenderable:
+    """CR 轮（2026-10-25）：可排版文本里不得有 CJK。
+
+    实测事故：本轮编译论文时 tectonic 报
+    `could not represent character "档" (0x6863) in font "ec-lmr10"`，而**编译退出码
+    是 0**——`refs.bib` 两个条目把中文写进了 `note`，note 进 .bbl 被原样排版，
+    Latin Modern 没有中文字形 ⇒ PDF 参考文献处出现缺字符。判据由此从「看编译
+    警告」升级为「可执行检查」。
+    """
+
+    def test_bib_field_with_cjk_fails(self, tmp_path):
+        bib = """@misc{broken2026,
+  title = {A Paper},
+  note  = {DOI 归档后回填（2026-10-25 检索）}
+}
+"""
+        paper = _make_paper(tmp_path, bib=bib)
+        result = audit_mod.audit_bib(paper / "refs.bib", "")
+        assert any("中文字符" in failure for failure in result["failures"]), result["failures"]
+        assert result["cjk_entries"] and result["cjk_entries"][0]["key"] == "broken2026"
+
+    def test_bib_comment_line_with_cjk_is_allowed(self, tmp_path):
+        """bib 里的 `%` 行是注释，不进 .bbl ⇒ 不该被判红。"""
+        bib = """% 这条注释是中文，但它不排版
+@misc{fine2026,
+  title = {A Paper},
+  note  = {arXiv:2601.09695}
+}
+"""
+        paper = _make_paper(tmp_path, bib=bib)
+        result = audit_mod.audit_bib(paper / "refs.bib", "")
+        assert not any("中文字符" in failure for failure in result["failures"]), result["failures"]
+
+    def test_draft_line_with_cjk_fails(self, tmp_path, monkeypatch):
+        draft = "= Introduction\n我们的流水线检出 44.8% 的任务。\n"
+        paper = _make_paper(tmp_path, draft=draft)
+        monkeypatch.setattr(audit_mod, "PROJECT_ROOT", tmp_path)
+        audit = audit_mod.build_audit(paper, window=5)
+        assert any("中文字符" in failure for failure in audit["failures"]), audit["failures"]
+
+    def test_draft_comment_with_cjk_is_allowed(self, tmp_path, monkeypatch):
+        """稿件里的 `%` 之后是注释，不排版 ⇒ 不该被判红。"""
+        draft = "= Introduction\n% 这一行是中文注释\nWe detect 44.8% of tasks.\n"
+        paper = _make_paper(tmp_path, draft=draft)
+        monkeypatch.setattr(audit_mod, "PROJECT_ROOT", tmp_path)
+        audit = audit_mod.build_audit(paper, window=5)
+        assert not any("中文字符" in failure for failure in audit["failures"]), audit["failures"]
+
+    def test_escaped_percent_is_not_a_comment_start(self, tmp_path):
+        """`\\%` 是转义百分号，不开启注释 ⇒ 其后的中文仍算正文（会被排版）。"""
+        assert audit_mod._strip_comment(r"we cover 100\% 覆盖率") == r"we cover 100\% 覆盖率"
+        assert audit_mod._strip_comment(r"we cover 100% 覆盖率") == "we cover 100"
+
+    def test_pmlr_publisher_counts_as_identifier(self, tmp_path):
+        """PMLR 不分配 DOI（CR 轮一手核验）：publisher={PMLR} 是正当标识。"""
+        bib = """@inproceedings{liu26ct,
+  title     = {TestExplora},
+  publisher = {PMLR},
+  note      = {PMLR v306; the PMLR record lists no DOI}
+}
+"""
+        paper = _make_paper(tmp_path, bib=bib)
+        result = audit_mod.audit_bib(paper / "refs.bib", "")
+        assert "liu26ct" not in result["entries_without_identifier"], result["entries_without_identifier"]
+        assert not any("缺少 DOI/arXiv" in failure for failure in result["failures"]), result["failures"]
