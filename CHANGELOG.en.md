@@ -163,6 +163,19 @@ formalisations and one **submitted to the same venue**) ⇒ the synchronisation 
 next round.
 
 
+**五、Readings.**
+Full suite: **12,634 passed / 268 skipped / 0 failed** (collected 12,902; **135.79s** in the CI
+caliber `xdist -n 4 --dist loadfile`, 463.25s single-process, zero LLM);
+clean-tree gate chain **27 steps rc=0** (including the three local-tool items: snapshot
+`--check`, the fix-coverage audit, `paper-audit --strict`); `ruff format --check .` = 987 files
+already formatted, `ruff check` clean, `mypy src/ config.py` = Success: no issues found in 137
+source files; manuscript rebuilt at **55 pages** (`xdv` log caliber), 0 undefined references,
+**0 missing-character warnings**; `paper-audit --strict` rc=0 (241 numeric claims, SRC coverage
+95.0%, 100.0% overall traceability, 0 invalid citations, 0 strict-block failures); the abstract
+measures **225 / 240** words under the two calibers (limit 250, headroom 10); the citation-key
+snapshot `--check` reports it identical.
+
+
 ### CS round addendum (same day): snapshot generation path committed + submission-package coherence check + the fix-coverage tool's baseline revived (zero LLM, $0)
 
 **一、Registry-side false statement: the snapshot's "re-generate" instruction points at a script that does not exist.**

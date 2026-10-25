@@ -143,6 +143,18 @@ E2E/Docker/Smoke 全绿）；tag `v1.0.0` → `dc8285d3` 的 CI 与 Release 均 
 （含 2 篇独立形式化与 1 篇**同投 EMSE** 的工作）⇒ 同步工作留在下一轮。
 
 
+**五、读数。**
+全量：**12,634 passed / 268 skipped / 0 failed**（collected 12,902；CI 同口径
+`xdist -n 4 --dist loadfile` **135.79s**，单进程 463.25s，零 LLM）；
+干净树门禁链 **27 步 rc=0**（含三个本地工具项：快照 `--check` / 修复覆盖率审计 /
+`paper-audit --strict`）；`ruff format --check .` = 987 files already formatted、`ruff check` 全过、
+`mypy src/ config.py` = Success: no issues found in 137 source files；
+论文重编译 **55 页**（`xdv` 日志口径）、0 未定义引用、**缺字符警告 0**；
+`paper-audit --strict` rc=0（数字声明 241 条 / SRC 覆盖 95.0% / 综合可追溯率 100.0% /
+引用无效 0 / strict 块失败 0）；摘要双口径实测 **225 / 240** 词（上限 250，余量 10）；
+引用键快照 `--check` 一致。
+
+
 ### CS 轮补记（同日）：快照生成路径入库化 + 投稿包自洽判据 + 修复覆盖率工具的基线口径复活（零 LLM，$0）
 
 **一、登记面失实：快照的「重生成」指令指向一个不存在的脚本。**
