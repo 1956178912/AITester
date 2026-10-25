@@ -32,6 +32,12 @@ All notable changes to this project will be documented in this file. Format foll
   (absence is neither failure nor success).
 - `REPLICATION.md` gains a three-class path convention (on disk / withdrawn /
   runtime product); three bare `run_benchmark.py:line` references now carry the full path.
+- **The CI evidence-chain step pointed at a withdrawn directory**: `Verify experiment
+  artifact checksums` verified `experiments/results/main_batch`, withdrawn on 2026-10-24 and
+  therefore absent in a fresh clone, so three consecutive runs since `798d8c72` died on that
+  step in the 3.14 leg (locally the artifacts were on disk, so it looked green). It now
+  verifies three current, registered directories with manifests (fresh clone: **127 / 3 / 34
+  items match**).
 
 ### A4 A read-side check for paper numbers (one real traceability break found and fixed)
 

@@ -26,6 +26,10 @@
 - 报告把命令级 `[SKIP]` 由 ❌ 改为 ⬜ skipped，与 FAILED 分列（缺席不是失败，也不是通过）。
 - `REPLICATION.md` 补「路径三类口径」（在盘 / 已撤回 / 运行产物），三处裸
   `run_benchmark.py:行号` 引用补全为 `experiments/run_benchmark.py`。
+- **CI 证据链步骤指向了已撤回目录**：`Verify experiment artifact checksums` 校验
+  `experiments/results/main_batch`，而该目录 2026-10-24 已撤回、fresh clone 中不存在 ⇒
+  自 `798d8c72` 起连续三次 run 在 3.14 档死在这一步（本地工件在盘，看不出红）。改为校验
+  当前世代三个在册且有清单的目录（fresh clone 实测 **127 / 3 / 34 项一致**）。
 
 ### A4 论文数字审计补读侧（发现并修复一处真实溯源断裂）
 

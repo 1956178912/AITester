@@ -289,13 +289,23 @@ jobs:
         run: python scripts/gates/check_artifact_doc_consistency.py
 
       - name: Verify experiment artifact checksums (U1 证据链门禁)
-        # U1（2026-10-05 系统性审查落地）：主批次工件（汇总 JSON + 统计报告 +
+        # U1（2026-10-05 系统性审查落地）：证据工件（汇总 JSON + 统计报告 +
         # traces + SHA256SUMS）已入库（.gitignore 白名单修复）。本步骤校验
         # 工作区工件与 SHA256SUMS 清单一致（防工件被静默篡改/损坏），并附带
         # 校验"清单与实际入库文件集一致"（缺失/多余都报错）。纯 stdlib 快检，
         # 三档矩阵只跑 3.14（工件与 Python 版本无关）。
+        #
+        # CM 轮（2026-10-25）：原命令校验 `experiments/results/main_batch`，
+        # 而该目录已于 2026-10-24 数据清除**撤回**（fresh clone 中不存在）⇒
+        # 自 798d8c72 起连续三次 run 在 3.14 档死在这一步，而本地因工件在盘
+        # 「看起来是绿的」。现改为校验**当前世代在册且有清单**的三个目录：
+        # 三者都在 fresh clone 中逐项通过（127 / 3 / 34 项）。撤回目录不得
+        # 回到本步骤——它已无清单，也没有可校验的字节。
         if: matrix.python-version == '3.14'
-        run: python scripts/gates/checksum_results.py --results-dir experiments/results/main_batch --verify
+        run: |
+          python scripts/gates/checksum_results.py --results-dir experiments/results/emse_docstring_augment_20261017 --verify
+          python scripts/gates/checksum_results.py --results-dir experiments/results/emse_misguided_augment_20261017 --verify
+          python scripts/gates/checksum_results.py --results-dir experiments/results/p_round_b8_ablation_20261018 --verify
 
       - name: Check artifacts tracked (AK3 引用链入库守卫)
         # AK3（2026-10-06 第十二轮审查 R1）：报告引用的关键证据工件
