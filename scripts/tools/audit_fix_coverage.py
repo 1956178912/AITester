@@ -10,7 +10,11 @@
 
 ## 口径
 
-- **基线**：`--base`（默认 `ff15a2f`，即 V 轮修复起点）；
+- **基线**：`--base`（默认 `auto` = **最近一次改动审计范围的提交**，即「本次修复」的语义化起点；
+  可显式给提交号）。**CS 轮更正**：默认值原为 `ff15a2f`（V 轮修复起点），距今已 50+ 轮 ⇒
+  默认跑出来的「新增行」几乎覆盖整个 `src/`，输出是「整仓未覆盖」的**噪声**（真读数：几十个
+  文件的未覆盖计数全为 0 命中），没有诊断价值——这也是该工具长期无人跑的主因；
+  改为 `auto` 后默认口径回到「本次修复引入的行」。
 - **新增行**：`git diff --unified=0 <base> HEAD -- src/` 中 `+` 侧的行号
   （HEAD 行号）；
 - **可执行行**：**以 `coverage.xml` 的 `<line>` 条目为唯一权威**，不自行用
@@ -45,8 +49,28 @@ from typing import Any
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 HUNK_RE = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
-DEFAULT_BASE = "ff15a2f"
+#: `auto` = 最近一次改动审计范围的提交（修复起点的语义化默认；CS 轮取代写死的 V 轮起点）。
+DEFAULT_BASE = "auto"
 DEFAULT_COVERAGE_XML = PROJECT_ROOT / "coverage.xml"
+
+
+def resolve_base(base: str, root: Path, pathspec: str = "src/") -> str:
+    """把 `base` 解析成具体提交号。
+
+    `base == "auto"` ⇒ 取**最近一次改动 `pathspec` 的提交**（`git log -1 -- pathspec`）——
+    这正是「本次修复的起点」的语义。解析不出（仓库无该路径历史）⇒ 返回空串，由调用方
+    明确报错，不静默回落到某个写死的历史提交。
+    """
+    if base != "auto":
+        return base
+    proc = subprocess.run(
+        ["git", "log", "-1", "--format=%H", "--", pathspec],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return proc.stdout.strip()
 
 
 def added_lines_by_file(base: str, root: Path, pathspec: str = "src/") -> dict[str, list[int]]:
@@ -116,7 +140,10 @@ def audit(base: str, xml_path: Path, root: Path, pathspec: str = "src/") -> dict
         pathspec: 审计范围前缀（``src/`` 或 ``experiments/``），同时用于
             还原 coverage.xml 的相对路径前缀。
     """
-    added = added_lines_by_file(base, root, pathspec)
+    resolved = resolve_base(base, root, pathspec)
+    if not resolved:
+        raise ValueError(f"无法解析 base={base!r}（pathspec={pathspec!r} 无历史提交）")
+    added = added_lines_by_file(resolved, root, pathspec)
     cov = coverage_lines(xml_path, pathspec)
 
     files: list[dict[str, Any]] = []
@@ -133,7 +160,7 @@ def audit(base: str, xml_path: Path, root: Path, pathspec: str = "src/") -> dict
         files.append({"file": rel, "added": len(effective), "uncovered": len(uncovered), "missing_lines": uncovered})
 
     return {
-        "base": base,
+        "base": resolved,
         "pathspec": pathspec,
         "coverage_xml": str(xml_path),
         "total_added": total_added,
@@ -160,7 +187,11 @@ def render(result: dict[str, Any]) -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--base", default=DEFAULT_BASE, help=f"修复起点提交（默认 {DEFAULT_BASE}）")
+    parser.add_argument(
+        "--base",
+        default=DEFAULT_BASE,
+        help="修复起点提交；默认 auto = 最近一次改动审计范围的提交（也可显式给提交号）",
+    )
     parser.add_argument(
         "--pathspec",
         default="src/",

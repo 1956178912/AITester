@@ -333,3 +333,99 @@ class TestCjkUnrenderable:
         result = audit_mod.audit_bib(paper / "refs.bib", "")
         assert "liu26ct" not in result["entries_without_identifier"], result["entries_without_identifier"]
         assert not any("缺少 DOI/arXiv" in failure for failure in result["failures"]), result["failures"]
+
+
+class TestSubmissionPackageCoherence:
+    """CS 轮（2026-10-26）：投稿包自洽——`paper/SUBMISSION.md` 是投稿前最后一道
+    人工清单，它自己必须与稿件/投稿材料一致。
+
+    CS 轮实测：该表已与工件脱节四处（页数写 54 实测 55/57、表数写 22 实测 19、
+    TODO 数写 14 实测 18、refs.bib 标识口径漏 `publisher={PMLR}`），而它**没有任何
+    机制能发现自己过期**——审稿人看到的正是这张表。
+    """
+
+    @staticmethod
+    def _make_pkg(tmp_path, pages=55, tables=19, todos=18, draft_tables=19, cover_todos=5, title_todos=13):
+        paper = tmp_path / "paper"
+        (paper / "tex").mkdir(parents=True)
+        body = "\n".join(r"\begin{table}" for _ in range(draft_tables))
+        (paper / "tex" / "manuscript.tex").write_text(body, encoding="utf-8")
+        (paper / "tex" / "manuscript.log").write_text(
+            f"Output written on manuscript.xdv ({pages} pages, 200 bytes).\n", encoding="utf-8"
+        )
+        (paper / "cover_letter.tex").write_text("TODO x\n" * cover_todos, encoding="utf-8")
+        (paper / "title_page.tex").write_text("TODO y\n" * title_todos, encoding="utf-8")
+        (paper / "SUBMISSION.md").write_text(
+            "| `tex/manuscript.tex` | `tex/manuscript.pdf` | "
+            f"{pages}（含附录） |\n"
+            f"| 表格 | 稿件 {tables} 张表全部编号 |\n"
+            f"- 共 {todos} 处待填标记\n",
+            encoding="utf-8",
+        )
+        return paper
+
+    def test_consistent_package_passes(self, tmp_path):
+        paper = self._make_pkg(tmp_path)
+        result = audit_mod.audit_submission_package(
+            paper, (paper / "tex" / "manuscript.tex").read_text(encoding="utf-8")
+        )
+        assert result["failures"] == [], result["failures"]
+        assert result["claims"]["tables"] == {"claimed": 19, "measured": 19}
+        assert result["claims"]["todo_marks"] == {"claimed": 18, "measured": 18}
+
+    def test_table_count_drift_fails(self, tmp_path):
+        """表数声明与稿件实测不符 ⇒ 红。"""
+        paper = self._make_pkg(tmp_path, draft_tables=3)
+        result = audit_mod.audit_submission_package(
+            paper, (paper / "tex" / "manuscript.tex").read_text(encoding="utf-8")
+        )
+        assert any("tables" in f for f in result["failures"]), result["failures"]
+
+    def test_todo_count_drift_fails(self, tmp_path):
+        """TODO 数声明与投稿材料实测不符 ⇒ 红。"""
+        paper = self._make_pkg(tmp_path, cover_todos=3)
+        result = audit_mod.audit_submission_package(
+            paper, (paper / "tex" / "manuscript.tex").read_text(encoding="utf-8")
+        )
+        assert any("todo_marks" in f for f in result["failures"]), result["failures"]
+
+    def test_page_count_drift_fails(self, tmp_path):
+        """页数声明与 xdv 日志不符 ⇒ 红。"""
+        paper = self._make_pkg(tmp_path)
+        (paper / "tex" / "manuscript.log").write_text(
+            "Output written on manuscript.xdv (61 pages).\n", encoding="utf-8"
+        )
+        result = audit_mod.audit_submission_package(
+            paper, (paper / "tex" / "manuscript.tex").read_text(encoding="utf-8")
+        )
+        assert any("pages" in f for f in result["failures"]), result["failures"]
+
+    def test_missing_log_skips_page_claim(self, tmp_path):
+        """构建产物不在场 ⇒ 页数判据跳过并披露，不判红。"""
+        paper = self._make_pkg(tmp_path)
+        (paper / "tex" / "manuscript.log").unlink()
+        result = audit_mod.audit_submission_package(
+            paper, (paper / "tex" / "manuscript.tex").read_text(encoding="utf-8")
+        )
+        assert not any("pages" in f for f in result["failures"]), result["failures"]
+        assert any("manuscript.log" in note for note in result["notes"]), result["notes"]
+
+    def test_missing_submission_file_skips_whole_surface(self, tmp_path):
+        """投稿包不在场 ⇒ 整个判定面跳过（不是红）。"""
+        paper = self._make_pkg(tmp_path)
+        (paper / "SUBMISSION.md").unlink()
+        result = audit_mod.audit_submission_package(
+            paper, (paper / "tex" / "manuscript.tex").read_text(encoding="utf-8")
+        )
+        assert result["present"] is False
+        assert result["failures"] == []
+
+    def test_conflicting_claims_fail(self, tmp_path):
+        """同一项出现两个不同声明 ⇒ 红（登记面自相矛盾）。"""
+        paper = self._make_pkg(tmp_path)
+        text = (paper / "SUBMISSION.md").read_text(encoding="utf-8")
+        (paper / "SUBMISSION.md").write_text(text + "| 稿件 22 张表 |\n", encoding="utf-8")
+        result = audit_mod.audit_submission_package(
+            paper, (paper / "tex" / "manuscript.tex").read_text(encoding="utf-8")
+        )
+        assert any("多个不同值" in f for f in result["failures"]), result["failures"]
