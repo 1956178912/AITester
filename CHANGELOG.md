@@ -200,7 +200,7 @@ LaTeX 引用键口径（§九），它让「正文引用了不存在的文献」
 暴露：编译器的增量缺陷 + 审计器的口径盲区。**
 **十一、读数。**
 全量：**12,669 passed / 268 skipped / 0 failed**（collected 12,937；CI 同口径
-`xdist -n 4 --dist loadfile` 135.1s，单进程 465.11s，零 LLM）；干净树门禁链 **27 步 rc=0**
+`xdist -n 4 --dist loadfile` 133.69s，单进程 465.11s，零 LLM）；干净树门禁链 **27 步 rc=0**
 （含三个本地工具项）；`ruff format --check .` = 987 files already formatted、`ruff check` 全过、
 `mypy src/ config.py` = Success: no issues found in 137 source files；`paper-audit --strict` rc=0
 （数字声明 258 条 / SRC 覆盖 95.3% / 综合可追溯率 100.0% / **引用无效 0** / **引文问题 0**）；
