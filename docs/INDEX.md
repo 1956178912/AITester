@@ -155,6 +155,7 @@
 
 | 文档 | 一句话说明 |
 |---|---|
+| [docs/reviews/README.md](reviews/README.md) | 评审分册目录占位（82 份分册已随 2026-10-24 数据清除删除，本 README 自述）。 |
 | [docs/PROJECT_STATUS_REGISTER.md](PROJECT_STATUS_REGISTER.md) | 项目状态与决策登记册：已完成 / 遗留 / 阻断三类状态与验证入口。 |
 | [CHANGELOG.md](../CHANGELOG.md) | 逐批变更日志（历史快照；当前口径以 BASELINE 与本索引指向的文档为准）。 |
 | INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-18（分册已删除） | 第三轮独立系统性评审报告（2026-10-18）：60+ 前沿数据点一手重建、14 项核心声明逐位复验、A-01..A-20 建议与同日收口状态。 |

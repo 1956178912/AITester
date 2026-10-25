@@ -138,6 +138,7 @@
 
 | Document | One-line description |
 |---|---|
+| [docs/reviews/README.md](reviews/README.md) (Chinese) | Placeholder for the emptied reviews directory (82 booklets removed 2026-10-24). |
 | [docs/PROJECT_STATUS_REGISTER.md](PROJECT_STATUS_REGISTER.md) (Chinese) | Project status and decision register: done / open / blocked states with verification entry points. |
 | [CHANGELOG.en.md](../CHANGELOG.en.md) | Per-batch change log (historical snapshot; current calibers live in BASELINE and the documents linked here). |
 | INDEPENDENT_SYSTEMATIC_REVIEW_2026-10-18（分册已删除） (Chinese) | Third independent systematic review (2026-10-18): 60+ frontier data points rebuilt from primary sources, 14 core claims recomputed bit-for-bit, A-01..A-20 recommendations and same-day close-out status. |
