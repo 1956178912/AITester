@@ -13,6 +13,61 @@
 > 收敛版**：把「路径存在」升级为「数字在工件里」，把「没清单算跳过」升级为「没清单算失败」，
 > 把三处只在登记册里的缺口写进论文正文。
 
+### CN 轮补记（同日）：原生 LaTeX 稿 + 2026 前沿文献对账（零 LLM，$0）
+
+**一、投稿稿改为原生 LaTeX，并修掉转换器带进 PDF 的四类真实缺陷。**
+`paper/tex/manuscript.tex` 自此是唯一权威源（转换器移入 `paper/legacy/`，不参与构建）。
+用 PDF 文本抽取逐项验证：
+
+1. `// SRC:` 注释被当作正文**印进了 PDF**（20 处，含表 3 图注把 "// SRC: b1_lite_…"
+   印在 "(single seed, 50 tasks per cell…)" 中间）——现全部为 `%` 注释，PDF 中
+   `// SRC` 出现次数 20 → 0（仅剩一个真实 URL）。
+2. Typst 列表标记 `+ ` / `- ` 原样输出（22 处，贡献列表与 Limitations 会印成「+ 条目」）
+   ——现为 4 个 `itemize` 环境。
+3. 两处图注内嵌 SRC 片段把图注切成病句——已按 Typst 源重建图注，SRC 移到 `\label` 之后。
+4. 19 张三线表 5 张溢出页宽（最严重 215pt，sha256 列被裁）——改为 booktabs 三线表 +
+   条件缩放 `\resizebox{\ifdim\width>\linewidth\linewidth\else\width\fi}{!}{…}`；
+   最大溢出降到 91pt，且只剩正文长 token。
+
+**二、审计器从「审 Typst 稿」切到「审 LaTeX 稿」**（这一步不做，换稿后的绿就是假绿）：
+新增 `% SRC:` / `% SRC-CHECK: strict` 识别、`\%` 归一化（否则百分比声明系统性漏报）、
+`\citet/\citep` 引文覆盖、`\_` 路径反转义（30 条假红）、非路径 token 过滤（`26/50` 这类
+读数注解）、`select_draft()` 选稿（显式指定 > `tex/manuscript.tex` > `draft.typ`）。
+6 例新锁。实测：**数字声明 218 条 / 综合可追溯率 100.0% / 引用无效 0 / strict 块失败 0**，
+`--strict` rc=0。
+
+**三、2026 前沿文献对账（检索日期 2026-10-25，逐条核验 DOI/arXiv）。**
+检索发现三组与本文同向的独立结果，此前相关工作只引了其中一组，**「前沿领先」的表述在
+旧稿里是虚的**：
+
+- 编排层：新增 Arnaudo et al.（ICSTW 2026，九个多智能体架构 vs 单智能体：覆盖率升、
+  执行成功率无差异、token 三到四倍）与 Radaideh et al.（BDAI 2026，CANDOR 迭代框架
+  vs 单次提示：45.63% vs 69.90%（GPT-4o）、35.92% vs 88.35%（Gemini 2.5 Flash），
+  45 秒 vs 约 50 小时）；与 Konstantinou et al. 合成「工具级/架构级/框架级」三层证据。
+  本文的差异点改写成**分辨率**而非方向：把 196 字符协议文本与再生产预算分开计价。
+- 评测面：补 SWT-Bench（NeurIPS 2024，仓库级 issue→fail-to-pass）、TestExplora
+  （ICML 2026，主动发现，F2P 上限 16.06%）、SWE-Mutation（ACL 2026 Findings，
+  10.20% 验证 / 36.15% 检出）、Hamidi et al.（arXiv 2609.09315，检出接近零因
+  oracle 不捕捉错误行为），把本文定位为「函数级 bug 暴露」这一第四角落。
+- 规格面：补 Tufano et al.（SpecOps '26，规格驱动 +9.8pp 检出，p=0.0352）——
+  这与本文 RQ4 的零结果**存在张力**，正文如实写出两处差异（同体生成的脚手架 vs
+  独立编写并用于裁决；生产缺陷的富契约 vs 模板任务近乎可从代码恢复契约）。
+- 机制：补 Konstantinou/Tambon/Papadakis（arXiv 2607.05139，先测后码 25% vs 约 14%），
+  作为「检测优先段落为何有效」的外部解释，并据此限定主张边界。
+
+**四、外部数字登记工件化。** 新建 `docs/study/EXTERNAL_READINGS_2026-10-25.md`：
+逐条抄录原文读数、DOI/arXiv 号、检索日期，并**显式声明它验证的是登记一致性、不是复算**；
+版本间读数冲突（Arnaudo 的 ESR：96.88/96.89 vs 97.31/97.25）单独登记，正文只取跨版本
+稳定的定性结论。同轮把 `/tmp/rq1_new_report.md`（4 处 SRC 指向临时目录）冻结为
+`docs/study/RQ1_PAIRING_REPORT_2026-10-25.md`，并写明复算命令。
+
+**五、自查（无 bug / 稳定）**：全量测试见 `BASELINE.yaml#tests`；19+ 道门禁 rc=0；
+`ruff format --check .` 979 文件、`ruff check` 全过、mypy 137 源文件 0 错；
+LaTeX 编译 55 页、0 未定义引用/文献、0 致命错误；`paper-audit --strict` rc=0。
+已知环境项：`pip check` 报 `z3-solver 5.1.0.0 is not supported on this platform`
+（wheel 元数据问题；实测 `import z3` 正常、版本 5.1.0，仓库无运行时代码 import 它，
+相关 SMT 测试全绿）。
+
 ### A3 复现包闭环（零 LLM，$0）
 
 - **完整性校验改四态**：`ok` / `FAILED`（校验不符**或在盘却没有清单**）/ `absent`（目录

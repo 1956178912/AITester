@@ -15,6 +15,75 @@ All notable changes to this project will be documented in this file. Format foll
 > "no manifest" moves from *skip* to *fail*, and three gaps that lived only in the
 > register are now in the paper body.
 
+### CN round addendum (same day): native LaTeX manuscript + 2026 frontier literature reconciliation (zero LLM, $0)
+
+**1. The submission manuscript is now native LaTeX, and four real defects the converter had
+printed into the PDF are fixed.** `paper/tex/manuscript.tex` is the single authoritative
+source from now on (the converter moved to `paper/legacy/` and is out of the build). Verified
+by extracting text from the PDF:
+
+1. `// SRC:` provenance comments were typeset as body text (20 occurrences, including Table
+   3's caption printing `// SRC: b1_lite_...` in the middle of "(single seed, 50 tasks per
+   cell...)"). They are all `%` comments now: `// SRC` occurrences in the PDF went 20 -> 0
+   (one real URL remains).
+2. Typst list markers `+ ` / `- ` were emitted verbatim (22 occurrences; the contributions
+   list and Limitations printed as "+ item"). They are four `itemize` environments now.
+3. SRC fragments embedded in two captions cut those captions into broken sentences. Both
+   captions were rebuilt from the Typst source and the SRC moved after `\label`.
+4. Five of nineteen three-line tables overflowed the text width (worst: 215pt, clipping the
+   sha256 column). Tables are now booktabs with conditional scaling
+   `\resizebox{\ifdim\width>\linewidth\linewidth\else\width\fi}{!}{...}`; the worst overflow
+   is 91pt and only long inline tokens remain.
+
+**2. The audit switched from the Typst draft to the LaTeX manuscript** (without this, a green
+after the switch would be a false green): it now recognises `% SRC:` / `% SRC-CHECK: strict`,
+normalises `\%` (otherwise percentage claims are systematically missed), reads
+`\citet`/`\citep` for citation coverage, unescapes `\_` in paths (30 false reds), filters
+non-path tokens such as `26/50`, and adds `select_draft()` (explicit > `tex/manuscript.tex` >
+`draft.typ`). Six new locks. Measured: **218 numeric claims / 100.0% traceable / 0 invalid
+references / 0 strict failures**, `--strict` rc=0.
+
+**3. 2026 frontier reconciliation** (retrieval date 2026-10-25, every DOI/arXiv checked). The
+search found three groups of independent results pointing the same way as this paper; the old
+related work cited only one of them, so the "frontier" claim was hollow:
+
+- Orchestration: added Arnaudo et al. (ICSTW 2026; nine multi-agent architectures vs a single
+  agent: coverage up, execution success unchanged, three to four times the tokens) and
+  Radaideh et al. (BDAI 2026; CANDOR vs one-shot: 45.63% vs 69.90% with GPT-4o, 35.92% vs
+  88.35% with Gemini 2.5 Flash, 45 seconds vs about 50 hours). Together with Konstantinou et
+  al. this is now a tool-level / architecture-level / framework-level evidence stack. The
+  paper's differentiator is restated as *resolution*, not direction: pricing the
+  196-character protocol text and the regeneration budget separately.
+- Evaluation: added SWT-Bench (NeurIPS 2024; repository-level issue-to-fail-to-pass),
+  TestExplora (ICML 2026; proactive discovery, F2P ceiling 16.06%), SWE-Mutation (ACL 2026
+  Findings; 10.20% verification / 36.15% detection) and Hamidi et al. (arXiv 2609.09315;
+  detection near zero because oracles do not capture faulty behaviour), positioning this
+  paper as the fourth, function-level bug-exposure corner.
+- Specification: added Tufano et al. (SpecOps '26; spec-driven +9.8 pp detection, p=0.0352).
+  This is in tension with our RQ4 null, and the text states the two material differences (a
+  scaffolding spec produced by the same agent vs an independently authored spec also used for
+  adjudication; production bugs with rich contracts vs template tasks whose contract is
+  nearly recoverable from code).
+- Mechanism: added Konstantinou/Tambon/Papadakis (arXiv 2607.05139; test-before-code 25% vs
+  about 14%), the external account of why the detection-first paragraph pays, which also
+  bounds the claim.
+
+**4. External readings became an artifact.** New `docs/study/EXTERNAL_READINGS_2026-10-25.md`
+transcribes each reading with its DOI/arXiv and retrieval date, and states explicitly that it
+verifies *registry consistency, not recomputation*. A version conflict (Arnaudo's ESR:
+96.88/96.89 vs 97.31/97.25) is registered separately; the text quotes only the stable
+qualitative conclusion. The same round froze `/tmp/rq1_new_report.md` (four SRC pointers into
+a temporary directory) as `docs/study/RQ1_PAIRING_REPORT_2026-10-25.md` with its recompute
+command.
+
+**5. Self-check (bug-free / stable):** full-suite readings in `BASELINE.yaml#tests`; all gates
+rc=0; `ruff format --check .` 979 files, `ruff check` clean, mypy 137 source files with 0
+errors; LaTeX builds 55 pages with 0 undefined references/citations and 0 fatal errors;
+`paper-audit --strict` rc=0. One environment note: `pip check` reports
+`z3-solver 5.1.0.0 is not supported on this platform` (wheel metadata issue; `import z3`
+works and reports 5.1.0, nothing in the repository imports it at runtime, and the SMT tests
+pass).
+
 ### A3 Replication-package closure (zero LLM, $0)
 
 - **Integrity checking is now four-state**: `ok` / `FAILED` (mismatch **or an on-disk
