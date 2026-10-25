@@ -1,0 +1,355 @@
+{
+  "arm_label": "stagnation",
+  "cli_flag": "--enable-stagnation",
+  "env_expected_COVERAGE_STALL_DETECT_ENABLE": "true",
+  "cache_namespace": "p_round_b8_ablation_20261018_stagnation",
+  "batch_path": "/Users/wangchenyu/Workspace/AITester/experiments/results/p_round_b8_ablation_20261018/benchmark_synthetic_20261024_193144.json",
+  "batch_sha256": "24ea268a44ad1c31216fb307a4141e83de23655d2b963ee7ccfbd05d29a4083a",
+  "rows": 10,
+  "task_ids": [
+    "synthetic__task_0001",
+    "synthetic__task_0000",
+    "synthetic__task_0002",
+    "synthetic__task_0005",
+    "synthetic__task_0006",
+    "synthetic__task_0004",
+    "synthetic__task_0007",
+    "synthetic__task_0009",
+    "synthetic__task_0008",
+    "synthetic__task_0003"
+  ],
+  "tasks": [
+    {
+      "task_id": "synthetic__task_0001",
+      "difficulty": 1,
+      "bug_type": "runtime",
+      "is_cross_file": false,
+      "passed": true,
+      "iterations": 0,
+      "coverage": 100.0,
+      "detection_rate": 0.0,
+      "repair_rate": 0.0,
+      "false_fix_rate": 1.0,
+      "stop_reason": "test_passed",
+      "elapsed_seconds": 6.54,
+      "execution_trace_len": 1,
+      "token_usage": {
+        "input_tokens": 1533,
+        "output_tokens": 1070,
+        "total_tokens": 2603,
+        "llm_calls": 2,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 2603
+        }
+      }
+    },
+    {
+      "task_id": "synthetic__task_0000",
+      "difficulty": 1,
+      "bug_type": "assertion",
+      "is_cross_file": false,
+      "passed": true,
+      "iterations": 0,
+      "coverage": 100.0,
+      "detection_rate": 0.0,
+      "repair_rate": 0.0,
+      "false_fix_rate": 1.0,
+      "stop_reason": "test_passed",
+      "elapsed_seconds": 7.99,
+      "execution_trace_len": 1,
+      "token_usage": {
+        "input_tokens": 983,
+        "output_tokens": 1400,
+        "total_tokens": 2383,
+        "llm_calls": 2,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 2383
+        }
+      }
+    },
+    {
+      "task_id": "synthetic__task_0002",
+      "difficulty": 3,
+      "bug_type": "runtime",
+      "is_cross_file": true,
+      "passed": true,
+      "iterations": 0,
+      "coverage": 100.0,
+      "detection_rate": 0.0,
+      "repair_rate": 0.0,
+      "false_fix_rate": 1.0,
+      "stop_reason": "test_passed",
+      "elapsed_seconds": 7.96,
+      "execution_trace_len": 1,
+      "token_usage": {
+        "input_tokens": 1901,
+        "output_tokens": 1352,
+        "total_tokens": 3253,
+        "llm_calls": 2,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 3253
+        }
+      }
+    },
+    {
+      "task_id": "synthetic__task_0005",
+      "difficulty": 2,
+      "bug_type": "runtime",
+      "is_cross_file": false,
+      "passed": true,
+      "iterations": 0,
+      "coverage": 100.0,
+      "detection_rate": 0.0,
+      "repair_rate": 0.0,
+      "false_fix_rate": 1.0,
+      "stop_reason": "test_passed",
+      "elapsed_seconds": 6.56,
+      "execution_trace_len": 1,
+      "token_usage": {
+        "input_tokens": 2194,
+        "output_tokens": 1286,
+        "total_tokens": 3480,
+        "llm_calls": 2,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 3480
+        }
+      }
+    },
+    {
+      "task_id": "synthetic__task_0006",
+      "difficulty": 1,
+      "bug_type": "assertion",
+      "is_cross_file": false,
+      "passed": true,
+      "iterations": 0,
+      "coverage": 100.0,
+      "detection_rate": 0.0,
+      "repair_rate": 0.0,
+      "false_fix_rate": 1.0,
+      "stop_reason": "test_passed",
+      "elapsed_seconds": 7.78,
+      "execution_trace_len": 1,
+      "token_usage": {
+        "input_tokens": 1970,
+        "output_tokens": 1410,
+        "total_tokens": 3380,
+        "llm_calls": 2,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 3380
+        }
+      }
+    },
+    {
+      "task_id": "synthetic__task_0004",
+      "difficulty": 2,
+      "bug_type": "assertion",
+      "is_cross_file": false,
+      "passed": true,
+      "iterations": 0,
+      "coverage": 79.0,
+      "detection_rate": 0.0,
+      "repair_rate": 0.0,
+      "false_fix_rate": 1.0,
+      "stop_reason": "test_passed",
+      "elapsed_seconds": 10.25,
+      "execution_trace_len": 1,
+      "token_usage": {
+        "input_tokens": 1842,
+        "output_tokens": 2170,
+        "total_tokens": 4012,
+        "llm_calls": 2,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 4012
+        }
+      }
+    },
+    {
+      "task_id": "synthetic__task_0007",
+      "difficulty": 5,
+      "bug_type": "runtime",
+      "is_cross_file": false,
+      "passed": true,
+      "iterations": 0,
+      "coverage": 97.0,
+      "detection_rate": 0.0,
+      "repair_rate": 0.0,
+      "false_fix_rate": 1.0,
+      "stop_reason": "test_passed",
+      "elapsed_seconds": 6.53,
+      "execution_trace_len": 1,
+      "token_usage": {
+        "input_tokens": 1311,
+        "output_tokens": 1066,
+        "total_tokens": 2377,
+        "llm_calls": 2,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 2377
+        }
+      }
+    },
+    {
+      "task_id": "synthetic__task_0009",
+      "difficulty": 5,
+      "bug_type": "assertion",
+      "is_cross_file": false,
+      "passed": true,
+      "iterations": 0,
+      "coverage": 93.0,
+      "detection_rate": 0.0,
+      "repair_rate": 0.0,
+      "false_fix_rate": 1.0,
+      "stop_reason": "test_passed",
+      "elapsed_seconds": 6.62,
+      "execution_trace_len": 1,
+      "token_usage": {
+        "input_tokens": 1852,
+        "output_tokens": 1193,
+        "total_tokens": 3045,
+        "llm_calls": 2,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 3045
+        }
+      }
+    },
+    {
+      "task_id": "synthetic__task_0008",
+      "difficulty": 1,
+      "bug_type": "assertion",
+      "is_cross_file": false,
+      "passed": true,
+      "iterations": 0,
+      "coverage": 100.0,
+      "detection_rate": 0.0,
+      "repair_rate": 0.0,
+      "false_fix_rate": 1.0,
+      "stop_reason": "test_passed",
+      "elapsed_seconds": 8.06,
+      "execution_trace_len": 1,
+      "token_usage": {
+        "input_tokens": 1885,
+        "output_tokens": 1488,
+        "total_tokens": 3373,
+        "llm_calls": 2,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 3373
+        }
+      }
+    },
+    {
+      "task_id": "synthetic__task_0003",
+      "difficulty": 2,
+      "bug_type": "assertion",
+      "is_cross_file": false,
+      "passed": false,
+      "iterations": 2,
+      "coverage": 100.0,
+      "detection_rate": 0.0,
+      "repair_rate": 0.0,
+      "false_fix_rate": 0.0,
+      "stop_reason": "coverage_stall",
+      "elapsed_seconds": 27.84,
+      "execution_trace_len": 3,
+      "token_usage": {
+        "input_tokens": 10811,
+        "output_tokens": 4070,
+        "total_tokens": 14881,
+        "llm_calls": 6,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 14881
+        }
+      }
+    }
+  ],
+  "token_metrics": {
+    "total_input_tokens": 26282,
+    "total_output_tokens": 16505,
+    "total_tokens": 42787,
+    "total_llm_calls": 24,
+    "total_cache_hits": 0,
+    "total_cache_avoided_tokens": 0,
+    "cache_hit_rate_pct": 0.0,
+    "uncached_theoretical_tokens": 42787,
+    "avg_tokens_per_task": 4278.7,
+    "output_share_pct": 38.57,
+    "avg_output_per_task": 1650.5,
+    "avg_output_per_call": 687.71
+  },
+  "cost_usd_standard_price": 0.027691,
+  "price_table": {
+    "model": "deepseek-flash",
+    "input_per_mtok": 0.3,
+    "output_per_mtok": 1.2
+  },
+  "wall_seconds": 37,
+  "start_epoch": 1792841467,
+  "start_iso_utc": "2026-10-24T11:31:07Z",
+  "end_iso_utc": "2026-10-24T11:31:44Z",
+  "exit_code": 0,
+  "log_path": "/Users/wangchenyu/Workspace/AITester/experiments/results/p_round_b8_ablation_20261018/log_stagnation.log",
+  "trace_dir": "/Users/wangchenyu/Workspace/AITester/experiments/results/p_round_b8_ablation_20261018/traces_stagnation",
+  "provenance": {
+    "git_sha": "00e8c24d685bfff55e92b8a2a5b82e786ffc5103",
+    "git_dirty": true,
+    "model_fingerprint": {
+      "requested_alias": "deepseek-flash",
+      "returned_model": "deepseek-flash",
+      "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+      "probe_sha256": "fc3d915941b87e39064ba2075b6e2b29fc0de33bd9fd2b046f6857036edefda3",
+      "probe_at": "2026-10-24T11:31:43.272898+00:00",
+      "missing": [],
+      "pinned": true,
+      "error": null,
+      "alias_mismatch": false
+    },
+    "env_snapshot_COVERAGE_STALL_DETECT_ENABLE": "true",
+    "env_snapshot_DETECTION_SPEC_MODE": null
+  },
+  "stop_reason_counts": {
+    "test_passed": 9,
+    "coverage_stall": 1
+  },
+  "coverage_stall_label_count": 1,
+  "trace_reason_counts": {
+    "test_passed": 9,
+    "coverage_stall": 1
+  },
+  "trace_node_decisions": {
+    "_should_debug:done": 10,
+    "_should_debug:debug": 2
+  },
+  "field_present_counts": {
+    "task_id": 10,
+    "passed": 10,
+    "coverage": 10,
+    "iterations": 10,
+    "stop_reason": 10,
+    "detection_rate": 10,
+    "repair_rate": 10,
+    "false_fix_rate": 10
+  },
+  "detection_aggregate": {
+    "measurable": 10,
+    "detected": 0,
+    "rate": 0.0
+  }
+}

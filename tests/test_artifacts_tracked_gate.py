@@ -136,7 +136,7 @@ class TestExemptionDrift:
         # CI 轮补跑（2026-10-24）：豁免表自「清空态」重建为 5 条（DeepSeek 重跑期
         # 新批目录、按用户口径暂不提交）；提交入库后「已全部入库」漂移会提醒删登记，
         # 届时同步把本锁改回更小值。
-        assert len(gate.EVIDENCE_DIR_EXEMPTIONS) == 4, sorted(gate.EVIDENCE_DIR_EXEMPTIONS)
+        assert gate.EVIDENCE_DIR_EXEMPTIONS == {}  # 2026-10-25：四目录入库后清空
 
     def test_registry_names_stay_in_scan_surface(self):
         """登记名必须落在 EVIDENCE_DIR_GLOBS 内，否则豁免永不被扫描读取。"""

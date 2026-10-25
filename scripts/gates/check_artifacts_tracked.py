@@ -61,15 +61,8 @@ MANIFEST: tuple[str, ...] = (
 # 现由 exemption_coverage() 单源统计、exemption_drift_failures() 判漂移，
 # 并删除本轮实测失效的两条（目录已不存在 / 53 个文件已全部入库）。
 EVIDENCE_DIR_EXEMPTIONS: dict[str, str] = {
-    # CI 轮第三批（2026-10-24）原表随数据清除清空；以下为 DeepSeek 重跑期新批：
-    # 证据性批次但按用户口径暂不提交（工作树携带 CA-CI 轮未提交改动）；
-    # 提交入库后「已全部入库」漂移判定会自动提醒移除这些登记。
-    # docstring_anchor / docstring_augment 两正式批已随 d79a9500 全量入库
-    # （180/128 文件），按「已全部入库 ⇒ 删登记」漂移判定移除其登记。
-    "emse_misguided_augment_20261017": "2026-10-24 augment 正式批的机制重放残留目录（misguided_metrics 重放产物）；未提交 @experiments/run_augment_batch.sh",
-    "emse_oracle_enabled_validation_20261017": "2026-10-25 oracle 注入批（锚表自 llm.bak 重建后 16/20 注入成功，两臂 benchmark 已落盘）；收尾断言拦下（跑批期间并行修复语料锁致树变脏，非绕过门禁），未 --allow-dirty 补跑、数据有效已登记；未提交 @experiments/run_oracle_validation_batch.sh",
-    "emse_spec_anchor_20261016": "2026-10-24 自 LLM 缓存零成本重建的锚表；未提交 @experiments/build_spec_anchor_table.py",
-    "p_round_b8_ablation_20261018": "2026-10-24 DeepSeek 重跑批（重跑 PREREG 已落盘）；未提交 @experiments/run_b8_ablation.sh",
+    # 2026-10-25：四个重跑期目录已全部 git add -f 入库（锚表/机制重放/
+    # oracle 注入批/b8 消融批），按「已全部入库 ⇒ 删登记」清空豁免表。
 }
 
 # 向后兼容别名（T 轮前仅扫 emse_*；既有测试/调用方仍可用旧名）。
