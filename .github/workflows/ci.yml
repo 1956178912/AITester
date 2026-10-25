@@ -384,6 +384,19 @@ jobs:
         if: matrix.python-version == '3.14'
         run: python scripts/gates/check_repo_hygiene.py
 
+      - name: Check scheduled workflows (CY 远端定时作业巡检)
+        # CY（2026-10-26）：每周跑一次的作业（perf.yml 周日 / mutation.yml 周一 / ci.yml 周日）
+        # 最近一次必须非红。改前实测：perf.yml 连续三次定时红（构造期缺凭据）、mutation.yml 定时红
+        # （沙箱缺 experiments/ 包 ⇒ 收集期报错 ⇒ baseline 红），而两者的修复都晚于最后一次红
+        # ⇒ 修复从未被远端跑过，且**没有任何机制能发现**「定时作业红」——CI 只在 PR/push 上跑。
+        # 判定形状：定时红 + 存在**更新的、成功的** workflow_dispatch 运行 ⇒ 绿（真跑已验证修复）；
+        # 否则判红。GITHUB_TOKEN 走环境变量（匿名调用是 60 次/小时）；API 不可达按 [SKIP] 披露，
+        # 不谎报通过。
+        if: matrix.python-version == '3.14'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python scripts/gates/check_scheduled_workflows.py
+
       - name: Check env budget (X3 开关预算守卫)
         # X3（2026-10-05 审查 P0-5）：环境变量开关冻结棘轮——产品开关面
         #（src/ + config.py）新环境变量须先本地运行 check_env_budget.py

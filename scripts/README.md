@@ -9,7 +9,7 @@
 
 > 命名不是判定依据：`tools/check_quota.py` 虽以 `check_` 开头，但它是对 LLM 端点发探测请求的运维工具，不参与门禁；`tools/generate_static_report.py` 虽被 CI 调用，但产物是报告而非判定，故归 `tools/`。
 
-## gates/（34 个）
+## gates/（35 个）
 
 CI / pre-commit 阻断项，`make gates` 跑其中大部分：
 
@@ -41,6 +41,7 @@ CI / pre-commit 阻断项，`make gates` 跑其中大部分：
 | `check_prompt_artifacts.py` | Instruction artifact 清单哈希锁 |
 | `check_registration_consistency.py` | 登记册 §1「当前口径」数字 ↔ `BASELINE.yaml` 双向对账 |
 | `check_repo_hygiene.py` | 仓库卫生：临时/缓存产物不得被 git 跟踪 + 本清单与盘面一致 |
+| `check_scheduled_workflows.py` | 远端定时作业巡检：每周跑一次的作业最近一次必须非红（定时红 + 更新的成功手动运行 ⇒ 绿） |
 | `check_state_contract.py` | 未声明 state 键读写 |
 | `check_status_persistence.py` | 状态通道落盘可达性棘轮（声明了却不落盘 = 归档里 0 出现） |
 | `check_swe_bench_pro_ready.py` | SWE-bench Pro 数据前置校验 |

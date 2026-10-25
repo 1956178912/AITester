@@ -503,6 +503,34 @@ def classify_result(returncode: int | None, timed_out: bool, output: str) -> tup
 #: 复制副本时需要剔除的非源码产物（.pyc/缓存复制过去只会制造陈旧字节码风险）
 _SANDBOX_IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc", ".pytest_cache", ".mypy_cache")
 
+#: `experiments/` 下**不**进沙箱的目录（CY 轮 2026-10-26）。
+#: 背景：`experiments/` 是实验脚本包（101 个顶层模块 + `analysis_parts` 子包），
+#: 而**很多测试文件直接 import 它**（`from experiments import helpers_tier_replay`
+#: 等）。CY 轮实测：mutation.yml 的「全量巡检」步骤自 2026-10-19 起一直红，
+#: 根因正是沙箱**只复制 `src/` + `config.py` + 指定测试文件**，于是被自动发现到的
+#: `tests/test_helpers_tier_replay.py` 在副本里 `ModuleNotFoundError: experiments`
+#: → **收集期报错**（rc=2）→ baseline 红 → 该模块的测量被判无效并中止。
+#: `results/` 是 32 MB 的运行工件（不是代码），不进沙箱；`experiments/` 里
+#: 模块级**不读数据**（数据读取都在函数体内），故只复制 `.py` 即可让收集通过。
+_SANDBOX_EXPERIMENTS_SKIP_DIRS = frozenset(
+    {"results", "artifacts", "__pycache__", ".pytest_cache", ".mypy_cache", ".git"}
+)
+
+
+def _sandbox_experiments_filter(directory: str, names: list[str]) -> set[str]:
+    """`shutil.copytree` 的 ignore 回调：`experiments/` 下只保留 `.py` 与包目录。"""
+    skipped: set[str] = set()
+    base = Path(directory)
+    for name in names:
+        path = base / name
+        if path.is_dir():
+            if name in _SANDBOX_EXPERIMENTS_SKIP_DIRS:
+                skipped.add(name)
+        elif not name.endswith(".py"):
+            skipped.add(name)
+    return skipped
+
+
 #: 宿主 pytest 会话残留键：本工具若在 pytest 用例内被调用，这些键会泄漏进
 #: 嵌套 pytest，让被测行为依赖"是谁启动了它"（CI 用 xdist -n4，worker 身份
 #: 变量同样不应跨层传播）
@@ -553,9 +581,20 @@ class Sandbox:
         test_files: Sequence[str],
         label: str = "worker",
     ) -> Sandbox:
-        """建立完整副本：src/ 全树 + config.py + pyproject.toml + conftest + 目标测试。"""
+        """建立完整副本：src/ 全树 + experiments/ 源码 + config.py + pyproject.toml + conftest + 目标测试。"""
         root.mkdir(parents=True, exist_ok=True)
         shutil.copytree(repo_root / "src", root / "src", ignore=_SANDBOX_IGNORE)
+        # CY 轮（2026-10-26）：`experiments/` 的**源码**必须进副本——被测测试文件
+        # 会 `from experiments import ...`，缺了它就是**收集期** ModuleNotFoundError
+        # （rc=2），baseline 必红，测量被判无效。只复制 `.py`（见
+        # `_sandbox_experiments_filter`）：`results/` 是 32 MB 运行工件，不是代码。
+        experiments_dir = repo_root / "experiments"
+        if experiments_dir.is_dir():
+            shutil.copytree(
+                experiments_dir,
+                root / "experiments",
+                ignore=_sandbox_experiments_filter,
+            )
         shutil.copy2(repo_root / "config.py", root / "config.py")
         # pyproject.toml 决定 pytest rootdir/ini；复制但不改写——命令模板已用
         # `-o addopts=` 清空宿主口径，副本保持"与工作树同字节"便于审计。

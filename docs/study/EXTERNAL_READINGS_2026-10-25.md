@@ -297,3 +297,51 @@ IEEE Xplore 上线、未同步 arXiv 的 9/10 月论文未被本轮覆盖**。
 **备选索引（已核验，未列入正文，避免下轮重复检索）**：`arXiv:2608.17214`、`2609.28896`、
 `2608.17177`、`2606.08588`、`2604.21579`、`2608.13404`、`2602.03585`、`2605.02096`、
 `2610.03969`、`2609.34752`、`2608.23341`、`2603.07520`。
+
+## 10. CY 轮（2026-10-26）新增八篇：回溯扫描的**召回缺口**与三处novelty 再收窄
+
+> **核验方式**：`export.arxiv.org/api/query`（https）的 `summary` 字段逐字取回（作者名取自 Atom
+> `author/name`，日期取自 `published`，版本号取自 arXiv id）；每段引文**先断言存在于官方 summary
+> 再写入本表**（CY 轮实测 19 条引文逐字命中，坏引文 0）。
+>
+> **为什么本轮又做一次检索**：CW 轮已按「2026-01-01～10-26 全年回溯」扫过一遍，本轮按
+> 「2026-10-19～10-26 共 120 条新投稿」逐条标题+摘要判读，发现**其中 8 篇与本稿核心论断的
+> 关系比 CW 轮选中的十篇更近**——它们恰好落在 CW 轮 11 维加权的**低分区**：它们的领域词是
+> 「harness / verifier / instruction file / assurance evidence / requirements engineering」，
+> 而不是「test generation / mutation / SWE-bench」。**这是一次召回缺口，不是检索窗口缺口。**
+> ⇒ 结论：CW 轮的「全年回溯」在**关键词覆盖**上仍有系统性盲区，回溯对账必须按**论断族**检索，
+> 不能只按**领域词**检索。
+
+| 键 | 读数 | 原文表述 | 出处 |
+|---|---|---|---|
+| `zuppardo2026beyondaccuracy` | 18 条件 / 625 需求 / +0.075 / -0.003～+0.013 / 3 个 7–8B 模型 | "The 18 conditions cover PROMISE NFR+ (625 requirements), three locally hosted small language models, and two languages."；"The F1 gain over the baseline is associated with the two-call, specialized-prompt variant (up to +0.075), whereas the typed state adds a small difference (-0.003 to +0.013) that is significant in one of six comparisons."；"The study is associative: the contrasts bundle prompts, call count, and staged context, and the results come from three 7--8B models on one dataset." | arXiv:2610.31280v1（2026-10-22；cs.SE；SBQS 待发表；无出版商 DOI） |
+| `curmi2026harnessmatter` | 24 配置 / 265 根因 / 60.4% / 14.3% / 20–86% vs 2% | "We study 24 model-runner configurations using an open-source harness on a production codebase whose vulnerabilities were non-public at scan time."；"moving from a minimal prompt to an engineered prompt with a CodeQL-derived call graph raises criticality-weighted yield by 20-86% for smaller and mid-tier models, compared with 2% for the frontier model"；"Separating those effects shows that the engineered prompt improves yield for all four models, while adding CodeQL context beyond that prompt improves yield only for the smallest model."；"Across 265 confirmed security root causes, the largest two-run configuration covers 60.4%, while 14.3% are found by exactly one model." | arXiv:2610.28802v1（2026-10-20；cs.CR；CAMLIS 2026 已接收；无出版商 DOI） |
+| `xu2026staleinstructions` | 40 项目 / 320 次运行 / 90.1% / 79-of-80 / 4.2%→91.4% / 89.4%→100% | "We built 40 Python projects in which the instruction file asks for one convention while the existing code uses another, for example print instead of logging."；"in 320 runs."；"Without the sentence, 90.1% of the agents' choices followed the stale file."；"Claude Code pointed out the conflict in 79 of 80 runs and still followed the file."；"The sentence raised the share of choices that follow the code from 4.2% to 91.4%, stopped the rewrites and raised the test pass rate from 89.4% to 100%." | arXiv:2610.30571v1（2026-10-22；cs.SE；SN Computer Science 在审；无出版商 DOI） |
+| `zhu2026selfreportleakage` | 43.4 pp / 13.3 pp / F1 0.75–0.78 / 0.77–0.81 | "Withholding it improves trace-only dangerous-misreport recall by 43.4 percentage points with Qwen3.5-35B-A3B and 13.3 percentage points with DeepSeek-284B-A13B"；"an unhedged success claim that the trace does not support as causal accomplishment during the run"；"The auditor achieves F1 0.75--0.78 on the 465-record audit-target set and 0.77--0.81 on held-out Batch 2, outperforming claim-aware and prompt-blind controls in recall and F1." | arXiv:2610.29609v1（2026-10-21；cs.SE；ICSE 2027 Research Track 已接收；无出版商 DOI） |
+| `yin2026verifierbench` | 19 模型 / 10.6–62.1 | "Across 19 models in a common agent harness, normalized balanced accuracy ranges from 10.6 to 62.1, with generated verifiers consistently rejecting invalid solutions more reliably than they accept valid ones"；"These errors survive self-testing because agents test solutions that share the verifier's mistaken assumptions, or submit verifiers without confirming that any correct solution passes." | arXiv:2610.28679v1（2026-10-19；cs.SE；无出版商 DOI） |
+| `weber2026evaluationscarcity` | 经验报告（单开发者 / 单系统 / 无对照） | "Several defects passed the test suite: they sat at the boundaries the tests had mocked, the browser and the language-model API, or appeared only in real use."；"Writing code becomes abundant. Reliable evaluation-knowing whether a result is correct and meets the actual need-remains necessary at every iteration and becomes the binding constraint." | arXiv:2610.30916v1（2026-10-22；cs.SE；经验报告（证据等级最低）；无出版商 DOI） |
+| `mukhopadhyay2026assuranceevidence` | 83.4% / 3.3% / 31% | "Reuse is safe only if each control's declared dependencies cover everything that can change its outcome, and only if the release gate checks that reused evidence describes the candidate being released."；"Reusing stage results according to declared dependencies avoids 83.4% of stage executions, but in 3.3% of commits it reuses a stage whose imported code or referenced configuration changed, and 31% of pipelines are affected." | arXiv:2610.27672v1（2026-10-20；cs.CV；无出版商 DOI） |
+| `quan2026agentest` | 60% | "about 60% of bug-triggering runs cannot be detected from the final state alone, highlighting the need to check the full interaction against explicit business rules"；"Violating such rules can lead to business logic bugs, even when a task appears successful." | arXiv:2610.28116v1（2026-10-20；cs.SE；无出版商 DOI） |
+
+### 10.1 三处 novelty 再收窄（本轮新增占位者）
+
+| 本稿原口径 | 本轮新增占位者 | 本稿因此必须让渡什么 | 本稿仍保留什么 |
+|---|---|---|---|
+| 「编排/流水线的收益由**提示文本**承载，而非由**结构**承载」 | `zuppardo2026beyondaccuracy`（2610.31280：F1 增益归于「专门化提示词的两调用变体」+0.075，类型化状态只加 -0.003～+0.013，18 条件 625 需求）＋ `curmi2026harnessmatter`（2610.28802：把最小提示换成工程化提示 + CodeQL 调用图，较小/中等模型 +20–86%、前沿模型 +2%；**分离**后工程化提示对四个模型都有效，额外上下文只对最小模型有效） | **不得再声称「我们第一个发现流水线的收益来自提示文本而非结构」**。两篇已在**需求工程**与**漏洞发现**两个域各自独立得到同向结论；且 `zuppardo2026beyondaccuracy` 自陈其对比**捆绑**了提示、调用次数与分阶段上下文，**并未真正分离**。 | ① **分母层面的分解**（条件口径 vs 边际口径；文本承载 vs 它授权的再生成预算**分别计价**）；② **预注册**；③ **经 F→P 裁决的检出**而非 F1；④ **被审计过的装置**（含它自身的失效模式）。 |
+| 「指令文件是一等因果对象」 | `xu2026staleinstructions`（2610.30571：过期指令文件在 90.1% 的运行里压过代码；Claude Code 在 79/80 次里**明确指出冲突仍然照旧执行**；一句话把「跟随代码」从 4.2% 提到 91.4%，测试通过率 89.4%→100%） | **不得再声称「指令文本会压过代码」是新发现**。这已是**机制级**证据（40 项目 × 320 次运行、两个商用编码 agent）。 | ① 本稿测的是**检出收益**而非**风格选择**；② 本稿的指令段落是**被测量的对象**（196 字符、可单独计价），而不是被当成「配置」；③ 本稿的结论是**该段落不授权再生成就不产生检出**。 |
+| 「谁裁决 / 装置自身的效度」 | `zhu2026selfreportleakage`（2610.29609：撤掉 agent 的自述报告，轨迹口径的危险误报召回 +43.4 pp / +13.3 pp）＋ `yin2026verifierbench`（2610.28679：生成的验证器**拒绝**无效解比**接受**有效解更可靠，平衡准确率 10.6–62.1；「这些错误之所以躲过自测，是因为 agent 用与验证器共享的错误假设去测」）＋ `mukhopadhyay2026assuranceevidence`（2610.27672：证据复用只有在**声明的依赖**覆盖一切可变项时才安全；714 条 DVC 管线的回放里 3.3% 的提交复用了已变更的阶段） | **不得再声称「裁决者必须与被裁决者分离」或「复用证据需要依赖闭包」是新发现**。 | ① 本稿的 F→P 裁决**不消费被测者的自述**（因此不落在 `zhu2026selfreportleakage` 的泄漏面）；② 本稿对**自家装置**做失效模式审计并公开其上限（可执行预言机 16/20 任务成功但**不**提升检出）；③ 本稿的**归档工件复用**同样受 `mukhopadhyay2026assuranceevidence` 的依赖闭包约束——这一点已转成本仓库的**可执行判据**（见 `scripts/tools/audit_paper_numbers.py` 的 SRC 存在性/数字存在性面）。 |
+
+### 10.2 两条**同向证据**（不再是占位者，而是外部收敛证据）
+
+- `weber2026evaluationscarcity`（2610.30916）：经验报告层级（证据等级最低，须显式标注），但其观察与本稿的 false-fix 现象**同构**——「若干缺陷通过了测试套件：它们位于测试所 mock 的边界上……或只在真实使用中出现」。本稿的 false-fix 是**声明侧**的同一形状（声明被接受，缺陷未修复）。
+- `quan2026agentest`（2610.28116）：「约 60% 的触发缺陷运行**无法仅从最终状态**检出」与本稿的轨迹/状态裁决需要同向；其「即使任务看起来成功，仍可能违反业务规则」与本稿的「声明成功但未修复」是同一族表述。
+
+### 10.3 本轮**未**解决的覆盖缺口（诚实登记）
+
+- 本轮检索窗口仍是 **arXiv cs.SE + cs.CR + cs.CV 的 2026-10-19～10-26**；非 arXiv 渠道（DBLP / ACM DL / IEEE Xplore）
+  在本环境仍被代理拦截，**可能存在只在 ACM DL / IEEE 上线、未同步 arXiv 的同期论文未被覆盖**。
+- **结构性缺口（可复算）**：CW 轮的全年回溯**只扫了 cs.SE**（登记册 §9 自陈「全部 cs.SE 共
+  6,500 条」）。而本轮八篇里有**两篇的主分类不在 cs.SE**——`curmi2026harnessmatter` 主分类
+  **cs.CR**、`mukhopadhyay2026assuranceevidence` 主分类 **cs.CV**——它们**结构上不可能**被
+  CW 轮的扫描覆盖。⇒ 后续检索**必须**把 cs.CR / cs.CV 纳入同一次扫描，并在登记册里**逐轮
+  写明扫描的分类集合**（否则「全年回溯」这个说法会掩盖它其实只覆盖了一个分类）。

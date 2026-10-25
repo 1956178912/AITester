@@ -15,6 +15,78 @@ All notable changes to this project will be documented in this file. Format foll
 > "no manifest" moves from *skip* to *fail*, and three gaps that lived only in the
 > register are now in the paper body.
 
+### CY round addendum (2026-10-26): remote scheduled jobs actually run + a sandbox dependency-closure defect + **eight directly-on-topic frontier papers narrow novelty three more times** (zero LLM, $0)
+
+**1. Remote inspection found scheduled jobs that were "fixed but never verified" (a real defect).**
+The `perf.yml` scheduled job was red on 2026-10-11 / 10-18 / 10-25 (root cause: `BaseAgent`
+requires credentials at construction time and the scheduled environment has no `.env`; the CO
+round's fix `2d594419` came **after** the last red run ⇒ it had never been exercised
+remotely). The `mutation.yml` scheduled job was red on 2026-10-19 (the CQ round's fix is
+later still). After two manual `workflow_dispatch` runs: perf is **green** (the fix holds on
+the real runner), mutation is **still red** — and what is red is **not** the gate step (the
+gate reports `score=0.9067 > 0.85`, matching the CQ round's prediction digit for digit) but
+the step commented as "report-only".
+
+**2. A sandbox dependency-closure defect (the real bug fixed this round).** The remote log:
+`baseline RED: src/utils/helpers.py` → `ERROR tests/test_helpers_tier_replay.py` →
+`Interrupted: 1 error during collection`. Root cause: the self-mutation harness copies only
+`src/` + `config.py` + the target test files, while that test does
+`from experiments import helpers_tier_replay` ⇒ the copy fails at **collection time**
+(`ModuleNotFoundError`, rc=2) ⇒ baseline red ⇒ the whole patrol aborts. Fix: the sandbox now
+also copies the **sources** of `experiments/` (`.py` only; `results/` is 32 MB of run
+artefacts, not code). Measured locally: `helpers` went from unmeasurable to measurable
+(0.6555); the three modules together score 0.7468. Two new end-to-end locks (not "the file was
+copied" but "the tests in the copy really collect and pass").
+
+**3. New gate `check_scheduled_workflows.py`: "the scheduled job is red" becomes an executable
+criterion.** Decision shape: for every registered scheduled workflow, take the latest completed
+`schedule` run and the latest completed `workflow_dispatch` run — **red schedule + a newer
+successful manual run ⇒ green** (the fix has been verified by a real run); otherwise red. An
+unreachable API is disclosed as `[SKIP]` (never reported as a pass). Two self-consistency
+surfaces: every workflow with a `schedule:` trigger on disk must be registered, and the
+registered cron must match the workflow file verbatim. 13 locks (8 of them negative).
+**"Fixed but never verified" must be caught by a mechanism, not by someone's memory.**
+
+**4. Eight on-topic frontier papers narrow novelty three more times.** The CW round's
+"full-year retrospective" **scanned cs.SE only** (as §9 of the register states) and weighted
+by **domain words**; this round read all 120 new submissions in the same window
+(2026-10-19 to 10-26) and found **eight papers closer to this manuscript's claims than the ten
+the CW round selected**, two of whose primary categories (cs.CR / cs.CV) were **structurally
+out of reach** of the CW sweep. All eight were verified verbatim against the arXiv official
+Atom API `summary` field (19 quotes hit verbatim, 0 bad), and register §10 was added (with a
+§10.1 concession table and a §10.3 coverage-gap disclosure):
+
+- `zuppardo2026beyondaccuracy` (2610.31280) and `curmi2026harnessmatter` (2610.28802) have
+  independently reported, in requirements engineering and in vulnerability discovery, that a
+  pipeline's gain is carried by prompt text rather than by structure ⇒ **we can no longer
+  claim that as a new observation**; what remains is the **decomposition at the level of
+  denominators + pre-registration + fail-to-pass-adjudicated detection + an audited device**.
+- `xu2026staleinstructions` (2610.30571) establishes at the mechanism level (40 projects, 320
+  runs) that a stale instruction file outranks the code (90.1%, and Claude Code points out the
+  conflict in 79 of 80 runs and still obeys it) ⇒ **we can no longer claim that instruction
+  text outranks code as a finding**; we measure a **detection** effect, not a stylistic one.
+- `zhu2026selfreportleakage` (2610.29609, ICSE 2027), `yin2026verifierbench` (2610.28679) and
+  `mukhopadhyay2026assuranceevidence` (2610.27672) turn "who adjudicates", "the validity of the
+  device itself" and "the dependency closure of evidence reuse" into **measurements** ⇒ this
+  paper can only say that its own device was audited, not that auditing devices is a new demand.
+- `weber2026evaluationscarcity` (2610.30916) and `quan2026agentest` (2610.28116) are
+  **converging evidence** rather than occupiers (the former is an experience report, the
+  weakest evidence tier, labelled as such).
+
+Manuscript handling: Related Work gains three paragraphs (placed under the misguidance,
+multi-agent, and measurement-integrity subsections), the Introduction's contribution sentence
+now states that **four things are already established** (a fail-to-pass check can pass on a
+wrong patch, test passing does not establish behavioral equivalence, a gain can be carried by
+prompt text, and an instruction artefact can outrank the code) and that the increment is a
+**decomposition at the level of denominators**, and the cover letter concedes the three points
+by name. The manuscript grew from 62 to 65 pages and from 56 to 64 bibliography entries.
+
+**5. Run the criterion before compiling (caught this round).** When adding the eight
+`refs.bib` entries I carried over the register's Chinese phrasing and put Chinese into the
+`note` field ⇒ LaTeX reported 8 `Unicode character … not set up for use with LaTeX` errors;
+the CR round's "no CJK in typeset text" criterion caught **8 of 8** on its first run. Fixed to
+Latin text and rebuilt (64 pages, 64 bibitems, zero undefined citations, zero missing glyphs).
+
 ### CW round addendum (2026-10-26): a full-year retrospective reconciliation of 2026 — ten frontier papers enter the manuscript and the register, and the novelty claim becomes "not a new observation" (zero LLM, $0)
 
 The previous two rounds of retrieval only watched the "latest window" (late October) and therefore

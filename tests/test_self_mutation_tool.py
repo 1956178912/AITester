@@ -547,3 +547,83 @@ def test_main_dry_run_writes_reports(tool: ModuleType, tmp_path: Path) -> None:
     assert report["summary"]["not_run"] == module_report["sampled_mutants"]
     assert report["summary"]["mutation_score"] is None
     assert md_out.is_file()
+
+
+# ─── CY 轮（2026-10-26）：沙箱必须带上 `experiments/` 源码 ─────────────────────
+#
+# 回归锁的由来（本轮实测的真实缺陷）：
+#   mutation.yml 的「Self-mutation full patrol (3 modules, report-only)」步骤
+#   自 2026-10-19 起**一直红**，而门禁步骤（env_utils + atomic_io）是绿的。
+#   远端日志原文：
+#     [self-mutation] baseline RED: src/utils/helpers.py (5.03s)
+#     ERROR tests/test_helpers_tier_replay.py
+#     ! Interrupted: 1 error during collection
+#   根因：沙箱只复制 `src/` + `config.py` + `pyproject.toml` + 目标测试文件，
+#   而 `tests/test_helpers_tier_replay.py` 里有 `from experiments import
+#   helpers_tier_replay as rep` ⇒ 副本里**收集期**就 ModuleNotFoundError（rc=2）
+#   ⇒ baseline 红 ⇒ 该模块的测量被判无效并中止整个巡检。
+#   修法：沙箱额外复制 `experiments/` 的**源码**（只 `.py`；`results/` 是 32 MB
+#   运行工件，不是代码，不进沙箱）。
+# 这条锁的判据形状是**端到端**的：不是「文件被复制了」，而是「副本里的测试真的
+# 收集并跑绿了」——只有后者才能证明缺包这类缺陷不会再回来。
+
+
+def test_sandbox_copies_experiments_package_sources(tool: ModuleType, fake_repo: Path, tmp_path: Path) -> None:
+    """副本里必须能 `from experiments import ...`（否则收集期就炸）。"""
+    repo = fake_repo
+    (repo / "experiments").mkdir()
+    (repo / "experiments" / "__init__.py").write_text("", encoding="utf-8")
+    (repo / "experiments" / "helper_mod.py").write_text("VALUE = 1\n", encoding="utf-8")
+    (repo / "experiments" / "results").mkdir()
+    (repo / "experiments" / "results" / "data.json").write_text("{}", encoding="utf-8")
+    (repo / "tests" / "test_foo.py").write_text(
+        "from experiments.helper_mod import VALUE\n"
+        "from src.foo import add\n"
+        "\n"
+        "\n"
+        "def test_add():\n"
+        "    assert add(1, 2) == 3\n"
+        "    assert VALUE == 1\n",
+        encoding="utf-8",
+    )
+    sandbox_root = tmp_path / "sandbox"
+    tool.Sandbox.create(
+        sandbox_root,
+        repo,
+        module_paths=["src/foo.py"],
+        test_files=["tests/test_foo.py"],
+    )
+    assert (sandbox_root / "experiments" / "__init__.py").is_file()
+    assert (sandbox_root / "experiments" / "helper_mod.py").is_file()
+    # 运行工件不是代码，不进沙箱（否则每个 worker 都要拷 32 MB）
+    assert not (sandbox_root / "experiments" / "results").exists()
+
+
+def test_sandbox_runs_tests_that_import_experiments(tool: ModuleType, fake_repo: Path, tmp_path: Path) -> None:
+    """端到端：副本里那类测试必须真的跑绿（收集不报错）。"""
+    repo = fake_repo
+    (repo / "experiments").mkdir()
+    (repo / "experiments" / "__init__.py").write_text("", encoding="utf-8")
+    (repo / "experiments" / "helper_mod.py").write_text("VALUE = 1\n", encoding="utf-8")
+    (repo / "tests" / "test_foo.py").write_text(
+        "from experiments.helper_mod import VALUE\n"
+        "from src.foo import add\n"
+        "\n"
+        "\n"
+        "def test_add():\n"
+        "    assert add(1, 2) == 3\n"
+        "    assert VALUE == 1\n",
+        encoding="utf-8",
+    )
+    sandbox_root = tmp_path / "sandbox"
+    sandbox = tool.Sandbox.create(
+        sandbox_root,
+        repo,
+        module_paths=["src/foo.py"],
+        test_files=["tests/test_foo.py"],
+    )
+    try:
+        proc = sandbox.run_tests(["tests/test_foo.py"], tool.DEFAULT_TEST_COMMAND, timeout=120)
+    finally:
+        sandbox.close()
+    assert proc.returncode == 0, proc.stdout[-2000:] + proc.stderr[-2000:]
