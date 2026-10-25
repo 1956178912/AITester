@@ -84,6 +84,20 @@ errors; LaTeX builds 55 pages with 0 undefined references/citations and 0 fatal 
 works and reports 5.1.0, nothing in the repository imports it at runtime, and the SMT tests
 pass).
 
+**6. Typst line removed (same day).** Everything Typst-side under `paper/` moved to the
+system Trash (`~/.Trash/aitester-typst-2026-10-25/`, with a per-file `MANIFEST.md`; each
+item can be moved back verbatim): `draft.typ` / `draft.pdf` / `draft_submission.typ` /
+`draft_submission.pdf` / `cover_letter.typ` / `cover_letter.pdf` / `refs.bib` (the Typst-side
+copy) / `build_submission.py` / `legacy/` (the converter). The workspace keeps only
+`paper/tex/` plus the corpus and reference directories. Three hidden couplings to hard-coded
+Typst paths were fixed with it: (i) the audit's bibliography path now follows the selected
+manuscript's directory (otherwise deleting `paper/refs.bib` makes `--strict` report "bib file
+missing" and block); (ii) the TODO list reports the actual draft name instead of a literal
+`draft.typ`; (iii) `_scrub_typst_math` became `_keep_math` (keeping math-mode numbers applies
+to both markups). One paper-dependent test therefore turns into a named skip:
+**12,513/267 -> 12,512 passed / 268 skipped**. The cover letter exists only in Typst today; if
+it is still needed it must be rewritten as LaTeX for SVJour3.
+
 ### A3 Replication-package closure (zero LLM, $0)
 
 - **Integrity checking is now four-state**: `ok` / `FAILED` (mismatch **or an on-disk

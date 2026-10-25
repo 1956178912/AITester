@@ -68,6 +68,17 @@ LaTeX 编译 55 页、0 未定义引用/文献、0 致命错误；`paper-audit -
 （wheel 元数据问题；实测 `import z3` 正常、版本 5.1.0，仓库无运行时代码 import 它，
 相关 SMT 测试全绿）。
 
+**六、Typst 侧清理（同日）**：`paper/` 下 Typst 线路整体移入系统废纸篓
+（`~/.Trash/aitester-typst-2026-10-25/`，附 `MANIFEST.md` 逐文件说明，可原样移回）——
+`draft.typ` / `draft.pdf` / `draft_submission.typ` / `draft_submission.pdf` /
+`cover_letter.typ` / `cover_letter.pdf` / `refs.bib`（Typst 侧副本）/ `build_submission.py` /
+`legacy/`（转换器）。工作区只留 `paper/tex/` 与语料、文献目录。连带修掉三处「写死 Typst
+路径」的隐性耦合：① 审计器的文献路径改为跟随所选稿件目录（否则删掉 `paper/refs.bib`
+后 `--strict` 直接报「bib 不存在」）；② TODO 清单的文件名用实际稿件名，不再写死
+`draft.typ`；③ `_scrub_typst_math` 更名 `_keep_math`（数学模式保留对两种写法都适用）。
+一个依赖论文稿的测试因此转为具名 skip：**12,513/267 → 12,512 passed / 268 skipped**。
+投稿信目前只有 Typst 版，若仍要用，需要按 SVJour3 另写一份 LaTeX 投稿信。
+
 ### A3 复现包闭环（零 LLM，$0）
 
 - **完整性校验改四态**：`ok` / `FAILED`（校验不符**或在盘却没有清单**）/ `absent`（目录
