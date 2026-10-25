@@ -14,6 +14,10 @@
   二者混为一谈。
 - 登记纪律：只登记**能从原文（摘要/正文）直接抄到**的读数；版本间读数不一致时，
   登记**会议/期刊定稿**并注明版本差异，不取「看起来更好」的那个。
+- **行级判据（CP 轮新增，可执行）**：每行「读数」列里的**多位数与小数**必须在同行
+  「原文表述」列里逐字出现（千分位逗号不计），「原文表述」不得写成自指（"quoted above"
+  一类必须内联原句）。该判据由 `tests/test_external_readings_rows.py` 执行；英文数词
+  （`ten` / `thirteen`）按名豁免且豁免表只允许变短。**读数出自全文而引文抄摘要**，锁当场红。
 - 检索日期：2026-10-25。
 
 ## 1. 编排 vs 单提示（RQ2 的外部对照）
@@ -46,6 +50,47 @@ POLITO 机构库与 IEEE CSDL 摘要写 "96.88% versus 96.89%"，ResearchR 会�
 「260 配置 / 6 个基准」。本登记册与正文一律采用 **arXiv 摘要的一手读数**；引用该文时
 不要采信博客数字。这是本项目「二手来源只作线索、读数必须回原文」的又一例。
 
+## 1c. 编排与协作上限（CP 轮补登记，2026-10-25 一手核验）
+
+| 键 | 读数 | 原文表述 | 出处 |
+|---|---|---|---|
+| `yang2026dualcontrol` | 7,950 / 6 模型 / 3 族 | "over about 7,950 simulated conversations, with one completion-token ledger per episode per system"；"for six models from three families" | arXiv:2610.27655v1（2026-10-20），DOI 10.48550/arXiv.2610.27655 |
+| `yang2026dualcontrol` | 12/13 负 / 1 平 | "the MAS is worse in 12 of the 13 valid cells and tied in the thirteenth" | 同上 |
+| `yang2026dualcontrol` | -28 / [-44, -12] | "the fitted gain is negative across the observed capability range (weighted mean -28 points, 95% CI [-44, -12])" | 同上 |
+| `yang2026dualcontrol` | 13 / 22 / 5.5x | "On the two cells where the rule predicts a benefit, the MAS loses by 13 and 22 points, and without a budget ceiling it at best draws level at 5.5 times the SAS's token spend" | 同上 |
+| `yang2026dualcontrol` | 45% / -0.41 | "the crossing near 45% single-agent accuracy"；"slope -0.41, 95% CI [-1.51, +0.68]"（能力衰减方向未定） | 同上 |
+| `yang2026dualcontrol` | 预注册 + 1 项有效性未达标 | "The study was pre-registered with a public change log; the MAS is reported as built, with one validity bar unmet (its planner never saw the tool schemas)" | 同上 |
+| `yang2026dualcontrol` | 结论 | "For agents that serve people, the SAS is the default; a multi-agent design must show compute-matched evidence from the setting itself" | 同上 |
+| `shu2026agentworld` | 100 + 100 变体 / 3–20 智能体 / 50+ 轮 | "a benchmark of 100 human-annotated tasks (with 100 augmented variants)"；"require 3-20 agents"；"Tasks span 50+ interaction rounds" | arXiv:2609.31590v1（2026-09-25），DOI 10.48550/arXiv.2609.31590 |
+| `shu2026agentworld` | 52.0% | "even the best model achieves only 52.0% task success" | 同上 |
+| `shu2026agentworld` | CCE 0.320 / 0.125–0.320 | "CCE ranges from 0.125 (DeepSeek) to 0.320 (Gemini), indicating that less than a third of all agent actions causally contribute to success even for the best model"（**全文** §3 与 Table 2；摘要只给指标定义与 52.0%，**不含**本读数——见下注 2） | 同上 |
+| `tabassum2026vibecheck` | 15 仓库 / 3 代理 / 5 维度 | "an empirical study of unit test generation across 15 student-developed Python and JavaScript/TypeScript repositories"；"We evaluate Kiro, Antigravity, and Cursor with Claude Sonnet 4.5"；"a five-dimensional rubric" | POVC '26（ACM，DOI 10.1145/3843779.3844632），arXiv:2609.05978v2（2026-09-05 / v2 2026-09-14） |
+| `tabassum2026vibecheck` | execution-adequacy gap | "Results show a clear execution-adequacy gap: generated tests are often runnable but frequently lack strong assertions and meaningful behavioral coverage"；"Weak assertions and missing edge cases occur more often than blocking failures" | 同上 |
+
+**版本与来源冲突（必须留存）**
+
+1. `shu2026agentworld` 的**录用信息**：多篇二手来源（中文技术站、agihunt、dair.ai 解读）称
+   "COLM 2026 录用"。**一手复核（CP 轮）**：arXiv 元数据的 Comments 字段写
+   "Accepted at COLM 2026"（作者提交的元数据，与项目主页 `agentworld.io` 同址声明一致）；
+   OpenReview 以标题检索**无对应记录**。处置：`refs.bib` 仍以 arXiv 版本（`@misc` + eprint）
+   登记，**不写 `booktitle`**——会议名只有 arXiv 元数据一处来源，缺独立第二源时不生成正式
+   会议条目；正文按 2026-09-25 的 v1 引用。**教训**：把「OpenReview 查不到」当成「未录用」
+   是把**单一索引的缺席**当成事实缺席（同族于 A4 的「路径存在 ≠ 数字在工件里」）——
+   **索引缺席 ≠ 事实缺席**。
+2. `shu2026agentworld` 的 **CCE 0.320**：arXiv **摘要**只给 CCE 的**定义**与 52.0% 任务成功率，
+   **不含** 0.320；0.320 出自**全文** §3 与 Table 2（"CCE ranges from 0.125 (DeepSeek) to
+   0.320 (Gemini)"），附录 Table 6 给跨 judge 的稳健性（0.320 / 0.338 / 0.330）。处置：本册登记
+   **全文读数并标明定位**；正文由 "peaks at 0.320" 改为「四模型区间 0.125–0.320、最佳模型
+   0.320」——原文并未主张峰值，只给区间与最佳模型。**教训**：摘要级检索只能回答「摘要里有没有」，
+   不能回答「原文里有没有」——**摘要缺席 ≠ 原文缺席**（与上一条同族）。本册同轮的
+   `tufano2026specops` p 值行也属同类：读数在，引文写成自指 "quoted above"，已改为内联原句。
+3. `yang2026dualcontrol` 的 **-0.41 斜率**：原文明确写 "Whether the gain declines with
+   capability is unresolved (slope -0.41, 95% CI [-1.51, +0.68])"。本登记册与正文都
+   不把该斜率当作结论（区间跨零），只登记「该方向未定」这一事实本身。
+4. `yang2026dualcontrol` 的 **45% 拐点**：原文写的是「最系统的既有研究给出的
+   capability-saturation rule，拐点在单智能体准确率 45% 附近」——即该规则**来自
+   Kim et al.（本册 §1b 已登记）**，本条只引用该规则的出处，不重复登记其读数。
+
 ## 2. 评测任务族与检出上限（RQ1 的外部对照）
 
 | 键 | 读数 | 原文表述 | 出处 |
@@ -64,7 +109,7 @@ POLITO 机构库与 IEEE CSDL 摘要写 "96.88% versus 96.89%"，ResearchR 会�
 |---|---|---|---|
 | `tufano2026specops` | 9.8 / 53.4 / 63.2 | "a 9.8 percentage points (p = 0.0352) improvement in bug detection rate" over a 53.4% baseline, reaching 63.2% | SpecOps '26（DOI 10.1145/3842652.3843195；arXiv:2608.17177） |
 | `tufano2026specops` | 2.5 | "a 2.5 percentage point (p = 0.0034) improvement in branch coverage" | 同上 |
-| `tufano2026specops` | 0.0352 / 0.0034 | McNemar p-values quoted above | 同上 |
+| `tufano2026specops` | 0.0352 / 0.0034 | "a 9.8 percentage points (p = 0.0352) improvement in bug detection rate"；"a 2.5 percentage point (p = 0.0034) improvement in branch coverage" | 同上 |
 | `tufano2026specops` | 90 | "a dataset of 90 historical production bugs from Google's Issue Tracking System" | 同上 |
 | `konstantinou2026coding` | 25 / 14 | "a fault detection rate of 25% for a test-driven workflow versus approximately 14% when tests follow code generation" | arXiv:2607.05139 |
 | `konstantinou2026coding` | 13.2 | "Providing both sources reduces fault detection by 13.2% on average relative to the description alone" | 同上 |
