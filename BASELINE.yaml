@@ -1259,15 +1259,15 @@ gates:
 invocation:                  # CG 轮（2026-10-24）新增节：`scripts/gates/check_invocation_caliber.py` 的 13 个声明键
   # 权威 = 本门就地复算（`make invocation-caliber`）；登记面 = 登记册 §1「调用口径」行，两侧逐项对账，缺键即红。
   # 「挂在链上」不等于「以同一口径在跑」：本节回答的是调用面归属、命令行有效开关、阻断性写法三件事。
-  disk_scripts: 32           # 盘口径 `ls scripts/gates/*.py | wc -l`（索引口径 29，差 3 = CF/CG/CH 未提交）
-  chain_scripts: 18          # `make gates` 展开后链上的门禁脚本数（递归展开 prerequisites，不是只看 `gates:` 一行；CH 轮 +1 = `flag-effect` 目标）
+  disk_scripts: 33           # 盘口径 `ls scripts/gates/*.py | wc -l`（索引口径 29，差 3 = CF/CG/CH 未提交）
+  chain_scripts: 19          # `make gates` 展开后链上的门禁脚本数（递归展开 prerequisites，不是只看 `gates:` 一行；CH 轮 +1 = `flag-effect` 目标）
   faces: 5                   # 调用面数 = make 目标面 ∪ workflow 步骤面：['make:gates', 'make:perf-check', 'make:prompt-artifacts-check', 'wf:ci.yml', 'wf:perf.yml']
-  declared_flags: 73         # 25 道有 argparse 的门禁声明的开关总数（`add_argument` 复算，不是 grep 文本；CH 轮 +2 = 新门自己的 `--list` 与 `--quiet`）
+  declared_flags: 75         # 25 道有 argparse 的门禁声明的开关总数（`add_argument` 复算，不是 grep 文本；CH 轮 +2 = 新门自己的 `--list` 与 `--quiet`）
   passed_flags: 14           # 真的被某个调用面传上去的开关数（`--f=v` 拆值、`store_true` 记 "set"、argparse 默认值用 `ast` 复算后才可比）
-  locked_flags: 30           # 有代码锁（测试/工装文件里既出现该开关、又点名这道门）的声明开关数——读者敏感，随文本变；**CJ 轮（2026-10-25）29 → 30**：`tests/test_citations_gate.py` 以 `gate.main(["--files", ...])` 调 `check_citations.py`，令其 `--files` 从「范围呈现档无读者」转入本类（同轮 presentation_unread 22 → 21，恒等式 73 = 14 + 30 + 8 + 0 + 21 两侧各自成立）；CH 轮 +3 = 新门的 `--list`/`--quiet`（由 `tests/test_flag_effect_ch.py` 点名）与 `check_docs_history_drift --strict`（同文件点名，令那条 manual-only 登记失效并删除）
+  locked_flags: 31           # 有代码锁（测试/工装文件里既出现该开关、又点名这道门）的声明开关数——读者敏感，随文本变；**CJ 轮（2026-10-25）29 → 30**：`tests/test_citations_gate.py` 以 `gate.main(["--files", ...])` 调 `check_citations.py`，令其 `--files` 从「范围呈现档无读者」转入本类（同轮 presentation_unread 22 → 21，恒等式 73 = 14 + 30 + 8 + 0 + 21 两侧各自成立）；CH 轮 +3 = 新门的 `--list`/`--quiet`（由 `tests/test_flag_effect_ch.py` 点名）与 `check_docs_history_drift --strict`（同文件点名，令那条 manual-only 登记失效并删除）
   registered_unread: 8       # 只在登记表 `docs/invocation_caliber_allowlist.txt` 里被认领的开关数（CH 轮 9 → 8：删掉上一条已失效的 manual-only 登记）
   caliber_unread: 0          # **判据档无读者**（改变判定方向的开关没人传、没人锁）——记红档，本轮实测 0
-  presentation_unread: 21    # 范围与呈现档无读者（只影响披露/呈现面，不改判定）——只记数不记红，数字锁在本节；**CJ 轮（2026-10-25）22 → 21**：`check_citations.py --files` 因新锁 `tests/test_citations_gate.py` 的 `main(["--files", ...])` 调用转入代码锁类（见 `locked_flags` 注）
+  presentation_unread: 22    # 范围与呈现档无读者（只影响披露/呈现面，不改判定）——只记数不记红，数字锁在本节；**CJ 轮（2026-10-25）22 → 21**：`check_citations.py --files` 因新锁 `tests/test_citations_gate.py` 的 `main(["--files", ...])` 调用转入代码锁类（见 `locked_flags` 注）
   flag_diffs: 3              # 同一门禁在两个调用面之间的**有效值**不等处数（全部落登记表，无登记即红）
   swallow_steps: 1           # 门禁命令被 shell 兜底（`||` 或 `set +e` 生效区）吞掉失败的非阻断步骤数
   dynamic_steps: 1           # 开关值由运行时变量注入（perf.yml `$STRICT_FLAG`）、静态普查看不到实际口径的步骤数
@@ -1276,10 +1276,10 @@ invocation:                  # CG 轮（2026-10-24）新增节：`scripts/gates/
 flag_effect:                 # CH 轮（2026-10-24）新增节：`scripts/gates/check_flag_effect.py` 的 9 个声明键
   # 权威 = 本门就地复算（`make flag-effect`）；登记面 = 登记册 §1「开关有效性（CH 轮）」行，两侧逐项对账，缺键即红。
   # 「命令行上传了这个开关」不等于「这个开关在源码里接了线」：CG 判读者活性，本节判 dest 活性——同一个分母、两条独立实现。
-  disk_scripts: 32           # 盘口径 `ls scripts/gates/*.py | wc -l`，与 `gates.scripts_total`、`invocation.disk_scripts` 三处同数（三条独立实现）
-  argparse_gates: 25         # 有 `argparse` 声明的门禁数（其余 7 道无开关面，不进 (门禁, 开关) 分母）
-  declared_flags: 73         # 25 道门声明的 (门禁, 开关) 实例数——与 `invocation.declared_flags` 同数、两条独立复算，任一实现漏一条即两侧不等
-  live_flags: 73             # `活`：dest 在声明行以外被显式读到的实例数
+  disk_scripts: 33           # 盘口径 `ls scripts/gates/*.py | wc -l`，与 `gates.scripts_total`、`invocation.disk_scripts` 三处同数（三条独立实现）
+  argparse_gates: 26         # 有 `argparse` 声明的门禁数（其余 7 道无开关面，不进 (门禁, 开关) 分母）
+  declared_flags: 75         # 25 道门声明的 (门禁, 开关) 实例数——与 `invocation.declared_flags` 同数、两条独立复算，任一实现漏一条即两侧不等
+  live_flags: 75             # `活`：dest 在声明行以外被显式读到的实例数
   proxy_flags: 0             # `代理`：dest 从不被读，但与已读的兄弟同处 `required=True` 互斥组——当下等价、保证来自组而不是它自己，仍计红
   dead_flags: 0              # `死`：dest 在整个模块从不被读且无结构代理——传与不传都不改变行为（改前实测 dest 从不被读 **2** 条 = 死 1（`check_docs_history_drift --warn-only`）+ 代理 1（`checksum_results --verify`，等价性由 `required=True` 互斥组担保）；两条都是判据档、都真被 ci.yml 传上去，本轮逐个接了线）
   opaque_flags: 0            # `不可判`：整包读走 Namespace 的门里那些 dest 级判不出的实例（显式计红，绝不静默算成「活」）

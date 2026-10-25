@@ -166,7 +166,10 @@ def main(argv: list[str] | None = None) -> int:
     else:
         print("[doc-commands] 通过：文档引用的脚本与 make 目标全部存在")
     if args.json and args.json != "-":
-        Path(args.json).write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+        Path(args.json).write_text(
+            json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False),
+            encoding="utf-8",
+        )
     return 1 if missing else 0
 
 
