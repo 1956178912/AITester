@@ -1247,7 +1247,7 @@ gates:
   ci_unique_scripts: 31       # CH 轮 +1：`check_flag_effect.py` 接为 ci.yml 阻断步骤（口径 = `grep -oE 'scripts/gates/[a-z_]+[.]py' .github/workflows/ci.yml` 去重，且**只数命令行**、不数注释里的门名——子串式正则会把手写归因里的说明读成调用点，实测差 +1）。历史 CG 轮 +1：`check_invocation_caliber.py` 接为 ci.yml 阻断步骤（同一口径）。历史 CF 轮 +1：`check_registration_consistency.py`。历史 27  #（BN 轮把 `check_status_persistence.py` 接为独立步骤，+1；BK 轮 +1；AF 轮 +1）
   ci_call_sites: 34           # CM 轮复算 33（CH 的 31 之上 +2：证据链步骤由 1 条命令改为 3 条同脚本调用，替换已撤回目录）。历史 CG 轮复算 30（原登记 31 是子串口径：ci.yml 注释里那句「`scripts/gates/check_...py`」被数成一次调用）。口径 = 门禁步骤内命令行里的引用数，注释不参与
   not_in_ci: [check_perf_regression, check_swe_bench_pro_ready]  # 前者在 perf.yml，后者为 SWE-bench 数据前置门（本地/专用作业）
-  index_scripts: 32  # CI 补跑批（2026-10-24）：CF/CG/CH 三轮门禁随 78fef75f 入库，「盘 vs 索引差 3」消除（29→32，与盘口径一致）.            # 索引口径 `git ls-files scripts/gates/*.py`（CI clone 拿到的是这一份）；与盘口径 32 差 **3** = CF 轮、CG 轮与 CH 轮的三个新门禁均未提交（本轮按用户口径暂不提交）
+  index_scripts: 33  # CI 补跑批（2026-10-24）：CF/CG/CH 三轮门禁随 78fef75f 入库，「盘 vs 索引差 3」消除（29→32，与盘口径一致）.            # 索引口径 `git ls-files scripts/gates/*.py`（CI clone 拿到的是这一份）；与盘口径 32 差 **3** = CF 轮、CG 轮与 CH 轮的三个新门禁均未提交（本轮按用户口径暂不提交）
   gate_steps: 32             # CH 轮 +1：ci.yml 里调用 `scripts/gates/*.py` 的 `- name:` 步骤数 30 → 31（新增 flag-effect 一步）。历史 CG 轮 +1：同上口径新增 invocation-caliber 一步
   non_blocking_steps: 2             # **CG 轮复算 2**（本轮实测漂移：3 → 2）。原 3 是 CF 轮按**子串**搜步骤正文得到的——ci.yml 里有一条注释写着 `continue-on-error: true`，注释不是步骤键。CG 与 CF 两条独立实现按 YAML 结构复算同一个数（键必须缩进 8 格、行不能以 `#` 开头），两侧现值都是 2；「同一个数、两条实现」的实证锁见 `tests/test_invocation_caliber_cg.py::test_r01`
   blocking_steps: 30             # CH 轮复算 **29**（= 门禁步骤 31 − 非阻断 2，派生恒等）。历史 CG 轮复算 **28**（= 门禁步骤 30 − 非阻断 2，派生恒等）。原登记 26 = 29 − 3，分子分母同因 CF 轮的子串口径而各偏 1
