@@ -150,6 +150,25 @@ undefined references/citations, 0 errors; `paper-audit --strict` 221 claims / 10
 the zero-LLM recomputation chain 3/6 commands ok (3 disclosed as absent) with 8 directories / 489 files
 verified and 0 failed; full suite 12,512 passed / 268 skipped / 0 failed.
 
+**9. CO round, end: the chronic red in the weekly perf job is cleared (zero LLM, $0).** The
+Sunday performance sweep had been failing **three consecutive times** (2026-10-11, 10-18, 10-25)
+without anyone touching it. Root cause, reproduced deterministically locally:
+`scripts/tools/performance_benchmark.py` measures three pure functions and makes no model call at
+all, but its import chain constructs langchain's `ChatOpenAI`, and that construction demands
+credentials **at construction time** --- the scheduled job has no `.env`, so the script died in the
+BaseAgent benchmark with `openai.OpenAIError: Missing credentials`. The first fix attempt (injecting
+`OPENAI_API_KEY`) **does not work**, because `_get_llm_config()` returns an empty triple when no
+provider is configured and the client still raises; the correct injection point is the three
+variables config.py itself reads: `LLM_1_API_KEY` / `LLM_1_BASE_URL` / `LLM_1_MODEL_NAME`. The script
+now injects a placeholder provider triple when configuration is missing and restores the environment
+on exit (an existing real configuration is never overwritten), and its output path honours
+`AITESTER_PERF_BENCHMARK_OUT` so tests can write to tmp_path instead of the repository artifact.
+Two regression locks were added (`tests/test_perf_benchmark_offline.py`: in a credential-free
+subprocess the script still exits 0 and writes its artifact; an existing real configuration is not
+overwritten by the placeholder). Reproduced locally exactly as the job runs it: the benchmark exits 0
+and writes its JSON (5300 operations / 0.23s), and the baseline-comparison gate exits 0 (one
+non-blocking warning, cross-machine hardware noise, by design non-blocking).
+
 ### A3 Replication-package closure (zero LLM, $0)
 
 - **Integrity checking is now four-state**: `ok` / `FAILED` (mismatch **or an on-disk

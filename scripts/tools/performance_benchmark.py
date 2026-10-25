@@ -13,6 +13,32 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
+# CO 轮（2026-10-25）：本脚本**不调用任何模型**，它只测三个纯函数（Executor 的
+# `_auto_fix_imports`、ErrorClassifier 的 `classify`、BaseAgent 的文本抽取）。
+# 但 `src.agents.executor` 的导入链会构造 langchain 的 `ChatOpenAI`，而该构造
+# 在**构造期**就要求凭据 —— 于是没有 .env 的环境（CI 的每周定时作业）里，
+# 脚本在最后一步（BaseAgent 基准）抛 `openai.OpenAIError: Missing credentials`，
+# perf.yml 自 2026-10-11 起连续三次定时失败。处置：缺配置时注入一次性占位
+# provider 三元组，只让构造通过；脚本不发任何请求，退出前还原环境变量
+# （避免污染 import 它的进程）。
+# 占位三元组：仅用于让模型客户端**构造**通过，脚本不发任何请求。
+# 用的是 config.py 自己读的那三个环境变量（`LLM_{i}_API_KEY` / `_BASE_URL` /
+# `_MODEL_NAME`），而不是绕过配置层直接塞 `OPENAI_API_KEY`——后者不生效：
+# `_get_llm_config()` 在无 provider 时返回空三元组，客户端拿到空 key 仍会抛
+# `Missing credentials`（CO 轮实测）。
+_NOOP_LLM_ENV = {
+    "LLM_1_API_KEY": "sk-perf-benchmark-noop",
+    "LLM_1_BASE_URL": "https://api.openai.com/v1",
+    "LLM_1_MODEL_NAME": "perf-benchmark-noop",
+}
+
+
+def _ensure_constructible_client() -> dict[str, str]:
+    """缺凭据时注入占位 provider 配置；返回本次注入的变量名（供退出时还原）。"""
+    if os.environ.get("LLM_1_API_KEY"):
+        return {}
+    return {name: value for name, value in _NOOP_LLM_ENV.items() if name not in os.environ}
+
 
 def benchmark_executor():
     """基准测试 Executor 性能"""
@@ -330,7 +356,10 @@ def main():
     # 保存结果
     import json
 
-    output_path = os.path.join(PROJECT_ROOT, "experiments", "results", "performance_benchmark.json")
+    # CO 轮：允许用环境变量改输出路径（测试写 tmp_path，避免污染仓库工件）。
+    output_path = os.environ.get("AITESTER_PERF_BENCHMARK_OUT") or os.path.join(
+        PROJECT_ROOT, "experiments", "results", "performance_benchmark.json"
+    )
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
     with open(output_path, "w", encoding="utf-8") as f:
@@ -342,4 +371,11 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    _injected = _ensure_constructible_client()
+    for _name, _value in _injected.items():
+        os.environ[_name] = _value
+    try:
+        main()
+    finally:
+        for _name in _injected:
+            os.environ.pop(_name, None)

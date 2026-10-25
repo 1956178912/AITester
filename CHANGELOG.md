@@ -115,6 +115,19 @@ LaTeX 模板且未言取代关系；本稿保留期刊自带包，证据与回�
 rc=0；零 LLM 复现链 3/6 命令 ok（3 缺席披露）+ 8 目录 489 文件校验通过 / 0 失败；全量
 12,512 passed / 268 skipped / 0 failed。
 
+**九、CO 轮末：perf.yml 定时作业的慢性红归零（零 LLM，$0）**：该每周日性能巡检作业
+**自 2026-10-11 起连续三次失败**（10-11 / 10-18 / 10-25），此前无人处理。根因本地确定性复现：
+`scripts/tools/performance_benchmark.py` 只测三个纯函数、一次模型请求也不发，但它的导入链会构造
+langchain 的 `ChatOpenAI`，而该构造在**构造期**就要求凭据——CI 的定时作业没有 `.env`，于是脚本在
+BaseAgent 基准那一步抛 `openai.OpenAIError: Missing credentials`。第一版修法（注入
+`OPENAI_API_KEY`）**无效**，因为 `_get_llm_config()` 在无 provider 时返回空三元组，客户端拿到空 key
+照样抛错；真正的注入点是 config.py 自己读的 `LLM_1_API_KEY` / `LLM_1_BASE_URL` / `LLM_1_MODEL_NAME`。
+处置：脚本在缺配置时注入占位 provider 三元组、退出前还原（已有真实配置不覆盖），并给输出路径加
+`AITESTER_PERF_BENCHMARK_OUT` 覆盖（测试写 tmp_path，不污染仓库工件）；新增 2 例回归锁
+（`tests/test_perf_benchmark_offline.py`：清空凭据的子进程里脚本仍 rc=0 且产物落盘；已有真实配置
+时不得被占位值覆盖）。本地按作业原样复现：基准 rc=0 产出 JSON（5300 次操作 / 0.23s），
+基线比对门禁 rc=0（1 条 non-blocking 告警属跨机硬件噪声，非阻断口径）。
+
 ### A3 复现包闭环（零 LLM，$0）
 
 - **完整性校验改四态**：`ok` / `FAILED`（校验不符**或在盘却没有清单**）/ `absent`（目录
