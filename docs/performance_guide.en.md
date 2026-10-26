@@ -55,7 +55,8 @@ make perf-check
 - `make perf-check` compares the current reading with the baseline; warnings are non-blocking by
   default, and `--strict` is available for local investigation.
 - Per-task detail: `python3 main.py run <file> --json` returns timing fields; structured traces go
-  to the directory given by `AITESTER_TRACE_DIR` (no-op when unset).
+  to the directory given by `AITESTER_TRACE_DIR` (when unset nothing is written; the in-process
+  snapshot buffer remains, and an uncreatable directory warns and degrades to memory-only).
 - Cost readings: multiply the batch provenance `usage` / token triples by the price table; never
   estimate from log text.
 

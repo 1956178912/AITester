@@ -29,6 +29,9 @@ This file records externally visible changes only; round-by-round history is arc
   section / line ceilings / index completeness); round markers and line-window locks retired.
 
 ### Fixed
+- Trace sessions no longer turn tasks into crashes when the directory cannot be created (DY round): `AITESTER_TRACE_DIR` under a
+  regular file raised `NotADirectoryError`, so `run` rewrote every task as crashed; it now warns and degrades to memory-only snapshots
+  (`--dump-trace-on-failure` still works), and `task_end` carries `duration_s` in memory-only mode too. 4 new locks.
 - Diagnostic dump arguments and concurrency no longer distort the export (DX round): `limit=0` silently
   exported every snapshot and negatives sliced backwards; same-second / concurrent dumps shared one file
   and later writes truncated earlier ones. Now `0`/negatives raise `ValueError`, and `O_EXCL` + numbered
@@ -110,16 +113,13 @@ This file records externally visible changes only; round-by-round history is arc
   `timeout-minutes` (a hung endpoint would hit the platform's 360-minute default); it now
   declares 15 minutes, and `tests/test_ci_job_timeouts.py` locks every job's budget and (0, 60] range (3 tests, red first).
 - The citation-key snapshot generator undercounted multi-key citations (DG round): a single-key
-  regex missed keys inside `\citep{a,b}` groups — the chain criterion measured `konstantinou2026icst`
-  at 3 vs 4 in the manuscript; four multi-key groups (nine slots) hid six registered keys
+  regex missed keys inside `\citep{a,b}` groups — four multi-key groups (nine slots) hid six registered keys
   (konstantinou2026icst / arna2026icstw / radaideh2026bdai / zuppardo2026beyondaccuracy /
   curmi2026harnessmatter / sghaier2026harnesshierarchy). Counting now splits groups, with one regression test written red first.
 - Optional embedding backends now degrade on load failure (DG round): the sentence-transformers
-  branch caught only `ImportError`, so model-download/cache failures escaped `embed_text()` instead
-  of returning `None` like the codebert/chromadb branches; it now mirrors that fallback and warns when selected (3 tests, red first).
+  branch caught only `ImportError`, so download/cache failures escaped `embed_text()` instead of returning `None`; now mirrored and warned (3 tests, red first).
 - Comment semantics are now parsed per file type (DE round): TeX `%` with backslash parity, Typst `//`
-  and nestable block comments, BibTeX by brace depth (`\"` no longer switches string state); fixes a
-  false CJK failure where a `refs.bib` comment was attributed to the preceding entry's field value.
+  and nestable block comments, BibTeX by brace depth; fixes a false CJK failure from `refs.bib` comments.
 - The paper build script's pre-flight audit now uses `--pre-build`: it skips only artifact page reconciliation and
   still blocks on source-side defects, so editing a source file no longer makes the build script impossible to run.
 - The external-readings register corrects `wang2026harnessreeval` to arXiv v4 with the full

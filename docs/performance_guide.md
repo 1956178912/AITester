@@ -49,7 +49,8 @@ make perf-check
 - `make perf-bench` 写 `experiments/results/performance_benchmark.json`（与 `perf.yml` 同口径）。
 - `make perf-check` 对比当前读数与基线，默认非阻断告警；本机排查可加 `--strict`。
 - 单任务细粒度：`python3 main.py run <file> --json` 的结果含耗时字段；结构化 trace 由
-  `AITESTER_TRACE_DIR` 指定目录输出（未设时 no-op）。
+  `AITESTER_TRACE_DIR` 指定目录输出（未设时不写盘，仅保留进程内快照缓冲；目录不可创建时
+  告警降级为仅内存，不阻断任务）。
 - 成本读数：批次 provenance 的 `usage` / token 三元组与价目表相乘；不要从日志文本估算。
 
 测量纪律：同一机器、同一依赖锁、同一端点；明确标注**冷缓存还是热缓存**、并发度与

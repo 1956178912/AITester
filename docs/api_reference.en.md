@@ -152,7 +152,8 @@ Sources: `.env.local` (LLM credentials, gitignored), `.env.example` (tracked tem
 | `LLM_THINKING_MODE` | str | "disabled" | DeepSeek reasoning chains off by default (cost protection) |
 | `FAULT_LOCALIZER_ENABLE` | bool | true | RGFL-style LLM reasoning localization; false falls back to spectral only |
 | `AITESTER_PROFILE` | str | unset | Preset: `safe` / `scientific` / `logic` / `fast` |
-| `AITESTER_TRACE_DIR` | str | unset | Structured JSONL tracing; no-op when unset |
+| `AITESTER_TRACE_DIR` | str | unset | Structured JSONL tracing; when unset nothing is written (in-memory snapshot buffer only); an uncreatable directory warns and degrades to memory-only without blocking tasks |
+| `TRACE_MEMORY_BUFFER_ENABLE` | bool | true | In-process snapshot ring buffer behind `--dump-trace-on-failure`; false restores the zero-overhead mode |
 | `COST_BUDGET_ENABLE` | bool | false | Per-task token / USD hard budget |
 
 The authoritative full list is `config.py` plus `docs/env_budget.yaml`; batch provenance records

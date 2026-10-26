@@ -25,6 +25,8 @@
   退役逐轮标记与行窗口锁。
 
 ### Fixed
+- 追踪会话不再因目录不可建而反噬任务（DY 轮）：`AITESTER_TRACE_DIR` 指向普通文件之下曾抛 `NotADirectoryError`，`run` 把每个任务改写成崩溃；
+  现在告警后降级为仅内存快照（`--dump-trace-on-failure` 照常可用），`task_end` 的 `duration_s` 也不再只在文件模式下存在。4 例新锁。
 - 失败追踪导出的参数与并发落点不再失真（DX 轮）：`limit=0` 曾静默导出全部快照、负数反向切片；
   同一秒内的多次 / 并发导出又共用文件名、后写覆盖先写。现在 0 / 负数抛 `ValueError`，`O_EXCL` + 序号重试、绝不覆盖旧快照。11 例新锁。
 - `--dump-trace-on-failure` 的失败态不再静默或反噬任务（DW 轮）：目录创建失败曾把已完成任务改写成崩溃，
@@ -117,11 +119,8 @@
   低估 6 个受管键（konstantinou2026icst / arna2026icstw / radaideh2026bdai /
   zuppardo2026beyondaccuracy / curmi2026harnessmatter / sghaier2026harnesshierarchy）；
   改为按组拆分计数，1 例测试锁先红后绿。
-- 可选嵌入后端加载失败必须降级（DG 轮）：`src/utils/embedding_utils.py` 的
-  sentence-transformers 分支此前只捕获 `ImportError`，模型下载失败 / 缓存损坏等
-  非 ImportError 会击穿「不可用即 None」契约，`embed_text()` 直接向调用方抛异常
-  （codebert / chromadb 两分支均捕获 `Exception` 降级）；现补同形降级并在显式
-  选择该后端时告警，3 例测试锁先红后绿。
+- 可选嵌入后端加载失败必须降级（DG 轮）：`sentence-transformers` 分支只捕 `ImportError`，模型下载失败 / 缓存损坏会击穿
+  「不可用即 None」契约；现补同形降级并在显式选择该后端时告警，3 例测试锁先红后绿。
 - 注释语义按文件类型分治（DE 轮）：TeX `%` 按反斜杠奇偶、Typst `//` 与可嵌套块注释、
   BibTeX 按括号深度且 `\"` 不切换字符串态；修复 `refs.bib` 注释被误算进上一条目字段值造成的假 CJK 红。
 - 论文构建脚本前置判据改为 `--pre-build`：只跳过产物页数对账，源侧判据照常阻断，

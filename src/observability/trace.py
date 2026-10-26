@@ -216,7 +216,8 @@ class TraceSession:
         Args:
             task_id: 任务标识（JSONL 文件名与记录字段均用它）。
             trace_directory: 输出目录，None 时读环境变量；
-                目录不存在时自动创建，创建失败降级为 no-op（不阻断主流程）。
+                目录不存在时自动创建，创建失败降级为仅内存快照
+                （records 照常累积、告警一次，不阻断主流程）。
             task_meta: 任务级静态元数据（如 target_file、func、dataset），
                 随 task_start 事件落盘。
         """
@@ -232,11 +233,17 @@ class TraceSession:
         self._run_id = uuid.uuid4().hex
         self._root_span_id = uuid.uuid4().hex[:16]
         started_at = time.time()
+        self._started_at = started_at
         if self._enabled and directory is not None:
-            os.makedirs(directory, exist_ok=True)
-            safe_task = "".join(c if c.isalnum() or c in "-_." else "_" for c in task_id) or "task"
-            self._file_path = os.path.join(directory, f"{safe_task}.trace.jsonl")
-            self._started_at = started_at
+            try:
+                os.makedirs(directory, exist_ok=True)
+            except OSError as e:
+                # 追踪是旁路观测层：目录不可建时降级为仅内存快照（records 仍进
+                # 环形缓冲、--dump-trace-on-failure 仍可导出），绝不把任务改写成崩溃。
+                logger.warning("追踪目录不可创建（降级为仅内存快照）: %s", e)
+            else:
+                safe_task = "".join(c if c.isalnum() or c in "-_." else "_" for c in task_id) or "task"
+                self._file_path = os.path.join(directory, f"{safe_task}.trace.jsonl")
         # root 事件在文件追踪与纯内存两种模式下都写入 records：没有 root，
         # 子事件的 parent_span_id 就会悬空，内存快照也无法复原一条完整 trace。
         self._append(

@@ -133,7 +133,8 @@ false_fix 属于基准评估面，由 `experiments/_m1_metrics.py` 计算、
 | `LLM_THINKING_MODE` | str | "disabled" | DeepSeek 思考链默认关闭（成本保护） |
 | `FAULT_LOCALIZER_ENABLE` | bool | true | RGFL 式 LLM 推理定位通道；false 退回纯谱系口径 |
 | `AITESTER_PROFILE` | str | 未设 | 预设档：`safe` / `scientific` / `logic` / `fast` |
-| `AITESTER_TRACE_DIR` | str | 未设 | 结构化 JSONL 追踪输出；未设时 no-op |
+| `AITESTER_TRACE_DIR` | str | 未设 | 结构化 JSONL 追踪输出；未设时不写盘（仅进程内快照缓冲）；目录不可创建时告警并降级为仅内存快照，不阻断任务 |
+| `TRACE_MEMORY_BUFFER_ENABLE` | bool | true | 进程内追踪快照环形缓冲（`--dump-trace-on-failure` 的数据源）；false 时恢复零开销口径 |
 | `COST_BUDGET_ENABLE` | bool | false | 任务级 token / USD 预算硬闸 |
 
 完整清单与逐项语义以 `config.py` 与 `docs/env_budget.yaml` 为准；批次 provenance 记录
