@@ -111,6 +111,7 @@ from src.datasets.dataset_loader import (  # noqa: E402
 from src.graph import token_usage  # noqa: E402
 from src.graph.state import AITesterState, create_initial_state  # noqa: E402
 from src.graph.workflow import (  # noqa: E402
+    StopReason,
     build_workflow,
     effective_stop_reason,
     end_task_trace,
@@ -4886,15 +4887,13 @@ def run_benchmark(
                 # 上限是 config.MAX_REGENERATIONS（Z2 已确立单一事实源，当前 1）。即历史批次
                 # 工件里的 `test_regeneration_cap: 2` 系统性地**高估了一倍**。现改读真实来源。
                 "test_regeneration_cap": MAX_REGENERATIONS,
-                "stop_reasons": [
-                    "test_passed",
-                    "max_iterations",
-                    "skip_debugger_repair_invalid",
-                    "test_defect_regeneration_cap",
-                    "budget_exceeded",
-                    "regression_detected",
-                    "unknown",
-                ],
+                # EM（2026-10-27）：词表由 StopReason 枚举派生（单一事实源）。
+                # 此前是手写 7 值字面量，枚举已 13 值——`recursion_limit`
+                # （EJ 起可落盘）、`coverage_stall`（P2-4）等 6 个真实终止
+                # 原因从未出现在工件自述里；harness 披露块承诺"停止规则可
+                # 复核"，读者却会据此以为 harness 只会以旧 7 值停止。
+                # 新增枚举值自动进入新批次工件；历史工件一字节不动。
+                "stop_reasons": [reason.value for reason in StopReason],
             },
             "per_task_time_limit_seconds": EXECUTION_TIMEOUT,
             "model_version": _model_version,

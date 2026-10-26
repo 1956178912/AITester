@@ -4894,3 +4894,34 @@ side=harness_side）；无 final_state 且原因未知（普通异常 / 限流�
 有效成功率已由 `effective_success_rate` 单列；本轮只修失效分布的分类与披露）；不改
 `_aggregate_failure_categories`（`harness_invalid` 作为失败类别本就显式可见）。
 **修 1 个聚合器 + 1 个报告层披露，锁 10 例（8 红→绿 + 2 口径护栏）。**
+
+## 106. 附：EM 轮（2026-10-27）**harness 自述的停止原因词表不该与枚举脱钩**
+
+**① 「停止规则可复核」只兑现在字段存在，不兑现在取值。**
+R56 起批次 provenance 的 `provenance.harness.retry_stop_rules` 承诺「重试与停止规则」可从
+工件复核（读者据此判定增益来自脚手架还是角色协作）。其中 `stop_reasons` 是一份**手写
+字面量**：7 个值。`StopReason` 枚举已扩到 13 个值——6 个真实终止原因从未出现在任何新批次
+工件自述里：`test_gen_diagnosis_early` / `test_gen_diagnosis` / `test_passed_converged` /
+`max_iterations_reached` / `coverage_stall` / `recursion_limit`。其中 `recursion_limit` 是
+EJ 轮刚从死映射接线为可落盘原因（`effective_stop_reason` 读它、分类法映射它），
+`coverage_stall` 是 P2-4 的提前停止标签——工件却仍声明 harness 只会以旧 7 值停止。
+I1 的用途是「失败归因可从批次工件复算」；自述词表缺项会把读者引向「这些原因不存在」。
+
+**② 红因可辨。**
+预修实测（真实生产路径 `run_benchmark` 零任务批次，零 LLM）：工件
+`provenance.harness.retry_stop_rules.stop_reasons` 长度 7，与枚举差集恰为上述 6 值。
+既有 `tests/test_r56_harness_disclosure.py` 一直是绿的——它**手工内联构造**一个等价小
+dict（docstring 声称「经 `_build_harness_block` 口径验证」，而该函数并不存在），从未读
+生产块；读侧从自己手抄的写侧取证，双方共谋把漂移锁成绿色。3 例红→绿锁住：词表与枚举
+逐项相等（含顺序）/ 6 个漏项补齐 / `recursion_limit` 端到端可见；3 例预修即绿的口径护栏
+锁「不要过度修」：历史 7 值仍被声明（旧读侧兼容）、纯 `str` + 枚举顺序 + 无重复、磁盘
+工件与内存态同值。
+
+**③ 修法：词表从枚举派生。**
+`stop_reasons` 改为 `[reason.value for reason in StopReason]`（`StopReason` 增列进既有
+`src.graph.workflow` 导入）。新增枚举值自动进入新批次工件，同一族不会再漂移；已归档的
+历史工件一字节不动（7 值自述是那些批次的时代事实）。R56 旧测试的误导性 docstring 同步
+更正，并注明生产路径锁在新文件。
+**同轮排除**：不改 harness 块其余字段（执行隔离 / 上下文策略 / 时限 / 模型版本）；
+不改 `StopReason` 枚举本身与 `determine_stop_reason` 判定；不改 summary 顶层键。
+**修 1 个 provenance 字段 + 1 处旧测试 docstring，锁 6 例（3 红→绿 + 3 口径护栏）。**

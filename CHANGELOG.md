@@ -18,6 +18,8 @@
 - 文档测试锁改为结构判据（定位区 / 披露小节 / 行数上限 / 索引完备性），退役逐轮标记与行窗口锁。
 
 ### Fixed
+- 批次 provenance 的停止原因词表不再与 `StopReason` 枚举脱钩（EM 轮）：harness 披露块承诺「停止规则可复核」，但 `retry_stop_rules.stop_reasons` 是手写 7 值字面量、枚举已 13 值——`recursion_limit`（EJ 起可落盘）、`coverage_stall`（P2-4）等 6 个真实终止原因从未出现在工件自述里，读者会以为 harness 只会以旧 7 值停止。
+  现由枚举派生（单一事实源），新增值自动进入新批次工件；历史工件一字节不动。6 例新锁（3 红→绿 + 3 口径护栏）；`src/` 零改动 ⇒ 覆盖读数不变。
 - P2P 门禁判无效的行不再在失效分布里冒充「运行异常/限流」（EL 轮）：批次汇总承诺 harness_invalid（基线 P2P 不达标）实例「从统计中剔除」，但 `_aggregate_failure_buckets` 只看 `failure_bucket` 是否为空——门禁早退行（从未进入工作流）与真崩溃同形计入 `unclassified_rows`，报告层还把它们写成「无工作流终局状态〔运行异常/限流〕」。
   现单列 `harness_invalid_rows` 并从桶分母剔除（恒等式 total + unclassified_rows + harness_invalid_rows == total_rows），`render_markdown` 分因披露两种排除；逐行四键仍 `None`（不臆造桶）。10 例新锁（8 红→绿 + 2 口径护栏），分母口径变化已在 `MEASUREMENT_INTEGRITY` §105 披露。
 - 已知崩溃原因不再与归因列自相矛盾（EK 轮）：EJ 轮把 `GraphRecursionError` 落成结果行 `stop_reason="recursion_limit"` 后，失败分支仍把归因四键硬编码为 `None`——同一行「原因已知、归因未知」，批次聚合继续把这类确定性 harness 崩溃计入 `unclassified_rows`，ADR-0026 的 harness 归因在生产工件里仍不可读。
@@ -115,13 +117,9 @@
   合法值（rc=2）；`doctor` 把子进程 rc=2 映射为 `usage`（退出码 2，不伪造
   error 行）、脚本缺件映射为 `unavailable`（不计失败，`--strict` 下退 1），
   空 `--groups` 直接走用法错误路径且不采集检查/不跑矩阵（10 例测试锁，先红后绿）。
-- 门禁链子进程全部带超时预算（DI 轮）：10 处 `subprocess` 调用缺 `timeout`——git 锁、
-  ruff、mypy 与 pytest 收集任一挂起都会让 `make gates` / CI 无限挂起（没有读数、
-  没有失败行，只有被平台上限回收的作业）。补齐预算并钉死超时语义：登记面对账超时
-  抛 `RuntimeError` 判红（返回 `None` 会被读成 `[SKIP]` 静默放行）、基线收集降级为
-  `None`、仓库卫生抛 `RuntimeError`、工件门合成 rc=124、静态快照记
-  `(124, 超时)`；删除 `check_invocation_caliber` 的死 helper；AST 结构锁覆盖
-  `scripts/gates/*.py` 与两个工具脚本（7 例，先红后绿）。
+- 门禁链子进程全部带超时预算（DI 轮）：10 处 `subprocess` 调用缺 `timeout`——git 锁、ruff、mypy 与 pytest 收集任一挂起都会让 `make gates` / CI 无限挂起（没有读数、没有失败行，只有被平台上限回收的作业）。
+  补齐预算并钉死超时语义：登记面对账超时抛 `RuntimeError` 判红（返回 `None` 会被读成 `[SKIP]` 静默放行）、基线收集降级为 `None`、仓库卫生抛 `RuntimeError`、工件门合成 rc=124、静态快照记 `(124, 超时)`；
+  删除 `check_invocation_caliber` 的死 helper；AST 结构锁覆盖 `scripts/gates/*.py` 与两个工具脚本（7 例，先红后绿）。
 - CI 作业预算补齐（DH 轮）：`ci.yml` 的 `smoke-llm` 是唯一没有 `timeout-minutes`
   的作业——LLM 端点挂起时会被平台默认的 360 分钟兜底回收；补 15 分钟预算，并新增
   `tests/test_ci_job_timeouts.py` 锁全部 workflow 作业的预算声明与 (0,60] 值域

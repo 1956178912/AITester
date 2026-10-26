@@ -22,6 +22,8 @@ This file records externally visible changes only; round-by-round history is arc
 - Documentation test locks moved to structural criteria (positioning preamble / disclosure section / line ceilings / index completeness); round markers and line-window locks retired.
 
 ### Fixed
+- Batch provenance no longer declares a stale stop-reason vocabulary (EM round): the harness disclosure block promises auditable stop rules, but `retry_stop_rules.stop_reasons` was a hand-written 7-value literal while the `StopReason` enum has 13 — six real stop reasons (`recursion_limit`, reachable since EJ; `coverage_stall`, P2-4; plus four diagnosis/convergence variants) never appeared in any artifact's self-description, so readers would conclude the harness only stops for the old seven.
+  The list is now derived from the enum (single source of truth) and new values reach new batches automatically; archived artifacts are untouched. 6 new locks (3 red→green + 3 caliber guards); no `src/` change, so coverage readings are unchanged.
 - P2P-gate rejects no longer masquerade as runtime crashes in the failure distribution (EL round): the batch summary promises to exclude `harness_invalid` instances (baseline P2P below threshold) from statistics, but `_aggregate_failure_buckets` only checked whether `failure_bucket` was empty — gate-skipped rows (which never entered the workflow) were counted in `unclassified_rows` exactly like real crashes, and the report labelled them "no workflow terminal state (runtime exception / rate limit)".
   They are now counted in `harness_invalid_rows` and excluded from the bucket denominator (identity: total + unclassified_rows + harness_invalid_rows == total_rows), and `render_markdown` discloses the two exclusion causes separately; the per-row four keys stay `None` (no invented bucket). 10 new locks (8 red→green + 2 caliber guards); the denominator change is disclosed in `MEASUREMENT_INTEGRITY` §105.
 - Known crash causes no longer contradict the attribution columns (EK round): after EJ stored `stop_reason="recursion_limit"` on crash rows, the failure branch still hardcoded the four attribution keys to `None` — "reason known, attribution unknown" in one row; batch aggregation kept counting these deterministic harness crashes as `unclassified_rows`, so ADR-0026's harness attribution remained unreadable in production artifacts.
@@ -113,16 +115,9 @@ This file records externally visible changes only; round-by-round history is arc
   no fabricated error row) and a missing script to `unavailable` (not a failure;
   exit 1 under `--strict`); an empty `--groups` short-circuits to the usage path
   without collecting checks or running the matrix (10 test locks, red before green).
-- Every gate-chain subprocess now carries a timeout budget (DI round): ten
-  `subprocess` calls had no `timeout`, so a stuck git lock, ruff, mypy or pytest
-  collection could hang `make gates` / CI forever — no readings, no failure line,
-  just a job reclaimed by the platform limit. Budgets are in place and the timeout
-  semantics are pinned: registration reconciliation raises `RuntimeError` (a
-  `None` return would be read as `[SKIP]` and silently pass), baseline collection
-  degrades to `None`, repo hygiene raises `RuntimeError`, the artifacts gate
-  synthesizes rc=124, and the static snapshot records `(124, timeout)`. The dead
-  `_run` helper in `check_invocation_caliber` was removed, and an AST structural
-  lock covers `scripts/gates/*.py` plus both tool scripts (7 tests, red first).
+- Every gate-chain subprocess now carries a timeout budget (DI round): ten `subprocess` calls had no `timeout`, so a stuck git lock, ruff, mypy or pytest collection could hang `make gates` / CI forever — no readings, no failure line, just a job reclaimed by the platform limit.
+  Budgets are in place and the timeout semantics are pinned: registration reconciliation raises `RuntimeError` (a `None` return would be read as `[SKIP]` and silently pass), baseline collection degrades to `None`, repo hygiene raises `RuntimeError`, the artifacts gate synthesizes rc=124, and the static snapshot records `(124, timeout)`.
+  The dead `_run` helper in `check_invocation_caliber` was removed, and an AST structural lock covers `scripts/gates/*.py` plus both tool scripts (7 tests, red first).
 - CI job budgets completed (DH round): `smoke-llm` in `ci.yml` was the only job without
   `timeout-minutes` (a hung endpoint would hit the platform's 360-minute default); it now
   declares 15 minutes, and `tests/test_ci_job_timeouts.py` locks every job's budget and (0, 60] range (3 tests, red first).

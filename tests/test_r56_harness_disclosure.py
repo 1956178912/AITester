@@ -19,10 +19,12 @@ class TestHarnessDisclosure:
     """provenance.harness 块结构。"""
 
     def test_harness_block_keys_present(self, monkeypatch):
-        """monkeypatch 各环境变量后，经 _build_harness_block 口径验证披露字段齐备。
+        """校验披露字段的**形状**（手工内联等价 dict，不读生产块）。
 
-        直接验证 harness 块构造逻辑（从 run_benchmark 提取的纯函数口径）：
         执行隔离 / 上下文策略 / 重试停止 / 时限 / 模型版本 / 快照日期。
+        注意：本测试不覆盖生产块的取值真实性——`stop_reasons` 词表曾在此
+        视角下漂移 6 个值（EM 轮），生产路径锁见
+        `tests/test_stop_reason_vocabulary_em.py`。
         """
         # 这里以等价口径内联构造（避免触发整图构建的重副作用），
         # 验证"披露口径"本身——各字段的键集合同构且非空。
