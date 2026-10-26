@@ -599,6 +599,9 @@ LLM_RETRY_WAIT: int = _parse_int_env("LLM_RETRY_WAIT", 30, 1, None)
 # 单次 LLM 调用的全局墙钟总预算（秒）：覆盖"故障转移 × 模型 × 重试"整段，
 # 超出即快速失败（防极端组合下基准跑批被单任务卡死数十分钟；0.7 债务项 2.2）。
 # EH 轮：计时改 monotonic（不受系统时间回拨影响），判定下沉到每次请求前。
+# EI 轮：`LlmCallBudgetExceeded`（本预算的耗尽信号）是 `BudgetExceededError`
+# 子类——节点与 determine_stop_reason 的预算封顶读者只认父类，兄弟类会让
+# 时间预算封顶退化成"未知故障"。
 LLM_CALL_BUDGET_SECONDS: int = _parse_int_env("LLM_CALL_BUDGET_SECONDS", 600, 1, None)
 
 # ─── 功能模块自有开关（默认关，不在本文件集中声明）──────────────────────────

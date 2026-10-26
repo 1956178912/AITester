@@ -47,6 +47,7 @@ from src.agents.llm_client import (
     request_identity_material,
 )
 from src.agents.rogue_monitor import rogue_monitor_enabled
+from src.budget.cost_budget import BudgetExceededError
 from src.utils.env_utils import env_flag_opt_out
 from src.utils.helpers import extract_code_block, extract_json_object
 
@@ -510,13 +511,27 @@ def _pin_thread_api_group(
     return pinned
 
 
-class LlmCallBudgetExceeded(RuntimeError):
+class LlmCallBudgetExceeded(BudgetExceededError):
     """单次 LLM 调用的全局墙钟预算耗尽（控制流信号，不进入重试/故障转移）。
 
     EH 轮（2026-10-27）：预算判定改用 monotonic 时钟并在**每次请求前**复查；
     本异常是确定性失败，重试器不得退避重试（同 `BudgetExceededError` 待遇）。
-    继承 RuntimeError 保持既有调用方的捕获面不变。
+
+    EI 轮（2026-10-27）：继承 `BudgetExceededError` 而非其兄弟类——编排层
+    planner / generator / debugger 与 `determine_stop_reason` 的预算封顶读者
+    全部以 `isinstance(e, BudgetExceededError)` 为判据，兄弟类会让时间预算
+    封顶在工件里退化成"未知故障"、`BUDGET_EXCEEDED` 永不产生。时间口径没有
+    可报的已消耗量（超限发生在下一次请求**之前**），故 `consumed=None`。
     """
+
+    def __init__(self, message: str, *, limit: int | float | None = None) -> None:
+        # 绕过父类数值模板（父类按 consumed/limit 构造 token/USD 消息，本类
+        # message 由调用点给出、语义更完整）；属性仍按父类字段形状暴露，兼容
+        # 既有 `except BudgetExceededError` 消费点对 `.unit` / `.limit` 的读取。
+        RuntimeError.__init__(self, message)
+        self.consumed = None
+        self.limit = limit
+        self.unit = "seconds"
 
 
 class BaseAgent:
@@ -1008,7 +1023,9 @@ class BaseAgent:
         def _raise_if_call_budget_exhausted() -> None:
             """预算耗尽即抛确定性信号（不参与重试/故障转移）。"""
             if time.monotonic() >= deadline:
-                raise LlmCallBudgetExceeded(f"LLM 调用超过全局预算 {LLM_CALL_BUDGET_SECONDS}s，快速失败")
+                raise LlmCallBudgetExceeded(
+                    f"LLM 调用超过全局预算 {LLM_CALL_BUDGET_SECONDS}s，快速失败", limit=LLM_CALL_BUDGET_SECONDS
+                )
 
         def _pre_retry_budget_check() -> None:
             """A11 + EH：重试前复查任务级（token/USD）与单次调用（时间）预算。"""

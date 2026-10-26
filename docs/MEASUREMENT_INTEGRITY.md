@@ -4776,3 +4776,30 @@ VM 快照恢复、笔记本改时间都会把它往回拨，截止点随之后�
 持久化（monotonic 无跨进程语义），要么与被比较的 mtime 同源；`duration_ms` 等**读数**不改，
 本轮只碰**行为门控**的截止判定。**修 1 处截止判定（3 个检查点 + 1 处等待截断），
 锁 6 例（5 红→绿 + 1 预算内回归），不把 TTL/读数站点记成修复。**
+
+## 102. 附：EI 轮（2026-10-27）**时间预算的降级面兑现了、判定面没有**；「快速失败」不等于「被记成预算封顶」
+
+**① 新信号落在既有捕获面之外。**
+EH 引入的 `LlmCallBudgetExceeded` 被建成 `RuntimeError` 的**兄弟类**。编排层的预算封顶读者
+全部以 `isinstance(e, BudgetExceededError)` 为唯一判据：`_planner_node`（默认计划 +
+`logic_degraded`）、`_generator_node`（空测试 + `budget_exceeded`）、`_debugger_node`
+（`error_category="budget_exceeded"` + 空补丁），以及 `determine_stop_reason` 经
+`state["budget_exceeded"]` 产出 `BUDGET_EXCEEDED`。超时异常在三个节点都被更宽的
+`except RuntimeError` 接住，降级产物与 token/USD 超限**肉眼相同**，但标记一个都没写：
+工件把「时间预算止损」记成「未知故障」，`BUDGET_EXCEEDED` 终止原因永久不可达，
+`.env.example` 的「触发 5.4 预算封顶」承诺落空。
+
+**② 红因逐节点可辨。**
+真树预修：planner / generator 的更新字典缺 `budget_exceeded`（`KeyError`），debugger 落
+`error_category="unknown"`，planner 降级结果经 `determine_stop_reason` 返回
+`MAX_ITERATIONS` 而非 `BUDGET_EXCEEDED`；构造签名也不接受 `limit`（`TypeError`）、
+`.limit` 属性不存在（`AttributeError`）。7 例新锁全红，红因各自指向「标记缺席」而非 fixture。
+
+**③ 修法：改继承，不动读者。**
+`class LlmCallBudgetExceeded(BudgetExceededError)`，自定义 `__init__(message, *, limit=None)`
+经 `RuntimeError.__init__` 绕过父类数值模板（本类**没有**可报的已消耗秒数，`consumed=None`
+表示未知），属性按父类字段形状暴露（`unit="seconds"`、`limit=配置值`）；raise 点传
+`limit=LLM_CALL_BUDGET_SECONDS`。三个节点与停止原因的判定代码**零改动**自动同待遇——
+这正是「读者只认父类」应有的扩展方式。**同轮排除**：不改 `non_retryable_exceptions`
+的冗余双元组（保留 EH 的显式语义）、不新增 state 键、不把 `BudgetAccountingError` 等
+已继承者重登记。**修 1 处继承关系（1 个类 + 1 个 raise 点），锁 7 例（7 红→绿）。**

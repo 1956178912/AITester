@@ -19,10 +19,10 @@
 
 ### Fixed
 - 单次 LLM 调用的全局预算不再被时钟回拨绕过（EH 轮）：`LLM_CALL_BUDGET_SECONDS`（默认 600s）此前用 `time.time()` 算截止点，NTP 阶跃校正 / VM 快照恢复导致墙钟回拨时截止点随之后移、预算永不触发；且检查只在换模型时进行，同一模型内的重试阶梯（1/2/4s）与 429 退避（最长 30s）越预算后仍会继续发请求（与 `COST_MODEL` 的「不继续发请求」相反）。
-  现改 monotonic 计时、每次真实请求前复查、429 等待按剩余预算截断，预算耗尽以 `LlmCallBudgetExceeded`（RuntimeError 子类）收口。6 例新锁。
-- 默认开启的安全/质量守卫不再被坏值静默关闭（EG 轮）：venv 沙箱、凭证与 pip 白名单、危险 API、命名契约、注入输出扫描、证据门、P2P 门禁、容器只读/断网共 10 个开关（11 处读取）走正集 `env_flag(name, True)`，
-  `yes` / `enabled` / 拼错 / 空串都会把守卫判关——实测危险补丁被放行、`MYSQL_PASSWORD` 重新进入子进程环境、容器丢掉 `--read-only` 与 `--network=none`。现统一改走 `env_flag_opt_out`：仅 `false`/`0`/`off` 关闭，坏值保持开启；默认关的特征/成本开关仍为正集（坏值不得隐式开启）。
-  31 例新锁（24 红→绿 + 7 边界），先红后绿。
+  现改 monotonic 计时、每次真实请求前复查、429 等待按剩余预算截断，预算耗尽以 `LlmCallBudgetExceeded` 收口。6 例新锁。
+- 时间预算异常不再被「预算封顶」读者漏认（EI 轮）：`LlmCallBudgetExceeded` 原为 `RuntimeError` 兄弟类，而 planner / generator / debugger 与 `determine_stop_reason` 只认 `BudgetExceededError`——超时照常降级，但 `budget_exceeded` 永不落盘、`BUDGET_EXCEEDED` 终止原因不可达，`.env.example` 的「触发 5.4 预算封顶」承诺落空。现改为 `BudgetExceededError` 子类（`unit="seconds"`、`consumed=None` 表示未知），三节点与停止原因零改动自动同待遇。7 例新锁。
+- 默认开启的安全/质量守卫不再被坏值静默关闭（EG 轮）：venv 沙箱、凭证与 pip 白名单、危险 API、命名契约、注入输出扫描、证据门、P2P 门禁、容器只读/断网共 10 个开关（11 处读取）走正集 `env_flag(name, True)`，`yes` / `enabled` / 拼错 / 空串都会把守卫判关——实测危险补丁被放行、`MYSQL_PASSWORD` 重新进入子进程环境、容器丢掉 `--read-only` 与 `--network=none`。
+  现统一改走 `env_flag_opt_out`：仅 `false`/`0`/`off` 关闭，坏值保持开启；默认关的特征/成本开关仍为正集（坏值不得隐式开启）。31 例新锁（24 红→绿 + 7 边界），先红后绿。
 - 可选依赖「装上但坏了」不再击穿降级契约（ED 轮）：12 处 `try: import … except ImportError` 只拦缺包，扩展 ABI / 传递依赖冲突抛出的 RuntimeError/OSError 会穿过去（chromadb 损坏时整个 CLI 无法启动）；现在导入期任意异常都降级告警。12 例新锁 + 1 例负控制。
 - 读侧「损坏」判定不再停在 JSON 语法层（EE 轮）：15 处 JSON/JSONL 读侧只捕 `json.JSONDecodeError`（只覆盖解码后的
   文本），坏字节（截断多字节 / GBK 保存）在解码期抛 `UnicodeDecodeError`——行级「坏行跳过」变成一行拖垮整份文件，
