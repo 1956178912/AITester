@@ -229,6 +229,7 @@ def _append_task_error(
     json_output: bool,
     coverage_threshold: float | None = None,
     max_iterations: int | None = None,
+    dump_trace_on_failure: bool = False,
 ) -> dict[str, Any]:
     """F11（2026-10-22 第三方复审 P2）：异常任务也必须在结果流里出现。
 
@@ -237,8 +238,18 @@ def _append_task_error(
     里**完全缺失**（既没有成功行也没有失败行），调度层无法区分"没跑"和"崩了"。
     现在与成功路径同构：追加 + （JSON 模式）输出一行错误 JSON；非 JSON 模式把
     异常原因写 stderr（stdout 只承载结果表格），避免「失败但终端不可读」。
+
+    崩溃任务此前从不进入诊断导出（`_run_single_task` 的 dump 只在结果构造之后
+    调用）——恰在最需要追踪时开关不生效。此处按同一开关补做一次导出，成功与
+    失败分别记入 ``trace_dump_path`` / ``trace_dump_error``。
     """
     result = _make_task_error_result(file_path, func, error, coverage_threshold, max_iterations)
+    if dump_trace_on_failure:
+        dump_path, dump_error = _dump_trace_on_failure(json_output)
+        if dump_path is not None:
+            result["trace_dump_path"] = dump_path
+        elif dump_error is not None:
+            result["trace_dump_error"] = dump_error
     results.append(result)
     if json_output:
         click.echo(json.dumps(result, ensure_ascii=False, indent=2))
@@ -255,6 +266,7 @@ def _handle_task_exception(
     json_output: bool = False,
     coverage_threshold: float | None = None,
     max_iterations: int | None = None,
+    dump_trace_on_failure: bool = False,
 ) -> None:
     """
     统一处理并行任务执行中的异常，记录日志并追加错误结果。
@@ -267,11 +279,21 @@ def _handle_task_exception(
         json_output: JSON 模式时同步输出错误结果行（F11）。
         coverage_threshold: CLI 覆盖率阈值（透传给错误结果）。
         max_iterations: CLI 最大迭代次数（透传给错误结果）。
+        dump_trace_on_failure: 崩溃任务同样尝试导出内存追踪快照。
     """
     file_path = future_to_file[future]
     task_error = future.exception()  # 只调用一次，避免重复取异常
     logger.error("任务执行异常：file=%s, error=%s", file_path, task_error)
-    _append_task_error(file_path, func, task_error, results, json_output, coverage_threshold, max_iterations)
+    _append_task_error(
+        file_path,
+        func,
+        task_error,
+        results,
+        json_output,
+        coverage_threshold,
+        max_iterations,
+        dump_trace_on_failure=dump_trace_on_failure,
+    )
 
 
 def _dispatch_parallel_tasks(
@@ -336,6 +358,7 @@ def _dispatch_parallel_tasks(
                     json_output,
                     coverage_threshold,
                     max_iterations,
+                    dump_trace_on_failure=dump_trace_on_failure,
                 )
             finally:
                 if on_progress:
@@ -416,28 +439,32 @@ def _dispatch_concurrent(
         )
 
 
-def _dump_trace_on_failure(output_json: bool) -> str | None:
+def _dump_trace_on_failure(output_json: bool) -> tuple[str | None, str | None]:
     """任务失败时把内存追踪快照写成临时 JSONL 供诊断（--dump-trace-on-failure）。
 
     仅当 CLI 显式开启 --dump-trace-on-failure 且本任务失败时触发；
     把进程级内存快照（TraceSession 累积的最近任务节点记录，默认启用、不落盘）
-    经 `dump_recent_to` 写入 `./tmp_trace/<ts>_failed_trace.jsonl` 并提示路径。
-    无快照可写 / 写盘失败时静默跳过（诊断出口，不影响主流程）。
+    经 `dump_recent_to_with_reason` 写入 `./tmp_trace/<ts>_failed_trace.jsonl` 并提示路径。
+    写盘失败 / 无快照可写不得反噬任务结果：失败原因写 stderr 与日志（--json 模式
+    stdout 仍只承载 JSON），返回值供调用方把 ``trace_dump_path`` /
+    ``trace_dump_error`` 写进结果 dict。
 
     Returns:
-        写盘成功时返回路径字符串（供调用方把 `trace_dump_path` 字段写进结果 dict），
-        无快照可写 / 写盘失败时返回 None。
+        ``(path, None)`` 写盘成功；``(None, reason)`` 无快照可写或写盘失败。
     """
-    from src.observability.trace import dump_recent_to
+    from src.observability.trace import dump_recent_to_with_reason
 
     target_dir = os.path.join(os.getcwd(), "tmp_trace")
-    path = dump_recent_to(target_dir)
+    path, error = dump_recent_to_with_reason(target_dir)
     if path is None:
-        return None
+        reason = error or "原因未知"
+        logger.warning("失败追踪快照未写入：%s", reason)
+        warning_msg(f"失败追踪快照未写入：{reason}")
+        return None, reason
     logger.info("失败追踪快照已写盘: %s", path)
     if not output_json:
         click.echo(f"\n  诊断追踪：{path}（--dump-trace-on-failure）")
-    return path
+    return path, None
 
 
 def _run_single_task(
@@ -571,11 +598,14 @@ def _run_single_task(
 
     # 可观测性批次：--dump-trace-on-failure 且本任务失败 → 把内存追踪快照
     # （TraceSession 累积的最近任务节点记录，默认启用不落盘）写成临时 JSONL
-    # 供诊断；写盘成功时把路径写进 result（JSON 模式可消费），失败静默跳过。
+    # 供诊断；成功/失败分别记入 trace_dump_path / trace_dump_error，失败原因
+    # 同时写 stderr（写盘失败不得把已完成任务改写成崩溃）。
     if dump_trace_on_failure and not result["passed"]:
-        _dump_path = _dump_trace_on_failure(output_json)
+        _dump_path, _dump_error = _dump_trace_on_failure(output_json)
         if _dump_path is not None:
             result["trace_dump_path"] = _dump_path
+        elif _dump_error is not None:
+            result["trace_dump_error"] = _dump_error
 
     # 输出结果
     if output_json:
@@ -637,8 +667,9 @@ def _run_single_task(
     "dump_trace_on_failure",
     is_flag=True,
     default=False,
-    help="任务失败时把内存追踪快照（最近任务节点记录，默认启用不落盘）写成 "
-    "./tmp_trace/<ts>_failed_trace.jsonl 供诊断；默认关，不设置时无 I/O",
+    help="任务失败（含崩溃）时把内存追踪快照（最近任务节点记录，默认启用不落盘）写成 "
+    "./tmp_trace/<ts>_failed_trace.jsonl 供诊断；无快照/写盘失败在 stderr 披露原因、"
+    "不改变任务结果；默认关，不设置时无 I/O",
 )
 def run(
     target_files: tuple[str, ...],
@@ -762,7 +793,16 @@ def run(
                     results.append(result)
                 except Exception as e:
                     logger.error("任务执行异常：file=%s, error=%s", target_file, e)
-                    _append_task_error(target_file, func, e, results, json_output, coverage_threshold, max_iterations)
+                    _append_task_error(
+                        target_file,
+                        func,
+                        e,
+                        results,
+                        json_output,
+                        coverage_threshold,
+                        max_iterations,
+                        dump_trace_on_failure=dump_trace_on_failure,
+                    )
 
         elapsed_time = time.time() - start_time
 

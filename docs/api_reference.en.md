@@ -75,6 +75,11 @@ omit the option to ask for "all".
 pattern that matches only directories, is a usage error (rc=2) and starts no task (it is no
 longer disguised as a task failure); a file matched by both a glob and an explicit path is
 deduplicated by absolute path and run once, so LLM calls are not repeated.
+
+`run --dump-trace-on-failure` attempts to export the in-memory trace snapshot when a task fails
+(including a crash): on success the result carries `trace_dump_path`; when no snapshot exists or
+the write fails it carries `trace_dump_error` and discloses the reason on stderr. Export failure
+never changes the task result, and in `--json` mode stdout still carries JSON only.
 `check-dataset` accepts only names returned by `get_available_datasets()` (case- and
 hyphen-insensitive); the library function `load_dataset` still degrades unknown names to the
 built-in examples, but that lenient contract does not apply to the diagnostic command —

@@ -29,17 +29,17 @@ This file records externally visible changes only; round-by-round history is arc
   section / line ceilings / index completeness); round markers and line-window locks retired.
 
 ### Fixed
-- Doctor's `dataset-check-cli` probe no longer requires removed output (DV round): after DL,
-  QuixBugs prints "loaded N tasks" plus an explicit "no quality_report" skip instead of "passed
-  (N tasks)"; the probe still failed on the old text, so a clean-tree doctor reported a missing
-  capability as a fault while its unit test mocked that text. It now accepts verified-pass or
-  explicit-skip (missing verdict is red), reads the loaded count, keeps the <41 skip. 4 net-new locks (6 in all).
-- `check-dataset` no longer exits 0 after finding loading problems (DU round): a non-empty report
-  only warned while the docstring promised "0 = no problems", so CI read "problems found" as
-  "dataset healthy". It now lists them and exits 1; missing `quality_report` stays a disclosure. 11 new locks.
-- `doctor --json` keeps one schema on every exit (DT round): an internal exception emitted 4 keys
-  against 12 on success, so `jq '.conclusion'` failed instead of reading a failure. All exits now
-  share 13 keys; the exception path reports `matrix.status: internal` / `null` aggregates. 13 new locks.
+- `--dump-trace-on-failure` no longer goes silent or corrupts results (DW round): directory creation
+  ran outside the `try`, so a blocked path raised and rewrote a completed task as crashed, while empty
+  buffers / write failures were silent. The three states are now distinct (`trace_dump_path` /
+  `trace_dump_error` plus a stderr reason), and crashed tasks also attempt the export. 9 new locks.
+- Doctor's `dataset-check-cli` probe no longer requires removed output (DV round): QuixBugs prints
+  "loaded N tasks" plus an explicit skip; the probe now accepts verified-pass or explicit-skip (missing verdict is red). 4 net-new locks (6 in all).
+- `check-dataset` no longer exits 0 after finding loading problems (DU round): a non-empty report only
+  warned while the docstring promised "0 = no problems". It now lists them and exits 1; a missing
+  `quality_report` stays a disclosure. 11 new locks.
+- `doctor --json` keeps one 13-key schema on every exit (DT round): an internal exception emitted 4 keys
+  against 12 on success. The exception path now reports `matrix.status: internal` / `null` aggregates. 13 new locks.
 - A crashed task no longer has a different result shape (DS round): 5 keys vs 14 on success
   (`jq '.coverage_ok'` failed), and human mode hid the reason and fabricated iteration 0. Both paths
   now share all keys (unknowns `null`), reasons go to stderr, iterations show `N/A`. 9 new locks.

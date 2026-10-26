@@ -74,6 +74,10 @@ CLI 退出码统一口径：0 通过；1 运行期失败（`run` 存在失败任
 用法错误 rc=2 拒绝且不启动任务（不再伪装成任务失败）；同一文件经 glob 与显式路径重复
 命中时按绝对路径去重、只跑一次，避免重复消耗 LLM。
 
+`run --dump-trace-on-failure` 在任务失败（含崩溃）时尝试导出内存追踪快照：成功时结果
+带 `trace_dump_path`，无快照可写 / 写盘失败时带 `trace_dump_error` 并在 stderr 披露
+原因；导出失败不改变任务结果，`--json` 模式的 stdout 仍只承载 JSON。
+
 `check-dataset --subset` 只在加载器真正支持子集时生效：`swe_bench` 系列把子集名映射为
 `swe_bench_<subset>_instances.jsonl`，`ult` 支持 `lite` / `full`（官方子集文件）；其他
 数据集（内置示例、QuixBugs、BugsInPy、Defects4J、synthetic）没有子集概念，传入

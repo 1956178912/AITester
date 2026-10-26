@@ -470,14 +470,27 @@ def dump_recent_to(target_dir: str, limit: int | None = None) -> str | None:
 
     Returns:
         写盘的 JSONL 文件完整路径；无快照可写或写盘失败时返回 None。
+        需要区分这两种失败原因时用 ``dump_recent_to_with_reason``。
+    """
+    path, _ = dump_recent_to_with_reason(target_dir, limit=limit)
+    return path
+
+
+def dump_recent_to_with_reason(target_dir: str, limit: int | None = None) -> tuple[str | None, str | None]:
+    """``dump_recent_to`` 的带原因版本：成功返回 ``(path, None)``。
+
+    失败时返回 ``(None, reason)`` 并区分两种状态：无快照可写（内存追踪缓冲
+    为空 / 被关闭）与写盘失败（目录不可创建、文件不可写）。目录创建同样在
+    try 内——父级是普通文件或只读时抛出的 ``OSError`` 不得冒泡到调用方
+    （docstring 承诺失败返回 None；CLI 在任务结果构造之后调用本出口，
+    异常会把「已完成的任务」改写成「任务崩溃」）。
     """
     with _memory_ring_lock:
         if not _memory_ring:
-            return None
+            return None, "无快照可写（内存追踪缓冲为空或已关闭；见 TRACE_MEMORY_BUFFER_ENABLE）"
         recent = list(_memory_ring)
     if limit is not None:
         recent = recent[-limit:]
-    os.makedirs(target_dir, exist_ok=True)
     import time as _time
 
     filename = f"{int(_time.time())}_failed_trace.jsonl"
@@ -492,6 +505,7 @@ def dump_recent_to(target_dir: str, limit: int | None = None) -> str | None:
     # 做法是对已序列化整行 mask，可能吞掉 JSON 定界符产出坏行），写盘前逐行
     # json.loads 结构守卫；不合法行丢弃并告警（诊断出口不得产出坏 JSONL）。
     try:
+        os.makedirs(target_dir, exist_ok=True)
         with open(path, "w", encoding="utf-8") as f:
             for snap in recent:
                 for record in snap.get("records", []):
@@ -512,5 +526,5 @@ def dump_recent_to(target_dir: str, limit: int | None = None) -> str | None:
                 )
     except OSError as e:
         logger.warning("内存快照写盘失败（忽略）: %s", e)
-        return None
-    return path
+        return None, f"写盘失败：{e}"
+    return path, None

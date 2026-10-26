@@ -3,7 +3,7 @@
 锁定 cli/app.py 未覆盖的纯逻辑 / mock 隔离分支（零工作流执行 / 零 LLM / 零网络）：
 - _validate_run_args：parallel / max_iterations / coverage_threshold / timeout 非法值
 - _expand_target_files：glob 命中 / 普通路径 / 不存在文件三分支
-- _dump_trace_on_failure：有快照写盘（json / 非 json 提示差异）/ 无快照 None
+- _dump_trace_on_failure：有快照写盘（json / 非 json 提示差异）/ 无快照返回原因（DW 轮起为二元组）
 - _print_quality_report：有报告（含超 10 条截断）/ 无报告
 - _print_missing_source：缺失源码（含超 20 条截断）/ 全部含源码
 """
@@ -102,31 +102,32 @@ class TestExpandTargetFilesBranches:
 
 class TestDumpTraceOnFailureBranches:
     def test_snapshot_written_returns_path(self, monkeypatch):
-        """有内存快照 → 写盘成功返回路径（output_json 时静默不 echo）。"""
+        """有内存快照 → 写盘成功返回 (路径, None)（output_json 时静默不 echo）。"""
         from src.cli import app as cli_app
 
         monkeypatch.setattr(cli_app, "_quiet_console_logs", lambda: _null_ctx())
 
-        with patch("src.observability.trace.dump_recent_to", return_value="/tmp/x.jsonl"):
+        with patch("src.observability.trace.dump_recent_to_with_reason", return_value=("/tmp/x.jsonl", None)):
             out = cli_app._dump_trace_on_failure(output_json=True)
-        assert out == "/tmp/x.jsonl"
+        assert out == ("/tmp/x.jsonl", None)
 
-    def test_no_snapshot_returns_none(self):
-        """无内存快照（dump_recent_to → None）→ 返回 None。"""
+    def test_no_snapshot_returns_reason(self):
+        """无内存快照 → 返回 (None, 原因)，不得静默。"""
         from src.cli import app as cli_app
 
-        with patch("src.observability.trace.dump_recent_to", return_value=None):
+        reason = "无快照可写（内存追踪缓冲为空或已关闭）"
+        with patch("src.observability.trace.dump_recent_to_with_reason", return_value=(None, reason)):
             out = cli_app._dump_trace_on_failure(output_json=True)
-        assert out is None
+        assert out == (None, reason)
 
     def test_non_json_mode_echoes_diagnostic(self, monkeypatch, capsys):
         """output_json=False → 额外 echo 诊断路径到 stdout。"""
         from src.cli import app as cli_app
 
-        with patch("src.observability.trace.dump_recent_to", return_value="/tmp/y.jsonl"):
+        with patch("src.observability.trace.dump_recent_to_with_reason", return_value=("/tmp/y.jsonl", None)):
             out = cli_app._dump_trace_on_failure(output_json=False)
         captured = capsys.readouterr()
-        assert out == "/tmp/y.jsonl"
+        assert out == ("/tmp/y.jsonl", None)
         assert "诊断追踪" in captured.out
 
 
