@@ -18,8 +18,10 @@
 #
 # 已知误报登记（_KNOWN_FP）：原 2026-10-01 基线 5 项（基线核查类 Markdown
 # 的 ICLR/NeurIPS proceedings URL 中 hex 片段≥32 位十六进制串，非真实凭证）
-# 所涉文档已于 2026-10-09 清理批次删除，登记项随之清空（正则恒不命中，
-# 保留结构以便未来新增误报文档时扩展）。命中文件非占位符时照常阻断。
+# 所涉文档已于 2026-10-09 清理批次删除。2026-10-26（DU 收口提交批次）新增
+# 两项：`docs/history/CHANGELOG_2026-10-26_full*.md` 是冻结的历史归档，正文
+# 含 sha256 摘要（64 位 hex）与「曾误报的占位值」说明文字（如 AKIA+PLACEHOLDER），
+# 均为记录而非凭证；命中仅打印供人工复核，不阻断。命中文件非占位符时照常阻断。
 # 维护：新增误报文档时同步加入 _KNOWN_FP 正则，并在头部登记。
 
 set -e
@@ -48,7 +50,7 @@ _SENSITIVE_RE='sk-[A-Za-z0-9._-]{10,}|[A-Fa-f0-9]{32,}|[A-Z][A-Z_]*(PASSWORD|PAS
 # 已知误报登记（占位符形式，与头部"已知误报登记"注释同步）。
 # 原 5 项基线核查类文档已删除（2026-10-09 清理批次），登记清空；
 # 未来新增误报文档时请扩展本正则并同步头部注释。
-_KNOWN_FP='^$'
+_KNOWN_FP='^docs/history/CHANGELOG_2026-10-26_full(\.en)?\.md$'
 
 LEAKED=""
 while IFS= read -r f; do
@@ -62,7 +64,7 @@ while IFS= read -r f; do
   # grep 命中条件：任一敏感模式命中
   hit=$(grep -nE "$_SENSITIVE_RE" "$f" 2>/dev/null || true)
   # 过滤占位符行（your- / placeholder / example / <全大写> / 全 x）
-  real=$(printf '%s\n' "$hit" | grep -vE 'your-|placeholder|example|<[A-Z_]+>|x{5,}' || true)
+  real=$(printf '%s\n' "$hit" | grep -viE 'your-|placeholder|example|<[A-Z_]+>|x{5,}' || true)
   # 已知误报登记命中 → 打印供人工复核（不阻断），见头部"已知误报登记"
   if printf '%s\n' "$f" | grep -qE "$_KNOWN_FP"; then
     if [ -n "$real" ]; then

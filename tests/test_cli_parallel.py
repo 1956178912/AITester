@@ -187,7 +187,7 @@ class TestHandleTaskException:
         assert fake_key not in r["error"]
 
     def test_error_result_shape_matches_success_result(self):
-        """异常结果与正常结果同构：成功结果有的判定键，异常结果也都有。"""
+        """异常结果与正常结果键集合同构（DS 轮收紧：此前只锁 5 个最小键）。"""
         results: list[dict] = []
         future = MagicMock()
         future_to_file = {future: "f.py"}
@@ -196,10 +196,26 @@ class TestHandleTaskException:
         cli_app._handle_task_exception(future, future_to_file, None, results)
 
         r = results[0]
-        # _make_task_error_result 的最小键集
-        assert {"success", "file", "func", "passed", "error"} <= r.keys()
+        assert set(r) == {
+            "success",
+            "file",
+            "func",
+            "passed",
+            "coverage",
+            "coverage_threshold",
+            "coverage_ok",
+            "iterations",
+            "max_iterations",
+            "diagnosis",
+            "error_category",
+            "error",
+            "event_bus",
+            "cost_budget",
+            "semantic_cache",
+        }
         assert r["error"] == "unknown error"
         assert r["func"] == "all"
+        assert r["iterations"] is None
 
 
 class TestRunParallelBranches:

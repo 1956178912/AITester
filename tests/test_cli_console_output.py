@@ -92,15 +92,18 @@ class TestRunSingleTaskConsoleOutput:
         assert "建议操作" in r.output
 
     def test_failed_task_without_coverage(self, tmp_path, monkeypatch):
-        """覆盖率数据缺失（None）→ 摘要不输出覆盖率行（'N/A' 逻辑由 coverage is None 控制）。"""
+        """覆盖率数据缺失（None）→ 逐任务摘要不输出覆盖率行，批次摘要记入「不可测」。"""
         path = self._make_file(tmp_path)
         fs = _FakeFinalState(test_passed=False, coverage=None, iteration=1)
         self._patch_workflow(monkeypatch, fs)
 
         r = CliRunner().invoke(cli_app.cli, ["run", path])
         assert r.exit_code == 1
-        # 覆盖率缺失时摘要不含 '覆盖率：' 行
-        assert "覆盖率：" not in r.output
+        # 逐任务摘要不含覆盖率行（'N/A' 逻辑由 coverage is None 控制）……
+        assert "（阈值 80.0% ✓" not in r.output
+        assert "（阈值 80.0% ✗" not in r.output
+        # ……但批次摘要必须披露「不可测」，缺失不等于达标
+        assert "覆盖率：0 达标 / 0 未达标 / 1 不可测（阈值 80.0%）" in r.output
         assert "修复迭代：1" in r.output
 
     def test_json_output_is_pure_json(self, tmp_path, monkeypatch):

@@ -16,6 +16,16 @@
 判定面：被 git 跟踪的路径里，不得出现「缓存/临时」形态。规则按**路径分量**判定
 （不是后缀）——`.log` 在 `experiments/results/` 下是**故意的证据工件**，不在禁列。
 
+新增判定面（2026-10-26，用户口径「上传 GitHub 的只能是项目相关代码和必要的
+说明性文档」）：**敏感/私有路径也不得被跟踪**。`.gitignore` 只约束未跟踪面——
+一旦 `git add`（尤其 `-f`）就随提交上传，推送后内容进远端历史、无从撤回。故本
+门禁增第二判据面，读同一个 `git ls-files`：顶层 `paper/`、`.private/`、`data/`、
+`rag_data/`、`.qoder/`、`.workbuddy/`、`tmp_apr_baseline/`；文件 `.env`、
+`.env.local`、`.env.local.bak*`、`.gitignore-sensitive`；以及学术/评审/投稿类
+文档模式（见 `_PRIVATE_PATH_GLOBS` / `_PRIVATE_BASENAME_GLOBS`）。两级锚定都有
+负例钉住：顶层锚定避免误伤 `docs/paper/`、`src/data/`；`docs/study/*_PREREG_*.md`
+锚定避免误伤 `experiments/results/**/PREREG.md`（公开证据工件）。
+
 口径：
   - 只看 `git ls-files`（已跟踪面），不看工作树（未跟踪文件由 .gitignore 管）；
   - 不设豁免表：缓存/临时文件进版本库没有正当理由；确有需要时应当**改名**成
@@ -32,12 +42,16 @@ CI 接线：ci.yml test 作业（仅 3.14 档，纯 git 调用，与 Python 版�
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import re
 import subprocess
 import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+
+#: `git ls-files` 的正常耗时是毫秒级；60s 仍不返回即视为仓库被锁或 git 挂起。
+_GIT_TIMEOUT_S = 60.0
 
 #: (规则名, 命中说明, 判定函数)。判定函数收到「路径分量列表」。
 #: 全部按**分量**判定：只有当某个分量整体等于（或匹配）该模式时才命中，
@@ -72,6 +86,70 @@ _SUFFIX_COMPONENTS: tuple[tuple[str, str], ...] = (
     (".pyo", "Python 优化字节码"),
 )
 
+#: 顶层目录禁跟踪（仅路径**第一段**整体等于该值才命中）。
+#: 要么是敏感内容（论文源 / 私有审查 / 数据集 / 密钥），要么是工具生成物（可重建）。
+_PRIVATE_TOP_LEVEL_DIRS: tuple[tuple[str, str], ...] = (
+    ("paper", "论文 LaTeX 源与构建产物（双盲投稿纪律：不入公开仓）"),
+    (".private", "私有隔离目录（论文/实验/审查的本地副本）"),
+    ("data", "本地数据集（不入库，复现走下载入口）"),
+    ("rag_data", "RAG 持久化检索库（本地生成，可再生）"),
+    (".qoder", "Qoder 生成的 RepoWiki 知识（工具产物，可重建）"),
+    (".workbuddy", "第三方工具工作记忆目录（运行时产物）"),
+    ("tmp_apr_baseline", "APR 基线爬取缓存（一次性脚本产物）"),
+)
+
+#: 文件名禁跟踪（任意层级，末段整体相等）。
+_PRIVATE_FILENAMES: tuple[tuple[str, str], ...] = (
+    (".env", "真实环境变量文件（含 API Key）"),
+    (".env.local", "本机 LLM 配置（含真实 API Key）"),
+    (".gitignore-sensitive", "敏感文件清单（本地策略件）"),
+)
+
+#: 文件名前缀禁跟踪——`.env.local.bak_g8` 这类版本化备份曾含 22 条真实密钥。
+_PRIVATE_FILE_PREFIXES: tuple[tuple[str, str], ...] = ((".env.local.bak", "密钥备份文件（历史泄漏面）"),)
+
+#: 路径模式禁跟踪（相对仓库根的 glob）——学术/评审/投稿类文档。
+_PRIVATE_PATH_GLOBS: tuple[tuple[str, str], ...] = (
+    ("docs/study/SUBMISSION_*.md", "期刊投稿文档"),
+    ("docs/study/OPTIMIZATION_APPENDIX_*.md", "投稿优化附录"),
+    ("docs/study/*_PREREG_*.md", "预注册文档（论文数字未公开前的口径）"),
+    ("docs/study/BATCH8_MUTK_VALIDITY_*.md", "批八变异体效度文档"),
+    ("docs/study/GOLD_CONFORMANCE_*.md", "金标一致性预注册"),
+    ("docs/study/PAPER_CONSISTENCY_AUDIT_*.md", "论文-源码一致性审计（含论文正文数字）"),
+    ("docs/design/stvr_empirical_study_design.md", "研究设计文档"),
+    ("docs/design/false_fix_caliber_matrix.md", "误修口径矩阵"),
+    ("SPEC_REPLACE_AB_SCALE87_REPORT_*.md", "扩样实验报告"),
+)
+
+#: 文件名模式禁跟踪（任意层级）——`.gitignore` 里该模式本就未锚定。
+_PRIVATE_BASENAME_GLOBS: tuple[tuple[str, str], ...] = (("INDEPENDENT_REVIEW_*.md", "独立审查报告"),)
+
+
+def _private_hit_reason(parts: tuple[str, ...]) -> tuple[str, str] | None:
+    """返回 (规则名, 命中说明)；敏感/私有路径命中，否则 None。"""
+    if not parts:
+        return None
+    top = parts[0]
+    if len(parts) > 1:
+        for name, why in _PRIVATE_TOP_LEVEL_DIRS:
+            if top == name:
+                return (name + "/", why)
+    last = parts[-1]
+    for name, why in _PRIVATE_FILENAMES:
+        if last == name:
+            return (name, why)
+    for prefix, why in _PRIVATE_FILE_PREFIXES:
+        if last.startswith(prefix):
+            return (prefix + "*", why)
+    path = "/".join(parts)
+    for pattern, why in _PRIVATE_PATH_GLOBS:
+        if fnmatch.fnmatchcase(path, pattern):
+            return (pattern, why)
+    for pattern, why in _PRIVATE_BASENAME_GLOBS:
+        if fnmatch.fnmatchcase(last, pattern):
+            return (pattern, why)
+    return None
+
 
 def _hit_reason(parts: tuple[str, ...]) -> tuple[str, str] | None:
     """返回 (规则名, 命中说明)；未命中则 None。"""
@@ -95,13 +173,16 @@ def _hit_reason(parts: tuple[str, ...]) -> tuple[str, str] | None:
 
 
 def tracked_files(repo: Path) -> list[str]:
-    """列出被 git 跟踪的文件（相对仓库根）。git 不可用时抛 RuntimeError。"""
+    """列出被 git 跟踪的文件（相对仓库根）。git 不可用或超时抛 RuntimeError。"""
     try:
         proc = subprocess.run(
             ["git", "-C", str(repo), "ls-files", "-z"],
             capture_output=True,
             check=False,
+            timeout=_GIT_TIMEOUT_S,
         )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(f"`git ls-files` 超时（>{_GIT_TIMEOUT_S:g}s）——仓库可能被锁或 git 挂起") from exc
     except FileNotFoundError as exc:  # pragma: no cover - 环境无 git
         raise RuntimeError("git 不可用——无法核验跟踪面") from exc
     if proc.returncode != 0:
@@ -121,6 +202,16 @@ def find_offenders(repo: Path) -> list[tuple[str, str, str]]:
     return offenders
 
 
+def find_private_offenders(repo: Path) -> list[tuple[str, str, str]]:
+    """返回被跟踪的敏感/私有路径 [(相对路径, 规则名, 说明)]。"""
+    offenders: list[tuple[str, str, str]] = []
+    for path in tracked_files(repo):
+        hit = _private_hit_reason(tuple(path.split("/")))
+        if hit is not None:
+            offenders.append((path, hit[0], hit[1]))
+    return offenders
+
+
 def rule_inventory() -> list[tuple[str, str, str]]:
     """列出全部规则：[(类别, 规则名, 说明)]。`--list` 打印它。"""
     rows: list[tuple[str, str, str]] = []
@@ -133,6 +224,16 @@ def rule_inventory() -> list[tuple[str, str, str]]:
     for name, why in _SUFFIX_COMPONENTS:
         rows.append(("末段后缀匹配", name, why))
     rows.append(("顶层目录精确匹配", "venv", "本地虚拟环境（无点写法）"))
+    for name, why in _PRIVATE_TOP_LEVEL_DIRS:
+        rows.append(("敏感/私有：顶层目录", name + "/", why))
+    for name, why in _PRIVATE_FILENAMES:
+        rows.append(("敏感/私有：文件名", name, why))
+    for prefix, why in _PRIVATE_FILE_PREFIXES:
+        rows.append(("敏感/私有：文件名前缀", prefix + "*", why))
+    for pattern, why in _PRIVATE_PATH_GLOBS:
+        rows.append(("敏感/私有：路径模式", pattern, why))
+    for pattern, why in _PRIVATE_BASENAME_GLOBS:
+        rows.append(("敏感/私有：文件名模式", pattern, why))
     return rows
 
 
@@ -188,7 +289,7 @@ def check_gate_registry(repo: Path) -> list[str]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="仓库卫生守卫：临时/缓存产物不得被 git 跟踪")
+    parser = argparse.ArgumentParser(description="仓库卫生守卫：临时/缓存产物与敏感/私有路径不得被 git 跟踪")
     parser.add_argument(
         "--list",
         action="store_true",
@@ -197,7 +298,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.list:
-        print("[repo-hygiene] 规则清单：")
+        print("[repo-hygiene] 规则清单（临时/缓存 + 敏感/私有）：")
         for kind, name, why in rule_inventory():
             print(f"  - [{kind}] {name}：{why}")
 
@@ -205,6 +306,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         offenders = find_offenders(PROJECT_ROOT)
+        private_offenders = find_private_offenders(PROJECT_ROOT)
     except RuntimeError as exc:
         print(f"[repo-hygiene] ❌ {exc}")
         return 1
@@ -216,6 +318,15 @@ def main(argv: list[str] | None = None) -> int:
         print("[repo-hygiene] 处置：`git rm --cached <路径>` 移出索引 + 把该目录名登记进 .gitignore。")
         failures.append(f"跟踪面内含 {len(offenders)} 个临时/缓存产物")
 
+    if private_offenders:
+        print(f"[repo-hygiene] ❌ 被 git 跟踪的敏感/私有路径 {len(private_offenders)} 个：")
+        for path, rule, why in private_offenders:
+            print(f"  - {path}  （规则「{rule}」：{why}）")
+        print(
+            "[repo-hygiene] 处置：`git rm --cached <路径>` 移出索引；若已推送，内容已进远端历史，须按泄漏处置流程重写历史。"
+        )
+        failures.append(f"跟踪面内含 {len(private_offenders)} 个敏感/私有路径")
+
     registry_problems = check_gate_registry(PROJECT_ROOT)
     for problem in registry_problems:
         print(f"[repo-hygiene] ❌ {problem}")
@@ -224,7 +335,7 @@ def main(argv: list[str] | None = None) -> int:
     if failures:
         return 1
 
-    print("[repo-hygiene] ✅ 跟踪面内无临时/缓存产物；门禁清单与盘面一致。")
+    print("[repo-hygiene] ✅ 跟踪面内无临时/缓存产物或敏感/私有路径；门禁清单与盘面一致。")
     return 0
 
 

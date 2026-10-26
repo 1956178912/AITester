@@ -222,6 +222,7 @@ def probe_oracle_independent_judging():
         capture_output=True,
         text=True,
         cwd=str(Path(__file__).resolve().parents[2]),
+        timeout=120,
     )
     if "--independent-judging" not in (proc.stdout + proc.stderr):
         return fail("oracle_quality_replay 缺少 --independent-judging 入口（N-3 交付）")

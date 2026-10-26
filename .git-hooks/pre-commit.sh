@@ -11,6 +11,7 @@
 #   3. check_bilingual_docs.py   —— 双语文档同步（默认非 strict 警告；CI 可用 --strict）
 #   4. check_secret_leak.sh      —— 未跟踪/新增文件含 sk-/sk-ws-/sk-or- 密钥前缀即阻断
 #   5. ruff check + format --check —— O34 新增：与 CI Lint 步骤同口径（防 D.3 复发）
+#   6. check_repo_hygiene.py     —— 临时/缓存产物 + 敏感/私有路径不得被 git 跟踪
 # 仅提交时运行（pre-commit），不阻塞本地开发。
 
 set -e
@@ -21,7 +22,7 @@ cd "$REPO_ROOT"
 
 PY="${PYTHON:-python3}"
 
-echo "[pre-commit] 运行 CI 同源守卫（check_lock_sync / check_credential_scrub / check_baseline_numbers / check_baseline / check_bilingual_docs / check_secret_leak）…"
+echo "[pre-commit] 运行 CI 同源守卫（check_lock_sync / check_credential_scrub / check_baseline_numbers / check_baseline / check_bilingual_docs / check_secret_leak / check_repo_hygiene）…"
 
 # lock 同步守卫（requirements.lock 与 pyproject 一致性，CI 同名步骤）
 if [ -f scripts/gates/check_lock_sync.py ]; then
@@ -74,5 +75,11 @@ if [ -f .git-hooks/check_secret_leak.sh ]; then
 else
   echo "[pre-commit] 警告：.git-hooks/check_secret_leak.sh 缺失，跳过密钥泄漏守卫（建议 git add 纳入版本库）" >&2
 fi
+
+# 2026-10-26：敏感/私有路径不得被跟踪（用户口径：上传 GitHub 的只能是项目代码
+# 与必要说明文档）。pre-commit 阶段索引已含刚 `git add` 的文件，所以这一跑能在
+# 内容进入本地历史**之前**拦住 paper/、.private/、data/、rag_data/、.qoder/、
+# .env.local*、敏感 EMSE 文档等路径；`make gates`/CI 只能事后发现（推送即泄漏）。
+"$PY" scripts/gates/check_repo_hygiene.py
 
 echo "[pre-commit] 守卫通过。"

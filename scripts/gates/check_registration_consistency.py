@@ -89,6 +89,9 @@ _SHELL_SWALLOW_RE = re.compile(r"\|\|\s*(?:echo|true|exit[ \t]+0)(?![a-z0-9_-])|
 _REVIEW_ROW_RE = re.compile(r"\]\(reviews/([^)\s]+)\)")
 _NUMBERED_ROW_RE = re.compile(r"^(\d+)\.\s+\[[^\]]*\]\(reviews/[^)\s]+\)", re.M)
 
+# 门内最重的一条是 `mypy src/ config.py`（冷缓存可达数十秒）；300s 仍挂起即视为故障。
+_SUBPROCESS_TIMEOUT_S = 300.0
+
 
 def _rel(path: Path) -> str:
     """路径显示名：仓库内用相对路径，仓库外（测试用 tmp_path）退化为绝对路径。"""
@@ -98,10 +101,18 @@ def _rel(path: Path) -> str:
         return str(path)
 
 
-def _run(cmd: list[str], root: Path) -> subprocess.CompletedProcess[str] | None:
-    """指定仓库根下的只读子进程；不可用时返回 None（环境性前提缺失，不是红）。"""
+def _run(
+    cmd: list[str], root: Path, *, timeout: float = _SUBPROCESS_TIMEOUT_S
+) -> subprocess.CompletedProcess[str] | None:
+    """指定仓库根下的只读子进程；不可启动时返回 None（环境性前提缺失，不是红）。
+
+    超时不在此列：调用方把 None 读成「前提缺失」并 `[SKIP]`，挂起的 git/ruff/mypy
+    若也走那条路，等于把「挂死」洗成「通过」——超时一律抛 RuntimeError 判红。
+    """
     try:
-        return subprocess.run(cmd, cwd=root, capture_output=True, text=True)
+        return subprocess.run(cmd, cwd=root, capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(f"子进程超时（>{timeout:g}s）：{' '.join(cmd)}") from exc
     except (OSError, ValueError):
         return None
 
@@ -847,7 +858,11 @@ def main(argv: list[str] | None = None) -> int:
     ci_text = _read(CI_YML)
     register_text = _read(REGISTER)
 
-    auth, auth_notes, problems = compute_authorities(verify_mypy=args.verify_mypy)
+    try:
+        auth, auth_notes, problems = compute_authorities(verify_mypy=args.verify_mypy)
+    except RuntimeError as exc:
+        print(f"[registration-consistency] 阻断：{exc}", file=sys.stderr)
+        return 1
     number_problems, number_ok, number_skips, per_row = check_declared_numbers(auth, register_text)
     index_problems, index_ok, index_notes = check_index_presence()
     owner_problems, owner_ok = check_owner_liveness(make_text=make_text, ci_text=ci_text)

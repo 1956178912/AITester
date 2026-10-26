@@ -1,13 +1,15 @@
 """`main.py doctor`（P-3）零 LLM 自检命令回归测试。
 
-覆盖分层（全部零网络 / 零 LLM / 不真实跑探针矩阵）：
+覆盖分层（全部零网络 / 零 LLM；除「真实未知分组」集成用例外不真实跑探针矩阵）：
 1. 命令注册/help（doctor 在 group 帮助与自身 --help 可见）；
 2. 环境检查各分支（Python 版本 / 可选依赖缺失 / LLM 端点空与不完整 / 数据集
    可加载性 / 内核沙箱 supported/unsupported / git HEAD+dirty）；
 3. 探针矩阵聚合（全 pass → 0、含 fail → 1、error → 1、strict+skip → 1）；
 4. CLI 行为（--json stdout 纯 JSON、schema 与探针报告兼容、--groups 透传、
    子进程超时/坏 JSON fail-closed）；
-5. 密钥不泄漏（构造假 LLM_N_API_KEY 环境变量，断言 human/JSON 输出均不含其值）。
+5. 密钥不泄漏（构造假 LLM_N_API_KEY 环境变量，断言 human/JSON 输出均不含其值）；
+6. 分组过滤用法错误（`--groups ""`/逗号 → exit 2，不跑矩阵、不伪装成矩阵 error）
+   与安装面缺探针脚本（unavailable：不 spawn、不计失败、strict 下退 1）。
 """
 
 from __future__ import annotations
@@ -533,3 +535,124 @@ class TestProbeSubprocessInvocation:
         result = cli_app._doctor_run_probe_matrix([], 30)
         assert result["status"] == "error"
         assert "无法启动探针子进程" in result["detail"]
+
+
+# ─────────────────── 7. 分组过滤用法错误与安装面（DJ 轮） ───────────────────
+
+
+def _usage_result(detail: str = "探针子进程用法/发现错误（rc=2）：[e2e] 未知分组: 'core'") -> dict[str, Any]:
+    return {
+        "status": "usage",
+        "report": None,
+        "duration_s": 0.0,
+        "returncode": 2,
+        "detail": detail,
+        "stderr_tail": "[e2e] 未知分组: 'core'",
+    }
+
+
+def _unavailable_result() -> dict[str, Any]:
+    return {
+        "status": "unavailable",
+        "report": None,
+        "duration_s": 0.0,
+        "returncode": None,
+        "detail": "安装面未附带探针脚本（.../scripts/tools/e2e_probe.py）；功能矩阵仅在源码检出中可用，环境检查不受影响",
+        "stderr_tail": "",
+    }
+
+
+class TestUsageAndInstalledSurface:
+    def test_empty_groups_value_is_usage_error_without_running_anything(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        calls = {"checks": 0, "matrix": 0}
+
+        def _checks() -> list[dict[str, Any]]:
+            calls["checks"] += 1
+            return [_check()]
+
+        def _matrix(groups: list[str], timeout_s: int) -> dict[str, Any]:
+            calls["matrix"] += 1
+            return _probe_result_ok()
+
+        monkeypatch.setattr(cli_app, "_doctor_collect_checks", _checks)
+        monkeypatch.setattr(cli_app, "_doctor_run_probe_matrix", _matrix)
+        result = CliRunner().invoke(cli_app.cli, ["doctor", "--json", "--groups", " , "])
+        assert result.exit_code == 2
+        report = json.loads(result.output)
+        assert report["matrix"]["status"] == "usage"
+        assert report["matrix"]["summary"] == {"pass": 0, "fail": 0, "skip": 0, "error": 0}
+        assert report["exit_code"] == 2
+        assert report["ok"] is False
+        assert report["command"]["groups"] == []
+        assert calls == {"checks": 0, "matrix": 0}
+
+    def test_empty_groups_human_output_says_usage_not_matrix_failure(self) -> None:
+        result = CliRunner().invoke(cli_app.cli, ["doctor", "--groups", ""])
+        assert result.exit_code == 2
+        assert "用法错误" in result.output
+        assert "本次未执行环境检查与功能矩阵" in result.output
+        assert "exit=2" in result.output
+        assert "功能矩阵执行失败" not in result.output
+
+    def test_usage_status_is_not_aggregated_as_system_error(self) -> None:
+        report = cli_app._doctor_build_report(
+            groups=[], timeout_s=30, strict=False, checks=[_check()], probe_result=_usage_result()
+        )
+        assert report["matrix"]["summary"] == {"pass": 0, "fail": 0, "skip": 0, "error": 0}
+        assert report["exit_code"] == 2
+        assert report["ok"] is False
+        assert report["conclusion"] == "fail"
+
+    def test_unavailable_matrix_is_warning_not_failure(self) -> None:
+        report = cli_app._doctor_build_report(
+            groups=[], timeout_s=30, strict=False, checks=[_check()], probe_result=_unavailable_result()
+        )
+        assert report["matrix"]["summary"] == {"pass": 0, "fail": 0, "skip": 0, "error": 0}
+        assert report["exit_code"] == 0
+        assert report["ok"] is True
+        assert report["conclusion"] == "warn"
+
+    def test_unavailable_matrix_strict_exit_one(self) -> None:
+        report = cli_app._doctor_build_report(
+            groups=[], timeout_s=30, strict=True, checks=[_check()], probe_result=_unavailable_result()
+        )
+        assert report["exit_code"] == 1
+
+    def test_unavailable_human_output_distinguishes_from_failure(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(cli_app, "_doctor_run_probe_matrix", lambda groups, timeout_s: _unavailable_result())
+        result = CliRunner().invoke(cli_app.cli, ["doctor"])
+        assert result.exit_code == 0
+        assert "功能矩阵不可用" in result.output
+        assert "功能矩阵执行失败" not in result.output
+        assert "环境检查不受影响" in result.output
+
+    def test_missing_probe_script_is_unavailable_without_spawning(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Any
+    ) -> None:
+        def _no_spawn(*args: Any, **kwargs: Any) -> Any:
+            raise AssertionError("脚本缺失时不得启动探针子进程")
+
+        monkeypatch.setattr(cli_app, "_DOCTOR_REPO_ROOT", str(tmp_path))
+        monkeypatch.setattr(subprocess, "run", _no_spawn)
+        result = _REAL_RUN_PROBE_MATRIX([], 30)
+        assert result["status"] == "unavailable"
+        assert result["returncode"] is None
+        assert "e2e_probe.py" in result["detail"]
+        assert "环境检查不受影响" in result["detail"]
+
+    def test_usage_exit_code_is_read_from_stderr(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def _fake_run(cmd: list[str], **kwargs: Any) -> Any:
+            return subprocess.CompletedProcess(cmd, 2, stdout="", stderr="\n[e2e] 未知分组: 'x'；可用分组: budget\n")
+
+        monkeypatch.setattr(subprocess, "run", _fake_run)
+        result = _REAL_RUN_PROBE_MATRIX(["x"], 30)
+        assert result["status"] == "usage"
+        assert result["returncode"] == 2
+        assert "未知分组" in result["detail"]
+        assert "未产出可解析 JSON" not in result["detail"]
+
+    def test_real_unknown_group_reports_usage_not_system_error(self) -> None:
+        result = _REAL_RUN_PROBE_MATRIX(["no_such_group"], 60)
+        assert result["status"] == "usage"
+        assert result["returncode"] == 2
+        assert "未知分组" in result["detail"]

@@ -1,169 +1,89 @@
 # AITester Model Card
 
-Last updated: 2026-10-25 (1.0.0 release round: §4 gains a generation banner — the 261-rows-per-arm numbers belong to the generation withdrawn on 2026-10-24, and current readings point at `BASELINE.yaml` and the rebuilt batches; the known limitations share their source with the README "Known Limitations (1.0.0)" row and the paper's Threats section. Previously 2026-10-21 measurement-caliber batch: §4 gains an "effective pass" caliber — the BA/BB/BC rounds write "rc==0 is not assertions-executed pass" into derived-reading criteria. Previously the 2026-10-14 LLM structured-output hardening batch: §2 gains an "Invocation configuration" bullet — thinking disabled by default [cost protection] + `LLM_JSON_MODE` on by default [DeepSeek official JSON Output at seven JSON-contract call sites] + finish_reason guard + parse-layer numeric-expression repair [ADR-0031]; previously 2026-10-08 R2 landing batch: narrative alignment with ADR-0016 — §1 drops "multi-agent" as the primary claim; "multi-agent orchestration" demoted to an ablatable container; repair numbers updated to corrected caliber v2)
+A **detection-first** research system for repair-evaluation (attribution-aware) Python test
+generation and repair. Covers model usage, data, evaluation calibers, and known limitations.
+
+Last updated: 2026-10-26
 
 ## 1. System Overview
 
-AITester is a **detection-first research system for attribution-aware Python
-test-generation and repair-evaluation**: given function-level
-repair tasks (from a synthetic dataset or SWE-bench Lite splits), a
-LangGraph-orchestrated Planner → Generator → Executor → Debugger →
-PatchApplier loop generates pytest tests, executes them, diagnoses failures,
-and patches code. "**Multi-agent orchestration**" is positioned as an
-**ablatable container** (not a primary claim — after the E2 double gates,
-aitester vs plain_llm_df δ=−0.3673, structurally inferior, ADR-0016). The
-three-seed main batch repair, after the ADR-0021/0027/0029 measurement-caliber
-corrections, is **39.31% (v2, 57/145 replayable rows; gold adjudication)**
-(v1 35.86%; ceiling attribution in
-`experiments/results/main_batch/repair_ceiling_report.md`). This card
-describes model usage, data provenance, and the risk surface (following
-NIST AI RMF and common model-card entries; the
-system is research code, not a deployed product).
+Given function-level repair tasks (synthetic dataset or SWE-bench Lite splits), a
+LangGraph-orchestrated Planner → Generator → Executor → Debugger → PatchApplier loop
+generates pytest tests, executes them, diagnoses failures, and patches code. "Multi-agent
+orchestration" is an **ablatable container**, not a primary claim (ADR-0016; E2 double
+gates: aitester vs plain_llm_df δ=−0.3673, structurally inferior). Research code, not a
+deployed product.
 
 ## 2. Model Usage
 
-- **Model provenance**: this project trains no models. All intelligence comes
-  from user-configured OpenAI-compatible endpoints (`.env.local` `LLM_N_*`
-  triples: API key / base URL / model name; only the official DeepSeek
-  endpoint ships as a built-in provider).
-- **Model roles**: Planner (logic analysis / spec production), Generator (test
-  code), Debugger/Review (root-cause diagnosis and patches), FaultLocalizer
-  (RGFL-style reasoning fault localization, localization only no repair,
-  since repair-engine batch I 2026-10-07), optional ExpertPool (parallel
-  dimension experts).
-- **Deterministic channels**: SpecIR v2 DSL-compiled assertions, SMT witnesses
-  (`[formal]` extra), Ochiai spectral fault localization, mutation scoring, and
-  the P2P regression gate are **non-LLM** deterministic components; the system
-  degrades conservatively when the LLM fails (see module docstrings). Note:
-  fault localization is **dual-channel** — besides the spectral channel
-  (Ochiai, non-LLM), the reasoning channel (RGFL-style `FaultLocalizerAgent`,
-  `FAULT_LOCALIZER_ENABLE` on by default) **consumes LLM** and degrades
-  conservatively to None on failure; `FAULT_LOCALIZER_ENABLE=false` falls
-  back to the pure-spectral ablation caliber.
-- **Invocation configuration (2026-10-14, ADR-0031; aligned with DeepSeek
-  official docs)**: thinking **disabled** by default (`LLM_THINKING_MODE`;
-  cost protection — V4-family reasoning chains are on by default and billed
-  as output); `LLM_JSON_MODE` **on** by default — seven JSON-contract call
-  sites bind the official JSON Output (`response_format=json_object`,
-  guaranteeing valid JSON strings; `off` replays the historical
-  byte-identical caliber); responses with `finish_reason ∈ {length,
-  insufficient_system_resource}` are retried as recoverable failures;
-  Python numeric expressions in JSON value positions (`10**18` class)
-  are repaired by the parse layer via bounded evaluation (no eval). All
-  settings are registered in `docs/env_budget.yaml` and per-batch
-  provenance `env_snapshot` (auditable, reproducible).
+- **Provenance**: no self-trained or fine-tuned models; all intelligence comes from
+  user-configured OpenAI-compatible endpoints (`.env.local` `LLM_N_*`: API key / base URL /
+  model name). The only built-in provider is the official DeepSeek endpoint and the price
+  table registers only deepseek-flash — a **single model family**, so conclusions do not
+  extend to other families.
+- **Roles**: Planner (logic analysis), Generator (tests), Debugger/Review (diagnosis and
+  patches), FaultLocalizer (RGFL-style reasoning localization, no repair), optional
+  ExpertPool.
+- **Deterministic channels**: SpecIR v2 DSL assertions, SMT witnesses, Ochiai spectral
+  localization, mutation scoring, and the P2P regression gate are non-LLM; the system
+  degrades conservatively when the LLM fails.
+- **Dual-channel localization**: spectral (Ochiai, non-LLM) plus reasoning
+  (`FaultLocalizerAgent`, consumes LLM, `FAULT_LOCALIZER_ENABLE` on by default, degrades to
+  `None` on failure).
+- **Invocation (ADR-0031)**: `LLM_THINKING_MODE` off by default (reasoning chains are billed
+  as output); `LLM_JSON_MODE` on by default (seven JSON-contract sites bind
+  `response_format=json_object`); `finish_reason ∈ {length, insufficient_system_resource}`
+  retried as recoverable; numeric expressions in JSON values repaired by a bounded parse
+  layer (no `eval`).
 
-## 3. Training Data and Data Sources
+## 3. Data
 
-- This project **trains no models**; there is no training data.
-- Evaluation data: `data/swe_bench_lite_*` (derived from the public SWE-bench
-  Lite dataset; the data license: the official SWE-bench repository
-  distributes the data under the **Apache License 2.0** (P1-9 completion;
-  refer to the [official repository](https://github.com/SWE-bench/SWE-bench)
-  declaration — third parties should re-verify the current version) and
-  programmatic synthetic tasks from
-  `src/datasets/synthetic_dataset.py` (built in-house, distributed under the
-  repository's MIT license).
-- RAG case base: historical cases produced by the user's own experiment runs
-  (local `rag_data/`).
+- **No training data.** Evaluation data: `data/swe_bench_lite_*` from public SWE-bench Lite
+  (the official repository distributes it under Apache-2.0; re-verify the current
+  declaration) and synthetic tasks from `src/datasets/synthetic_dataset.py` (in-house, MIT).
+  RAG cases come from the experiments' own history (local `rag_data/`, never committed).
+- **Known biases**: Python only; synthetic templates are hand-written boundary/exception/
+  contract defects that differ systematically from real-repository defect distributions;
+  tasks are mostly function-level single-file; generation and repair share one LLM pool, so
+  self-production/self-verification (`false_fix` measures it) is quantified but not
+  eliminated.
 
-## 4. Evaluation Protocol and Known Limitations (Honesty Notes)
+## 4. Metrics and Calibers
 
-- Current caliber = R-P0-2 lifespan experiment, three seeds pooled
-  (2026-10-06, n=261/arm, logic profile, deepseek-flash, McNemar + BH-FDR
-  all significant; see the `benchmark` section of `BASELINE.yaml` and
-  `docs/study/WITHDRAWN_ARTIFACTS_2026-10-24.md`; `statistical_report_3seed_pooled.md` was withdrawn with that batch): detection plain_llm_df 44.8% >
-  aitester 15.8% > plain_llm 1.5%; aitester vs df **−28pp** — the full
-  system is significantly worse than the plain prompting protocol on a
-  strong model (net-negative orchestration contribution; robust under dual
-  bounds for the 21 missing rows).
-- **repair = 39.31% after the measurement-caliber correction (57/145
-  replayable rows)**: the historical "0.0% across all arms" resulted from
-  two stacked measurement artifacts (ADR-0021 patch-field fence residue +
-  ADR-0029 cross-file tasks not materialized), not from a lack of evidence
-  for the repair claim. Ceiling attribution (`repair_ceiling_report.md`,
-  AK1): repair loop 154/261 → patch produced 94.2% → plausible 46.8% →
-  correct 39.31% — the bottleneck is patch plausibility and gold
-  correctness, not patch production. After the 2026-10-07 paradigm shift,
-  repair turns from "an honestly measured conclusion" into "a target to
-  optimize" (repair-engine route: localization → synthesis → verification);
-  the v1 caliber 35.86% is a cross-file artifact lower bound (caliber matrix
-  in `docs/design/repair_caliber_matrix.md`).
-- Localization dimension: `fl_at_k` (spectral line-level Top-k hit, since R8)
-  and `localization_hit_function` (LLM reasoning localization function-level
-  hit, since batch I, compared against the gold changed-function set;
-  schema-isomorphic placeholder when unlocalized / no gold material) ship
-  alongside detection / repair metrics. The E2 final-adjudication batch
-  first measured FL@1 at 19/53 = 35.8% (after the gold-diff alignment fix).
-- Cost: aitester $0.0259 / plain_llm_df $0.0045 per task (officially sourced
-  price table, 2026-10-06: deepseek-flash peak-hour rates — the only model
-  registered; on 2026-10-23 all non-DeepSeek entries were removed).
-  **plain_llm_df's $0.0045 is a lower bound on recorded spend, not an exact
-  mean and not "free"**: 35 of the main batch's 261 rows carry an all-zero
-  token triple with a non-empty `generated_test` (3 of them
-  `detection_rate=1.0`); S11's threshold passed on the one-sided side
-  (13.4% unaccounted rows < 50%), and before this fix those rows entered the
-  amount numerator as 0 while still occupying the task denominator. Since
-  round AK this is disclosed explicitly via
-  `cost_caliber="recorded_lower_bound"`; true spend can only be higher
-  (`PARTIAL_ACCOUNTING_AK_2026-10-21.md`).
-- **Suite-green caliber (BA→BC rounds, 2026-10-21)**: pytest also returns
-  `rc==0` for suites that are all skip / xfail / deselect, so `rc==0` is not
-  "a pass with assertions executed". M1 detection / repair, `repair_replay`,
-  `mutation_detection` and the 11 remaining verdict sites in `experiments/`
-  now require an effective pass (at least one passed and zero failed) and
-  otherwise fail closed (`None` / `unverifiable` / `not_applicable` /
-  `skipped`); "green not demonstrated" in the replay reconciliation tool is
-  no longer recorded as False or as a mismatch. Real-corpus audit: 246
-  benchmark files / 736 gold suites / 4895 mutation rows and 3
-  MISGUIDED_REPORT archives (350 task rows / 700 sides) contain zero
-  module-level all-skip suites ⇒ zero impact on archived readings; the
-  caliber affects derived readings and verdicts only and rewrites no
-  archived artifact (see `EFFECTIVE_GREEN_BA_2026-10-21.md` /
-  `EFFECTIVE_GREEN_CONSUMERS_BB_2026-10-21.md` /
-  `MISGUIDED_REPLAY_EFFECTIVE_GREEN_BC_2026-10-21.md`).
-- spec_compile_rate measured constantly 0.0 in the logic profile (AB1
-  validation batch 12/12) — the "logic-driven" spec chain is not activated;
-  current detection gains attribute to the detection-first prompting
-  protocol. E1 (preregistered thresholds ≥0.3 keep / <0.2 drop) is the
-  deciding experiment for that claim.
-- Real SWE-bench Lite (n=20 smoke run): **infrastructure failure with no valid capability conclusion** — of 20 attempts, 7 completed and all 7 failed due to API 429 rate limiting, 3 failed, 10 timed out (`experiments/results/swebench_20_summary.json`; 2026-10-13 erratum: the earlier "0/20 resolved" must not be read as a capability negative result). The system's effectiveness claims are **not yet supported by a real benchmark**, with BASELINE.yaml as the single source of truth; this benchmark is on the re-run list. (Rate-limit signal count = 2 under the de-duplicated all-structured-source caliber run_notes/notes/issues = 1 each; the 404 endpoint-misconfiguration entry is booked separately — see `experiments/results/emse_swebench_disclosure.md`.)
-- The full "logic-driven" chain (SpecIR DSL / deterministic oracle / structured
-  routing) is off by default; enable with `AITESTER_PROFILE=logic`.
+- **repair = 39.31% (v2, 57/145 replayable rows, independent gold adjudication)**. The
+  historical "0.0% across all arms" came from two stacked measurement artifacts (ADR-0021
+  patch-field fence residue + ADR-0029 cross-file tasks not materialized); v1 caliber 35.86%
+  is a cross-file artifact lower bound (matrix: `docs/design/repair_caliber_matrix.md`).
+- **Generation notice**: the multi-seed pool at "n=261/arm" was withdrawn on 2026-10-24 and
+  is historical only; current readings live in `BASELINE.yaml` and the rebuilt batches,
+  never pooled with the 261-row pool.
+- **Detection**: after the E2 double gates aitester vs plain_llm_df δ=−0.3673 — the full
+  system is worse than the plain prompting protocol on a strong model; detection gains
+  attribute to the detection-first protocol, not the "logic-driven" spec chain.
+- **Effective pass (BA→BC)**: pytest also returns `rc==0` for all-skip/xfail/deselect
+  suites, so derived readings require at least one passed and zero failed, otherwise
+  fail-closed (`None`/`unverifiable`).
+- **spec_compile_rate** is 0.0 in the logic profile (AB1 12/12); E1 (preregistered ≥0.3
+  keep / <0.2 drop) decides that claim.
+- **Cost**: aitester $0.0259 / plain_llm_df $0.0045 per task (deepseek-flash peak rates);
+  plain_llm_df is a **lower bound** on recorded spend (`cost_caliber="recorded_lower_bound"`), not free.
+- **Real SWE-bench Lite (n=20 smoke)**: infrastructure failure with **no valid capability
+  conclusion** — 7 completions all hit 429, 3 failures, 10 timeouts
+  (`experiments/results/swebench_20_summary.json`); the benchmark is on the re-run list.
+- **E7 (repair-ceiling stratified sampling) is preregistered but not executed**
+  (`docs/preregistration.md`): ceiling attribution cannot be claimed until E7 data exists.
 
-## 5. Risk Surface and Mitigations
+## 5. Known Limitations
 
-- **Arbitrary code execution**: LLM-generated code runs on the host.
-  Mitigations: venv sandbox on by default (`EXECUTOR_USE_VENV`), optional
-  Docker isolation (defaults to `--network=none`, `--read-only`,
-  `--cap-drop=ALL`), optional kernel sandbox (bwrap/Landlock, Linux),
-  path-traversal guards, patch evidence gate, and snapshot rollback.
-- **Credential management**: API keys live only in `.env.local` (never
-  committed), with gitleaks working-tree and full-history scans plus
-  subprocess environment scrubbing (`scrub_os_environ`).
-- **Prompt injection**: input-side `detect_prompt_injection` feature scanning
-  (off by default, `INJECTION_GUARD_ENABLE`); hits warn but do not
-  auto-block (the "detect + isolate" posture of the OWASP LLM Top 10).
-- **Cost**: per-task token/USD hard budget (off by default) plus an LLM-call
-  wall-clock budget.
-
-## 6. Ethics and Compliance
-
-- No human subjects, no personal-data collection; SWE-bench tasks come from
-  public-repository issue/PR history.
-- Under the EU AI Act this system is a software development tool (not a GPAI
-  provider/deployer obligation holder); compliance for third-party LLM
-  endpoints rests with the endpoint provider and the user.
-- Generation disclosure: development of this project used LLM assistance;
-  per team convention, code and docs carry no AI attribution and the
-  repository maintainers are responsible for all content.
-
-## 7. Citation and License
-
-- Project code: see the repository root `LICENSE`.
-- Referenced benchmarks/methods: see the five `*_BASELINE_2023-2026.md`
-  surveys under `.private/review/recovered/` (that directory is not part of
-  the distribution; for external citation rely on the pending items
-  registered in `docs/citation_allowlist.txt` and the paper's reference
-  list). Citation liveness is checked weekly by
-  `scripts/gates/check_citations.py`.
+- Single model family and mostly synthetic data: numbers do not extrapolate to other models
+  or real-repository distributions.
+- repair 39.31% is a measured reading, not a claim that "self-repair is achieved"; the
+  repair-engine route (localize → synthesize → verify) is in progress.
+- Real-benchmark evidence is missing: the n=20 smoke run supports neither a negative nor a
+  positive capability claim.
+- E7 is not executed, so the repair-ceiling attribution is not closed.
+- Arbitrary-code-execution risk: generated code runs on the host; the venv sandbox is on by
+  default (`EXECUTOR_USE_VENV`), Docker isolation is optional (`--network=none` +
+  `--read-only` + `--cap-drop=ALL`). Keys live only in `.env.local`, with gitleaks scans and
+  subprocess environment scrubbing.
+- No human subjects or personal data; SWE-bench tasks come from public issue/PR history. License: `LICENSE` (MIT); citation: `CITATION.cff`.

@@ -44,6 +44,13 @@ CB 的第二个发现是**自指**：上面这句披露在本 docstring 里写�
 `_apparatus_paths()` 排除测量装置（本模块 + 直接 import 本模块的测试模块）后再分类；
 排除面精确到模块级导入（`from scripts.gates import other` 不算），已加锁。
 
+DS 轮（2026-10-26）重登记：CLI 崩溃结果与成功结果键集合同构后，
+`src/cli/app.py::_make_task_error_result` 直接返回的结果 dict 让两个字面声明键
+（`coverage_threshold` / `max_iterations`）进入 update dict 计数——实测 47 键 /
+99 站点、未触及 34 键（33 有字面 / 1 零字面）、未审计 46 键。新增的 2 键 / 4 站点
+是 CLI 呈现层的结果 dict，**不是状态节点写**，正是本条「普通 dict 与状态更新同形」
+的已知噪声；判定面与通过/失败口径一处未改，仅按棘轮重登记读数。
+
 用法：
     python scripts/gates/check_state_contract.py            # 审计，违规 exit 1
     python scripts/gates/check_state_contract.py --list     # 仅打印声明键集
@@ -190,7 +197,11 @@ class ChannelCoverage(NamedTuple):
 
     @property
     def unaudited_write_keys(self) -> tuple[str, ...]:
-        """只经 update dict 写的声明键——判定面对它们完全失明。"""
+        """update dict 侧可见、就地写/读判定面失明的声明键。
+
+        与普通结果 dict 同形，故含不可静态归属的噪声（如 CLI 结果 dict 携带的
+        `coverage_threshold` / `max_iterations`），只披露不判定。
+        """
         return tuple(sorted(set(self.update_write_keys) - set(self.inplace_write_keys)))
 
 
@@ -212,7 +223,7 @@ def _walk_channel_usage(paths: list[Path], declared: set[str]) -> _Usage:
     三形态：就地赋值 `state["k"] = ...`、读 `state.get("k")` / `state["k"]`、
     update dict（`return {"k": ...}` 与 update/merge 的 dict 实参）。
     update dict 只统计**已声明键**——普通函数返回的 dict 与状态更新同形，
-    未声明键无法归属（实测 898 处），计数会把噪声说成覆盖面。
+    未声明键无法归属（CB 轮实测 898 处、DS 轮 922 处），计数会把噪声说成覆盖面。
     """
     read: Counter[str] = Counter()
     inplace: Counter[str] = Counter()

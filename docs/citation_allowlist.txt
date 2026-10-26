@@ -46,29 +46,23 @@
 # （Huang et al., TOSEM, 2026-02-25 接受）——该误判已在
 # `docs/INDEPENDENT_REVIEW_2026-10-16.md` 内更正，不涉及本清单。
 #
-# 现状（2026-10-25 起）：**11 条登记，零历史遗留**。其中 12 条为 v0.8.0 数据换代时
-# 人工判定的「内部指标/轮次叙述行」（登记册轮次明细、INDEX 分册一句话说明；
-# 另 1 条为 CM 轮 1.0.0 发布行，见文末）；
-# 行内数字是项目自身指标，不是外部文献引用）。行号漂移后命中会重现、需重新
-# 判定而非无脑续登；**重复键与陈旧条目由 tests/test_citations_gate.py 计红**
-# （登记面此前无任何读者，重复登记曾静默通过）。新增豁免前仍须在上述记录
+# 现状（2026-10-26 DD 轮起）：**6 条登记，零历史遗留**，均为登记册轮次明细行
+# （行内数字是项目自身指标，不是外部文献引用）。DD 轮文档重写后，原 5 条
+# `docs/INDEX*.md` 键因 INDEX 精简而不再命中，已随重写退役；行号漂移后命中会
+# 重现、需重新判定而非无脑续登；**重复键与陈旧条目由 tests/test_citations_gate.py
+# 计红**（登记面此前无任何读者，重复登记曾静默通过）。新增豁免前仍须在上述记录
 # 格式下登记核验方法与结论。
 
-# ── 2026-10-25 v0.8.0 数据换代补登记（12 条）──────────────────────────
-# 以下均为**内部指标/轮次叙述行**（登记册轮次明细、INDEX 分册一句话说明），
-# 行内数字是项目自身指标（12,745 passed、+3 tasks、百分比等），不是外部文献
-# 引用。行号漂移后需重新判定（命中会重现，不会静默失效）。
-docs/INDEX.en.md:201
-docs/INDEX.en.md:214
-docs/INDEX.en.md:215
-docs/INDEX.en.md:220
-docs/INDEX.md:233
-docs/PROJECT_STATUS_REGISTER.md:213
-docs/PROJECT_STATUS_REGISTER.md:225
-docs/PROJECT_STATUS_REGISTER.md:233
-docs/PROJECT_STATUS_REGISTER.md:250
-docs/PROJECT_STATUS_REGISTER.md:298
-docs/PROJECT_STATUS_REGISTER.md:312
+# ── 2026-10-25 v0.8.0 数据换代补登记（6 条，DD 轮复核行号）────────────
+# 以下均为**内部指标/轮次叙述行**（登记册轮次明细），行内数字是项目自身指标
+# （12,745 passed、+3 tasks、百分比等），不是外部文献引用。行号漂移后需重新
+# 判定（命中会重现，不会静默失效）。
+docs/PROJECT_STATUS_REGISTER.md:214
+docs/PROJECT_STATUS_REGISTER.md:226
+docs/PROJECT_STATUS_REGISTER.md:234
+docs/PROJECT_STATUS_REGISTER.md:251
+docs/PROJECT_STATUS_REGISTER.md:299
+docs/PROJECT_STATUS_REGISTER.md:313
 
 # ── 2026-10-25 CM 轮补登记（1 条）────────────────────────────────────
 # 1.0.0 发布行（登记册 §3.2 首行）：行内 26,114.9 / 0.025885 / 35-of-261 是

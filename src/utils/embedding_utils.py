@@ -105,6 +105,10 @@ def _load_backend() -> tuple[str | None, Any]:
             if choice == "sentence_transformers":
                 logger.warning("EMBEDDING_BACKEND=sentence_transformers 但未安装 sentence-transformers，回退 None")
             instance, name = None, None
+        except Exception as e:
+            if choice == "sentence_transformers":
+                logger.warning("sentence-transformers 模型加载失败（回退 None）: %s", e)
+            instance, name = None, None
 
     if instance is None and choice in ("auto", "chromadb"):
         try:

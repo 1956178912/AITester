@@ -9,7 +9,7 @@
 
 > 命名不是判定依据：`tools/check_quota.py` 虽以 `check_` 开头，但它是对 LLM 端点发探测请求的运维工具，不参与门禁；`tools/generate_static_report.py` 虽被 CI 调用，但产物是报告而非判定，故归 `tools/`。
 
-## gates/（36 个）
+## gates/（38 个）
 
 CI / pre-commit 阻断项，`make gates` 跑其中大部分：
 
@@ -20,10 +20,12 @@ CI / pre-commit 阻断项，`make gates` 跑其中大部分：
 | `check_ast_parse_guards.py` | ast.parse 守卫捕获面棘轮（新增单腿守卫 = 抛穿 ValueError 族） |
 | `check_baseline.py` | `BASELINE.yaml` 健全性 |
 | `check_baseline_numbers.py` | 核心文档不得内嵌过期基线数字 |
+| `check_bibtex_compilability.py` | 引用库可编译性：BibTeX 在百分号注释行里遇到 at 符号会重启条目扫描 ⇒ 静默丢条目（本门真跑 bibtex 探针 + 静态扫描注释行） |
 | `check_bilingual_docs.py` | 中英文档配对 / 日期 / 章节对齐 |
 | `check_branch_coverage.py` | 核心路由模块分支覆盖门槛 |
 | `check_citations.py` | 文档引用真实性 |
 | `check_credential_scrub.py` | 静态枚举与动态接口漂移 |
+| `check_dependency_audit.py` | 依赖漏洞豁免过期：真实 pip-audit（不带 `--ignore-vuln`）发现修复版即红；登记版本漂移 / 新 ID 未登记即红；豁免理由「仅嵌入式」由 `src/` 静态扫描锁定 |
 | `check_dependency_exemptions.py` | pip-audit 漏洞豁免登记 |
 | `check_doc_commands.py` | 文档引用的 `scripts/….py` 路径与 `make <target>` 目标必须真实存在 |
 | `check_doc_links.py` | 文档相对链接 / 行锚 / 标题锚点静态完整性 |
@@ -40,7 +42,7 @@ CI / pre-commit 阻断项，`make gates` 跑其中大部分：
 | `check_perf_regression.py` | 性能基线回归 |
 | `check_prompt_artifacts.py` | Instruction artifact 清单哈希锁 |
 | `check_registration_consistency.py` | 登记册 §1「当前口径」数字 ↔ `BASELINE.yaml` 双向对账 |
-| `check_repo_hygiene.py` | 仓库卫生：临时/缓存产物不得被 git 跟踪 + 本清单与盘面一致 |
+| `check_repo_hygiene.py` | 仓库卫生：临时/缓存产物与敏感/私有路径不得被 git 跟踪 + 本清单与盘面一致 |
 | `check_release_freshness.py` | 发布新鲜度：最新 release tag 不得落在 main 后面（落后须登记例外） |
 | `check_scheduled_workflows.py` | 远端定时作业巡检：每周跑一次的作业最近一次必须非红（定时红 + 更新的成功手动运行 ⇒ 绿） |
 | `check_state_contract.py` | 未声明 state 键读写 |

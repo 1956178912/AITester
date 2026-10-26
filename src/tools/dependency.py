@@ -24,12 +24,14 @@ from __future__ import annotations
 
 import ast
 import atexit
+import contextlib
 import hashlib
 import importlib.util
 import json
 import logging
 import os
 import re
+import shutil
 import sys
 import threading
 import time
@@ -852,30 +854,23 @@ def list_venv_cache() -> list[dict[str, Any]]:
         每项 {"name": 目录名, "path": 绝对路径, "size_mb": float, "created_at": str}；
         目录不存在时返回空列表。
     """
-    if not os.path.isdir(_VENV_CACHE_DIR):
-        return []
-    result: list[dict[str, Any]] = []
-    for entry in sorted(os.listdir(_VENV_CACHE_DIR)):
-        full = os.path.join(_VENV_CACHE_DIR, entry)
-        if not os.path.isdir(full):
-            continue
-        # 统计目录大小（MB，忽略读取失败）
-        size_mb = 0.0
-        for root, _dirs, files in os.walk(full):
-            for fname in files:
-                try:
-                    size_mb += os.path.getsize(os.path.join(root, fname)) / (1024 * 1024)
-                except OSError:
-                    continue
-        try:
-            # 0.7 一致性修正：用 getmtime 替代 getctime（macOS 上 ctime 是创建
-            # 时间、Linux 上是 inode 变更时间，跨平台语义不一致；venv 目录创建
-            # 后内容很少变动，mtime 更可靠，与 clear_venv_cache 的年龄判断口径一致）
-            created_at = str(int(os.path.getmtime(full)))
-        except OSError:
-            created_at = "unknown"
-        result.append({"name": entry, "path": full, "size_mb": round(size_mb, 2), "created_at": created_at})
-    return result
+    return [_public_venv_entry(entry) for entry in _scan_venv_cache()]
+
+
+def preview_venv_cache_cleanup(max_age_days: int | None = None, max_size_mb: int | None = None) -> list[dict[str, Any]]:
+    """预演 clear_venv_cache 的删除名单（只读，不触碰磁盘）。
+
+    判定复用 clear_venv_cache 的同一函数，``would_remove`` 为真的条目就是实际清理时
+    会被删除的条目——预览与实删不会各算一套口径。
+
+    Returns:
+        每项在 list_venv_cache 字段基础上多一个 ``would_remove: bool``；
+        目录不存在时返回空列表。
+    """
+    return [
+        {**_public_venv_entry(entry), "would_remove": _venv_cache_would_remove(entry, max_age_days, max_size_mb)}
+        for entry in _scan_venv_cache()
+    ]
 
 
 def _dir_size_mb(path: str) -> float:
@@ -890,6 +885,48 @@ def _dir_size_mb(path: str) -> float:
     return size_bytes / (1024 * 1024)
 
 
+def _scan_venv_cache() -> list[dict[str, Any]]:
+    """扫描缓存目录，返回未舍入的原始读数（size_mb 精确值、mtime 读不到为 None）。"""
+    if not os.path.isdir(_VENV_CACHE_DIR):
+        return []
+    entries: list[dict[str, Any]] = []
+    for entry in sorted(os.listdir(_VENV_CACHE_DIR)):
+        full = os.path.join(_VENV_CACHE_DIR, entry)
+        if not os.path.isdir(full):
+            continue
+        try:
+            # 0.7 一致性修正：用 getmtime 替代 getctime（macOS 上 ctime 是创建
+            # 时间、Linux 上是 inode 变更时间，跨平台语义不一致；venv 目录创建
+            # 后内容很少变动，mtime 更可靠，与 clear_venv_cache 的年龄判断口径一致）
+            mtime: float | None = os.path.getmtime(full)
+        except OSError:
+            mtime = None
+        entries.append({"name": entry, "path": full, "size_mb": _dir_size_mb(full), "mtime": mtime})
+    return entries
+
+
+def _public_venv_entry(entry: dict[str, Any]) -> dict[str, Any]:
+    mtime = entry["mtime"]
+    return {
+        "name": entry["name"],
+        "path": entry["path"],
+        "size_mb": round(entry["size_mb"], 2),
+        "created_at": "unknown" if mtime is None else str(int(mtime)),
+    }
+
+
+def _venv_cache_would_remove(entry: dict[str, Any], max_age_days: int | None, max_size_mb: int | None) -> bool:
+    """删除判定：任一过滤条件命中即删；两者均未指定时清空全部。"""
+    if max_age_days is None and max_size_mb is None:
+        return True
+    mtime = entry["mtime"]
+    age_days = None if mtime is None else (time.time() - mtime) / 86400.0
+    return bool(
+        (max_age_days is not None and age_days is not None and age_days > max_age_days)
+        or (max_size_mb is not None and entry["size_mb"] > max_size_mb)
+    )
+
+
 def clear_venv_cache(max_age_days: int | None = None, max_size_mb: int | None = None) -> dict[str, Any]:
     """清理 venv 缓存目录（4.4）。
 
@@ -901,39 +938,29 @@ def clear_venv_cache(max_age_days: int | None = None, max_size_mb: int | None = 
         max_size_mb: 超过该大小的 venv 删除（None 表示不按大小过滤）。
 
     Returns:
-        {"removed": [name...], "kept": [name...], "freed_mb": float}
+        {"removed": [name...], "failed": [name...], "kept": [name...], "freed_mb": float}
+        removed 只含确实已从磁盘消失的目录；failed 是命中过滤但删除后目录仍在的
+        条目（如权限不足）；freed_mb 只累计 removed 的大小。
     """
     if not os.path.isdir(_VENV_CACHE_DIR):
-        return {"removed": [], "kept": [], "freed_mb": 0.0}
-    now = time.time()
+        return {"removed": [], "failed": [], "kept": [], "freed_mb": 0.0}
     removed: list[str] = []
+    failed: list[str] = []
     kept: list[str] = []
     freed_mb = 0.0
-    for entry in sorted(os.listdir(_VENV_CACHE_DIR)):
-        full = os.path.join(_VENV_CACHE_DIR, entry)
-        if not os.path.isdir(full):
+    for entry in _scan_venv_cache():
+        if not _venv_cache_would_remove(entry, max_age_days, max_size_mb):
+            kept.append(entry["name"])
             continue
-        # 统计目录大小（MB）与年龄（天）
-        size_mb = _dir_size_mb(full)
-        age_days = (now - os.path.getmtime(full)) / 86400.0
-        # 任一过滤条件命中即删除；两者均未指定时清空全部
-        should_remove = (
-            (max_age_days is not None and age_days > max_age_days)
-            or (max_size_mb is not None and size_mb > max_size_mb)
-            or (max_age_days is None and max_size_mb is None)
-        )
-        if should_remove:
-            import shutil
-
-            try:
-                shutil.rmtree(full, ignore_errors=True)
-                removed.append(entry)
-                freed_mb += size_mb
-            except OSError:
-                kept.append(entry)
+        with contextlib.suppress(OSError):
+            shutil.rmtree(entry["path"])
+        # rmtree 失败会抛 OSError；再核对目录是否真的消失，不能凭「没抛异常」报成功
+        if os.path.isdir(entry["path"]):
+            failed.append(entry["name"])
         else:
-            kept.append(entry)
-    return {"removed": removed, "kept": kept, "freed_mb": round(freed_mb, 2)}
+            removed.append(entry["name"])
+            freed_mb += entry["size_mb"]
+    return {"removed": removed, "failed": failed, "kept": kept, "freed_mb": round(freed_mb, 2)}
 
 
 # ─── 4.4 缓存容量监控与告警 ─────────────────────────────────────────────────────

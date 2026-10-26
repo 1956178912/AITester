@@ -24,7 +24,7 @@ import re
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from dataclasses import dataclass, field
-from typing import Any, ClassVar
+from typing import Any, ClassVar, NamedTuple
 
 from config import SWE_BENCH_ENRICHMENT
 from src.utils.env_utils import env_flag
@@ -139,6 +139,12 @@ class BaseDatasetLoader(ABC):
 
     DATASET_NAME: str = "base"
     DEFAULT_CACHE_DIR: str = os.path.join(os.path.expanduser("~"), ".cache", "aitester")
+    #: 是否支持 subset 选择。基类默认 False——接受 subset 参数只为构造函数
+    #: 兼容，不代表语义生效（InMemory/Synthetic/QuixBugs/BugsInPy/Defects4J
+    #: 均无子集概念）。CLI 校验与提示名单统一由 dataset_subset_support 派生。
+    SUPPORTS_SUBSET: ClassVar[bool] = False
+    #: 允许的子集名集合；None 表示任意名称都映射到数据文件（由加载结果披露缺失）。
+    SUPPORTED_SUBSETS: ClassVar[frozenset[str] | None] = None
 
     def __init__(self, subset: str | None = None, data_dir: str | None = None) -> None:
         """
@@ -150,6 +156,9 @@ class BaseDatasetLoader(ABC):
                 外部基准经 load_dataset(kwargs) 注入；None 时用默认缓存目录）。
         """
         self.subset = subset
+        # 请求的 subset 未被实际采用时的原因（如 ULT 子集文件缺失回退通用
+        # manifest、数据源为显式文件）；None 表示未请求或已生效。
+        self.subset_fallback_reason: str | None = None
         self.data_dir = data_dir or os.path.join(self.DEFAULT_CACHE_DIR, self.DATASET_NAME)
         self._tasks: list[BenchmarkTask] = []
         self._loaded = False
@@ -288,6 +297,10 @@ class SWEBenchDataset(BaseDatasetLoader):
     """
 
     DATASET_NAME = "swe_bench"
+    #: subset 直接映射为 swe_bench_<subset>_instances.jsonl；不预枚举名称
+    #: （本地导出可自定义），文件缺失由「0 个任务」路径披露。
+    SUPPORTS_SUBSET = True
+    SUPPORTED_SUBSETS = None
 
     # 2.1 外部数据目录注入（类级 env var 钩子）：key = load_dataset() 的
     # 注册名，value = 外部数据目录环境变量名。swe_rebench / swe_bench_pro 等
@@ -888,6 +901,76 @@ from src.datasets.dataset_inmemory import InMemoryDataset  # noqa: E402
 
 # ─── 便捷工厂函数 ─────────────────────────────────────────────────────────────
 
+#: 数据集名称注册表（唯一事实源）：工厂解析与 ``get_available_datasets`` 共用一份。
+#: 新增数据集只改这里——手工维护的平行名单会出现「工厂能加载、名单漏列」的漂移。
+_DATASET_REGISTRY: dict[str, type] = {
+    "examples": InMemoryDataset,
+    "swe_bench": SWEBenchDataset,
+    "swebench": SWEBenchDataset,
+    # 2.1 SWE-rebench 抗污染基准：与 SWE-bench 共用 SWEBenchDataset 加载器
+    # （字段同构），数据文件经 SWE_BENCH_DATA_DIR / AITESTER_SWE_REBENCH_DIR
+    # 环境变量指向 rebench 数据集目录；未配置时加载失败由调用方兜底。
+    "swe_rebench": SWEBenchDataset,
+    "swebench_rebench": SWEBenchDataset,
+    # 2.1 SWE-bench Pro 抗污染基准（强 copyleft 设计，GPT-5 Pass@1 仅
+    # ~23.3%）：同样共用 SWEBenchDataset 加载器（字段同构），数据文件经
+    # AITESTER_SWE_BENCH_PRO_DIR 环境变量指向 Pro 数据集目录；未配置时
+    # 加载失败由调用方兜底（与 swe_rebench 注册口径一致）。
+    "swe_bench_pro": SWEBenchDataset,
+    "swebench_pro": SWEBenchDataset,
+    "defects4j_python": Defects4JPYDataset,
+    "d4j_py": Defects4JPYDataset,
+    # W4（2026-10-05 审查落地）：真实缺陷基准阶梯 L1/L2（real_benchmark_upgrade
+    # 设计稿实现）——本地目录解析，目录缺失时空数据集 + warning 优雅降级
+    # （与 d4j_py 同口径）；gold 材料对齐合成集（metadata.test_cases/fixed）
+    # 使 M1 诚实指标开箱可用。
+    "quixbugs": QuixBugsDataset,
+    "quix_bugs": QuixBugsDataset,
+    "bugsinpy": BugsInPyDataset,
+    "bugs_in_py": BugsInPyDataset,
+    # W4b（2026-10-10 独立审查落地；2026-10-12 官方仓库一手核验勘误）：
+    # ULT 基准（TOSEM 2026，防污染）。官方 JSON 数组 .jsonl 直接兼容；
+    # 官方测试材料（tests/test_list）记录为 gold 材料；mutation
+    # score（Mut@k）为主评测指标；目录缺失时优雅降级（与 bugsinpy 同口径）。
+    "ult": ULTDataset,
+    "unleaked_testbench": ULTDataset,
+    "in_memory": InMemoryDataset,
+}
+
+#: 懒加载名称：SyntheticDataset 顶层导入会与 synthetic_dataset 循环导入，不能进注册表。
+_LAZY_DATASET_NAMES: frozenset[str] = frozenset({"synthetic", "synth"})
+
+
+def normalize_dataset_name(name: str) -> str:
+    """归一化数据集名称（小写 + 连字符/空格转下划线）；工厂与 CLI 校验共用同一口径。"""
+    return name.lower().replace("-", "_").replace(" ", "_")
+
+
+class SubsetSupport(NamedTuple):
+    """数据集对子集选择的支持能力（supports=False 时 allowed 无意义）。"""
+
+    supports: bool
+    allowed: frozenset[str] | None
+
+
+def dataset_subset_support(name: str) -> SubsetSupport:
+    """返回数据集对 ``--subset`` 的支持能力（CLI 校验与提示名单的唯一事实源）。
+
+    ``allowed is None`` 表示任意子集名都映射到数据文件（SWE-bench 系列）；
+    空的 allowed 集合或 ``supports=False`` 表示该数据集没有子集概念。
+    """
+    name_lower = normalize_dataset_name(name)
+    if name_lower in _LAZY_DATASET_NAMES:
+        from src.datasets.synthetic_dataset import SyntheticDataset
+
+        loader_class: type = SyntheticDataset
+    else:
+        loader_class = _DATASET_REGISTRY.get(name_lower, InMemoryDataset)
+    return SubsetSupport(
+        supports=bool(getattr(loader_class, "SUPPORTS_SUBSET", False)),
+        allowed=getattr(loader_class, "SUPPORTED_SUBSETS", None),
+    )
+
 
 def load_dataset(
     name: str,
@@ -922,51 +1005,15 @@ def load_dataset(
     Returns:
         对应的数据集加载器实例。
     """
-    name_lower = name.lower().replace("-", "_").replace(" ", "_")
-
-    dataset_map: dict[str, type] = {
-        "examples": InMemoryDataset,
-        "swe_bench": SWEBenchDataset,
-        "swebench": SWEBenchDataset,
-        # 2.1 SWE-rebench 抗污染基准：与 SWE-bench 共用 SWEBenchDataset 加载器
-        # （字段同构），数据文件经 SWE_BENCH_DATA_DIR / AITESTER_SWE_REBENCH_DIR
-        # 环境变量指向 rebench 数据集目录；未配置时加载失败由调用方兜底。
-        "swe_rebench": SWEBenchDataset,
-        "swebench_rebench": SWEBenchDataset,
-        # 2.1 SWE-bench Pro 抗污染基准（强 copyleft 设计，GPT-5 Pass@1 仅
-        # ~23.3%）：同样共用 SWEBenchDataset 加载器（字段同构），数据文件经
-        # AITESTER_SWE_BENCH_PRO_DIR 环境变量指向 Pro 数据集目录；未配置时
-        # 加载失败由调用方兜底（与 swe_rebench 注册口径一致）。
-        "swe_bench_pro": SWEBenchDataset,
-        "swebench_pro": SWEBenchDataset,
-        "defects4j_python": Defects4JPYDataset,
-        "d4j_py": Defects4JPYDataset,
-        # W4（2026-10-05 审查落地）：真实缺陷基准阶梯 L1/L2（real_benchmark_upgrade
-        # 设计稿实现）——本地目录解析，目录缺失时空数据集 + warning 优雅降级
-        # （与 d4j_py 同口径）；gold 材料对齐合成集（metadata.test_cases/fixed）
-        # 使 M1 诚实指标开箱可用。
-        "quixbugs": QuixBugsDataset,
-        "quix_bugs": QuixBugsDataset,
-        "bugsinpy": BugsInPyDataset,
-        "bugs_in_py": BugsInPyDataset,
-        # W4b（2026-10-10 独立审查落地；2026-10-12 官方仓库一手核验勘误）：
-        # ULT 基准（TOSEM 2026，防污染）。官方 JSON 数组 .jsonl 直接兼容；
-        # 官方测试材料（tests/test_list）记录为 gold 材料；mutation
-        # score（Mut@k）为主评测指标；目录缺失时优雅降级（与 bugsinpy 同口径）。
-        "ult": ULTDataset,
-        "unleaked_testbench": ULTDataset,
-        "in_memory": InMemoryDataset,
-        # "synthetic": SyntheticDataset,  # 使用懒加载避免循环导入
-        # "synth": SyntheticDataset,  # 使用懒加载避免循环导入
-    }
+    name_lower = normalize_dataset_name(name)
 
     # 懒加载 synthetic 以避免循环导入
-    if name_lower in ("synthetic", "synth"):
+    if name_lower in _LAZY_DATASET_NAMES:
         from src.datasets.synthetic_dataset import SyntheticDataset
 
         return SyntheticDataset(subset=subset, **kwargs)
 
-    loader_class = dataset_map.get(name_lower, InMemoryDataset)
+    loader_class = _DATASET_REGISTRY.get(name_lower, InMemoryDataset)
     if loader_class is SWEBenchDataset:
         instance = loader_class(subset=subset, data_dir_env_value=name_lower, **kwargs)
     else:
@@ -981,34 +1028,14 @@ def get_available_datasets() -> list[str]:
     """
     返回当前支持的所有数据集名称列表。
 
-    与 load_dataset 的 dataset_map 保持同步（含别名）：
-    未列出的名称调用 load_dataset 时会降级为 InMemoryDataset。
+    与 ``load_dataset`` 共用模块级注册表 ``_DATASET_REGISTRY``（唯一事实源；
+    另加懒加载的 synthetic/synth）。注册表之外的名称调用 load_dataset 时
+    仍会降级为 InMemoryDataset（程序化调用方的宽容契约不变）。
 
     Returns:
         数据集名称列表（排序后，跨进程/哈希随机化下顺序稳定）。
     """
-    return sorted(
-        {
-            "swe_bench",
-            "swebench",
-            "swe_rebench",
-            "swebench_rebench",
-            "swe_bench_pro",
-            "swebench_pro",
-            "defects4j_python",
-            "d4j_py",
-            "quixbugs",
-            "quix_bugs",
-            "bugsinpy",
-            "bugs_in_py",
-            "ult",
-            "unleaked_testbench",
-            "in_memory",
-            "examples",
-            "synthetic",
-            "synth",
-        }
-    )
+    return sorted(set(_DATASET_REGISTRY) | _LAZY_DATASET_NAMES)
 
 
 if __name__ == "__main__":

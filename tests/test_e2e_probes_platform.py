@@ -505,7 +505,7 @@ class TestDatasetProbes:
         assert outcome.status == "pass", outcome.detail
 
     def test_check_cli_probe_passes(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(probes, "run_cmd", lambda *a, **k: (0, "ℹ ✓ 全量质量检查通过（50 个任务无加载问题）\n", ""))
+        monkeypatch.setattr(probes, "run_cmd", lambda *a, **k: (0, "✓ 全量质量检查通过（50 个任务无加载问题）\n", ""))
         outcome = probes.probe_dataset_check_cli()
         assert outcome.status == "pass", outcome.detail
         assert outcome.evidence["checked_tasks"] == 50

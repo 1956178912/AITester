@@ -135,18 +135,16 @@ class TestDumpTraceOnFailureBranches:
 
 class TestPrintQualityReportBranches:
     def test_no_report_no_loader_method(self, capsys):
-        """loader 无 quality_report 属性 → 视为通过（info_msg 提示走 stdout）。"""
+        """loader 无 quality_report 属性 → 显式披露跳过，不得宣称全量通过（DL 轮）。"""
         from src.cli.app import _print_quality_report
 
         class _Loader:
             pass
 
-        # U3（2026-10-05 系统性审查落地）：补断言——无报告属性与空报告同语义
-        # （走 test_empty_report_shows_pass 的 info_msg 分支）。
         _print_quality_report(_Loader(), [1, 2, 3])
         out = capsys.readouterr().out
-        assert "全量质量检查通过" in out
-        assert "3" in out
+        assert "未提供 quality_report" in out
+        assert "全量质量检查通过" not in out
 
     def test_report_present_shows_issues(self, capsys):
         from src.cli.app import _print_quality_report
@@ -191,17 +189,15 @@ class TestPrintQualityReportBranches:
 
 class TestPrintMissingSourceBranches:
     def test_no_missing_source_method(self, capsys):
-        """loader 无 tasks_missing_source 属性 → 静默（无任何输出）。"""
+        """loader 无 tasks_missing_source 属性 → 显式披露跳过（DL 轮，不再静默）。"""
         from src.cli.app import _print_missing_source
 
         class _Loader:
             pass
 
-        # U3（2026-10-05 系统性审查落地）：补断言——无属性时函数整体静默
-        # （stdout/stderr 均无输出，锁定"静默兜底"语义本身）。
         _print_missing_source(_Loader(), [1, 2, 3])
         captured = capsys.readouterr()
-        assert captured.out == ""
+        assert "未提供 tasks_missing_source" in captured.out
         assert captured.err == ""
 
     def test_missing_source_present_shows_list(self, capsys):

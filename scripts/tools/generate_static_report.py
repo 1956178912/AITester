@@ -29,11 +29,16 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 HISTORY_DIR = PROJECT_ROOT / "docs" / "history"
 _MAX_DETAIL_LINES = 200
+#: 全仓 ruff / mypy 冷缓存约 10-30s；600s 仍不返回即视为挂起，按 POSIX `timeout(1)` 记 124。
+_SUBPROCESS_TIMEOUT_S = 600.0
 
 
 def _run(cmd: list[str]) -> tuple[int, str]:
-    """执行命令，返回 (退出码, 合并输出)。"""
-    result = subprocess.run(cmd, capture_output=True, text=True, cwd=PROJECT_ROOT)
+    """执行命令，返回 (退出码, 合并输出)；超时记 124 并写明预算，不炸掉整份快照。"""
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, cwd=PROJECT_ROOT, timeout=_SUBPROCESS_TIMEOUT_S)
+    except subprocess.TimeoutExpired:
+        return 124, f"命令超时（>{_SUBPROCESS_TIMEOUT_S:g}s）"
     return result.returncode, (result.stdout + ("\n" + result.stderr if result.stderr else "")).strip()
 
 

@@ -3,9 +3,9 @@
 锁定四组行为：
 - AL1 红线勘误：预注册双语的 AK 补注行以禁止语境提及 --allow-dirty
   （与 AJ 行级守卫同口径逐行复检），勘误事实不丢失；
-- AL5 定位收口：README(.en) / MODEL_CARD(.en) 标题与导语不再含
-  "自修复系统/框架"主张，诚实披露行指向 repair_ceiling_report.md，
-  并与 CITATION.cff 的 detection-first 口径一致；
+- AL5 定位收口：README(.en) / MODEL_CARD(.en) 定位区不含"自修复系统/框架"
+  主张；诚实披露小节携带修正口径与伪影定性，并与 CITATION.cff 的
+  detection-first 口径一致（DD 轮改为结构判据）；
 - E6/E7 预注册节（AL7/AL10）：双语存在性与关键口径（预算匹配定义 /
   执行前置旗标 / 分层键 / 判定规则 / 增补先于数据产生的时序声明）；
 - E7 抽样纯函数：抽样框过滤、分层 ceil 配额、同 seed 确定性、
@@ -51,6 +51,30 @@ def _first_heading(path: Path) -> str:
     raise AssertionError(f"{path} 缺一级标题")
 
 
+def _preamble(path: Path) -> str:
+    """首个二级标题之前的定位区（门面的「名片」部分）。"""
+    lines: list[str] = []
+    for line in _read(path).splitlines():
+        if line.startswith("## "):
+            break
+        lines.append(line)
+    return "\n".join(lines)
+
+
+def _h2_section(path: Path, heading: str) -> str:
+    """取某个二级标题下的正文（到下一个二级标题为止）；标题缺失即红。"""
+    lines = _read(path).splitlines()
+    for index, line in enumerate(lines):
+        if line.strip() == heading:
+            body: list[str] = []
+            for follow in lines[index + 1 :]:
+                if follow.startswith("## "):
+                    break
+                body.append(follow)
+            return "\n".join(body)
+    raise AssertionError(f"{path} 缺二级标题 {heading!r}")
+
+
 class TestAL1ErratumContext:
     """AJ 红线守卫同口径复检（zh/en 逐行）+ 勘误事实保全。"""
 
@@ -70,56 +94,49 @@ class TestAL1ErratumContext:
 
 
 class TestAL5Positioning:
-    """对外门面与 repair=0 证据一致：标题去"自修复"主张 + 诚实披露行。"""
+    """对外门面与 repair=0 证据一致（DD 轮：结构判据取代行窗口）。
 
-    def test_readme_title_zh(self) -> None:
-        title = _first_heading(README_ZH)
-        assert "自修复" not in title
-        assert "检出优先" in title and "修复评估" in title
+    旧锁用 16/18、60/70 行窗口钉「披露留在头部」，两次因叙事增补被迫扩容。
+    DD 轮把判据改成结构：定位事实在首个 H2 前的定位区，披露事实在
+    `## 它不是什么（诚实披露）` / `## What It Is Not (Honest Disclosure)` 小节内。
+    结构锁不随篇幅漂移，也不会把「披露被下沉到中后段」误判为通过。
+    """
 
-    def test_readme_title_en(self) -> None:
-        title = _first_heading(README_EN)
-        assert "Self-Repair" not in title and "self-repair" not in title
-        assert "Detection-First" in title
+    def test_readme_positioning_zh(self) -> None:
+        preamble = _preamble(README_ZH)
+        assert "检出优先" in preamble and "修复评估" in preamble
+        assert "自修复" not in preamble
 
-    def test_readme_honest_disclosure(self) -> None:
-        # 2026-10-09 C-01 叙事增补（"为什么不用多智能体"段）使披露段偏移
-        # 出历史 18/22 行窗口；扩容至 30/40 行（覆盖完整披露段 + CANDOR/BOAD
-        # 叙事段，防止披露段再被后续增补挤出锁窗口）。
-        # 2026-10-10 独立审查 P0-0：CANDOR 引用改写为"不利证据 / 有利证据 /
-        # 最强负面证据"三方并列（撤回"共识"表述，补 IEEE 11655121 与
-        # Konstantinou et al. ICST 2026），叙事段由 ~9 行扩至 ~22 行 →
-        # 披露段落到第 35/44 行，**再次**被 30/40 窗口挤出。
-        # 扩容至 60/70。锁语义不变（披露必须留在文档头部区域，不得下沉到
-        # 正文中后段）；这是本窗口第 2 次因叙事增补而扩容，若第 3 次发生，
-        # 应改为"锚定披露小标题位置"而非继续调窗口大小。
-        zh_head = _head(README_ZH, 60)
-        en_head = _head(README_EN, 70)
-        assert "诚实披露" in zh_head and "repair_ceiling_report.md" in zh_head
-        assert "Honest disclosure" in en_head and "repair_ceiling_report.md" in en_head
-        # 批次 XIII（2026-10-07，ADR-0021/0027）+ R2（2026-10-08，
-        # ADR-0029）：repair=0.0% 经查系 patch 字段围栏残留 + 跨文件任务
-        # 未物化两起测量伪影（修正口径 39.31%）——诚实披露主张随勘误推进
-        # （历史行"修复杂铺"锁）；锁语义不变：披露必须携带修正口径数字与
-        # 伪影定性，不得回退为"自修复已达成"类未证实主张。
-        assert "39.31%" in zh_head and "伪影" in zh_head
-        assert "39.31%" in en_head and "artifact" in en_head
-        assert "可测量口径" not in zh_head or "39.31%" in zh_head
+    def test_readme_positioning_en(self) -> None:
+        lowered = _preamble(README_EN).lower()
+        assert "detection-first" in lowered and "repair-evaluation" in lowered
+        assert "self-repair" not in lowered
 
-    def test_model_card_overview(self) -> None:
-        zh_head = _head(MODEL_CARD_ZH, 16)
-        en_head = _head(MODEL_CARD_EN, 18)
-        assert "自修复研究系统" not in zh_head
-        assert "修复评估研究系统" in zh_head and "检出优先" in zh_head
-        assert "self-repair research" not in en_head
-        assert "repair-evaluation" in en_head
+    def test_readme_honest_disclosure_zh(self) -> None:
+        section = _h2_section(README_ZH, "## 它不是什么（诚实披露）")
+        assert "39.31%" in section
+        assert "伪影" in section
+        assert "repair_caliber_matrix.md" in section
+        assert "preregistration.md" in section
+
+    def test_readme_honest_disclosure_en(self) -> None:
+        section = _h2_section(README_EN, "## What It Is Not (Honest Disclosure)")
+        assert "39.31%" in section
+        assert "artifact" in section
+        assert "repair_caliber_matrix.md" in section
+        assert "preregistration.md" in section
+
+    def test_model_card_positioning(self) -> None:
+        zh = _preamble(MODEL_CARD_ZH)
+        en = _preamble(MODEL_CARD_EN).lower()
+        assert "修复评估研究系统" in zh and "检出优先" in zh
+        assert "自修复研究系统" not in zh
+        assert "repair-evaluation" in en and "detection-first" in en
+        assert "self-repair research" not in en
 
     def test_citation_alignment(self) -> None:
         title_line = next(line for line in _read(CITATION).splitlines() if line.startswith("title:"))
-        # 大小写不敏感锁定（2026-10-16 C 轮：CITATION.cff 标题随 R2/R26
-        # 叙事重构改为 "Detection-First Python Test Generation and Repair
-        # Evaluation (Attribution) System"；锁语义=检出优先定位在场、
-        # 自修复主张不在场，标题大小写不构成语义差异）
+        # 锁语义=检出优先定位在场、自修复主张不在场；标题大小写不构成语义差异。
         assert "detection-first" in title_line.lower()
         assert "Self-Repair" not in title_line
 

@@ -423,8 +423,12 @@ def _main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="AITester 全功能端到端探针（N 轮）")
     parser.add_argument("--list", action="store_true", help="列出全部探针后退出")
     parser.add_argument("--all", action="store_true", help="运行全部探针（默认行为）")
-    parser.add_argument("--group", action="append", default=None, help="只跑指定功能组（可多次）")
-    parser.add_argument("--name", action="append", default=None, help="只跑指定探针名（可多次）")
+    parser.add_argument(
+        "--group", action="append", default=None, help="只跑指定功能组（可多次；未知分组报错并列出可用值）"
+    )
+    parser.add_argument(
+        "--name", action="append", default=None, help="只跑指定探针名（可多次；未知探针报错并提示 --list）"
+    )
     parser.add_argument(
         "--include-llm", action="store_true", help="包含需要真实 LLM 的探针（另需 AITESTER_E2E_LLM=true）"
     )
@@ -474,6 +478,27 @@ def _main(argv: list[str] | None = None) -> int:
     probes, load_errors = discover_probes(args.module)
     for item in load_errors:
         print(f"[e2e] ⚠️ 探针模块加载问题：{item}", file=sys.stderr)
+    # 未知 group/name 是用法错误（rc=2）：静默过滤成空集会让调用方把拼写错误
+    # 读成"系统没有这个功能"，这里在过滤与 --list 之前显式报错并给出合法值。
+    if args.group:
+        available_groups = sorted({p.group for p in probes})
+        unknown_groups = [g for g in args.group if g not in available_groups]
+        if unknown_groups:
+            print(
+                f"[e2e] 未知分组: {', '.join(repr(g) for g in unknown_groups)}（区分大小写）；"
+                f"可用分组: {', '.join(available_groups)}",
+                file=sys.stderr,
+            )
+            return 2
+    if args.name:
+        available_names = {p.name for p in probes}
+        unknown_names = [n for n in args.name if n not in available_names]
+        if unknown_names:
+            print(
+                f"[e2e] 未知探针: {', '.join(repr(n) for n in unknown_names)}；可用探针见 `--list`",
+                file=sys.stderr,
+            )
+            return 2
     if args.group:
         probes = [p for p in probes if p.group in set(args.group)]
     if args.name:

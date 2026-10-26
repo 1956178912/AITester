@@ -1,356 +1,57 @@
-> **语言 / Language**：[English](QUICKSTART.en.md) | 简体中文（本文）
+# 快速开始
 
-# AITester 快速开始指南
+> 最后更新：2026-10-26 · English: [QUICKSTART.en.md](QUICKSTART.en.md)
 
-## 1. 克隆仓库
+## 1. 安装
 
-```bash
-git clone https://github.com/1956178912/AITester.git
-cd AITester
-```
-
-## 2. 安装依赖
+需要 Python 3.12+（`scipy` 的下限决定）。
 
 ```bash
-# 创建虚拟环境（Python 3.12+；锁定依赖 scipy 要求 ≥3.12）
 python3 -m venv .venv
 source .venv/bin/activate
-
-# 安装依赖
-pip install -r requirements.txt
-# 仅 wheel 安装（非仓库开发）：运行 Executor 与基准评测请安装执行 extra
-# pip install "aitester[execution]"   # requirements.txt 全量安装已含 pytest
+make install
+cp .env.example .env                   # 非敏感配置（可选）
+cp config.local.example .env.local     # LLM 配置模板
 ```
 
-> **一键引导（推荐）**：上面第 2-4 步可由 `bash scripts/tools/bootstrap_dev.sh`
-> 自动完成（venv 创建 + 依赖安装 + 两个 env 文件复制 + 配置加载校验，失败时
-> 给出具体缺失项提示）；只需在脚本完成后编辑 `.env.local` 填入真实
-> `LLM_N_API_KEY`。校验已配置的环境可用 `bash scripts/tools/bootstrap_dev.sh --check-only`。
+也可以一键引导：`bash scripts/tools/bootstrap_dev.sh`（创建 venv、装依赖、复制两个
+env 模板并校验配置加载；完成后编辑 `.env.local` 填入真实值）。
 
-## 3. 配置环境变量
+## 2. 配置 LLM
 
-> 两步都要做：步骤一配置非敏感项，步骤二配置 LLM 密钥（可跳过步骤一使用默认值，但密钥必须配）。
+`.env.local` 只填值，变量名固定：
 
-### 步骤一：非敏感配置（.env）
+| 变量 | 用途 |
+|---|---|
+| `LLM_1_API_KEY` | API Key |
+| `LLM_1_BASE_URL` | OpenAI 兼容端点 |
+| `LLM_1_MODEL_NAME` | 模型名 |
 
-```bash
-# 复制非敏感配置模板
-cp .env.example .env
+`1` 可替换为其它编号以配置多个端点；内置 provider 仅 DeepSeek 官方端点。
+`.env.local` 已被 git 忽略，不要把真实密钥写进任何被跟踪的文件。
 
-# 按需调整（如 TEMPERATURE）
-vim .env
-```
-
-### 步骤二：LLM 密钥（.env.local，必须）
+## 3. 第一个任务
 
 ```bash
-# 复制敏感配置模板
-cp config.local.example .env.local
-
-# 编辑 .env.local 文件，填入 LLM_N_API_KEY 等
-vim .env.local
-```
-
-## 4. 验证配置已加载
-
-```bash
-# 仅校验配置加载（无网络调用）：成功打印加载的 LLM 配置数即可
-python3 -c "from config import LLM_CONFIGS; print(f'已加载 {len(LLM_CONFIGS)} 个 LLM 配置')"
-
-# 如需真实探测各模型 API 连通性与额度（每个仅 1 token），用第 6 步的脚本：
-# python scripts/tools/check_quota.py
-```
-
-## 5. 运行测试
-
-```bash
-# 列出示例文件
+make test                    # 先验证环境与依赖
 python3 main.py list-examples
-
-# 测试单个文件
 python3 main.py run examples/calculator.py --func add
-
-# 并发测试多个文件
-python3 main.py run examples/calculator.py examples/string_utils.py --parallel=2
 ```
 
-## 5.5 一键冒烟测试（可选）
+`main.py run` 会调用 LLM，消耗配额。纯离线自检用：
 
 ```bash
-# 全量验证（配置加载 → 模块导入 → ruff → 快速单测 → 最小 LLM 生成流程）
-bash scripts/tools/smoke_test.sh
-
-# 纯离线模式（CI 无 LLM 密钥场景，跳过 S5 的 LLM 调用）
 bash scripts/tools/smoke_test.sh --no-llm --skip-lint
 ```
 
-## 6. 可选：模型额度探测与省 token 缓存
+## 4. 沙箱与安全
 
-LLM 调用默认开启文件缓存（默认目录 `~/.cache/aitester/llm/`，2026-10-05 起迁出源码树；命中相同 prompt 不再消耗 token）。在「免费额度用完即停」的供应商下可延长可用时长。
+- 执行隔离：`EXECUTOR_USE_VENV` **默认开启**（R10 起），LLM 生成的代码在 venv 沙箱中执行。
+- Docker / 内核级沙箱为显式启用；平台不支持时 **fail-closed** 拒绝执行。
+- 三条执行链路统一剔除 LLM 凭证，日志三层脱敏。
+- 设 `EXECUTOR_USE_VENV=false` 只在本地调试时使用。
 
-```bash
-# 探测各已配置模型哪些还活着、哪些 403 额度用尽（每个仅 1-token，不打印 key）
-python scripts/tools/check_quota.py
+## 5. 遇到问题
 
-# 关闭缓存 / 清缓存
-export AITESTER_LLM_CACHE=0
-rm -rf ~/.cache/aitester/llm
-```
-
-## 7. 可选：高级开关（默认全部关闭，不影响常规使用）
-
-以下开关除特别注明外默认关闭，按需启用（详见 `.env.example` 注释）：
-
-```bash
-# ── 开关预设（推荐入口；2026-10-06 AA 批次起共四档）──────────────────────
-# 档位预设一次配置一组开关（setdefault 注入，显式设置的 env 不被覆盖）：
-#   safe       —— 安全敏感档：内核沙箱 + 补丁回滚（fail-closed）+ 注入守卫 +
-#                 流氓监控 + flaky 门禁全开
-#   scientific —— 科研评测档：SpecIR/DSL/规约 oracle 执行 + 变异检出率 +
-#                 oracle 校验 + 快照回滚全开（配合 deterministic=True）
-#   logic      —— 逻辑链全开档：scientific 超集 + 规约强校验 + 确定性守卫 +
-#                 分支覆盖注入 + 结构化路由 + 检出优先协议（AA 批次补齐
-#                 DETECTION_FIRST_ENABLE——"逻辑驱动"完整链路一键可测）
-#   fast       —— 历史默认档（与不设 PROFILE 等价）
-export AITESTER_PROFILE=scientific
-
-# ── 2026-10-05 审查批次：单项开关（预设之外也可单独启用）──────────────────
-# R1c 确定性规约 oracle 执行：compile_spec_oracle 产物（签名感知绑定）追加到
-# LLM 生成测试尾部并列执行——LLM 测试通过 ≠ 规约 oracle 通过。
-export SPEC_ORACLE_EXEC_ENABLE=true
-
-# R4b 回滚 fail-closed：P2P 回归的 rc>=2/超时/IO 异常口径也触发自动回滚
-# （默认关 = 历史口径"坏测试不误杀好补丁"）。
-export PATCH_ROLLBACK_FAIL_CLOSED=true
-
-# R17 结构化路由：error_category=logic_error（断言失败但栈未触及被测模块）
-# 优先于中文诊断关键词触发"重新生成测试"路由。
-export ROUTE_STRUCTURED_ENABLE=true
-
-# R16 流氓 agent 监控：LLM 调用事件上报 + 每轮 check（state["rogue_findings"]）。
-export ROGUE_MONITOR_ENABLE=true
-
-# api_manager 后台健康检查线程（默认 true 保持历史；免费配额场景建议关，
-# 故障转移的即时探测不受影响）。
-export API_HEALTH_CHECKER_ENABLE=false
-
-# R11 确定性采样（run_benchmark 参数，非环境变量）：
-# TEMPERATURE=0.0 三处级联（env + config + base_agent），provenance 记录。
-# from experiments.run_benchmark import run_benchmark
-# run_benchmark(dataset_name="synthetic", task_count=50, seed=42, deterministic=True)
-
-# 结构化 JSONL 追踪（4.1）：每任务落 <task_uuid>.trace.jsonl，
-# 记录各智能体节点决策/token/耗时，供实验分析回放。未设置时全 no-op。
-export AITESTER_TRACE_DIR=./trace_out
-
-# 多候选补丁（3.1）：Debugger 一轮生成 N 个候选补丁，静态+执行验证选最优。
-export ENABLE_MULTI_CANDIDATE_PATCH=true
-export MULTI_CANDIDATE_COUNT=3
-export MULTI_CANDIDATE_EXEC_VALIDATE=true   # 逐候选跑测试筛选（成本更高）
-
-# 成本感知路由（3.4）：COST_AWARE 策略避免故障转移全量切到昂贵 provider。
-# 各 provider 相对成本倍数在 .env.local 以 LLM_N_COST_WEIGHT 配置。
-# 成本告警阈值可配（3.2）：转移到 cost_weight >= 阈值（默认 2.0）的昂贵节点时记 WARNING，
-# 阈值过低导致误报多时上调（如 3.0/5.0），成本敏感度高时下调，无需改代码：
-from src.api.api_manager import APIManager, APIManagerConfig
-manager = APIManager(config=APIManagerConfig(cost_alert_threshold=3.0))
-
-# 熔断冷却期 + 半开探测（4.1 + 4.2）：APIManager 节点连续失败达
-# max_consecutive_failures 阈值后自动进入冷却期（circuit_cooldown_seconds，默认 60s），
-# 冷却期内即使健康检查翻回 is_healthy=True 路由层也继续跳过该节点。
-# 4.2：冷却到期后节点进入"半开"窗口，仅承载一次探测请求；探测成功闭合
-# 熔断器恢复全量路由，失败重开半程冷却（min(cooldown/2, cap=30s)）。
-# 半开探测默认开启（enable_half_open_probe=True）；对比实验可退回 4.1 直接放行：
-from src.api.api_manager import APIManager, APIManagerConfig
-manager = APIManager(config=APIManagerConfig(
-    circuit_cooldown_seconds=120.0,
-    # 可选：关闭半开探测退回 4.1 行为（默认 True）
-    enable_half_open_probe=False,
-    # 可选：半开探测失败惩罚时长上限（默认 30.0s）
-    # half_open_probe_penalty_cap_seconds=60.0,
-))
-
-# RAG（检索增强）：合成/内置数据集实验可显式开启
-python experiments/run_benchmark.py --dataset synthetic --enable-rag
-
-# 3.5 跨文件修复（默认关）：启用后 workflow 在 executor → debugger 之间插入
-# cross_file_analyzer 节点，分析被测代码的跨文件 import 依赖关系，
-# 多文件补丁按拓扑序应用（被调用方先改，调用方后改），失败整体回滚。
-# 单文件项目自动降级（依赖边为空时走单文件路径）。
-export CROSS_FILE_ENABLE=true
-export CROSS_FILE_MAX_MODULES=5
-
-# 2.2 跨文件双向依赖图（默认关，需配合 CROSS_FILE_ENABLE=true）：
-# 额外收集"其他模块→entry"反向依赖边（被调用方视角），使修复计划能同步
-# 更新调用方模块。两级保守开关：跨文件启用 ≠ 双向启用。
-export CROSS_FILE_BIDIRECTIONAL=true
-
-# 3.4 断言增强（默认关）：Generator 在生成前先 AST 提取被测代码中已有
-# assert 语句，作为"锚点断言"注入 prompt，避免断言弱化 / 恒真断言 / 魔数异味。
-export ASSERTION_AUGMENT_ENABLE=true
-
-# 3.1 对抗性推理（默认关，ADVERSARIAL_DEBUGGING_ENABLE）：Debugger 在生成
-# 补丁前注入 2-3 个"击穿当前实现"的对抗性意图假设（AdverIntent-Agent 式），
-# 生成针对性测试；生成后独立"批评者"LLM 调用尝试构造击穿用例；被击穿则
-# 把负面反馈注入 prompt 重新生成一次补丁（仍失败保留当前并记录风险）。
-# 纯观测层，启用会增加 2-4 次 LLM 调用/修复轮。
-export ADVERSARIAL_DEBUGGING_ENABLE=true
-
-# ── 2026-10-07 修复引擎批次 I：故障定位双通道（默认开，仅消融时需要动作）──────
-# 谱系通道（Ochiai Top-k，零 LLM，FL_SPECTRAL_ENABLE，R8 起默认开）+ 推理通道
-# （RGFL 式 LLM 结构化定位，FAULT_LOCALIZER_ENABLE，批次 I 起默认开）：定位结果
-# 注入 Debugger prompt 并随结果行透出 localization_hit_function 指标（函数级命中，
-# 与 gold 变更函数集合比对）；推理失败保守降级 None，不阻断修复主流程。
-# 仅消融对照时设 false——退回纯谱系口径（无 LLM 定位）：
-export FAULT_LOCALIZER_ENABLE=false
-
-# 4.4 API 熔断器指数退避（默认开，API_CIRCUIT_BACKOFF）：冷却期改按
-# base*2^open_count 指数退避（彻底死掉的 provider 冷却期单调增长），
-# 设 false 回退 4.2 固定冷却期口径（便于对比实验）。
-# 0.6 起经 config.py 集中声明，api_health.mark_failure / _probe_circuit_half_open
-# 实际读取该开关——此前六处文档承诺的开关全仓无代码读取点（幽灵开关），
-# 用户设 false 不会发生任何事；0.6 实装后下方语义才真正生效。
-export API_CIRCUIT_BACKOFF=false
-
-# 4.4 Prometheus 指标导出（默认关，API_PROMETHEUS_EXPORT）：启用后
-# APIManager.to_prometheus_text() 输出 7 类指标供 Prometheus 抓取。
-# 0.6 起 api_manager.to_prometheus_text 实际读取该开关（false 时返回空串，
-# 默认行为不变）；此前文档承诺的开关同样无代码读取点。
-export API_PROMETHEUS_EXPORT=true
-
-# 结果分析（4.3 + 1.1/1.2/1.3 指标增强 + 2.1 污染检测 + 2.2 难度分层 + 4.4 依赖缓存 + 5.3 跨批次对比）：
-# 跑完 benchmark 后生成 Markdown 汇总，含成功率 / token 效率 / 迭代分布 / 失败原因分布 /
-# RAG 质量 / 修复收敛效率（首次尝试成功率、成功与失败任务的迭代及耗时统计）/
-# 修复收敛曲线（按迭代轮次 0/1/2/3+ 累计通过率与耗时）/ 测试异味检测 / 多维质量代理 /
-# 收敛失败模式归因（1.2，区分"无法定位根因" vs "无法生成有效补丁"）/
-# 边界用例覆盖（1.3，AST 保守判定 None/空集合/0/-1/>=/<= 等边界条件）/
-# 变异得分（1.3，外部变异测试器产出，无 mutation_score 字段时跳过）/
-# 故障定位质量 FL@1/3/5（B-02，details[].fl_at_k 存在且 gold 材料可解时输出）/
-# 断言强度 AST 增强（1.3，ast.parse + ast.Assert 节点计数，输出 ast_avg_assertions）/
-# 数据污染检测（2.1，SWE-bench 黄金补丁 token 级 Jaccard 重叠度，high ≥ 0.85 / medium ≥ 0.6）/
-# 任务难度分层（2.2，code_size / dependency_count / complexity_proxy 三维度）/
-# 执行反馈轨迹汇总（3.2，观测任务数 / 总执行次数 / 首轮即通过率 / 末轮奖励信号 / 覆盖率趋势）/
-# 依赖缓存命中统计（4.4，venv 缓存 hit_rate）。
-# 旧 JSON 缺对应键时自动兜底或降级，不崩。
-python experiments/analyze_results.py --results-dir experiments/results
-# 可选：显式传入黄金补丁映射（{task_id: patch_text}，JSON 对象）覆盖污染检测
-python experiments/analyze_results.py --results-dir experiments/results \
-    --golden-patches /path/to/golden_patches.json
-
-# 3.2 执行反馈轨迹：executor 节点默认常开，每次执行追加 passed / coverage_delta /
-# elapsed / reward_signals {correctness, efficiency, simplicity} 到 state.execution_trace。
-# 查看某任务的轨迹（结果 JSON 的 details[].execution_trace）：
-python -c "import json; d=json.load(open('experiments/results/benchmark_xxx.json')); [print(r['task_id'], r.get('execution_trace')) for r in d['results']['aitester']['details'][:3]]"
-
-# 修复引擎批次 I 新增结果行字段（与 detection/repair/fl_at_k 并列）：
-# details[].llm_localization——LLM 推理定位 JSON（function_name / line_start /
-# line_end / confidence / reasoning；开关关、LLM 失败或无失败用例时为 null）；
-# details[].localization_hit_function——函数级命中 bool（定位函数 ∈ gold 变更函数
-# 集合；未定位或无 gold 材料时为 null，键集合同构占位）。
-python -c "import json; d=json.load(open('experiments/results/benchmark_xxx.json')); [print(r['task_id'], r.get('localization_hit_function'), r.get('llm_localization')) for r in d['results']['aitester']['details'][:3]]"
-
-# 失败根因分类 + 案例知识库（5.3）：按 LLM 能力 / 依赖 / 框架三大根因归因，
-# 结构化案例落盘 failure_knowledge_base.json（含 task_id / root_cause / 复现步骤 / 建议修复）。
-python experiments/analyze_failures.py --results-dir experiments/results
-python experiments/analyze_failures.py -r experiments/results -k experiments/results/failure_knowledge_base.json
-
-# 4.4 依赖缓存监控：venv 缓存命中率统计 + 清理
-python main.py clean-venv-cache --list-only           # 查看现有缓存与命中率（--list-only）
-python main.py clean-venv-cache --max-age-days 30     # 删除 30 天前的 venv
-python main.py clean-venv-cache --max-size-mb 512     # 删除超过 512MB 的 venv
-# 命中率亦可直接在分析层取（analyze_results.py 自动渲染"依赖缓存命中统计（4.4）"章节）
-python -c "from src.tools.dependency import get_venv_cache_stats; print(get_venv_cache_stats())"
-
-# 4.3 Docker 隔离执行（需本机安装 docker 并构建镜像，依赖预安装缓存在镜像构建期完成）
-docker build -t aitester:latest .
-EXECUTOR_USE_DOCKER=true python main.py run examples/calculator.py
-# Docker vs venv 执行时间对比（实验环境选择依据，输出 Markdown 表）
-python scripts/tools/compare_executor_modes.py --tasks examples/calculator.py examples/string_utils.py
-
-# 1.2 内置变异测试生成器：AST 级三类变异体（边界值替换 / 运算符翻转 / 布尔取反），
-# 每任务 ≤20 个，无 mutmut 依赖；mutation_score_from_details 汇总 details[].mutation_score。
-python -c "
-from experiments.mutation_testing import MutationGenerator, mutation_score_from_details
-gen = MutationGenerator()
-mutants = gen.generate('def check(x): return x > 5 and not x')
-print(f'{len(mutants)} 个变异体: {[(m.mutant_type, m.line_no) for m in mutants]}')
-"
-
-# 5.3 跨批次失败模式对比：追踪多个 benchmark JSON 批次间失败模式 new / resolved / regressed 趋势
-python experiments/compare_failures.py \
-    --results experiments/results/benchmark_synthetic_new.json \
-    --cross-batch experiments/results/benchmark_synthetic_old.json \
-    --cross-batch-baseline aitester
-
-# 4.4 多版本 venv 缓存：venv_cache_dir 默认将 Python 版本前缀纳入缓存 key，
-# 不同版本 venv 隔离存放（py3.10 / py3.12），避免交叉复用导致依赖不兼容
-python -c "from src.tools.dependency import venv_cache_dir; print(venv_cache_dir(['pandas'], python_version='3.10'))"
-
-# 4.1 日志脱敏完整审计（全仓库 logger 调用点扫描，退出码 0=无可疑点，可挂 CI 门禁）
-python scripts/gates/audit_log_redaction.py
-
-# P0 运行时探针（RUNTIME_PROBE_ENABLE，默认关）：被测代码抛异常时刻直接读
-# exc.__traceback__ 帧链采集精确失败时刻帧栈与局部变量快照（零 trace 开销，
-# 2026-09-29 修复核心缺陷后真正生效）。
-export RUNTIME_PROBE_ENABLE=true
-
-# G3 内核级沙箱（KERNEL_SANDBOX_ENABLE，默认关）：macOS Seatbelt（sandbox-exec）/
-# Linux Landlock（bwrap）双后端；平台不支持时 fail-closed 拒绝执行（不静默降级到
-# 无隔离本地，与 Docker 不可用同口径）。P2-5（2026-10 批次）起本地 + venv 沙箱
-# 两条非容器执行链路均已接入（venv 链路此前走裸子进程，内核开关在
-# EXECUTOR_USE_VENV=true 推荐档位下静默失效——现已补齐，结果附
-# kernel_sandbox_obs 观测层，与本地链路同字段）。
-export KERNEL_SANDBOX_ENABLE=true
-
-# G4 AgentTelemetry 故障检测基准（AGENT_TELEMETRY_ENABLE，默认关）：10 类内置
-# 失败模式正则匹配（零 LLM 成本，纯观测层），输出 Markdown 报告供实验分析消费。
-export AGENT_TELEMETRY_ENABLE=true
-
-# G5 无测试场景执行无关验证（TESTLESS_VALIDATION_ENABLE，默认关）：四层独立可开关
-# （AST 符号守卫 / mypy 静态检查 / 命名契约回归 / 导入冒烟），任一层失败整体 fail
-# （保守 fail-closed 口径）。
-export TESTLESS_VALIDATION_ENABLE=true
-
-# G6 多智能体辩论收敛（EXPERT_POOL_DEBATE_ENABLE，默认关，需配合
-# EXPERT_POOL_ENABLE=true）：top-K 候选辩论收敛产出一个 debate_revise 修订候选，
-# LLM 失败时保守降级回原 verified 列表（不阻断主链路）。
-export EXPERT_POOL_ENABLE=true
-export EXPERT_POOL_DEBATE_ENABLE=true
-
-# G2 风险分级人工回路（RISK_APPROVAL_ENABLE，默认关）：三因子加权打分
-# （置信度 + 补丁影响面 + 预算占比）→ low/medium/high → auto_merge /
-# human_confirm / force_review。
-export RISK_APPROVAL_ENABLE=true
-```
-
-### 推荐开启项（默认关闭但建议按需启用的能力）
-
-以下开关默认关闭（保证默认行为不变），但对大多数常规使用场景预期收益
-大于成本，建议在正式实验 / 规模化跑基准时评估开启：
-
-| 开关 | 预期收益 | 成本 / 注意事项 |
-|------|---------|----------------|
-| `SEMANTIC_CACHE_ENABLE=true`（5.1 语义级 LLM 缓存） | 相似 prompt（表述不同但语义等价）命中缓存，省 LLM 调用 token | 引入嵌入计算开销；阈值 `SEMANTIC_CACHE_THRESHOLD` 默认 0.92（保守，宁可漏命中） |
-| `COST_BUDGET_ENABLE=true`（5.4 任务级预算硬上限） | 消耗超限时自动停调用，避免免费额度跑飞 | 需同时设置 `COST_BUDGET_LIMIT` 预算值；超限后的调用已发生不可撤销 |
-| `POSITION_AWARE_REPAIR_ENABLE=true`（位置感知迭代修复） | MAX_ITERATIONS 收敛失败中"无法定位根因"类更精准地锁定修复位置 | 开启前建议先在 50 任务合成集上验证修复率增益 |
-| `ADVERSARIAL_DEBUGGING_ENABLE=true`（对抗性推理） | 生成器主动构造易错输入，提升修复方案鲁棒性 | 每任务额外 LLM 调用，成本更高；建议配合变异测试得分作输入信号 |
-
-> **跨文件修复（`CROSS_FILE_ENABLE`）与对抗性推理的说明**：跨文件任务在引擎能力
-> 突破前无正向信息量（ON/OFF 都会 0/N），跨文件收益验证需更强模型 + 仓库全量源码
-> 上下文，当前不建议默认开启；详见 `docs/failure_analysis.md` 的 SWE-bench 仓库级
-> 验证说明。
-
-## 配置文件说明
-
-| 文件 | 说明 | Git 状态 |
-|------|------|---------|
-| `.env.example` | 非敏感配置模板 | ✅ 已提交 |
-| `config.local.example` | 敏感配置模板（API Key） | ✅ 已提交 |
-| `.env` | 实际配置（需自行创建） | ❌ 已排除 |
-| `.env.local` | 实际敏感配置（需自行创建） | ❌ 已排除 |
-
-## 注意事项
-
-1. **不要提交 `.env` 和 `.env.local` 到 Git**
-2. 从 `.env.example` 和 `config.local.example` 创建你的配置文件
-3. 确保 API Key 安全存储，不要分享给他人
+按症状查 [docs/troubleshooting.md](docs/troubleshooting.md)：
+安装与环境 → 运行与沙箱 → 测试与门禁。提交前跑 `make gates`（单链）。

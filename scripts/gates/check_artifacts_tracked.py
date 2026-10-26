@@ -41,6 +41,9 @@ from typing import NamedTuple
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
+#: `git ls-files` / `git check-ignore` 的正常耗时是毫秒级；60s 仍不返回即视为挂起。
+_GIT_TIMEOUT_S = 60.0
+
 # "报告 → 证据工件"引用链清单（相对仓库根）。新增引用新工件时同步登记。
 MANIFEST: tuple[str, ...] = (
     # CI 轮第三批（2026-10-24）：用户指令清除 experiments/results/ 全部历史数据
@@ -73,19 +76,35 @@ STUDY_DIR_EXEMPTIONS = EVIDENCE_DIR_EXEMPTIONS
 EVIDENCE_DIR_GLOBS: tuple[str, ...] = ("emse_*", "*_round_*")
 
 
+def _git_ls(git_args: list[str]) -> subprocess.CompletedProcess[str]:
+    """只读 git 查询；超时合成 rc=124（POSIX `timeout(1)` 惯例），走既有失败文案。
+
+    形参不叫 `args`：`check_flag_effect` 的「整包读走 Namespace」判据按名字识别
+    `args`，同名形参被读成「整个 Namespace 传进别的函数」会让该门转红。
+    """
+    try:
+        return subprocess.run(
+            ["git", *git_args], cwd=PROJECT_ROOT, capture_output=True, text=True, timeout=_GIT_TIMEOUT_S
+        )
+    except subprocess.TimeoutExpired:
+        return subprocess.CompletedProcess(git_args, 124, "", f"git 超时（>{_GIT_TIMEOUT_S:g}s）")
+
+
 def _is_tracked(path: Path) -> tuple[bool, str]:
     """返回 (是否被 git 跟踪, 状态说明)。缺失 / 未跟踪 / 被忽略分别可辨。"""
     if not path.exists():
         return False, "文件不存在（路径拼写错误或未生成）"
     rel = path.relative_to(PROJECT_ROOT).as_posix()
-    ls = subprocess.run(["git", "ls-files", "--", rel], cwd=PROJECT_ROOT, capture_output=True, text=True)
+    ls = _git_ls(["ls-files", "--", rel])
     if ls.returncode != 0:
         return False, f"git ls-files 失败: {ls.stderr.strip()}"
     if ls.stdout.strip():
         return True, ""
-    check_ignore = subprocess.run(["git", "check-ignore", "-q", rel], cwd=PROJECT_ROOT, capture_output=True, text=True)
+    check_ignore = _git_ls(["check-ignore", "-q", rel])
     if check_ignore.returncode == 0:
         return False, "被 .gitignore 忽略（永远无法入库——先修白名单）"
+    if check_ignore.returncode > 1:
+        return False, f"git check-ignore 失败: {check_ignore.stderr.strip()}"
     return False, "存在于工作区但未被 git 跟踪（git add 后提交）"
 
 
@@ -140,7 +159,7 @@ def exemption_coverage() -> list[ExemptionCoverage]:
             rows.append(ExemptionCoverage(name, "empty", surface, 0, 0, "目录内无文件"))
             continue
         rels = [path.relative_to(PROJECT_ROOT).as_posix() for path in files]
-        ls = subprocess.run(["git", "ls-files", "--", *rels], cwd=PROJECT_ROOT, capture_output=True, text=True)
+        ls = _git_ls(["ls-files", "--", *rels])
         if ls.returncode != 0:
             rows.append(
                 ExemptionCoverage(name, "unreadable", surface, len(files), 0, f"git ls-files 失败: {ls.stderr.strip()}")
@@ -200,7 +219,7 @@ def _scan_evidence_dirs() -> list[tuple[str, str]]:
             name = child.name
             if name in EVIDENCE_DIR_EXEMPTIONS:
                 continue
-            ls = subprocess.run(["git", "ls-files", "--", rel], cwd=PROJECT_ROOT, capture_output=True, text=True)
+            ls = _git_ls(["ls-files", "--", rel])
             if ls.returncode != 0:
                 offenders.append((rel, f"git ls-files 失败: {ls.stderr.strip()}"))
                 continue

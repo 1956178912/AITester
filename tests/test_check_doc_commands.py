@@ -158,10 +158,14 @@ def test_scanner_finds_the_real_documents():
 
 
 def test_real_repository_has_no_broken_refs():
-    """真树：文档引用的脚本与 make 目标必须全部存在。"""
+    """真树：文档引用的脚本与 make 目标必须全部存在。
+
+    DD 轮（2026-10-26）文档重写后实测 checked=15（旧门面中的长命令清单随叙事
+    一并退役）。下限按实测 −20% 设为 12：防扫描面塌陷，不防命令密度下降。
+    """
     result = doc_mod.check(doc_mod.PROJECT_ROOT)
     assert result["missing"] == [], result["missing"]
-    assert result["checked"] >= 30, result["checked"]
+    assert result["checked"] >= 12, result["checked"]
 
 
 def test_main_exit_codes(tmp_path, capsys):

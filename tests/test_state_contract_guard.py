@@ -142,8 +142,8 @@ class TestChannelCoverage:
 
     旧成功语句「无未声明键读写」把「判过且干净」与「压根没看」说成同一件事：
     判定面只有就地赋值 + `state.get/state[]` 字面读写，而 LangGraph 的规范写侧
-    是节点返回局部更新 dict（实测 45 键 / 95 站点）——正是 docstring 背景里
-    M14 / O35 静默丢弃事故的路径。本轮只披露、不动判定。
+    是节点返回局部更新 dict（CB 轮实测 45 键 / 95 站点；DS 轮后 47 键 / 99 站点）——
+    正是 docstring 背景里 M14 / O35 静默丢弃事故的路径。本轮只披露、不动判定。
     """
 
     def test_declared_matches_runtime_annotations(self):
@@ -151,13 +151,19 @@ class TestChannelCoverage:
         assert cov.declared == tuple(sorted(declared_state_keys()))
 
     def test_real_repo_coverage_numbers(self):
-        """真实仓库读数快照：数字变动即须重跑普查并重登记（棘轮式可见）。"""
+        """真实仓库读数快照：数字变动即须重跑普查并重登记（棘轮式可见）。
+
+        其余读数为 CB 轮普查值；update dict / 未触及为 DS 轮重登记值
+        （44 → 46 未审计）。update dict 计的是字面出现，CLI 结果 dict 与状态
+        节点更新同形，`coverage_threshold` / `max_iterations` 的 4 个站点来自
+        `src/cli/app.py::_make_task_error_result`，不是状态写。
+        """
         cov = channel_coverage()
         assert len(cov.declared) == 118
         assert (len(cov.read_keys), cov.read_sites) == (57, 353)
         assert (len(cov.inplace_write_keys), cov.inplace_write_sites) == (2, 11)
-        assert (len(cov.update_write_keys), cov.update_write_sites) == (45, 95)
-        assert (len(cov.untouched), len(cov.untouched_elsewhere), len(cov.untouched_nowhere)) == (35, 34, 1)
+        assert (len(cov.update_write_keys), cov.update_write_sites) == (47, 99)
+        assert (len(cov.untouched), len(cov.untouched_elsewhere), len(cov.untouched_nowhere)) == (34, 33, 1)
         assert (cov.temp_keys, cov.temp_sites, cov.dynamic_sites, cov.undeclared_sites) == (2, 2, 1, 0)
 
     def test_written_keys_union_and_unaudited_gap(self):
@@ -169,7 +175,9 @@ class TestChannelCoverage:
         assert cov.inplace_write_keys == ("gold_fixed_code", "stop_reason")
         assert "gold_fixed_code" not in cov.update_write_keys
         assert "stop_reason" in cov.update_write_keys
-        assert len(cov.unaudited_write_keys) == 44
+        assert len(cov.unaudited_write_keys) == 46
+        # DS 轮新增的不可归属噪声：CLI 结果 dict 里的两个声明键
+        assert {"coverage_threshold", "max_iterations"} <= set(cov.update_write_keys)
 
     def test_untouched_reconciles_with_sets(self):
         cov = channel_coverage()
@@ -303,7 +311,7 @@ class TestChannelCoverage:
         lines = [ln for ln in result.stdout.splitlines() if ln.strip()]
         assert lines[0].startswith("状态通道契约审计通过")
         assert any("审计面披露" in ln for ln in lines)
-        assert any("update dict 45 键 / 95 站点" in ln for ln in lines)
+        assert any("update dict 47 键 / 99 站点" in ln for ln in lines)
         assert any("failure_frequency_applied" in ln for ln in lines)
 
     def test_coverage_lines_are_stable(self):

@@ -9,8 +9,9 @@
 #   要防复发，就得把「先跑判据」变成**流程的固定第一步**，而不是靠人记得。
 #
 # 三步各自的职责：
-#   1. **前置判据**（audit --strict）：源文件已经不合格 ⇒ **拒绝编译**（不产出坏产物）；
-#   2. **编译**：标准 TeX Live（pdflatex + bibtex 三遍）；不写死路径，先找 PATH 再找 TinyTeX；
+#   1. **前置判据**（audit --strict --pre-build）：源文件已经不合格 ⇒ **拒绝编译**（不产出坏产物）；
+#   2. **编译**：标准 TeX Live（pdflatex ×2 → bibtex → pdflatex，排到 `.aux` 不再
+#      变化为止，通常三遍、最多五遍）；不写死路径，先找 PATH 再找 TinyTeX；
 #   3. **后置判据**：构建可能改变读数（页数、文献数）⇒ 重新对账；不一致时**退出码非 0**
 #      并打印需要更新的读数 ⇒ 投稿包在数字对齐前**不算完成**。
 #
@@ -46,13 +47,15 @@ command -v bibtex   >/dev/null 2>&1 || die "找不到 bibtex"
 echo "[build-paper] 工具链：pdflatex=$(command -v pdflatex)"
 
 # ── 1. 前置判据：源文件不合格就不编译 ───────────────────────────────────
-echo "[build-paper] ① 前置判据（audit --strict）……"
-if ! "$PY" "$AUDIT" --strict; then
+# `--pre-build`：源文件刚改过时产物必然过期，页数对账留给构建后（否则本脚本
+# 在编辑源文件后的第一次运行就红在「产物已过期」，永远进不到编译步骤）。
+echo "[build-paper] ① 前置判据（audit --strict --pre-build）……"
+if ! "$PY" "$AUDIT" --strict --pre-build; then
   die "前置判据未通过——**不编译**（源文件已不合格，编译只会产出坏产物）" 1
 fi
 
 # ── 2. 编译 ──────────────────────────────────────────────────────────────
-echo "[build-paper] ② 编译稿件（pdflatex → bibtex → pdflatex → pdflatex）……"
+echo "[build-paper] ② 编译稿件（pdflatex ×2 → bibtex → pdflatex，按 Rerun 提示收敛）……"
 cd "$TEX_DIR" || die "找不到 $TEX_DIR"
 rm -f manuscript.aux manuscript.bbl manuscript.blg manuscript.log \
       manuscript.out manuscript.fdb_latexmk manuscript.fls manuscript.pdf
@@ -61,8 +64,26 @@ pdflatex -interaction=nonstopmode manuscript.tex >/dev/null 2>&1 \
 bibtex manuscript >/dev/null 2>&1 || die "bibtex 失败（看 $TEX_DIR/manuscript.blg）" 1
 pdflatex -interaction=nonstopmode manuscript.tex >/dev/null 2>&1 \
   || die "稿件第二遍 pdflatex 失败（看 $TEX_DIR/manuscript.log）" 1
-pdflatex -interaction=nonstopmode manuscript.tex >/dev/null 2>&1 \
-  || die "稿件第三遍 pdflatex 失败（看 $TEX_DIR/manuscript.log）" 1
+# 从零构建时：第 1 遍没有 .bbl，引文按 `?` 占位；第 2 遍引文入版后分节页码整体
+# 后移（实测 68 → 70 页）。LaTeX **只在引用未定义时**报 `Rerun`，页码变化本身不报，
+# 所以拿「上一遍的 .aux == 这一遍的 .aux」当收敛判据——它逐字记录 `\newlabel` 的页码。
+prev_aux="$(mktemp)"
+cp manuscript.aux "$prev_aux"
+passes=2
+while :; do
+  pdflatex -interaction=nonstopmode manuscript.tex >/dev/null 2>&1 \
+    || { rm -f "$prev_aux"; die "稿件第 $((passes + 1)) 遍 pdflatex 失败（看 $TEX_DIR/manuscript.log）" 1; }
+  passes=$((passes + 1))
+  if cmp -s "$prev_aux" manuscript.aux; then
+    rm -f "$prev_aux"
+    break
+  fi
+  cp manuscript.aux "$prev_aux"
+  [ "$passes" -ge 5 ] \
+    && { rm -f "$prev_aux"; die "pdflatex 第 $passes 遍后 .aux 仍未收敛（看 $TEX_DIR/manuscript.log）" 1; }
+done
+grep -q 'There were undefined references\|Citation .* undefined' manuscript.log \
+  && die "仍有未定义的引用/文献（看 $TEX_DIR/manuscript.log）" 1
 
 for stem in cover_letter title_page; do
   cd "$PAPER_DIR" || die "找不到 $PAPER_DIR"

@@ -1,1110 +1,185 @@
-> **语言 / Language**：[English](api_reference.en.md) | 简体中文（本文）
-
-# AITester API 参考文档
-
-> 本文档描述 AITester 的核心类和方法，供开发者集成和扩展使用。
-> 最后更新：2026-10-14（LLM 结构化输出加固批次：新增 `LLM_JSON_MODE` / `LLM_THINKING_MODE` / `LLM_REASONING_EFFORT` / `LLM_MAX_OUTPUT_TOKENS` 环境变量条目〔ADR-0031，DeepSeek 官方 JSON Output 与思考模式对齐〕。此前 2026-10-07 修复引擎批次 I：独立 `FaultLocalizerAgent` 落地〔RGFL 式 LLM 推理定位 + Ochiai 谱系佐证双通道，只定位不修复，失败保守降级 None〕；`DebuggerAgent.debug()` 新增 `localization_section` 形参；工作流 `debugger` 节点内联推理定位并写 `state["llm_localization"]`）
-> 上一批：2026-10-06（第十二轮审查落地批次 AK：实验侧新增 `experiments/repair_ceiling_analysis.py` 离线归因分析〔repair=0 修复漏斗 + detection=None 双界敏感性，见 2.x 统计分析配套条目〕；src/ 零改动、默认行为不变；AA 及更早批次见"上一批"与 CHANGELOG）
-> 上一批：2026-10-06（AA 代码优化批次：`AITESTER_PROFILE` 扩为四档并补齐 logic 档 `DETECTION_FIRST_ENABLE`〔ADR-0015 检出优先协议漏配补齐〕；`SyntheticDataset` 新增 `max_pattern_repeat` 同池模板重复上限 + `run_benchmark` CLI `--max-pattern-repeat`（均 opt-in，默认 None=历史口径，seed=42 复现性不变）；README CI 矩阵漂移修复；默认行为不变）
->
-> 更早批次：2026-10-05（审查批次 R1-R18：R1a/R1b 规约编译修复与签名感知绑定、R1c 规约 oracle 与 LLM 测试并列执行（`SPEC_ORACLE_EXEC_ENABLE` 默认关）、R4b 回滚 fail-closed（`PATCH_ROLLBACK_FAIL_CLOSED` 默认关）、R5 变异检出率（`ENABLE_MUTATION_SCORING` 门控）、R2 统计报告落盘（McNemar/BH-FDR/bootstrap CI/Cliff's delta/`--batches`）、R17 结构化路由优先（`ROUTE_STRUCTURED_ENABLE` 默认关）、R16 流氓行为监控（`ROGUE_MONITOR_ENABLE` 默认关）、R11 确定性采样（`run_benchmark(deterministic=True)`）、R15 `AITESTER_PROFILE` 三档预设、`API_HEALTH_CHECKER_ENABLE` 健康检查线程开关、LLM 缓存目录默认迁移 `~/.cache/aitester/llm`；默认行为不变，新能力均带独立开关）
->
-> 上一轮：2026-09-29（审查优化轮：P0 运行时探针缺陷修复——历史 settrace exception 事件采集在函数体异常时不传播到被调帧，实测 frames 恒空（探针自引入以来从未真正生效）；本轮改为异常抛出时刻读 exc.__traceback__ 帧链（零 trace 开销），同步修复单字符变量误过滤 / 行号错误（f_lineno → tb_lineno）/ 模块过滤永不匹配 / 子线程未处理异常泄漏；默认行为不变，RUNTIME_PROBE_ENABLE=false 时零差异）
->
-> 上一轮：2026-09-28（前沿推荐批次 P0/P1/P2 缺口落地：G2 风险分级人工回路（`src/graph/risk_approval.py`，`RISK_APPROVAL_ENABLE` 默认关）/ G8 全链路 SWE-bench Pro 复测（`experiments/run_full_stack_swe_bench_pro.py` + `scripts/gates/check_swe_bench_pro_ready.py` + `experiments/summarize_full_stack.py`）/ G3 内核级沙箱（`src/agents/kernel_sandbox.py`，`KERNEL_SANDBOX_ENABLE` 默认关，macOS Seatbelt / Linux Landlock+bwrap，fail-closed）/ G1 Tree-sitter 精确 AST 后端（`src/tools/tree_sitter_backend.py`，可选依赖，缺依赖时透明降级）/ G4 AgentTelemetry 故障检测基准（`src/observability/agent_telemetry.py`，`AGENT_TELEMETRY_ENABLE` 默认关，10 类内置失败模式）/ G5 无测试场景执行无关验证（`src/tools/testless_validation.py`，`TESTLESS_VALIDATION_ENABLE` 默认关，四层独立可开关）/ G6 多智能体辩论收敛（`src/graph/expert_pool.py` 新增 `debate_round()`，`EXPERT_POOL_DEBATE_ENABLE` 默认关）/ G7 缺陷报告生成（`src/reports/generator.py` 的 `ErrorReport` 新增 `oracle_stats` + `with_oracle_stats()`）/ 文档一致性 P2（`docs/dependency_exemptions.md` + `scripts/gates/check_dependency_exemptions.py` CI 门禁 + `scripts/gates/check_docs_history_drift.py` warning-only 漂移检测）；默认行为不变，新能力均带独立开关）
->
-> 上一版：2026-09-28 P0/P1 改进批次（1.1 LLM 输出后处理层（`patch_postprocess.sanitize_patch` + P1 空壳检测 / P2 导入回填 / P3 契约别名回填）/ 2.1 错误分类→修复策略显式映射（`get_recommended_fix_strategy`）/ 5.4 任务级 token/费用预算硬上限（`COST_BUDGET_ENABLE` + `cost_budget`）/ 5.1 语义级 LLM 缓存（`SEMANTIC_CACHE_ENABLE` + `semantic_cache`）/ 3.3 端到端冒烟测试脚本（`scripts/tools/smoke_test.sh`）；默认行为不变，新能力均有独立开关）
->
-> 再上一版：2026-09-27（第十一轮全项目 P1/P2 收敛 + 路线图剩余缺口落地批次：错误分类 16→17 类（新增 `PATCH_SYNTAX_INVALID`）/ 2.2 补丁后处理重采样（`PATCH_RESAMPLE_ENABLE`）/ 1.3 分层压缩降级链透传（`contract_reject_feedback` 跨轮透传）/ 多维度污染检测（`contamination_risk_level` + `rag_ab_experiment.compare_ab` 新增 `token_saving.delta_pct`）/ 2.1 mypy 静态层（`TYPE_CHECK_ENABLE`）/ SWE-bench Pro 支持（`swe_bench_pro` 注册）/ CodeBERT 嵌入后端（`EMBEDDING_BACKEND=codebert`）/ pyright 静态类型后端（`TYPE_CHECK_BACKEND=pyright`）；全量 1937 测试用例 / ruff 全仓 0 告警 / mypy 64 源文件 0 错误 / 覆盖率 94%）
-
----
-
-## 目录
-
-1. [智能体模块](#智能体模块)
-2. [工具模块](#工具模块)
-3. [工作流编排](#工作流编排)
-4. [数据集加载](#数据集加载)
-5. [配置管理](#配置管理)
-
----
-
-## 智能体模块
-
-### PlannerAgent
-
-测试规划师，负责分析目标函数并生成结构化测试计划。
-
-```python
-from src.agents.planner import PlannerAgent
-
-agent = PlannerAgent()
-plan = agent.plan(
-    target_code="def divide(a, b): return a / b",
-    target_function="divide",
-)
-```
-
-**关键方法：**
-
-| 方法 | 参数 | 返回值 | 说明 |
-|------|------|--------|------|
-| `plan()` | `target_code: str`, `target_function: str \| None = None` | `dict` | 生成测试计划，包含 `logic_analysis` 和 `test_cases`；`target_function` 为 None 时分析全部函数 |
-
-**返回格式：**
-```json
-{
-  "function_name": "divide",
-  "description": "两数除法",
-  "logic_analysis": {
-    "input_domain": "float, float",
-    "output_domain": "float",
-    "preconditions": ["b != 0"],
-    "postconditions": ["result * b == a"],
-    "edge_cases": ["b == 0 时抛出 ValueError"]
-  },
-  "test_cases": [...]
-}
-```
-
----
-
-### GeneratorAgent
-
-测试代码生成器，根据测试计划生成可运行的 pytest 代码。
-
-```python
-from src.agents.generator import GeneratorAgent
-
-agent = GeneratorAgent()
-test_code = agent.generate(
-    test_plan=plan,
-    target_code="def divide(a, b): return a / b",
-    module_name="calculator",
-    rag_references=[...],  # 可选，RAG 检索结果
-)
-```
-
-**关键方法：**
-
-| 方法 | 参数 | 返回值 | 说明 |
-|------|------|--------|------|
-| `generate()` | `test_plan: dict`, `target_code: str`, `module_name: str = ""`, `rag_references: list[dict] \| None = None`, `focus_function: str \| None = None` | `str` | 生成 pytest 测试代码（超预算时按 focus_function 做 AST 智能截取；后三参数均默认 None/""） |
-
-**验证方法：**
-
-| 方法 | 参数 | 返回值 | 说明 |
-|------|------|--------|------|
-| `_validate_parametrize()` | `code: str` | `bool` | 校验 parametrize 参数匹配 |
-| `_fix_import_module()` | `code: str`, `expected_module: str` | `str` | 修正错误的 import 模块名 |
-
----
-
-### ExecutorAgent
-
-测试执行器，在本地、隔离沙箱或 Docker 容器中运行 pytest 并捕获结果。
-
-```python
-from src.agents.executor import ExecutorAgent
-
-agent = ExecutorAgent(timeout=30)  # 默认本地系统环境执行
-result = agent.execute(
-    test_code="import pytest\nfrom calculator import divide\n\ndef test_divide():\n    assert divide(1, 2) == 0.5",
-    target_file="examples/calculator.py",
-    target_function="divide",
-)
-
-# venv 沙箱隔离执行（P1：不污染系统环境，依赖冲突互不影响）
-sandbox_agent = ExecutorAgent(use_venv=True, auto_install_deps=True)
-
-# 4.3 Docker 隔离执行（经 docker CLI 在容器内跑 pytest，镜像内置依赖）
-docker_agent = ExecutorAgent(use_docker=True, docker_image="aitester:latest")
-```
-
-**关键方法：**
-
-| 方法 | 参数 | 返回值 | 说明 |
-|------|------|--------|------|
-| `execute()` | `test_code: str`, `target_file: str`, `target_function: str \| None` | `dict` | 执行测试，返回通过/失败状态、覆盖率、失败用例；执行模式优先级 Docker > venv 沙箱 > 本地 |
-| `_execute_docker()` | 同 `execute()` | `dict` | 4.3 Docker 隔离执行：`docker run` 挂载卷传入被测代码，docker 不可用时返回 `docker_unavailable` 诊断（不静默降级本地） |
-
-**返回格式：**
-```json
-{
-  "passed": true,
-  "failed_cases": [],
-  "coverage": 85.5,
-  "output": "...",
-  "docker_image": "aitester:latest"
-}
-```
-
-> Docker 模式额外携带 `docker_image` 字段（供实验分析记录执行模式差异）；失败时 `error_info.type` 可能为 `docker_unavailable` / `docker_timeout`。
-
----
-
-### DebuggerAgent
-
-调试修复师，分析测试失败并生成修复补丁。
-
-```python
-from src.agents.debugger import DebuggerAgent
-
-agent = DebuggerAgent()
-result = agent.debug(
-    target_code="def divide(a, b): return a - b",
-    test_output="AssertionError: expected 0.5, got -1.0",
-    failed_cases=[{"name": "test_divide", "error": "expected 0.5, got -1.0"}],
-    rag_references=[...],  # 可选，RAG 修复案例
-)
-```
-
-**关键方法：**
-
-| 方法 | 参数 | 返回值 | 说明 |
-|------|------|--------|------|
-| `debug()` | `target_code: str`, `test_output: str`, `failed_cases: list`, `rag_references: list[dict] \| None = None`, `focus_function: str \| None = None`, `target_module: str \| None = None`, `fl_spectral_section: str \| None = None`, `localization_section: str \| None = None` | `dict` | 分析失败并生成修复补丁（中间参数均默认 None：大文件 AST 聚焦截取 / 区分 ASSERTION 与 LOGIC_ERROR；末两项为定位段落注入——谱系 Ochiai Top-k 段与 RGFL 推理定位段，与既有段落并列注入，None/空串不注入，历史口径零变化） |
-
-**返回格式：**
-```json
-{
-  "root_cause": "除法是减法而非除法，第 3 行应为 return a / b",
-  "error_category": "assertion",
-  "fix_strategy": "修改除法运算符",
-  "patch": "```python\ndef divide(a, b): return a / b\n```"
-}
-```
-
----
-
-### FaultLocalizerAgent
-
-RGFL 式 LLM 推理故障定位智能体（修复引擎第一阶段，2026-10-07 范式转向批）：只定位不修复，双通道融合——Ochiai 谱系（零 LLM，`fl_spectral` 测量层）提供行级可疑度佐证，LLM 输出结构化定位 JSON。开关 `FAULT_LOCALIZER_ENABLE`（默认 true；显式 false 退回纯谱系消融口径）。
-
-```python
-from src.agents.fault_localizer import (
-    FaultLocalizerAgent,
-    fault_localizer_enabled,
-    gold_changed_functions,
-    localization_hit,
-)
-
-agent = FaultLocalizerAgent()
-loc = agent.localize(
-    target_code="def divide(a, b): return a - b",
-    test_code="def test_divide():\n    assert divide(1, 2) == 0.5",
-    test_output="AssertionError: expected 0.5, got -1.0",
-    failed_cases=[{"test": "test_divide"}],
-    spectral_top_k=[{"line": 3, "score": 0.87}],  # 可选，谱系 Top-k 佐证
-)
-```
-
-**关键方法 / 函数：**
-
-| 名称 | 参数 | 返回值 | 说明 |
-|------|------|--------|------|
-| `FaultLocalizerAgent.localize()` | `target_code: str`, `test_code: str`, `test_output: str`, `failed_cases: list[dict] \| None = None`, `spectral_top_k: list[dict] \| None = None`, `max_retries: int = 2` | `dict \| None` | LLM 推理定位：源码带行号 + 失败测试 + 错误输出（截断 2000 字符）+ 谱系 Top-5 佐证 → 结构化 JSON；LLM 失败 / 空输入保守返回 None（不阻断修复主流程） |
-| `fault_localizer_enabled()` | 无 | `bool` | 开关读取（`FAULT_LOCALIZER_ENABLE`，默认 true；显式 false = 纯谱系消融对照） |
-| `gold_changed_functions()` | `buggy_code: str`, `fixed_code: str` | `set[str]` | gold 变更函数集合：buggy↔fixed diff 缺陷行经 AST 向上追溯所属函数（嵌套取最内层；函数外变更记 `"<module>"`） |
-| `localization_hit()` | `loc: dict \| None`, `gold_functions: set[str]` | `dict \| None` | 函数级命中判定：`{"localization_hit_function": bool}`（函数名按 `.` 末段归一比较，方法/嵌套容错）；未定位或无 gold 材料返回 None（不可测，键集合同构占位） |
-| `build_localization_prompt_section()` | `loc: dict \| None` | `str` | 定位结果渲染为 Debugger prompt 段落（None/空 → 空串，历史口径） |
-
-**返回格式（`localize()` 成功时）：**
-```json
-{
-  "function_name": "divide",
-  "line_start": 3,
-  "line_end": 3,
-  "confidence": 0.9,
-  "reasoning": "除法实现误写为减法"
-}
-```
-
-> 接线：`_debugger_node` 在有失败用例且开关开启时内联调用本智能体，定位结果写 `state["llm_localization"]`，并经 `build_localization_prompt_section()` 与谱系段落并列注入 Debugger prompt；实验层消费 `localization_hit_function` 指标（与 gold 变更函数集合比对）。
-
----
-
-### ErrorClassifier
-
-错误类型分类器，使用规则匹配快速判断错误类别。
-
-```python
-from src.agents.error_classifier import ErrorClassifier, ErrorCategory
-
-classifier = ErrorClassifier()
-category = classifier.classify(test_output, failed_cases)
-# 提供被测模块名时，断言失败可区分 ASSERTION（代码 bug）与 LOGIC_ERROR（测试预期值写错）
-category = classifier.classify(test_output, failed_cases, target_module="calculator")
-```
-
-**错误类别枚举（十七类，2026-09-27 批次新增 `PATCH_SYNTAX_INVALID`）：**
-
-| 值 | 说明 | 处理策略 |
-|----|------|---------|
-| `llm_format_error` | LLM 响应格式异常（JSON 解析失败 / 响应被截断），此前 75% UNKNOWN 的根因之一（1.2 残余细化） | 重新请求 LLM 生成合规响应 / 剥离 markdown 代码块后再解析 / 降低单次输出长度 |
-| `llm_empty_response` | LLM 空响应（响应体为空串 / 空白），`LLM_FORMAT_ERROR` 的精确子类（P0 4.1 批次）——由 `ErrorClassifier.classify_llm_response(raw_response)` 在 Debugger 收到 LLM 响应后、JSON 解析前直接分类，不走 `classify()` 文本正则 | Debugger 用更严格 prompt 自动重试一次，仍失败降级到宽松 JSON 提取；记录原始响应片段到 `failure_knowledge_base.json` |
-| `llm_json_parse_failed` | LLM 响应非空但 JSON 提取失败（`extract_json_object` 未找到完整 JSON），`LLM_FORMAT_ERROR` 的精确子类（P0 4.1 批次）——判定口径同上 | 记录原始响应片段 + 降低单次输出长度重试一次；仍失败降级宽松提取 |
-| `import_error` | 模块导入失败（ModuleNotFoundError/ImportError），通常缺第三方依赖或模块路径错误 | 安装缺失依赖 / 修正导入语句（配合 executor `auto_install_deps` 自动装依赖） |
-| `syntax` | 语法/编译错误（SyntaxError、IndentationError） | 重新生成完整文件 |
-| `type_error` | 类型不匹配（TypeError） | 核对参数与返回类型 |
-| `index_error` | 索引越界（IndexError / index out of range / 下标越界），此前落入 RUNTIME/UNKNOWN 致 Debugger 无法针对性修复（1.2 残余细化） | 补边界判断（空容器先判空再访问），不用 try/except 静默吞掉越界 |
-| `assertion` | 断言失败且失败栈触及被测代码 | 判断是代码逻辑错误 |
-| `logic_error` | 断言失败但失败栈未触及被测模块，疑似测试预期值写错 | 修正测试用例断言（而非盲目改被测代码） |
-| `runtime` | 其他运行时异常（除零、NameError 等） | 分析异常栈定位 bug |
-| `timeout` | 执行超时 | 检查死循环 |
-| `unknown` | 无法识别的错误 | 通用分析（LLM 兜底） |
-| `patch_validation_failed` | 补丁被 PatchApplier 安全守卫拒绝（空/过短/无函数定义/路径不合法，repair_history 中 patch_applied=False），1.1 状态细化——由 `refine_failure_category()` 按 repair_history 信号判定，不走 `classify()` 文本正则 | 重新生成完整修复补丁（先补函数定义与最小长度再走验证），区分"补丁未生效"与"补丁应用后仍失败" |
-| `rag_retrieval_empty` | RAG 启用但任务内全部检索命中为 0（rag_stats 非空且所有 results==0），标识 RAG 失效场景（1.1 状态细化）——由 `refine_failure_category()` 按 rag_stats 信号判定，不走 `classify()` 文本正则 | 检查 RAG 检索库是否已填充 / 降低 top_k / 改启用混合检索；本类命中占比恒 0，可当 RAG 自检指标 |
-| `execution_trace_missing` | 任务失败但 `execution_trace` 为空（执行器异常路径：executor 节点未正常写入轨迹，或被上游崩溃截断），标识"执行轨迹丢失"（5.2 持续细化）——由 `refine_failure_category()` 按 execution_trace 信号判定，不走 `classify()` 文本正则 | 排查执行链路（venv/沙箱/超时配置）后重试；代码层面按常规策略谨慎修复 |
-| `multi_candidate_all_rejected` | 多候选补丁策略失效：N 个候选全部被静态筛选拒绝（`ENABLE_MULTI_CANDIDATE_PATCH=true` 但均未通过 static_validate_patch）（5.2 持续细化）——由 `refine_failure_category()` 按 multi_candidate_stats 信号判定，不走 `classify()` 文本正则 | 回退到单补丁流程，降低候选视角扰动幅度 |
-| `patch_syntax_invalid` | 补丁后处理重采样耗尽：`PATCH_RESAMPLE_ENABLE=true` 时重采样 `PATCH_RESAMPLE_MAX` 次后补丁仍语法损坏（2.2 批次）——由 `refine_failure_category()` / `refine_final_error_category()` 按 `patch_resample_stats` 信号判定，不走 `classify()` 文本正则 | 检查 LLM 输出质量（prompt 是否约束了合法 Python 语法）；增加重采样次数或降低单次输出长度 |
-
-**P1 改进（2026-09-28 批次）：分类 → 修复策略显式映射**：`get_recommended_fix_strategy(category, context)` 把"该走哪条修复路径"从 workflow/debugger 的隐式分支收敛为分类器的结构化输出——返回 `{"category", "strategy"（snake_case 标签，如 `add_boundary_check` / `regenerate_strict_json`）, "description"（与 `get_fix_strategy` 同口径）, "repair_action"（llm_resample / repair_code / repair_test / investigate_infra）}`。`_debugger_node` 将标签随结果写入 state（`fix_strategy_tag` / `fix_strategy_action`），供实验分析"哪类错误走了哪条修复路径"消费。
-
-**改进清单 P1 批次（2026-09-28）：置信度分层分类（L1 规则层 + L2 协议预留 + 低置信度兜底）**：
-
-```python
-from src.agents.error_classifier import (
-    ClassificationResult,
-    ErrorClassifier,
-    ProbabilisticClassifier,
-    classify_with_confidence,
-)
-
-# 模块级便利函数（等价于 ErrorClassifier().classify_with_confidence）
-result: ClassificationResult = classify_with_confidence(
-    test_output,
-    failed_cases=failed_cases,
-    target_module="calculator",
-)
-# result.category / result.confidence / result.confidence_basis /
-# result.fallback_used / result.fallback_category
-```
-
-- **L1 规则层**（`_classify_confidence`，零 LLM 成本、确定性可复现）：
-  具体特征命中（异常关键词 / 缺失模块名 / 行号定位）→ confidence 0.9；
-  弱命中（仅通用 `file.py:line:col` / `E` 前缀格式命中、无具体异常关键词，
-  如 `SYNTAX` 弱命中 / `IMPORT_ERROR` 无法提取模块名）→ confidence 0.5；
-  未命中（`UNKNOWN`）→ confidence 0.2；
-- **低置信度兜底策略**（`enable_fallback=True`，默认开）：confidence ≤ 0.5
-  的样本触发兜底——类别收敛到兜底类别（`UNKNOWN` / `SYNTAX` 弱命中 →
-  `generic_analysis` 而非硬性"重写整文件"路由），`fallback_used=True` /
-  `fallback_category=UNKNOWN`；`enable_fallback=False` 时分类结果与历史 17 类
-  口径逐样本等价（`_classify_combined` 经新内核，兜底不触发）；
-- **L2 概率化 / ML 层协议预留**（`ProbabilisticClassifier`，当前
-  `_default_probabilistic_classifier` 恒 `None`）：低置信度样本可经
-  `classifier` 参数注入 L2 分类器精判（`predict(combined, target_module) →
-  (category, confidence)`），L2 置信度 > 0.5 时覆盖 L1 判定；落地 L2
-  需独立 ADR + 回归守卫（见 [ADR-0002](adr/0002-error-classifier-rules.md)
-  "已知局限与演进方向"）。
-
-分类优先级（`classify()` 文本正则十类）：`LLM_FORMAT_ERROR > IMPORT_ERROR > SYNTAX > TYPE_ERROR > INDEX_ERROR > RUNTIME > ASSERTION/LOGIC_ERROR > TIMEOUT > UNKNOWN`，全部基于正则规则匹配，不消耗 LLM token。LLM_FORMAT_ERROR 置于最前（JSON 解析失败文本几乎不含 IndexError，但 IndexError 文本可能出现 assert，顺序放反会误判）。后 5 类（`PATCH_VALIDATION_FAILED` / `RAG_RETRIEVAL_EMPTY` / `EXECUTION_TRACE_MISSING` / `MULTI_CANDIDATE_ALL_REJECTED` / `PATCH_SYNTAX_INVALID`）为状态细化类，不走 `classify()` 文本正则，由纯函数 `refine_failure_category()` 在任务收尾按 `repair_history`（补丁被拒）/ `rag_stats`（检索全空）/ `execution_trace`（轨迹丢失）/ `multi_candidate_stats`（多候选全拒）/ `patch_resample_stats`（重采样耗尽）信号判定——判定优先级 `patch_rejected > rag_empty > trace_missing > multi_rejected > patch_syntax_invalid`；成功任务原样返回。benchmark 与 CLI 两个出口口径一致。P0 4.1 批次的两个子类（`LLM_EMPTY_RESPONSE` / `LLM_JSON_PARSE_FAILED`）由 `classify_llm_response()` 直接分析 LLM 原始响应（空 → `LLM_EMPTY_RESPONSE`；非空但 JSON 提取失败 → `LLM_JSON_PARSE_FAILED`），在 Debugger 收到响应后、JSON 解析前判定，命中时用更严格 prompt 重试一次，不走 `classify()` 文本正则。
-
----
-
-## 工具模块
-
-### PatchPostprocess（1.1 LLM 输出后处理层）
-
-补丁应用前的自动修复层（`src/tools/patch_postprocess.py`）：检测并修复常见 LLM
-代码破坏模式，减少无效迭代（与 1.3 契约守卫的"拒绝层"互补，本层是"修复层"）。
-
-```python
-from src.tools.patch_postprocess import sanitize_patch, detect_empty_patch
-
-# 后处理层入口（P1 空壳检测 + P2 导入回填 + P3 契约别名回填）
-patch, labels = sanitize_patch(original_code, llm_patch)
-# labels 取值：["empty_patch"]（P1 命中）/ ["imports_repaired"]（P2 生效）/
-# ["contract_aliases_restored"]（P3 生效），可叠加
-
-# P1 空壳检测（EMPTY_LLM_PATCH 场景可观测标签；EMPTY_PATCH_GUARD 默认 true）
-is_empty = detect_empty_patch(llm_patch)
-```
-
-| 开关（环境变量） | 默认 | 语义 |
-|------------------|------|------|
-| `EMPTY_PATCH_GUARD` | true | P1 空壳补丁检测（仅分类标签，不改代码） |
-| `IMPORT_REPAIR_ENABLE` | false | P2 导入断裂修复（丢失的顶层 import 行自动回填补丁头部） |
-| `CONTRACT_ALIAS_ENABLE` | false | P3 契约符号别名回填（LLM 重命名 Rule_L001→RuleL001 时补 `Rule_L001 = RuleL001`） |
-
-### CostBudget（5.4 任务级预算硬上限）
-
-`src/graph/cost_budget.py`：单任务 LLM token/费用预算封顶（线程局部累计，
---parallel 每任务独立）。
-
-```python
-from src.graph.cost_budget import check_budget, is_budget_exceeded, get_budget_stats
-
-# 超预算时 check_budget 返回 False，BaseAgent._call_llm 前置守卫抛出
-# BudgetExceededError，工作流各节点降级兜底（不再空转烧 token）
-ok = check_budget(consumed_delta_tokens=2000)
-capped = is_budget_exceeded()
-```
-
-| 开关（环境变量） | 默认 | 语义 |
-|------------------|------|------|
-| `COST_BUDGET_ENABLE` | false | 预算守卫总开关 |
-| `COST_BUDGET_TOKENS` | 0（不限） | 单任务 token 硬上限 |
-| `COST_BUDGET_USD` | 0（不生效） | 单任务费用硬上限（美元） |
-| `COST_USD_PER_1K` | 0 | 每 1K token 费用（美元，配合 COST_BUDGET_USD 计价） |
-
-### SemanticCache（5.1 语义级 LLM 缓存）
-
-`src/agents/semantic_cache.py`：嵌入向量相似度匹配缓存（复用
-`embedding_utils` 的 CodeBERT/sentence-transformers/chromadb 后端），
-语义相同但措辞不同的 prompt 可复用缓存响应；嵌入后端缺失时自动降级
-为精确缓存口径（零行为变化）。
-
-```python
-from src.agents.semantic_cache import get_semantic_cache_stats, reset_semantic_index
-
-stats = get_semantic_cache_stats()  # {entries, hits, misses, embed_failures, enabled, threshold}
-```
-
-| 开关（环境变量） | 默认 | 语义 |
-|------------------|------|------|
-| `SEMANTIC_CACHE_ENABLE` | false | 语义级匹配总开关 |
-| `SEMANTIC_CACHE_THRESHOLD` | 0.92 | 余弦相似度阈值（保守：宁可漏命中） |
-| `SEMANTIC_CACHE_MAX_ENTRIES` | 256 | 索引扫描的缓存文件数上限 |
-
-### LLM 文件缓存的多进程 / 多线程一致性（--parallel 与多 worker）
-
-`src/agents/base_agent.py` 的 LLM 文件缓存分两级：进程内 L1（`_lru_store` /
-`_lru_negatives`，内存 dict，仅当前进程可见）+ 文件层（md5 键命名的 JSON
-文件，进程间共享；默认目录 2026-10-05 起迁移至 `~/.cache/aitester/llm`
-（`XDG_CACHE_HOME` 优先），此前为 `src/cache/`，可经 `AITESTER_LLM_CACHE_DIR`
-覆盖）。**多进程（多个 worker 进程共用同一缓存目录）
-一致性策略（2026-09-28 补充说明）**：
-
-- **写侧**：采用"临时文件 + `os.replace` 原子替换"（与 `cross_file` /
-  `graph.nodes` 的原子写同模式）——并发写入的是逐字节相同的 JSON（缓存键
-  即 prompt 材料 md5，内容确定），原子替换消除"读到半截 JSON"的竞态；
-  临时文件名带 `threading.get_ident()` 后缀，跨线程/跨进程不撞名。
-- **读侧**：若读到损坏 / 半写中的文件（极端时序下另一进程 `os.replace`
-  尚未完成的瞬间），`json.load` 抛错被 `except` 兜住，静默降级为重新调用
-  LLM（不阻断主流程），下一轮读到完整文件后恢复命中。
-- **L1 负缓存**：`_lru_negatives` 记录"该键当前无文件"的时间戳（TTL
-  30s），多进程场景下仅本进程可见——其他进程刚写入的缓存对本进程
-  L1 不可见，本进程可能短期内（≤30s TTL）重复发起 LLM 调用而非立即读
-  到他人写入的新文件。这是**可接受的保守退化**（最坏情况是少量重复
-  token 消耗，不影响正确性），无需跨进程共享 L1（引入共享内存 / IPC
-  的复杂度收益比不划算）。
-- **建议**：大规模 `--parallel`（多进程模式）跑基准时，可预期每个
-  worker 进程前 30s 内的 L1 负缓存命中率偏低；如需最大化跨进程命中，
-  让所有 worker 共享同一进程（即 `--parallel` 的多线程模式）即可，
-  L1 为进程级共享 dict。
-
-**15. 多进程缓存协调（命中率观测 + 预热建议，2026-09-28 改进批次）**：
-
-```python
-from src.agents.llm_client import (
-    cleanup_expired_cache_files,
-    ensure_llm_cache_dir,
-    get_cache_hit_rate,
-    record_cache_hit,
-    reset_cache_hit_stats,
-    secure_cache_file,
-)
-
-# 命中率观测（纯读，不改变缓存正确性；线程安全，--parallel 并发调用）
-rate = get_cache_hit_rate()  # 本进程视角命中率（0.0-1.0）；无记录时 None
-record_cache_hit(True)  # 命中/未命中埋点（_call_llm_with_cache 自动调用）
-reset_cache_hit_stats()  # 清零计数（批次边界 / 测试隔离）
-
-# 缓存安全（18. 权限收敛 + TTL 过期清理）
-ensure_llm_cache_dir()  # 新目录 0o700；既有目录不动；返回路径
-secure_cache_file(tmp_path)  # os.chmod(tmp_path, 0o600)；OSError 静默
-removed = cleanup_expired_cache_files()  # 按 mtime 删早于 TTL 的 *.json；返回删除数
-# TTL：AITESTER_LLM_CACHE_TTL_DAYS（默认 7 天；0/负数 = 关闭清理）
-```
-
-- 命中率 < 0.5 时（多进程 `--parallel` 高频重复任务）：各 worker 前 30s
-  负缓存窗口内重复发起 LLM 调用，建议"主进程预热缓存 + 共享目录"（先单
-  进程顺序跑高频任务预热 LLM 文件缓存目录（默认 `~/.cache/aitester/llm`），
-  再多进程跑批）或改用多线程模式
-  （`BENCHMARK_PARALLELISM=N`，L1 进程内共享 dict 跨线程可见）；详见
-  [performance_guide.md](performance_guide.md) "3.5 并发与多进程缓存语义"。
-- `get_workflow_stats()["llm_cache"]["hit_rate"]` 自动附带本进程命中率
-  （无 LLM 调用记录时不附该键，保持既有统计快照逐字节不变）。
-
-**4. 失败知识库最小闭环（落点 B 在线消费 + 衰减，2026-09-28 改进批次）**：
-
-```python
-from src.agents.failure_kb import (
-    kb_debugger_snippet,
-    load_knowledge_base,
-    rank_knowledge_entries,
-)
-
-# 离线积累：python experiments/analyze_failures.py -k failure_knowledge_base.json
-# 在线消费（FAILURE_KB_ENABLE=true 时 _debugger_node 自动注入；默认关）
-snippet = kb_debugger_snippet("syntax")  # 匹配 error_category="syntax" 的同类案例片段
-entries = load_knowledge_base()  # 加载知识库（缺失/损坏/非列表 → []）
-ranked = rank_knowledge_entries(entries, "syntax")  # 频次×时间衰减排序取 top-k
-# 衰减：FAILURE_KB_DECAY_DAYS（默认 30 天）；条目 last_seen 越久权重越低
-# （0.5 ** (age_days / half_life_days)；last_seen 缺失 / 半衰期 ≤0 时权重 1.0）
-```
-
-- `kb_prompt_snippet_applied`（state 观测键）：`_debugger_node` 注入 KB
-  片段时置 `True`；`FAILURE_KB_ENABLE` 默认关时恒 `None`（历史口径不变），
-  供 `analyze_results.py` 统计"哪些任务走了 KB 增强路径"（效果验证 ⑤）。
-
-### CodeAnalyzer
-
-AST 代码分析工具，提供圈复杂度计算与精确的代码替换能力。
-
-```python
-from src.tools.code_analyzer import compute_cyclomatic_complexity, replace_function_code
-
-# 计算圈复杂度（McCabe：1 + if/for/while/except 等决策点；返回 int）
-complexity = compute_cyclomatic_complexity(source_code)
-
-# AST 精确替换函数定义：new_function_code 必须是完整的 def 代码块
-# （整段函数定义，不是仅函数体）；返回 (new_code, success) 元组，
-# 语法非法 / 找不到同名函数时原样返回 (source_code, False)
-new_code, ok = replace_function_code(
-    source_code,
-    "divide",
-    "def divide(a, b):\n    if b == 0:\n        raise ValueError('b must not be zero')\n    return a / b",
-)
-```
-
-**关键函数：**
-
-| 函数 | 参数 | 返回值 | 说明 |
-|------|------|--------|------|
-| `compute_cyclomatic_complexity()` | `source_code: str` | `int` | 计算圈复杂度（McCabe：1 + 决策点计数，`and/or` 组合路径按 `len(values) - 1` 计入） |
-| `replace_function_code()` | `source_code`, `function_name`, `new_function_code`（完整 `def`） | `tuple[str, bool]` | AST 精确替换整个函数定义；语法非法/未找到同名函数 → `(source_code, False)` |
-
----
-
-### PatchApplier
-
-补丁应用工具，支持完整文件和单函数模式（模式由补丁形态自动判定，无需显式传参）。
-
-```python
-from src.tools.patch_applier import apply_patch_to_code
-
-# 无 mode / function_name 参数：完整文件 vs 单函数模式由补丁形态自动判定
-# （补丁以 docstring 开头 / 含行首顶层 import / 多函数补丁 → 完整文件模式；
-#  否则按补丁内首个 def 的函数名，定位原代码同名函数做单函数替换）。
-# 返回 (修复后代码, 是否成功)；失败时原样返回 (original_code, False)。
-
-# 完整文件模式：补丁含行首顶层 import（自动判定）
-fixed_code, ok = apply_patch_to_code(
-    original_code=buggy_code,
-    patch="```python\nimport math\n\n\ndef divide(a, b):\n    if b == 0:\n        raise ValueError('b must not be zero')\n    return a / b\n```",
-)
-
-# 单函数模式：补丁须含完整 def（仅函数体文本会被拒绝 → ok=False）
-fixed_code, ok = apply_patch_to_code(
-    original_code=buggy_code,
-    patch="def divide(a, b):\n    if b == 0:\n        raise ValueError('b must not be zero')\n    return a / b",
-)
-```
-
-**关键函数：**
-
-| 函数 | 参数 | 返回值 | 说明 |
-|------|------|--------|------|
-| `apply_patch_to_code()` | `original_code`, `patch` | `tuple[str, bool]` | 自动判定完整文件/单函数模式（无 `mode`/`function_name` 参数）；补丁文本自动剥离 Markdown 代码围栏（python 标记）与 `python:` 前缀；空补丁/找不到目标函数/完整文件漏原函数 → `(original_code, False)` |
-| `apply_multi_function_patch()` | `code: str`, `patches: list[dict]` | `tuple[str, bool]` | 多函数同时修复：每项 patch 为 `{"function_name": str, "patch": str}`；按函数起始行号从高到低应用（避免行号偏移）。0.2 性能优化：排序 key 复用预切分行（O(n+m)，此前每个 patch 各自 split 一遍代码 O(n·m)） |
-| `safe_apply_patch()` | `code`, `patch` | `tuple[str, bool]` | 应用补丁后做语法校验与危险 API 守卫差集检查，失败自动回滚到原始代码 |
-
----
-
-### CodeContext
-
-基于 AST 的智能代码截取工具（P0：大文件场景 LLM 上下文优化）。
-
-```python
-from src.tools.code_context import extract_focused_code
-
-focused = extract_focused_code(
-    source_code,
-    focus_function="divide",  # 保留 import + 该函数及其直接依赖的辅助函数
-    max_chars=3000,
-)
-```
-
-**关键函数：**
-
-| 函数 | 参数 | 返回值 | 说明 |
-|------|------|--------|------|
-| `extract_focused_code()` | `code`, `focus_function`, `max_chars` | `str` | AST 截取：保留 import + 焦点函数及直接依赖；无法解析或仍超预算时返回原样/兜底结果 |
-
----
-
-### Dependency
-
-第三方依赖检测与缓存 venv 管理（P1：执行隔离）。
-
-```python
-from src.tools.dependency import find_missing_modules, venv_cache_dir, create_venv, install_packages
-
-missing = find_missing_modules("import pandas\ndef f(): ...")
-# → {"pandas"}（标准库与非 import 语句会被过滤）
-
-venv_dir = venv_cache_dir(["pandas"])  # 按依赖组合 + 当前 Python 版本的磁盘缓存目录（4.4 多版本支持）
-venv_dir_310 = venv_cache_dir(["pandas"], python_version="3.10")  # 指定 Python 版本（py3.10 前缀隔离）
-venv_python = create_venv(venv_dir, timeout=120)
-install_packages(venv_python, ["pandas"], timeout=120)
-```
-
-**关键函数：**
-
-| 函数 | 参数 | 返回值 | 说明 |
-|------|------|--------|------|
-| `extract_imported_modules()` | `code: str` | `set[str]` | 提取代码中 import 的顶层模块名 |
-| `is_standard_library()` | `module_name: str` | `bool` | 判断是否标准库 |
-| `find_missing_modules()` | `module_names: set[str]`, `extra_search_files: list[str] \| None = None` | `set[str]` | 传入**模块名集合**（不是源码字符串），返回当前环境不可用的第三方模块 |
-| `suggest_package_names()` | `module_names: set[str]` | `list[str]` | 模块名 → 建议的 pip 包名（处理下划线/别名映射） |
-| `venv_cache_dir()` | `required_packages: list[str]`, `python_version: str \| None = None` | `str` | 4.4 多版本缓存：按依赖组合 + Python 版本计算缓存目录（`python_version` 为 None 时取 `sys.version_info` 前两位；不同版本目录隔离存放，避免交叉复用） |
-| `create_venv()` | `venv_dir: str`, `timeout: int` | `str` | 创建 venv 并返回 python 解释器路径（磁盘缓存复用） |
-| `install_packages()` | `venv_interpreter`, `package_names: list[str]`, `timeout: int = 120` | `tuple[bool, str]` | 在 venv 内 pip install；返回 `(成功, 摘要/错误详情)`，不抛异常（F20 更正：原文档把返回写成 `bool`、参数名写成 `venv_python`） |
-| `get_venv_cache_stats()` | 无 | `dict` | 4.4 依赖缓存命中率统计：进程内累计 hit/create 事件 + 落盘 JSON 跨进程聚合，返回 `hit_rate = hits/(hits+creates)` |
-| `list_venv_cache()` | 无 | `list[dict]` | 4.4 列出缓存目录所有 venv（name / path / size_mb / created_at） |
-| `clear_venv_cache()` | `max_age_days: int \| None`, `max_size_mb: int \| None` | `dict` | 4.4 按年龄 / 大小过滤清理缓存，两者均 None 时清空 |
-| `get_venv_cache_size_mb()` | 无 | `float` | 4.4 改进：统计 venv 缓存目录总大小（MB，保留 2 位小数，目录不存在返回 0.0） |
-| `check_venv_cache_size()` | 无 | `dict` | 4.4 改进：缓存容量监控，返回 `{size_mb, threshold_mb(5120), exceeded, recommendation}`；超过 5GB 阈值时 `exceeded=True` 并给出清理建议（只监控不自动清理） |
-
----
-
-### 数据污染检测（2.1）
-
-`experiments/contamination_check.py`：SWE-bench 数据污染风险应对——比较系统生成补丁与数据集官方黄金补丁的 token 级 Jaccard 相似度，标记高度重叠任务（疑似训练数据污染 / 逐字复现）。
-
-```python
-from experiments.contamination_check import (
-    detect_contamination,
-    patch_overlap_score,
-    render_contamination_section,
-)
-
-# 单对补丁的重叠度（[0.0, 1.0]，空补丁返回 0.0）
-score = patch_overlap_score(generated_patch, golden_patch)
-
-# 批量扫描 benchmark 结果 details（details[].patch + golden_patches 映射或 task_metadata.golden_patch）
-report = detect_contamination(details, golden_patches={"task_1": "..."})
-# → {"checked": n, "high": [...], "medium": [...], "scores": {...}, "contaminated_tasks": [...]}
-
-# Markdown 章节渲染（checked=0 时返回空列表，调用方跳过）
-lines = render_contamination_section(report, baseline="aitester")
-```
-
-**口径：** high ≥ 0.85（疑似逐字复现）/ medium ≥ 0.6（建议人工复核）；token 为小写化标识符/数字切分，仅统计 diff 修改行（丢弃 diff 元数据）。配套：`dataset_loader` 把官方 patch 存入 `task.metadata["golden_patch"]`（不暴露给 LLM），`run_benchmark` 结果行携带 `patch` 字段，`load_dataset` 支持 `swe_rebench` 别名（抗污染基准）。
-
----
-
-### 任务难度分层（2.2）
-
-`experiments/difficulty_stratification.py`：按代码复杂度 / 依赖数量 / 文件规模把任务分层，定位"系统在什么难度区间能力衰减"。
-
-```python
-from experiments.difficulty_stratification import stratify_by_dimension, render_stratification_section
-
-# 按指定维度分层（code_size / dependency_count / complexity_proxy）
-strat = stratify_by_dimension(details, "code_size", instance_codes={...}, test_codes={...})
-# → {"small": {"tasks": n, "passed": n, "success_rate": f}, "medium": {...}, "large": {...}}
-
-# Markdown 章节渲染（无 details 时返回空列表）
-lines = render_stratification_section(details, baseline="aitester")
-```
-
-**分层边界（保守可解释口径）：** code_size small <2KB / medium 2–10KB / large >10KB；dependency_count low 0 / medium 1–2 / high ≥3；complexity_proxy easy 0 / medium 1 / hard ≥2（`iterations × (1 - passed)`，成功任务恒 0）。
-
----
-
-### 收敛失败模式归因（1.2）
-
-`experiments/analyze_results.py:_convergence_failure_modes(details)`：对达到 MAX_ITERATIONS（iterations>=3）仍未修复的任务，区分两类失败模式：
-- **无法定位根因**：诊断文本反复同义（最近 2 轮 diagnosis 相同）且补丁从未写盘成功——说明 Debugger 反复给出相同结论，没有真正识别到问题所在
-- **无法生成有效补丁**：补丁曾写盘成功（patch_applied=True）但测试仍失败，或被安全守卫反复拒绝（patch_applied=False 且有 patch 记录）
-
-```python
-from experiments.analyze_results import _convergence_failure_modes
-
-report = _convergence_failure_modes(details)
-# → {"total_converged_failed": n, "root_cause_stuck": n, "patch_generation_failed": n,
-#    "tasks": [...], "available": bool}
-# available=False 时无达到 MAX_ITERATIONS 的失败任务，渲染层跳过章节
-```
-
-**保守启发，不依赖 LLM**：仅消费 details[].iterations / diagnosis / repair_history / patch 已有字段。
-
----
-
-### 边界用例覆盖（1.3）
-
-`experiments/analyze_results.py:_boundary_case_coverage(details)`：对 details[].generated_test 做 AST 保守判定，识别是否覆盖 None / 空字符串 / 空集合 / 0 / -1 / >= / <= 等边界条件。
-
-```python
-from experiments.analyze_results import _boundary_case_coverage
-
-report = _boundary_case_coverage(details)
-# → {"available": bool, "observed_tasks": n, "boundary_types": {"none": n, ...},
-#    "tasks_covering_any_boundary": n, "coverage_rate": f}
-# 旧 JSON 无 generated_test 时 available=False，渲染层跳过章节
-```
-
----
-
-### 变异得分（1.3）
-
-`experiments/analyze_results.py:_mutation_score_metrics(details)`：收集 details[].mutation_score（外部变异测试器如 mutmut 产出，0.0–1.0），汇总平均 / 高（>=0.7）/ 低（<0.4）分布。无该字段时 available=False，渲染层跳过章节，不阻断主流程。
-
-```python
-from experiments.analyze_results import _mutation_score_metrics
-
-report = _mutation_score_metrics(details)
-# → {"available": bool, "observed_tasks": n, "avg_mutation_score": f,
-#    "high_score_tasks": n, "low_score_tasks": n}
-```
-
----
-
-### 变异检出率（R5，2026-10-05 批次）
-
-`experiments/mutation_detection.py`：SWE-Mutation 2026 口径的测试有效性客观指标——生成的测试在 **gold 修复代码**上必须全绿（先证测试本身有效），再看其 AST 变异体变红的比例。与 1.3 变异得分互补：后者对**缺陷代码**做变异（生成器视角的故障覆盖），本指标对 **gold 修复代码**做变异（测试有效性的独立裁决）。`run_benchmark.py` 接线（与 1.2 变异得分共用 `ENABLE_MUTATION_SCORING` 门控与挂点），结果行新增三个字段。
-
-```python
-from experiments.mutation_detection import mutation_detection_rate
-
-result = mutation_detection_rate(
-    fixed_code=gold_fixed_code,
-    test_code=generated_test,
-    module_name="calculator",
-    n_mutants=20,
-)
-# → {"rate": 0.65, "mutants_killed": 13, "mutants_total": 20, "skipped": False, ...}
-# 缺 gold fixed 材料 / 测试在 fixed 上不绿 / 无变异体可生成 → rate=None + skipped=True
-# （保守不误报 0，统计层按不可测跳过）
-```
-
-| 结果字段 | 类型 | 说明 |
-|---------|------|------|
-| `mutation_detection_rate` | `float \| None` | 变异检出率（跳过条件命中时 None） |
-| `mutants_killed` | `int` | 被检出的变异体数（跳过时 0 占位，与函数返回同构） |
-| `mutants_total` | `int` | 评估的变异体总数（跳过时 0 占位） |
-
-**保守口径（纯子进程、零 LLM）**：变异体检出 = pytest rc != 0 且非收集错误（rc>=2 / "no tests were run" 等套件未跑起来的情况不算检出）；单变异体超时 / IO 异常按"存活"计（不夸大检出率）；变异体多于 `n_mutants` 时按 `seed` 随机采样（跨运行可复现）。
-
----
-
-### 统计检验报告（R2，2026-10-05 批次）
-
-`experiments/statistical_analysis.py`：McNemar 配对检验（按 task_id 配对的 2×2 不一致对，chi2 连续性校正）/ 独立两组二项检验 / BH-FDR 多重比较校正结果落盘 `statistical_report.md`（此前仅打印控制台）；新增两个非参数统计函数与批次白名单 CLI：
-
-```python
-from experiments.statistical_analysis import bootstrap_paired_diff_ci, cliffs_delta
-
-# 配对差值均值的百分位法 bootstrap 95% CI（默认 10000 次重采样、seed=42，
-# 纯 Python random.Random(seed) 固定种子——同参数多次调用逐位可复现，可审计）
-mean_diff, ci_low, ci_high, n_pairs = bootstrap_paired_diff_ci(aitester_results, baseline_results)
-
-# 配对差值符号版 Cliff's delta（δ = (n⁺ − n⁻) / n_pairs，二值配对场景比
-# Cohen's d 更稳健——d 在零方差差值时退化为 ±inf）；与 d 并列输出
-delta, n_pairs = cliffs_delta(aitester_results, baseline_results)
-# 效应量分级（interpret_cliffs_delta，Romano et al. 2006 阈值）：
-# |δ| < 0.147 negligible / < 0.33 small / < 0.474 medium / ≥ 0.474 large
-```
+# AITester API 参考
+
+最后更新：2026-10-26 · English: [api_reference.en.md](api_reference.en.md)
+
+面向开发者的模块、CLI、配置、异常与 LLM 调用契约速查。架构背景见
+[algorithm_design.md](algorithm_design.md)；安全边界见 [threat_model.md](threat_model.md)。
+
+## 1. 模块地图
+
+| 路径 | 职责 | 主要入口 |
+|------|------|----------|
+| `src/agents/` | 智能体与错误分类 | `PlannerAgent`、`GeneratorAgent`、`ExecutorAgent`、`DebuggerAgent`、`FaultLocalizerAgent`、`ErrorClassifier` |
+| `src/graph/` | 工作流编排、状态机、事件与预算 | `WorkflowGraph`、节点函数、`EventBus`、`CostBudget` |
+| `src/tools/` | 静态分析、补丁与回滚、上下文构建 | `CodeAnalyzer`、`PatchApplier`、`CodeContext`、快照回滚 |
+| `src/specs/` | SpecIR 规约中间表示与 SMT 见证 | 规约编译、oracle 生成 |
+| `src/api/` | Provider 池、熔断、健康检查 | `APIManager`、`APIManagerConfig` |
+| `src/datasets/` | 数据集加载与合成任务生成 | `DatasetLoader`、`SyntheticDataset` |
+| `src/observability/` | 结构化追踪与遥测 | `TraceSession`、`AgentTelemetry` |
+| `src/measurement/` | 政策无关度量（MDO）、恢复延迟与检索质量 | `compute_mdo`、`compute_recovery_latency`、`retrieval_relevance` |
+| `src/budget/` | token 与费用记账 | `CostBudget`、`BudgetExceededError` |
+| `src/reports/` | 缺陷报告生成 | `ErrorReport` |
+| `src/cli/` | 命令行实现 | `src/cli/app.py`（`main.py` 为薄封装） |
+| `src/utils/` | 异常、日志脱敏、通用工具 | `AITesterError` 体系、`mask_sensitive_info` |
+| `config.py` | 环境变量与集中配置 | `LLM_CONFIGS`、`MODEL_NAME` |
+
+工作流：Planner → Generator → Executor → Debugger → PatchApplier，编排层是可消融容器
+（ADR-0016），不是主断言。M1 指标（detection / repair / false_fix）不在
+`src/measurement/`：实现在 `experiments/_m1_metrics.py`，由 `experiments/run_benchmark.py`
+消费（需要 gold 材料）。
+
+## 2. CLI 与入口
 
 ```bash
-# --batches 批次白名单：只纳入指定结果文件（相对 --results-dir 的逗号分隔路径；
-# 未提供时保持历史"递归 glob 全目录"行为不变）
-python experiments/statistical_analysis.py \
-    --results-dir experiments/results \
-    --batches main_batch/benchmark_synthetic_20261006_140906.json,main_batch/benchmark_synthetic_20261006_151907.json
+python3 main.py --help
+python3 main.py run examples/calculator.py --func divide
+python3 main.py run examples/calculator.py --json
+python3 main.py doctor
 ```
 
-- 报告头部新增**"数据来源"审计章节**：列出实际纳入的批次文件与条目数，读者可核对 p 值背后的样本构成；
-- 配套：`experiments/analyze_results.py` 聚合 M1 四指标（`detection_rate` / `repair_rate` / `false_fix_rate` / `test_error_rate`；None 不计入分母，旧 JSON 无该字段时自动跳过）。
-- 配套（AK1，2026-10-06）：`experiments/repair_ceiling_analysis.py`——R-P0-2 工件的纯离线归因分析：repair=0 修复漏斗（修复循环 → patch 产出 → patch_plausible → patch_correct，附 patch_evidence_level / stop_reason / error_category 分布与 fl_at_k、mutation 观测覆盖率）+ 21 行 `detection=None` 双界敏感性（None→0/1 填充重算 McNemar）。与 pooled 报告同参口径（`--batches` 白名单 + `--pool-seeds`），产出 `（工件已清除）`。
+| 命令 | 用途 | 关键选项 |
+|------|------|----------|
+| `run` | 运行测试生成与修复任务 | `--func` / `-f`、`--max-iterations`、`--coverage-threshold`、`--parallel` / `-p`、`--timeout` / `-t`、`--json`、`--verbose` / `-v`、`--dump-trace-on-failure` |
+| `list-examples` | 列出 `examples/` 下的示例文件 | — |
+| `check-dataset` | 校验数据集加载质量 | `--subset` / `-s`、`--limit` / `-n` |
+| `clean-venv-cache` | 清理 Executor 的 venv 依赖缓存 | `--max-age-days`、`--max-size-mb`、`--list-only` / `-l` |
+| `doctor` | 零 LLM 自检（环境 + 功能探针矩阵） | `--json`、`--groups`、`--timeout`、`--strict` |
 
----
+`doctor` 退出码：0 通过；1 失败（或 `--strict` 下 warn/skip/矩阵不可用）；2 参数用法错误
+（`--groups` 为空或未知分组）。功能矩阵依赖源码检出的 `scripts/tools/e2e_probe.py`；
+wheel 安装面标记 `unavailable`（不计失败），环境检查仍有效。
 
-### 断言强度 AST 增强（1.3）
+`doctor --json` 的三条出口（成功 / 用法错误 / doctor 自身异常）输出**同一键集合**：
+`schema`、`generated_at`、`cwd`、`command`、`python`、`checks`、`check_summary`、
+`matrix`、`conclusion`、`ok`、`strict`、`exit_code`、`error`。`error` 在非异常路径为
+`null`；异常路径 `matrix.status` 记 `internal`，未采集的 `checks` / `check_summary` /
+矩阵聚合记 `null`（未知 ≠ 全 0），消费方无需按「键是否存在」分支。
 
-`experiments/analyze_results.py:_assertion_strength_proxy(details)`：在原有 `assert` 行数统计基础上新增 AST 口径（`ast.parse` + `ast.Assert` 节点计数），输出 `ast_avg_assertions` 与 `ast_parse_failed_tasks`（解析失败任务清单，可交叉异味检测）。旧 JSON 无 generated_test 时整个 proxy available=False。
+CLI 退出码统一口径：0 通过；1 运行期失败（`run` 存在失败任务——覆盖率未达标只作
+逐任务判定与摘要披露、不计入失败；`check-dataset` 加载异常、
+0 个任务、请求的子集未生效或全量质量报告发现加载问题、`clean-venv-cache` 有条目删除失败）；
+2 用法错误（未知数据集名、
+`--limit` 为负、`--subset` 用于不支持子集的数据集或未知子集名、`run` 的 `--func` 或
+`check-dataset` 的 `--subset` 为显式空值（空串 / 纯空白）、`--max-age-days` /
+`--max-size-mb` 为负、`run` 无有效目标或数值选项非法，含 `--coverage-threshold=nan`）。
+显式空值不等于「未提供」：脚本里 `--func "$FUNC"` / `--subset "$SUBSET"` 变量未展开时
+传入的是 `""`，按未提供处理会静默放宽到全部函数（按函数数消耗 LLM）或全量数据；
+省略选项才是「全部」口径。
+`check-dataset` 只接受 `get_available_datasets()` 列出的名称（大小写与连字符不敏感）；
+库函数 `load_dataset` 对未知名称仍按契约降级为内置示例——诊断命令不适用该宽容口径，
+否则「没校验到目标数据集」会被报成通过。`clean-venv-cache` 的 `0` 过滤器是「全部过期」
+的显式语义（与两个过滤条件缺省等价），只有负数被拒。
 
-```python
-from experiments.analyze_results import _assertion_strength_proxy
+`run` 的 TARGET_FILES 只接受普通文件：显式目录 / 特殊文件与「通配符只匹配到目录」按
+用法错误 rc=2 拒绝且不启动任务（不再伪装成任务失败）；同一文件经 glob 与显式路径重复
+命中时按绝对路径去重、只跑一次，避免重复消耗 LLM。
 
-report = _assertion_strength_proxy(details)
-# → {"available": bool, "observed_tasks": n, "avg_assertions_per_task": f,
-#    "min_assertions": n, "max_assertions": n, "tasks_with_zero_assertions": n,
-#    "ast_avg_assertions": f | None, "ast_parse_failed_tasks": [...]}
-```
+`check-dataset --subset` 只在加载器真正支持子集时生效：`swe_bench` 系列把子集名映射为
+`swe_bench_<subset>_instances.jsonl`，`ult` 支持 `lite` / `full`（官方子集文件）；其他
+数据集（内置示例、QuixBugs、BugsInPy、Defects4J、synthetic）没有子集概念，传入
+`--subset` 会按用法错误（退出码 2）拒绝并列出支持子集的数据集。`ult` 的子集文件缺失、
+子集名未知或数据源为显式文件时，请求的子集不会被静默替换——命令以退出码 1 披露
+「未生效」原因；去掉 `--subset` 才会校验回退后的数据。
 
----
+`clean-venv-cache --list-only` 与过滤条件组合时按实际删除口径预演（`[将删除]` / `[保留]`），
+预览与真实清理复用同一判定，名单不会各算一套；删除失败（目录仍存在，如权限不足）会逐项
+报告并以退出码 1 结束，不会把失败计为已删除，也不会谎报释放空间。
 
-### 执行反馈轨迹（3.2）
+`check-dataset` 的「全量质量检查通过」只在加载器实现 `quality_report` 时出现；内置示例、
+QuixBugs、ULT 等数据集没有该能力，命令会显式打印「未提供 quality_report，跳过全量校验」；
+`tasks_missing_source` 缺失时同样披露跳过。能力缺失（跳过校验）不是失败，退出码仍为 0；
+但质量报告非空——即真的查出了加载问题——会逐项披露并以退出码 1 结束，与「加载异常」同码、
+文案可区分（`加载质量校验未通过：N 个任务存在加载问题`）；`tasks_missing_source` 非空属
+信息性披露（源码待导出），单独不改变退出码。
 
-`state.execution_trace`（list，默认 `[]`）+ `nodes._record_execution_trace`：每次 Executor 执行追加一条记录到 `state["execution_trace"]`，纯观测层默认常开，不影响修复路由。
+`run` 逐任务输出测试是否通过、覆盖率判定（结果键 `coverage_ok`）、覆盖率数值与迭代
+次数；非 `--json` 模式的批次摘要汇总覆盖率达标情况（达标 / 未达标 / 不可测三态），
+`--json` 输出逐任务结构化结果（含 `coverage_ok`）。任务崩溃（如源文件不是合法 UTF-8、
+工作流抛异常）同样产出一行结果：`--json` 下与成功结果**键集合逐键相同**（`coverage` /
+`coverage_ok` / `iterations` / `diagnosis` / `error_category` / 观测统计等未知判定显式
+为 `null`，另含 `error` 描述）；非 `--json` 模式下原因写 stderr、stdout 仍只承载结果
+表格（迭代列显示 `N/A`，不用 0 冒充未测）。`--coverage-threshold` 只影响覆盖率
+判定与摘要，**不改变退出码**（退出码只反映测试通过/失败）。detection / repair /
+false_fix 属于基准评估面，由 `experiments/_m1_metrics.py` 计算、
+`experiments/run_benchmark.py` 消费（需要 gold 材料），CLI 不计算也不输出。
 
-```python
-from src.graph.state import AITesterState, create_initial_state
-from src.graph.nodes import _record_execution_trace
+安装为包后也可用 `aitester` 控制台入口（见 `pyproject.toml`）。
 
-state = create_initial_state(
-    task_uuid="t1", target_file="/p.py", target_code="def f(): pass", target_function=None, max_iterations=3
-)
-# 工作流执行后 state["execution_trace"] 形如：
-[
-    {
-        "iteration": 0,
-        "passed": False,
-        "coverage": 40.0,
-        "coverage_delta": None,  # 首轮无前一轮
-        "elapsed_seconds": 2.0,
-        "reward_signals": {  # 保守线性归一，仅记录观测，不参与路由
-            "correctness": 0.0,  # 1.0 if passed else 0.0
-            "efficiency": 0.93,  # 1 - elapsed / EXECUTION_TIMEOUT
-            "simplicity": 0.97,  # 1 - elapsed / (EXECUTION_TIMEOUT * 2)
-        },
-    },
-    {
-        "iteration": 1,
-        "passed": True,
-        "coverage": 85.0,
-        "coverage_delta": 45.0,  # 85 - 40
-        "elapsed_seconds": 3.0,
-        "reward_signals": {"correctness": 1.0, "efficiency": 0.9, "simplicity": 0.95},
-    },
-]
-```
+## 3. 配置
 
-`run_benchmark.py` 结果行带 `execution_trace`（失败分支 `None` 兜底保持键集合同构）；`analyze_results.py` 新增"执行反馈轨迹汇总（3.2）"章节：统计观测任务数 / 总执行次数 / 平均轮数 / 首轮即通过率 / 末轮 correctness & efficiency 均值 / 首末轮覆盖率趋势（delta）。旧 JSON 无该字段时章节跳过。
-
-**用途**：为未来执行反馈驱动的微调（如 BoostAPR 类方法）备料——每次 benchmark 自动把"通过/失败、覆盖率变化、耗时、多维奖励信号"落进结果 JSON，无需额外执行轨迹采集脚本。
-
----
-
-### 结构化追踪层（4.1）
-
-`src/observability/trace.py`：JSONL 追加式记录每个工作流任务的"任务级"事件（节点输入/输出摘要、token 消耗、墙钟耗时、路由决策），供实验分析直接消费。默认关闭（`AITESTER_TRACE_DIR` 未设时全 no-op，零性能税）；显式设置后启用。
-
-```python
-from src.observability.trace import TraceSession, trace_enabled
-
-if trace_enabled():
-    session = TraceSession(task_id, trace_dir, config_flags)
-    session.record_node("planner", output_summary=..., decision="plan_complete")
-    session.record_task_end(passed=True)
-```
-
-**关键特性：** 线程安全（`--parallel` 多工作线程并发追加同一 JSONL，单条 append+flush 在锁内）；所有写入文本统一过 `mask_sensitive_info`（与日志脱敏同源）；写盘失败不阻断主流程（仅 warning）。
-
-**内存快照缓冲（默认启用、不落盘）：** 即便未设 `AITESTER_TRACE_DIR`（文件追踪全 no-op），`TraceSession` 仍把每次任务的"最小化节点快照"（node 决策 / token / 耗时）累积进进程级环形缓冲（容量 64，`TRACE_MEMORY_BUFFER_ENABLE=false` 可完全关闭），供 CLI `--dump-trace-on-failure` 在任务失败时经 `dump_recent_to(target_dir)` 写成临时 JSONL（`./tmp_trace/<ts>_failed_trace.jsonl`）供诊断；无快照可写 / 写盘失败时静默跳过（诊断出口，不影响主流程）。默认行为不变（不落盘、零 I/O）。
-
----
-
-### TokenUsage
-
-线程局部 LLM token 用量统计（P0：效率指标）。
-
-```python
-from src.graph import token_usage
-
-token_usage.record_usage(1200, 300, model="deepseek-flash")
-usage = token_usage.get_usage()
-print(usage.total_tokens)  # 1500
-token_usage.reset()  # F20 更正：reset 是模块级函数；TokenUsage 实例没有 reset()
-```
-
-**关键函数：**
-
-| 函数 | 参数 | 返回值 | 说明 |
-|------|------|--------|------|
-| `record_usage()` | `input_tokens`, `output_tokens`, `model` | `None` | 记入当前线程统计（按模型分桶） |
-| `get_usage()` | - | `TokenUsage` | 当前线程累计（含 total_tokens / by_model，`as_dict()` 可序列化） |
-| `reset()` | - | `TokenUsage` | 重置当前线程统计，返回重置前快照 |
-
----
-
-## 工作流编排
-
-### WorkflowGraph
-
-LangGraph 工作流图，协调多智能体协作流程。
-
-```python
-from src.graph.workflow import build_workflow
-from src.graph.state import AITesterState
-
-# 构建并编译工作流图。planner / debugger 可显式覆盖 config 开关
-# （消融基线如 plain_llm 可传 False）；None（默认）读取 config.ENABLE_PLANNER / ENABLE_DEBUGGER
-graph = build_workflow()
-# 消融示例：纯 LLM 基线（无规划、无修复循环）
-# graph = build_workflow(planner=False, debugger=False)
-
-# 运行工作流：invoke 接收初始状态字典，返回最终状态
-state: AITesterState = {
-    "target_code": "def divide(a, b): return a - b",
-    "target_file": "/path/to/calculator.py",
-    "target_function": "divide",
-    "max_iterations": 3,
-}
-final_state = graph.invoke(state)
-```
-
-**工作流节点**（节点 ID 在 `src/graph/workflow.py` 经 `add_node` 注册，节点函数实现见 `src/graph/nodes.py`，均为下划线前缀的 `_<id>_node`）：
-
-| 节点 ID | 功能 | 是否调用 LLM |
-|---------|------|-------------|
-| `planner` | 生成测试计划 | ✅ |
-| `generator` | 生成测试代码 | ✅ |
-| `executor` | 执行测试 | ❌ |
-| `debugger` | 分层诊断 + 生成修复补丁（错误分类在节点内联调用 `error_classifier.classify`，无独立分类节点；修复引擎批次 I 起节点内还内联 RGFL 式 LLM 推理定位〔`FAULT_LOCALIZER_ENABLE` 默认开〕——谱系 Top-k 佐证 + 结构化定位，结果写 `state["llm_localization"]`，定位段落与谱系段落并列注入 prompt） | ✅ |
-| `patch_applier` | 应用补丁（单文件 `safe_apply_patch`；`CROSS_FILE_ENABLE=true` 时走跨文件多文件分支） | ❌ |
-| `cross_file_analyzer` | 3.5 跨文件依赖分析（仅 `CROSS_FILE_ENABLE=true` 时注册，插在 `executor → debugger` 之间） | ❌ |
-
-**条件路由：**
-- `_should_debug()`：根据测试结果与迭代轮次决定是否继续进入调试循环（循环终止逻辑）
-- 最大迭代次数限制：防止无限循环
-
-**RAG 降级守卫（0.2 新增）**：`src/graph/rag.py` 的 `rag_guarded` 统一了 `nodes.py` 中 4 处同构的「ENABLE_RAG 前置判断 + 取检索器单例 + try/except 降级」模板（generator 检索 / executor 入库 / debugger 检索 / debugger 入库）。采用依赖注入式设计（`enabled` / `module_available` / `retriever_cls` / `get_retriever` 作为参数传入，而非模块内直读全局），保持历史 patch 路径（`src.graph.nodes.ENABLE_RAG` / `get_rag_retriever` 等）继续有效。未来调整 RAG 降级策略（失败计数、熔断等）只改 `rag_guarded` 一处，4 个调用点不动。
-
----
-
-## 数据集加载
-
-### DatasetLoader
-
-数据集加载基类。
-
-```python
-from src.datasets import load_dataset
-
-# 加载内置示例数据集
-dataset = load_dataset("examples")
-
-# 加载合成数据集
-from src.datasets import SyntheticDataset
-
-dataset = SyntheticDataset(task_count=50, seed=42)
-# AA（2026-10-06）：同池模板重复上限（opt-in，默认 None=历史口径；>=1 时同
-# (difficulty, pattern) 至多出现 N 次，防单 pattern 分布塌缩——见 DATA_CARD §2）
-dataset = SyntheticDataset(task_count=50, seed=42, max_pattern_repeat=2)
-
-# 加载 SWE-bench 数据集
-from src.datasets import SWEBenchDataset
-
-dataset = SWEBenchDataset(subset="lite")
-
-# 2.1 加载 SWE-rebench 抗污染基准（与 SWE-bench 字段同构，经 data_dir 指向 rebench 数据目录）
-dataset = load_dataset("swe_rebench", data_dir="/path/to/rebench_data")
-
-# 2.1 加载 SWE-bench Pro 抗污染基准（强 copyleft 设计，字段同构，经 data_dir 指向 Pro 数据目录）
-dataset = load_dataset("swe_bench_pro", data_dir="/path/to/pro_data")
-```
-
-**支持的数据集名称**（`load_dataset` 的 `dataset_map`，含别名）：
-`swe_bench` / `swebench` / `swe_rebench` / `swebench_rebench` / `swe_bench_pro` / `swebench_pro` / `defects4j_python` / `d4j_py` / `in_memory` / `examples` / `synthetic` / `synth`。未列出的名称降级为 `InMemoryDataset`（graceful degradation）。
-
-**数据集接口：**
-
-```python
-# 遍历任务（F20 更正：BenchmarkTask 是 dataclass，用属性访问，不能当 dict 下标）
-for task in dataset:
-    task_id = task.task_id
-    target_code = task.instance_code
-    gold_tests = task.test_code
-    # ...
-
-# 按 task_id 查找（O(1) 查表，2026-09-26 全面审查：原 O(n) 线性扫描在
-# SWE-bench full 2294 任务 × benchmark 循环逐查场景下为 O(n²)，现经
-# _task_index 索引 + 长度标记惰性失效判断降为 O(1)；add_task 追加后
-# 下次 get_task_by_id 自动重建索引）
-task = dataset.get_task_by_id("sqlfluff__sqlfluff-1234")
-```
-
-**基类能力（2026-09-26 全面审查补强）：**
-
-| 方法 | 说明 |
-|------|------|
-| `add_task(task)` | 向数据集追加任务（基类实现，原 `InMemoryDataset` 覆写已并入）；追加后 `_tasks` 长度变化触发 `get_task_by_id` 惰性重建索引（O(n) 一次，后续 O(1)） |
-| `get_task_by_id(task_id)` | O(1) 查表（`_task_index` 字典 + `_index_size` 长度标记失效判断）；加载完成 / `add_task` 追加后自动重建 |
-
----
-
-## 配置管理
-
-### Config
-
-全局配置管理，从环境变量和配置文件读取。
-
-```python
-from config import LLM_CONFIGS, MODEL_NAME
-
-print(len(LLM_CONFIGS))  # 已加载的 LLM Provider 数量
-print(MODEL_NAME)  # 默认模型（LLM_1）名称
-```
-
-**配置项清单：**
+配置来源：`.env.local`（LLM 凭证，gitignore）、`.env.example`（模板，入库）、
+`config.local.example`（LLM 模板，入库）。`LLM_N_*` 支持多个 provider（N 从 1 起）。
 
 | 配置项 | 类型 | 默认值 | 说明 |
 |--------|------|--------|------|
-| `LLM_N_API_KEY` | str | - | 第 N 个 LLM 的 API 密钥（写在 `.env.local`） |
-| `LLM_N_BASE_URL` | str | - | 第 N 个 LLM 的 API 基础 URL |
-| `LLM_N_MODEL_NAME` | str | - | 第 N 个 LLM 的模型名称 |
-| `LLM_N_COST_WEIGHT` | float | 0.0（=无信息） | 3.4 成本感知路由的相对成本倍数（0.1~1000，未配置 0.0 时 APIManager 回退 1.0 基准） |
+| `LLM_N_API_KEY` / `LLM_N_BASE_URL` / `LLM_N_MODEL_NAME` | str | — | 第 N 个 OpenAI 兼容端点 |
+| `LLM_N_COST_WEIGHT` | float | 0.0 | 成本感知路由的权重（0.0 = 无信息） |
 | `MAX_ITERATIONS` | int | 3 | 最大修复迭代次数 |
-| `COVERAGE_THRESHOLD` | float | 80.0 | 覆盖率阈值 |
+| `COVERAGE_THRESHOLD` | float | 80.0 | 覆盖率阈值（%） |
 | `EXECUTION_TIMEOUT` | int | 30 | pytest 执行超时（秒） |
-| `LLM_TIMEOUT` | int | 60 | LLM 调用超时（秒） |
-| `LLM_RETRY_WAIT` | int | 30 | LLM 重试等待（秒） |
-| `ENABLE_PLANNER` | bool | true | 启用 Planner |
-| `ENABLE_DEBUGGER` | bool | true | 启用 Debugger |
-| `ENABLE_RAG` | bool | false | 启用 RAG |
-| `CROSS_FILE_ENABLE` | bool | false | 3.5 跨文件修复：启用 `cross_file_analyzer` 节点（插在 executor→debugger 之间）+ 多文件补丁分支 |
-| `CROSS_FILE_MAX_MODULES` | int | 5 | 3.5 跨文件修复计划最大模块数（防 token 爆炸） |
-| `CROSS_FILE_BIDIRECTIONAL` | bool | false | 2.2 跨文件双向依赖图：`CROSS_FILE_ENABLE=true` 基础上额外收集"其他模块→entry"反向依赖边（被调用方视角），使修复计划同步更新调用方模块；需配合 `CROSS_FILE_ENABLE=true` 生效，独立开关保证两级保守 |
-| `ADVERSARIAL_DEBUGGING_ENABLE` | bool | false | 3.1 对抗性推理：Debugger 生成补丁前注入 2-3 个"击穿当前实现"的对抗性意图假设（AdverIntent-Agent 式）+ 生成针对性测试，生成后独立批评者评估，被击穿则重生成一次补丁；纯观测层，启用会增加 2-4 次 LLM 调用/修复轮 |
-| `API_CIRCUIT_BACKOFF` | bool | true | 4.4 API 熔断器指数退避开关：`mark_failure` 冷却期改按 `base * 2^open_count` 指数退避（封顶 `half_open_probe_penalty_cap_seconds`），彻底死掉的 provider 冷却期单调增长；设 false 回退 4.2 固定冷却期口径（便于对比实验） |
-| `API_PROMETHEUS_EXPORT` | bool | false | 4.4 Prometheus 指标导出开关：启用后 `APIManager.to_prometheus_text()` 输出 7 类指标（health / circuit_state / open_remaining_s / open_count / probe_success_rate / success_rate / avg_response_ms）供监控抓取；纯旁路不影响既有路由行为 |
-| `ASSERTION_AUGMENT_ENABLE` | bool | false | 3.4 断言增强：AST 提取被测代码现有 assert 注入 prompt |
-| `ENABLE_MULTI_CANDIDATE_PATCH` | bool | false | 3.1 多候选补丁生成与静态/执行验证筛选（默认关，无候选回退单补丁）；`reproduce.sh` 自 **W7（2026-10-05）起同样默认关闭**（A/B 实测成功率 −2pp 且 token +256%），需对照时显式 `--multi-candidate` 开启；`--no-multi-candidate` 仅为兼容保留（空操作） |
-| `AITESTER_TRACE_DIR` | str | 未设（no-op） | 4.1 结构化 JSONL 追踪层输出目录（未设时追踪层 no-op，不影响运行）；`reproduce.sh` 默认启用（`（工件已清除）`） |
-| `BENCHMARK_PARALLELISM` | int | 0 | 并行度（0=串行） |
-| `LLM_JSON_MODE` | str | "on" | ADR-0031（2026-10-14，DeepSeek 官方 JSON Output）：七处 JSON 契约调用点（Planner 测试计划 / Debugger 补丁·严格重试·批评者·击穿用例·缺陷分类 / FaultLocalizer 定位）绑定 `response_format={"type":"json_object"}`（保证响应为合法 JSON 字符串）；`off` 恢复历史逐字节口径（旧批次复现）；已登记 env_budget 与 `_env_snapshot_keys`（批次 provenance 可审计） |
-| `LLM_THINKING_MODE` | str | "disabled" | AD1（2026-10-06）输出成本控制：DeepSeek V4 系思考链默认 enabled 且计入输出计费，本项目默认 disabled；`enabled` 恢复思考模式（质量敏感实验显式开启） |
-| `LLM_REASONING_EFFORT` | str | 未设 | AD1：思考强度（`none`/`low`/`high`/`max`；`none` 亦关闭思考；官方默认 high）；未设时不发该字段 |
-| `LLM_MAX_OUTPUT_TOKENS` | int | 未设 | AD1：输出硬上限 1..393216（官方：不设时非思考 8K/思考 64K）；设小值可截断长响应；越界/非整数忽略并告警 |
-| `TEMPERATURE` | float | 0.2 | LLM 采样温度；R11（2026-10-05）确定性采样用法：`run_benchmark(deterministic=True)` 强制 TEMPERATURE=0.0（三处级联——`os.environ` + `config` + `base_agent` 命名空间，后二者 import 时求值仅改 env 不生效），供主批次复现实验使用 |
-| `MODEL_NAME` / `OPENAI_API_KEY` / `OPENAI_BASE_URL` | str | - | 仅派生值（取自 LLM_1，向后兼容），**不是配置输入** |
-| `EXECUTOR_USE_DOCKER` | bool | false | 4.3 Docker 隔离执行（经 docker CLI 在容器内跑 pytest；需本机安装 docker 且镜像已构建，不可用时返回 `docker_unavailable` 诊断不降级本地） |
-| `EXECUTOR_DOCKER_IMAGE` | str | `aitester:latest` | 4.3 Docker 执行使用的镜像名（对应仓库根 Dockerfile） |
-| `EXECUTOR_USE_VENV` | bool | true | venv 沙箱隔离执行（按依赖组合磁盘缓存，不污染系统环境；**R10 起默认 true**，设 false 回退宿主环境直跑，仅调试用） |
-| `EXECUTOR_AUTO_INSTALL_DEPS` | bool | false | venv 内自动 pip install 缺失依赖 |
-| `AITESTER_VENV_CACHE_DIR` | str | `~/.cache/aitester/venvs` | 4.4 venv 缓存目录覆盖（容器/CI 隔离场景指向挂载卷；配合 `clean-venv-cache` 子命令清理） |
-| `AITESTER_LLM_CACHE_DIR` | str | `~/.cache/aitester/llm` | LLM 文件缓存目录覆盖（2026-10-05 起默认用户缓存目录，`XDG_CACHE_HOME` 优先解析；此前默认 `src/cache/`；`src/graph/rag.py` 兜底检索路径同口径收敛为引用同一常量，消除路径双写） |
-| `AITESTER_PROFILE` | str | 未设（不注入） | R15 开关预设（非布尔；2026-10-06 AA 批次起共四档）：`safe` 安全敏感档（KERNEL_SANDBOX / PATCH_SNAPSHOT_ROLLBACK / PATCH_ROLLBACK_FAIL_CLOSED / INJECTION_GUARD / ROGUE_MONITOR / FLAKY_CHECK 全开）/ `scientific` 科研评测档（SPEC_IR / SPEC_IR_DSL / SPEC_SMT / SPEC_ORACLE_EXEC / ENABLE_MUTATION_SCORING / ORACLE_VALIDATE / PATCH_SNAPSHOT_ROLLBACK 全开，配合 `run_benchmark(deterministic=True)`）/ `logic` 逻辑链全开档（scientific 全量 + PATCH_ROLLBACK_FAIL_CLOSED + LOGIC_SPEC_STRICT / DETERMINISTIC_GUARD / BRANCH_COVERAGE_INJECT / ROUTE_STRUCTURED 全开 + `DETECTION_FIRST_ENABLE`〔AA 2026-10-06 补齐——ADR-0015 检出优先协议，首轮全绿不计成功〕）/ `fast` 历史默认档（全部默认关，等价不设）；经 `os.environ.setdefault` 注入，显式设置的单开关不被覆盖；未识别值记 WARNING 并忽略 |
-| `SPEC_ORACLE_EXEC_ENABLE` | bool | false | R1c 规约 oracle 执行注入：`_append_spec_oracle_to_test` 把 `compile_spec_oracle` 编译产物（签名感知绑定）追加到 LLM 生成测试尾部并列执行；state 新增 `spec_oracle_injected` 观测字段；默认关时历史口径零变化 |
-| `DETECTION_SPEC_MODE` | str | "off" | P0-A-2 规格优先模式（`src/tools/spec_first.py`）：off=历史口径（目标代码照常注入）/ replace=Generator prompt 的「目标代码」块替换为规约文档（签名 + NL + SpecExpr + 纪律，不暴露实现）；state 新增 `spec_replace_applied` 三态可审计观测字段（off/minimal→None，replace+材料→"attempted_replaced"，replace+无材料→"attempted_fallback"），与 R1c 确定性 oracle 执行注入（`spec_oracle_injected`）解耦；默认 off 历史口径零变化 |
-| `RAG_RETRIEVAL_RECALL_ENABLE` | bool | false | STVR 实证研究批次（2026-10-12）：检索质量 Recall@k 观测开关（`src/measurement/retrieval_quality.py`）。开启后 `_build_rag_stat_with_relevance`（`src/graph/rag.py`）在 rag_stats 追加 `recall_at_k` / `retrieval_relevance` / `retrieval_relevant_count` 三字段——"top-k 检索结果中真正相关（similarity ≥ `RAG_RECALL_RELEVANT_THRESHOLD`）的比例"，使实验分析侧可量化"检索质量 ↔ 生成质量"相关性（STVR 可归因性 RQ2）。确定性纯函数，零 LLM 成本；默认关时三字段均 None / 0 占位（键集合同构，历史口径零变化） |
-| `RAG_RECALL_K` | int | 3 | STVR 批次 Recall@k 的 k（与 `retrieve_test_cases` 的 top_k 口径一致；非法值回退 3） |
-| `RAG_RECALL_RELEVANT_THRESHOLD` | float | 0.7 | STVR 批次判定"检索案例相关"的 similarity 下限（与 `RAG_RELEVANCE_THRESHOLD` 同量级；非法值回退 0.7） |
-| `PATCH_ROLLBACK_FAIL_CLOSED` | bool | false | R4b 补丁回滚 fail-closed 口径：P2P 全量回归 rc>=2 / 超时 / IO 异常时改判 `regression_failed` 触发快照自动回滚（默认口径为 `regression_error` 不回滚——"坏测试不误杀好补丁"）；`PatchRollbackProtocol.run` 透传 `fail_closed` 参数，编程接口可显式覆盖 |
-| `ROUTE_STRUCTURED_ENABLE` | bool | false | R17 结构化路由优先：`_should_debug` 判定"回 generator 重新生成"时，`error_category=logic_error` 的结构化信号优先于中文诊断关键词匹配（`_test_gen_signal_hit`），信号来源（`structured_error_category` / `diagnosis_keyword`）写入 trace 供打点度量"关键词兜底触发率"；默认关时与历史关键词口径逐字节一致 |
-| `ROGUE_MONITOR_ENABLE` | bool | false | R16 流氓行为监控：`base_agent._call_llm_with_cache` 上报 `AgentEvent`（agent_id=类名，tool="llm_call"），`_executor_node` 每轮 check 四个核心 agent 写 `state["rogue_findings"]`（纯观测不改路由——隔离/升级由调用方决定）；默认关时零开销 |
-| `API_HEALTH_CHECKER_ENABLE` | bool | true | APIManager 后台健康检查线程开关：该线程每 60s 对所有节点发起真实 LLM 请求（消耗 API 配额）；免费/低配额场景建议 `.env` 设 false 关闭（编程接口 `APIManager(enable_health_checker=False)` 同效；默认 true 历史行为不变） |
+| `LLM_TIMEOUT` / `LLM_RETRY_WAIT` | int | 60 / 30 | LLM 调用超时与重试等待（秒） |
+| `TEMPERATURE` | float | 0.2 | 采样温度；确定性实验由 `run_benchmark(deterministic=True)` 强制 0.0 |
+| `EXECUTOR_USE_VENV` | bool | true | venv 沙箱隔离执行（R10 起默认 true；false 仅调试用） |
+| `EXECUTOR_AUTO_INSTALL_DEPS` | bool | false | venv 内自动安装缺失依赖 |
+| `EXECUTOR_USE_DOCKER` | bool | false | Docker 隔离执行；不可用时返回 `docker_unavailable`，不静默降级 |
+| `ENABLE_RAG` | bool | false | 启用 RAG 案例检索 |
+| `ENABLE_MUTATION_SCORING` | bool | false | 启用变异评分 |
+| `LLM_JSON_MODE` | str | "on" | JSON Output 契约（`json_object`）；`off` 为历史逐字节口径 |
+| `LLM_THINKING_MODE` | str | "disabled" | DeepSeek 思考链默认关闭（成本保护） |
+| `FAULT_LOCALIZER_ENABLE` | bool | true | RGFL 式 LLM 推理定位通道；false 退回纯谱系口径 |
+| `AITESTER_PROFILE` | str | 未设 | 预设档：`safe` / `scientific` / `logic` / `fast` |
+| `AITESTER_TRACE_DIR` | str | 未设 | 结构化 JSONL 追踪输出；未设时 no-op |
+| `COST_BUDGET_ENABLE` | bool | false | 任务级 token / USD 预算硬闸 |
 
-**APIManagerConfig 字段**（`src/api/api_health.py` 数据模型，`api_manager.py` 消费；编程接口配置，非环境变量；4.1/4.2 熔断器 + 3.4 成本感知）：
+完整清单与逐项语义以 `config.py` 与 `docs/env_budget.yaml` 为准；批次 provenance 记录
+`env_snapshot`，供复现审计。
 
-| 字段 | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
-| `circuit_cooldown_seconds` | float | 60.0 | 4.1 熔断冷却时长：节点连续失败达 `max_consecutive_failures` 后进入冷却期 |
-| `enable_half_open_probe` | bool | True | 4.2 半开探测开关：冷却到期后节点先进入 half-open 窗口仅承载一次探测，成功闭合熔断器 / 失败重开半程冷却；置 False 退回 4.1 直接放行行为 |
-| `half_open_probe_penalty_cap_seconds` | float | 30.0 | 4.2 半开探测失败惩罚时长上限：失败重开冷却 = `min(circuit_cooldown_seconds/2, 本字段)` |
-| `cost_alert_threshold` | float | 2.0 | 3.4 成本告警阈值：故障转移到 `cost_weight >= 阈值` 的昂贵节点时记 WARNING |
-| `batch_health_check_interval` | float | 0.1 | 批量健康检查节点间隔（秒）：串行探测时避免瞬时流量触发限流；0 表示纯串行排队（大节点池场景）；0.1 保持历史默认行为 |
-
-> 监控：`get_status()` 每节点输出 `circuit_open_remaining_s`（熔断冷却剩余秒）与 `circuit_state`（`closed` / `open` / `half_open` 三态，仅 `enable_half_open_probe=True` 时报告 half_open）。
->
-> **4.4 指数退避 + Prometheus 导出**：`API_CIRCUIT_BACKOFF=true`（默认）时，`mark_failure` 冷却期改按 `base * 2^circuit_open_count` 指数退避（封顶 `half_open_probe_penalty_cap_seconds`），彻底死掉的 provider 冷却期单调增长（60s → 120s → 240s → …），避免反复短冷却打同一死点；`mark_success` 重置 `circuit_open_count`。`get_status()` 额外暴露 `circuit_open_count` / `half_open_success` / `half_open_failure` / `half_open_probe_success_rate`。`API_PROMETHEUS_EXPORT=true`（默认 false）时，`APIManager.to_prometheus_text()` 导出 7 类 Prometheus 指标（`aitester_api_health` / `aitester_api_circuit_state` / `aitester_api_circuit_open_remaining_s` / `aitester_api_circuit_open_count` / `aitester_api_half_open_probe_success_rate` / `aitester_api_success_rate` / `aitester_api_avg_response_ms`）供监控抓取，纯旁路不影响既有路由行为。
-
----
-
-## 错误处理
-
-### 常见异常
-
-| 异常 | 触发场景 | 处理方式 |
-|------|---------|---------|
-| `RuntimeError` | LLM 调用失败 | 检查 API Key 和网络连接 |
-| `ModuleNotFoundError` | import 模块不存在 | 检查 `module_name` 配置 |
-| `SyntaxError` | 生成的代码有语法错误 | Debugger 会重新生成 |
-| `TimeoutError` | 测试执行超时 | 增加 `EXECUTION_TIMEOUT` |
-
----
-
-## 脱敏边界与已知盲区（Redaction Boundaries & Known Blind Spots）
-
-> 4.1 审计口径：脱敏是**旁路观测层**，不阻断主流程；本节登记脱敏的**能力边界**与**已知盲区**，供使用者在评估"日志/追踪是否可安全共享"时参考。
-
-### 覆盖范围（已脱敏的通道）
-
-| 通道 | 脱敏函数 | 凭证替换 | 降级策略 |
-|------|---------|---------|---------|
-| 控制台日志（stdout/stderr） | `logging_utils.mask_sensitive_info` + `redact_text` | `<REDACTED_API_KEY>` / `<REDACTED_BEARER>` | 三级降级：① 正则替换 ② import 失败时原样输出 + warning ③ 脱敏函数本身崩溃时静默跳过 |
-| 追踪 JSONL（`AITESTER_TRACE_DIR`） | 同一 `mask_sensitive_info`（同源，`TraceSession._append` 内统一过） | 同上 | 序列化失败丢弃本条 + warning；脱敏 import 失败降级原样写入（不阻断观测层） |
-| 内存快照（`--dump-trace-on-failure` 写盘前） | 快照记录经 `TraceSession._append` 时已过脱敏 | 同上 | 写盘失败返回 None + warning（诊断出口，不阻断主流程） |
-| `os.environ` 进程级凭证 | `credential_scrub.scrub_os_environ` | 置空 / 替换占位 | 3 条 exec 路径前调用；import 失败静默跳过（主流程不依赖） |
-| LLM 调用异常日志 | `api_manager._redact` → `redact_text` | 同上 | 异常体回显请求头/base_url（含 API Key）时统一脱敏 |
-
-### 已知盲区（脱敏覆盖不到的路径）
-
-| 盲区 | 说明 | 缓解 |
-|------|------|------|
-| LLM 网关 401/5xx 错误体回显请求头 | 部分 openai 兼容 SDK 的 `str(e)` 把 `Authorization` 或 `base_url`（含 query 参数形式的 API Key）打进异常消息；`_redact` 已覆盖 SDK 路径，但**第三方网关自定义错误体**（非标准 openai SDK 抛出的异常）可能绕过 | 部署时如使用非标准网关，建议把错误响应体也过 `redact_text`；或用 `credential_scrub` 在子进程 exec 前清除 `os.environ` |
-| `os.environ` 中非 `LLM_N_*` / `GITHUB_*` 前缀的自定义凭证 | `scrub_os_environ` 的 3 条 exec 路径按前缀匹配（`LLM_N_API_KEY` / `LLM_N_BASE_URL` / `GITHUB_TOKEN` / `GITHUB_REPOSITORY`）；用户自定义前缀（如 `MY_PROVIDER_API_KEY`）不会被自动清除 | 自定义前缀需在 exec 调用前手动 `del os.environ[...]`；或写入 `scrub_os_environ` 的前缀表 |
-| 追踪 meta 字段嵌套非 str 值里的凭证 | `TraceSession._append` 的脱敏作用于 JSON 序列化后的整行文本；`task_meta` 嵌套 dict 中若含 `api_key` 键，序列化后会被整行正则匹配到（覆盖），但**以非键名形式出现的明文**（如 meta 值 = 整段含 Key 的字符串）依赖正则命中，存在漏检可能 | `task_meta` 构造时避免把含凭证的整段文本作为 meta 值；凭证走 `os.environ`（已被 `scrub_os_environ` 清除） |
-| 写盘失败 / 脱敏 import 失败时的降级原样输出 | `TraceSession._append` 的脱敏 import 失败时"降级原样写入"（不阻断观测层）；极端场景（`logging_utils` 被 monkeypatch 掉）下凭证可能原样落盘 | 降级路径记 warning 日志；生产环境不应 monkeypatch `logging_utils` |
-
-### 验证方式
-
-- `tests/test_trace_observability.py::TestRedaction`：`sk-ws-` 前缀凭证在追踪 JSONL 中被替换为 `<REDACTED_API_KEY>`。
-- `tests/test_redaction_audit.py`（如存在）：全项目脱敏审计（0.7 审计口径）。
-- 手动验证：设 `AITESTER_TRACE_DIR=/tmp/tr`，跑一次 `python main.py run examples/calculator.py --json`，`grep -r 'sk-ws-' /tmp/tr` 应为 0 命中。
-
----
-
-## 扩展开发
-
-### 添加新的智能体
-
-1. 继承 `BaseAgent` 类
-2. 定义 System Prompt
-3. 实现核心方法
-4. 注册到工作流图
+## 4. 异常与错误分类
 
 ```python
-from src.agents.base_agent import BaseAgent
+from src.utils.exceptions import AITesterError, APIError, ParsingError
 
-
-class MyAgent(BaseAgent):
-    def __init__(self):
-        super().__init__(MY_SYSTEM_PROMPT)
-
-    def my_method(self, input_data):
-        # 实现逻辑
-        pass
+try:
+    ...
+except APIError as exc:
+    ...
 ```
 
-### 添加新的数据集
+| 异常 | 父类 | 触发场景 |
+|------|------|----------|
+| `ConfigurationError` | `AITesterError` | 配置缺失或非法 |
+| `ExecutionError` | `AITesterError` | 测试执行失败 |
+| `TimeoutError` | `ExecutionError` | 测试执行超时（与内置同名，属既有 API） |
+| `ParsingError` | `AITesterError` | LLM 输出解析失败 |
+| `JSONParseError` | `ParsingError` | JSON 契约响应不可解析 |
+| `SyntaxParseError` | `ParsingError` | 生成代码语法错误 |
+| `APIError` | `AITesterError` | Provider 调用失败 |
+| `RateLimitError` | `APIError` | 429 限流 |
+| `AuthenticationError` | `APIError` | 401/403 鉴权失败 |
+| `BudgetExceededError` | `RuntimeError` | 任务预算超限 |
+| `SandboxUnavailable` | `RuntimeError` | 内核沙箱不可用（fail-closed） |
 
-1. 实现 `BaseDatasetLoader` 抽象基类
-2. 返回 `target_code`, `function_name`, `module_name`
-3. 在 `load_dataset()` 工厂函数的 `dataset_map` 中注册
+`ErrorClassifier` 产出 18 类 `ErrorCategory`：`llm_format_error`、`llm_empty_response`、
+`llm_json_parse_failed`、`import_error`、`syntax`、`type_error`、`index_error`、`assertion`、
+`logic_error`、`runtime`、`timeout`、`unknown`、`patch_validation_failed`、
+`rag_retrieval_empty`、`execution_trace_missing`、`multi_candidate_all_rejected`、
+`patch_syntax_invalid`、`test_regenerated_pass_unverified`。分类是纯规则（无 LLM），
+未知形态归 `unknown` 并保守处理。
 
-```python
-from src.datasets.dataset_loader import BaseDatasetLoader
+执行侧结构化诊断：`error_info.type` 可能为 `execution_dependency_missing`（缺 pytest 等
+执行依赖，提示安装 `aitester[execution]`）、`docker_unavailable`、`docker_timeout`。
 
+## 5. LLM 调用契约
 
-class CustomDataset(BaseDatasetLoader):
-    def __init__(self):
-        self.tasks = [...]
-
-    def __iter__(self):
-        return iter(self.tasks)
-```
-
----
-
-## 版本历史
-| Unreleased（2026-10-05） | 2026-10-05 | 2026-10-05 审查批次 R1-R18 落地（默认行为不变，新能力均带独立开关）：① R1a SpecIR v1 编译缺陷修复（参数化 `'; '.join`→`', '.join`；NL invariants 不再编译为 `assert True` 恒真断言——假通过通道封堵，无边界材料返回空串）；② R1b/R6 签名感知绑定（`spec_ir.extract_signature_params` AST 签名提取（None/[]/非空三态）+ `compile_spec_oracle` 新增 `signature_params`——绑定上下文按真实签名扩展，修正调用元数）；③ R1c 确定性规约 oracle 执行接线（`SPEC_ORACLE_EXEC_ENABLE` 默认关：compile 产物追加到 LLM 测试尾部并列执行，state 新增 `spec_oracle_injected`——规约从观测层指标升级为执行链确定性 oracle）；④ R4b 回滚 fail-closed（`PATCH_ROLLBACK_FAIL_CLOSED` 默认关：rc>=2/超时/IO 异常改判 regression_failed 触发回滚，`PatchRollbackProtocol.run` 透传）；⑤ R5 变异检出率（新模块 `experiments/mutation_detection.py` + `run_benchmark.py` 接线（`ENABLE_MUTATION_SCORING` 门控），结果行新增 mutation_detection_rate / mutants_killed / mutants_total）；⑥ R2 统计报告（McNemar/BH-FDR 落盘 statistical_report.md + `bootstrap_paired_diff_ci`（10000 次重采样 seed 42）+ `cliffs_delta` + `--batches` 白名单 + "数据来源"审计章节 + `analyze_results.py` 聚合 M1 四指标（None 不计分母））；⑦ R17 结构化路由优先（`ROUTE_STRUCTURED_ENABLE` 默认关：logic_error 结构化信号优先于中文诊断关键词，信号来源入 trace）；⑧ R16 流氓行为监控（`ROGUE_MONITOR_ENABLE` 默认关：AgentEvent 上报 + `state["rogue_findings"]`）；⑨ R11 确定性采样（`run_benchmark(deterministic=True)` 三处级联 TEMPERATURE=0.0）；⑩ R15 `AITESTER_PROFILE` 三档预设（safe/scientistic/fast，setdefault 注入不覆盖显式设置）；⑪ `API_HEALTH_CHECKER_ENABLE`（默认 true）后台 60s 健康检查线程可关；⑫ LLM 缓存目录默认迁移 `~/.cache/aitester/llm`（XDG_CACHE_HOME 优先，`src/graph/rag.py` 路径双写收敛）；CI 硬化（security 作业转 push/PR 阻断、分支覆盖门禁扩全矩阵、新增 release.yml（tag v* → build → twine check → SBOM → GitHub Release）与 perf.yml（周巡检 + `scripts/gates/check_perf_regression.py` 15% 阈值 + `docs/performance_baseline.json`））；全量 3984 测试通过（+71：test_2026_10_05_review_batch 34 + test_r2_statistical_report 18 + test_r5_mutation_detection 19）/ ruff 0 告警 / mypy 98 源文件 0 错误 |
-| 0.12（2026-09-28） | 2026-09-28 | 前沿推荐批次落地（gap_report P0/P1/P2 缺口，全部默认行为不变 + 新能力独立开关）：① G2 P0 风险分级人工回路（`src/graph/risk_approval.py`，`RISK_APPROVAL_ENABLE` 默认关，三因子加权打分 → low/medium/high → auto_merge/human_confirm/force_review，`run_benchmark` 结果行新增 `risk_summary` 占位字段）；② G8 P0 全链路 SWE-bench Pro 复测（`experiments/run_full_stack_swe_bench_pro.py` 一键七开关 + `scripts/gates/check_swe_bench_pro_ready.py` 数据前置门禁 + `experiments/summarize_full_stack.py` ON/OFF 对照与错误分桶对比）；③ G3 P1 内核级沙箱（`src/agents/kernel_sandbox.py`，`KERNEL_SANDBOX_ENABLE` 默认关，macOS Seatbelt / Linux Landlock+bwrap 双后端，平台不支持时 fail-closed 拒绝执行）；④ G1 P1 Tree-sitter 精确 AST 后端（`src/tools/tree_sitter_backend.py`，可选依赖，缺 `tree_sitter` 时透明降级回词法层，不阻断 Python 主路径）；⑤ G4 P1 AgentTelemetry 故障检测基准（`src/observability/agent_telemetry.py`，`AGENT_TELEMETRY_ENABLE` 默认关，10 类内置失败模式正则匹配，零 LLM 成本纯观测，输出 Markdown 报告）；⑥ G5 P2 无测试场景执行无关验证（`src/tools/testless_validation.py`，`TESTLESS_VALIDATION_ENABLE` 默认关，四层独立可开关：AST 符号守卫 / mypy 静态检查 / 命名契约回归 / 导入冒烟，任一层失败整体 fail）；⑦ G6 P2 多智能体辩论收敛（`src/graph/expert_pool.py` 新增 `debate_round()`，`EXPERT_POOL_DEBATE_ENABLE` 默认关需配合 `EXPERT_POOL_ENABLE=true`，top-K（默认 2，`EXPERT_POOL_DEBATE_TOP_K` [2,4]）候选辩论收敛产出一个 `debate_revise` 修订候选，LLM 失败时保守降级回原 verified 列表）；⑧ G7 P2 缺陷报告生成（`src/reports/generator.py` 的 `ErrorReport` 新增 `oracle_stats` 字段 + `with_oracle_stats()` 方法，`total_oracles > 0` 时才渲染"预言有效性（Oracle 增强，G7）"章节）；⑨ 文档一致性 P2（`docs/dependency_exemptions.md` 依赖豁免登记表 + `scripts/gates/check_dependency_exemptions.py` CI 门禁 + `scripts/gates/check_docs_history_drift.py` warning-only 历史快照基线漂移检测）；全量 2487 测试通过零回归（基线 2453，+34 新增测试覆盖上述 8 项缺口）/ ruff 0 告警 / mypy 0 错误（86 源文件） |
-| 0.9（2026-09-27） | 2026-09-27 | 路线图剩余缺口落地 + 第十一轮功能批次（默认行为不变）：① 错误分类 16→17 类（新增 `PATCH_SYNTAX_INVALID`，2.2 重采样耗尽标记）；② 2.2 补丁后处理重采样（`PATCH_RESAMPLE_ENABLE`，最多 `PATCH_RESAMPLE_MAX` 次）；③ 1.3 分层压缩降级链透传（`contract_reject_feedback` 经 `_debugger_node` 跨轮透传 + 档位温度映射）；④ 多维度污染检测（`contamination_risk_level` 字段 + `rag_ab_experiment.compare_ab` 新增 `token_saving.delta_pct`）；⑤ 2.1 mypy 静态层（`TYPE_CHECK_ENABLE` 时 `type_repair._run_mypy_findings` 补充分层类型疑点）；⑥ 路线图剩余缺口补齐：SWE-bench Pro 支持（`swe_bench_pro` / `swebench_pro` 注册）+ CodeBERT 嵌入后端（`EMBEDDING_BACKEND=codebert`，`transformers.AutoModel` 加载，缺依赖时保守回退）+ pyright 静态类型后端（`TYPE_CHECK_BACKEND=pyright`，pyright CLI / pyright-python，不可用时降级 ast 静态层）；全量 1937 测试通过（基线 1920 + 17 新增）/ ruff / mypy 全绿（64 源文件）/ 覆盖率 94% |
-| 0.8（2026-09-27） | 2026-09-27 | 全面审查与保守优化轮（九轮 + 十轮，默认行为不变）：第九轮并行子代理深审 P1×4——局部 import 落在前 200 字符触发顶层 import 静默丢弃；`multi_candidate` 执行验证模式全部候选 `exec_passed=False` 时仍返回最不差候选写盘劣化代码——加守卫返回 None；`dependency` `create_venv` 缓存命中检查+创建序列无锁 `--parallel` 并发同缓存目录竞态——per-dir 锁；`executor_repo` `verify()` 临时测试文件名仅按 `(commit, pid)` 键多线程同 pid 并发覆盖——加 thread ident 第三键 + `setup()` clone/venv/pip 序列 per-env_dir 锁）+ P2×10（`debugger` 两次坏 JSON 时 `_extract_json` 必抛异常崩溃节点——try/except 降级空 patch + critic requery 同守卫；`executor_runtime` 通用异常分支把第 1 次失败 last_result 置 None 丢失真实输出——保留最近有效结果 + 无有效结果返回 `(UNAVAILABLE, error_info)` 标记；`patch_applier` `_find_function_start_line_in_lines` 正则缺 async 前缀——补 `(?:async\s+)?` 与 `_TOP_DEF_RE` 同口径；`multi_candidate` `_coverage_trend` 非数值 delta float() 崩溃——try/except 跳过；`generator` 每次调用现场 re.compile——预编译为模块级 `_FROM_IMPORT_RE`；`convergence_analysis` 无逐轮明细时 total_tokens 重复计入各轮——每个任务 total 仅计入最终到达轮一次 + 增量按当轮 round_tokens 直接取值）+ 新增回归守卫 26 用例（`tests/test_2026_09_26_review_round9.py`）；第十轮全项目 P1/P2 收敛 P1×6（`graph/nodes._suggest_iteration_strategy` 非数值 coverage_delta 裸 float() 崩溃 executor 节点——try/except 跳过该条目；`agents/base_agent._lru_store` 负缓存无容量上限——与正缓存同 `_LRU_MAXSIZE` 上限 FIFO 淘汰；`experiments/analysis_parts/rag_analysis._rag_similarity_distribution` 负 max_similarity 致 bins 键 KeyError——下界钳位到 0 + 非数值 float() try/except 跳过；`experiments/analysis_parts/convergence_analysis._execution_trace_summary` 非数值 reward_signals/coverage 裸 float() 崩溃——contextlib.suppress 跳过；`experiments/statistical_analysis._pair_by_task` 跨批次重复 task_id 旧 dict 推导"末者胜"静默丢弃——首见优先去重 + warning 日志；`experiments/run_benchmark` 汇总裸 r["iterations"]/r["elapsed_seconds"] 在键存在但值为 None 时崩溃——r.get(...) or 0 防护）+ P2×10（`executor_repo` verify() 流程注释与 docstring "git stash" 措辞改为实际 "git checkout -- . / clean -fd"；`executor_runtime` TimeoutExpired 分支第 2 次超时不再覆盖第 1 次有效 pytest 输出——追加 [timeout attempt N] 快照；`generator._fix_import_module` 带点路径裸子串 code.replace 误改包形式 import——按模块名锚定的正则；`cli/app.py` --verbose + --json 组合显式提示 verbose 在 --json 模式下不生效；`datasets/dataset_loader` total_test_count 兜底口径 len(FAIL_TO_PASS) 漏计 P2P——改 len(F2P) + len(P2P)；`reports/generator` error_context None 字段渲染 "None" 改 "未知"/"—"；`tools/code_context._closure_names` depth=N 口径文档澄清；`analysis_parts/convergence_analysis` 模块级 _safe_int/_safe_float 辅助 + 所有裸 int()/float() 转换点统一安全归一；`analysis_parts/rag_analysis` _iter_rag_stats 跳过非 dict 元素 + _rag_similarity_distribution 均值按截断后 [0,1] 口径；`compare_failures` regressed 排除 new_categories；`run_benchmark` L701 死写 results[baseline]["mutation_feedback"] 删除；`statistical_analysis.run_all_statistics` 区分两种 nan 成因 + `cohens_d` docstring 修正）+ 新增回归守卫 33 用例（`tests/test_2026_09_27_review_round10.py`）；全仓 ruff format 归一 14 文件；全量 1920 测试通过 / ruff 全仓 0 告警 / mypy 62 源文件 0 错误 / 覆盖率 94% |
-| Unreleased（2026-09-26） | 2026-09-26 | 全面审查与保守优化轮（默认行为不变，六批次）：静态检查清零（mypy 4 错 + ruff lint 5 处 + 11 文件格式归一）；死代码清理（`_build_node_list` 不可达块）+ 线程卫生（`reset_manager` 健康检查线程 stop 移出全局锁临界区）；项目卫生（`.gitignore` 补工具缓存/实验数据目录）；凭证脱敏 P0 补强（`credential_scrub` 编号变体 `OPENAI_(API_KEY|BASE_URL)_\d+` + provider 中间变量，与 `PROVIDER_TEMPLATES` 键联动；`APIManager.call` 全节点失败异常出口统一 `_redact`；`config_manager.add_llm_config` 拒含换行/`#` 的变量值；`retry_with_backoff` 日志惰性脱敏；`SensitiveFormatter` 降级路径先走纯正则兜底）；并发竞态修复（`APIHealth` 节点级 `threading.Lock` 原子化、`health_check_all/batch` 持锁快照遍历 + 批次间检查停止事件、LLM 缓存与跨文件计划缓存改"临时文件 + `os.replace`"原子写、`ReportGenerator` 双检锁）；CF-3 跨文件修复缺陷修复（`build_cross_file_repair_plan` 新增 `source_files` 参数，每模块用自有源码生成补丁，此前全模块共用入口代码致多文件场景补丁错位；缓存包装层同步透传）；第五轮 P0 批次（变异测试 `_run_mutant_tests` 改按 pytest 官方退出码精确判定（rc==1 杀死 / 其他非零保守存活，修复指标恒 1.0 的误判）+ 变异体定位键升级 (lineno, col_offset) + 类型轮转均匀取样去重、`run_benchmark` 并行 API 轮询改 `zlib.crc32` 跨进程可复现（原 `hash()` 受 `PYTHONHASHSEED` 随机化）、`single_agent` 基线写盘补最小安全检查、`repo_verification` 状态 schema 显式声明、`_parse_failed_cases` pytest 短输出模式匹配）；第六轮节点层路由语义与鲁棒性（`_should_debug` 诊断关键词判定提升为独立分支——早期迭代命中"测试生成错误"即回 generator 重新生成、`test_passed` 统一 truthiness 口径、`_generator_node` LLM 失败降级空测试不再崩溃整图、planner/debugger 兜底扩 `OSError`、`_FILE_CACHE_COUNT_MEMORY` 读改写加锁、`extract_focused_code_detail` 消除重复 AST 解析、`DatasetLoader.get_task_by_id` O(n)→O(1) 索引查表、`redact_dict` 字符串入参契约修复）；全量 1785 测试通过（~29s）/ 零回归 / ruff + mypy 全绿 |
-| Unreleased（2026-09-26） | 2026-09-26 | 全面审查与保守优化轮（默认行为不变，六批次）：静态检查清零（mypy 4 错 + ruff lint 5 处 + 11 文件格式归一）；死代码清理（`_build_node_list` 不可达块）+ 线程卫生（`reset_manager` 健康检查线程 stop 移出全局锁临界区）；项目卫生（`.gitignore` 补工具缓存/实验数据目录）；凭证脱敏 P0 补强（`credential_scrub` 编号变体 `OPENAI_(API_KEY|BASE_URL)_\d+` + provider 中间变量，与 `PROVIDER_TEMPLATES` 键联动；`APIManager.call` 全节点失败异常出口统一 `_redact`；`config_manager.add_llm_config` 拒含换行/`#` 的变量值；`retry_with_backoff` 日志惰性脱敏；`SensitiveFormatter` 降级路径先走纯正则兜底）；并发竞态修复（`APIHealth` 节点级 `threading.Lock` 原子化、`health_check_all/batch` 持锁快照遍历 + 批次间检查停止事件、LLM 缓存与跨文件计划缓存改"临时文件 + `os.replace`"原子写、`ReportGenerator` 双检锁）；CF-3 跨文件修复缺陷修复（`build_cross_file_repair_plan` 新增 `source_files` 参数，每模块用自有源码生成补丁，此前全模块共用入口代码致多文件场景补丁错位；缓存包装层同步透传）；第五轮 P0 批次（变异测试 `_run_mutant_tests` 改按 pytest 官方退出码精确判定（rc==1 杀死 / 其他非零保守存活，修复指标恒 1.0 的误判）+ 变异体定位键升级 (lineno, col_offset) + 类型轮转均匀取样去重、`run_benchmark` 并行 API 轮询改 `zlib.crc32` 跨进程可复现（原 `hash()` 受 `PYTHONHASHSEED` 随机化）、`single_agent` 基线写盘补最小安全检查、`repo_verification` 状态 schema 显式声明、`_parse_failed_cases` pytest 短输出模式匹配）；第六轮节点层路由语义与鲁棒性（`_should_debug` 诊断关键词判定提升为独立分支——早期迭代命中"测试生成错误"即回 generator 重新生成、`test_passed` 统一 truthiness 口径、`_generator_node` LLM 失败降级空测试不再崩溃整图、planner/debugger 兜底扩 `OSError`、`_FILE_CACHE_COUNT_MEMORY` 读改写加锁、`extract_focused_code_detail` 消除重复 AST 解析、`DatasetLoader.get_task_by_id` O(n)→O(1) 索引查表、`redact_dict` 字符串入参契约修复）；全量 1785 测试通过（~29s）/ 零回归 / ruff + mypy 全绿 |
-| Unreleased（2026-09-25） | 2026-09-25 | 0.10 深度审查修复轮（0.9 批次回修，零功能回归）：LLM 文件缓存负缓存 TTL 正确性回归——`_lru_negatives` 引入 `_LRU_NEGATIVE_TTL_SECONDS = 30.0`（窗口内同键跳过文件重读省 IO，过期后惰性清理并重新读文件恢复外部写入可见性）+ `_lru_store` 写成功路径 `.pop(key, None)` 幂等清除负缓存（旧 `del` 从未记过负缓存时 KeyError）；路径白名单根归一口径修正——`_ALLOWED_WRITE_ROOTS` 去冗余 `abspath`（`realpath` 已含 `abspath` 语义），与 `_is_within_allowed_roots` 入参归一对称（macOS /var→/private/var 符号链接场景判定正确性关键）；追踪层冗余 meta 摘要消除——`TraceSession._append` 由浅拷贝+重建 meta dict 收敛为记录只读序列化（摘要责任归 task_start/record_node/record_task_end 入口，`--parallel` 追踪热路径省冗余深处理）；`_file_cache_entry_count` 进程内 `(目录, 条目数)` 记忆免重复 glob（`--parallel` 多任务收尾报告逐任务调用 `get_workflow_stats` 时省 N-1 次目录扫描，目录切换/删除自动失效）；全量 1667 测试通过（较 0.9 的 1665 净增 2 条回归用例：负缓存 TTL + 统计记忆）/ ruff 全仓 0 告警 / mypy 0 错误（58 源文件）/ src 覆盖率 94% |
-| Unreleased（2026-09-24） | 2026-09-24 | 全面审查修复轮（安全 + 正确性 + 可维护性）：凭证脱敏动态模式化——新增 `src/utils/credential_scrub.py`（`scrub_os_environ()` 按 `LLM_\d+_API_KEY` / `LLM_\d+_BASE_URL` 动态模式 + 通用 SDK 凭证剔除），本地 / venv / Docker 三条执行链路统一接入（此前本地只剔 7 项固定变量、venv/Docker 原样继承宿主环境，`LLM_N_API_KEY` 系列凭证可被生成代码读到）；CLI `finally` 块脆弱代码消除（`final_state` 显式 `None` 初始化 + `is not None` 判断，替代 `locals()` 检查）；多候选节点无副作用化（`_select_multi_candidate_patch` 统计改经 update dict 传递，不再原地写共享 TypedDict）；补丁函数定位正则→AST（`_find_function_range_ast` 读 `FunctionDef.lineno/end_lineno`，装饰函数 / 含注释函数体不再被过早截断，原代码无法解析时自动回退正则兜底）；`requirements.txt` 显式声明 `openai==2.54.0`（`api_manager.py` 顶层 import，此前靠传递依赖隐式安装）；删除 `.env.local.bak`（含真实密钥的备份文件）；修 5 处 tests/ ruff 瑕疵（I001/F401/RUF100/E741/SIM115）；全量 1672 测试通过 / ruff 全仓 0 告警 / mypy 0 错误 / src 覆盖率 94% |
-| Unreleased（2026-09-23） | 2026-09-23 | 静态类型清零 + 代码质量清理轮（默认行为不变）：mypy 全仓 0 错误（19 文件类型修复——字典值混含时补 `dict[str, Any]` 标注、`ast.Module` 参数收窄、TimeoutExpired 合并 `_to_str` 归一、模块期属性挂载补 ignore、第三方 SDK 重试元组去死子类、`setup_logger_safety` 幂等短路、chromadb 元数据按 `float` 归一）；3 测试文件 sleep mock 化（套件 ~30s→~22s）；全量 1659 测试通过 / ruff 全仓 0 告警 / mypy 0 错误 / src 覆盖率 94% |
-| 0.7 | 2026-09-21 | 跨文件二期 + 数据完整性修正 + 研究立项（A/B/C 三方向）：3.5 跨文件修复二期——多入口依赖分析（`analyze_multi_entry_deps`，一级展开 + 去重合并）+ 拓扑序补丁应用（`apply_multi_file_patch(deps=...)`，Kahn 算法被调用方先改，环按字典序打破，不传 deps 退字典序保一期口径）+ 修复计划缓存（`build_cross_file_repair_plan_cached`，依赖图指纹落盘 LLM 缓存目录，命中零 LLM 调用）；4.4 依赖缓存一致性修正（`list_venv_cache` getctime→getmtime，跨平台口径对齐 `clear_venv_cache`）；RAG 写锁热路径优化（`_upsert` 清理/容量检查移锁外，写锁内只做 upsert，`--parallel` + RAG 场景入库不再排队，瞬时超容量放宽为"至多多并行度条、下一清理窗口收敛"，0.6 P1-4 驱逐语义不变）；run_benchmark 静默降级误导归档修正（指定数据集子集为空时回退 examples，归档 dataset 字段同步改回 + warning 明确标注"非原始请求数据集"，R-01 探路首跑暴露）；R-01 SWE-bench 补跑探路立项（`docs/design/swe_bench_probe.md`，发现 lite 子集 JSONL 为空 + 通用文件缺 `instance_code`——真实阻塞项是"数据集无可用源码"而非配额，选择 (c) 记录在案）；`llm_cache.py` docstring 标注"生产路径已改用文件缓存，本模块仅保留接口"（消除双套缓存认知漂移）；全量 1627 测试通过 / ruff 全仓 0 告警 / src 覆盖率 94% |
-| 0.6 | 2026-09-20 | P0 修复批（性能审计三路并行：死代码/技术债 + 性能热点 + 文档漂移，人工复核确认 3 项 P0）：P0-1 LLM OpenAI 路径零重试→指数退避故障转移（`_retry_with_exponential_backoff`（1s/2s/4s 退避）套到 OpenAI 路径，空响应也触发重试，重试耗尽才进入故障转移，与 第三方 SDK 路径语义对齐）；P0-2 venv 统计双锁分离（计数锁 ns 级临界区 + 独立落盘锁保护"读磁盘/快照/写磁盘"整段，防 lost-update；简单移到计数锁外会触发 50+50 事件被合并成 50 的并发缺陷，已实证）；P0-3 幽灵开关实装（`API_CIRCUIT_BACKOFF` 默认 true / `API_PROMETHEUS_EXPORT` 默认 false 经 `config.py` 集中声明，`api_health.mark_failure` + `_probe_circuit_half_open` 接入退避开关、`api_manager.to_prometheus_text` 接入导出开关——六处文档承诺的开关首次拥有代码读取点）；multi_candidate 双次补丁应用消除（`static_validate_patch` 签名 2-tuple→3-tuple 复用 `apply` 结果）；ruff 15 告警清零 + 33 文件 format 归一；全量 1612 测试通过 / 零回归 / src 覆盖率 94% |
-| 0.4 | 2026-09-20 | 五大章节系统能力增强：1.1 评估指标深化（异味 EagerTest/LackOfCohesion + 收敛 token 效率 + 难度分层迭代 + 变异-断言交叉 + RAG token/相似度 + 根因趋势 + 污染交叉）；1.2 变异反馈闭环（boundary_shift/return_void 变异体 + prompt 注入 + run_single_task 开关修复）；2.1 多维污染检测（结构级 AST 骨架 LCS + 语义级词袋余弦 + 抗污染基准注册表）；2.2 跨文件双向依赖图（反向依赖边 + 符号定义行定位，`CROSS_FILE_BIDIRECTIONAL` 默认 false）；3.1 对抗性推理（AdverIntent + 批评者评估 + 补丁重生成，`ADVERSARIAL_DEBUGGING_ENABLE` 默认 false）；3.2 执行反馈动态迭代策略 + 多候选行级信用分配（BOOSTAPR 式）；4.4 熔断器指数退避 + Prometheus 导出（`API_CIRCUIT_BACKOFF` 默认 true / `API_PROMETHEUS_EXPORT` 默认 false）+ venv 缓存容量监控（5GB 阈值，只监控不自动清理）；4.2 redact_dict 递归脱敏 + 降级路径补 JWT 拦截 + 注入回归 CI 用例；5.2 错误分类体系 12→14 类（EXECUTION_TRACE_MISSING + MULTI_CANDIDATE_ALL_REJECTED）；全量 1548 测试通过 / 零回归 |
-| 0.2 | 2026-09-19 | 代码质量与可靠性优化轮次（无新功能，零功能破坏）：RAG 降级守卫抽取（`graph/rag.py` 新增依赖注入式 `rag_guarded`，统一 `nodes.py` 4 处同构模板，历史 patch 路径不变）；多函数补丁排序 O(n·m)→O(n+m)（`patch_applier.py` 新增 `_find_function_start_line_in_lines` 预切分行复用）；实验排名绑定修复（`experiments/analysis.py` 按 name/value 绑定排序 + 新增乱序插入回归测试，全量 1459→1460）；数据库库名白名单（`init_db.py`，堵环境变量注入 SQL 向量）；懒导入消除（`base_agent.py`）；脱敏双实现收敛（`llm_client._redact_log_text` / `api_manager._redact`）；批量健康检查间隔提为可配置项 `APIManagerConfig.batch_health_check_interval`；tests/ 存量 Ruff 告警 24 条清理 + 1 处恒真断言修复；`ruff check src/ tests/` 全绿 |
-| 0.1 | 2026-09-18 | 首个正式版本：四智能体协作架构（Planner/Generator/Executor/Debugger）+ 十二类错误分层修复 + 逻辑驱动 CoT；多基线对比（aitester/plain_llm/single_agent）+ SWE-bench/Defects4J-Python/合成数据集支持；SWE-bench 源码导出自动化 + 数据污染检测；统计检验（t 检验/Mann-Whitney U/Cohen's d）；结果分析层（修复收敛/边界覆盖/变异得分/断言强度/执行反馈轨迹）；内置变异测试生成器 + 测试异味检测；结构化 JSONL 追踪层；多候选补丁；成本感知路由 + 熔断冷却期 + 半开探测；跨文件修复；断言增强；Docker 隔离执行；依赖缓存监控 + clean-venv-cache CLI；Ruff + pre-commit + GitHub Actions CI；全量 1459 测试用例 / 覆盖率 96% |
-
+- **Provider**：OpenAI 兼容端点，凭证只经 `.env.local`；内置 provider 仅 DeepSeek 官方。
+- **JSON 契约**：七处调用点（Planner 计划、Debugger 补丁 / 严格重试 / 批评者 / 击穿用例 /
+  缺陷分类、FaultLocalizer 定位）在 `LLM_JSON_MODE=on` 时绑定
+  `response_format={"type": "json_object"}`；`off` 用于历史批次逐字节复现。
+- **思考模式**：`LLM_THINKING_MODE=disabled` 默认关闭（V4 系思考链计入输出计费）；
+  `LLM_REASONING_EFFORT` 与 `LLM_MAX_OUTPUT_TOKENS` 可选覆盖。
+- **可恢复失败**：`finish_reason ∈ {length, insufficient_system_resource}` 按可恢复失败
+  重试；JSON 值位的 Python 数值表达式由限制求值解析层修复（无 `eval`）。
+- **缓存**：LLM 文件缓存默认在用户缓存目录（`~/.cache/aitester/llm`）；缓存键包含
+  provider / 模型 / 温度 / JSON 模式等身份字段；种子只用于任务采样，不发送给 API。
+- **路由与熔断**：`APIManager` 提供健康检查、熔断与成本感知路由；失败时保守降级，
+  不伪造成功。凭证在三条执行链路进入子进程前由 `credential_scrub.scrub_os_environ` 清除。

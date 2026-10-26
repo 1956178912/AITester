@@ -172,15 +172,22 @@ class TestClearVenvCacheEdgeCases:
 
     def test_missing_cache_dir_returns_empty(self, cache_dir):
         result = dep.clear_venv_cache()
-        assert result == {"removed": [], "kept": [], "freed_mb": 0.0}
+        assert result == {"removed": [], "failed": [], "kept": [], "freed_mb": 0.0}
 
-    def test_rmtree_failure_kept(self, cache_dir, monkeypatch):
+    def test_rmtree_failure_reported_as_failed(self, cache_dir, monkeypatch):
+        """删除失败必须进 failed，而不是装作已删除（DM 轮修正）。
+
+        旧锁用 MagicMock 让 rmtree 主动抛 OSError，恰好绕开了生产代码
+        ``ignore_errors=True`` 永不抛出的真实形态；真实权限失败见
+        tests/test_clean_venv_cache_report_dm.py。
+        """
         venv = cache_dir / "locked"
         (venv / "bin").mkdir(parents=True)
         monkeypatch.setattr(shutil, "rmtree", MagicMock(side_effect=OSError("locked")))
         result = dep.clear_venv_cache()
-        assert "locked" in result["kept"]
+        assert result["failed"] == ["locked"]
         assert result["removed"] == []
+        assert result["kept"] == []
 
 
 class TestVenvCacheDirWindows:

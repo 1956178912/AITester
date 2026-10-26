@@ -11,15 +11,22 @@
 >   CI `--ignore-vuln` 豁免与本表条目；
 > - 每季度复审一次本表，过期未复审的条目在 CHANGELOG 标注"豁免过期"。
 >
-> **复审触发机制（2026-10 确认）**：
-> 1. **CI 自动门禁**：`scripts/gates/check_dependency_exemptions.py`（经
+> **复审触发机制（2026-10 确认；DF 轮补入可执行的过期判据）**：
+> 1. **CI 登记门禁**：`scripts/gates/check_dependency_exemptions.py`（经
 >    `.github/workflows/ci.yml` 在每次 PR / 推送时运行）把 `ci.yml` 实际生效的
 >    `--ignore-vuln` 列表与本表"当前豁免"节逐条对照——未登记的豁免阻断合并
 >    （退出码 1）；已登记但"复审期限"列缺失 / 空白时输出 warning。
-> 2. **上游修复版提醒**：chromadb 上游发布含修复的新版本号（命中 3813/3814/3815
+> 2. **CI 过期门禁**：`scripts/gates/check_dependency_audit.py --require-audit`
+>    （同作业、同一次 PR / 推送）真实跑一次**不带 `--ignore-vuln`** 的 pip-audit：
+>    本表任一条目在审计结果里出现 `fix_versions` ⇒ 阻断（**豁免必须随修复版失效**）；
+>    审计命中未登记 ID、或本表"锁定版本"与 `requirements.lock` 不一致 ⇒ 阻断；
+>    本表理由「仅嵌入式、无服务器面、无 `trust_remote_code`」由 `src/` 静态扫描锁定
+>    （命中 `HttpClient` / `trust_remote_code` / RBAC provider / `chromadb.app` 即阻断）。
+>    这条把下方第 2 点从"人工记得"变成"不记得就红"。
+> 3. **上游修复版提醒**：chromadb 上游发布含修复的新版本号（命中 3813/3814/3815
 >    任一 advisory）时，`requirements.lock` 版本变化即触发"复审触发条件"；
 >    维护者在每次升级依赖时对照本表检查是否有可关闭的豁免条目。
-> 3. **季度人工复审**：每季度末检查本表所有条目的"复审期限"，过期未复审的
+> 4. **季度人工复审**：每季度末检查本表所有条目的"复审期限"，过期未复审的
 >    条目在 CHANGELOG 对应批次标注"豁免过期"，并决定是否续期 / 升级 / 关闭。
 
 ## 当前豁免

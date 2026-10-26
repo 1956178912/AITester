@@ -154,14 +154,35 @@ class TestCliProbes:
         out = (
             "ℹ 数据集 quixbugs 共加载 50 个任务\n"
             "── quixbugs__bitcount ──\n"
-            "ℹ ✓ 全量质量检查通过（50 个任务无加载问题）\n"
+            "✓ 全量质量检查通过（50 个任务无加载问题）\n"
             "ℹ 路径 /Users/x/.<REDACTED_KEY>\n"
         )
         monkeypatch.setattr(probes_mod, "run_cmd", lambda *a, **kw: (0, out, ""))
         outcome = probes_mod.probe_cli_check_dataset()
         assert outcome.status == "pass"
         assert outcome.evidence["task_count"] == 50
+        assert outcome.evidence["quality_verdict"] == "verified_pass"
         assert outcome.evidence["redacted_path_segments"] == 1
+
+    def test_cli_check_dataset_skip_disclosure_is_not_a_failure(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """加载器不提供 quality_report 时显式披露跳过 ⇒ 能力缺失，探针不得判红。"""
+        out = (
+            "ℹ 数据集 quixbugs 共加载 50 个任务\n"
+            "ℹ ── quixbugs__bitcount ──\n"
+            "ℹ 质量检查：该数据集未提供 quality_report，跳过全量校验（SWE-bench 系列提供）\n"
+        )
+        monkeypatch.setattr(probes_mod, "run_cmd", lambda *a, **kw: (0, out, ""))
+        outcome = probes_mod.probe_cli_check_dataset()
+        assert outcome.status == "pass"
+        assert outcome.evidence["quality_verdict"] == "skipped"
+
+    def test_cli_check_dataset_fail_without_any_quality_verdict(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """两种合法形态都没有 ⇒ 静默：质量结论既未给出也未披露跳过。"""
+        out = "ℹ 数据集 quixbugs 共加载 50 个任务\nℹ ── quixbugs__bitcount ──\n"
+        monkeypatch.setattr(probes_mod, "run_cmd", lambda *a, **kw: (0, out, ""))
+        outcome = probes_mod.probe_cli_check_dataset()
+        assert outcome.status == "fail"
+        assert "质量结论" in outcome.detail
 
     def test_cli_check_dataset_fail_when_tasks_missing(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(probes_mod, "run_cmd", lambda *a, **kw: (0, "共加载 3 个任务\n", ""))

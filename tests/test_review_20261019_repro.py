@@ -166,8 +166,10 @@ class TestF03VenvDefaultConsistency:
     def test_config_py_default_is_true(self) -> None:
         assert 'env_flag("EXECUTOR_USE_VENV", True)' in _text("config.py")
 
-    def test_readme_warning_still_states_default_on(self) -> None:
-        text = _text("README.md")
+    def test_quickstart_warning_still_states_default_on(self) -> None:
+        # DD 轮（2026-10-26）文档重写：venv 默认开启的读者提示随「安装步骤」
+        # 迁至 QUICKSTART.md，README 只保留快速开始链接；事实判据不变。
+        text = _text("QUICKSTART.md")
         assert "EXECUTOR_USE_VENV" in text
         assert "默认开启" in text
         assert "R10" in text or "2026-09-30" in text
@@ -175,8 +177,6 @@ class TestF03VenvDefaultConsistency:
     @pytest.mark.parametrize(
         ("rel", "column"),
         [
-            ("README.md", -1),
-            ("README.en.md", -1),
             ("docs/api_reference.md", 2),
             ("docs/api_reference.en.md", 2),
         ],

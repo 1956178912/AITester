@@ -8,6 +8,9 @@ on:
   # 定期依赖豁免复查（P2-4，2026-10-01 全面审查批次）：
   # chromadb 豁免清单（--ignore-vuln PYSEC-*）需定期对照上游
   # "是否已发布修复版" 复查，避免"豁免遗忘"。
+  # DF（2026-10-26）：这条从"定期人看"升级为 push/PR 即跑的可执行判据——
+  # 依赖豁免过期门禁真实跑一次不带 --ignore-vuln 的审计，登记条目一旦
+  # 出现 fix_versions 即红；schedule 仅保留"周日全量扫描"语义。
   # R10（2026-10-05 审查批次）：security 作业从"仅周日 schedule / 手动
   # 触发"升级为 push/PR 即跑且阻断（pip-audit + bandit + gitleaks +
   # 豁免登记守卫全部硬门禁，2026-10-05 本地实测当前仓库全绿）；本
@@ -45,6 +48,9 @@ jobs:
   smoke-llm:
     name: Smoke LLM (optional)
     runs-on: ubuntu-latest
+    # DH 轮（2026-10-26）：LLM 端点挂起时不得吃满平台默认 360 分钟——预算覆盖
+    # lock 依赖安装 + 一次最小连通性冒烟；tests/test_ci_job_timeouts.py 锁全作业。
+    timeout-minutes: 15
     env:
       # P2 #9：push/PR 默认关闭（历史口径零 LLM 成本）；需要真实 LLM 集成冒烟时设为 true。
       # 冒烟作业读取 LLM_1_API_KEY / LLM_1_BASE_URL / LLM_1_MODEL_NAME（.env 或 Secrets）。
@@ -408,6 +414,20 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: python scripts/gates/check_release_freshness.py
+
+      - name: Check BibTeX gate contract (CI has no paper/ -> [SKIP])
+        # DB（2026-10-26）：BibTeX 在**百分号注释**里遇到 at 符号会**重启条目扫描**
+        # ⇒ `pass@1` 被读成条目类型 `1` ⇒ 报 "missing an entry type" 并**静默跳过该行之后
+        # 的全部条目**。本轮实测踩中：refs.bib 的注释里写了 `pass@1`，bibtex 退出码 2，
+        # 而 pdflatex 三遍退出码全是 0 ⇒ PDF 照样产出、只是少了几条参考文献，
+        # **没有任何机制能发现**（连编译链都不看 bibtex 的退出码）。
+        # 本门在临时目录里真跑一次 bibtex（真实 refs.bib + 真实 spbasic.bst，`\citation{*}` +
+        # 逐键 .bbl 哨兵），并静态扫描注释区里的 at 符号。paper/ 按双盲纪律不入库
+        # ⇒ CI clone 里稿件缺席 ⇒ 默认档按 [SKIP] 披露、不谎报通过。
+        # **CI 不编译真实稿件**；门禁逻辑由 tests/test_bibtex_compilability_gate.py
+        # 的合成 bib + fresh-clone 行为锁覆盖。本地有稿时本步会真跑并阻断。
+        if: matrix.python-version == '3.14'
+        run: python scripts/gates/check_bibtex_compilability.py
       - name: Check env budget (X3 开关预算守卫)
         # X3（2026-10-05 审查 P0-5）：环境变量开关冻结棘轮——产品开关面
         #（src/ + config.py）新环境变量须先本地运行 check_env_budget.py
@@ -808,6 +828,15 @@ jobs:
         # docs/dependency_exemptions.md 登记（每条漏洞 ID 命中登记表某一行）；
         # 未登记的豁免 → 退出码 1 阻断合并（防"加了 --ignore-vuln 却没留痕"漂移）。
         run: python scripts/gates/check_dependency_exemptions.py
+
+      - name: Check dependency exemption expiry (DF)
+        # 依赖豁免的**过期**判据（DF 轮）：上方两步 pip-audit 带 --ignore-vuln，
+        # 只能发现「未登记的新 ID」，无法发现「已登记 ID 出现了修复版本」。
+        # 本步真跑一次不带 --ignore-vuln 的审计：登记表中的漏洞一旦有
+        # fix_versions ⇒ 红（豁免必须随修复版失效）；审计命中未登记 ID /
+        # 登记版本与 requirements.lock 漂移 ⇒ 红；豁免理由「仅嵌入式、无服务器面、
+        # 无 trust_remote_code」由 src/ 静态扫描锁定。审计不可用 ⇒ --require-audit 判红。
+        run: python scripts/gates/check_dependency_audit.py --require-audit
 
       - name: Check docs history baseline drift (warning-only)
         # 文档一致性治理（P2）：docs/history/ 下的历史快照文档若声明的

@@ -1,151 +1,76 @@
-# AITester 模型卡（MODEL CARD）
+# AITester 模型卡
 
-最后更新：2026-10-25（1.0.0 发布轮：§4 加世代横幅——261 行/臂池数字属 2026-10-24 撤回世代，当前世代读数指向 `BASELINE.yaml` 与重建批；已知限制与 README「已知限制（1.0.0）」行、论文 Threats 段同源。此前 2026-10-21 测量口径批次：§4 新增「有效通过」口径——BA/BB/BC 三轮把 `rc==0` ≠ 有断言执行的通过写入派生读数判据。此前 2026-10-14 LLM 结构化输出加固批次：§2 新增"调用配置"节——thinking 默认 disabled〔成本保护〕+ `LLM_JSON_MODE` 默认 on〔DeepSeek 官方 JSON Output，七处 JSON 契约调用点〕+ finish_reason 守卫 + 数值表达式解析层修复〔ADR-0031〕。此前 2026-10-08 R2 落地批次：叙事对齐 ADR-0016——§1 去"多智能体"主断言，"多智能体编排"降为可消融容器；repair 数字更新为修正口径 v2）
+**检出优先**的 Python 测试生成与修复评估研究系统（归因口径）。本卡描述模型使用、数据来源、评估口径与已知限制。
+
+最后更新：2026-10-26
 
 ## 1. 系统概述
 
-AITester 是一个**检出优先的 Python 测试生成与修复评估研究系统**（归因口径）：
-给定函数级修复任务（合成数据集或 SWE-bench Lite 拆分任务），由
-LangGraph 编排的 Planner → Generator → Executor → Debugger →
-PatchApplier 闭环生成 pytest 测试、执行、诊断并打补丁。其中"**多智能体
-编排**"定位为**可消融容器**（非主断言——E2 双门后 aitester vs
-plain_llm_df δ=−0.3673 结构性劣后，ADR-0016）。三种子主批次 repair 经
-ADR-0021/0027/0029 测量口径修正后为 **39.31%（v2，57/145 可重放行；gold
-独立裁决）**（v1 35.86%；上限归因见
-`experiments/results/main_batch/repair_ceiling_report.md`）；**自修复为可测量
-口径而非已证实主张**（AL5 定位收口）。
-本卡描述其模型使用、数据来源与风险面（参考 NIST AI RMF 与
-模型卡通行条目；本系统当前定位为科研代码，非部署产品）。
+给定函数级修复任务（合成数据集或 SWE-bench Lite 拆分任务），系统由 LangGraph 编排
+Planner → Generator → Executor → Debugger → PatchApplier 闭环：生成 pytest 测试、执行、
+诊断失败并打补丁。
+
+「多智能体编排」是**可消融容器**，不是主断言（ADR-0016；E2 双门后 aitester 对
+plain_llm_df δ=−0.3673，结构性劣后）。本系统是科研代码，不是部署产品。
 
 ## 2. 模型使用
 
-- **模型来源**：本项目不自研/微调模型。全部智能由用户自配的 OpenAI 兼容端点
-  提供（`.env.local` 的 `LLM_N_*` 三元组：API Key / Base URL / 模型名，
-  内置 provider 仅 DeepSeek 官方端点）。
-- **模型角色**：Planner（逻辑分析/规约产出）、Generator（测试代码生成）、
-  Debugger/Review（根因诊断与补丁生成）、FaultLocalizer（RGFL 式推理故障
-  定位，只定位不修复，2026-10-07 修复引擎批次 I 起）、ExpertPool（可选
-  多维度并行专家）。
-- **确定性通道**：SpecIR v2 DSL 编译断言、SMT 见证（`[formal]` extra）、
-  Ochiai 谱系定位、变异评估、P2P 回归门禁均为**非 LLM** 的确定性组件，
-  LLM 失败时系统保守降级（详见各模块 docstring）。注意：故障定位为
-  **双通道**——谱系通道（Ochiai，非 LLM）之外，推理通道（RGFL 式
-  `FaultLocalizerAgent`，`FAULT_LOCALIZER_ENABLE` 默认开）**消耗 LLM**
-  且失败时保守降级 None；`FAULT_LOCALIZER_ENABLE=false` 退回纯谱系消融口径。
-- **调用配置（2026-10-14 ADR-0031，DeepSeek 官方文档对齐）**：
-  thinking 默认 **disabled**（`LLM_THINKING_MODE`，成本保护——V4 系思考
-  链默认开启且计入输出计费）；`LLM_JSON_MODE` **默认 on**——7 处 JSON
-  契约调用点绑定官方 JSON Output（`response_format=json_object`，保证
-  响应为合法 JSON 字符串；`off` 供历史逐字节复现）；响应
-  `finish_reason ∈ {length, insufficient_system_resource}` 按可恢复失败
-  重试；LLM 在 JSON 值位写 Python 数值表达式（`10**18` 类）由解析层
-  受限求值修复（无 eval）。全部配置入 `docs/env_budget.yaml` 与批次
-  provenance `env_snapshot`（可审计、可复现）。
+- **模型来源**：不自研、不微调。全部智能由用户自配的 OpenAI 兼容端点提供
+  （`.env.local` 的 `LLM_N_*`：API Key / Base URL / 模型名）；内置 provider 只有
+  DeepSeek 官方端点，价目表只登记 deepseek-flash——**单一模型族**，结论不外推到
+  其他模型族。
+- **模型角色**：Planner（逻辑分析）、Generator（测试生成）、Debugger/Review（根因诊断
+  与补丁）、FaultLocalizer（RGFL 式推理定位，只定位不修复）、ExpertPool（可选并行专家）。
+- **确定性通道**：SpecIR v2 DSL 断言、SMT 见证、Ochiai 谱系定位、变异评分、P2P 回归
+  门禁均为非 LLM 组件；LLM 失败时系统保守降级。
+- **故障定位双通道**：谱系通道（Ochiai，非 LLM）+ 推理通道（`FaultLocalizerAgent`，
+  消耗 LLM，`FAULT_LOCALIZER_ENABLE` 默认开，失败降级 `None`）。
+- **调用配置（ADR-0031）**：`LLM_THINKING_MODE` 默认 off（思考链计入输出计费）；
+  `LLM_JSON_MODE` 默认 on（7 处 JSON 契约调用点绑定 `response_format=json_object`）；
+  `finish_reason ∈ {length, insufficient_system_resource}` 按可恢复失败重试；JSON
+  值位的 Python 数值表达式由限制求值解析层修复（无 `eval`）。
 
-## 3. 训练数据与数据来源
+## 3. 数据
 
 - 本项目**不训练模型**，无训练数据。
-- 评估数据：`data/swe_bench_lite_*`（SWE-bench Lite 派生，来源为公开
-  SWE-bench 数据集；数据许可：SWE-bench 官方仓库以 **Apache License 2.0**
-  分发数据（P1-9 补齐，引用以 [官方仓库](https://github.com/SWE-bench/SWE-bench)
-  声明为准——第三方使用前请自行复核当期版本）与
-  `src/datasets/synthetic_dataset.py` 程序化生成的合成任务（本项目自研，
-  随仓库 MIT 许可）。
-- RAG 案例库：来自实验自身产出的历史用例（用户本地 `rag_data/`）。
+- 评估数据：`data/swe_bench_lite_*` 来自公开 SWE-bench Lite（SWE-bench 官方仓库以
+  Apache-2.0 分发，第三方使用前请复核当期声明）；合成任务由
+  `src/datasets/synthetic_dataset.py` 程序化生成（本项目自研，随仓库 MIT 分发）。
+- RAG 案例库来自实验自身的历史产出（本地 `rag_data/`，不入库）。
+- **已知偏差**：仅 Python 单语言；合成模板以人工编写的边界/异常/契约缺陷为主，与真实
+  仓库缺陷分布存在系统性差距；任务以函数级单文件为主，仓库级未覆盖；测试生成与修复
+  使用同一 LLM 配置池，自产生/自验证循环（`false_fix` 即其产物）已量化但未消除。
 
-### 3.1 已知偏差（Bias）
+## 4. 指标与口径
 
-- **语言偏差**：仅支持 Python 单语言（多语言为设计未实现，见
-  `docs/design/multilanguage_extension.md`），结论不可外推至其他语言生态。
-- **任务分布偏差**：合成模板为人工编写的经典缺陷形态（边界/异常/契约类），
-  与真实仓库缺陷分布（跨文件、依赖性、语义性缺陷为主）存在系统性差距——
-  detection/repair 在合成集上的数字不应外推到真实仓库场景。
-- **难度偏差**：模板以函数级单文件为主（Level 3/3.5 跨文件占少数），
-  仓库级/工程级任务未覆盖。
-- **LLM 同源偏差**：测试生成与修复使用同一 LLM 配置池，自产生/自验证的
-  循环（M1 三指标中的 false_fix 即其产物）已量化但未消除。
+- **repair = 39.31%（v2，57/145 可重放行，gold 独立裁决）**。历史「全线 0.0%」是两起
+  测量伪影（ADR-0021 patch 字段围栏残留 + ADR-0029 跨文件任务未物化）叠加所致；v1
+  口径 35.86% 是跨文件伪影下界。口径矩阵见 `docs/design/repair_caliber_matrix.md`。
+- **世代声明**：以「n=261/臂」为口径的多 seed 池已于 2026-10-24 撤回，只作历史记录；
+  当前世代读数见 `BASELINE.yaml` 与重建批，单批不混池。
+- **检出口径**：E2 双门后 aitester 对 plain_llm_df δ=−0.3673（全系统在强模型下劣于
+  纯提示协议）；现有检出收益归因于检出优先提示协议，而非「逻辑驱动」规格链。
+- **有效通过口径（BA→BC）**：pytest 对全 skip/xfail/deselect 也返回 `rc==0`，故派生
+  读数要求至少 1 个 passed 且 0 个 failed，否则 fail-closed（`None`/`unverifiable`）。
+- **spec_compile_rate** 在 logic 档实测恒 0.0（AB1 12/12），规格链未被激活；E1
+  （预注册阈值 ≥0.3 保留 / <0.2 放弃）为该主张的生死裁决。
+- **成本**：aitester $0.0259 / plain_llm_df $0.0045 每任务（deepseek-flash 峰时价目表）；
+  plain_llm_df 为已记账花费**下界**（`cost_caliber="recorded_lower_bound"`），非免费。
+- **真实 SWE-bench Lite（n=20 冒烟）**：基础设施故障，**无有效能力结论**——7 次完成
+  全部 429 限流、3 次失败、10 次超时（`experiments/results/swebench_20_summary.json`）。
+  有效性主张尚未被真实基准支持，该基准在待复跑清单。
+- **E7（修复上限分层抽样）已预注册、尚未执行**（`docs/preregistration.md`）：修复上限
+  归因待 E7 数据产生后才可主张。
 
-## 4. 评估口径与已知局限（诚实声明）
+## 5. 已知限制
 
-> **世代横幅（1.0.0，2026-10-25）**：本节以下以「n=261/臂」为口径的数字属于
-> **已撤回的多 seed 池**（2026-10-24 数据清除），保留为历史记录；论文 v0.5/v0.6
-> 已按重建语料重写，并把这些数字标为 historical。**当前世代**的读数在
-> `BASELINE.yaml` `benchmark` 节与各重建批（`b1_lite_20261025` /
-> `spec_ab_scale87_20261024` / `emse_docstring_*_20261017`）里，单批、不与
-> 261 行池混池。撤回映射与冻结读数（含成本表 W-1）见
-> `docs/study/WITHDRAWN_ARTIFACTS_2026-10-24.md`。
-
-- 历史口径（已撤回世代）= R-P0-2 生死实验三种子合并（2026-10-06，n=261/臂，logic 档、
-  deepseek-flash、McNemar+BH-FDR 全显著；详见 `BASELINE.yaml` benchmark 节
-  与 `docs/study/WITHDRAWN_ARTIFACTS_2026-10-24.md`；`statistical_report_3seed_pooled.md` 随该批撤回）：detection plain_llm_df 44.8% >
-  aitester 15.8% > plain_llm 1.5%；aitester vs df **−28pp**——完整系统在
-  强模型下显著劣于纯提示协议（编排净负贡献；21 行缺失双界下结论稳健）。
-- **repair 经测量口径修正后 = 39.31%（57/145 可重放行）**：历史"全线
-  0.0%"系两起测量伪影（ADR-0021 patch 字段围栏残留 + ADR-0029 跨文件任务
-  未物化）叠加所致，非修复主张缺证。上限归因
-  （`repair_ceiling_report.md`，AK1）：修复循环 154/261 → patch 产出 94.2%
-  → plausible 46.8% → correct 39.31%——瓶颈在补丁合理性与 gold 正确性，
-  非补丁未产出。2026-10-07 范式转向后 repair 从"诚实测量的结论"转为
-  "要优化的目标"（修复引擎路线：局部化 → 合成 → 验证）；v1 口径
-  35.86% 系跨文件伪影下界（口径矩阵见 `docs/design/repair_caliber_matrix.md`）。
-- 局部化维度：`fl_at_k`（谱系行级 Top-k 命中，R8 起）与
-  `localization_hit_function`（LLM 推理定位函数级命中，批次 I 起，与
-  gold 变更函数集合比对；未定位/无 gold 材料时键集合同构占位）与
-  检出/修复指标并列输出。E2 定案批 FL@1 首度可测 19/53=35.8%
-  （gold diff 对齐修复后口径）。
-- 成本：aitester $0.0259 / plain_llm_df $0.0045 每任务（价目表 2026-10-06
-  官方登记口径：deepseek-flash 峰时价——表内唯一登记模型；2026-10-23
-  按"仅保留 DeepSeek 官方"要求删除其余条目）。**plain_llm_df 的 $0.0045 是已记录花费的下界，不是精确
-  均值，也不是"免费"**：主批 261 行中 35 行 token 三元组全 0 但
-  `generated_test` 非空（其中 3 行 detection=1.0），S11 阈值单侧通过
-  （无记账行 13.4% < 50%），改前这些行以 0 进金额分子、仍占任务分母；
-  AK 轮起 `cost_caliber="recorded_lower_bound"` 显式披露，真实花费只会更高
-  （`PARTIAL_ACCOUNTING_AK_2026-10-21.md`）。
-- **套件判绿口径（BA→BC 轮，2026-10-21）**：pytest 对全 skip / xfail /
-  deselect 的套件同样返回 `rc==0`，故 `rc==0` 不等于"有断言执行的通过"。
-  M1 detection / repair、`repair_replay`、`mutation_detection` 与
-  `experiments/` 侧 11 处判绿点一律要求有效通过（至少 1 个 passed 且 0 个
-  failed），否则 fail-closed（`None` / `unverifiable` / `not_applicable` /
-  `skipped`）；重放对账工具的"未演示 green"不再记成 False 或 mismatch。
-  真实语料审计：246 份 benchmark / 736 份 gold 套件 / 4895 条 mutation 行、
-  3 份 MISGUIDED_REPORT（350 任务行 / 700 侧）零模块级全 skip ⇒ 历史读数
-  零影响；该口径只影响派生读数与判定，不改写任何归档工件（详见
-  `EFFECTIVE_GREEN_BA_2026-10-21.md` /
-  `EFFECTIVE_GREEN_CONSUMERS_BB_2026-10-21.md` /
-  `MISGUIDED_REPLAY_EFFECTIVE_GREEN_BC_2026-10-21.md`）。
-- spec_compile_rate 在 logic 档实测恒 0.0（AB1 验证批 12/12）——"逻辑驱动"
-  规格链未被激活，当前检出收益归因于检出优先提示协议；E1（预注册阈值
-  ≥0.3 保留 / <0.2 放弃）为该主张的生死裁决。
-- 真实 SWE-bench Lite（n=20 冒烟）：**基础设施故障，无有效能力结论**——20 次尝试中 7 次完成且全部因 API 429 限流失败、3 次失败、10 次超时（`experiments/results/swebench_20_summary.json`；2026-10-13 勘误：此前的"resolved 0/20"不可读作能力负结果）。系统的有效性主张**尚未被真实基准支持**，数字以 BASELINE.yaml 为单一事实源；该基准列入待复跑清单。（限流信号计数口径 = 全结构化文本源 run_notes/notes/issues **去重后**统计 `429` 字面量 = 2，分源各 1；issues 中 404 端点错配条目独立记账，披露工件见 `experiments/results/emse_swebench_disclosure.md`。）
-- "逻辑驱动"全链路（SpecIR DSL / 确定性 oracle / 结构化路由）默认关闭，
-  需 `AITESTER_PROFILE=logic` 显式启用。
-
-## 5. 风险面与防护
-
-- **任意代码执行**：LLM 生成代码在本机执行。防护：venv 沙箱默认开
-  （`EXECUTOR_USE_VENV`）、Docker 隔离可选（默认 `--network=none` +
-  `--read-only` + `--cap-drop=ALL`）、内核沙箱（bwrap/Landlock，Linux，
-  可选）、路径越界防护、补丁证据门与快照回滚。
-- **凭证管理**：API Key 只经 `.env.local`（不入库）+ gitleaks 工作树/全历史
-  双扫描 + 子进程环境脱敏（`scrub_os_environ`）。
-- **提示注入**：输入侧 `detect_prompt_injection` 特征扫描（默认关，
-  `INJECTION_GUARD_ENABLE`），命中只警示不自动阻断（OWASP LLM
-  Top 10 口径的"检测+隔离"分层处置）。
-- **成本**：任务级 token/USD 预算硬闸（默认关）+ LLM 调用墙钟预算。
-
-## 6. 伦理与合规
-
-- 不涉人类受试者、不采集个人数据；SWE-bench 任务均来自公开仓库的
-  历史 issue/PR。
-- 按 EU AI Act 口径本系统属软件开发工具（非 GPAI 提供商/部署者义务主体），
-  使用第三方 LLM 端点时的合规责任在端点提供方与使用者。
-- 生成内容披露：本项目开发流程使用 LLM 辅助，代码与文档按团队规范
-  不以 AI 署名、由仓库维护者对全部内容负责。
-
-## 7. 引用与许可
-
-- 本项目代码：见仓库根 `LICENSE`。
-- 引用的基准/方法来源：见 `.private/review/recovered/` 下 5 份
-  `*_BASELINE_2023-2026.md` 综述（该目录不随发行包分发；对外引用以
-  `docs/citation_allowlist.txt` 登记的待核验项与论文正文参考文献为准）。
-  引用真实性由 `scripts/gates/check_citations.py` 周检。
+- 单一模型族、合成数据为主：检出与修复数字不可外推到其他模型或真实仓库分布。
+- repair 39.31% 是**已测量读数**，不是「自修复已达成」的主张；修复引擎路线（定位 →
+  合成 → 验证）仍在推进。
+- 真实基准证据缺位：SWE-bench Lite 冒烟无有效结论，不得引用为能力负结果或正结果。
+- E7 未执行，修复上限的归因结论尚未闭环。
+- 任意代码执行风险：LLM 生成代码在本机运行；venv 沙箱默认开（`EXECUTOR_USE_VENV`），
+  Docker 隔离可选（`--network=none` + `--read-only` + `--cap-drop=ALL`）。API Key 只经
+  `.env.local`（不入库），配合 gitleaks 扫描与子进程环境脱敏。
+- 不涉人类受试者、不采集个人数据；SWE-bench 任务来自公开仓库历史 issue/PR。
+- 代码许可见 `LICENSE`（MIT）；引用规范见 `CITATION.cff`。

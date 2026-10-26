@@ -95,13 +95,16 @@ def print_rich_table(results: list[dict[str, Any]]) -> None:
         # 0.0 是合法覆盖率，用 is not None 判断缺失（falsy 会把 0% 误显示为 N/A）
         r_cov = r.get("coverage")
         coverage = f"{r_cov}%" if r_cov is not None else "N/A"
+        # 崩溃任务没有迭代数（结果记 None）：显示 N/A，不用缺键兜底的 0 冒充真实值
+        r_iterations = r.get("iterations")
+        iterations = str(r_iterations) if r_iterations is not None else "N/A"
 
         table.add_row(
             status_icon,
             os.path.basename(r.get("file", "")),
             r.get("func", "all"),
             coverage,
-            str(r.get("iterations", 0)),
+            iterations,
             style=status_style,
         )
 

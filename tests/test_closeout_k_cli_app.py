@@ -97,7 +97,7 @@ class TestRunCommandEarlyExits:
     ):
         with pytest.raises(SystemExit) as exc_info:
             self._invoke_run(monkeypatch, tmp_path, json_output=True, verbose=True)
-        assert exc_info.value.code == 1
+        assert exc_info.value.code == 2
         captured = capsys.readouterr()
         out = captured.out + captured.err
         assert "--json 模式下控制台日志被静音" in out
@@ -110,7 +110,7 @@ class TestRunCommandEarlyExits:
         logging.getLogger().setLevel(logging.INFO)  # 先复位，避免全局 DEBUG 级别外溢
         with pytest.raises(SystemExit) as exc_info:
             self._invoke_run(monkeypatch, tmp_path, json_output=False, verbose=True)
-        assert exc_info.value.code == 1
+        assert exc_info.value.code == 2
         captured = capsys.readouterr()
         out = captured.out + captured.err
         assert "已启用详细日志模式" in out
@@ -145,7 +145,7 @@ class TestPrintRunSummaryFallback:
             {"file": "a.py", "func": "f", "passed": True, "coverage": 0.0},
             {"file": "b.py", "func": "g", "passed": False},
         ]
-        cli_app._print_run_summary(results, total=2, passed=1, failed=1, elapsed_time=1.5)
+        cli_app._print_run_summary(results, total=2, passed=1, failed=1, elapsed_time=1.5, coverage_threshold=80.0)
         out = capsys.readouterr().out
         assert "批量测试完成" in out
         assert "✓ a.py (func=f, coverage=0.0%)" in out

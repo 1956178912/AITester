@@ -103,6 +103,12 @@ scheduled-workflows:  ## 远端定时作业巡检守卫（CY 轮，CI 阻断项�
 release-freshness:  ## 发布新鲜度守卫（CZ 轮，CI 阻断项：最新 release tag 不得落在 main 后面；落后须登记例外）
 	$(PY) scripts/gates/check_release_freshness.py
 
+bibtex-compilability:  ## 引用库可编译性守卫（DB/DE 轮：本地有稿且有 bibtex 时真实编译阻断；无 bibtex / CI 缺稿均披露 [SKIP]；spbasic.bst 缺席即红）
+	$(PY) scripts/gates/check_bibtex_compilability.py
+
+dependency-audit:  ## 依赖漏洞豁免过期守卫（DF 轮：修复版发布/新 advisory 未登记/登记版本漂移即红；离线披露 [SKIP]；豁免理由「仅嵌入式」由 src 静态扫描锁定）
+	$(PY) scripts/gates/check_dependency_audit.py
+
 self-mutation:  ## 自身测试套件变异测试（零 LLM；临时副本内变异；默认 3 个核心模块等距抽样 120/文件）
 
 fix-coverage:  ## 修复覆盖率缺口审计（找出「修复新增但从未被测试执行」的代码行；零 LLM；基线默认 auto = 最近一次改动 src/ 的提交）
@@ -136,7 +142,7 @@ perf-check:  ## 性能回归比对（默认 non-blocking 告警；本地同机�
 tool-versions:  ## CI/pre-commit/lock 三方工具版本一致守卫（AK4 接入 CI）
 	$(PY) scripts/gates/check_tool_versions.py
 
-gates: lint format typecheck test docs-check doc-commands env-budget baseline-check state-contract env-snapshot model-fingerprint tool-versions json-contract-sites json-strict artifact-doc-consistency zero-assert ast-guards status-persistence registration-consistency invocation-caliber flag-effect repo-hygiene scheduled-workflows release-freshness  ## 本地全部门禁（合并前自检；format = ruff format --check，2026-10-12 质量债清偿批次补入；zero-assert = K 轮补入，此前 CI 阻断但本地 gates 缺席；json-strict = AF 轮补入；ast-guards = BK 轮补入，捕获面棘轮；status-persistence = BN 轮补入，落盘可达性棘轮；registration-consistency = CF 轮补入，登记面当前口径与分册清单对账；repo-hygiene = CX 轮补入，临时/缓存产物不得被跟踪；scheduled-workflows = CY 轮补入，远端定时作业最近一次必须非红）
+gates: lint format typecheck test docs-check doc-commands env-budget baseline-check state-contract env-snapshot model-fingerprint tool-versions json-contract-sites json-strict artifact-doc-consistency zero-assert ast-guards status-persistence registration-consistency invocation-caliber flag-effect repo-hygiene scheduled-workflows release-freshness bibtex-compilability dependency-audit  ## 本地全部门禁（合并前自检；format = ruff format --check，2026-10-12 质量债清偿批次补入；zero-assert = K 轮补入，此前 CI 阻断但本地 gates 缺席；json-strict = AF 轮补入；ast-guards = BK 轮补入，捕获面棘轮；status-persistence = BN 轮补入，落盘可达性棘轮；registration-consistency = CF 轮补入，登记面当前口径与分册清单对账；repo-hygiene = CX 轮补入，临时/缓存产物不得被跟踪；scheduled-workflows = CY 轮补入，远端定时作业最近一次必须非红；bibtex-compilability = DB 轮补入，引用库注释行的 at 符号会静默丢条目；dependency-audit = DF 轮补入，豁免必须随修复版失效）
 
 repro:  ## 复现主批次（详见 reproduce.sh；消耗 LLM 配额，勿自动触发）
 	bash reproduce.sh

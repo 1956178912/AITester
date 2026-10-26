@@ -186,13 +186,16 @@ class TestCliJsonErrorLine:
         assert payload["passed"] is False
         assert len(results) == 1
 
-    def test_append_task_error_silent_in_text_mode(self, capsys):
+    def test_append_task_error_text_mode_keeps_stdout_clean(self, capsys):
         from src.cli.app import _append_task_error
 
         results: list[dict] = []
         _append_task_error("bad.py", "f", RuntimeError("boom"), results, json_output=False)
 
-        assert capsys.readouterr().out == ""
+        captured = capsys.readouterr()
+        # DS 轮：stdout 仍只承载结果表格；异常原因改由 stderr 披露（此前只进日志）
+        assert captured.out == ""
+        assert "任务执行异常" in captured.err and "boom" in captured.err
         assert len(results) == 1
 
     def test_parallel_handler_uses_same_contract(self, capsys):

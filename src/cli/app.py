@@ -22,6 +22,7 @@ import contextlib
 import glob as glob_module
 import json
 import logging
+import math
 import os
 import sys
 import time
@@ -143,7 +144,7 @@ class UXGroup(click.Group):
 
         # 添加示例命令（使用 rich 语法）
         examples = """
-[bold]示例命令[/bold]
+示例命令
   $ python main.py run examples/calculator.py                    # 测试单个文件
   $ python main.py run examples/*.py --parallel=2                # 并发测试所有示例文件
   $ python main.py run examples/calculator.py --func divide      # 测试指定函数
@@ -160,12 +161,14 @@ class UXGroup(click.Group):
 def cli() -> None:
     """AITester - 检出优先的测试生成与修复评估（归因）系统
 
-    以**检出优先协议**为主成功口径：自动为 Python 代码生成测试、诊断错误、
-    尝试修复，直至测试通过或达到最大迭代次数；并如实报告 detection / repair /
-    false_fix 三指标与口径（见 BASELINE.yaml）。
+    以检出优先协议为主成功口径：自动为 Python 代码生成测试、诊断错误、
+    尝试修复，直至测试通过或达到最大迭代次数。CLI 逐任务报告测试是否通过、
+    覆盖率判定（coverage_ok）与迭代次数，非 --json 模式的批次摘要汇总覆盖率
+    达标情况；detection / repair / false_fix 属于基准评估面（experiments/run_benchmark.py
+    消费 experiments/_m1_metrics.py，需要 gold 材料），不在 CLI 输出中。
 
     注：编排层（LangGraph：Planner → Generator → Executor → Debugger →
-    PatchApplier）在本系统中定位为**可消融容器**，非主断言——项目自身 n=261
+    PatchApplier）在本系统中定位为可消融容器，非主断言——项目自身 n=261
     实验测得编排净贡献为负（δ≈−0.28，ADR-0016），故不再以"多智能体"为主表述
     （与 README / MODEL_CARD 对齐）。
     """
@@ -174,24 +177,47 @@ def cli() -> None:
 
 
 # ─── 任务执行 ─────────────────────────────────────────────────────────────────
-def _make_task_error_result(file_path: str, func: str | None, error: BaseException | None) -> dict[str, Any]:
-    """构建任务异常结果字典（与 _run_single_task 正常结果同构，便于汇总统计）。
+def _make_task_error_result(
+    file_path: str,
+    func: str | None,
+    error: BaseException | None,
+    coverage_threshold: float | None = None,
+    max_iterations: int | None = None,
+) -> dict[str, Any]:
+    """构建任务异常结果字典（与 _run_single_task 正常结果键集合逐键相同）。
+
+    崩溃时未知的判定值显式记 None（coverage / coverage_ok / iterations /
+    diagnosis / error_category / 任务级观测统计），CLI 已知的阈值与迭代上限
+    照实透传；``error`` 键在成功结果里也存在（值 None），消费方不必按
+    「键是否存在」分支。
 
     Args:
         file_path: 被测文件路径。
         func: 被测函数名（None 时记 "all"）。
         error: 触发异常的 Exception（None 时 error 字段记 "unknown error"）。
+        coverage_threshold: CLI 覆盖率阈值，未传入时记 None（未知）。
+        max_iterations: CLI 最大迭代次数，未传入时记 None（未知）。
 
     Returns:
-        标记 success/passed 为 False 的结果字典，含 error 描述（已脱敏，防 LLM 异常
-        文本携带的 API Key 经 JSON/stdout 外泄——脱敏过滤器只覆盖 logging 通道）。
+        标记 success/passed 为 False 的结果字典，error 描述已脱敏，防 LLM 异常
+        文本携带的 API Key 经 JSON/stdout 外泄——脱敏过滤器只覆盖 logging 通道。
     """
     return {
         "success": False,
         "file": file_path,
         "func": func or "all",
         "passed": False,
+        "coverage": None,
+        "coverage_threshold": coverage_threshold,
+        "coverage_ok": None,
+        "iterations": None,
+        "max_iterations": max_iterations,
+        "diagnosis": None,
+        "error_category": None,
         "error": mask_sensitive_info(str(error)) if error else "unknown error",
+        "event_bus": None,
+        "cost_budget": None,
+        "semantic_cache": None,
     }
 
 
@@ -201,18 +227,23 @@ def _append_task_error(
     error: BaseException | None,
     results: list[dict[str, Any]],
     json_output: bool,
+    coverage_threshold: float | None = None,
+    max_iterations: int | None = None,
 ) -> dict[str, Any]:
-    """F11（2026-10-22 第三方复审 P2）：异常任务也必须在 JSON 流里出现。
+    """F11（2026-10-22 第三方复审 P2）：异常任务也必须在结果流里出现。
 
     历史实现只把错误结果追加进内存 ``results``：``--json`` 模式下逐任务的 JSON
     行来自 ``_run_single_task`` 内部 echo，异常路径绕过了它 → 该任务在 stdout
     里**完全缺失**（既没有成功行也没有失败行），调度层无法区分"没跑"和"崩了"。
-    现在与成功路径同构：追加 + （JSON 模式）输出一行错误 JSON。
+    现在与成功路径同构：追加 + （JSON 模式）输出一行错误 JSON；非 JSON 模式把
+    异常原因写 stderr（stdout 只承载结果表格），避免「失败但终端不可读」。
     """
-    result = _make_task_error_result(file_path, func, error)
+    result = _make_task_error_result(file_path, func, error, coverage_threshold, max_iterations)
     results.append(result)
     if json_output:
         click.echo(json.dumps(result, ensure_ascii=False, indent=2))
+    else:
+        error_msg(f"任务执行异常：{file_path}（func={result['func']}）：{result['error']}")
     return result
 
 
@@ -222,6 +253,8 @@ def _handle_task_exception(
     func: str | None,
     results: list[dict[str, Any]],
     json_output: bool = False,
+    coverage_threshold: float | None = None,
+    max_iterations: int | None = None,
 ) -> None:
     """
     统一处理并行任务执行中的异常，记录日志并追加错误结果。
@@ -232,11 +265,13 @@ def _handle_task_exception(
         func: 被测函数名（用于结果字典）。
         results: 结果列表，异常结果将被追加到此列表。
         json_output: JSON 模式时同步输出错误结果行（F11）。
+        coverage_threshold: CLI 覆盖率阈值（透传给错误结果）。
+        max_iterations: CLI 最大迭代次数（透传给错误结果）。
     """
     file_path = future_to_file[future]
     task_error = future.exception()  # 只调用一次，避免重复取异常
     logger.error("任务执行异常：file=%s, error=%s", file_path, task_error)
-    _append_task_error(file_path, func, task_error, results, json_output)
+    _append_task_error(file_path, func, task_error, results, json_output, coverage_threshold, max_iterations)
 
 
 def _dispatch_parallel_tasks(
@@ -293,7 +328,15 @@ def _dispatch_parallel_tasks(
                 if on_success:
                     on_success(os.path.basename(future_to_file[future]))
             except Exception:
-                _handle_task_exception(future, future_to_file, func, results, json_output)
+                _handle_task_exception(
+                    future,
+                    future_to_file,
+                    func,
+                    results,
+                    json_output,
+                    coverage_threshold,
+                    max_iterations,
+                )
             finally:
                 if on_progress:
                     on_progress(future)
@@ -414,7 +457,8 @@ def _run_single_task(
         func: 指定被测函数名，None 表示测试全部函数。
         max_iterations: 最大修复迭代次数。
         timeout: 单个任务的执行超时（秒），经 state 贯通到 Executor。
-        coverage_threshold: 覆盖率达标阈值（%），用于结果判定与摘要输出。
+        coverage_threshold: 覆盖率达标阈值（%）。只写入逐任务结果 coverage_ok
+            并在批次摘要汇总，不参与任务通过/退出码判定。
         output_json: 是否输出 JSON 格式结果。
         dump_trace_on_failure: 任务失败时把内存追踪快照（--dump-trace-on-failure）
             写成临时 JSONL 供诊断；None/False 时不触发（默认行为不变，零 I/O）。
@@ -517,6 +561,8 @@ def _run_single_task(
         "max_iterations": max_iterations,
         "diagnosis": final_state.get("diagnosis"),
         "error_category": error_category,
+        # 崩溃结果也有该键（值 None）：键集合逐键相同，消费方不必按存在性分支
+        "error": None,
         # 1.4 事件总线 / 5.4 预算 / 5.1 语义缓存 观测统计
         "event_bus": _event_bus_stats(),
         "cost_budget": get_process_budget_stats(),
@@ -570,10 +616,17 @@ def _run_single_task(
 
 @cli.command()
 @click.argument("target_files", type=click.Path(exists=True), nargs=-1)
-@click.option("--func", "-f", default=None, help="指定被测函数名，不指定则测试全部函数")
+@click.option(
+    "--func",
+    "-f",
+    default=None,
+    help="指定被测函数名，不指定则测试全部函数（显式空字符串按用法错误拒绝，避免静默放宽到全部函数）",
+)
 @click.option("--max-iterations", default=MAX_ITERATIONS, help=f"最大修复迭代次数（默认 {MAX_ITERATIONS}）")
 @click.option(
-    "--coverage-threshold", default=COVERAGE_THRESHOLD, help=f"覆盖率阈值百分比（默认 {COVERAGE_THRESHOLD}%）"
+    "--coverage-threshold",
+    default=COVERAGE_THRESHOLD,
+    help=f"覆盖率达标阈值百分比（默认 {COVERAGE_THRESHOLD}%）；用于逐任务 coverage_ok 判定与批次摘要，不改变退出码",
 )
 @click.option("--parallel", "-p", default=1, type=int, help="并发执行的文件数量（默认 1，单线程）")
 @click.option("--timeout", "-t", default=None, type=int, help=f"单个任务执行超时秒数（默认 {EXECUTION_TIMEOUT}s）")
@@ -600,7 +653,12 @@ def run(
 ) -> None:
     """运行测试任务（支持单文件或多个文件）
 
-    TARGET_FILES: 一个或多个被测 Python 文件路径（必须存在）
+    TARGET_FILES: 一个或多个被测 Python 文件路径（必须存在且为普通文件；目录 / 特殊文件
+    按用法错误 rc=2 拒绝，重复路径只跑一次）
+
+    --func 显式传空字符串 / 纯空白按用法错误 rc=2 拒绝（不启动任何任务）：shell 里
+    ``--func "$FUNC"`` 变量未展开时传入的是空值而非「未提供」，静默当作全部函数会
+    按函数数消耗 LLM；省略 --func 才是「测试全部函数」。
 
     示例：
         python main.py run examples/calculator.py
@@ -616,6 +674,12 @@ def run(
         4. 输出执行结果摘要或 JSON
     """
     _validate_run_args(parallel, max_iterations, coverage_threshold, timeout)
+
+    # 显式空值 ≠ 未提供：`--func "$FUNC"` 变量未展开时 click 收到 ""，若按 falsy
+    # 当作「未指定」就会静默测试全部函数（按函数数消耗 LLM），必须按用法错误拒绝。
+    if func is not None and not func.strip():
+        error_msg("--func 不能为空（显式空值不等于「未提供」：省略 --func 才是测试全部函数）")
+        raise SystemExit(2)
 
     # 设置详细日志级别
     if verbose and not json_output:
@@ -644,7 +708,7 @@ def run(
     if not expanded_files:
         error_msg("没有有效的目标文件，请检查文件路径是否正确")
         info_msg("提示：使用 'python main.py list-examples' 查看可用示例文件")
-        raise SystemExit(1)
+        raise SystemExit(2)
 
     # --json 模式：静音 stdout 控制台日志 + rich 进度条走 stderr，让 stdout 只承载 JSON
     # （此前 json 输出与日志同走 stdout，`| jq` 解析必失败）
@@ -698,7 +762,7 @@ def run(
                     results.append(result)
                 except Exception as e:
                     logger.error("任务执行异常：file=%s, error=%s", target_file, e)
-                    _append_task_error(target_file, func, e, results, json_output)
+                    _append_task_error(target_file, func, e, results, json_output, coverage_threshold, max_iterations)
 
         elapsed_time = time.time() - start_time
 
@@ -709,7 +773,7 @@ def run(
 
         # 输出汇总信息（非 JSON 模式下）
         if not json_output:
-            _print_run_summary(results, total, passed, failed, elapsed_time)
+            _print_run_summary(results, total, passed, failed, elapsed_time, coverage_threshold)
 
         logger.info("批量测试完成：总计=%d, 通过=%d, 失败=%d, 耗时=%.2fs", total, passed, failed, elapsed_time)
         exit_code = 1 if failed > 0 else 0
@@ -721,47 +785,97 @@ def run(
 
 
 def _validate_run_args(parallel: int, max_iterations: int, coverage_threshold: float, timeout: int | None) -> None:
-    """校验 run 命令输入参数，非法时抛 SystemExit(1)。"""
+    """校验 run 命令输入参数，非法时抛 SystemExit(2)（用法错误，与 click 口径一致）。"""
     if parallel < 1:
         error_msg("--parallel 必须大于 0")
-        raise SystemExit(1)
+        raise SystemExit(2)
     if max_iterations < 1:
         error_msg("--max-iterations 必须大于 0")
-        raise SystemExit(1)
-    if coverage_threshold < 0 or coverage_threshold > 100:
+        raise SystemExit(2)
+    # nan 与任何数比较都为 False，会绕过下面的范围比较并让每个任务恒判失败
+    if math.isnan(coverage_threshold) or coverage_threshold < 0 or coverage_threshold > 100:
         error_msg(f"--coverage-threshold 必须在 0-100 范围内（当前: {coverage_threshold}%）")
-        raise SystemExit(1)
+        raise SystemExit(2)
     # 超时参数校验：负数/0 会让 subprocess 立即超时，属于无效输入
     if timeout is not None and timeout < 1:
         error_msg(f"--timeout 必须 >= 1 秒（当前: {timeout}）")
-        raise SystemExit(1)
+        raise SystemExit(2)
 
 
 def _expand_target_files(target_files: tuple[str, ...]) -> list[str]:
-    """展开 glob 模式与普通路径，返回存在的文件列表（glob 匹配项按字典序稳定排序）。"""
+    """展开 glob 模式与普通路径，只收普通文件；同一文件按绝对路径去重（保留首次出现）。
+
+    - 显式命名的目录 / 特殊文件：用法错误（rc=2）。原逻辑经 ``glob.glob`` 原样
+      收下目录，任务在 ``open()`` 处抛 ``IsADirectoryError`` 后被记成「任务失败」
+      （rc=1），把用法问题伪装成测试没过；
+    - glob 命中的目录静默过滤（通配符本来就可能覆盖子目录），全部落空时按用法
+      错误拒绝——否则「什么都没匹配到」会退化成「无有效目标」之外的第二种静默；
+    - 同一文件经 glob 与显式路径重复命中时只跑一次：重复执行会重复进入工作流、
+      重复消耗 LLM。去重口径是 ``os.path.abspath``（相对/绝对路径视为同一目标）。
+    """
     expanded_files: list[str] = []
+    seen: set[str] = set()
     for pattern in target_files:
-        matched = glob_module.glob(pattern)
-        if matched:
-            expanded_files.extend(sorted(matched))
+        if glob_module.has_magic(pattern):
+            candidates = [path for path in sorted(glob_module.glob(pattern)) if os.path.isfile(path)]
+            if not candidates:
+                # 通配符不命中但路径本身就存在（文件名含 [] 等元字符）时按字面量收下
+                if os.path.isfile(pattern):
+                    candidates = [pattern]
+                elif os.path.exists(pattern):
+                    error_msg(f"目标不是普通文件（目录或特殊文件）：{pattern}")
+                    raise SystemExit(2)
+                elif glob_module.glob(pattern):
+                    error_msg(f"模式只匹配到目录或非普通文件：{pattern}")
+                    raise SystemExit(2)
+                else:
+                    warning_msg(f"文件不存在：{pattern}")
+                    continue
+        elif os.path.isfile(pattern):
+            candidates = [pattern]
         elif os.path.exists(pattern):
-            expanded_files.append(pattern)
+            error_msg(f"目标不是普通文件（目录或特殊文件）：{pattern}")
+            raise SystemExit(2)
         else:
             warning_msg(f"文件不存在：{pattern}")
+            continue
+        for path in candidates:
+            key = os.path.abspath(path)
+            if key in seen:
+                continue
+            seen.add(key)
+            expanded_files.append(path)
     return expanded_files
 
 
 def _print_run_summary(
-    results: list[dict[str, Any]], total: int, passed: int, failed: int, elapsed_time: float
+    results: list[dict[str, Any]],
+    total: int,
+    passed: int,
+    failed: int,
+    elapsed_time: float,
+    coverage_threshold: float,
 ) -> None:
-    """打印批量测试完成摘要（非 JSON 模式，含结果表格与统计）。"""
+    """打印批量测试完成摘要（非 JSON 模式，含结果表格与统计）。
+
+    覆盖率判定（逐任务 ``coverage_ok``）在此汇总披露三态：达标 / 未达标 /
+    不可测（无覆盖率数据或任务崩溃）。阈值不参与「通过」计数与退出码——
+    退出码只反映测试通过/失败，与 ``run --help`` 的说明一致。
+    """
     separator = "=" * 50
+    coverage_met = sum(1 for r in results if r.get("coverage_ok") is True)
+    coverage_missed = sum(1 for r in results if r.get("coverage_ok") is False)
+    coverage_unmeasured = total - coverage_met - coverage_missed
     click.echo(f"\n{separator}")
     click.echo(f"{Colors.BOLD}批量测试完成{Colors.RESET}")
     click.echo(f"  总计：{total} 个文件")
     click.echo(f"  通过：{colorize(str(passed), Colors.GREEN)}")
     if failed > 0:
         click.echo(f"  失败：{colorize(str(failed), Colors.RED)}")
+    click.echo(
+        f"  覆盖率：{coverage_met} 达标 / {colorize(str(coverage_missed), Colors.RED)} 未达标 / "
+        f"{coverage_unmeasured} 不可测（阈值 {coverage_threshold:.1f}%）"
+    )
     click.echo(f"  耗时：{elapsed_time:.2f}s")
     click.echo(f"{separator}")
 
@@ -813,28 +927,64 @@ def list_examples() -> None:
 @cli.command(name="clean-venv-cache")
 @click.option("--max-age-days", default=None, type=int, help="超过该天数的 venv 删除（None 表示不按年龄过滤）")
 @click.option("--max-size-mb", default=None, type=int, help="超过该大小（MB）的 venv 删除（None 表示不按大小过滤）")
-@click.option("--list-only", "-l", is_flag=True, help="仅列出缓存目录内容，不删除")
+@click.option(
+    "--list-only",
+    "-l",
+    is_flag=True,
+    help="仅列出缓存目录内容，不删除（与过滤条件组合时预演实际会被删除的条目）",
+)
 def clean_venv_cache(max_age_days: int | None, max_size_mb: int | None, list_only: bool) -> None:
     """清理 ExecutorAgent 的 venv 依赖缓存（4.4：按时间/大小清理 + 命中率统计）。
 
     缓存目录默认 ~/.cache/aitester/venvs/（可经 AITESTER_VENV_CACHE_DIR 环境变量覆盖）。
-    两个过滤条件均缺省时清空全部缓存；--list-only 只读展示，不产生删除。
+    两个过滤条件均缺省时清空全部缓存；--list-only 只读展示，不产生删除，与过滤条件
+    组合时按实际删除口径预演（[将删除]/[保留]），预览名单与实删名单同源。
 
     示例：
         python main.py clean-venv-cache --list-only            # 查看现有缓存
+        python main.py clean-venv-cache --list-only --max-age-days 30  # 预演会删哪些
         python main.py clean-venv-cache --max-age-days 30      # 删除 30 天前的 venv
         python main.py clean-venv-cache --max-size-mb 512      # 删除超过 512MB 的 venv
+
+    退出码：0 正常；1 有条目删除失败（目录仍存在，如权限不足）；2 过滤条件为负数
+    （用法错误，不触碰缓存）。
     """
     from src.tools import dependency
 
+    # 负数过滤在 clear_venv_cache 里恒为真（age_days > -5 对每个条目都成立），
+    # 会静默删光全部缓存——必须在删除之前拦截；0 是「全部过期」的显式语义，保持合法。
+    if max_age_days is not None and max_age_days < 0:
+        error_msg(f"--max-age-days 必须 >= 0（当前: {max_age_days}）")
+        raise SystemExit(2)
+    if max_size_mb is not None and max_size_mb < 0:
+        error_msg(f"--max-size-mb 必须 >= 0（当前: {max_size_mb}）")
+        raise SystemExit(2)
+
     if list_only:
-        entries = dependency.list_venv_cache()
+        filtered = max_age_days is not None or max_size_mb is not None
+        if filtered:
+            # 过滤条件此前被静默忽略（列出全部），用户按 --list-only 预演会误以为
+            # 全部都会删；这里复用 clear_venv_cache 的同一判定，预览与实删同源。
+            entries = dependency.preview_venv_cache_cleanup(max_age_days=max_age_days, max_size_mb=max_size_mb)
+        else:
+            entries = dependency.list_venv_cache()
         if not entries:
             info_msg("venv 缓存目录为空（或尚未创建）")
         else:
-            info_msg(f"venv 缓存共 {len(entries)} 项（总大小 {round(sum(e['size_mb'] for e in entries), 2)} MB）：")
-            for entry in entries:
-                info_msg(f"  {entry['name']}  {entry['size_mb']} MB  创建 {entry['created_at']}")
+            total_mb = round(sum(e["size_mb"] for e in entries), 2)
+            if filtered:
+                doomed = sum(1 for e in entries if e["would_remove"])
+                info_msg(
+                    f"venv 缓存共 {len(entries)} 项（总大小 {total_mb} MB）；"
+                    f"按当前过滤条件将删除 {doomed} 项、保留 {len(entries) - doomed} 项："
+                )
+                for entry in entries:
+                    tag = "将删除" if entry["would_remove"] else "保留"
+                    info_msg(f"  [{tag}] {entry['name']}  {entry['size_mb']} MB  创建 {entry['created_at']}")
+            else:
+                info_msg(f"venv 缓存共 {len(entries)} 项（总大小 {total_mb} MB）：")
+                for entry in entries:
+                    info_msg(f"  {entry['name']}  {entry['size_mb']} MB  创建 {entry['created_at']}")
         stats = dependency.get_venv_cache_stats()
         info_msg(f"命中率统计: {stats['hits']}/{stats['total']} 次复用（hit rate {stats['hit_rate']}）")
         return
@@ -844,15 +994,25 @@ def clean_venv_cache(max_age_days: int | None, max_size_mb: int | None, list_onl
         success_msg(
             f"已删除 {len(result['removed'])} 个 venv（释放 {result['freed_mb']} MB）：{', '.join(result['removed'])}"
         )
-    else:
-        info_msg("没有符合条件的 venv 需要删除")
     if result["kept"]:
         info_msg(f"保留 {len(result['kept'])} 个 venv：{', '.join(result['kept'])}")
+    if result["failed"]:
+        warning_msg(
+            f"{len(result['failed'])} 个 venv 删除失败（目录仍存在，可能权限不足）：{', '.join(result['failed'])}"
+        )
+        raise SystemExit(1)
+    if not result["removed"]:
+        info_msg("没有符合条件的 venv 需要删除")
 
 
 @cli.command(name="check-dataset")
 @click.argument("dataset", default="examples")
-@click.option("--subset", "-s", default=None, help="数据子集（如 lite/mini）")
+@click.option(
+    "--subset",
+    "-s",
+    default=None,
+    help="数据子集（如 lite/mini）；显式空字符串按用法错误拒绝，避免静默放宽到全量数据",
+)
 @click.option("--limit", "-n", default=3, type=int, help="展示前 N 个任务的加载详情（默认 3）")
 def check_dataset(dataset: str, subset: str | None, limit: int) -> None:
     """校验数据集加载质量（P0：SWE-bench 加载正确性排查入口）。
@@ -863,24 +1023,80 @@ def check_dataset(dataset: str, subset: str | None, limit: int) -> None:
     示例：
         python main.py check-dataset swe_bench --subset lite
         python main.py check-dataset examples
+
+    退出码：0 至少校验到一个任务且质量报告无问题（或加载器不提供该能力）；
+    1 加载异常、0 个任务（什么都没校验到）、请求的子集未生效（子集文件缺失 /
+    数据源为显式文件）或质量报告发现加载问题；2 用法错误
+    （未知数据集名 / --limit 为负 / --subset 为显式空值 / --subset 用于不支持子集
+    的数据集或未知子集名）。显式空 subset 会被 click 传成 ""，若按 falsy 当作「未请求
+    子集」就会静默校验全量数据——脚本里 ``--subset "$SUBSET"`` 变量未展开时正是这种形态。
     """
-    from src.datasets.dataset_loader import load_dataset
+    from src.datasets.dataset_loader import (
+        dataset_subset_support,
+        get_available_datasets,
+        load_dataset,
+        normalize_dataset_name,
+    )
+
+    # 工厂对未知名称按契约降级为 InMemoryDataset（程序化调用方的宽容入口）——
+    # 但诊断命令若照此静默换成示例数据，就会把「没校验到你要的数据集」报成通过。
+    supported = get_available_datasets()
+    if normalize_dataset_name(dataset) not in supported:
+        error_msg(f"未知数据集: {dataset}（支持: {', '.join(supported)}）")
+        raise SystemExit(2)
+    # Python 负切片 tasks[:-5] 会静默变成「取尾部」，与「展示前 N 个」语义完全不同
+    if limit < 0:
+        error_msg(f"--limit 必须 >= 0（当前: {limit}）")
+        raise SystemExit(2)
+    # 显式空值 ≠ 未提供：`--subset "$SUBSET"` 变量未展开时 click 收到 ""，若按
+    # falsy 跳过下面的能力校验，输出会把「子集: 全部」当成已校验口径（静默放宽）。
+    if subset is not None and not subset.strip():
+        error_msg("--subset 不能为空（显式空值不等于「未请求子集」：省略 --subset 才是校验全量数据）")
+        raise SystemExit(2)
+    # --subset 不能被静默忽略：没有子集概念的数据集接受该参数只会让输出
+    # 冒充「已校验子集」，而实际加载的是全量数据。
+    if subset:
+        support = dataset_subset_support(dataset)
+        if not support.supports:
+            supporting = [name for name in supported if dataset_subset_support(name).supports]
+            error_msg(f"数据集 {dataset} 不支持子集选择（--subset）")
+            info_msg(f"支持 --subset 的数据集：{', '.join(supporting)}")
+            raise SystemExit(2)
+        if support.allowed is not None and subset not in support.allowed:
+            error_msg(f"数据集 {dataset} 不支持子集 {subset!r}（可选: {', '.join(sorted(support.allowed))}）")
+            raise SystemExit(2)
 
     try:
         loader = load_dataset(dataset, subset=subset)
     except Exception as e:
         error_msg(f"数据集加载失败: {e}")
-        return
+        raise SystemExit(1) from e
 
     tasks = loader.tasks
+    if not tasks:
+        # 0 个任务 ⇒ 质量报告没有任何样本可查，绝不能报「通过」（数据未就位是 rc=1）
+        warning_msg("未加载到任何任务：本次未校验任何内容（数据未就位或加载配置缺失）")
+        raise SystemExit(1)
+    # 请求的子集未生效（子集文件缺失 / 数据源为显式文件）时，加载器会回退到
+    # 其他数据；此时继续输出「子集: X」等于宣称校验了没校验的数据。
+    if subset and loader.subset_fallback_reason:
+        error_msg(f"--subset {subset} 未生效：{loader.subset_fallback_reason}")
+        info_msg("如需校验回退后的数据，请去掉 --subset 重新运行")
+        raise SystemExit(1)
+
     info_msg(f"数据集 {dataset}（子集: {subset or '全部'}）共加载 {len(tasks)} 个任务")
 
     # 逐任务打印加载详情（前 N 个，对应"手动检查 2-3 个任务"的排查方法）
     _print_task_details(tasks, limit)
     # 全量质量报告（仅 SWE-bench/Defects4J 等标准数据集有意义）
-    _print_quality_report(loader, tasks)
+    quality_issues = _print_quality_report(loader, tasks)
     # 2.1 源码补充流程：缺失被测源码的任务单独列出 instance_id
     _print_missing_source(loader, tasks)
+    # 发现加载问题必须以非零码退出：诊断命令只打 warning、返回 0 时，CI 与脚本
+    # 会把「校验出问题」读成「数据集健康」（docstring 承诺 0 = 无问题）。
+    if quality_issues:
+        error_msg(f"加载质量校验未通过：{len(quality_issues)} 个任务存在加载问题（详见上方质量报告）")
+        raise SystemExit(1)
 
 
 def _print_task_details(tasks: list[Any], limit: int) -> None:
@@ -899,16 +1115,24 @@ def _print_task_details(tasks: list[Any], limit: int) -> None:
         issues = SWEBenchDataset.validate_task(task)
         if issues:
             for issue in issues:
-                warning_msg(f"  ⚠ {issue}")
+                warning_msg(f"  {issue}")
         else:
-            info_msg("  ✓ 加载质量健康")
+            success_msg("  加载质量健康")
 
 
-def _print_quality_report(loader: Any, tasks: list[Any]) -> None:
-    """打印全量质量报告（仅 SWE-bench/Defects4J 等标准数据集有意义）。"""
-    report = {}
-    if hasattr(loader, "quality_report"):
-        report = loader.quality_report()
+def _print_quality_report(loader: Any, tasks: list[Any]) -> dict[str, list[str]] | None:
+    """打印全量质量报告，返回报告字典（能力缺失时返回 None）。
+
+    只有加载器实现了 ``quality_report`` 才能给出「全量通过」结论；缺失该方法时
+    必须显式披露跳过——把空报告读成「全部健康」会让 ``--limit`` 之外的未检查
+    任务一起被宣告通过（DL 轮：InMemoryDataset 实测 3 个任务从未做过全量校验）。
+    返回值只算一次报告：调用方据此决定退出码，展示与判定必须同源。
+    """
+    quality_report = getattr(loader, "quality_report", None)
+    if not callable(quality_report):
+        info_msg("质量检查：该数据集未提供 quality_report，跳过全量校验（SWE-bench 系列提供）")
+        return None
+    report = quality_report()
     if report:
         warning_msg(f"质量报告：{len(report)}/{len(tasks)} 个任务存在加载问题：")
         for task_id, issues in list(report.items())[:10]:
@@ -916,25 +1140,33 @@ def _print_quality_report(loader: Any, tasks: list[Any]) -> None:
         if len(report) > 10:
             warning_msg(f"  …（其余 {len(report) - 10} 个略）")
     else:
-        info_msg(f"✓ 全量质量检查通过（{len(tasks)} 个任务无加载问题）")
+        success_msg(f"全量质量检查通过（{len(tasks)} 个任务无加载问题）")
+    return report
 
 
 def _print_missing_source(loader: Any, tasks: list[Any]) -> None:
-    """列出缺失被测源码的任务（供 export_swe_bench_source.py 批量导出补全）。"""
-    if hasattr(loader, "tasks_missing_source"):
-        missing_source = loader.tasks_missing_source()
-        if missing_source:
-            warning_msg(f"⚠ 缺失被测源码任务 {len(missing_source)} 个（instance_code 兜底为 issue 文本）：")
-            for task_id in missing_source[:20]:
-                warning_msg(f"  {task_id}")
-            if len(missing_source) > 20:
-                warning_msg(f"  …（其余 {len(missing_source) - 20} 个略）")
-            warning_msg(
-                "  补充方式：运行 scripts/tools/export_swe_bench_source.py 按 base_commit 自动导出，"
-                "再经 SWE_BENCH_ENRICHMENT 环境变量加载"
-            )
-        else:
-            info_msg(f"✓ 全部 {len(tasks)} 个任务均含被测源码")
+    """列出缺失被测源码的任务（供 export_swe_bench_source.py 批量导出补全）。
+
+    加载器未实现 ``tasks_missing_source`` 时显式披露跳过：静默会让读者误以为
+    「没有缺失源码」，而实际上这项检测从未执行。
+    """
+    missing_source_fn = getattr(loader, "tasks_missing_source", None)
+    if not callable(missing_source_fn):
+        info_msg("源码完整性：该数据集未提供 tasks_missing_source，跳过检测（SWE-bench 系列提供）")
+        return
+    missing_source = missing_source_fn()
+    if missing_source:
+        warning_msg(f"缺失被测源码任务 {len(missing_source)} 个（instance_code 兜底为 issue 文本）：")
+        for task_id in missing_source[:20]:
+            warning_msg(f"  {task_id}")
+        if len(missing_source) > 20:
+            warning_msg(f"  …（其余 {len(missing_source) - 20} 个略）")
+        warning_msg(
+            "  补充方式：运行 scripts/tools/export_swe_bench_source.py 按 base_commit 自动导出，"
+            "再经 SWE_BENCH_ENRICHMENT 环境变量加载"
+        )
+    else:
+        success_msg(f"全部 {len(tasks)} 个任务均含被测源码")
 
 
 # ─── doctor：零 LLM 自检命令（P-3，2026-10-18）────────────────────────────────
@@ -1224,14 +1456,27 @@ def _doctor_run_probe_matrix(groups: list[str], timeout_s: int) -> dict[str, Any
     """在隔离子进程中跑零 LLM 探针矩阵（强制零 LLM，读 JSON 汇总）。
 
     Returns:
-        ``{"status": "ok"|"error"|"timeout", "report": <探针报告 dict>|None,
-        "duration_s": float, "returncode": int|None, "detail": str, "stderr_tail": str}``。
+        ``{"status": "ok"|"error"|"timeout"|"usage"|"unavailable",
+        "report": <探针报告 dict>|None, "duration_s": float,
+        "returncode": int|None, "detail": str, "stderr_tail": str}``。
+        ``usage`` = 子进程用法/发现错误（rc=2，如未知分组）；``unavailable`` =
+        安装面没有探针脚本（wheel 只打包 src/，无 scripts/）。
     """
     import shutil as _shutil
     import subprocess as _subprocess
     import tempfile as _tempfile
 
     script = os.path.join(_DOCTOR_REPO_ROOT, "scripts", "tools", "e2e_probe.py")
+    if not os.path.isfile(script):
+        # 安装面缺件不是系统故障：未 spawn、不计失败；环境检查仍然有效。
+        return {
+            "status": "unavailable",
+            "report": None,
+            "duration_s": 0.0,
+            "returncode": None,
+            "detail": f"安装面未附带探针脚本（{script}）；功能矩阵仅在源码检出中可用，环境检查不受影响",
+            "stderr_tail": "",
+        }
     tmpdir = _tempfile.mkdtemp(prefix="aitester_doctor_")
     json_path = os.path.join(tmpdir, "e2e_probe.json")
     env = dict(os.environ)
@@ -1273,6 +1518,18 @@ def _doctor_run_probe_matrix(groups: list[str], timeout_s: int) -> dict[str, Any
                 report = loaded if isinstance(loaded, dict) else None
             except (OSError, json.JSONDecodeError):
                 report = None
+        if report is None and proc.returncode == 2:
+            # rc=2 是探针框架约定的用法/发现错误（未知分组等）：必须与
+            # "子进程崩了/没产出 JSON" 区分，否则调用方无法修正参数。
+            first_line = next((line.strip() for line in (proc.stderr or "").splitlines() if line.strip()), "")
+            return {
+                "status": "usage",
+                "report": None,
+                "duration_s": duration_s,
+                "returncode": 2,
+                "detail": f"探针子进程用法/发现错误（rc=2）：{mask_sensitive_info(first_line)[:200]}",
+                "stderr_tail": stderr_tail,
+            }
         if report is None:
             return {
                 "status": "error",
@@ -1320,6 +1577,25 @@ def _doctor_aggregate_probe_result(probe_result: dict[str, Any]) -> dict[str, An
         "probe_report": None,
     }
     report = probe_result.get("report")
+    if status == "internal":
+        # doctor 自身在结果落地前异常：聚合面**未知**，各字段记 None——记 0/[]
+        # 会把「没跑」读成「跑了且全过」（与 DS 轮崩溃结果同一口径）。
+        matrix.update(
+            {
+                "duration_s": None,
+                "returncode": None,
+                "summary": None,
+                "groups": None,
+                "failures": None,
+                "skips": None,
+                "load_errors": None,
+            }
+        )
+        return matrix
+    if status in ("usage", "unavailable"):
+        # 用法错误/安装面缺件都不是"跑出 1 条 error"：summary 保持全 0，
+        # 由 status 与 detail 单独表达（避免把参数问题伪装成功能失败）。
+        return matrix
     if status != "ok" or not isinstance(report, dict):
         matrix["summary"] = {"pass": 0, "fail": 0, "skip": 0, "error": 1}
         return matrix
@@ -1379,6 +1655,72 @@ def _doctor_parse_groups(raw_groups: tuple[str, ...]) -> list[str]:
     return groups
 
 
+def _doctor_report(
+    *,
+    groups: list[str],
+    timeout_s: int,
+    strict: bool,
+    checks: list[dict[str, Any]] | None,
+    check_summary: dict[str, int] | None,
+    matrix: dict[str, Any],
+    conclusion: str,
+    ok: bool,
+    exit_code: int,
+    error: str | None,
+) -> dict[str, Any]:
+    """doctor JSON 报告的单一构造点。
+
+    成功 / 用法错误 / 内部异常三条出口路径都经这里出报告，键集合由构造点保证
+    逐键相同；未知值（崩溃时未采集的 checks / 矩阵聚合）记 None，消费方不必
+    按「键是否存在」分支，也不能把缺键误读成「值为 0」。
+    """
+    return {
+        "schema": _DOCTOR_SCHEMA,
+        "generated_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+        "cwd": os.getcwd(),
+        "command": {"groups": list(groups), "timeout_s": timeout_s, "strict": bool(strict), "zero_llm": True},
+        "python": {"version": f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"},
+        "checks": checks,
+        "check_summary": check_summary,
+        "matrix": matrix,
+        "conclusion": conclusion,
+        "ok": ok,
+        "strict": bool(strict),
+        "exit_code": exit_code,
+        "error": error,
+    }
+
+
+def _doctor_error_report(
+    error: BaseException,
+    *,
+    groups: list[str],
+    timeout_s: int,
+    strict: bool,
+) -> dict[str, Any]:
+    """doctor 自身异常时的兜底报告（与成功报告同 schema，退出码 1）。"""
+    safe_error = mask_sensitive_info(f"{type(error).__name__}: {error}")
+    matrix = _doctor_aggregate_probe_result(
+        {
+            "status": "internal",
+            "detail": f"doctor 内部异常（环境检查与功能矩阵结果未知）：{safe_error}",
+            "stderr_tail": "",
+        }
+    )
+    return _doctor_report(
+        groups=groups,
+        timeout_s=timeout_s,
+        strict=strict,
+        checks=None,
+        check_summary=None,
+        matrix=matrix,
+        conclusion="fail",
+        ok=False,
+        exit_code=1,
+        error=safe_error,
+    )
+
+
 def _doctor_build_report(
     *,
     groups: list[str],
@@ -1398,6 +1740,7 @@ def _doctor_build_report(
         if check_status not in check_summary:
             check_status = "warn"
         check_summary[check_status] += 1
+    matrix_status = str(matrix.get("status") or "error")
     matrix_fail = int(matrix["summary"].get("fail", 0)) + int(matrix["summary"].get("error", 0))
     matrix_skip = int(matrix["summary"].get("skip", 0))
     fail_total = check_summary["fail"] + matrix_fail
@@ -1405,38 +1748,43 @@ def _doctor_build_report(
     ok = fail_total == 0
     if fail_total > 0:
         conclusion = "fail"
-    elif warn_total > 0:
+    elif warn_total > 0 or matrix_status == "unavailable":
         conclusion = "warn"
     else:
         conclusion = "pass"
     exit_code = 0 if ok else 1
-    if strict and (warn_total > 0 or matrix_skip > 0):
+    if strict and (warn_total > 0 or matrix_skip > 0 or matrix_status == "unavailable"):
         exit_code = 1
-    return {
-        "schema": _DOCTOR_SCHEMA,
-        "generated_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
-        "cwd": os.getcwd(),
-        "command": {"groups": list(groups), "timeout_s": timeout_s, "strict": bool(strict), "zero_llm": True},
-        "python": {"version": f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"},
-        "checks": check_items,
-        "check_summary": check_summary,
-        "matrix": matrix,
-        "conclusion": conclusion,
-        "ok": ok,
-        "strict": bool(strict),
-        "exit_code": exit_code,
-    }
+    if matrix_status == "usage":
+        # 参数用法错误单独占 exit 2（click 约定），优先于 fail/strict 判定
+        ok = False
+        conclusion = "fail"
+        exit_code = 2
+    return _doctor_report(
+        groups=groups,
+        timeout_s=timeout_s,
+        strict=strict,
+        checks=check_items,
+        check_summary=check_summary,
+        matrix=matrix,
+        conclusion=conclusion,
+        ok=ok,
+        exit_code=exit_code,
+        error=None,
+    )
 
 
 def _doctor_print_human(report: dict[str, Any]) -> None:
     """人类可读输出（✅/⚠️/❌ + 分组汇总 + 失败建议 + 结论）。"""
     click.echo(colorize("AITester Doctor — 零 LLM 自检", Colors.BOLD))
-    click.echo(colorize("环境 / 配置：", Colors.BOLD))
-    for item in report.get("checks") or []:
-        status = str(item.get("status") or "warn")
-        icon = _DOCTOR_STATUS_ICON.get(status, "•")
-        color = _DOCTOR_STATUS_COLOR.get(status, Colors.BLUE)
-        click.echo(colorize(f"  {icon} {item.get('label')}: {item.get('detail')}", color))
+    checks = report.get("checks") or []
+    if checks:
+        click.echo(colorize("环境 / 配置：", Colors.BOLD))
+        for item in checks:
+            status = str(item.get("status") or "warn")
+            icon = _DOCTOR_STATUS_ICON.get(status, "•")
+            color = _DOCTOR_STATUS_COLOR.get(status, Colors.BLUE)
+            click.echo(colorize(f"  {icon} {item.get('label')}: {item.get('detail')}", color))
     click.echo(colorize("功能矩阵（零 LLM 子集；强制不设置 AITESTER_E2E_LLM，不消耗 LLM 配额）：", Colors.BOLD))
     matrix = report.get("matrix") or {}
     status = str(matrix.get("status") or "error")
@@ -1481,6 +1829,10 @@ def _doctor_print_human(report: dict[str, Any]) -> None:
             click.echo(
                 f"  ⚠️ 探针模块加载告警 {len(load_errors)} 条：" + "；".join(str(item)[:120] for item in load_errors[:3])
             )
+    elif status == "usage":
+        click.echo(colorize(f"  ❌ 用法错误：{matrix.get('detail') or ''!s}", Colors.RED))
+    elif status == "unavailable":
+        click.echo(colorize(f"  ⚠️ 功能矩阵不可用：{matrix.get('detail') or ''!s}", Colors.YELLOW))
     else:
         click.echo(
             colorize(
@@ -1498,11 +1850,15 @@ def _doctor_print_human(report: dict[str, Any]) -> None:
         "warn": "通过（存在警告项，见上）",
         "fail": "未通过（存在失败项，见上）",
     }.get(conclusion, "未通过")
+    if str((report.get("matrix") or {}).get("status") or "") == "usage":
+        # 子进程用法错误（未知分组等）时环境检查已经跑过，措辞不能谎称"未执行"
+        if checks:
+            conclusion_text = "用法错误（参数未通过校验；功能矩阵未执行，环境检查见上）"
+        else:
+            conclusion_text = "用法错误（参数校验失败；本次未执行环境检查与功能矩阵）"
     reason = ""
-    if report.get("strict") and int(report.get("exit_code") or 0) != 0 and report.get("ok"):
-        reason = "；--strict：warn/skip 视为不通过"
-    elif report.get("strict") and int(report.get("exit_code") or 0) != 0:
-        reason = "；--strict 下 warn/skip 亦算不通过"
+    if conclusion != "fail" and report.get("strict") and int(report.get("exit_code") or 0) != 0:
+        reason = "；--strict 下 warn/skip 视为不通过"
     click.echo(colorize(f"结论：{icon} {conclusion_text}{reason}（exit={report.get('exit_code')}）", color))
 
 
@@ -1512,7 +1868,7 @@ def _doctor_print_human(report: dict[str, Any]) -> None:
     "--groups",
     "groups",
     multiple=True,
-    help="只跑指定功能组（可多次或逗号分隔，如 budget,executor；默认全部零 LLM 探针）",
+    help="只跑指定功能组（可多次或逗号分隔，如 budget,executor；默认全部零 LLM 探针；未知分组退出码 2）",
 )
 @click.option(
     "--timeout",
@@ -1529,10 +1885,15 @@ def doctor(json_output: bool, groups: tuple[str, ...], timeout_s: int, strict: b
     检查项：Python 版本、可选依赖（z3/coverage/pytest/chromadb/datasets）、
     LLM 端点配置存在性（只报数量/缺键，绝不输出凭证）、数据集缓存
     （QuixBugs/ULT/examples）、内核沙箱能力、git HEAD/dirty（只读）。
-    随后在隔离子进程内跑 N 轮全功能探针的**零 LLM 子集**（真实 LLM 探针
+    随后在隔离子进程内跑 N 轮全功能探针的零 LLM 子集（真实 LLM 探针
     置 skip，不消耗任何 API 配额），汇总 pass/fail/skip/error。
 
-    退出码：存在 fail/error → 1；仅 warn/skip → 0；--strict 时 warn/skip → 1。
+    退出码：0 通过；1 存在 fail/error，或 --strict 下存在 warn/skip/矩阵不可用；
+    2 参数用法错误（`--groups` 解析为空、探针框架报告未知分组等）。
+
+    安装面说明：功能矩阵依赖源码检出中的 scripts/tools/e2e_probe.py；
+    pip 安装的 wheel 不含 scripts/，此时矩阵标记 unavailable（不计失败，
+    --strict 下退 1），环境/配置检查仍然有效。
 
     示例：
         python main.py doctor
@@ -1541,28 +1902,36 @@ def doctor(json_output: bool, groups: tuple[str, ...], timeout_s: int, strict: b
         python main.py doctor --strict --timeout 240
     """
     group_list = _doctor_parse_groups(groups)
+    build_kwargs: dict[str, Any] = {"groups": group_list, "timeout_s": timeout_s, "strict": strict}
+    if groups and not group_list:
+        # `--groups ""` / `--groups ","` 是用法错误：若静默丢弃会跑成全量矩阵，
+        # 调用方以为"只查了某组"，实际扫描面被悄悄放宽。
+        build_kwargs["checks"] = []
+        build_kwargs["probe_result"] = {
+            "status": "usage",
+            "report": None,
+            "duration_s": 0.0,
+            "returncode": 2,
+            "detail": "`--groups` 解析为空：请至少提供一个分组名（逗号分隔），或省略该选项以运行全部零 LLM 探针",
+            "stderr_tail": "",
+        }
     try:
         if json_output:
             # stdout 只承载 JSON：静音 root logger 的 stdout 控制台 handler
             with _quiet_console_logs():
-                report = _doctor_build_report(groups=group_list, timeout_s=timeout_s, strict=strict)
+                report = _doctor_build_report(**build_kwargs)
                 click.echo(json.dumps(report, ensure_ascii=False, indent=2))
         else:
             # 检查期（数据加载器等）的 INFO 日志仍落 aitester.log，但不刷屏 stdout
             with _quiet_console_logs():
-                report = _doctor_build_report(groups=group_list, timeout_s=timeout_s, strict=strict)
+                report = _doctor_build_report(**build_kwargs)
             _doctor_print_human(report)
     except Exception as exc:  # 兜底 fail-closed：doctor 自身异常也必须非零退出且可诊断
-        safe_error = mask_sensitive_info(f"{type(exc).__name__}: {exc}")
+        report = _doctor_error_report(exc, groups=group_list, timeout_s=timeout_s, strict=strict)
         if json_output:
-            click.echo(
-                json.dumps(
-                    {"schema": _DOCTOR_SCHEMA, "ok": False, "error": safe_error, "exit_code": 1},
-                    ensure_ascii=False,
-                )
-            )
+            click.echo(json.dumps(report, ensure_ascii=False, indent=2))
         else:
-            error_msg(f"doctor 执行失败：{safe_error}")
-        click.get_current_context().exit(1)
+            error_msg(f"doctor 执行失败：{report['error']}")
+        click.get_current_context().exit(int(report["exit_code"]))
         return
     click.get_current_context().exit(int(report.get("exit_code") or 0))

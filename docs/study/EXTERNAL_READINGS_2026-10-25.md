@@ -423,3 +423,139 @@ IEEE Xplore 上线、未同步 arXiv 的 9/10 月论文未被本轮覆盖**。
   ⇒ 这是 DBLP 公开 API 的**常驻属性**，不是本环境的临时故障 ⇒ **非 arXiv 渠道的覆盖缺口无法
   通过「再试一次」关闭**，只能如实披露（ACM DL / IEEE Xplore 同样未在本环境验证）。
 - 分类集合的覆盖缺口**已在本轮闭合**：cs.SE ∪ cs.CR ∪ cs.CV（CY 轮发现的「只扫 cs.SE」已补）。
+
+## 12. DA 轮（2026-10-26）Web 检索通道的补扫：两篇 F4 族同向新命中（**非直接占位**）与检索通道的缺口登记
+
+> **核验方式**：arXiv 官方摘要页（`arxiv.org/abs/<id>`）逐字取回；本节引文均先在摘要页
+> 核对后写入。检索通道 = 通用 Web 搜索（CZ 轮的 arXiv API 论断族查询之外的第二通道）。
+>
+> **为什么 CZ 轮的 12 条论断族查询没有命中这两篇**（诚实诊断，不是辩解）：
+> ① `2610.28678` 主分类 cs.SE、提交日 2026-10-19 落在 CZ 时间窗内，其摘要含 "harness" 与
+> "evaluation"，理论上是 F4 查询（`all:"harness" AND (all:"agent" OR all:"LLM") AND
+> all:"evaluation"`）的可达集——最可能的漏因是**分页深度**（F4 结果集大、CZ 只对 F3/F4/F8
+> 翻到深度 300，该篇排序可能落在 300 之后）；② `2610.13548` 主分类 cs.CV，但其措辞
+> （VLMEvalKit / permutation null / audit layer）与 12 条 SE 论断族查询**没有交叠**——
+> **按论断族检索的查询集天然带 SE 措辞偏置**，分类集合扩到 cs.CV 不等于措辞覆盖扩到 cs.CV。
+> ⇒ 教训登记：**通道单一（只用 arXiv API + 论断族查询）就是单点**；DA 轮起补通用 Web
+> 搜索通道，且「分类集合已覆盖」不等于「措辞空间已覆盖」。
+
+| 键 | 读数 | 原文表述 | 出处 |
+|---|---|---|---|
+| `seefried2026quantumleap` | 15 模型 / 530 任务 / 96 任务 / 98.7% / 63.8% / 17 任务 / 0%→94.1% | "We evaluate 15 hosted frontier, open-weight, quantum-specialized, and retrieval-augmented models on five quantum code-generation suites (530 tasks)"；"plus 10 models on our new QuantumBenchEval (QBE) benchmark (96 tasks across six topics)"；"QiskitHumanEval-Standard approaches saturation (98.7% pass@1), while its Hard variant retains headroom (63.8%)"；"We identify 17 QuanBench-117 tasks with shared failures linked to benchmark-owned imports."；"removing checks for unspecified quantities raises GPT-6 Astra's QBE pass@1 from 0% to 94.1%"；"None of the five top-two comparisons across primary suites remains significant"；"leaderboard scores alone do not adequately characterize progress" | arXiv:2610.28678v1（2026-10-19；Seefried / Ghosh / Afrose / Stapleton / Layton Ortega / Humble / Ghosal；cs.SE + quant-ph；无出版商 DOI） |
+| `degtiarev2026vlmaudit` | 6 探测器 / 17.0% / +3.2 pp / p=0.001 / 20.2% / 134 题 | "add an audit layer to VLMEvalKit: six detectors that run as post-processing over saved outputs"；"An item-matched permutation null accounts for 17.0%, leaving a +3.2 pp excess (corrected permutation p = 0.001)"；"zero aggregate accuracy gain from the image on 20.2% of its questions"；"A second detector flags 134 questions on which every model that answered in parseable form picked the same non-gold option" | arXiv:2610.13548v1（2026-10-09；Degtiarev / Gromova / Katkov / Mikhailin / Mukhamedshina / Nasybullin / Shaikhutdinova / Tuzov；cs.CV；无出版商 DOI） |
+
+### 12.1 对本稿 novelty 的影响（同向加强，不是占位）
+
+两篇都落在 **F4（测量装置审计）** 族，且都与 `bhat2026benchmarkingbenchmarks`（§11.1 第三行）
+同向——「审计评测器本身」在 2026-10 又添两个域的实例：
+
+- `seefried2026quantumleap` 把「评测器设计决定分数」推到极端：**移除对未声明量的检查把
+  GPT-6 Astra 的 QBE pass@1 从 0% 抬到 94.1%，而模型输出一个字节没变**；并报告
+  bootstrap CI + 多重比较校正，随文发布 harness 与逐样本结果。⇒ 与本稿 F4 主张同向：
+  「装置与模型必须一起被审计」。它**不占位**本稿剩余增量（口径矩阵 / 声明率 / 预注册零 LLM
+  复算链 / 公开装置自身上限），但**多重比较校正与本稿共享**（本稿 BH-FDR 节），登记为
+  同向证据。
+- `degtiarev2026vlmaudit` 的审计层是**对已保存评测产物的后处理**（不重跑模型）+ 排列零假设
+  基线 + 「以超出基线的 excess 报告 headline」——方法上与本稿「零 LLM 复算链」同族
+  （从存量工件重算、不产生新模型调用），但落在 VLM 域、且其判据（图像信息量）与
+  本稿判据（功能级裁决）不同。**不占位**，登记为跨域同向。
+
+### 12.2 本轮检索面读数（诚实汇报）
+
+- 检索 4 组查询（F1 误导测试 / F2 编排负结果 / F4 基准效度 / F3 规格锚定），命中并一手
+  核验 **2 篇新增**（本节）；另核验 1 篇（`2610.11835`）**已在 §8 登记**（CU 轮召回网曾
+  抓住它，DA 轮初判「未登记」有误、已更正——**先查登记面再声明新增**这条纪律本轮自己
+  踩了一次）。F2 / F3 两组查询未产出未登记的同题命中（F2 首屏多为已登记的
+  `tao2026execcritic` / `kim2026coherencecollapse` 邻域；F3 首屏为 2026-01 之前的
+  spec-driven 工作）。
+- **发布新鲜度结论**：截至 2026-10-26，检索面内**无新的直接占位**；§11.3 所列四条剩余
+  增量（口径矩阵 / 预注册零 LLM 复算 / 装置上限自审 / 功能级共享分母裁决）经本轮
+  补扫后维持成立。
+
+## 13. DB 轮（2026-10-26）**分类集合再次漏扫**：五篇新命中，其中**两篇直接占位本稿核心叙事**——DA 轮「无新占位」的结论被推翻
+
+> **核验方式**：arXiv 官方 Atom API（`export.arxiv.org/api/query`，取 `summary` /
+> `author/name` / `category` 字段逐字核对）。检索通道 = **arXiv API 的分类过滤 + 排序**
+> （DA 轮的 Web 搜索通道之外的第三通道），与 CZ/DA 轮的「论断族措辞查询」**结构上不同**。
+>
+> **本轮的方法学教训（比结论更重要）**：CZ 轮把分类集合扩到 cs.SE ∪ cs.CR ∪ cs.CV，
+> DA 轮据此宣称「分类集合的覆盖缺口已闭合」。**本轮实测证明那个结论是错的**：本轮
+> 只用**分类过滤**（不写任何论断族措辞）就召回了 19 篇未登记工作，其中**主分类
+> cs.CL / cs.AI / stat.ME 的有 4 篇**。⇒ **「分类集合已覆盖」与「措辞空间已覆盖」是
+> 两个独立的缺口**，前者闭合不等于后者闭合；而**扩分类集合时若同时绑定 SE 措辞，
+> 新增的分类并不会带来新召回**——DA 轮自己的诊断已经说了后半句（「按论断族检索的
+> 查询集天然带 SE 措辞偏置」），却没意识到**分类过滤通道**能绕开这个偏置。
+>
+> **⇒ 登记一条可执行的检索纪律**：每轮检索必须至少包含**一条不带论断族措辞的
+> 分类过滤通道**（`cat:` 过滤 + 按提交日倒序翻页），否则「扩分类」只是名义上的。
+
+| 键 | 读数 | 原文表述 | 出处 |
+|---|---|---|---|
+| `ding2026harnessdelta` | 11 执行模型 / 3 框架 / 21 显著设置 / 54% / 14% / 14 设置 >50% | "we introduce Harness-Delta Attribution (HDA), an evaluation protocol that dissects an evolution gain into artifact-driven overfitting, gains explained by test-time scaling, and the remainder, which gives an upper bound on residual generalizable improvement"；"We apply HDA to 11 executor models and three harness-evolution frameworks across math, coding, creativity, and agentic tasks"；"In 21 of these settings that show statistically significant search-set gains, we find that a large share of the improvement is explained by overfitting or test-time scaling"；"overfitting and test-time scaling account for 54% and 14% of the gain on average; their combined share exceeds 50% in 14 settings"；"search-set gains often fail to transfer to held-out tasks"；"validation-based signals are insufficient to prevent overfitting" | arXiv:2610.22466v1（2026-10-15；Ding / Lu / Yu / Li / Jin / Liu / Shi / Durrett；**cs.AI**；无出版商 DOI） |
+| `cheng2026skillsutility` | 87 任务 / 9 配置 / 37,596 Skills / 36.78% / +4.35–5.80 pp / 17 条实践 | "We conduct an empirical study on 87 SkillsBench tasks, defining downstream utility as the pass-rate difference from No-Skill on the same tasks under the same model--harness configuration"；"We compare the same Skills across nine configurations"；"We retrieve marketplace candidates from a curated corpus of 37,596 Skills"；"The same Skills help some configurations and hurt others on 36.78\% of tasks, with trajectories showing that recommended procedures can become an execution burden"；"reranking by support for required operations raises first-choice pass rates by 4.35--5.80 percentage points"；"We derive 17 authoring practices" | arXiv:2610.08875v1（2026-10-06 / v2 2026-10-08；Cheng / Zhao / Liu / Huang / Xing / Ren；**cs.AI + cs.LG**；无出版商 DOI） |
+| `han2026skilluse` | 79 skills / 177 任务 / 9 域 / 8 模型 / 2 harness / SU 0.613 | "Skill-Use pairs 79 real skills with 177 executable tasks across nine domains, each grounded in real files, run in an isolated Docker sandbox, and scored by a trajectory-based rubric"；"Evaluating eight LLMs under two agent harnesses, we find that reliable skill use remains out of reach, as the strongest configuration reaches an SU of only 0.613"；"Triggering and procedural compliance fail as independent bottlenecks, and both scores and model rankings shift with the harness, so skill use behaves as a capability conditioned on the harness rather than a fixed property of the model" | arXiv:2608.04828v1（2026-08-05；Han / Xu / Liao / Wang / Jiang / Di / Lu / Hu / Xiao；**cs.CL**；无出版商 DOI） |
+| `wang2026harnessreeval` | Terminal-Bench 2.1 / ARC-AGI-3 +80% / EdgeBench +11% | "Following prior work, we experiment on Terminal-Bench 2.1 and find that automatic harness evolution fails to outperform simple test-time scaling methods both with and without test cases, and exhibits limited generalization"；"prior work does not compare these approaches with simple task-level search baselines under matched feedback and inference budgets"；"prior work searches for harness configurations using verification signals (e.g., unit test cases) drawn from the same benchmarks on which it reports the final performance of the evolved harnesses, violating the standard separation between training and test data"；"automatic harness evolution fails to outperform simple test-time scaling methods both with and without test cases, and exhibits limited generalization"；"task-specific harness evolution improves over the search baseline by 80% on ARC-AGI-3 and by 11% on EdgeBench games under matched budgets" | arXiv:2607.12227v4（v1 2026-07-14 / v2 2026-08-27 / v3 2026-10-01 / v4 2026-10-05；Wang / Zhu / Hu / Yuan / Chen / Senthil / Hajishirzi / Tsvetkov / Smith / Dasigi / Xiao；**cs.AI**；无出版商 DOI） |
+| `park2026progressmirage` | 54 周期 / 56% / 19% / 44% / 38% / 110.0 vs 113.0 | "Across 54 cycles a frontier agent claimed improvement every time, yet 56 percent had a measured delta of zero or below"；"the self-verdict gate degenerated into accept-all, eroding the best deployed state it had reached by 19 percent"；"the strongest in-band judge ... accepted cycles of which 44 percent were real-world regressions and rejected 38 percent of real improvements；the preregistered adversarial hypothesis that a strong judge closes the gap was rejected"；"A sign-only variant returning only the acceptance verdict kept real-world output similar to full feedback (110.0 versus 113.0)" | arXiv:2607.25152v1（2026-07-27 / v2 2026-09-29；Park / Choi；**cs.AI**；无出版商 DOI） |
+
+### 13.1 占位判定：**两篇直接占位**（必须正面处理，不可回避）
+
+**（一）`ding2026harnessdelta`（HDA）——占位本稿 RQ1 的「分解」框架。**
+
+HDA 把 harness 演化的增益**分解为三块**：artifact 驱动的过拟合 / test-time scaling 解释的
+部分 / 残余的可泛化改进上限。在 21 个显著设置里，过拟合与 test-time scaling 平均
+解释 **54%** 与 **14%** 的增益，合计过半者有 **14** 个设置。
+
+这与本稿 RQ1 的核心动作**同构**：本稿把「指令工件的文本」与「它授权的再生成预算」
+分开固定，再问增益落在哪一边。⇒ **「把协议文本与计算预算分开归因」这个分解动作，
+在 2026-10 已被明确提出并规模化应用**。本稿**不得**再把它写成自己的方法创新。
+
+但 HDA **不占位**本稿剩下的一块：HDA 的三块是**增益的归因**（overfitting / scaling /
+残余），本稿的三块是**声明口径的矩阵**（条件口径 / 边际口径 / **声明率**）。§11.3 第 1 条
+的「**声明率**」这个量，在 HDA 的分解里**所核摘要与正文未见对应物**——HDA 分解的是*性能增益*，
+本稿分解的是*成功声明的分母*。⇒ 本稿可保留的增量进一步收窄为：
+「**在固定成功定义下，声明率本身是一个被协议扰动的量**」+「功能级共享分母的功能级裁决」
++「预注册零 LLM 复算链」+「公开装置自身上限」。
+
+**（二）`cheng2026skillsutility`——占位本稿「工件的效果依赖配置」这一观察。**
+
+该文把「下游效用」定义为**同一 model–harness 配置下、与 No-Skill 的通过率差**，跨
+**9 种配置**比同一批 Skill，得到：**同一批 Skill 在 36.78% 的任务上帮了某些配置、
+伤了另一些配置**，轨迹显示「推荐的过程本身会变成执行负担」。
+
+这与本稿「工件的效果随配置漂移」的观察**直接重叠**，且**方法上更细**（9 配置 × 同
+一批工件 × 同任务）。⇒ 本稿**不得**再把「工件效果依赖配置」写成自己的发现。
+
+但该文**不占位**本稿剩下的一块：它测量的是**通过率差（任务级）**，本稿的裁决是
+**功能级、共享分母**的 fail-to-pass 判定；它研究的是 **Skill 的内容与组织**，本稿研究
+的是**一个 196 字符检测优先段**在**测试生成**中的协议文本 vs 再生成预算分离。就**所核
+摘要与正文表述**而言，未见预注册、未见零 LLM 复算包，也未见对自身装置（评分器）上限的报告。
+
+### 13.2 三篇同向证据（不占位，但改变定位）
+
+- `han2026skilluse`：**分数与模型排名随 harness 变动**，「skill use 是被 harness 条件化
+  的能力，而不是模型的固定属性」。⇒ 与本稿核心命题（价值在协议与测量，不在编排）
+  **同向**，且是**跨分类实例**（cs.CL）。它**不占位**本稿增量（测的是 skill 使用三
+  切面，不是 false-fix 口径；判据是轨迹 rubric，不是功能级 fail-to-pass）。
+- `wang2026harnessreeval`：**matched-budget 基线 + held-out 评估**是区分「真实 harness
+  改进」与「benchmark 特异搜索」的标准手段；且给出与本稿 RQ2 同型的阴性（自动 harness
+  演化不敌简单 test-time scaling）。⇒ 本稿 RQ2 的「编排不加值」**不再孤立**。
+- `park2026progressmirage`：**预注册的对抗性假设被拒绝**（加强型 judge 不能闭合
+  自评偏差）；且「收益来自 gate 的接地而非反馈内容」（110.0 vs 113.0）。⇒ 与本稿
+  「协议/装置决定读数」同向，且其**预注册+拒绝假设**的做法与本稿纪律同族。
+
+### 13.3 本轮检索面读数（诚实汇报）
+
+- **通道**：arXiv API **分类过滤**（cs.SE / cs.CR / cs.CV / **cs.AI / cs.CL** /
+  stat.ME），按提交日倒序翻页，12 条论断族 × 分类过滤共命中数百条次，去重后与
+  **已登记 67 篇 arXiv ID**（登记册 ∪ refs.bib ∪ 快照三处并集）求差。
+- **命中**：F13（skill×harness×agent）未登记 200 篇、F14（test-time×harness）91 篇、
+  F10（oracle×test generation）未登记 40 篇 —— 其中**经摘要判读为同题或同族**的
+  **5 篇**登记入本节；其余为跨域噪声（具身智能、机器人、医疗、法律、HCI），如实登记
+  为「查过但不用」。
+- **失败通道（不静默）**：F15（prompt×artifact×instruction×agent）首轮 API 调用
+  `curl` 退出码 56（连接重置）⇒ 该族本轮**无读数**，不按「零命中」记。
+- **发布新鲜度结论（推翻 DA 轮）**：DA 轮「检索面内无新的直接占位」**不成立**——
+  `ding2026harnessdelta` 与 `cheng2026skillsutility` 是新的直接占位者。§11.3 的四条
+  剩余增量经本轮后**收窄为两条半**：①**声明率作为被协议扰动的量**（口径矩阵里的
+  第三个量，HDA / Skills-Utility 均无对应物）；②**功能级共享分母的裁决**（落在测试
+  生成流水线）+ 预注册零 LLM 复算链 + 公开装置自身上限。

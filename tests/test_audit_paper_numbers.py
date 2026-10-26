@@ -61,6 +61,7 @@ def _write_build(base_dir: Path, stem: str, pages: int, inputs: tuple[str, ...] 
 _DRAFT = """// TODO(submit): author block
 
 = Introduction
+[TODO(submit): fill corresponding author email]
 Our pipeline detects 15.8% of tasks versus 44.8% for the prompt-only arm
 ($n=261$ pooled; exact $p=0.0001$). Costs are \\$0.0259 per task.
 // SRC: experiments/results/main_batch/statistical_report_3seed_pooled.md;
@@ -266,6 +267,82 @@ class TestEndToEnd:
         files = {t["file"] for t in audit["todos"]}
         assert "draft.typ" in files
 
+    def test_find_todos_uses_typst_comment_syntax(self, tmp_path, monkeypatch):
+        """DE 轮（2026-10-26）：Typst 的行注释是 `//`，不是 `%`。
+
+        DA 轮的实现一律剥 `%` ⇒ `// TODO` 被误列、`% TODO` 反被剥掉；旧测试
+        还把 `% TODO` 当成 Typst 注释，通过但证明的是错误语言规则。
+        """
+        draft = (
+            "= Introduction\n"
+            "// TODO(ref): comment, not a placeholder\n"
+            "[TODO(submit): real]\n"
+            "% TODO(body): percent is not a typst comment\n"
+        )
+        bib = "@article{k, title={T}, note={DOI: 10.1145/1}}\n% TODO(ref): comment TODO in bib\n"
+        paper = _make_paper(tmp_path, draft=draft, bib=bib)
+        monkeypatch.setattr(audit_mod, "PROJECT_ROOT", tmp_path)
+        audit = audit_mod.build_audit(paper, window=5)
+        assert [(t["file"], t["line"]) for t in audit["todos"]] == [("draft.typ", 3), ("draft.typ", 4)]
+
+    def test_find_todos_uses_tex_comment_syntax(self, tmp_path, monkeypatch):
+        """TeX 的 `%` 是注释；`//` 不是（会原样排版，因此 `// TODO` 要列入）。"""
+        draft = (
+            "\\section{Introduction}\n"
+            "% TODO(ref): comment, not a placeholder\n"
+            "[TODO(submit): real]\n"
+            "// TODO(slash): not a tex comment\n"
+        )
+        paper = tmp_path / "paper"
+        (paper / "tex").mkdir(parents=True)
+        (paper / "tex" / "manuscript.tex").write_text(draft, encoding="utf-8")
+        (paper / "tex" / "refs.bib").write_text("@article{k, note={DOI: 10.1145/1}}\n", encoding="utf-8")
+        monkeypatch.setattr(audit_mod, "PROJECT_ROOT", tmp_path)
+        audit = audit_mod.build_audit(paper, window=5)
+        assert [(t["file"], t["line"]) for t in audit["todos"]] == [
+            ("manuscript.tex", 3),
+            ("manuscript.tex", 4),
+        ]
+
+    def test_typst_block_comment_todo_is_ignored(self, tmp_path, monkeypatch):
+        """跨行块注释里的 TODO 不排版，不进清单。"""
+        draft = "= Introduction\n/* TODO(ref): spans\n   two lines */\n[TODO(submit): real]\n"
+        paper = _make_paper(tmp_path, draft=draft)
+        monkeypatch.setattr(audit_mod, "PROJECT_ROOT", tmp_path)
+        audit = audit_mod.build_audit(paper, window=5)
+        assert [(t["file"], t["line"]) for t in audit["todos"]] == [("draft.typ", 4)]
+
+    def test_bib_percent_inside_field_is_literal(self):
+        """BibTeX 字段值括号内的 `%` 是字面量：里面的 TODO 仍要列入。"""
+        bib = "@misc{k,\n  note={100% TODO(fill)}\n}\n% TODO(comment): ignored\n"
+        stripped = audit_mod._strip_comments(bib, ".bib")
+        assert "TODO(fill)" in stripped
+        assert "TODO(comment)" not in stripped
+
+    def test_bib_escaped_quote_does_not_swallow_following_comments(self):
+        """`{\\"a}` 是转义引号（LaTeX 变音符），不是字符串边界。
+
+        DF 轮实测：`author = {Sch{\\"a}fer, ...}` 让剥注释器误入字符串态，
+        后面紧随的 `% HITS（…）` 中文注释未被剥掉，被算成前一条目的字段值 ⇒
+        `refs.bib` 被误判「字段值含中文」。转义引号不得切换字符串态。
+        """
+        bib = '@article{k,\n  author = {Sch{\\"a}fer, Max},\n  title = {T}\n}\n% 中文注释\n@misc{j, title={X}}\n'
+        stripped = audit_mod._strip_comments(bib, ".bib")
+        assert "中文注释" not in stripped
+        assert 'Sch{\\"a}fer' in stripped
+        assert audit_mod._cjk_hits_text(bib, ".bib") == []
+
+    def test_typst_comment_lexer_protects_strings_raw_and_urls(self):
+        """`//` 在字符串 / raw / URL 里不是注释；真正的行注释被剥掉。"""
+        in_string = audit_mod._strip_typst_comments('"https://x" // trailing')
+        assert in_string.startswith('"https://x"') and "trailing" not in in_string
+        in_raw = audit_mod._strip_typst_comments("`// raw` // trailing")
+        assert in_raw.startswith("`// raw`") and "trailing" not in in_raw
+        in_url = audit_mod._strip_typst_comments("see https://example.com // trailing")
+        assert in_url.startswith("see https://example.com") and "trailing" not in in_url
+        assert "trailing" not in audit_mod._strip_typst_comments("// trailing\nbody")
+        assert "b" not in audit_mod._strip_typst_comments("a /* b */ c").replace("a", "").replace("c", "")
+
     def test_json_and_md_outputs(self, tmp_path, monkeypatch):
         paper = _make_paper(tmp_path)
         monkeypatch.setattr(audit_mod, "PROJECT_ROOT", tmp_path)
@@ -293,6 +370,44 @@ class TestEndToEnd:
         monkeypatch.setattr(audit_mod, "PROJECT_ROOT", tmp_path)
         rc = audit_mod.main(["--paper-dir", str(paper), "--window", "5", "--strict", "--min-coverage", "0.5"])
         assert rc == 0
+
+    def test_pre_build_skips_stale_artifact_reconciliation(self, tmp_path, monkeypatch):
+        """DG 轮：源文件改过、产物必然过期时，构建前档不得把「还没构建」判成失实。
+
+        反例就是本判据自身：`build_paper.sh` 第一步跑 `audit --strict`，而
+        `refs.bib` 一改，产物过期判据立刻红 ⇒ 脚本永远进不到编译步骤。
+        """
+        paper = _make_paper(tmp_path)
+        tex = paper / "tex"
+        tex.mkdir()
+        source = tex / "manuscript.tex"
+        source.write_text("body", encoding="utf-8")
+        pdf = tex / "manuscript.pdf"
+        pdf.write_bytes(b"x" * 1234)
+        log = tex / "manuscript.log"
+        log.write_text("Output written on manuscript.pdf (12 pages, 1234 bytes).\n", encoding="utf-8")
+        os.utime(log, (1000, 1000))
+        os.utime(pdf, (1000, 1000))
+        os.utime(source, (2000, 2000))
+        (paper / "SUBMISSION.md").write_text("| `manuscript.pdf` | 12 |\n", encoding="utf-8")
+        monkeypatch.setattr(audit_mod, "PROJECT_ROOT", tmp_path)
+
+        post = audit_mod.build_audit(paper, window=5)
+        assert any("修改时间晚于" in f for f in post["failures"]), post["failures"]
+
+        pre = audit_mod.build_audit(paper, window=5, pre_build=True)
+        assert not any("修改时间晚于" in f for f in pre["failures"]), pre["failures"]
+        assert any("构建前档" in note for note in pre["submission"]["notes"])
+
+    def test_pre_build_still_blocks_source_defects(self, tmp_path, monkeypatch):
+        """构建前档只免掉产物对账，**不放行源侧缺陷**（中文照样判红）。"""
+        draft = "= Introduction\n这一段含中文，编译后 Latin Modern 无字形。\n"
+        paper = _make_paper(tmp_path, draft=draft)
+        monkeypatch.setattr(audit_mod, "PROJECT_ROOT", tmp_path)
+        rc = audit_mod.main(
+            ["--paper-dir", str(paper), "--window", "5", "--strict", "--pre-build", "--min-coverage", "0"]
+        )
+        assert rc == 1
 
 
 class TestCjkUnrenderable:
@@ -336,17 +451,45 @@ class TestCjkUnrenderable:
         assert any("中文字符" in failure for failure in audit["failures"]), audit["failures"]
 
     def test_draft_comment_with_cjk_is_allowed(self, tmp_path, monkeypatch):
-        """稿件里的 `%` 之后是注释，不排版 ⇒ 不该被判红。"""
-        draft = "= Introduction\n% 这一行是中文注释\nWe detect 44.8% of tasks.\n"
+        """Typst 的 `//` 之后是注释，不排版 ⇒ 不该被判红。"""
+        draft = "= Introduction\n// 这一行是中文注释\nWe detect 44.8% of tasks.\n"
         paper = _make_paper(tmp_path, draft=draft)
         monkeypatch.setattr(audit_mod, "PROJECT_ROOT", tmp_path)
         audit = audit_mod.build_audit(paper, window=5)
         assert not any("中文字符" in failure for failure in audit["failures"]), audit["failures"]
 
+    def test_typst_block_comment_with_cjk_is_allowed(self, tmp_path, monkeypatch):
+        draft = "= Introduction\n/* 中文注释\n   跨行 */\nWe detect 44.8% of tasks.\n"
+        paper = _make_paper(tmp_path, draft=draft)
+        monkeypatch.setattr(audit_mod, "PROJECT_ROOT", tmp_path)
+        audit = audit_mod.build_audit(paper, window=5)
+        assert not any("中文字符" in failure for failure in audit["failures"]), audit["failures"]
+
+    def test_typst_percent_is_not_a_comment(self, tmp_path, monkeypatch):
+        """Typst 的 `%` 不是注释 ⇒ 其后的中文是正文，应判红。"""
+        draft = "= Introduction\n% 中文不是 Typst 注释\n"
+        paper = _make_paper(tmp_path, draft=draft)
+        monkeypatch.setattr(audit_mod, "PROJECT_ROOT", tmp_path)
+        audit = audit_mod.build_audit(paper, window=5)
+        assert any("中文字符" in failure for failure in audit["failures"]), audit["failures"]
+
+    def test_tex_comment_with_cjk_is_allowed(self, tmp_path, monkeypatch):
+        """TeX 的 `%` 之后是注释，不排版 ⇒ 不该被判红。"""
+        draft = "\\section{Introduction}\n% 这一行是中文注释\nWe detect 44.8% of tasks.\n"
+        paper = tmp_path / "paper"
+        (paper / "tex").mkdir(parents=True)
+        (paper / "tex" / "manuscript.tex").write_text(draft, encoding="utf-8")
+        (paper / "tex" / "refs.bib").write_text("@article{k, note={DOI: 10.1145/1}}\n", encoding="utf-8")
+        monkeypatch.setattr(audit_mod, "PROJECT_ROOT", tmp_path)
+        audit = audit_mod.build_audit(paper, window=5)
+        assert not any("中文字符" in failure for failure in audit["failures"]), audit["failures"]
+
     def test_escaped_percent_is_not_a_comment_start(self, tmp_path):
-        """`\\%` 是转义百分号，不开启注释 ⇒ 其后的中文仍算正文（会被排版）。"""
+        """`\\%`（奇数反斜杠）是转义百分号；`\\\\%`（偶数）才是注释起点。"""
         assert audit_mod._strip_comment(r"we cover 100\% 覆盖率") == r"we cover 100\% 覆盖率"
         assert audit_mod._strip_comment(r"we cover 100% 覆盖率") == "we cover 100"
+        assert audit_mod._strip_comment(r"a\\% b") == r"a\\"
+        assert audit_mod._strip_comment(r"a\\\% b") == r"a\\\% b"
 
     def test_pmlr_publisher_counts_as_identifier(self, tmp_path):
         """PMLR 不分配 DOI（CR 轮一手核验）：publisher={PMLR} 是正当标识。"""
@@ -369,6 +512,11 @@ class TestSubmissionPackageCoherence:
     CS 轮实测：该表已与工件脱节四处（页数写 54 实测 55/57、表数写 22 实测 19、
     TODO 数写 14 实测 18、refs.bib 标识口径漏 `publisher={PMLR}`），而它**没有任何
     机制能发现自己过期**——审稿人看到的正是这张表。
+
+    DA 轮（2026-10-26）：TODO 数口径再修正——只数**会被排版**的 `[TODO(` 占位符
+    （注释里的约定举例不计、按 token 不按行）。CS 轮把「18」按旧口径钉进 SUBMISSION.md
+    时，其逐文件拆分（5 + 11 = 16 行）与 token 总数（18）本来就对不上；DA 轮实测
+    真值 = 14（投稿信 4 + title page 10），声明面与三例新锁同轮对齐。
     """
 
     @staticmethod
@@ -388,8 +536,10 @@ class TestSubmissionPackageCoherence:
         body = "\n".join(r"\begin{table}" for _ in range(draft_tables))
         (paper / "tex" / "manuscript.tex").write_text(body, encoding="utf-8")
         _write_build(paper / "tex", "manuscript", pages, inputs=("manuscript.tex",))
-        (paper / "cover_letter.tex").write_text("TODO x\n" * cover_todos, encoding="utf-8")
-        (paper / "title_page.tex").write_text("TODO y\n" * title_todos, encoding="utf-8")
+        # DA 轮（2026-10-26）口径：`todo_marks` 只数会被排版的 `[TODO(` 占位符 token，
+        # 夹具必须用真实占位符形态（裸 `TODO x` 在旧口径下能碰巧对账，但锁不住新判据）。
+        (paper / "cover_letter.tex").write_text("[TODO(submit): x]\n" * cover_todos, encoding="utf-8")
+        (paper / "title_page.tex").write_text("[TODO(confirm): y]\n" * title_todos, encoding="utf-8")
         _write_build(paper, "cover_letter", cover_pages, inputs=("cover_letter.tex",))
         _write_build(paper, "title_page", title_doc_pages, inputs=("title_page.tex",))
         (paper / "SUBMISSION.md").write_text(
@@ -427,6 +577,33 @@ class TestSubmissionPackageCoherence:
             paper, (paper / "tex" / "manuscript.tex").read_text(encoding="utf-8")
         )
         assert any("todo_marks" in f for f in result["failures"]), result["failures"]
+
+    def test_comment_todo_lines_not_counted(self, tmp_path):
+        """DA 轮（2026-10-26）：约定注释里的 `[TODO(` 不计数——注释不进 PDF，作者
+        无需（也不能）去填它。旧口径按整文件 token 计 ⇒ 会指示作者把约定说明一起删掉。"""
+        paper = self._make_pkg(tmp_path)
+        (paper / "cover_letter.tex").write_text(
+            "% 纪律：待作者确认处一律写 [TODO(confirm): …] / [TODO(submit): …]，**不预填**。\n"
+            + "[TODO(submit): x]\n" * 5,
+            encoding="utf-8",
+        )
+        result = audit_mod.audit_submission_package(
+            paper, (paper / "tex" / "manuscript.tex").read_text(encoding="utf-8")
+        )
+        assert result["claims"]["todo_marks"] == {"claimed": 18, "measured": 18}, result["claims"]
+
+    def test_todo_marks_counts_tokens_per_line(self, tmp_path):
+        """`todo_marks` 是 token 口径（`line.count("[TODO(")`）：同一行两个占位符计 2，
+        与「行数」口径（CS 轮曾出现 16 ≠ 18 的两套数字互相对不上）显式区分。"""
+        paper = self._make_pkg(tmp_path, cover_todos=0, title_todos=0)
+        (paper / "cover_letter.tex").write_text(
+            "[TODO(submit): a] and [TODO(submit): b] on one line\n", encoding="utf-8"
+        )
+        (paper / "SUBMISSION.md").write_text("- 共 2 处待填标记\n", encoding="utf-8")
+        result = audit_mod.audit_submission_package(
+            paper, (paper / "tex" / "manuscript.tex").read_text(encoding="utf-8")
+        )
+        assert result["claims"]["todo_marks"] == {"claimed": 2, "measured": 2}, result["claims"]
 
     def test_page_count_drift_fails(self, tmp_path):
         """页数声明与 xdv 日志不符 ⇒ 红。"""

@@ -179,11 +179,13 @@ class ULTDataset(BaseDatasetLoader):
     """
 
     DATASET_NAME = "ult"
+    SUPPORTS_SUBSET = True
     _MANIFEST_NAMES: ClassVar[tuple[str, ...]] = ("ult_manifest.jsonl", "manifest.jsonl")
     _SUBSET_FILENAMES: ClassVar[dict[str, str]] = {
         "lite": "ULT_Lite.jsonl",
         "full": "ULT.jsonl",
     }
+    SUPPORTED_SUBSETS: ClassVar[frozenset[str] | None] = frozenset(_SUBSET_FILENAMES)
     _MAX_NAME_LEN: ClassVar[int] = 40  # task_id 末段长度预算（可导入标识符）
 
     def __init__(self, subset: str | None = None, data_dir: str | None = None) -> None:
@@ -193,12 +195,21 @@ class ULTDataset(BaseDatasetLoader):
     def _manifest_path(self) -> str | None:
         # 显式文件路径优先（data_dir 直接指向 .jsonl）
         if self.data_dir.endswith(".jsonl") and os.path.exists(self.data_dir):
+            if self.subset:
+                self.subset_fallback_reason = f"数据源为显式文件 {self.data_dir}，--subset 不生效"
             return self.data_dir
         # subset 指定的官方子集文件（lite → ULT_Lite.jsonl）
-        if self.subset and self.subset in self._SUBSET_FILENAMES and os.path.isdir(self.data_dir):
-            candidate = os.path.join(self.data_dir, self._SUBSET_FILENAMES[self.subset])
-            if os.path.exists(candidate):
-                return candidate
+        if self.subset:
+            if self.subset not in self._SUBSET_FILENAMES:
+                self.subset_fallback_reason = (
+                    f"未知子集 {self.subset!r}（支持: {', '.join(sorted(self._SUBSET_FILENAMES))}）"
+                )
+            elif os.path.isdir(self.data_dir):
+                candidate = os.path.join(self.data_dir, self._SUBSET_FILENAMES[self.subset])
+                if os.path.exists(candidate):
+                    return candidate
+                # 不能静默换成通用 manifest：调用方会以为校验/跑批的是请求的子集
+                self.subset_fallback_reason = f"未找到子集文件 {os.path.basename(candidate)}，已回退到通用 manifest"
         for name in self._MANIFEST_NAMES:
             candidate = os.path.join(self.data_dir, name)
             if os.path.exists(candidate):

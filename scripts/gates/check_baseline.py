@@ -42,6 +42,9 @@ BASELINE_PATH = PROJECT_ROOT / "BASELINE.yaml"
 # 全量 pytest 实测与 BASELINE total_passed 的容差比例（精简环境 skipif 漂移）
 _MEASURE_TOLERANCE = 0.02
 
+# 冷缓存收集全量测试约 20s；300s 仍不返回即视为死锁（返回 None 由调用方判红）。
+_COLLECT_TIMEOUT_S = 300.0
+
 
 def _load_baseline() -> dict:
     """加载 BASELINE.yaml（pyyaml 缺失时用最小行解析兜底）。"""
@@ -142,13 +145,17 @@ def measure_full_suite() -> int | None:
     """跑全量 pytest 收集计数（--collect-only -q），返回通过用例数。"""
     env = dict(os.environ)
     env.setdefault("AITESTER_LLM_CACHE", "0")
-    result = subprocess.run(
-        [sys.executable, "-m", "pytest", "tests/", "--collect-only", "-q", "-p", "no:cacheprovider"],
-        capture_output=True,
-        text=True,
-        cwd=PROJECT_ROOT,
-        env=env,
-    )
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "pytest", "tests/", "--collect-only", "-q", "-p", "no:cacheprovider"],
+            capture_output=True,
+            text=True,
+            cwd=PROJECT_ROOT,
+            env=env,
+            timeout=_COLLECT_TIMEOUT_S,
+        )
+    except subprocess.TimeoutExpired:
+        return None
     # collect-only 末行形如 "927 tests collected in 2.10s"
     for line in reversed(result.stdout.splitlines()):
         m = re.search(r"(\d+) tests? collected", line)

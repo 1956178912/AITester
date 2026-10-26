@@ -1,346 +1,62 @@
-> **Language**: [中文版](QUICKSTART.md) | English (this document)
->
-> Last updated: 2026-10-06 (Z5: bilingual gate now covers root-level pairs; this line added to satisfy the date-sync check)
+# Quick Start
 
-# AITester Quick Start Guide
+> Last updated: 2026-10-26 · 简体中文: [QUICKSTART.md](QUICKSTART.md)
 
-## 1. Clone the Repository
+## 1. Install
 
-```bash
-git clone https://github.com/1956178912/AITester.git
-cd AITester
-```
-
-## 2. Install Dependencies
+Python 3.12+ is required (the `scipy` floor decides this).
 
 ```bash
-# Create a virtual environment (Python 3.12+; the locked dependency scipy requires >=3.12)
 python3 -m venv .venv
 source .venv/bin/activate
-
-# Install dependencies
-pip install -r requirements.txt
-# Wheel installs only (non-repo dev): install the execution extra to run the Executor and benchmarks
-# pip install "aitester[execution]"   # the full requirements.txt install already includes pytest
+make install
+cp .env.example .env                   # non-sensitive config (optional)
+cp config.local.example .env.local     # LLM config template
 ```
 
-> **One-command bootstrap (recommended)**: steps 2-4 above are automated by
-> `bash scripts/tools/bootstrap_dev.sh` (venv creation + dependency install + copying
-> both env files + config-load validation, with concrete missing-item hints on
-> failure); you only need to edit `.env.local` with a real `LLM_N_API_KEY` after
-> the script completes. To validate an already-configured environment, run
-> `bash scripts/tools/bootstrap_dev.sh --check-only`.
+One-shot bootstrap: `bash scripts/tools/bootstrap_dev.sh` (creates the venv, installs
+dependencies, copies both env templates, and verifies config loading; edit `.env.local`
+afterwards with real values).
 
-## 3. Configure Environment Variables
+## 2. Configure an LLM
 
-> Both steps are required: Step 1 configures non-sensitive items, Step 2 configures LLM keys (you may skip Step 1 and use the defaults, but the keys must be set).
+Fill values only; variable names are fixed:
 
-### Step 1: Non-sensitive configuration (.env)
+| Variable | Purpose |
+|---|---|
+| `LLM_1_API_KEY` | API key |
+| `LLM_1_BASE_URL` | OpenAI-compatible endpoint |
+| `LLM_1_MODEL_NAME` | Model name |
 
-```bash
-# Copy the non-sensitive configuration template
-cp .env.example .env
+`1` may be replaced by another index to configure multiple endpoints; only the official
+DeepSeek endpoint is built in. `.env.local` is git-ignored; never put real keys into a
+tracked file.
 
-# Adjust as needed (e.g. TEMPERATURE)
-vim .env
-```
-
-### Step 2: LLM keys (.env.local, required)
+## 3. First Task
 
 ```bash
-# Copy the sensitive configuration template
-cp config.local.example .env.local
-
-# Edit the .env.local file and fill in LLM_N_API_KEY, etc.
-vim .env.local
-```
-
-## 4. Verify the Configuration Is Loaded
-
-```bash
-# Only verify that configuration loads (no network calls): success prints the number of loaded LLM configs
-python3 -c "from config import LLM_CONFIGS; print(f'Loaded {len(LLM_CONFIGS)} LLM configs')"
-
-# To actually probe each model's API connectivity and quota (1 token each), use the script in step 6:
-# python scripts/tools/check_quota.py
-```
-
-## 5. Run Tests
-
-```bash
-# List example files
+make test                    # verify the environment and dependencies first
 python3 main.py list-examples
-
-# Test a single file
 python3 main.py run examples/calculator.py --func add
-
-# Test multiple files in parallel
-python3 main.py run examples/calculator.py examples/string_utils.py --parallel=2
 ```
 
-## 6. Optional: Model Quota Probing and Token-Saving Cache
-
-LLM calls enable the file cache by default (`~/.cache/aitester/llm/`; a cache hit on the same prompt consumes no further tokens). This extends the usable time under "stop when the free quota is exhausted" providers.
+`main.py run` calls an LLM and consumes quota. For a fully offline check:
 
 ```bash
-# Probe which of the configured models are still alive and which have exhausted their 403 quota (1 token each, keys are not printed)
-python scripts/tools/check_quota.py
-
-# Disable the cache / clear the cache
-export AITESTER_LLM_CACHE=0
-rm -rf ~/.cache/aitester/llm
+bash scripts/tools/smoke_test.sh --no-llm --skip-lint
 ```
 
-## 7. Optional: Advanced Switches (off by default unless noted; no impact on normal use)
+## 4. Sandbox and Safety
 
-All of the following switches are off by default unless explicitly noted; enable them as needed (see the comments in `.env.example` for details):
+- Execution isolation: `EXECUTOR_USE_VENV` is **on by default** (since R10); LLM-generated
+  code runs inside a venv sandbox.
+- Docker / kernel-level sandboxes are opt-in; when the platform cannot provide them the
+  system **fails closed** and refuses to execute.
+- All three execution paths scrub LLM credentials, and logs are redacted at three layers.
+- Set `EXECUTOR_USE_VENV=false` only for local debugging.
 
-```bash
-# ── Switch presets (recommended entry point; four tiers since batch AA, 2026-10-06)
-# Tier presets configure a group of switches at once (setdefault injection;
-# explicitly set env vars are never overridden):
-#   safe       — security-sensitive: kernel sandbox + patch rollback
-#                 (fail-closed) + injection guard + rogue-agent monitoring +
-#                 flaky gate all on
-#   scientific — research-evaluation: SpecIR/DSL/spec-oracle execution +
-#                 mutation detection + oracle validation + snapshot rollback
-#                 all on (pair with deterministic=True)
-#   logic      — full logic chain: superset of scientific + strict spec
-#                 validation + deterministic guard + branch-coverage injection
-#                 + structured routing + detection-first protocol (batch AA
-#                 completed DETECTION_FIRST_ENABLE — the whole "logic-driven"
-#                 chain testable in one shot)
-#   fast       — historical defaults (equivalent to no PROFILE)
-export AITESTER_PROFILE=scientific
+## 5. Troubleshooting
 
-# ── 2026-10-05 review batch: individual switches (also usable standalone) ─
-# R1c deterministic spec-oracle execution: compile_spec_oracle output
-# (signature-aware binding) is appended to LLM-generated tests and executed
-# side by side — LLM tests passing ≠ spec oracle passing.
-export SPEC_ORACLE_EXEC_ENABLE=true
-
-# R4b rollback fail-closed: rc>=2/timeout/IO errors in P2P regression also
-# trigger automatic rollback (default off = legacy "bad tests don't kill
-# good patches" semantics).
-export PATCH_ROLLBACK_FAIL_CLOSED=true
-
-# R17 structured routing: error_category=logic_error (assertion failure whose
-# stack never touches the module under test) takes priority over Chinese
-# diagnosis keywords for the "regenerate tests" route.
-export ROUTE_STRUCTURED_ENABLE=true
-
-# R16 rogue-agent monitoring: LLM-call event reporting + per-round checks
-# (state["rogue_findings"]).
-export ROGUE_MONITOR_ENABLE=true
-
-# api_manager background health-checker thread (default true, historical
-# behavior; disable on free-tier quotas — failover probing is unaffected).
-export API_HEALTH_CHECKER_ENABLE=false
-
-# R11 deterministic sampling (a run_benchmark parameter, not an env var):
-# TEMPERATURE=0.0 cascaded across three namespaces (env + config +
-# base_agent), recorded in provenance.
-# from experiments.run_benchmark import run_benchmark
-# run_benchmark(dataset_name="synthetic", task_count=50, seed=42, deterministic=True)
-
-# Structured JSONL tracing (4.1): write <task_uuid>.trace.jsonl per task,
-# recording the decisions/tokens/latency of each agent node, for replaying in experimental analysis. When unset, everything is a no-op.
-export AITESTER_TRACE_DIR=./trace_out
-
-# Multi-candidate patches (3.1): the Debugger generates N candidate patches in one round; static + execution verification picks the best.
-export ENABLE_MULTI_CANDIDATE_PATCH=true
-export MULTI_CANDIDATE_COUNT=3
-export MULTI_CANDIDATE_EXEC_VALIDATE=true   # Run tests per candidate to filter (higher cost)
-
-# Cost-aware routing (3.4): the COST_AWARE strategy avoids failover switching the full traffic to an expensive provider.
-# The relative cost multiplier for each provider is configured in .env.local as LLM_N_COST_WEIGHT.
-# The cost alert threshold is configurable (3.2): a WARNING is logged when failing over to an expensive node with cost_weight >= threshold (default 2.0).
-# Raise the threshold if it's too low and produces many false alarms (e.g. 3.0/5.0); lower it when cost sensitivity is high; no code changes needed:
-from src.api.api_manager import APIManager, APIManagerConfig
-manager = APIManager(config=APIManagerConfig(cost_alert_threshold=3.0))
-
-# Circuit breaker cooldown + half-open probe (4.1 + 4.2): when an APIManager node reaches
-# the max_consecutive_failures threshold of consecutive failures, it automatically enters a cooldown period (circuit_cooldown_seconds, default 60s).
-# During the cooldown, the routing layer keeps skipping that node even if the health check flips is_healthy back to True.
-# 4.2: after the cooldown expires, the node enters a "half-open" window that carries only a single probe request;
-# a successful probe closes the circuit breaker and restores full routing; a failure reopens a half-length cooldown (min(cooldown/2, cap=30s)).
-# Half-open probing is on by default (enable_half_open_probe=True); comparative experiments can fall back to 4.1's direct pass-through:
-from src.api.api_manager import APIManager, APIManagerConfig
-manager = APIManager(config=APIManagerConfig(
-    circuit_cooldown_seconds=120.0,
-    # Optional: disable half-open probing to revert to 4.1 behavior (default True)
-    enable_half_open_probe=False,
-    # Optional: upper bound on the half-open probe failure penalty duration (default 30.0s)
-    # half_open_probe_penalty_cap_seconds=60.0,
-))
-
-# RAG (retrieval augmentation): can be explicitly enabled for synthetic/built-in dataset experiments
-python experiments/run_benchmark.py --dataset synthetic --enable-rag
-
-# 3.5 Cross-file repair (off by default): when enabled, the workflow inserts a
-# cross_file_analyzer node between the executor and the debugger, analyzes the cross-file import
-# dependencies of the code under test, and applies multi-file patches in topological order
-# (the callee is modified first, the caller later); failures roll back as a whole.
-# Single-file projects degrade automatically (when there are no dependency edges, the single-file path is taken).
-export CROSS_FILE_ENABLE=true
-export CROSS_FILE_MAX_MODULES=5
-
-# 3.4 Assertion augmentation (off by default): before generating, the Generator uses AST to extract
-# existing assert statements in the code under test and injects them into the prompt as "anchor assertions",
-# avoiding assertion weakening / always-true assertions / magic-number smells.
-export ASSERTION_AUGMENT_ENABLE=true
-
-# ── 2026-10-07 repair-engine batch I: dual-channel fault localization (on by default; action needed only for ablation) ──
-# Spectral channel (Ochiai Top-k, zero LLM, FL_SPECTRAL_ENABLE, on by default since R8) +
-# reasoning channel (RGFL-style structured LLM localization, FAULT_LOCALIZER_ENABLE, on by
-# default since batch I): the localization result is injected into the Debugger prompt and
-# surfaced with the result rows as the localization_hit_function metric (function-level hit,
-# compared against the gold changed-function set); reasoning failures degrade conservatively
-# to None and never block the repair main path. Set false only for ablation controls —
-# falls back to the pure-spectral caliber (no LLM localization):
-export FAULT_LOCALIZER_ENABLE=false
-
-# Result analysis (4.3 + 1.1/1.2/1.3 metric enhancements + 2.1 contamination detection
-# + 2.2 difficulty stratification + 4.4 dependency cache): after running the benchmark,
-# generate a Markdown summary including success rate / token efficiency / iteration
-# distribution / failure-cause distribution / RAG quality / repair convergence efficiency /
-# repair convergence curve / test smell detection / multi-dimensional quality proxies /
-# convergence failure-mode attribution (1.2, distinguishing "cannot pinpoint root cause"
-# vs "cannot produce an effective patch") / boundary case coverage (1.3, AST conservative
-# detection of None / empty collection / 0 / -1 / >= / <= boundary conditions) /
-# mutation score (1.3, produced by external mutation testers; skipped when the field is
-# absent) / fault-localization quality FL@1/3/5 (B-02, emitted when details[].fl_at_k exists
-# and gold material is solvable) / assertion-strength AST enhancement (1.3, ast.parse + ast.Assert node
-# counting, outputting ast_avg_assertions) /
-# data contamination detection (2.1, token-level Jaccard overlap of SWE-bench golden
-# patches, high >= 0.85 / medium >= 0.6) / task difficulty stratification (2.2,
-# code_size / dependency_count / complexity_proxy) /
-# execution feedback trace summary (3.2, observed task count / total executions /
-# first-round pass rate / last-round reward signals / coverage trend) /
-# dependency cache hit statistics (4.4).
-# When corresponding keys are missing from an old JSON, it automatically falls back or
-# degrades without crashing.
-python experiments/analyze_results.py --results-dir experiments/results
-# Optional: explicitly pass a golden-patch mapping ({task_id: patch_text}, JSON object)
-# to override contamination detection
-python experiments/analyze_results.py --results-dir experiments/results \
-    --golden-patches /path/to/golden_patches.json
-
-# 3.2 Execution feedback trace: the executor node is enabled by default; on every execution
-# it appends passed / coverage_delta / elapsed / reward_signals {correctness, efficiency,
-# simplicity} to state.execution_trace. To inspect a task's trace (details[].execution_trace
-# in the result JSON):
-python -c "import json; d=json.load(open('experiments/results/benchmark_xxx.json')); [print(r['task_id'], r.get('execution_trace')) for r in d['results']['aitester']['details'][:3]]"
-
-# Repair-engine batch I result-row fields (alongside detection/repair/fl_at_k):
-# details[].llm_localization — LLM reasoning-localization JSON (function_name / line_start /
-# line_end / confidence / reasoning; null when the switch is off, the LLM fails, or there are
-# no failed cases); details[].localization_hit_function — function-level hit bool (localized
-# function ∈ gold changed-function set; null when unlocalized or no gold material,
-# schema-isomorphic placeholder).
-python -c "import json; d=json.load(open('experiments/results/benchmark_xxx.json')); [print(r['task_id'], r.get('localization_hit_function'), r.get('llm_localization')) for r in d['results']['aitester']['details'][:3]]"
-
-# Failure root-cause classification + case knowledge base (5.3): attribute causes to the three major root causes
-# (LLM capability / dependencies / frameworks); structured cases are written to failure_knowledge_base.json
-# (including task_id / root_cause / reproduction steps / suggested fix).
-python experiments/analyze_failures.py --results-dir experiments/results
-python experiments/analyze_failures.py -r experiments/results -k experiments/results/failure_knowledge_base.json
-
-# 4.4 Dependency cache monitoring: venv cache hit-rate statistics + cleanup
-python main.py clean-venv-cache --list-only           # List existing caches with hit rate
-python main.py clean-venv-cache --max-age-days 30     # Remove venvs older than 30 days
-python main.py clean-venv-cache --max-size-mb 512     # Remove venvs larger than 512MB
-# Hit rate is also auto-rendered in the analysis layer ("Dependency Cache Hit Statistics (4.4)" section of analyze_results.py)
-python -c "from src.tools.dependency import get_venv_cache_stats; print(get_venv_cache_stats())"
-
-# 4.3 Docker isolated execution (requires local docker + built image; dependency pre-install cache baked into image build)
-docker build -t aitester:latest .
-EXECUTOR_USE_DOCKER=true python main.py run examples/calculator.py
-# Docker vs venv execution time comparison (Markdown table output, basis for choosing execution environment)
-python scripts/tools/compare_executor_modes.py --tasks examples/calculator.py examples/string_utils.py
-
-# 4.4 API circuit breaker exponential backoff (on by default, API_CIRCUIT_BACKOFF): the cooldown
-# period grows as base*2^open_count (fully-dead providers see a monotonically increasing
-# cooldown); set to false to fall back to the 4.2 fixed-cooldown baseline (for comparative
-# experiments).
-# Since 0.6, centrally declared in config.py and actually read by
-# api_health.mark_failure / _probe_circuit_half_open — before 0.6, six doc locations
-# promised this switch but no code read point existed (a ghost switch); users setting it
-# to false saw no effect. The semantics below only took effect after the 0.6 implementation.
-export API_CIRCUIT_BACKOFF=false
-
-# 4.4 Prometheus metric export (off by default, API_PROMETHEUS_EXPORT): when enabled,
-# APIManager.to_prometheus_text() emits 7 metric categories for Prometheus scraping.
-# Since 0.6, api_manager.to_prometheus_text actually reads this switch (false → empty
-# string, default behavior unchanged); before 0.6 this was likewise a ghost switch.
-export API_PROMETHEUS_EXPORT=true
-
-# 1.2 Built-in mutation generator: AST-level three mutant classes
-# (boundary-value replacement / operator flip / boolean negation),
-# up to 20 per task, no mutmut dependency required
-python -c "
-from experiments.mutation_testing import MutationGenerator
-gen = MutationGenerator()
-mutants = gen.generate('def check(x): return x > 5 and not x')
-print(f'{len(mutants)} mutants: {[(m.mutant_type, m.line_no) for m in mutants]}')
-"
-
-# 5.3 Cross-batch failure-mode comparison: track new / resolved / regressed
-# failure-category trends across multiple benchmark JSON batches
-python experiments/compare_failures.py     --results experiments/results/benchmark_synthetic_new.json     --cross-batch experiments/results/benchmark_synthetic_old.json     --cross-batch-baseline aitester
-
-# 4.4 Multi-version venv cache: venv_cache_dir includes the Python version
-# prefix in the cache key by default, isolating venvs of different versions
-python -c "from src.tools.dependency import venv_cache_dir; print(venv_cache_dir(['pandas'], python_version='3.10'))"
-
-
-# 4.1 Log redaction audit (scans all logger call sites; exit 0 = no suspicious points, can be wired into CI)
-python scripts/gates/audit_log_redaction.py
-
-# P0 Runtime probe (RUNTIME_PROBE_ENABLE, off by default): at exception-raise time,
-# captures the exc.__traceback__ frame chain and local variable snapshots (zero trace
-# overhead; the 2026-09-29 core-defect fix makes it actually functional).
-export RUNTIME_PROBE_ENABLE=true
-
-# G3 Kernel-level sandbox (KERNEL_SANDBOX_ENABLE, off by default): macOS Seatbelt
-# (sandbox-exec) / Linux Landlock (bwrap) dual backend; platform-unsupported →
-# fail-closed rejection (does not silently degrade to un-isolated local).
-export KERNEL_SANDBOX_ENABLE=true
-
-# G4 AgentTelemetry failure-detection benchmark (AGENT_TELEMETRY_ENABLE, off by
-# default): 10 built-in failure-pattern regex matches (zero LLM cost, pure
-# observation), outputs a Markdown report for experimental-analysis consumption.
-export AGENT_TELEMETRY_ENABLE=true
-
-# G5 Testless execution-irrelevant validation (TESTLESS_VALIDATION_ENABLE, off by
-# default): four independently toggleable layers (AST symbol guard / mypy static
-# check / naming-contract regression / import smoke); any layer failure → overall
-# fail (conservative fail-closed caliber).
-export TESTLESS_VALIDATION_ENABLE=true
-
-# G6 Multi-agent debate convergence (EXPERT_POOL_DEBATE_ENABLE, off by default,
-# requires EXPERT_POOL_ENABLE=true): top-K candidate debate convergence produces
-# one debate_revise revised candidate.
-export EXPERT_POOL_ENABLE=true
-export EXPERT_POOL_DEBATE_ENABLE=true
-
-# G2 Risk-tiered human approval loop (RISK_APPROVAL_ENABLE, off by default):
-# three-factor weighted scoring → low/medium/high → auto_merge / human_confirm /
-# force_review.
-export RISK_APPROVAL_ENABLE=true
-```
-
-## Configuration File Description
-
-| File | Description | Git Status |
-|------|-------------|------------|
-| `.env.example` | Non-sensitive configuration template | ✅ Committed |
-| `config.local.example` | Sensitive configuration template (API Key) | ✅ Committed |
-| `.env` | Actual configuration (create it yourself) | ❌ Excluded |
-| `.env.local` | Actual sensitive configuration (create it yourself) | ❌ Excluded |
-
-## Notes
-
-1. **Do not commit `.env` and `.env.local` to Git**
-2. Create your configuration files from `.env.example` and `config.local.example`
-3. Store your API keys securely and do not share them with others
+Look up the symptom in [docs/troubleshooting.en.md](docs/troubleshooting.en.md):
+install and environment → runtime and sandbox → tests and gates. Run `make gates`
+(single chain) before submitting.

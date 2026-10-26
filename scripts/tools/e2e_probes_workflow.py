@@ -185,7 +185,7 @@ def probe_cli_list_examples() -> ProbeOutcome:
 
 
 def probe_cli_check_dataset() -> ProbeOutcome:
-    """`check-dataset quixbugs`：加载 50 任务并给出质量报告。"""
+    """`check-dataset quixbugs`：加载 50 任务并披露质量结论（通过 / 显式跳过）。"""
     rc, out, err = run_cmd(
         [sys.executable, _MAIN, "check-dataset", "quixbugs", "--limit", "2"],
         timeout=180.0,
@@ -195,15 +195,23 @@ def probe_cli_check_dataset() -> ProbeOutcome:
         return error(f"check-dataset rc={rc}", stderr_tail=_tail(err))
     if "共加载 50 个任务" not in out:
         return fail("check-dataset 未报告 50 个任务", stdout_tail=_tail(out, 800))
-    if "全量质量检查通过" not in out:
-        return fail("check-dataset 质量报告未通过", stdout_tail=_tail(out, 800))
+    # 质量结论两种合法形态：加载器提供 quality_report 时给出经校验的通过结论；
+    # 不提供时显式披露跳过（DL 轮口径）。此前探针只认「全量质量检查通过」，
+    # QuixBugs 不提供该能力 ⇒ 探针在真实树上恒红，把「能力缺失」报成产品故障。
+    if "全量质量检查通过" in out:
+        quality_verdict = "verified_pass"
+    elif "未提供 quality_report" in out:
+        quality_verdict = "skipped"
+    else:
+        return fail("check-dataset 未披露质量结论（既无通过结论也无跳过说明）", stdout_tail=_tail(out, 800))
     if "quixbugs__bitcount" not in out:
         return fail("前 N 任务详情缺失（期望含 quixbugs__bitcount）", stdout_tail=_tail(out, 800))
     # 观测项（非阻断）：日志脱敏对长路径段的误伤（见 N-1 缺陷报告）
     redactions = out.count("<REDACTED_KEY>")
     return ok(
-        "check-dataset quixbugs 正常（50 任务 / 质量通过）",
+        f"check-dataset quixbugs 正常（50 任务 / 质量结论: {quality_verdict}）",
         task_count=50,
+        quality_verdict=quality_verdict,
         redacted_path_segments=redactions,
         redaction_note=("检出长路径段被日志脱敏误伤，属诊断可读性缺陷（非本探针功能失败）" if redactions else ""),
     )

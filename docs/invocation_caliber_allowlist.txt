@@ -13,6 +13,7 @@
 flag-diff check_artifact_doc_consistency make:gates>wf:ci.yml  # 本地 `make gates` 不加 --require-coverage：coverage.xml 在本地常缺席，该支路按 [SKIP] 明示「未对账」而不是谎报 [OK]；CI 覆盖率作业加它把缺席变成红。两个口径都是刻意的，登记以防有人只改一侧。理由原写在 Makefile G6 注释里，注释不会被复算，故落表 @Makefile
 flag-diff check_prompt_artifacts make:prompt-artifacts-check>wf:ci.yml  # 本地目标 `make prompt-artifacts-check` 跑 --strict（清单缺席即红），但它不在 `make gates` 依赖里；ci.yml 的 prompt-artifacts 步骤裸跑，清单缺席只 [SKIP]。两侧都不是「链上强制档」，本轮不改判据，登记这个分叉 @Makefile
 flag-diff check_perf_regression make:perf-check>wf:perf.yml  # 本地 `make perf-check` 不带 --strict（只告警）；perf.yml 的 --strict 由 workflow_dispatch 输入注入，见本表 dynamic-flag 那条。跨机阈值本身就不宜阻断，登记两侧口径差而不是强行对齐 @.github/workflows/perf.yml
+flag-diff check_dependency_audit make:gates>wf:ci.yml  # 本地 `make gates` 不传 --require-audit：无网络时按 [SKIP] 披露（离线不是仓库缺陷）；ci.yml 传它把「无法验证」判红（PR 不能因网络抖动静默跳过漏洞审计）。两侧口径刻意不同，登记以防有人只改一侧 @.github/workflows/ci.yml
 
 no-face check_swe_bench_pro_ready programmatic-only  # SWE-bench Pro 数据前置门：判的是「数据集在不在、字段齐不齐」，由跑批入口以 import 方式调用（check_pro_ready），设计上不挂任何门禁面——挂上 make gates 反而会让没有数据集的机器永远红。调用现场 @experiments/run_full_stack_swe_bench_pro.py
 

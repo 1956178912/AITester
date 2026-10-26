@@ -174,13 +174,13 @@ class TestRunSequentialResilience:
         """--timeout 0（或负数）应被参数校验拦截，而不是传到 subprocess。"""
         files = self._make_files(tmp_path, n=1)
         r = CliRunner().invoke(cli_app.cli, ["run", files[0], "--timeout=0", "--json"])
-        assert r.exit_code == 1
+        assert r.exit_code == 2
         assert "--timeout 必须 >= 1 秒" in r.output
 
     def test_timeout_negative_rejected(self, tmp_path):
         files = self._make_files(tmp_path, n=1)
         r = CliRunner().invoke(cli_app.cli, ["run", files[0], "--timeout=-5", "--json"])
-        assert r.exit_code == 1
+        assert r.exit_code == 2
         assert "--timeout 必须 >= 1 秒" in r.output
 
 
@@ -192,7 +192,7 @@ class TestRunParamValidation:
         files = [str(tmp_path / "mod.py")]
         (tmp_path / "mod.py").write_text("def f():\n    return 1\n", encoding="utf-8")
         r = CliRunner().invoke(cli_app.cli, ["run", *files, "--parallel=0", "--json"])
-        assert r.exit_code == 1
+        assert r.exit_code == 2
         assert "--parallel 必须大于 0" in r.output
 
     def test_max_iterations_zero_rejected(self, tmp_path):
@@ -200,7 +200,7 @@ class TestRunParamValidation:
         files = [str(tmp_path / "mod.py")]
         (tmp_path / "mod.py").write_text("def f():\n    return 1\n", encoding="utf-8")
         r = CliRunner().invoke(cli_app.cli, ["run", *files, "--max-iterations=0", "--json"])
-        assert r.exit_code == 1
+        assert r.exit_code == 2
         assert "--max-iterations 必须大于 0" in r.output
 
     def test_coverage_threshold_out_of_range_rejected(self, tmp_path):
@@ -208,7 +208,7 @@ class TestRunParamValidation:
         files = [str(tmp_path / "mod.py")]
         (tmp_path / "mod.py").write_text("def f():\n    return 1\n", encoding="utf-8")
         r = CliRunner().invoke(cli_app.cli, ["run", *files, "--coverage-threshold=150", "--json"])
-        assert r.exit_code == 1
+        assert r.exit_code == 2
         assert "必须在 0-100 范围内" in r.output
 
     def test_nonexistent_file_intercepted_by_click(self, tmp_path):
@@ -513,23 +513,22 @@ def _make_fake_workflow_result(test_passed: bool):
 
 
 class TestCheckDatasetBoundaries:
-    """1.4 check-dataset 参数解析异常路径（无效 dataset 值 / 非法 --limit）。"""
+    """1.4 check-dataset 参数解析异常路径（DK 轮：用法错误 2 / 运行失败 1）。"""
 
-    def test_invalid_dataset_value_degrades_to_inmemory(self, tmp_path, monkeypatch):
-        """无效 dataset 值：load_dataset 降级为 InMemoryDataset（优雅降级而非崩溃）。"""
+    def test_unknown_dataset_is_usage_error(self, tmp_path, monkeypatch):
+        """未知 dataset 名：CLI 层 rc=2 并列出合法名称（工厂的降级契约仅服务程序化调用方）。"""
         r = CliRunner().invoke(cli_app.cli, ["check-dataset", "no_such_dataset_xyz"])
-        assert r.exit_code == 0, f"无效数据集应降级为内置示例而非崩溃: {r.output}"
-        assert "共加载" in r.output
+        assert r.exit_code == 2, f"未知数据集是用法错误，不得静默降级为示例数据: {r.output}"
+        assert "未知数据集" in r.stderr
 
-    def test_negative_limit_rejected_by_click_type(self, tmp_path):
-        """--limit 传负数：click int 类型本身接受，命令体取 tasks[:limit] 空切片 → 无详情仍正常。"""
+    def test_negative_limit_rejected(self, tmp_path):
+        """--limit 传负数：Python 负切片会静默取尾部，属用法错误（rc=2）。"""
         r = CliRunner().invoke(cli_app.cli, ["check-dataset", "examples", "--limit=-5"])
-        # 负数切片在 Python 中取尾部（tasks[:-5]），命令不崩溃
-        assert r.exit_code == 0
-        assert "共加载" in r.output
+        assert r.exit_code == 2
+        assert "--limit" in r.stderr
 
-    def test_load_dataset_exception_returns_gracefully(self, monkeypatch):
-        """load_dataset 抛异常 → error_msg + 正常返回（599-601）。"""
+    def test_load_dataset_exception_exits_1(self, monkeypatch):
+        """load_dataset 抛异常 → error_msg + rc=1（运行期失败，不能报成功）。"""
         from src.datasets import dataset_loader
 
         monkeypatch.setattr(
@@ -538,11 +537,15 @@ class TestCheckDatasetBoundaries:
             lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")),
         )
         r = CliRunner().invoke(cli_app.cli, ["check-dataset", "swe_bench"])
-        assert r.exit_code == 0
-        assert "数据集加载失败" in r.output
+        assert r.exit_code == 1
+        assert "数据集加载失败" in r.stderr
 
     def test_check_dataset_quality_report_and_missing_source(self, monkeypatch):
-        """validate_task 有 issues + quality_report 非空 + tasks_missing_source 非空（616-648）。"""
+        """validate_task 有 issues + quality_report 非空 + tasks_missing_source 非空（616-648）。
+
+        DU 轮改写：报告发现加载问题时命令以 1 退出（改前锁的是 0——那正是
+        「诊断命令查出问题却报成功」的缺陷本身）。
+        """
         from unittest.mock import MagicMock
 
         from src.datasets import dataset_loader
@@ -565,9 +568,10 @@ class TestCheckDatasetBoundaries:
         monkeypatch.setattr(dataset_loader, "load_dataset", lambda *a, **k: loader)
         monkeypatch.setattr(dataset_loader.SWEBenchDataset, "validate_task", staticmethod(lambda t: ["结构不完整"]))
         r = CliRunner().invoke(cli_app.cli, ["check-dataset", "swe_bench", "--limit", "1"])
-        assert r.exit_code == 0
+        assert r.exit_code == 1, f"报告发现加载问题却以 0 退出：{r.output}"
         assert "质量报告" in r.output
         assert "缺失被测源码任务" in r.output
+        assert "加载质量校验未通过" in r.stderr
 
 
 class TestGlobInParallelMode:
@@ -732,7 +736,7 @@ class TestCleanVenvCache:
         removed: list = []
         monkeypatch.setattr(
             "src.tools.dependency.clear_venv_cache",
-            lambda **kw: removed.append(kw) or {"removed": [], "kept": [], "freed_mb": 0.0},
+            lambda **kw: removed.append(kw) or {"removed": [], "failed": [], "kept": [], "freed_mb": 0.0},
         )
         r = self._run("--list-only")
         assert r.exit_code == 0, r.output
@@ -756,7 +760,7 @@ class TestCleanVenvCache:
 
         def fake_clear(max_age_days=None, max_size_mb=None):
             captured.update(max_age_days=max_age_days, max_size_mb=max_size_mb)
-            return {"removed": ["v1"], "kept": ["v2"], "freed_mb": 12.5}
+            return {"removed": ["v1"], "failed": [], "kept": ["v2"], "freed_mb": 12.5}
 
         monkeypatch.setattr("src.tools.dependency.clear_venv_cache", fake_clear)
         r = self._run("--max-age-days", "30")
@@ -768,7 +772,12 @@ class TestCleanVenvCache:
         """--max-size-mb 过滤无命中时给出提示。"""
         monkeypatch.setattr(
             "src.tools.dependency.clear_venv_cache",
-            lambda max_age_days=None, max_size_mb=None: {"removed": [], "kept": ["v1", "v2"], "freed_mb": 0.0},
+            lambda max_age_days=None, max_size_mb=None: {
+                "removed": [],
+                "failed": [],
+                "kept": ["v1", "v2"],
+                "freed_mb": 0.0,
+            },
         )
         r = self._run("--max-size-mb", "512")
         assert r.exit_code == 0, r.output

@@ -62,6 +62,33 @@ class TestLoadBackendBranches:
             name, instance = eu._load_backend()
         assert name is None and instance is None
 
+    def test_sentence_transformers_load_exception_falls_back(self, monkeypatch, caplog):
+        # 构造失败（如模型下载/缓存损坏）必须像 codebert / chromadb 一样降级，
+        # 不能让非 ImportError 击穿「不可用即 None」的契约。
+        monkeypatch.setenv("EMBEDDING_BACKEND", "sentence_transformers")
+        caplog.set_level("WARNING")
+        mock_st = MagicMock()
+        mock_st.SentenceTransformer.side_effect = RuntimeError("model download failed")
+        with patch.dict("sys.modules", {"sentence_transformers": mock_st}):
+            name, instance = eu._load_backend()
+        assert name is None and instance is None
+        assert any("sentence-transformers" in r.getMessage() for r in caplog.records)
+
+    def test_auto_sentence_transformers_exception_falls_through_to_chromadb(self, monkeypatch):
+        # auto 模式：codebert 缺席、sentence-transformers 构造失败时，
+        # 仍应继续尝试 chromadb，而不是把异常抛给调用方。
+        monkeypatch.setenv("EMBEDDING_BACKEND", "auto")
+        mock_st = MagicMock()
+        mock_st.SentenceTransformer.side_effect = RuntimeError("model download failed")
+        mock_embed_fn = MagicMock()
+        with (
+            patch.dict("sys.modules", {"transformers": None, "sentence_transformers": mock_st}),
+            patch("chromadb.utils.embedding_functions.DefaultEmbeddingFunction", return_value=mock_embed_fn),
+        ):
+            name, instance = eu._load_backend()
+        assert name == "chromadb"
+        assert instance is mock_embed_fn
+
     def test_chromadb_load_success(self, monkeypatch):
         monkeypatch.setenv("EMBEDDING_BACKEND", "chromadb")
         mock_embed_fn = MagicMock()
@@ -192,6 +219,14 @@ class TestEmbedTextMainPath:
         ):
             result = eu.embed_text("hello")
         assert result is None
+
+    def test_embed_text_sentence_transformers_failure_returns_none(self, monkeypatch):
+        # 公开钩子的契约：后端加载失败返回 None（调用方回退词袋），不得抛异常。
+        monkeypatch.setenv("EMBEDDING_BACKEND", "sentence_transformers")
+        mock_st = MagicMock()
+        mock_st.SentenceTransformer.side_effect = RuntimeError("model download failed")
+        with patch.dict("sys.modules", {"sentence_transformers": mock_st}):
+            assert eu.embed_text("hello") is None
 
 
 # ═══ 3. cosine_similarity 纯 Python 回退零向量分支 ═════════════════════════════

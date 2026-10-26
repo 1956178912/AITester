@@ -473,10 +473,15 @@ class TestCurrentRepo:
         assert result.strict_warnings == []
 
     def test_current_repo_scan_surface_sanity(self):
-        """扫描面规模下限：门禁必须真的扫到全部文档（防退化为空扫）。"""
+        """扫描面规模下限：门禁必须真的扫到全部文档（防退化为空扫）。
+
+        DD 轮（2026-10-26）文档重写后实测 links_total=356（精简门面与 docs 核心
+        退役了旧叙事段落及其链接）。下限按实测 −20% 设为 284：防扫描面塌陷，
+        不防链接密度下降——文档再精简也不该让门禁退化为空扫。
+        """
         result = gate.scan()
         assert result.stats.files >= 100
-        assert result.stats.links_total >= 400
+        assert result.stats.links_total >= 284
         assert result.stats.external_links >= 1
         assert result.stats.files_by_area.get("root", 0) >= 10
         assert result.stats.files_by_area.get("docs", 0) >= 80

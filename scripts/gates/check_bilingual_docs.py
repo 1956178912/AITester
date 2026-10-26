@@ -46,6 +46,7 @@ _CHECK_FILES = [
     "CONTRIBUTING.md",
     "MODEL_CARD.md",
     "SECURITY.md",
+    "REPLICATION.md",  # DD 轮（2026-10-26）：补齐英文配对后纳入守卫
 ]
 
 # 豁免清单：非核心文档（审查报告/审计/历史实施记录等）不强制英文配对。
@@ -78,9 +79,7 @@ _EXEMPT_NO_EN = frozenset(
         # 无后续引用"）**确认删除**（实测全仓 0 引用，含 docs/history/ 内索引
         # 与实验报告；内容留存于删除前提交历史）：
         #   full_test_report_2026-09-28 / implementation_2026-10_l25hard_n40_batch
-        # 保留项：docs/troubleshooting.md 是 docs/ 顶层真实存在且暂无英文
-        # 配对的单语文档（本门禁仍会扫到它，故豁免仍然必要）。
-        "docs/troubleshooting.md",
+        # DD 轮（2026-10-26）：troubleshooting 补齐英文配对，移出豁免。
         # 2026-10-15 EMSE 批次新增 2 条：审计 / 协议记录类单语文档，无英文配对
         # （按上方维护约定：非核心文档不强制英文配对）。
         #   MEASUREMENT_INTEGRITY.md       = 四起测量伪影"口径分叉"方法论章

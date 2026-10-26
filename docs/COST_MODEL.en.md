@@ -1,187 +1,69 @@
-# Cost and Wall-Time Model: Batch Post-Processing Wall Observability (Q-3)
+# Cost Model
 
-> Last updated: 2026-10-18
->
-> This document defines the **batch post-processing wall** observability contract.
-> It fills a blind spot in the existing cost/wall-time bookkeeping: batch JSON has
-> only total wall time and token/USD cost, without per-stage (mutation / M1 / MDO /
-> other) per-task duration distributions. As a result it is impossible to answer
-> "which stage, which class of tasks, or whether a long tail caused a 2400s run".
+> Last updated: 2026-10-26 · 中文: [COST_MODEL.md](COST_MODEL.md)
 
-## 1. Background and Problem
+This file defines cost **calculation calibers, units and limits** only. The single
+sources of truth for prices and batch readings are
+[`experiments/price_table.json`](../experiments/price_table.json) and
+[`BASELINE.yaml`](../BASELINE.yaml); this file does not copy batch cost numbers.
 
-The O-2 real-LLM validation batch (same cut/protocol) exposed run-to-run
-post-processing wall-time variance: the control arm went **2102s -> >2400s (hit the
-2400s post-processing watchdog) -> 2297s**, a >=14% swing. Existing batch fields
-only expose total wall time and cannot distinguish:
+## 1. Pricing Sources
 
-- which post-processing stage (mutation / M1 / MDO) contributed the swing;
-- whether all tasks got slower or only a few long-tail tasks did (stable p50 but
-  exploding p95/max);
-- whether tasks were truncated by the watchdog or genuinely became slower
-  (timed-out task counts).
+| Source | Content | Caliber |
+|--------|---------|---------|
+| `experiments/price_table.json` | Per-model `input_per_mtok` / `output_per_mtok` (USD per million tokens) | Must carry `currency` / `source` / `as_of`; currently only DeepSeek official deepseek-flash is registered |
+| `COST_USD_PER_1K` | Fallback blended price when the table is unavailable (USD per thousand tokens) | Unset by default; applies only when greater than 0 |
+| Batch provenance `usage` | The real token triple of each call | Counts only real API consumption on cache misses |
 
-The module therefore records post-processing wall time as a stable, serializable,
-warnable field archived with the batch JSON (alongside token/USD cost, forming a
-two-dimensional resource-vs-time diagnosis).
+Current entry: deepseek-flash at input 0.3 / output 1.2 USD per million tokens,
+`currency=USD`, `source` is the official DeepSeek pricing page, `as_of=2026-10-06`
+(peak-time full price).
 
-## 2. Metrics and JSON Shape
+Unregistered models, undeterminable currency and null price fields mean **unpriced**:
+they must not be counted as 0 in averages, nor extrapolated.
 
-Output of `experiments/postprocess_wall.py::build_postprocess_wall` (one entry per
-stage, in input order):
+## 2. Per-Task Cost Formula
 
-```json
-{
-  "mdo": {
-    "wall_s": 123.4,
-    "n_tasks": 15,
-    "mean_s": 8.23,
-    "p50_s": 3.1,
-    "p95_s": 40.0,
-    "max_s": 60.0,
-    "timed_out_tasks": 1
-  }
-}
+```text
+cost_task = Σ_calls ( input_tokens × price_in + output_tokens × price_out ) / 1_000_000
 ```
 
-- `wall_s`: sum of per-task durations for the stage (task-level; not the stage wall
-  including queue/IO waits, and not total batch wall time);
-- `n_tasks`: number of timed tasks (including timed-out tasks);
-- `mean_s` / `p50_s` / `p95_s` / `max_s`: per-task duration distribution in seconds,
-  rounded to 6 decimals;
-- `timed_out_tasks`: tasks judged timed out by the caller (passed by the hook);
-- a stage with no tasks emits an all-zero distribution (stable key set);
-- warnings never enter JSON: `build_postprocess_wall` returns the `dict` subclass
-  `PostprocessWallResult`; `json.dumps()` serializes only the stage mapping while
-  threshold warnings live on `.warnings` for the caller's `logger.warning`.
+- Units: tokens as counts; `price_in` / `price_out` in USD per million tokens;
+  the result is USD.
+- Fallback: `cost_task = (input_tokens + output_tokens) / 1000 × COST_USD_PER_1K`.
+- Calls are counted per real LLM call: the multi-agent path is Planner + Generator +
+  one Debugger per iteration + optional FaultLocalizer / ExpertPool; baseline paths
+  are usually a single generation call.
+- Cost is a **standard-price estimate**, not a provider invoice; reports must state
+  both `source` and `as_of`.
+- Batch cost = sum of task costs; task mean = batch cost / number of tasks. Failed or
+  timed-out tasks keep their incurred calls and are not reallocated to successes.
 
-## 3. Quantile Algorithm (pure stdlib, numpy `linear` / R-7 compatible)
+## 3. Caching and Batch Discounts
 
-For sorted samples `v[0..n-1]` and quantile `p` in `[0,1]`:
+- **Response cache**: a hit in the LLM cache (default `~/.cache/aitester/llm`) makes
+  no API call and is recorded as `cache_hits` plus the separate
+  `cache_avoided_tokens`; it does not enter the real token triple and is not billed.
+- **Cache-hit and off-peak prices**: DeepSeek officially also has a cache-hit price
+  (0.006 USD per million tokens) and an off-peak half price; the table registers the
+  peak-time full price without deducting either, so the registered cost is an **upper
+  bound**.
+- **Batch discount**: the repository applies none; running several tasks in one batch
+  does not change unit prices.
+- **Cold start vs warm cache**: the first run, including venv creation and dependency
+  installation, is a cold start; a warm cache only reuses LLM responses and the venv
+  and does not lower the unit price of calls already made.
 
-```
-rank = p * (n - 1)
-lo   = floor(rank)
-hi   = min(lo + 1, n - 1)
-value = v[lo] + (rank - lo) * (v[hi] - v[lo])
-```
+## 4. Unknowns and Limits
 
-- `n == 1` returns the single value; `n == 0` returns 0.0 (no-task convention);
-- matches the existing repository helper
-  `experiments/bayesian_paired.py::_percentile_linear` (documented as numpy default
-  "linear"); this module implements it independently to avoid cross-module imports;
-- known exact examples: `[10,20,30,40]` -> p50=25, p95=38.5; `[10,20,30]` ->
-  p50=20, p95=29; `[42]` -> 42.
+| Item | Caliber |
+|------|---------|
+| Price of an unregistered model | Not measured; `estimate_usd` returns `unpriced`, never 0 |
+| Gap between estimate and provider invoice | Not measured; the model is a standard-price estimate |
+| Per-task token / USD hard caps | `COST_BUDGET_ENABLE` (off by default); `COST_BUDGET_TOKENS` / `COST_BUDGET_USD` of 0 means unlimited |
+| Per-call wall-clock cap | `LLM_CALL_BUDGET_SECONDS` (default 600 s); exceeding it fails fast without further requests |
+| Post-process wall-clock warning | `AITESTER_POSTPROCESS_WARN_S` (default 600 s); warning only, scoring unchanged |
 
-## 4. Threshold and Warnings
-
-- Threshold env: `AITESTER_POSTPROCESS_WARN_S` (default **600 seconds**; registered
-  by Q-1 in the env budget gate). The reader lives in
-  `src/utils/env_utils.py::postprocess_warn_seconds` (Q-3 decision option a:
-  `check_env_budget.py` scans `src/**/*.py` + `config.py` but not `experiments/`;
-  keeping the read in src prevents the registry entry from being pruned as
-  unused); `experiments/postprocess_wall.py::postprocess_warn_s` delegates to it.
-- `postprocess_warn_s()`: reads and validates the threshold; unset/empty/non-numeric
-  /NaN/inf/<=0 falls back to the default 600 (a bad env must not crash observability
-  or silently disable warnings).
-- Trigger: `wall_s > warn_s` produces one warning message (equal threshold does not
-  warn) containing stage name, measured wall, threshold and env name; the module
-  never logs itself, leaving `logger.warning` to the caller.
-
-## 5. Hook Integration (wired into run_benchmark, R-3, 2026-10-18)
-
-**Status: wired in.** The per-baseline post-processing block in
-`experiments/run_benchmark.py` (mutation scoring/detection + MDO calls) is wrapped
-with `StageTimer` and archived through three small helpers
-(`_run_postprocess_stage` / `_run_baseline_postprocess_with_wall` /
-`_attach_postprocess_wall_to_summary`; the default call path is byte-equivalent,
-observation only).
-
-**Current granularity = `per_baseline`**: one wall sample per baseline per stage
-(total wall of that baseline's post-processing calls in that stage), recorded in
-the batch summary:
-
-```json
-{
-  "postprocess_wall": {
-    "mutation": {"wall_s": 1.1e-05, "n_tasks": 1, "mean_s": 1.1e-05,
-                  "p50_s": 1.1e-05, "p95_s": 1.1e-05, "max_s": 1.1e-05,
-                  "timed_out_tasks": 0},
-    "mdo":      {"wall_s": 3e-06, "n_tasks": 1}
-  },
-  "postprocess_wall_granularity": "per_baseline"
-}
-```
-
-- **field always present**: with `mutation_enabled=False` (default),
-  `postprocess_wall={}` (empty mapping; only actually executed stages are included,
-  no empty stage keys) while `postprocess_wall_granularity` stays `"per_baseline"`;
-- threshold warnings are emitted one by one via the hook's `logger.warning`
-  (threshold `AITESTER_POSTPROCESS_WARN_S`, default 600s; reader in §4); JSON does
-  not contain warnings;
-- exception path: the stage wall sample is still appended before the original
-  exception is re-raised - exceptions are never swallowed and retry/timeout/scoring
-  logic is unchanged;
-- finer granularity (per task / per mutant) is a possible follow-up; the Q-3 module
-  API is unchanged.
-
-Integration shape (as in `run_benchmark.py` now):
-
-```python
-# post-processing collector (R-3): stage -> per-baseline wall samples
-postprocess_stage_durations: dict[str, list[float]] = {}
-
-# per-baseline post-processing (same call order/args/log as before, wall added)
-_run_baseline_postprocess_with_wall(
-    bl_results,
-    tasks,
-    postprocess_stage_durations,
-    mutation_enabled=mutation_enabled,
-    mutation_max_mutants=MUTATION_MAX_MUTANTS,
-    seed=seed,
-)
-
-# batch summary: write the two keys and log threshold warnings
-_attach_postprocess_wall_to_summary(summary, postprocess_stage_durations)
-```
-
-## 6. Trade-offs and Known Boundaries
-
-- **Zero behavior change**: the module only times/aggregates; no post-processing or
-  scoring field changes; overhead is two `time.perf_counter()` calls per task.
-- **Task-level accounting**: the sum of `wall_s` is not total batch wall time
-  (serialization/parallelism/IO waits are excluded); consume existing batch timing
-  fields for the total.
-- **Timeout semantics**: the caller should pass watchdog-truncated durations; the
-  module treats computation and queue timeouts alike (both counted in
-  `timed_out_tasks` and in the distribution).
-- **Threading**: `StageTimer` is not thread-safe (post-processing hook collects
-  serially on one thread); for parallel collection, use one timer per thread and
-  merge duration lists.
-- **Registered stage names**: `registered_stage_names()` returns
-  `("mutation","m1","mdo","other")`; `build_postprocess_wall` raises `ValueError`
-  for unregistered names (prevents silent metric renames from hook typos); new
-  stages must be registered and documented here.
-
-## 7. Verification and Tests
-
-- Tests: `tests/test_postprocess_wall_metrics.py` (88 cases, no network, no LLM, no
-  numpy): timers normal/exception/empty/nested/decorator, exact quantile values
-  (even/odd/single/unsorted/duplicates), JSON shape and serialization, threshold and
-  env fallback, all-timeout/no-task/inconsistent-data fail-fast, hook sample.
-- Smoke artifact: `（工件已清除）`
-  (deterministic JSON sample built from synthetic durations + SHA256 manifest; shape
-  demo only, not real batch numbers).
-- Integration tests (R-3): `tests/test_run_benchmark_postprocess_hook.py`
-  (23 cases): mutation-off zero behavior, identical call order/args, per-baseline
-  granularity, threshold warnings, exception path still records a sample and
-  re-raises, summary adds exactly two keys and stays JSON-serializable;
-- Default zero-behavior evidence (R-3): running `run_benchmark()` with the same
-  fake baseline on **HEAD (pre-integration)** and the current working tree
-  (examples, 1 task; provenance/timing volatile fields normalized) yields
-  **identical** legacy summary fields for both mutation-off and mutation-on
-  modes; the only difference is the two added keys `postprocess_wall` /
-  `postprocess_wall_granularity`;
-- Acceptance: `python -m pytest -q tests/test_postprocess_wall_metrics.py
-  tests/test_run_benchmark_postprocess_hook.py`; target files clean under
-  `ruff check` / `mypy` (no new errors beyond the pre-existing run_benchmark ones).
+If a reading here conflicts with `BASELINE.yaml`, the latter is the registration
+authority: recheck the price-table `as_of` and the batch `usage`, then update the
+document and the register.

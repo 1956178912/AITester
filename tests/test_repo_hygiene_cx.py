@@ -21,7 +21,7 @@
 本文件自身也是 `--list` 开关的**代码锁**（它点名 `check_repo_hygiene` 并真传
 `--list`）——按 CG 门的分类，`--list` 属「判据档」，判据档无读者即红。
 
-分组：A 规则面 8 例 / B 接线面 4 例。
+分组：A 规则面 8 例 / B 接线面 4 例 / C 敏感路径面（2026-10-26 用户口径）。
 """
 
 from __future__ import annotations
@@ -153,6 +153,129 @@ class TestHygieneWiring:
         """必须进 CI（否则只在本地跑，远端树照样能污染）。"""
         ci = (PROJECT_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
         assert "scripts/gates/check_repo_hygiene.py" in ci
+
+
+class TestPrivatePathRules:
+    """C 组：敏感/私有路径不得被跟踪（2026-10-26 用户口径）。
+
+    口径来源：用户明确「上传 GitHub 的只能是项目相关代码和必要的说明性文档」。
+    论文源（`paper/`）、私有审查（`.private/`）、数据集（`data/`）、RAG 持久化库
+    （`rag_data/`）、工具生成的 RepoWiki（`.qoder/`）、本机密钥（`.env` /
+    `.env.local*`）与投稿/预注册类文档一律**保持未跟踪**——`.gitignore` 只能挡住
+    「未跟踪」面，一旦被 `git add`（尤其 `-f`）就随提交上传，所以这里再加一道
+    **索引面**断言：`git ls-files` 里出现这些路径即判红。
+
+    两个刻意选择（都有负例钉住）：
+      1. 顶层目录锚定，不做全局分量匹配——`docs/paper/notes.md`、`src/data/x.py`
+         是正常文档/代码，不得误伤；
+      2. 只锚定 `docs/study/*_PREREG_*.md`——`experiments/results/` 下的
+         `PREREG.md` 是公开证据工件（已入库），不在禁列。
+    """
+
+    @pytest.mark.parametrize(
+        "path",
+        [
+            "paper/tex/manuscript.tex",
+            "paper/SUBMISSION.md",
+            ".private/audit/project_full_audit.md",
+            "data/dataset.jsonl",
+            "rag_data/index.faiss",
+            ".qoder/repowiki/zh/content/index.md",
+            ".workbuddy/memory/notes.md",
+            "tmp_apr_baseline/crawl.json",
+            ".env",
+            ".env.local",
+            ".env.local.bak_g8",
+            ".gitignore-sensitive",
+            "INDEPENDENT_REVIEW_2026-01-01.md",
+            "docs/study/SUBMISSION_v1.md",
+            "docs/study/OPTIMIZATION_APPENDIX_v1.md",
+            "docs/study/ULT_DF200_PREREG_2026-10-20.md",
+            "docs/study/BATCH8_MUTK_VALIDITY_2026.md",
+            "docs/study/GOLD_CONFORMANCE_2026.md",
+            "docs/study/PAPER_CONSISTENCY_AUDIT_2026-10-17.md",
+            "docs/design/stvr_empirical_study_design.md",
+            "docs/design/false_fix_caliber_matrix.md",
+            "SPEC_REPLACE_AB_SCALE87_REPORT_2026.md",
+        ],
+    )
+    def test_private_paths_are_flagged(self, path: str) -> None:
+        assert gate._private_hit_reason(tuple(path.split("/"))) is not None, path
+
+    @pytest.mark.parametrize(
+        "path",
+        [
+            # 模板无密钥值，必须入库供他人配置
+            ".env.example",
+            ".env.local.template",
+            # 嵌套同名目录不是顶层敏感目录
+            "docs/paper/notes.md",
+            "src/data/loader.py",
+            # 公开证据工件与说明文档
+            "experiments/results/p_round_b8_ablation_20261018/PREREG.md",
+            "experiments/results/main_batch/benchmark_x.json",
+            "experiments/results/emse_docstring_anchor_20261017/preflight.log",
+            "docs/study/PAPER_BUILD.md",
+            "docs/study/PAPER_CITATION_KEYS.md",
+            "docs/study/EXTERNAL_READINGS_2026-10-25.md",
+            "docs/study/OPTIMIZATION_2026-10-15.md",
+            "docs/design/adr-0014-branch-coverage-gates.md",
+            "llm_configs.json",
+            "scripts/gates/check_repo_hygiene.py",
+        ],
+    )
+    def test_public_paths_are_not_flagged(self, path: str) -> None:
+        assert gate._private_hit_reason(tuple(path.split("/"))) is None, path
+
+    def test_private_hit_reports_a_reason(self) -> None:
+        hit = gate._private_hit_reason(("paper", "tex", "manuscript.tex"))
+        assert hit is not None
+        assert hit[0]
+        assert hit[1]
+
+    def test_index_surface_detects_a_tracked_secret(self, tmp_path: Path) -> None:
+        """判据读索引：`git add -f` 过的 `.env.local` 在提交前就能被拦住。"""
+        subprocess.run(["git", "-C", str(tmp_path), "init", "-q"], check=True)
+        (tmp_path / ".env.local").write_text("LLM_1_API_KEY=placeholder\n", encoding="utf-8")
+        (tmp_path / "ok.py").write_text("print(1)\n", encoding="utf-8")
+        subprocess.run(
+            ["git", "-C", str(tmp_path), "add", "-f", ".env.local", "ok.py"],
+            check=True,
+        )
+        offenders = gate.find_private_offenders(tmp_path)
+        assert [path for path, _, _ in offenders] == [".env.local"]
+
+    def test_real_tree_has_no_tracked_private_paths(self) -> None:
+        """真实树：跟踪面内无敏感/私有路径。"""
+        assert gate.find_private_offenders(PROJECT_ROOT) == []
+
+    def test_list_switch_discloses_private_rules(self) -> None:
+        """`--list` 必须披露新增判据面（否则判据档无读者）。"""
+        proc = subprocess.run(
+            [sys.executable, str(_SCRIPT), "--list"],
+            capture_output=True,
+            check=False,
+        )
+        out = proc.stdout.decode("utf-8", "replace")
+        assert proc.returncode == 0, out
+        assert "敏感/私有" in out
+        assert ".env.local" in out
+
+    def test_gitignore_ignores_qoder_state(self) -> None:
+        """`.qoder/`（工具生成的 RepoWiki，可重建）必须被有效忽略。"""
+        ignore = (PROJECT_ROOT / ".gitignore").read_text(encoding="utf-8")
+        assert ".qoder/" in ignore
+        proc = subprocess.run(
+            ["git", "-C", str(PROJECT_ROOT), "check-ignore", "-v", ".qoder/repowiki/zh/content/index.md"],
+            capture_output=True,
+            check=False,
+        )
+        assert proc.returncode == 0, proc.stdout.decode("utf-8", "replace")
+
+    def test_pre_commit_runs_the_gate(self) -> None:
+        """本判据必须在提交前执行（`make gates`/CI 只能事后发现，内容已进历史）。"""
+        hook = (PROJECT_ROOT / ".git-hooks" / "pre-commit.sh").read_text(encoding="utf-8")
+        assert "scripts/gates/check_repo_hygiene.py" in hook
 
 
 class TestGateRegistrySurface:

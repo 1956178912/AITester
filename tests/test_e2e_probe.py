@@ -7,8 +7,9 @@
 3. 子进程隔离执行：`--run-probe` 结构化结果解析、超时/无结果 → fail/error；
 4. 运行引擎：LLM 探针在未启用时 skip（不静默通过）、fail_fast 生效；
 5. 报告渲染（Markdown 汇总/功能矩阵/失败明细）与 JSON 报告 schema；
-6. CLI：`--list`、filter（--group/--name）、无匹配 → exit 2、fail → exit 1、
-   strict 模式 skip → exit 1；LLM 门禁（--include-llm 但 AITESTER_E2E_LLM!=true → skip）。
+6. CLI：`--list`、filter（--group/--name）、未知 group/name 与无匹配 → exit 2、
+   fail → exit 1、strict 模式 skip → exit 1；LLM 门禁（--include-llm 但
+   AITESTER_E2E_LLM!=true → skip）。
 
 测试不依赖真实 LLM/网络；探针模块用 sys.modules 注入的假模块。
 """
@@ -254,6 +255,46 @@ class TestCli:
         assert rc == 0
         out = capsys.readouterr().out
         assert "b " in out and "a " not in out
+
+    def test_unknown_group_returns_usage_error_with_choices(self, monkeypatch, capsys, tmp_path):
+        """拼错分组是用法错误（rc=2），且必须列出合法分组而不是静默跑空集。"""
+        _install_fake_module(
+            monkeypatch,
+            "fake_probes_unknown_group",
+            [_make_probe("ok-probe", lambda: e2e.ok(), group="budget")],
+            tmp_path,
+        )
+        rc = e2e._main(["--module", "fake_probes_unknown_group", "--list", "--group", "no_such_group"])
+        assert rc == 2
+        err = capsys.readouterr().err
+        assert "未知分组" in err
+        assert "no_such_group" in err
+        assert "budget" in err
+
+    def test_unknown_probe_name_returns_usage_error(self, monkeypatch, capsys, tmp_path):
+        _install_fake_module(
+            monkeypatch,
+            "fake_probes_unknown_name",
+            [_make_probe("known-probe", lambda: e2e.ok())],
+            tmp_path,
+        )
+        rc = e2e._main(["--module", "fake_probes_unknown_name", "--all", "--name", "typo-probe"])
+        assert rc == 2
+        err = capsys.readouterr().err
+        assert "未知探针" in err
+        assert "typo-probe" in err
+        assert "--list" in err
+
+    def test_duplicate_valid_group_is_accepted(self, monkeypatch, capsys, tmp_path):
+        _install_fake_module(
+            monkeypatch,
+            "fake_probes_dup_group",
+            [_make_probe("dup-ok", lambda: e2e.ok(), group="budget")],
+            tmp_path,
+        )
+        rc = e2e._main(["--module", "fake_probes_dup_group", "--list", "--group", "budget", "--group", "budget"])
+        assert rc == 0
+        assert "dup-ok" in capsys.readouterr().out
 
     def test_fail_returns_one(self, monkeypatch, tmp_path):
         _install_fake_module(

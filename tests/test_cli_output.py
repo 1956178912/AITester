@@ -67,7 +67,8 @@ class TestPrintRichTable:
 
     def test_zero_coverage_rendered_as_0_percent_not_na(self, capsys):
         # 0.0 是合法覆盖率：falsy 判断会把 0% 误显示为 N/A，此处锁定 is-not-None 语义
-        print_rich_table([{"passed": False, "coverage": 0.0}])
+        # （显式给 iterations，避免崩溃结果的 N/A 迭代列干扰本判据）
+        print_rich_table([{"passed": False, "coverage": 0.0, "iterations": 0}])
         out = capsys.readouterr().out
         assert "0.0%" in out
         assert "N/A" not in out

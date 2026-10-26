@@ -70,7 +70,6 @@ import argparse
 import ast
 import re
 import shlex
-import subprocess
 import sys
 from collections.abc import Mapping
 from pathlib import Path
@@ -187,13 +186,6 @@ def _slugify(text: str) -> str:
 
 def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
-
-
-def _run(cmd: list[str], root: Path) -> subprocess.CompletedProcess[str] | None:
-    try:
-        return subprocess.run(cmd, cwd=root, capture_output=True, text=True)
-    except (OSError, ValueError):
-        return None
 
 
 def _join_continuations(lines: list[str]) -> list[str]:
