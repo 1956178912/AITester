@@ -864,7 +864,6 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         metavar="NAME",
         help="输出 JSON 文件名（不含 .json；P-1.1 用 ORACLE_EXAMPLES_REPORT_norm）",
     )
-    parser.add_argument("--repeat", type=int, default=1)
     parser.add_argument("--skip-markdown", action="store_true")
     parser.add_argument("--quiet", action="store_true")
     return parser

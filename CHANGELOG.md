@@ -18,12 +18,12 @@
 - 文档测试锁改为结构判据（定位区 / 披露小节 / 行数上限 / 索引完备性），退役逐轮标记与行窗口锁。
 
 ### Fixed
+- 模型目录工具的 `add` 子命令与重放脚本的 `--repeat` 不再与实现脱钩（EQ 轮）：`scripts/tools/expand_models.py add --name/--url/--key` 声明了三个必填旗标，`cmd_add` 却读 `args.model_name/base_url/api_key`——文档里的主命令一给旗标就 `AttributeError`（rc=1），从未成功执行过；`experiments/oracle_examples_replay.py --repeat N` 被接受且全程无 `args.repeat` 读取，用户以为做了 N 次确定性验证（同目录三个重放脚本都实现了整批重复 + body digest 比对，本脚本只抄了旗标）。
+  现把三个旗标的 `dest` 对齐 `cmd_add`（CLI 表面不变），删除从未实现的 `--repeat`（同型 `emse_batch5_orchestrator.py --skip-rerun` 因文件被 `.gitignore` 排除、不在跟踪面而不入库）。5 例新锁（2 红→绿 + 3 口径护栏）。
 - 批量配置脚本不再用占位符覆盖真实凭证（EP 轮）：生成物 `scripts/tools/generate_batch_config.py` 只为「模型列表为空」设了防覆盖守卫，缺 `*_API_KEY` 或 provider 时仍以 `w` 模式写出 `your-<provider>-api-key-here`、rc=0——现有可用 `.env.local` 会被伪配置替换；usage / argparse 里声明的 `--template` 从不读取（传了静默忽略）。
   现写入前逐条检查 provider 与对应 API Key，任一缺失即列出原因、rc=1、输出文件原样保留（部分缺 Key 整批拒绝）；删除幽灵开关；在盘脚本与生成模板由测试逐字节对账。7 例新锁（5 红→绿 + 2 口径护栏）。
-- 缓存开关的显式关闭拼写不再只在运行时生效（EO 轮）：`AITESTER_LLM_CACHE` / `AITESTER_CACHE_ISOLATE_MODEL` 是 opt-out 开关，运行时走 `env_flag_opt_out`（`false` / `0` / `off` 关），但 `experiments/run_benchmark.py` 三处仍手抄 `!= "0"`——X1 命名空间自设、`cache_enabled`、`cache_isolate_model` 在 `false` / `off` / 大小写空白变体下全部按「开」处理；同一份工件可同时出现 `env_snapshot="false"`、`cache_enabled=true`、`cache_namespace="seed42"`。
-  三处改用 `env_flag_opt_out`，缓存关闭时不再自设命名空间；19 例新锁（12 红→绿 + 7 口径护栏），历史工件一字节不动，`src/` 零改动 ⇒ 覆盖读数不变。
-- 批次工件自述的 harness 开关不再与运行时解析脱钩（EN 轮）：`provenance.harness` 用裸 `os.environ.get(...).lower() == "true"` 解析 8 个运行时开关 + 1 个零消费者幻影键，而运行时走 `env_flag` / `env_flag_opt_out`——`EXECUTOR_USE_VENV=yes`、`KERNEL_SANDBOX_ENABLE=on`、`COST_BUDGET_ENABLE=1` 等 8 个实测场景工件自述与生效值相反，`--enable-rag` 时同一工件顶层 `enable_rag=true`、harness 块却 `rag_enabled=false`。
-  现与运行时同一解析器、RAG 披露 `_apply_rag_setting` 生效值；删除运行时零消费者的 `truncation_first` 幻影键。21 例新锁（16 红→绿 + 5 口径护栏）；`src/` 零改动 ⇒ 覆盖读数不变。
+- 缓存开关的显式关闭拼写不再只在运行时生效（EO 轮）：`AITESTER_LLM_CACHE` / `AITESTER_CACHE_ISOLATE_MODEL` 是 opt-out 开关，运行时走 `env_flag_opt_out`（`false` / `0` / `off` 关），但 `experiments/run_benchmark.py` 三处仍手抄 `!= "0"`——X1 命名空间自设、`cache_enabled`、`cache_isolate_model` 在 `false` / `off` / 大小写空白变体下全部按「开」处理；同一份工件可同时出现 `env_snapshot="false"`、`cache_enabled=true`、`cache_namespace="seed42"`。三处改用 `env_flag_opt_out`，缓存关闭时不再自设命名空间；19 例新锁（12 红→绿 + 7 口径护栏），历史工件一字节不动，`src/` 零改动 ⇒ 覆盖读数不变。
+- 批次工件自述的 harness 开关不再与运行时解析脱钩（EN 轮）：`provenance.harness` 用裸 `os.environ.get(...).lower() == "true"` 解析 8 个运行时开关 + 1 个零消费者幻影键，而运行时走 `env_flag` / `env_flag_opt_out`——`EXECUTOR_USE_VENV=yes`、`KERNEL_SANDBOX_ENABLE=on`、`COST_BUDGET_ENABLE=1` 等 8 个实测场景工件自述与生效值相反，`--enable-rag` 时同一工件顶层 `enable_rag=true`、harness 块却 `rag_enabled=false`。现与运行时同一解析器、RAG 披露 `_apply_rag_setting` 生效值；删除运行时零消费者的 `truncation_first` 幻影键。21 例新锁（16 红→绿 + 5 口径护栏）；`src/` 零改动 ⇒ 覆盖读数不变。
 - 批次 provenance 的停止原因词表不再与 `StopReason` 枚举脱钩（EM 轮）：harness 披露块承诺「停止规则可复核」，但 `retry_stop_rules.stop_reasons` 是手写 7 值字面量、枚举已 13 值——`recursion_limit`（EJ 起可落盘）、`coverage_stall`（P2-4）等 6 个真实终止原因从未出现在工件自述里，读者会以为 harness 只会以旧 7 值停止。
   现由枚举派生（单一事实源），新增值自动进入新批次工件；历史工件一字节不动。6 例新锁（3 红→绿 + 3 口径护栏）；`src/` 零改动 ⇒ 覆盖读数不变。
 - P2P 门禁判无效的行不再在失效分布里冒充「运行异常/限流」（EL 轮）：批次汇总承诺 harness_invalid（基线 P2P 不达标）实例「从统计中剔除」，但 `_aggregate_failure_buckets` 只看 `failure_bucket` 是否为空——门禁早退行（从未进入工作流）与真崩溃同形计入 `unclassified_rows`，报告层还把它们写成「无工作流终局状态〔运行异常/限流〕」。

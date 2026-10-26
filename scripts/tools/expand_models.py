@@ -198,9 +198,9 @@ def main():
     subparsers.add_parser("list", help="列出所有模型")
     # add 命令
     add_parser = subparsers.add_parser("add", help="添加单个模型")
-    add_parser.add_argument("--name", required=True, help="模型名称")
-    add_parser.add_argument("--url", required=True, help="API Base URL")
-    add_parser.add_argument("--key", required=True, help="API Key")
+    add_parser.add_argument("--name", dest="model_name", required=True, help="模型名称")
+    add_parser.add_argument("--url", dest="base_url", required=True, help="API Base URL")
+    add_parser.add_argument("--key", dest="api_key", required=True, help="API Key")
     # batch 命令
     batch_parser = subparsers.add_parser("batch", help="批量添加模型")
     batch_parser.add_argument("--json", help="JSON 配置文件路径")

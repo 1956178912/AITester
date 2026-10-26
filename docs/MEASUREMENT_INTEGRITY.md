@@ -5078,3 +5078,38 @@ X1 门与两个 provenance 字段一律改 `env_flag_opt_out(...)`（与
 `--output` 默认值与 `{PROVIDER}_API_KEY` 命名推导；不新增任何入参（本轮
 只收紧既有契约）。
 **修 2 处契约，锁 7 例（5 红→绿 + 2 口径护栏）。**
+
+## 110. 附：EQ 轮（2026-10-27）**声明了却读不到的 CLI 输入**；模型目录 `add` 从未成功执行，重放脚本的 `--repeat` 从未被读取
+
+**① 两处「参数已声明」与「参数被实现」之间没有接线。**
+1. `scripts/tools/expand_models.py`：`add` 子命令声明
+   `--name` / `--url` / `--key`（argparse 派生 dest = `name` / `url` /
+   `key`），`cmd_add` 却读 `args.model_name` / `args.base_url` /
+   `args.api_key`——必填旗标一给就 `AttributeError`，模块 docstring 与
+   epilog 都把它列为「添加单个模型」的主命令；
+2. `experiments/oracle_examples_replay.py`：`--repeat N` 被 argparse 接受，
+   全文无任何 `args.repeat` 读取。同目录 `oracle_quality_replay` /
+   `misguided_metrics` / `compile_exec_metrics` 都实现了整批重复 + body
+   digest 比较，本脚本只复制了旗标——用户以为做了 N 次确定性验证。
+
+**② 红因可辨（实跑，零 LLM，$0）。**
+
+| 调用 | 修前 |
+| --- | --- |
+| `add --name probe-model --url … --key sk-not-real` | `AttributeError: 'Namespace' object has no attribute 'api_key'`，rc=1；`add_llm_config` 从未被调用 |
+| `--repeat 2` 解析 | 解析成功、`args.repeat=2`；AST 扫描 `args.*` 读取集合无 `repeat` |
+| 控制：`list` 子命令 | 正常输出（同一 parser，缺陷只在 `add` 的命名接线） |
+| 控制：默认参数解析（不带 `--repeat`） | 正常 |
+
+2 个站点红、2 个控制绿：缺陷只在「声明名与实现读取名不一致」和
+「声明了不存在的实现」处暴露，其余子命令与默认路径不受影响。
+
+**③ 修法：解析名成为实现的唯一名字；不存在的实现不保留开关。**
+`add` 的三个旗标补 `dest`（`model_name` / `base_url` / `api_key`），CLI
+表面不变；删除 `--repeat`（无任何文档或脚本引用它；实现整批重复需重塑
+`main` 的生成/分析边界，与其复制三份 sibling 机制，不如不再对外承诺）。
+**同轮排除**：`experiments/emse_batch5_orchestrator.py --skip-rerun` 有同型
+缺陷（实测仍调用 `emse_quixbugs_specir_expand_arms.py`，一次最长 7200s 的
+4 臂跑批），但该文件被 `.gitignore` 排除且未被跟踪——clean checkout 不存在，
+不属可交付面，本轮不入测、不改动。
+**修 2 处输入契约，锁 5 例（2 红→绿 + 3 口径护栏）。**
