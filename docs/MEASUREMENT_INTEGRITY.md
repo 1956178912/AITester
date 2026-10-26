@@ -1682,8 +1682,9 @@ sha256 原字节还原。`ar-rag-avg-fold` 首轮逃逸的根因是**测试形�
 
 **① 一个谓词管计数，一个值域管时间。** token 三元组与 iteration 复用生产者模块的
 `count_reason`（非负整数；bool / 小数 / 非有限 / 字符串都不是计数）；`ts` /
-`duration_ms` / `budget_remaining` 是时间或金额类数值，只收有限非负 int/float。
-判据：**计数与度量可以是两种值域，但同一类事实只能有一个判定入口。**
+`duration_s` / `duration_ms` / `budget_remaining` 是时间或金额类数值，只收有限非负
+int/float；duration 的单位由字段名决定（`duration_s` 秒 / `duration_ms` 毫秒），
+两者并存时 `duration_s` 优先。判据：**计数与度量可以是两种值域，但同一类事实只能有一个判定入口。**
 
 **② 坏值不导出原值。** bool / str / 有限小数（计数字段）/ 负数 / `nan` / `inf` /
 容器一律不写进 `gen_ai.usage.*`，机制名披露；一个坏字段不牵连同记录的其他干净字段。
@@ -1695,16 +1696,16 @@ NaN/Inf 不是合法 OTLP JSON 数值，原样导出等于把非法载荷推给�
 JSONL 行却是跳过的。改后非有限 / 负 / 缩放溢出 / 巨大整数都回落既有 0 哨兵并由
 披露属性点名。判据：**同类坏数据的两种命运必须收敛为一种。**
 
-**④ 0 是"不可用"不是"有效"。** 缺席的 `ts` / `duration_ms` 本来就用 0；坏值也回落
-0。需要拒绝损坏 span 的消费方必须读 `aitester.export_value_reasons`，不能只看
-0。判据：**哨兵值只能表示不可用，不能表示已校验。**
+**④ 0 是"不可用"不是"有效"。** 缺席的 `ts` / `duration_s` / `duration_ms` 本来就用
+0；坏值也回落 0。需要拒绝损坏 span 的消费方必须读 `aitester.export_value_reasons`，
+不能只看 0。判据：**哨兵值只能表示不可用，不能表示已校验。**
 
 **⑤ 静默丢弃要披露；历史缺席不披露。** `token_usage` 键缺席 / `null` 是历史缺席
 （无属性、无披露）；非对象整键、字段在场 `None` 或坏值是读不动，必须给机制名。
 判据：**"没有"与"读不动"在导出结构里也要可区分。**
 
-**⑥ 披露有确定形状。** 机制名按 **ts → duration_ms → token（input/output/total）→
-budget_remaining → iteration** 的处理顺序逗号拼进
+**⑥ 披露有确定形状。** 机制名按 **ts → duration（`duration_s` 优先，其次
+`duration_ms`）→ token（input/output/total）→ budget_remaining → iteration** 的处理顺序逗号拼进
 `aitester.export_value_reasons`；无坏值时不出现该属性。判据：**披露属性本身也是
 契约，顺序与键名由锁固定，不能靠字典迭代偶然。**
 
@@ -1723,6 +1724,13 @@ budget_remaining → iteration** 的处理顺序逗号拼进
 +59/+37；未覆盖行 524 与 AP 逐位相同，核心十项与路由三项不变。`coverage report`
 偏弧 380 与缺弧 434 是不同口径，不得混用。判据：**先看分母增量是否等于改动面，
 再看覆盖增量；总数相等或移动都不单独作证。**
+
+**⑩ 单位是字段的属性，不是导出器的猜测（DZ 轮，2026-10-26）。** ①~⑥ 的 duration
+口径此前只覆盖 `duration_ms`（node 事件字段），而 `TraceSession.record_task_end`
+写的是 `duration_s`（秒）——task_end root span 的时长恒 0 且无机制名。现按字段名
+选单位并让 `duration_s` 优先（task_end 的 `extra` 注入 `duration_ms` 不得改写任务级
+时长）；坏值机制名为 `duration_s_*`，披露顺序仍在 `ts` 之后、token 之前。判据：
+**生产者与导出器对同一事实的字段名必须由锁对齐，不能靠字段名相似推断。**
 
 ## 36. 附：AR 轮（2026-10-21）导出的标识先合法再谈稳定 — 单 trace、32/16 位 hex、确定性派生
 

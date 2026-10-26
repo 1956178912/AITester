@@ -25,6 +25,8 @@
   退役逐轮标记与行窗口锁。
 
 ### Fixed
+- OTel 导出的整任务时长不再恒为 0（DZ 轮）：`record_task_end` 写的是 `duration_s`（秒），导出器只读 node 的
+  `duration_ms`，task_end root span 的时长被静默丢成 0 且无披露。现在按字段名选单位（`duration_s` 优先），坏值给出 `duration_s_*` 机制名。7 例新锁。
 - 追踪会话不再因目录不可建而反噬任务（DY 轮）：`AITESTER_TRACE_DIR` 指向普通文件之下曾抛 `NotADirectoryError`，`run` 把每个任务改写成崩溃；
   现在告警后降级为仅内存快照（`--dump-trace-on-failure` 照常可用），`task_end` 的 `duration_s` 也不再只在文件模式下存在。4 例新锁。
 - 失败追踪导出的参数与并发落点不再失真（DX 轮）：`limit=0` 曾静默导出全部快照、负数反向切片；
@@ -39,8 +41,7 @@
   `jq -e '.conclusion == "pass"'` 在崩溃时取不到键。现在崩溃时 `matrix.status` 记 `internal`、
   未采集的聚合记 `null`（未知 ≠ 全 0）、脱敏原因进 `error` 并以 1 退出。13 例新锁。
 - 任务崩溃的结果面不再与成功路径不同构（DS 轮）：崩溃结果只有 5 个键、成功有 14 个，`jq '.coverage_ok'` 在崩溃任务上取不到键，
-  人读模式把缺键兜底画成「迭代 0」、原因只进日志。现在两条路径共用全部键（未知判定显式 `null`、成功结果带 `error: null`），
-  原因写 stderr、迭代列显示 `N/A`；崩溃结果 dict 让状态通道 update dict 重登记为 47 键 / 99 站点。9 例新锁。
+  人读模式把缺键兜底画成「迭代 0」；现在两条路径共用全部键（未知判定显式 `null`），原因写 stderr、迭代列显示 `N/A`；状态通道重登记 47 键 / 99 站点。9 例新锁。
 - `run --func` / `check-dataset --subset` 不再把显式空值当作「未提供」（DR 轮）：脚本里
   `--func "$FUNC"` / `--subset "$SUBSET"` 变量未展开时 click 收到 `""`，按 falsy 判定
   等于悄悄放宽口径——`check-dataset examples --subset ""` 实测输出「（子集: 全部）」并

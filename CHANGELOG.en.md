@@ -29,6 +29,9 @@ This file records externally visible changes only; round-by-round history is arc
   section / line ceilings / index completeness); round markers and line-window locks retired.
 
 ### Fixed
+- The OTel export no longer loses the whole-task duration (DZ round): `record_task_end` writes
+  `duration_s` (seconds), but the exporter only read `duration_ms`, so the task_end root span was
+  always 0 ns with no disclosure. Units now follow the field (`duration_s` wins); bad values report `duration_s_*`. 7 new locks.
 - Trace sessions no longer turn tasks into crashes when the directory cannot be created (DY round): `AITESTER_TRACE_DIR` under a
   regular file raised `NotADirectoryError`, so `run` rewrote every task as crashed; it now warns and degrades to memory-only snapshots
   (`--dump-trace-on-failure` still works), and `task_end` carries `duration_s` in memory-only mode too. 4 new locks.
@@ -57,13 +60,10 @@ This file records externally visible changes only; round-by-round history is arc
 - `run`'s help/docs now match reality (DO round): help no longer leaks rich/Markdown markup; detection / repair /
   false_fix are benchmark-only (`experiments/_m1_metrics.py`, gold required); coverage reads met/missed/unmeasured and the threshold never changes rc. 16 new locks.
 - `check-dataset --subset` no longer silently ignores or substitutes the request (DN round):
-  datasets without a subset concept previously accepted `--subset lite`, exited 0, printed
-  "(subset: lite)" and loaded the full data (`quixbugs --subset lite` measured 50 tasks); ULT
-  likewise fell back silently when `ULT_Lite.jsonl` was missing or `AITESTER_ULT_DATA` named
-  an explicit file. Such requests are now usage errors (rc=2) or, when a supported subset
-  cannot be honored, exit 1 with the reason disclosed; an honored subset loads only its file.
-  The capability table `dataset_subset_support` feeds the check and the hint; `load_dataset`
-  keeps its programmatic ULT fallback, recorded in `subset_fallback_reason`. 14 locks, red first.
+  datasets without a subset concept accepted `--subset lite`, exited 0, printed "(subset: lite)"
+  and loaded the full data; ULT also fell back silently when the subset file was missing or
+  `AITESTER_ULT_DATA` named a file. Such requests now exit 2 (unsupported/unknown subset) or 1
+  with the fallback reason; `load_dataset` keeps its recorded ULT fallback. 14 locks, red first.
 - `clean-venv-cache` no longer reports a disk state that does not exist (DM round):
   `shutil.rmtree(..., ignore_errors=True)` swallowed every deletion failure, so a read-only
   cache directory still printed "✓ removed 1 venv (freed 0.0 MB)" and exited 0 while

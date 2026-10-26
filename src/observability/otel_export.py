@@ -23,7 +23,9 @@
     - 数值导出值域（AQ，2026-10-21）：token 三个计数复用
       :func:`src.budget.token_usage.count_reason`（非负整数；bool / 小数 /
       非有限 / 字符串都不是计数），时间戳与 duration 只接受有限非负数，
-      budget_remaining / iteration 同域。不可读的值不导出原值，机制名按处理
+      budget_remaining / iteration 同域。duration 单位随字段：task_end 的
+      duration_s 按秒、node 的 duration_ms 按毫秒（两者同时出现时 duration_s
+      优先）。不可读的值不导出原值，机制名按处理
       顺序以逗号拼进 aitester.export_value_reasons；非有限时间戳回落到既有
       的 0 哨兵（不中止整文件导出）。干净记录（真实 trace 的全部数值字段）
       导出结果逐字不变。
@@ -240,8 +242,15 @@ def _record_to_span(
     ts = record.get("ts")
     start_ns, ts_reasons = _timestamp_ns(ts, 1e9, "ts")
     reasons.extend(ts_reasons)
-    duration_ms = record.get("duration_ms")
-    duration_ns, duration_reasons = _timestamp_ns(duration_ms, 1e6, "duration_ms")
+    # DZ（2026-10-26）：时长单位按记录携带的字段选择——task_end 写 duration_s
+    # （秒，TraceSession.record_task_end），node 写 duration_ms（毫秒）。此前只读
+    # duration_ms，整任务 root span 的时长恒为 0 且无披露。duration_s 优先，
+    # 避免 task_end 的 extra 注入 duration_ms 改写任务级时长。
+    if record.get("duration_s") is not None:
+        duration_field, duration_scale = "duration_s", 1e9
+    else:
+        duration_field, duration_scale = "duration_ms", 1e6
+    duration_ns, duration_reasons = _timestamp_ns(record.get(duration_field), duration_scale, duration_field)
     reasons.extend(duration_reasons)
 
     attributes: dict[str, Any] = {
