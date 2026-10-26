@@ -39,7 +39,7 @@ from src.utils.check_status import (
     status_for_check,
     unparseable_side,
 )
-from src.utils.env_utils import env_flag
+from src.utils.env_utils import env_flag_opt_out
 from src.utils.helpers import extract_code_block
 
 logger = logging.getLogger(__name__)
@@ -1063,9 +1063,10 @@ def _dangerous_api_guard_enabled() -> bool:
     """S2 安全守卫开关（PATCH_DANGEROUS_API_GUARD，默认 true）。
 
     与 PATCH_CONTRACT_CHECK 同模式（默认启用、可环境变量关闭）；
-    设 false 时恒放行（历史对照场景）。
+    设 false/0/off 时恒放行（历史对照场景）；其余值（含拼错）保持守卫开启
+    ——EG 轮起走 env_flag_opt_out 的 fail-closed 口径。
     """
-    return env_flag("PATCH_DANGEROUS_API_GUARD", True)
+    return env_flag_opt_out("PATCH_DANGEROUS_API_GUARD")
 
 
 # ─── P0 1.3 契约验证：命名契约检查 ─────────────────────────────────────────
@@ -1140,9 +1141,10 @@ def check_naming_contract(
     若任何原符号在补丁后代码中缺失，返回 (False, [缺失符号列表])。
     新增符号不报错（允许 LLM 增加辅助函数），仅删除/重命名报错。
 
-    开关：PATCH_CONTRACT_CHECK 环境变量（默认 true）。设 false 时本函数
+    开关：PATCH_CONTRACT_CHECK 环境变量（默认 true）。设 false/0/off 时本函数
     恒返回 (True, [])，由调用方（_patch_applier_node）直接跳过契约检查，
-    保持历史单补丁口径（历史对照 / 合成集无契约场景）。
+    保持历史单补丁口径（历史对照 / 合成集无契约场景）。EG 轮（2026-10-27）
+    起走 env_flag_opt_out：坏值（yes / 拼错）保持检查开启，不再静默放行。
 
     BI 轮（2026-10-22）：``(True, [])`` 此前是**四件事**共用的返回值——
     "比较过且无符号被删"、"原始代码读不懂（基准符号集为空 ⇒ 从未比较，保守
@@ -1165,7 +1167,7 @@ def check_naming_contract(
         必须与 sink 中 ``status == "ok"`` 配对读取（补丁读不懂时缺失列表按旧口径
         仍为"无法确认存在"的原符号全集）。
     """
-    if not env_flag("PATCH_CONTRACT_CHECK", True):
+    if not env_flag_opt_out("PATCH_CONTRACT_CHECK"):
         record_check_outcome(outcome_sink, "naming_contract", CHECK_DISABLED, "patch_contract_check_disabled")
         return True, []
     if not original_code or not patched_code:

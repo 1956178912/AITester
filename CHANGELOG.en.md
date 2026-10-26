@@ -14,18 +14,18 @@ This file records externally visible changes only; round-by-round history is arc
   verify" red (37 test locks).
 
 ### Changed
-- Regenerated the paper citation-key snapshot (DG round): the manuscript changed after the
-  snapshot, so `docs/study/PAPER_CITATION_KEYS.md` was recomputed (64 lines, six corrected
-  per-form counts); the snapshot and citation-chain tests are green.
+- Regenerated the paper citation-key snapshot (DG round): the manuscript changed after the snapshot, so `docs/study/PAPER_CITATION_KEYS.md` was recomputed (64 lines, six corrected counts).
 - Rebuilt the submission PDFs (DE round): 70 pages, `refs.bib` 79 entries ↔ 79 `\bibitem`s, 0 undefined citations;
-  the old page/entry counts in `docs/study/PAPER_BUILD.md` and `paper/tex/README.md` now match the measured artifacts.
-- Documentation facade rewrite (DD round): README / QUICKSTART / CONTRIBUTING / MODEL_CARD /
-  REPLICATION and the docs core now use a concise structure, synchronized across languages;
-  the old narrative is archived under `docs/history/`.
-- Documentation test locks moved to structural criteria (positioning preamble / disclosure
-  section / line ceilings / index completeness); round markers and line-window locks retired.
+  the old counts in `PAPER_BUILD.md` and `paper/tex/README.md` now match the artifacts.
+- Documentation facade rewrite (DD round): README / QUICKSTART / CONTRIBUTING / MODEL_CARD / REPLICATION
+  and the docs core use a concise structure, synchronized across languages; the old narrative is under `docs/history/`.
+- Documentation test locks moved to structural criteria (positioning preamble / disclosure section / line ceilings / index completeness); round markers and line-window locks retired.
 
 ### Fixed
+- Default-on safety/quality guards no longer obey unrecognised values (EG round): venv sandboxing, credential and pip whitelists, the dangerous-API guard, naming contract, injection output scan, evidence gate, P2P gate, container read-only/network isolation — 10 switches (11 reads) used `env_flag(name, True)`.
+  Values like `yes` / `enabled` / a typo / the empty string turned the guard **off** — reproduced as a dangerous patch being accepted, `MYSQL_PASSWORD` returning to the child environment, and containers losing `--read-only` and `--network=none`.
+  All now use `env_flag_opt_out`: only `false`/`0`/`off` disable a guard; unrecognised values keep it on. Default-off feature/cost switches keep positive-set semantics (a typo must not enable them).
+  31 new locks (24 red first, 7 boundary controls).
 - Optional integrations that are installed but broken no longer break the degradation contract (ED round):
   12 `try: import … except ImportError` guards only caught a missing package, so ABIs / transitive-dependency
   conflicts raising RuntimeError/OSError escaped (a broken chromadb failed the whole CLI start). Any import-time

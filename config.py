@@ -19,7 +19,7 @@ from dataclasses import dataclass
 
 from dotenv import load_dotenv
 
-from src.utils.env_utils import env_flag
+from src.utils.env_utils import env_flag, env_flag_opt_out
 
 # ─── 基础配置加载（.env，非敏感项）───────────────────────────────────────────
 load_dotenv()
@@ -528,9 +528,11 @@ SWE_BENCH_ENRICHMENT: str = os.getenv("SWE_BENCH_ENRICHMENT", "")
 # 相同依赖组合任务复用），不再直接落在宿主系统 Python 环境——
 # 默认配置从 fail-open（无沙箱）转为 fail-closed（有沙箱），
 # 消除"默认在宿主机执行任意 LLM 生成代码"的攻击面。
-# 设 EXECUTOR_USE_VENV=false 可显式退回"本地系统 Python"历史口径
+# 设 EXECUTOR_USE_VENV=false/0/off 可显式退回"本地系统 Python"历史口径
 # （仅调试 / 无 venv 权限的环境使用）。
-EXECUTOR_USE_VENV: bool = env_flag("EXECUTOR_USE_VENV", True)
+# EG 轮（2026-10-27）：读取走 env_flag_opt_out——只有显式关闭字面量才关沙箱；
+# 坏值（yes / enabled / 拼错）保持开启（此前正集解析会把它们静默判关）。
+EXECUTOR_USE_VENV: bool = env_flag_opt_out("EXECUTOR_USE_VENV")
 # 是否自动 pip install 缺失的第三方依赖（需配合 venv 沙箱使用）
 EXECUTOR_AUTO_INSTALL_DEPS: bool = env_flag("EXECUTOR_AUTO_INSTALL_DEPS")
 # 依赖安装等待超时（秒）：防止 pip 网络卡顿拖垮整个实验
@@ -566,12 +568,13 @@ SWE_REPO_SETUP_TIMEOUT: int = _parse_int_env("SWE_REPO_SETUP_TIMEOUT", 600, 60, 
 # ~60% 未解出实例的测试本身有缺陷（P2P 基线通过率不达标），把"0 解出"
 # 从"能力边界"误读为"系统无效"——开门禁后不可解实例记 harness_invalid
 # 并剔除（不计入失败统计），0% 还原为"harness 无效"。
-# 设 SWE_BENCH_P2P_GATE_ENABLE=false 可显式退回"关闭"历史口径
-# （消融对照 / 无 verify 脚本环境使用）。
+# 设 SWE_BENCH_P2P_GATE_ENABLE=false/0/off 可显式退回"关闭"历史口径
+# （消融对照 / 无 verify 脚本环境使用）；EG 轮起读取走 env_flag_opt_out，
+# 坏值保持门禁开启（避免拼写错误把不可解实例重新计入失败统计）。
 # 仅对 source=swe_bench 且含 repo_url/base_commit 的任务生效（合成 /
 # examples 任务永不命中，零行为变化）；验证基线 PASS_TO_PASS ≥
 # SWE_BENCH_P2P_GATE_THRESHOLD，不可解实例标记 harness_invalid 剔除。
-SWE_BENCH_P2P_GATE_ENABLE: bool = env_flag("SWE_BENCH_P2P_GATE_ENABLE", True)
+SWE_BENCH_P2P_GATE_ENABLE: bool = env_flag_opt_out("SWE_BENCH_P2P_GATE_ENABLE")
 # 阈值经容错解析（坏值回退 0.95）+ [0, 1] 范围校验（通过率阈值超出区间无意义）：
 # 此前此处是裸 float(os.getenv(...))，与本文件"坏值不让 import 崩溃"的口径
 # 相悖——SWE_BENCH_P2P_GATE_THRESHOLD=abc 会让所有入口（import config）直接

@@ -38,7 +38,7 @@ import logging
 import os
 from typing import Any
 
-from src.utils.env_utils import env_flag
+from src.utils.env_utils import env_flag, env_flag_opt_out
 
 logger = logging.getLogger(__name__)
 
@@ -340,7 +340,7 @@ def _run_naming_contract_layer(original_code: str, patched_code: str) -> dict[st
             "detail": f"命名契约回归不可测量（{side}无法解析，未做任何符号比较）",
         }
 
-    if not env_flag("PATCH_CONTRACT_CHECK", True):
+    if not env_flag_opt_out("PATCH_CONTRACT_CHECK"):
         return {
             "passed": True,
             "status": VALIDATION_DISABLED,

@@ -37,7 +37,7 @@ import os
 import re
 from typing import Any
 
-from src.utils.env_utils import env_flag
+from src.utils.env_utils import env_flag_opt_out
 
 # 凭证类环境变量剔除模式（按前缀匹配，N 为数字）
 # LLM_N_API_KEY / LLM_N_BASE_URL：LLM 配置（config.py _load_llm_configs 扫描口径 1-32）
@@ -113,9 +113,12 @@ def whitelist_enabled() -> bool:
     2026-09-30 审查 D.4-3 确认 S4 凭证白名单已实现但默认关（false），
     实测 MYSQL_PASSWORD / AWS_* / SSH_AUTH_SOCK 仍进子进程。
     现改为默认 true（安全默认"拒绝"口径），如需回退到历史黑名单行为
-    可显式设 CREDENTIAL_SCRUB_WHITELIST_ENABLE=false。
+    可显式设 CREDENTIAL_SCRUB_WHITELIST_ENABLE=false/0/off。
+    EG 轮（2026-10-27）：改用 env_flag_opt_out——只有显式关闭字面量才关白名单；
+    坏值（yes / enabled / 拼错）保持白名单（此前正集解析会退回黑名单，
+    实测 MYSQL_PASSWORD 重新进入子进程环境）。
     """
-    return env_flag("CREDENTIAL_SCRUB_WHITELIST_ENABLE", True)
+    return env_flag_opt_out("CREDENTIAL_SCRUB_WHITELIST_ENABLE")
 
 
 def build_minimal_env() -> dict[str, str]:

@@ -62,6 +62,23 @@
 ``config.py`` 与 ``src/`` 任意模块（含刻意保持轻依赖的叶子模块，如
 ``src/tools/control_flow.py`` 只有 ast/logging/typing）安全导入，
 无循环导入风险。
+
+2026-10-27 EG 轮：把 10 个默认开启的**安全/质量守卫**开关（11 处读取）
+从 :func:`env_flag` 正集口径迁到 :func:`env_flag_opt_out`：
+``EXECUTOR_USE_VENV`` / ``SWE_BENCH_P2P_GATE_ENABLE`` /
+``CREDENTIAL_SCRUB_WHITELIST_ENABLE`` / ``PIP_PACKAGE_WHITELIST_ENABLE`` /
+``PATCH_DANGEROUS_API_GUARD`` / ``PATCH_CONTRACT_CHECK``（两处消费点）/
+``INJECTION_GUARD_OUTPUT_ENABLE`` / ``PATCH_EVIDENCE_GATE_ENABLE`` /
+``DOCKER_READ_ONLY`` / ``DOCKER_DEFAULT_NETWORK_NONE``。此前正集解析下，
+``yes`` / ``enabled`` / 拼错 / 空串都会把守卫**静默判关**（危险补丁放行、
+凭证重新进入子进程环境、venv 与容器隔离降级），与各 docstring 承诺的
+「设 false 可显式退回」相悖。迁移后只有 ``false`` / ``0`` / ``off`` 关闭守卫，
+其余值保持开启——与 J-2 对守卫类开关的 fail-closed 定调一致。
+**边界**：默认关的特征/成本开关（``ENABLE_PLANNER`` /
+``API_HEALTH_CHECKER_ENABLE`` / ``FL_SPECTRAL_ENABLE`` 等）继续用正集口径：
+坏值不得隐式**开启**功能（拼错不应启动后台配额消耗或实验特性）；
+testless 的 ``_layer_enabled`` 层开关属"测量层是否运行"，关闭经 status 通道
+显式披露，不在本族。
 """
 
 from __future__ import annotations

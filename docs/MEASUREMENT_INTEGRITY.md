@@ -4707,3 +4707,46 @@ NaN，`score <= 0` 恒 False、排序键不可比，**知识库排序退回插�
 `src/` + `config.py` 的 `float(` 环境解析，剩余未受护站点 0。**修 6 处、锁 49 例
 （6 站点 × 6 非有限字面量 + 2 例有限口径回归 + 7 例行为后果 + 4 例告警文本），
 不把「已受护」的站点记成修复。**
+
+## 100. 附：EG 轮（2026-10-27）**默认开启的守卫被正集解析静默判关**；「设 false 可退回」不等于「坏值也退回」
+
+**① 默认开启 ≠ 正集解析。**
+`env_flag(name, True)` 的 `True` 只是**未设置**时的默认值；变量一旦被设置，判定完全交给正集
+（`true`/`1`/`on`），其余一律 False。于是 `PATCH_DANGEROUS_API_GUARD=yes`、
+`CREDENTIAL_SCRUB_WHITELIST_ENABLE=enabled`、`EXECUTOR_USE_VENV=ture`（拼错）甚至空串
+（`VAR=` 在 shell 脚本里很常见）都会把**安全守卫关掉**，而各站点 docstring 承诺的只是
+「设 false 可显式退回」——坏值不在承诺内，却与显式关闭走了同一分支。HEAD 真树复现
+（逐站设坏值后调用公开入口，全红）：`safe_apply_patch` 接受新引入 `os.system` 的补丁；
+`scrub_os_environ()` 返回的环境里仍有 `MYSQL_PASSWORD`（白名单退回黑名单）；
+`suggest_package_names` 返回任意未知名；`check_naming_contract` 对删除模块级符号的补丁
+返回 `(True, [])`；`check_llm_patch_safety` 对危险补丁返回 `[]`；证据门开关读成 False；
+Docker 命令丢掉 `--read-only` 与 `--network=none`；`config.EXECUTOR_USE_VENV` /
+`SWE_BENCH_P2P_GATE_ENABLE` 在导入期绑定为 False。
+
+**② 守卫用负集（fail-closed），特征/成本开关保留正集。**
+J-2 已引入 `env_flag_opt_out`（未设 → 开；`false`/`0`/`off` → 关；其余含坏值 → 开）。
+本轮把 10 个默认开启的守卫开关（11 处读取）迁过去：`EXECUTOR_USE_VENV`、
+`SWE_BENCH_P2P_GATE_ENABLE`、`CREDENTIAL_SCRUB_WHITELIST_ENABLE`、
+`PIP_PACKAGE_WHITELIST_ENABLE`、`PATCH_DANGEROUS_API_GUARD`、`PATCH_CONTRACT_CHECK`
+（patch_applier 与 testless 两处消费点）、`INJECTION_GUARD_OUTPUT_ENABLE`、
+`PATCH_EVIDENCE_GATE_ENABLE`、`DOCKER_READ_ONLY`、`DOCKER_DEFAULT_NETWORK_NONE`。
+方向判据是「坏值误判的后果」：守卫被误关 = 危险补丁落盘 / 凭证进子进程 / 隔离降级；
+特征被误开 = 拼错也会启动后台健康检查（真实消耗 API 配额）或实验特性。故后者
+（`ENABLE_PLANNER`、`ENABLE_DEBUGGER`、`API_CIRCUIT_BACKOFF`、`API_HEALTH_CHECKER_ENABLE`、
+`FL_SPECTRAL_ENABLE`、`FAULT_LOCALIZER_ENABLE`、`POSITION_AWARE_REPAIR_ENABLE`、
+`TRACE_MEMORY_BUFFER_ENABLE`）保持正集，坏值不隐式开启；`POSITION_AWARE_REPAIR_ENABLE`
+的 docstring 仍写「默认 false」而代码默认 true（文档漂移，另行处置，不改语义）；
+testless 的 `_layer_enabled` 层开关关闭会在 status 通道显式披露（VALIDATION_DISABLED），
+同属边界外。**不把「默认开」当成「都是守卫」。**
+
+**③ 迁移必须同步三类外部锁。**
+守卫口径变化会打到三类非行为锁：（a）源码文本锁——`tests/test_review_20261019_repro.py`
+直接断言 `env_flag("EXECUTOR_USE_VENV", True)` 出现在 `config.py`；（b）变异锚点——
+`scripts/tools/bh_mutation_verify.py` 的 M6 用该行原文作字符串锚点，源码一改即失配
+（同步后重跑整套 harness：11 变异全红、中性对照 0 红、collected 73 不变）；
+（c）旧测试 docstring 把缺陷写成契约（`TestSafetySwitchTruthyCaliber` 的
+「（及垃圾值）才关闭」）——改为「垃圾值保持开启」，并保留 `true`/`1`/`on` 与
+`false`/`0`/`off` 双向锁。**同轮排除**：J-2 已迁移的 11 处负集站点、上述特征/成本开关、
+`_layer_enabled`、`json_output_mode_enabled`（自定义负集，语义已等价）。
+**修 10 个开关 / 11 处读取，锁 31 例（24 红→绿 + 7 边界：显式关闭 ×4、
+config 显式关闭、特征/诊断开关正集 ×2），不把「默认开」的站点记成修复。**

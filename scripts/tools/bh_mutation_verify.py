@@ -93,7 +93,7 @@ MUTANTS: list[tuple[str, str, str, str, list[str]]] = [
     (
         "M6-patch-contract-switch-off-undisclosed",
         SRC,
-        '    if not env_flag("PATCH_CONTRACT_CHECK", True):',
+        '    if not env_flag_opt_out("PATCH_CONTRACT_CHECK"):',
         "    if False:  # mutation: 恒放行不披露",
         [],
     ),

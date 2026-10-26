@@ -164,7 +164,8 @@ class TestF03VenvDefaultConsistency:
         assert "两者默认 false" not in text
 
     def test_config_py_default_is_true(self) -> None:
-        assert 'env_flag("EXECUTOR_USE_VENV", True)' in _text("config.py")
+        # EG 轮（2026-10-27）：默认开启守卫迁到 opt-out 读取（坏值不再静默关沙箱）
+        assert 'env_flag_opt_out("EXECUTOR_USE_VENV")' in _text("config.py")
 
     def test_quickstart_warning_still_states_default_on(self) -> None:
         # DD 轮（2026-10-26）文档重写：venv 默认开启的读者提示随「安装步骤」

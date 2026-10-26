@@ -504,7 +504,9 @@ class TestSafetySwitchTruthyCaliber:
     运维写 PATCH_DANGEROUS_API_GUARD=1 / PATCH_CONTRACT_CHECK=1 想**显式
     开启**守卫，实际被判 False——危险 API 守卫与命名契约检查双双静默关闭
     且无任何告警。统一到 env_flag 单一事实源后，1/on 与 true 同义，只有
-    false/0/off（及垃圾值）才关闭。
+    false/0/off 才关闭。
+    EG 轮（2026-10-27）：读取迁到 env_flag_opt_out——垃圾值（yes / 拼错 /
+    空串）不再关闭守卫，而是保持开启（此前正集解析会静默放行）。
     """
 
     @pytest.mark.parametrize("raw", ["true", "TRUE", "1", "on"])

@@ -50,7 +50,7 @@ import logging
 import os
 from typing import Any
 
-from src.utils.env_utils import env_flag
+from src.utils.env_utils import env_flag_opt_out
 
 logger = logging.getLogger(__name__)
 
@@ -62,10 +62,11 @@ _ENV_MIN_LEVEL = "PATCH_EVIDENCE_GATE_MIN_LEVEL"
 def patch_evidence_gate_enabled() -> bool:
     """证据门开关（PATCH_EVIDENCE_GATE_ENABLE，默认 true——N9 防线）。
 
-    设 false 时保留历史口径（证据判定仍计算写入 state，但不阻断写盘），
-    供"证据门 on/off"消融实验。
+    设 false/0/off 时保留历史口径（证据判定仍计算写入 state，但不阻断写盘），
+    供"证据门 on/off"消融实验。EG 轮（2026-10-27）起走 env_flag_opt_out：
+    坏值（yes / 拼错）保持证据门开启，不再静默放行无证据写盘。
     """
-    return env_flag(_ENV, True)
+    return env_flag_opt_out(_ENV)
 
 
 # 历史"测试生成错误"关键词（与 workflow._TEST_GEN_DIAGNOSIS_KEYWORDS

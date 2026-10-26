@@ -36,7 +36,7 @@ from __future__ import annotations
 
 import re
 
-from src.utils.env_utils import env_flag
+from src.utils.env_utils import env_flag, env_flag_opt_out
 
 # ─── 开关（环境变量，调用期读取，保留测试的 patch.dict 切换能力）────────────
 # 输入侧（外部数据注入检测）默认关：检测+警示语义，阻断需人工审核策略
@@ -62,8 +62,10 @@ def injection_guard_output_enabled() -> bool:
     配置下恒返回 []、全仓无调用点的孤儿函数。默认开启 + 接线
     （patch_applier.dangerous_api_added AST 级同口径默认开）后，
     默认配置下 LLM 补丁危险操作即有拦截，不再依赖 Docker 模式兜底。
+    EG 轮（2026-10-27）：改用 env_flag_opt_out——只有 false/0/off 关闭，
+    坏值（yes / 拼错）保持输出侧扫描开启（此前正集解析会把它们静默判关）。
     """
-    return env_flag(_INJECTION_GUARD_OUTPUT_ENV, True)
+    return env_flag_opt_out(_INJECTION_GUARD_OUTPUT_ENV)
 
 
 # ─── 输入侧注入特征（指令覆盖 / 数据外传 / 编码绕过 / 多轮拼接）────────────

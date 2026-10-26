@@ -12,16 +12,16 @@
   `src/` 静态扫描锁定；离线 `[SKIP]` 披露，CI `--require-audit` 把「无法验证」判红（37 例锁）。
 
 ### Changed
-- 重算论文引用键快照（DG 轮）：稿件在快照后被外部改动，按导出脚本重算
-  `docs/study/PAPER_CITATION_KEYS.md`（64 行，6 行形态计数随生成器修复变化），读者链全绿。
-- 重建投稿 PDF（DE 轮）：70 页、`refs.bib` 79 条 ↔ 79 个 `\bibitem`、0 未定义引用；
-  `docs/study/PAPER_BUILD.md` 与 `paper/tex/README.md` 的旧页数/条数读数按实测刷新。
-- 文档门面重写（DD 轮）：README / QUICKSTART / CONTRIBUTING / MODEL_CARD /
-  REPLICATION / docs 核心改为简洁结构，中英同步；旧叙事归档到 `docs/history/`。
-- 文档测试锁改为结构判据（定位区 / 披露小节 / 行数上限 / 索引完备性），
-  退役逐轮标记与行窗口锁。
+- 重算论文引用键快照（DG 轮）：稿件在快照后被外部改动，按导出脚本重算 `docs/study/PAPER_CITATION_KEYS.md`（64 行，6 行形态计数随生成器修复变化），读者链全绿。
+- 重建投稿 PDF（DE 轮）：70 页、`refs.bib` 79 条 ↔ 79 个 `\bibitem`、0 未定义引用；`PAPER_BUILD.md` 与 `paper/tex/README.md` 的旧读数按实测刷新。
+- 文档门面重写（DD 轮）：README / QUICKSTART / CONTRIBUTING / MODEL_CARD / REPLICATION / docs 核心改为简洁结构，中英同步；旧叙事归档到 `docs/history/`。
+- 文档测试锁改为结构判据（定位区 / 披露小节 / 行数上限 / 索引完备性），退役逐轮标记与行窗口锁。
 
 ### Fixed
+- 默认开启的安全/质量守卫不再被坏值静默关闭（EG 轮）：venv 沙箱、凭证与 pip 白名单、危险 API、命名契约、注入输出扫描、证据门、P2P 门禁、容器只读/断网共 10 个开关（11 处读取）走正集 `env_flag(name, True)`，
+  `yes` / `enabled` / 拼错 / 空串都会把守卫判关——实测危险补丁被放行、`MYSQL_PASSWORD` 重新进入子进程环境、容器丢掉 `--read-only` 与 `--network=none`。
+  现统一改走 `env_flag_opt_out`：仅 `false`/`0`/`off` 关闭，坏值保持开启；默认关的特征/成本开关仍为正集（坏值不得隐式开启）。
+  31 例新锁（24 红→绿 + 7 边界），先红后绿。
 - 可选依赖「装上但坏了」不再击穿降级契约（ED 轮）：12 处 `try: import … except ImportError` 只拦缺包，扩展 ABI /
   传递依赖冲突抛出的 RuntimeError/OSError 会穿过去（chromadb 损坏时整个 CLI 无法启动）；现在导入期任意异常都降级告警。12 例新锁 + 1 例负控制。
 - 读侧「损坏」判定不再停在 JSON 语法层（EE 轮）：15 处 JSON/JSONL 读侧只捕 `json.JSONDecodeError`（只覆盖解码后的

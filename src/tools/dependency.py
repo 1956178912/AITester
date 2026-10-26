@@ -38,7 +38,7 @@ import time
 from typing import Any
 
 from src.utils.atomic_io import atomic_write_json
-from src.utils.env_utils import env_flag, env_flag_opt_out
+from src.utils.env_utils import env_flag_opt_out
 
 logger = logging.getLogger(__name__)
 
@@ -537,9 +537,11 @@ def suggest_package_names(module_names: set[str]) -> list[str]:
     未知模块默认"模块名即包名"（多数库如此）。
 
     S6（M11，2026-09-29 审查 P0；2026-10-09 审查修订 C-08 起默认开）：
-    pip 包名白名单守卫（PIP_PACKAGE_WHITELIST_ENABLE=true 时启用，
+    pip 包名白名单守卫（PIP_PACKAGE_WHITELIST_ENABLE 未设或非显式关闭时启用，
     默认 true——Slopsquatting 已由 USENIX Security 2025 量化为确认攻击
-    [待核验]，默认关不再可接受；显式设 false 退回历史口径）。
+    [待核验]，默认关不再可接受；显式设 false/0/off 退回历史口径）。
+    EG 轮（2026-10-27）：读取走 env_flag_opt_out——坏值（yes / 拼错）保持
+    白名单开启，不再静默退回"任意包名可安装"。
     启用时仅返回白名单内的包名，未知名默认拒绝——防止 LLM 生成的测试代码
     引入任意第三方包（如含恶意 setup.py 的 typosquatting 包）污染 venv。
     白名单来源：PIP_PACKAGE_WHITELIST（逗号分隔）或内置
@@ -552,7 +554,7 @@ def suggest_package_names(module_names: set[str]) -> list[str]:
         pip 包名列表（排序去重；白名单启用时仅含白名单内包名）。
     """
     # S6：白名单守卫（默认开，2026-10-09 C-08）
-    _whitelist_enabled = env_flag("PIP_PACKAGE_WHITELIST_ENABLE", True)
+    _whitelist_enabled = env_flag_opt_out("PIP_PACKAGE_WHITELIST_ENABLE")
     if _whitelist_enabled:
         _custom = os.getenv("PIP_PACKAGE_WHITELIST", "").strip()
         if _custom:

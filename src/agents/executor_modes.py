@@ -29,7 +29,7 @@ from src.agents.executor_runtime import (
 )
 from src.agents.kernel_sandbox import interpreter_sandbox_allowances, kernel_sandbox_enabled, sandbox_launch_failure
 from src.utils.credential_scrub import scrub_os_environ
-from src.utils.env_utils import env_flag, env_float, env_int
+from src.utils.env_utils import env_flag, env_flag_opt_out, env_float, env_int
 from src.utils.pytest_output import run_has_effective_pass
 
 logger = logging.getLogger(__name__)
@@ -484,13 +484,15 @@ def execute_docker(
         # / DOCKER_PIDS_LIMIT（默认 256）/ DOCKER_READ_ONLY（默认 true）。
         # 全部默认非 0，历史口径有变化（安全加固）；设 0/false 可恢复
         # 无限制口径（工件须记录该档位）。
+        # EG 轮（2026-10-27）：DOCKER_READ_ONLY / DOCKER_DEFAULT_NETWORK_NONE
+        # 走 env_flag_opt_out——只有 false/0/off 关闭，坏值保持加固开启。
         # J-1d（2026-10-17）：三项上限改走 env_int/env_float——原裸 int()/float() 遇坏值
         # 抛 ValueError，直接中断容器命令构造。lo=0 保留"设 0 即恢复无限制口径"的既有
         # 语义（注释里"设 false 可恢复无限制"实际会崩，故坏值统一回退到**收紧侧**默认值）。
         _docker_cpu_limit = env_float("DOCKER_CPU_LIMIT", 2.0, lo=0.0)
         _docker_mem_limit_mb = env_int("DOCKER_MEM_LIMIT_MB", 2048, lo=0)
         _docker_pids_limit = env_int("DOCKER_PIDS_LIMIT", 256, lo=0)
-        _docker_read_only = env_flag("DOCKER_READ_ONLY", True)
+        _docker_read_only = env_flag_opt_out("DOCKER_READ_ONLY")
         if _docker_cpu_limit > 0:
             cmd.extend(["--cpus", str(_docker_cpu_limit)])
         if _docker_mem_limit_mb > 0:
@@ -504,7 +506,7 @@ def execute_docker(
         cmd.extend(["--cap-drop=ALL", "--security-opt", "no-new-privileges"])
         # S3：默认断网（--network=none）；DOCKER_NETWORK_ISOLATION=false 且
         # DOCKER_DEFAULT_NETWORK_NONE=true（默认 true）时保持历史 bridge 口径
-        _default_network_none = env_flag("DOCKER_DEFAULT_NETWORK_NONE", True)
+        _default_network_none = env_flag_opt_out("DOCKER_DEFAULT_NETWORK_NONE")
         if network_isolation == "true" or (_default_network_none and network_isolation != "allowlist"):
             cmd.append("--network=none")
         docker_image = self.docker_image
