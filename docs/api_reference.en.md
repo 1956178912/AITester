@@ -79,7 +79,9 @@ deduplicated by absolute path and run once, so LLM calls are not repeated.
 `run --dump-trace-on-failure` attempts to export the in-memory trace snapshot when a task fails
 (including a crash): on success the result carries `trace_dump_path`; when no snapshot exists or
 the write fails it carries `trace_dump_error` and discloses the reason on stderr. Export failure
-never changes the task result, and in `--json` mode stdout still carries JSON only.
+never changes the task result, and in `--json` mode stdout still carries JSON only. Multiple or
+concurrent dumps within one second each land in their own file: an existing name gets a numeric
+suffix (`<ts>_2_failed_trace.jsonl`), so older snapshots are never overwritten.
 `check-dataset` accepts only names returned by `get_available_datasets()` (case- and
 hyphen-insensitive); the library function `load_dataset` still degrades unknown names to the
 built-in examples, but that lenient contract does not apply to the diagnostic command —

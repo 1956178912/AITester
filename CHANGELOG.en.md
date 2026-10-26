@@ -29,24 +29,24 @@ This file records externally visible changes only; round-by-round history is arc
   section / line ceilings / index completeness); round markers and line-window locks retired.
 
 ### Fixed
-- `--dump-trace-on-failure` no longer goes silent or corrupts results (DW round): directory creation
-  ran outside the `try`, so a blocked path raised and rewrote a completed task as crashed, while empty
-  buffers / write failures were silent. The three states are now distinct (`trace_dump_path` /
-  `trace_dump_error` plus a stderr reason), and crashed tasks also attempt the export. 9 new locks.
+- Diagnostic dump arguments and concurrency no longer distort the export (DX round): `limit=0` silently
+  exported every snapshot and negatives sliced backwards; same-second / concurrent dumps shared one file
+  and later writes truncated earlier ones. Now `0`/negatives raise `ValueError`, and `O_EXCL` + numbered
+  retry never overwrites an existing snapshot. 11 new locks.
+- `--dump-trace-on-failure` no longer goes silent or corrupts results (DW round): directory creation ran
+  outside the `try`, so a blocked path rewrote a completed task as crashed, and empty buffers / write
+  failures were silent. The three states are now distinct (`trace_dump_path` / `trace_dump_error` + stderr reason). 9 new locks.
 - Doctor's `dataset-check-cli` probe no longer requires removed output (DV round): QuixBugs prints
   "loaded N tasks" plus an explicit skip; the probe now accepts verified-pass or explicit-skip (missing verdict is red). 4 net-new locks (6 in all).
-- `check-dataset` no longer exits 0 after finding loading problems (DU round): a non-empty report only
-  warned while the docstring promised "0 = no problems". It now lists them and exits 1; a missing
-  `quality_report` stays a disclosure. 11 new locks.
+- `check-dataset` no longer exits 0 after finding loading problems (DU round): a non-empty report only warned
+  while the docstring promised "0 = no problems". It now lists them and exits 1; a missing `quality_report` stays a disclosure. 11 new locks.
 - `doctor --json` keeps one 13-key schema on every exit (DT round): an internal exception emitted 4 keys
   against 12 on success. The exception path now reports `matrix.status: internal` / `null` aggregates. 13 new locks.
-- A crashed task no longer has a different result shape (DS round): 5 keys vs 14 on success
-  (`jq '.coverage_ok'` failed), and human mode hid the reason and fabricated iteration 0. Both paths
-  now share all keys (unknowns `null`), reasons go to stderr, iterations show `N/A`. 9 new locks.
-- Blank option values are no longer read as "not provided" (DR round): an unset shell variable
-  (`--func "$FUNC"`) arrives as `""` and silently widened the scope to every function (LLM spend)
-  or the full dataset while exiting 0; both are now usage errors (rc=2) before any load or task
-  start, and omitting the option still means "all". 8 new locks.
+- A crashed task no longer has a different result shape (DS round): 5 keys vs 14 on success (`jq '.coverage_ok'` failed),
+  and human mode hid the reason and fabricated iteration 0. Both paths now share all keys, reasons go to stderr. 9 new locks.
+- Blank option values are no longer read as "not provided" (DR round): an unset shell variable (`--func "$FUNC"`)
+  arrives as `""` and silently widened the scope to every function (LLM spend) or the full dataset while exiting 0;
+  both are now usage errors (rc=2) before any load or task start, and omitting the option still means "all". 8 new locks.
 - `check-dataset` icons now come from the helpers alone (DQ round): six call sites stacked a
   second glyph on the helper prefix and successes printed as info; `success_msg` plus an AST
   lock now keep one icon per line. 15 new locks.

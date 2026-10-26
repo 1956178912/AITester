@@ -21,6 +21,7 @@ ult__string_contrast_aitester_1791954227.trace.jsonl` 第 10 行为非法 JSON
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -340,8 +341,12 @@ class TestTraceIoFailurePaths:
 
     def test_dump_recent_to_write_failure_returns_none(self, tmp_path, monkeypatch: pytest.MonkeyPatch):
         memory_buffer_snapshot("t0", [{"event": "node", "task": "t0"}])
-        # 冻结时间戳并把目标文件名占为目录 → open(path, "w") 必然 OSError
-        monkeypatch.setattr("time.time", lambda: 1700000000.0)
-        (tmp_path / "1700000000_failed_trace.jsonl").mkdir()
+
+        # DX 轮起同名文件走 O_EXCL 序号重试（占位目录不再等价于写失败），
+        # 改为在打开写句柄处注入 OSError，仍然锁「写盘失败返回 None 而非抛出」。
+        def boom(fd, *args, **kwargs):
+            raise OSError("注入写盘失败")
+
+        monkeypatch.setattr(os, "fdopen", boom)
 
         assert dump_recent_to(str(tmp_path)) is None, "快照写盘失败必须返回 None 而非抛出"

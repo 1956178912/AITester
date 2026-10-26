@@ -76,7 +76,8 @@ CLI 退出码统一口径：0 通过；1 运行期失败（`run` 存在失败任
 
 `run --dump-trace-on-failure` 在任务失败（含崩溃）时尝试导出内存追踪快照：成功时结果
 带 `trace_dump_path`，无快照可写 / 写盘失败时带 `trace_dump_error` 并在 stderr 披露
-原因；导出失败不改变任务结果，`--json` 模式的 stdout 仍只承载 JSON。
+原因；导出失败不改变任务结果，`--json` 模式的 stdout 仍只承载 JSON。同一秒内的多次 /
+并发导出各自落盘：同名文件已存在时追加序号（`<ts>_2_failed_trace.jsonl`），不覆盖旧快照。
 
 `check-dataset --subset` 只在加载器真正支持子集时生效：`swe_bench` 系列把子集名映射为
 `swe_bench_<subset>_instances.jsonl`，`ult` 支持 `lite` / `full`（官方子集文件）；其他

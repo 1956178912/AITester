@@ -35,6 +35,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os
@@ -420,6 +421,7 @@ def reset_trace_file_locks() -> None:
 # 仅在任务失败时把内存快照写入临时文件（诊断出口）。
 
 _MEMORY_BUFFER_CAPACITY = 64  # 进程级保留的最近任务快照数（环形覆盖）
+_DUMP_NAME_ATTEMPTS = 100  # 同名诊断快照的序号重试上限（O_EXCL，绝不覆盖旧文件）
 _memory_ring: list[dict[str, Any]] = []
 _memory_ring_lock = threading.Lock()
 
@@ -458,19 +460,49 @@ def reset_memory_buffer() -> None:
         _memory_ring.clear()
 
 
+def _open_unique_dump_file(target_dir: str) -> tuple[Any, str]:
+    """以 ``O_EXCL`` 创建本次导出的文件，同名已存在时追加序号（绝不覆盖旧快照）。
+
+    同一秒内的多次 / 并发失败此前共用 ``<ts>_failed_trace.jsonl``，后写截断先写，
+    诊断证据静默丢失（并发压测 4 次调用只剩 1 个文件）。``O_EXCL`` 让并发调用
+    在创建阶段分出唯一所有者，冲突方拿到 ``<ts>_2_...``、``<ts>_3_...``。
+    """
+    ts = int(time.time())
+    for attempt in range(1, _DUMP_NAME_ATTEMPTS + 1):
+        suffix = "" if attempt == 1 else f"_{attempt}"
+        path = os.path.join(target_dir, f"{ts}{suffix}_failed_trace.jsonl")
+        try:
+            fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+        except FileExistsError:
+            continue
+        try:
+            return os.fdopen(fd, "w", encoding="utf-8"), path
+        except OSError:
+            os.close(fd)
+            with contextlib.suppress(OSError):
+                os.unlink(path)
+            raise
+    raise OSError(f"{target_dir} 下同名诊断快照已连续占用 {_DUMP_NAME_ATTEMPTS} 次")
+
+
 def dump_recent_to(target_dir: str, limit: int | None = None) -> str | None:
     """把进程级内存快照写入目标目录（失败诊断出口，需显式调用才落盘）。
 
     非默认行为：仅当 CLI --dump-trace-on-failure 在任务失败时调用，
-    快照写 <target_dir>/<ts>_failed_trace.jsonl。
+    快照写 <target_dir>/<ts>_failed_trace.jsonl；同名已存在时追加序号
+    （<ts>_2_failed_trace.jsonl），不覆盖已有诊断证据。
 
     Args:
         target_dir: 输出目录（自动创建，创建失败返回 None）。
-        limit: 写入的最近任务快照数（None = 全部保留，默认全部）。
+        limit: 写入的最近任务快照数（None = 全部保留，默认全部；
+            必须为正整数，0 / 负数抛 ValueError）。
 
     Returns:
         写盘的 JSONL 文件完整路径；无快照可写或写盘失败时返回 None。
         需要区分这两种失败原因时用 ``dump_recent_to_with_reason``。
+
+    Raises:
+        ValueError: ``limit`` 不是正整数且不为 None（不再静默按 0/负数切片）。
     """
     path, _ = dump_recent_to_with_reason(target_dir, limit=limit)
     return path
@@ -484,17 +516,22 @@ def dump_recent_to_with_reason(target_dir: str, limit: int | None = None) -> tup
     try 内——父级是普通文件或只读时抛出的 ``OSError`` 不得冒泡到调用方
     （docstring 承诺失败返回 None；CLI 在任务结果构造之后调用本出口，
     异常会把「已完成的任务」改写成「任务崩溃」）。
+
+    落点纪律：``O_EXCL`` 创建 + 同名追加序号，绝不覆盖已有快照；写盘中途
+    失败会删除本次留下的半成品文件。
+
+    Raises:
+        ValueError: ``limit`` 不是正整数且不为 None（参数错误优先于缓冲状态）。
     """
+    if limit is not None and limit < 1:
+        raise ValueError(f"limit 必须为正整数或 None（当前: {limit}）")
     with _memory_ring_lock:
         if not _memory_ring:
             return None, "无快照可写（内存追踪缓冲为空或已关闭；见 TRACE_MEMORY_BUFFER_ENABLE）"
         recent = list(_memory_ring)
     if limit is not None:
         recent = recent[-limit:]
-    import time as _time
-
-    filename = f"{int(_time.time())}_failed_trace.jsonl"
-    path = os.path.join(target_dir, filename)
+    path: str | None = None
     # O35（2026-09-30 全面审查 P1）：内存快照里的 record 是**原始未脱敏**值
     # （_append 只对写入文件的那一行做 mask，self.records 保留原对象），
     # 而 dump_recent_to 是 --dump-trace-on-failure 的落盘出口——此前逐行
@@ -506,7 +543,8 @@ def dump_recent_to_with_reason(target_dir: str, limit: int | None = None) -> tup
     # json.loads 结构守卫；不合法行丢弃并告警（诊断出口不得产出坏 JSONL）。
     try:
         os.makedirs(target_dir, exist_ok=True)
-        with open(path, "w", encoding="utf-8") as f:
+        f, path = _open_unique_dump_file(target_dir)
+        with f:
             for snap in recent:
                 for record in snap.get("records", []):
                     redacted = _redact_record(record)
@@ -525,6 +563,9 @@ def dump_recent_to_with_reason(target_dir: str, limit: int | None = None) -> tup
                     + "\n"
                 )
     except OSError as e:
+        if path is not None:
+            with contextlib.suppress(OSError):
+                os.unlink(path)
         logger.warning("内存快照写盘失败（忽略）: %s", e)
         return None, f"写盘失败：{e}"
     return path, None

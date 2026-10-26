@@ -668,8 +668,8 @@ def _run_single_task(
     is_flag=True,
     default=False,
     help="任务失败（含崩溃）时把内存追踪快照（最近任务节点记录，默认启用不落盘）写成 "
-    "./tmp_trace/<ts>_failed_trace.jsonl 供诊断；无快照/写盘失败在 stderr 披露原因、"
-    "不改变任务结果；默认关，不设置时无 I/O",
+    "./tmp_trace/<ts>_failed_trace.jsonl 供诊断（同名已存在时追加序号、不覆盖旧快照）；"
+    "无快照/写盘失败在 stderr 披露原因、不改变任务结果；默认关，不设置时无 I/O",
 )
 def run(
     target_files: tuple[str, ...],
