@@ -7,18 +7,15 @@ This file records externally visible changes only; round-by-round history is arc
 ## [Unreleased]
 
 ### Added
-- Dependency-exemption expiry gate (DF round): `make dependency-audit` and a blocking CI
-  step run pip-audit **without** `--ignore-vuln` — a registered advisory that gains a fix
-  version, a new unregistered advisory, or a registered version that drifts from
-  `requirements.lock` turns the gate red; the exemption rationale ("embedded only, no
-  server surface, no `trust_remote_code`") is locked by a static scan of `src/`.
-  Offline runs disclose `[SKIP]`; CI's `--require-audit` turns "cannot verify" red
-  (37 test locks).
+- Dependency-exemption expiry gate (DF round): `make dependency-audit` and CI run pip-audit
+  **without** `--ignore-vuln` — a fix version appearing, an unregistered advisory, or a
+  version drift from `requirements.lock` turns the gate red; the rationale is locked by a
+  static scan of `src/`. Offline runs disclose `[SKIP]`; `--require-audit` turns "cannot
+  verify" red (37 test locks).
 
 ### Changed
-- Regenerated the paper citation-key snapshot (DG round): the manuscript changed after
-  the snapshot was produced, so `docs/study/PAPER_CITATION_KEYS.md` was recomputed with
-  `scripts/tools/export_paper_citation_keys.py` (64 lines, six of them with corrected
+- Regenerated the paper citation-key snapshot (DG round): the manuscript changed after the
+  snapshot, so `docs/study/PAPER_CITATION_KEYS.md` was recomputed (64 lines, six corrected
   per-form counts); the snapshot and citation-chain tests are green.
 - Rebuilt the submission PDFs (DE round): 70 pages, `refs.bib` 79 entries ↔ 79 `\bibitem`s, 0 undefined citations;
   the old page/entry counts in `docs/study/PAPER_BUILD.md` and `paper/tex/README.md` now match the measured artifacts.
@@ -29,10 +26,13 @@ This file records externally visible changes only; round-by-round history is arc
   section / line ceilings / index completeness); round markers and line-window locks retired.
 
 ### Fixed
-- The release-freshness gate's exception register is no longer "register and pass" (EB round): the two syntax promises
-  in the register header — a reason per entry, and it must name the current latest tag — were checked only when the
-  latest tag was unregistered; a registered current tag, tag == HEAD or no `v*` tag let stale or reasonless entries pass
-  silently. Both classes now exit 1 before any green branch and name every entry (reasons are judged pre-network). 9 new locks.
+- Trace visualization and replay now read the writer's vocabulary (EC round): traces only contain `node` events,
+  the tri-state `passed` field and `token_usage`, but the viewer read `node_end` / `test_passed` / `token_delta` —
+  all 100 real traces rendered as "no node records + FAIL" (the writer recorded 100/100 passes). Node timeline,
+  PASS/FAIL/CRASH verdicts, per-node tokens and counts, and replay state evolution now key off the written fields. 12 new locks; the state-channel in-place write census is re-registered from 2/11 to 3/12.
+- The release-freshness gate's exception register is no longer "register and pass" (EB round): the header's two promises
+  (a reason per entry, entry must name the latest tag) were checked only when the latest tag was unregistered; a registered
+  tag, tag == HEAD or no `v*` tag let stale or reasonless entries pass. Both classes now exit 1 before any green branch. 9 locks.
 - Exported span intervals no longer sit in the future (EA round): node / task_end records are appended when the
   operation **ends**, but the exporter used that timestamp as the start, pushing every interval forward (a real session measured the task_end span ending one task-duration after the export moment). Starts are now `ts − duration`; a duration longer than `ts` is clipped to `[0, ts]` with `span_interval_clamped`. 14 new locks.
 - The OTel export no longer loses the whole-task duration (DZ round): `record_task_end` writes `duration_s`, but the

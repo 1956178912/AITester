@@ -156,12 +156,15 @@ class TestChannelCoverage:
         其余读数为 CB 轮普查值；update dict / 未触及为 DS 轮重登记值
         （44 → 46 未审计）。update dict 计的是字面出现，CLI 结果 dict 与状态
         节点更新同形，`coverage_threshold` / `max_iterations` 的 4 个站点来自
-        `src/cli/app.py::_make_task_error_result`，不是状态写。
+        `src/cli/app.py::_make_task_error_result`，不是状态写。EC 轮
+        `src/utils/trace_viz.py::replay_trace` 把轨迹的 `passed` 映射进
+        `state["test_passed"]`（读侧词汇对齐写侧）⇒ 就地赋值 2 键 / 11 站点
+        → 3 键 / 12 站点，`test_passed` 同时进入两条写路径 ⇒ 未审计 46 → 45。
         """
         cov = channel_coverage()
         assert len(cov.declared) == 118
         assert (len(cov.read_keys), cov.read_sites) == (57, 353)
-        assert (len(cov.inplace_write_keys), cov.inplace_write_sites) == (2, 11)
+        assert (len(cov.inplace_write_keys), cov.inplace_write_sites) == (3, 12)
         assert (len(cov.update_write_keys), cov.update_write_sites) == (47, 99)
         assert (len(cov.untouched), len(cov.untouched_elsewhere), len(cov.untouched_nowhere)) == (34, 33, 1)
         assert (cov.temp_keys, cov.temp_sites, cov.dynamic_sites, cov.undeclared_sites) == (2, 2, 1, 0)
@@ -172,10 +175,10 @@ class TestChannelCoverage:
         cov = channel_coverage()
         assert set(cov.written_keys) == set(cov.inplace_write_keys) | set(cov.update_write_keys)
         assert set(cov.unaudited_write_keys) == set(cov.update_write_keys) - set(cov.inplace_write_keys)
-        assert cov.inplace_write_keys == ("gold_fixed_code", "stop_reason")
+        assert cov.inplace_write_keys == ("gold_fixed_code", "stop_reason", "test_passed")
         assert "gold_fixed_code" not in cov.update_write_keys
         assert "stop_reason" in cov.update_write_keys
-        assert len(cov.unaudited_write_keys) == 46
+        assert len(cov.unaudited_write_keys) == 45
         # DS 轮新增的不可归属噪声：CLI 结果 dict 里的两个声明键
         assert {"coverage_threshold", "max_iterations"} <= set(cov.update_write_keys)
 

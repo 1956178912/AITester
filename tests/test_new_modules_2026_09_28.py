@@ -310,21 +310,21 @@ class TestTraceToHTML:
         recs = [
             {"event": "task_start", "task_uuid": "task1", "ts": "2026-09-28T10:00:00Z"},
             {
-                "event": "node_end",
+                "event": "node",
                 "node": "planner",
                 "decision": "plan_complete",
                 "duration_ms": 1200,
-                "token_delta": 500,
+                "token_usage": {"input_tokens": 300, "output_tokens": 200, "total_tokens": 500},
                 "ts": "2026-09-28T10:00:01Z",
             },
             {
-                "event": "node_end",
+                "event": "node",
                 "node": "executor",
                 "decision": "PASS",
                 "duration_ms": 800,
                 "ts": "2026-09-28T10:00:05Z",
             },
-            {"event": "task_end", "test_passed": True, "ts": "2026-09-28T10:00:05Z"},
+            {"event": "task_end", "passed": True, "ts": "2026-09-28T10:00:05Z"},
         ]
         with open(trace_file, "w") as f:
             for r in recs:
@@ -352,19 +352,19 @@ class TestTraceToHTML:
         with open(trace_file, "w") as f:
             f.write('{"event": "task_start", "ts": "2026-09-28T10:00:00Z"}\n')
             f.write("corrupt {{{{ not json\n")
-            f.write('{"event": "task_end", "test_passed": false, "ts": "2026-09-28T10:00:05Z"}\n')
+            f.write('{"event": "task_end", "passed": false, "ts": "2026-09-28T10:00:05Z"}\n')
         out = tmp_path / "out.html"
         n = trace_to_html([str(trace_file)], str(out))
         assert n == 1  # 2 条有效记录（损坏行跳过）
         content = out.read_text()
-        assert "FAIL" in content  # test_passed=false
+        assert "FAIL" in content  # passed=false
 
     def test_render_multiple_traces(self, tmp_path: Path):
         traces = []
         for i in range(2):
             tf = tmp_path / f"t{i}.trace.jsonl"
             with open(tf, "w") as f:
-                f.write(json.dumps({"event": "task_end", "test_passed": i == 0}) + "\n")
+                f.write(json.dumps({"event": "task_end", "passed": i == 0}) + "\n")
             traces.append(str(tf))
         out = tmp_path / "out.html"
         n = trace_to_html(traces, str(out))
@@ -378,14 +378,8 @@ class TestReplayTrace:
         trace_file = tmp_path / "task1.trace.jsonl"
         recs = [
             {"event": "task_start", "task_uuid": "t1", "ts": "2026-09-28T10:00:00Z"},
-            {
-                "event": "node_end",
-                "node": "executor",
-                "test_passed": False,
-                "iteration": 1,
-                "ts": "2026-09-28T10:00:01Z",
-            },
-            {"event": "task_end", "test_passed": True, "iteration": 2, "ts": "2026-09-28T10:00:05Z"},
+            {"event": "node", "node": "executor", "iteration": 1, "ts": "2026-09-28T10:00:01Z"},
+            {"event": "task_end", "passed": True, "iteration": 2, "ts": "2026-09-28T10:00:05Z"},
         ]
         with open(trace_file, "w") as f:
             for r in recs:
@@ -394,7 +388,7 @@ class TestReplayTrace:
         steps = replay_trace(str(trace_file))
         assert len(steps) == 3
         assert steps[0]["event"] == "task_start"
-        assert steps[1]["state_snapshot"]["test_passed"] is False
+        assert steps[1]["state_snapshot"]["iteration"] == 1
         assert steps[2]["state_snapshot"]["test_passed"] is True
         assert steps[2]["state_snapshot"]["iteration"] == 2
 
@@ -404,7 +398,7 @@ class TestReplayTrace:
     def test_replay_state_factory(self, tmp_path: Path):
         trace_file = tmp_path / "t.trace.jsonl"
         with open(trace_file, "w") as f:
-            f.write(json.dumps({"event": "node_end", "test_passed": True}) + "\n")
+            f.write(json.dumps({"event": "task_end", "passed": True}) + "\n")
         steps = replay_trace(str(trace_file), state_factory=lambda: {"initial": True})
         assert steps[0]["state_snapshot"]["initial"] is True
         assert steps[0]["state_snapshot"]["test_passed"] is True

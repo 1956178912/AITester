@@ -7,16 +7,13 @@
 ## [Unreleased]
 
 ### Added
-- 依赖漏洞豁免过期守卫（DF 轮）：`make dependency-audit` 与 CI 阻断步骤真实跑一次
-  **不带** `--ignore-vuln` 的 pip-audit——登记条目出现修复版本、新 advisory 未登记、
-  登记版本与 `requirements.lock` 漂移即红；豁免理由「仅嵌入式、无服务器面、
-  无 `trust_remote_code`」由 `src/` 静态扫描锁定；离线按 `[SKIP]` 披露，
-  CI 的 `--require-audit` 把「无法验证」判红（37 例测试锁）。
+- 依赖漏洞豁免过期守卫（DF 轮）：`make dependency-audit` 与 CI 阻断步骤真实跑一次**不带**
+  `--ignore-vuln` 的 pip-audit——修复版出现、新 advisory 未登记、版本漂移即红；豁免理由由
+  `src/` 静态扫描锁定；离线 `[SKIP]` 披露，CI `--require-audit` 把「无法验证」判红（37 例锁）。
 
 ### Changed
-- 重算论文引用键快照（DG 轮）：稿件在快照生成后被外部改动，按
-  `scripts/tools/export_paper_citation_keys.py` 重算 `docs/study/PAPER_CITATION_KEYS.md`
-  （64 行，其中 6 行的形态计数随生成器修复而变化），快照与读者链测试全绿。
+- 重算论文引用键快照（DG 轮）：稿件在快照后被外部改动，按导出脚本重算
+  `docs/study/PAPER_CITATION_KEYS.md`（64 行，6 行形态计数随生成器修复变化），读者链全绿。
 - 重建投稿 PDF（DE 轮）：70 页、`refs.bib` 79 条 ↔ 79 个 `\bibitem`、0 未定义引用；
   `docs/study/PAPER_BUILD.md` 与 `paper/tex/README.md` 的旧页数/条数读数按实测刷新。
 - 文档门面重写（DD 轮）：README / QUICKSTART / CONTRIBUTING / MODEL_CARD /
@@ -25,6 +22,9 @@
   退役逐轮标记与行窗口锁。
 
 ### Fixed
+- trace 可视化 / 回放的读侧词汇与写侧对齐（EC 轮）：写侧只写 `node` 事件、`passed` 三态与 `token_usage`，读侧却按
+  `node_end` / `test_passed` / `token_delta` 读——实测 100 份真实轨迹 100% 渲染成「无节点记录 + FAIL」（写侧 100/100
+  通过）。节点时间轴、PASS/FAIL/CRASH 三态、节点 token / 计数与回放状态演化现在都按写侧字段读。12 例新锁；状态通道就地写按棘轮重登记 2/11 → 3/12。
 - 发布新鲜度门禁的例外登记不再「登记即通行」（EB 轮）：登记表头的两条语法承诺——条目必须写理由、条目
   必须对应当前最新 tag——此前只在「最新 tag 未登记」一个分支检查一次；当前 tag 已登记 / tag == HEAD /
   仓库没有 `v*` tag 三种状态下，失效或空理由条目静默通过。现在两类缺陷在任何绿色分支之前统一判红并逐条

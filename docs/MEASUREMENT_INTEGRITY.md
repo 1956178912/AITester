@@ -4571,3 +4571,37 @@ BibTeX 侧则把 `author={Sch{\"a}fer}` 的转义引号当成字符串起点，�
 CJK / 引用 / SRC / 覆盖率等源侧判据照常阻断；构建后的完整 `--strict` 仍逐项核对产物。
 **一般化：判据要区分「源侧事实」与「产物侧事实」；把产物侧的新鲜度判据放在产物生成之前，
 等于让流程自己把自己锁死。**
+
+## 96. 附：EC 轮（2026-10-27）**读侧词汇不是自选的**；测试夹具自造词汇会与读侧一起错；三态不得折叠成布尔
+
+**① 读侧的词汇表必须以写侧的实际产出为准，不能照抄另一套系统的字段名。**
+本仓的结构化追踪写侧只有一支：`TraceSession`（`src/observability/trace.py`）。它落盘的事件
+只有三种（`task_start` / `node` / `task_end`），任务结果字段是 `passed`（True / False /
+None 三态），节点 token 快照是 `token_usage.total_tokens`。读侧 `src/utils/trace_viz.py`
+却按另一套词汇读：节点事件集合写成 `node_start` / `node_end` / `planner` / `executor`
+等七个名字，结果字段读 `test_passed`，token 读 `token_delta` / `tokens`。EC 轮真树实测
+（`experiments/results/cross_file_ab_level3` 的 100 份真实轨迹）：**100/100** 张任务卡渲染
+成「无节点记录」，**100/100** 打 FAIL 徽章——而写侧这 100 个任务全部 `passed: true`；
+400 条 `node` 事件没有一条进入时间轴。渲染不报错，只是把「有」画成「无」、把「通过」画成
+「失败」，所以没有任何门禁会红。
+
+**② 写侧与读侧「互相印证」的测试，可能是一起错。**
+上述词汇在测试里同样存在：`tests/test_new_modules_2026_09_28.py` 的夹具直接构造
+`event: "node_end"` / `test_passed` / `token_delta` 记录喂给渲染器，断言「PASS 出现在 HTML
+里」——而真实轨迹里这三个词一个都不出现。测试与读侧共用同一套自造词汇，于是全绿；写侧
+（`TraceSession`）在测试里缺席。**处置**：EC 轮的 12 例新锁全部用**写侧真实产出**构造轨迹
+（`TraceSession.record_node` / `record_task_end` 落盘后渲染），并单列一例反向锁：外来的
+`node_end` 事件不得被当成节点记录——读侧只认写侧的事件名。
+
+**③ 三态不得折叠成布尔，缺席不得冒充失败。**
+写侧的 `passed` 有三个值：True / False / None（None 在 `record_task_end` 文档里就是
+「任务中途崩溃」）；整份轨迹没有 `task_end`（被截断）连值都没有。旧读侧用
+`any(… and test_passed)` 得到一个布尔，于是崩溃与截断都落进 FAIL。现在徽章按三态渲染：
+True=PASS、False=FAIL、None 或缺 `task_end`=CRASH（汇总口径相应改为「通过 / 未通过」）。
+节点计数同理：旧版汇总把 `task_start` / `task_end` 一起算进「节点记录」，卡片上的
+「节点数」却恒为 0；现在两处都只数 `node` 事件。回放的状态演化也改为读 `passed`
+（state 的规范键是 `test_passed`），真轨迹的 `state_snapshot` 不再为空。
+
+**一般化：读侧的词汇表属于写侧的契约，不是读侧的自选项；测试夹具必须取自写侧产出，
+否则测试只是和读侧互相印证。多值结果（True / False / None / 缺失）要按原样渲染——
+把「崩溃」折叠成「失败」、把「截断」猜成「失败」，都是让观测层说谎。**

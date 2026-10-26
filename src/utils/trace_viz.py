@@ -91,6 +91,16 @@ def _esc(s: Any) -> str:
     return str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
 
 
+def _node_token_total(token_usage: Any) -> int | None:
+    """节点 token 总量：写侧 token_usage 快照的 total_tokens（非 int 不猜）。"""
+    if not isinstance(token_usage, dict):
+        return None
+    total = token_usage.get("total_tokens")
+    if isinstance(total, int) and not isinstance(total, bool):
+        return total
+    return None
+
+
 def trace_to_html(trace_paths: list[str], out_path: str, title: str = "AITester Trace Timeline") -> int:
     """把一条或多条 trace JSONL 渲染为自包含 HTML 时间线图。
 
@@ -105,6 +115,9 @@ def trace_to_html(trace_paths: list[str], out_path: str, title: str = "AITester 
         时间线图：每个任务一张卡片，卡片内按节点时间戳排序的横向时间轴
         （node chip 序列：节点名 + 耗时 + token 消耗 + 决策），
         卡片可展开看各节点原始记录（pre 块 JSONL 原文）。
+
+        任务徽章按写侧 ``passed`` 三态渲染：True=PASS、False=FAIL、
+        None（任务中途崩溃）或整份轨迹没有 task_end（被截断）=CRASH。
     """
     all_records: list[tuple[str, list[dict[str, Any]]]] = []
     for tp in trace_paths:
@@ -120,29 +133,29 @@ def trace_to_html(trace_paths: list[str], out_path: str, title: str = "AITester 
         if not recs:
             continue
         total_tasks += 1
-        total_nodes += len(recs)
         # 按时间戳排序（ISO 时间戳字符串比较即可）
         recs_sorted = sorted(recs, key=lambda r: str(r.get("ts", r.get("timestamp", ""))))
-        passed_flag = any(r.get("event") == "task_end" and r.get("test_passed") for r in recs_sorted)
-        if passed_flag:
+        # 写侧（TraceSession.record_task_end）的结果字段是 passed 三态；
+        # None（任务中途崩溃）与缺 task_end（轨迹被截断）都不是测试失败。
+        verdicts = [r.get("passed") for r in recs_sorted if r.get("event") == "task_end"]
+        verdict = verdicts[-1] if verdicts else None
+        if verdict is True:
+            badge, label = "pass", "PASS"
             passed += 1
         else:
+            badge, label = "fail", "FAIL" if verdict is False else "CRASH"
             failed += 1
 
-        # 节点时间轴（只取 node 类事件，过滤 task_start/end）
-        node_recs = [
-            r
-            for r in recs_sorted
-            if r.get("event")
-            in ("node_start", "node_end", "planner", "executor", "debugger", "patch_applier", "generator")
-        ]
+        # 节点时间轴：写侧（record_node）的事件名是 node；task_start/task_end 不计。
+        node_recs = [r for r in recs_sorted if r.get("event") == "node"]
+        total_nodes += len(node_recs)
         chips: list[str] = []
         for r in node_recs:
-            node = _esc(r.get("node") or r.get("event") or "?")
+            node = _esc(r.get("node") or "?")
             dur = r.get("duration_ms")
             dur_s = f"{dur}ms" if dur is not None else ""
-            tok = r.get("token_delta") or r.get("tokens")
-            tok_s = f"{tok} tok" if tok else ""
+            token_total = _node_token_total(r.get("token_usage"))
+            tok_s = f"{token_total} tok" if token_total is not None else ""
             decision = r.get("decision", "")
             chip_cls = "node"
             if decision in ("PASS", "done", "written"):
@@ -150,7 +163,7 @@ def trace_to_html(trace_paths: list[str], out_path: str, title: str = "AITester 
             elif decision in ("FAIL", "rejected"):
                 chip_cls += " fail-node"
             chips.append(
-                f'<div class="{chip_cls}" title="{_esc(json.dumps({k: r.get(k) for k in ("node", "decision", "duration_ms", "token_delta")}, ensure_ascii=False))}">'
+                f'<div class="{chip_cls}" title="{_esc(json.dumps({k: r.get(k) for k in ("node", "decision", "duration_ms", "token_usage")}, ensure_ascii=False))}">'
                 f"<b>{node}</b>{f'<br><code>{_esc(decision)}</code>' if decision else ''}"
                 f"{f'<div class=tok>{_esc(tok_s)}</div>' if tok_s else ''}"
                 f"{f'<div class=t>{_esc(dur_s)}</div>' if dur_s else ''}</div>"
@@ -164,8 +177,6 @@ def trace_to_html(trace_paths: list[str], out_path: str, title: str = "AITester 
         raw_lines = "\n".join(json.dumps(r, ensure_ascii=False) for r in recs_sorted)
         detail_html = f"<pre>{_esc(raw_lines)}</pre>"
 
-        badge = "pass" if passed_flag else "fail"
-        label = "PASS" if passed_flag else "FAIL"
         # U10（2026-10-05 系统性审查落地）：DOM id 白名单净化——此前仅把
         # "." 替换为 "_"，task_id/文件名含引号（'、"）或其他字符时会逃出
         # onclick 字符串/属性边界注入 HTML/JS。现只保留 [A-Za-z0-9_-]，
@@ -184,7 +195,7 @@ def trace_to_html(trace_paths: list[str], out_path: str, title: str = "AITester 
         f'<div class="summary">'
         f"<span><b>任务数</b>: {total_tasks}</span>"
         f"<span><b>通过</b>: {passed}</span>"
-        f"<span><b>失败</b>: {failed}</span>"
+        f"<span><b>未通过</b>: {failed}</span>"
         f"<span><b>节点记录</b>: {total_nodes}</span>"
         f'<button style="float:right" onclick="expandAll(true)">展开全部</button>'
         f'<button style="float:right;margin-right:8px" onclick="expandAll(false)">折叠全部</button>'
@@ -236,10 +247,13 @@ def replay_trace(
     state: dict[str, Any] = dict(state_factory()) if state_factory else {}
     steps: list[dict[str, Any]] = []
     for i, r in enumerate(recs):
-        # 把 trace 里记录的节点输出合并进 state（模拟状态演化）
-        for k in ("test_passed", "iteration", "error_category", "coverage_report"):
+        # 把 trace 里记录的节点输出合并进 state（模拟状态演化）。
+        # 写侧任务结果字段是 passed，state 的规范键是 test_passed。
+        for k in ("iteration", "error_category", "coverage_report"):
             if k in r:
                 state[k] = r[k]
+        if "passed" in r:
+            state["test_passed"] = r["passed"]
         snapshot = dict(state)
         steps.append(
             {
