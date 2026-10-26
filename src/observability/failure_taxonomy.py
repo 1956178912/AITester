@@ -306,11 +306,16 @@ def render_markdown(summary: dict, title: str = "终局失效分布") -> str:
     # total 只是"有终局状态可分类"的行数。不显式披露会让报表把批次规模
     # 读小，且"归因未接线"与"状态信息不足"同形。summarize_batch 的输出
     # 无该键（全量分类）→ 不渲染此行，向后兼容。
+    # EL（2026-10-27）：harness_invalid（基线 P2P 不达标被门禁剔除）行同样
+    # 不在 total 里，但缺席原因是"未执行"而非崩溃——单列计数并单独措辞，
+    # 不与运行异常/限流合并（合并会把门禁剔除误报成运行故障）。
+    excluded_parts = []
     if summary.get("unclassified_rows"):
-        lines.append(
-            f"（另有 {summary['unclassified_rows']} 个任务无工作流终局状态"
-            f"〔运行异常/限流〕，不计入分布；批次共 {summary.get('total_rows', 0)} 行）"
-        )
+        excluded_parts.append(f"{summary['unclassified_rows']} 个任务无工作流终局状态〔运行异常/限流〕")
+    if summary.get("harness_invalid_rows"):
+        excluded_parts.append(f"{summary['harness_invalid_rows']} 个任务因 harness 前置门禁未执行〔基线 P2P 不达标〕")
+    if excluded_parts:
+        lines.append(f"（另有 {'，'.join(excluded_parts)}，不计入分布；批次共 {summary.get('total_rows', 0)} 行）")
     # 批次 XII（ADR-0026）：交互中心归因表（增补维度，未命中键全零渲染）
     lines += ["", "### 交互中心归因（edge × fault_side，批次 XII 增补）", ""]
     lines.append("| 故障侧 | 数量 | 修复动作指向 |")

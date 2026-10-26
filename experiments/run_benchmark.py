@@ -1623,6 +1623,8 @@ def _failure_attribution_for_result(
         时四键全 None：那不是 UNCATEGORIZED 的语义（"状态信息不足"），而是
         **根本没有终局状态可分类**；折进兜底桶会让桶分布的分母失去意义，故由
         _aggregate_failure_buckets 单列 unclassified_rows 计数（缺席不等于消失）。
+        harness_invalid（前置门禁剔除）行同样四键 None，但缺席原因是"未执行"
+        而非崩溃，由该聚合器单列 harness_invalid_rows（EL 轮）。
 
         EK 轮：final_state 为 None 但 stop_reason 已知（EJ 轮的
         `stop_reason_for_exception` 折出的确定性崩溃原因）时，按已知原因重建
@@ -1669,10 +1671,16 @@ def _aggregate_failure_buckets(bl_results: list[dict[str, Any]]) -> dict[str, An
 
     输出形状与 failure_taxonomy.summarize_batch 同构（counts / shares /
     fault_side_counts / edge_counts / total），故 render_markdown 可直接
-    消费本 dict 渲染报告层表格；额外两键 total_rows / unclassified_rows
-    把分母口径显式化——无终局状态**且原因未知**的行（普通运行异常 /
-    限流耗尽）单列计数而**不**折进 uncategorized 桶，否则"归因未接线"与
-    "状态信息不足"会同形；已知崩溃原因（如 recursion_limit）照常归因。
+    消费本 dict 渲染报告层表格；额外三键 total_rows / unclassified_rows /
+    harness_invalid_rows 把分母口径显式化：
+      - harness_invalid（基线 P2P 不达标）行由前置门禁早退，**从未进入
+        工作流**，与运行崩溃/限流不是同一件事；它们不参与桶分类，单列
+        harness_invalid_rows（EL 轮：此前与崩溃行同形计入 unclassified_rows，
+        报告层还把门禁剔除写成「运行异常/限流」）；
+      - 无终局状态**且原因未知**的行（普通运行异常 / 限流耗尽）单列
+        unclassified_rows 而**不**折进 uncategorized 桶，否则"归因未接线"与
+        "状态信息不足"会同形；已知崩溃原因（如 recursion_limit）照常归因。
+    恒等式：total + unclassified_rows + harness_invalid_rows == total_rows。
 
     位置说明：本函数与下列 rag/token/failure_categories 三个聚合同样为模块级
     （J-1b，2026-10-17 由 `run_benchmark()` 嵌套函数外提，行为逐字节不变）——
@@ -1682,7 +1690,14 @@ def _aggregate_failure_buckets(bl_results: list[dict[str, Any]]) -> dict[str, An
     fault_side_counts = dict.fromkeys(FAULT_SIDES, 0)
     edge_counts = dict.fromkeys(INTERACTION_EDGES, 0)
     unclassified_rows = 0
+    harness_invalid_rows = 0
     for r in bl_results:
+        # EL：门禁剔除行没有终局状态，但它缺席的原因是「未执行」而非「崩溃」；
+        # 先按显式标记分流，避免与 unclassified_rows 同形（该键的披露措辞
+        # 与 failure_taxonomy 的文档都把它定义为运行异常/限流）。
+        if r.get("harness_invalid"):
+            harness_invalid_rows += 1
+            continue
         bucket = r.get("failure_bucket")
         if bucket is None:
             unclassified_rows += 1
@@ -1694,11 +1709,12 @@ def _aggregate_failure_buckets(bl_results: list[dict[str, Any]]) -> dict[str, An
         edge = r.get("attribution_edge")
         if edge in edge_counts:
             edge_counts[edge] += 1
-    classified = len(bl_results) - unclassified_rows
+    classified = len(bl_results) - unclassified_rows - harness_invalid_rows
     return {
         "total": classified,
         "total_rows": len(bl_results),
         "unclassified_rows": unclassified_rows,
+        "harness_invalid_rows": harness_invalid_rows,
         "counts": counts,
         "shares": {k: (round(v / classified, 4) if classified else 0.0) for k, v in counts.items()},
         "fault_side_counts": fault_side_counts,

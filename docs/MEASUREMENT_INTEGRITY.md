@@ -4861,3 +4861,36 @@ side=harness_side）；无 final_state 且原因未知（普通异常 / 限流�
 单列——「根本没有终局状态可分类」的语义不变。**同轮排除**：不给 CLI 结果加归因列；
 不改 `annotate_final_state` 的桶定义与优先级；不改失败行其余占位键。
 **修 1 个归因构造器 + 1 个失败分支接线 + 1 例旧断言（EJ），锁 7 例（4 红→绿 + 3 口径护栏）。**
+
+## 105. 附：EL 轮（2026-10-27）**门禁剔除的行不该在失效分布里冒充崩溃**
+
+**① 「剔除」只兑现在成功率一处，失效分布仍把它计入。**
+批次汇总对 harness_invalid（基线 P2P 不达标、门禁早退）承诺「从统计中剔除」，并给出
+`harness_invalid_count` / `effective_total` / `effective_success_rate`；但这些行仍留在
+`bl_results` 里交给 `_aggregate_failure_buckets`。该聚合器只看 `failure_bucket` 是否为空：
+门禁行（`final_state=None`、`stop_reason=None`）与真崩溃/限流行同形计入
+`unclassified_rows`。报告层据此写出「另有 N 个任务无工作流终局状态〔运行异常/限流〕」——
+同一批工件里「剔除」与「计入」并存，且原因被写成事实错误的那一个（门禁行从未进入
+工作流，既没崩也没被限流）。I1 的用途正是「论文级失败归因分布可直接从批次工件复算」，
+错标会把 harness 缺陷计成系统运行故障。
+
+**② 红因可辨。**
+预修实测：混合批次（1 成功 + 1 门禁 + 1 崩溃）`unclassified_rows == 2`（应为 1），
+`harness_invalid_rows` 键缺席（`KeyError`）；全门禁批次的报告仍写「另有 2 个任务无
+工作流终局状态」；混合批次的报告没有门禁措辞。8 例红→绿锁住：门禁行不折进崩溃
+（混合 / 全门禁 / 恒等式 / 报告层单因与双因披露 / 端到端门禁产出行）；2 例预修即绿的
+口径护栏锁「不要过度修」：`summarize_batch` 输出（无新键）不得新增披露、门禁行四键
+仍全 `None`（没有终局状态可分类，不得臆造桶）。
+
+**③ 修法：三路分流 + 分因披露。**
+`_aggregate_failure_buckets` 先按 `harness_invalid` 标记把门禁行单列
+`harness_invalid_rows`，再处理其余行；恒等式
+`total + unclassified_rows + harness_invalid_rows == total_rows` 由测试逐批次锁定。
+`render_markdown` 把两种排除原因分开措辞（运行异常/限流 vs harness 前置门禁未执行），
+任一计数非零即披露——全门禁批次此前会因 `unclassified_rows == 0` 而**一行披露都不印**，
+把批次规模读小。无 `harness_invalid_rows` 键的旧 summary 逐字节不变。
+**同轮排除**：不改逐行四键（门禁行仍 `None`）；不改 `total_functions` / `success_rate` /
+`avg_coverage` / `avg_iterations` / `avg_elapsed_seconds` 的分母（原始成功率与效率口径，
+有效成功率已由 `effective_success_rate` 单列；本轮只修失效分布的分类与披露）；不改
+`_aggregate_failure_categories`（`harness_invalid` 作为失败类别本就显式可见）。
+**修 1 个聚合器 + 1 个报告层披露，锁 10 例（8 红→绿 + 2 口径护栏）。**

@@ -18,6 +18,8 @@
 - 文档测试锁改为结构判据（定位区 / 披露小节 / 行数上限 / 索引完备性），退役逐轮标记与行窗口锁。
 
 ### Fixed
+- P2P 门禁判无效的行不再在失效分布里冒充「运行异常/限流」（EL 轮）：批次汇总承诺 harness_invalid（基线 P2P 不达标）实例「从统计中剔除」，但 `_aggregate_failure_buckets` 只看 `failure_bucket` 是否为空——门禁早退行（从未进入工作流）与真崩溃同形计入 `unclassified_rows`，报告层还把它们写成「无工作流终局状态〔运行异常/限流〕」。
+  现单列 `harness_invalid_rows` 并从桶分母剔除（恒等式 total + unclassified_rows + harness_invalid_rows == total_rows），`render_markdown` 分因披露两种排除；逐行四键仍 `None`（不臆造桶）。10 例新锁（8 红→绿 + 2 口径护栏），分母口径变化已在 `MEASUREMENT_INTEGRITY` §105 披露。
 - 已知崩溃原因不再与归因列自相矛盾（EK 轮）：EJ 轮把 `GraphRecursionError` 落成结果行 `stop_reason="recursion_limit"` 后，失败分支仍把归因四键硬编码为 `None`——同一行「原因已知、归因未知」，批次聚合继续把这类确定性 harness 崩溃计入 `unclassified_rows`，ADR-0026 的 harness 归因在生产工件里仍不可读。
   现让 `_failure_attribution_for_result` 接受已知 `stop_reason`（仅 `final_state=None` 时生效），失败分支四键取归因结果；无原因崩溃仍四键 `None` 并单列。7 例新锁（4 红→绿 + 3 口径护栏），分母口径变化已在 `MEASUREMENT_INTEGRITY` §104 披露。
 - 编排硬上界的崩溃不再被折叠成「无终局状态」（EJ 轮）：`StopReason.RECURSION_LIMIT` 与失效分类法的 `recursion_limit → harness/harness_side` 映射（ADR-0026）都在，但全链路无写入点——基准跑批的异常分支把结果行 `stop_reason` 硬编码为 `None`，图递归上限触顶这一**确定性**原因在工件里退化成「状态信息不足」，分类法承诺的 harness 归因永不命中。
@@ -125,10 +127,8 @@
   `tests/test_ci_job_timeouts.py` 锁全部 workflow 作业的预算声明与 (0,60] 值域
   （3 例，先红后绿）。
 - 引用键快照生成器漏计多键引用（DG 轮）：`render_snapshot` 按单键正则统计
-  `\citep` / `\citet` 形态，正文 `\citep{a,b}` 组内的键被漏计——读者链判据实测
-  `konstantinou2026icst` 快照合计 3 / 正文 4。真实稿件 4 个多键组、9 个键位，旧逻辑
-  低估 6 个受管键（konstantinou2026icst / arna2026icstw / radaideh2026bdai /
-  zuppardo2026beyondaccuracy / curmi2026harnessmatter / sghaier2026harnesshierarchy）；改为按组拆分计数，1 例测试锁先红后绿。
+  `\citep` / `\citet` 形态，正文 `\citep{a,b}` 组内的键被漏计（真实稿件 4 个多键组、9 个键位，
+  低估 `konstantinou2026icst` 等 6 个受管键）；改为按组拆分计数，1 例测试锁先红后绿。
 - 可选嵌入后端加载失败必须降级（DG 轮）：`sentence-transformers` 分支只捕 `ImportError`，模型下载失败 / 缓存损坏会击穿「不可用即 None」契约；现补同形降级并在显式选择该后端时告警，3 例测试锁先红后绿。
 - 注释语义按文件类型分治（DE 轮）：TeX `%` 按反斜杠奇偶、Typst `//` 与可嵌套块注释、BibTeX 按括号深度且 `\"` 不切换字符串态；修复 `refs.bib` 注释被误算进上一条目字段值造成的假 CJK 红。
 - 论文构建脚本前置判据改为 `--pre-build`：只跳过产物页数对账，源侧判据照常阻断，避免「编辑源文件后无法重建」的自锁。
