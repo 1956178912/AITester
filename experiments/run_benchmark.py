@@ -1597,7 +1597,10 @@ def _check_swe_bench_p2p_gate(task: BenchmarkTask) -> dict[str, Any] | None:
     return None
 
 
-def _failure_attribution_for_result(final_state: dict[str, Any] | None) -> dict[str, Any]:
+def _failure_attribution_for_result(
+    final_state: dict[str, Any] | None,
+    stop_reason: str | None = None,
+) -> dict[str, Any]:
     """构建单任务结果行的终局失效归因（I1，2026-10-16；纯观测，零 LLM）。
 
     接线动机：`observability.failure_taxonomy.annotate_final_state` 自 U11
@@ -1616,20 +1619,29 @@ def _failure_attribution_for_result(final_state: dict[str, Any] | None) -> dict[
     Returns:
         {"failure_bucket": str | None, "failure_bucket_detail": str | None,
          "attribution_edge": str | None, "attribution_fault_side": str | None}。
-        final_state 为 None（运行异常 / 限流耗尽，无工作流终局）时四键全 None：
-        那不是 UNCATEGORIZED 的语义（"状态信息不足"），而是**根本没有终局状态**
-        可分类；折进兜底桶会让桶分布的分母失去意义，故由
+        final_state 为 None **且** stop_reason 也未知（普通运行异常 / 限流耗尽）
+        时四键全 None：那不是 UNCATEGORIZED 的语义（"状态信息不足"），而是
+        **根本没有终局状态可分类**；折进兜底桶会让桶分布的分母失去意义，故由
         _aggregate_failure_buckets 单列 unclassified_rows 计数（缺席不等于消失）。
+
+        EK 轮：final_state 为 None 但 stop_reason 已知（EJ 轮的
+        `stop_reason_for_exception` 折出的确定性崩溃原因）时，按已知原因重建
+        最小状态视图交给分类法——否则同一行「终止原因已知、归因未知」自相
+        矛盾，ADR-0026 的 harness 归因在生产工件里仍不可读。final_state 存在
+        时本参数被忽略（仍以 effective_stop_reason 为准），防止异常侧口径
+        覆盖真实终局。
     """
-    if final_state is None:
+    if final_state is None and not stop_reason:
         return {
             "failure_bucket": None,
             "failure_bucket_detail": None,
             "attribution_edge": None,
             "attribution_fault_side": None,
         }
-    annotation = annotate_final_state(
-        {
+    if final_state is None:
+        state_view: dict[str, Any] = {"test_passed": False, "stop_reason": stop_reason}
+    else:
+        state_view = {
             "test_passed": bool(final_state.get("test_passed")),
             # 与结果行 "stop_reason" 同源（effective_stop_reason），避免两处口径漂移
             "stop_reason": effective_stop_reason(final_state),
@@ -1637,7 +1649,7 @@ def _failure_attribution_for_result(final_state: dict[str, Any] | None) -> dict[
             "regression_detected": final_state.get("regression_detected"),
             "logic_degraded": final_state.get("logic_degraded"),
         }
-    )
+    annotation = annotate_final_state(state_view)
     return {
         "failure_bucket": annotation["bucket"].value,
         "failure_bucket_detail": annotation["detail"],
@@ -1658,8 +1670,9 @@ def _aggregate_failure_buckets(bl_results: list[dict[str, Any]]) -> dict[str, An
     输出形状与 failure_taxonomy.summarize_batch 同构（counts / shares /
     fault_side_counts / edge_counts / total），故 render_markdown 可直接
     消费本 dict 渲染报告层表格；额外两键 total_rows / unclassified_rows
-    把分母口径显式化——运行异常行（无工作流终局状态）单列计数而**不**折进
-    uncategorized 桶，否则"归因未接线"与"状态信息不足"会同形。
+    把分母口径显式化——无终局状态**且原因未知**的行（普通运行异常 /
+    限流耗尽）单列计数而**不**折进 uncategorized 桶，否则"归因未接线"与
+    "状态信息不足"会同形；已知崩溃原因（如 recursion_limit）照常归因。
 
     位置说明：本函数与下列 rag/token/failure_categories 三个聚合同样为模块级
     （J-1b，2026-10-17 由 `run_benchmark()` 嵌套函数外提，行为逐字节不变）——
@@ -2280,6 +2293,9 @@ def _build_task_result(
             # D3（N-5，2026-10-17）：跨文件审计字段（成功分支；与失败分支键位一致）
             **_cross_file_audit_fields(final_state),
         }
+    # EK 轮：已知崩溃原因（stop_reason）也参与归因；四键仍 None 只表示
+    # 「无终局状态且原因未知」。
+    _attribution = _failure_attribution_for_result(None, stop_reason)
     return {
         "task_id": task.task_id,
         "repo": task.repo_name,
@@ -2450,13 +2466,15 @@ def _build_task_result(
         # "状态信息不足"。
         "stop_reason": stop_reason,
         # I1（2026-10-16）：失败分支（运行异常 / 限流耗尽）无工作流终局状态，
-        # 归因四键以 None 占位保持键集合同构。**不填 uncategorized**——那不是
+        # 归因四键默认 None 保持键集合同构。**不填 uncategorized**——那不是
         # "状态信息不足"，而是"根本没有终局状态可分类"，折进兜底桶会让
         # failure_bucket_distribution 的分母失去意义（改由 unclassified_rows 单列）。
-        "failure_bucket": None,
-        "failure_bucket_detail": None,
-        "attribution_edge": None,
-        "attribution_fault_side": None,
+        # EK 轮：EJ 折出的已知崩溃原因（recursion_limit）例外——原因已知即可归因，
+        # 不再与结果行 stop_reason 自相矛盾。
+        "failure_bucket": _attribution["failure_bucket"],
+        "failure_bucket_detail": _attribution["failure_bucket_detail"],
+        "attribution_edge": _attribution["attribution_edge"],
+        "attribution_fault_side": _attribution["attribution_fault_side"],
         # I2（2026-10-16，ADR-0032）：失败分支无 final_state，占位 None
         "m10_leaf_fallback": None,
         # M3 门禁：harness_invalid 标记（基线 P2P 不达标，不计入统计）

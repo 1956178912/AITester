@@ -4831,3 +4831,33 @@ EH 引入的 `LlmCallBudgetExceeded` 被建成 `RuntimeError` 的**兄弟类**�
 `stop_reason` 列（CLI 成功/崩溃两侧都从未承诺该字段，单侧新增会破坏键集合同构）；
 不改 `determine_stop_reason` 的优先级。**修 1 个分类器 + 1 个结果构造参数 + 2 处接线，
 锁 10 例（8 红→绿 + 2 口径护栏）。**
+
+## 104. 附：EK 轮（2026-10-27）**原因已知、归因未知**；崩溃行的归因列不该与 `stop_reason` 自相矛盾
+
+**① 上一轮修好了生产端，消费端仍在丢。**
+EJ 轮把 `GraphRecursionError` 折成结果行 `stop_reason="recursion_limit"`，分类法也把该值
+映射到 `GENERATION_CAPABILITY_FAILURE` 与 `(harness, harness_side)`（ADR-0026）。但
+`_build_task_result` 的失败分支把归因四键（failure_bucket / failure_bucket_detail /
+attribution_edge / attribution_fault_side）硬编码为 `None`；`_failure_attribution_for_result`
+只接受 final_state，崩溃时拿不到原因。于是同一行「终止原因已知、归因未知」，
+`_aggregate_failure_buckets` 继续把这类确定性 harness 崩溃计入 `unclassified_rows`——
+生产工件里仍读不到 ADR-0026 的归因（§103 的「同轮排除」由此补上）。
+
+**② 红因可辨。**
+预修实测：`_failure_attribution_for_result(None, "recursion_limit")` 不接受第二参数
+（`TypeError`）；`_build_task_result` 崩溃行 `failure_bucket is None !=
+"generation_capability_failure"`；聚合后 `generation_capability_failure` 计数为 0、
+`unclassified_rows == 2`（应为 1）；端到端崩溃行四键全 `None`。其余 3 例是口径护栏
+（无原因崩溃仍 `None`、结果行无原因仍 `None`、普通异常仍 unclassified），预修即绿——
+它们锁的是「不要把未知原因也折进桶」。
+
+**③ 修法：已知原因参与归因，未知原因照旧单列。**
+`_failure_attribution_for_result` 增加可选 `stop_reason`：仅 `final_state=None` 时用它
+重建最小状态视图（`{"test_passed": False, "stop_reason": ...}`）交给
+`annotate_final_state`；final_state 存在时仍以 `effective_stop_reason` 为准。
+`_build_task_result` 失败分支四键改取归因结果。**分母口径变化已披露**：已知原因的
+崩溃行从 `unclassified_rows` 移入 `generation_capability_failure`（edge=harness /
+side=harness_side）；无 final_state 且原因未知（普通异常 / 限流耗尽）仍四键 `None` 并
+单列——「根本没有终局状态可分类」的语义不变。**同轮排除**：不给 CLI 结果加归因列；
+不改 `annotate_final_state` 的桶定义与优先级；不改失败行其余占位键。
+**修 1 个归因构造器 + 1 个失败分支接线 + 1 例旧断言（EJ），锁 7 例（4 红→绿 + 3 口径护栏）。**

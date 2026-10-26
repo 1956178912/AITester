@@ -22,6 +22,8 @@ This file records externally visible changes only; round-by-round history is arc
 - Documentation test locks moved to structural criteria (positioning preamble / disclosure section / line ceilings / index completeness); round markers and line-window locks retired.
 
 ### Fixed
+- Known crash causes no longer contradict the attribution columns (EK round): after EJ stored `stop_reason="recursion_limit"` on crash rows, the failure branch still hardcoded the four attribution keys to `None` — "reason known, attribution unknown" in one row; batch aggregation kept counting these deterministic harness crashes as `unclassified_rows`, so ADR-0026's harness attribution remained unreadable in production artifacts.
+  `_failure_attribution_for_result` now accepts the known `stop_reason` (used only when `final_state=None`) and the failure branch takes the four keys from it; crashes without a known cause stay `None` and unclassified. 7 new locks (4 red-to-green + 3 caliber guards); the denominator change is disclosed in `MEASUREMENT_INTEGRITY` §104.
 - Workflow-cap crashes no longer collapse to "no terminal state" (EJ round): `StopReason.RECURSION_LIMIT` and the failure taxonomy's `recursion_limit → harness/harness_side` mapping (ADR-0026) both existed, but nothing ever wrote the label — the benchmark exception branches hardcoded the row's `stop_reason` to `None`, so a graph-recursion cap hit degraded into "missing state information" and the promised harness attribution never matched.
   New `stop_reason_for_exception` maps only `GraphRecursionError` → `recursion_limit` (a plain `RecursionError` is a node-code defect and must not masquerade as a harness bound); both exception branches persist the label, while the bucket denominator is unchanged (rows without a terminal state stay in `unclassified_rows`). 10 new locks (8 red-to-green + 2 caliber guards).
 - The per-call LLM budget can no longer be bypassed by a clock rollback (EH round): `LLM_CALL_BUDGET_SECONDS` (default 600 s) computed its deadline with `time.time()`, so an NTP step correction or a VM snapshot restore pushed the deadline forward and the budget never fired; the check also ran only when switching models, so the retry ladder (1/2/4 s) and the 429 backoff (up to 30 s) kept sending requests past the budget (contradicting `COST_MODEL`'s "without further requests").
@@ -122,12 +124,8 @@ This file records externally visible changes only; round-by-round history is arc
 - CI job budgets completed (DH round): `smoke-llm` in `ci.yml` was the only job without
   `timeout-minutes` (a hung endpoint would hit the platform's 360-minute default); it now
   declares 15 minutes, and `tests/test_ci_job_timeouts.py` locks every job's budget and (0, 60] range (3 tests, red first).
-- The citation-key snapshot generator undercounted multi-key citations (DG round): a single-key
-  regex missed keys inside `\citep{a,b}` groups — four multi-key groups (nine slots) hid six registered keys
-  (konstantinou2026icst / arna2026icstw / radaideh2026bdai / zuppardo2026beyondaccuracy /
-  curmi2026harnessmatter / sghaier2026harnesshierarchy). Counting now splits groups, with one regression test written red first.
-- Optional embedding backends now degrade on load failure (DG round): the sentence-transformers
-  branch caught only `ImportError`, so download/cache failures escaped `embed_text()` instead of returning `None`; now mirrored and warned (3 tests, red first).
+- The citation-key snapshot generator undercounted multi-key citations (DG round): a single-key regex missed keys inside `\citep{a,b}` groups — four multi-key groups (nine slots) hid six registered keys (konstantinou2026icst / arna2026icstw / radaideh2026bdai / zuppardo2026beyondaccuracy / curmi2026harnessmatter / sghaier2026harnesshierarchy). Counting now splits groups, with one regression test written red first.
+- Optional embedding backends now degrade on load failure (DG round): the sentence-transformers branch caught only `ImportError`, so download/cache failures escaped `embed_text()` instead of returning `None`; now mirrored and warned (3 tests, red first).
 - Comment semantics are now parsed per file type (DE round): TeX `%` with backslash parity, Typst `//` and nestable block comments, BibTeX by brace depth; fixes a false CJK failure from `refs.bib` comments.
 - The paper build script's pre-flight audit now uses `--pre-build`: it skips only artifact page reconciliation and still blocks on source-side defects, so editing a source file no longer makes the build script impossible to run.
 - The external-readings register corrects `wang2026harnessreeval` to arXiv v4 with the full v1–v4 history and hedges two strong negatives to "not seen in the checked abstract and body".

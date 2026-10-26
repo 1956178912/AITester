@@ -21,7 +21,6 @@ import src.graph.workflow as workflow
 from experiments.run_benchmark import _build_task_result
 from src.datasets.dataset_loader import BenchmarkTask
 from src.graph.workflow import StopReason
-from src.observability.failure_taxonomy import annotate_final_state
 
 
 def _make_task() -> BenchmarkTask:
@@ -96,13 +95,10 @@ class TestRunSingleTaskWiring:
 
         assert row["error_category"] == "error"
         assert row["stop_reason"] == "recursion_limit"
-        # 口径不变：无终局状态的行仍不进桶分布分母
-        assert row["failure_bucket"] is None
-        # 标签落到分类法后兑现 ADR-0026 的 harness 归因承诺
-        annotation = annotate_final_state({"test_passed": False, "stop_reason": row["stop_reason"]})
-        assert annotation["bucket"].value == "generation_capability_failure"
-        assert annotation["edge"] == "harness"
-        assert annotation["fault_side"] == "harness_side"
+        # EK 轮：已知原因同时落进归因列（不再与 stop_reason 自相矛盾）
+        assert row["failure_bucket"] == "generation_capability_failure"
+        assert row["attribution_edge"] == "harness"
+        assert row["attribution_fault_side"] == "harness_side"
 
     def test_rate_limit_retry_recursion_crash_is_labeled(self, tmp_path, monkeypatch) -> None:
         calls: list[int] = []
