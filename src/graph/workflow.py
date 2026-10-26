@@ -51,6 +51,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
+from langgraph.errors import GraphRecursionError
 from langgraph.graph import END, StateGraph
 
 from config import (
@@ -219,6 +220,22 @@ def effective_stop_reason(state: AITesterState) -> str | None:
     if not state:
         return None
     return determine_stop_reason(state).value
+
+
+def stop_reason_for_exception(error: BaseException) -> StopReason | None:
+    """把工作流崩溃异常折成可落盘的终止原因（只映射确定性可判的类型）。
+
+    `RECURSION_LIMIT` 是 `_RecursionLimitedGraph` 自己的硬上界，崩溃时没有
+    final_state 可供 `determine_stop_reason` 判定——若结果行一律记 None，
+    这一**已知**终止原因就退化成"状态信息不足"，失效分类法为它准备的
+    harness/harness_side 归因（ADR-0026）永不命中。
+
+    普通 `RecursionError` 是节点代码的递归缺陷而非编排上界，不得冒充；
+    其余异常仍返回 None（无终局状态，不折进 UNCATEGORIZED 桶）。
+    """
+    if isinstance(error, GraphRecursionError):
+        return StopReason.RECURSION_LIMIT
+    return None
 
 
 # 重新生成测试代码的上限：达到最大迭代后，诊断指向"测试生成错误"时路由回

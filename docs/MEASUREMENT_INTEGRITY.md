@@ -4803,3 +4803,31 @@ EH 引入的 `LlmCallBudgetExceeded` 被建成 `RuntimeError` 的**兄弟类**�
 这正是「读者只认父类」应有的扩展方式。**同轮排除**：不改 `non_retryable_exceptions`
 的冗余双元组（保留 EH 的显式语义）、不新增 state 键、不把 `BudgetAccountingError` 等
 已继承者重登记。**修 1 处继承关系（1 个类 + 1 个 raise 点），锁 7 例（7 红→绿）。**
+
+## 103. 附：EJ 轮（2026-10-27）**枚举位与映射表都在，写入点为零**；崩溃原因不该折算成「状态信息不足」
+
+**① 承诺有两处，生产者一个也没有。**
+`StopReason.RECURSION_LIMIT`（workflow.py）声明了终止原因，失效分类法也把
+`"recursion_limit"` 映射到 `GENERATION_CAPABILITY_FAILURE` 与 `(harness, harness_side)`
+（ADR-0026 明文：编排上界问题，修复动作指向 scaffolding）；`src/graph/state.py` 的字段
+注释同样把 `recursion_limit` 列为合法值。但 `determine_stop_reason` 只读 state 键，
+图递归触顶时 `graph.invoke` 直接抛 `GraphRecursionError`、没有 final_state；基准跑批的
+两条异常分支把结果行 `stop_reason` 硬编码为 `None`。结果是：**已知的**编排上界触顶
+在工件里与「根本不知道原因」逐字节同形，ADR-0026 为它准备的桶/边/侧三条映射永不命中。
+
+**② 红因三分支可辨。**
+预修实测：分类器属性不存在（断言失败）；`_build_task_result` 不接受 `stop_reason`
+（`TypeError`）；端到端两分支（直接崩溃、限流重试后再崩溃）的结果行都是
+`None != "recursion_limit"`。其余 2 例是口径护栏（默认 None、普通异常仍 None），
+预修即绿——它们锁的是「不要把别的异常也标成上界」。
+
+**③ 修法：只映射确定性可判的异常。**
+新增 `stop_reason_for_exception`：仅 `GraphRecursionError` → `RECURSION_LIMIT`；
+普通 `RecursionError` 是节点代码的递归缺陷，不得冒充编排上界；其余异常返回 None。
+`_build_task_result` 增加 `stop_reason` 参数，只在失败分支落盘（有 final_state 时仍以
+`effective_stop_reason` 为准，异常侧不得覆盖真实终局）；限流重试失败与通用异常两条
+分支都接线。**桶分布分母口径零变化**：无终局状态的行仍单列 `unclassified_rows`，
+本轮不把崩溃行折进任何桶——只让已知原因可读。**同轮排除**：不给 CLI 结果新增
+`stop_reason` 列（CLI 成功/崩溃两侧都从未承诺该字段，单侧新增会破坏键集合同构）；
+不改 `determine_stop_reason` 的优先级。**修 1 个分类器 + 1 个结果构造参数 + 2 处接线，
+锁 10 例（8 红→绿 + 2 口径护栏）。**

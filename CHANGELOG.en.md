@@ -22,6 +22,8 @@ This file records externally visible changes only; round-by-round history is arc
 - Documentation test locks moved to structural criteria (positioning preamble / disclosure section / line ceilings / index completeness); round markers and line-window locks retired.
 
 ### Fixed
+- Workflow-cap crashes no longer collapse to "no terminal state" (EJ round): `StopReason.RECURSION_LIMIT` and the failure taxonomy's `recursion_limit → harness/harness_side` mapping (ADR-0026) both existed, but nothing ever wrote the label — the benchmark exception branches hardcoded the row's `stop_reason` to `None`, so a graph-recursion cap hit degraded into "missing state information" and the promised harness attribution never matched.
+  New `stop_reason_for_exception` maps only `GraphRecursionError` → `recursion_limit` (a plain `RecursionError` is a node-code defect and must not masquerade as a harness bound); both exception branches persist the label, while the bucket denominator is unchanged (rows without a terminal state stay in `unclassified_rows`). 10 new locks (8 red-to-green + 2 caliber guards).
 - The per-call LLM budget can no longer be bypassed by a clock rollback (EH round): `LLM_CALL_BUDGET_SECONDS` (default 600 s) computed its deadline with `time.time()`, so an NTP step correction or a VM snapshot restore pushed the deadline forward and the budget never fired; the check also ran only when switching models, so the retry ladder (1/2/4 s) and the 429 backoff (up to 30 s) kept sending requests past the budget (contradicting `COST_MODEL`'s "without further requests").
   The deadline now uses `time.monotonic`, is re-checked before every real request, clamps the 429 wait to the remaining budget, and surfaces `LlmCallBudgetExceeded`. 6 new locks.
 - The time-budget exception is no longer invisible to the budget-cap readers (EI round): `LlmCallBudgetExceeded` was a sibling of `RuntimeError` while planner / generator / debugger and `determine_stop_reason` only recognise `BudgetExceededError` — a timeout degraded as usual but never set `budget_exceeded`, so `BUDGET_EXCEEDED` was unreachable and `.env.example`'s "5.4 budget cap" promise was not kept. It now subclasses `BudgetExceededError` (`unit="seconds"`, `consumed=None` for unknown), so all three nodes and the stop reason treat it identically without changes. 7 new locks.
@@ -30,10 +32,8 @@ This file records externally visible changes only; round-by-round history is arc
 - Optional integrations that are installed but broken no longer break the degradation contract (ED round): 12 `try: import … except ImportError` guards only caught a missing package, so ABIs / transitive-dependency
   conflicts raising RuntimeError/OSError escaped (a broken chromadb failed the whole CLI start). Any import-time
   exception now degrades with a warning; the datasets entry keeps ImportError and chains the cause (12 locks + 1 control).
-- Readers no longer treat "corrupt" as JSON syntax only (EE round): 15 JSON/JSONL readers caught only
-  `json.JSONDecodeError` (raised on decoded text), so byte-level corruption (truncated multi-byte writes, GBK saves)
-  raised `UnicodeDecodeError` during decoding — one bad line killed the whole file, and whole-file readers raised instead
-  of degrading. Line readers now read binary and decode strictly per line; whole-file readers degrade alike; the bank write stays fail-closed. 15 new locks.
+- Readers no longer treat "corrupt" as JSON syntax only (EE round): 15 JSON/JSONL readers caught only `json.JSONDecodeError` (decoded text), so byte-level corruption (truncated multi-byte writes, GBK saves) raised `UnicodeDecodeError` during decoding — one bad line killed the whole file and whole-file readers raised instead of degrading.
+  Line readers now read binary and decode strictly per line; whole-file readers degrade alike; the bank write stays fail-closed. 15 new locks.
 - Non-finite float env values no longer silently rewrite control flow (EF round): 6 local parsers caught only `ValueError`,
   which `float("nan")` never raises; NaN/inf were clamped to a bound, so the semantic cache returned an unrelated entry, coverage
   stalls always fired, risk approval was bypassed, failure-KB ranking fell back to insertion order and `long_sleep` vanished.

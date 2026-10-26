@@ -110,7 +110,13 @@ from src.datasets.dataset_loader import (  # noqa: E402
 )
 from src.graph import token_usage  # noqa: E402
 from src.graph.state import AITesterState, create_initial_state  # noqa: E402
-from src.graph.workflow import build_workflow, effective_stop_reason, end_task_trace, start_task_trace  # noqa: E402
+from src.graph.workflow import (  # noqa: E402
+    build_workflow,
+    effective_stop_reason,
+    end_task_trace,
+    start_task_trace,
+    stop_reason_for_exception,
+)
 from src.observability.failure_taxonomy import (  # noqa: E402
     FAULT_SIDES,
     INTERACTION_EDGES,
@@ -1882,6 +1888,7 @@ def _build_task_result(
     golden_patches: dict[str, str] | None = None,
     harness_invalid: bool = False,
     oracle: tuple[str, bool] | None = None,
+    stop_reason: str | None = None,
 ) -> dict[str, Any]:
     """构建单基线运行的结果字典（单一构造点，供成功/限流重试/异常三分支复用）。
 
@@ -1901,6 +1908,12 @@ def _build_task_result(
         oracle: BT 轮：`(oracle_type, test_visible_to_system)`；调用方按基线是否
             走仓库级验收计算（见 `_oracle_descriptor`）。None 时回落到历史口径
             （生成测试 / 可见），仅供直接调用本函数的旧测试与旧路径。
+        stop_reason: EJ 轮：失败分支的终止原因（仅 final_state=None 时生效）。
+            崩溃前无终局状态可判定，但 `GraphRecursionError` 的成因是**确定**
+            的编排硬上界，调用方经 `stop_reason_for_exception` 折成
+            `recursion_limit` 落盘；其余异常仍 None。有 final_state 时以
+            `effective_stop_reason` 为准，本参数被忽略，防止异常侧口径覆盖
+            真实终局。
 
     Returns:
         结果字典（结构见 run_single_task 各分支的原始实现，字段完全一致）。
@@ -2431,8 +2444,11 @@ def _build_task_result(
         "self_repair_trap_signals": [],
         # R4（2026-09-30 独立审查 P0）：失败分支无 final_state，回归率占位
         "regression_rate": None,
-        # 2026-09-29 审查 P0（StopReason）：失败分支无 final_state，终止原因为 None
-        "stop_reason": None,
+        # 2026-09-29 审查 P0（StopReason）：失败分支无 final_state，终止原因
+        # 默认 None；EJ 轮：确定性可判的崩溃原因（recursion_limit）由调用方
+        # 经 stop_reason_for_exception 传入，不再把"已知上界触顶"折算成
+        # "状态信息不足"。
+        "stop_reason": stop_reason,
         # I1（2026-10-16）：失败分支（运行异常 / 限流耗尽）无工作流终局状态，
         # 归因四键以 None 占位保持键集合同构。**不填 uncategorized**——那不是
         # "状态信息不足"，而是"根本没有终局状态可分类"，折进兜底桶会让
@@ -3091,6 +3107,7 @@ def run_single_task(
                 except Exception as e2:
                     elapsed = time.time() - start_time
                     logger.error("    [%s] %s 重试后仍失败: %s", baseline, task.task_id, e2)
+                    _e2_reason = stop_reason_for_exception(e2)
                     results[baseline] = _build_task_result(
                         task,
                         elapsed,
@@ -3099,11 +3116,13 @@ def run_single_task(
                         golden_patches=golden_patches,
                         harness_invalid=_harness_invalid,
                         oracle=_oracle_descriptor(task, baseline, None),
+                        stop_reason=_e2_reason.value if _e2_reason is not None else None,
                     )
                     end_task_trace(False, token_snapshot=token_usage.get_usage().as_dict())
             except Exception as e:
                 elapsed = time.time() - start_time
                 logger.error("    [%s] %s 执行失败: %s", baseline, task.task_id, e)
+                _e_reason = stop_reason_for_exception(e)
                 results[baseline] = _build_task_result(
                     task,
                     elapsed,
@@ -3112,6 +3131,7 @@ def run_single_task(
                     golden_patches=golden_patches,
                     harness_invalid=_harness_invalid,
                     oracle=_oracle_descriptor(task, baseline, None),
+                    stop_reason=_e_reason.value if _e_reason is not None else None,
                 )
                 end_task_trace(False, token_snapshot=token_usage.get_usage().as_dict())
 
