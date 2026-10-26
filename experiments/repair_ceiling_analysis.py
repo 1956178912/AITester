@@ -16,15 +16,14 @@
    保持，写入 pooled 报告勘误节。
 
 数据口径与 statistical_report_3seed_pooled.md 完全一致：同一加载器
-（load_experiment_results_with_sources，--batches 白名单 + --pool-seeds
-多种子拼接）、同一 McNemar 实现（连续性校正，None 行跳过）。
+（load_experiment_results_with_sources，--batches 白名单 + 多种子拼接固定
+开）、同一 McNemar 实现（连续性校正，None 行跳过）。
 
 用法（与预注册 E2 就绪命令同参口径）::
 
     python experiments/repair_ceiling_analysis.py \
         --results-dir experiments/results/main_batch \
-        --batches benchmark_synthetic_20261006_140906.json,benchmark_synthetic_20261006_151907.json,benchmark_synthetic_20261006_164357.json \
-        --pool-seeds
+        --batches benchmark_synthetic_20261006_140906.json,benchmark_synthetic_20261006_151907.json,benchmark_synthetic_20261006_164357.json
 
 输出：experiments/results/main_batch/repair_ceiling_report.md（--output 可改）。
 """
@@ -262,7 +261,7 @@ def render_markdown(
     return "\n".join(lines)
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--results-dir", default="experiments/results/main_batch")
     parser.add_argument(
@@ -270,17 +269,16 @@ def main() -> int:
         default=",".join(_DEFAULT_BATCHES),
         help="批次白名单（逗号分隔，相对 results_dir；与 pooled 报告同参）",
     )
-    parser.add_argument("--pool-seeds", action="store_true", default=True, help="多种子拼接（默认开）")
     parser.add_argument(
         "--output",
         default=None,
         help="Markdown 输出路径（默认 <results-dir>/repair_ceiling_report.md）",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     batch_files = [b.strip() for b in args.batches.split(",") if b.strip()]
     results, source_files = load_experiment_results_with_sources(
-        args.results_dir, batch_files, allow_schema_mixed=False, pool_seeds=args.pool_seeds
+        args.results_dir, batch_files, allow_schema_mixed=False, pool_seeds=True
     )
     aitester_rows = results.get("aitester") or []
     if not aitester_rows:

@@ -214,19 +214,18 @@ def render(rows: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--results-dir", default="experiments/results/main_batch")
     parser.add_argument("--batches", default=",".join(_DEFAULT_BATCHES), help="批次白名单（与候选清单同参）")
-    parser.add_argument("--pool-seeds", action="store_true", default=True, help="多种子拼接（默认开）")
     parser.add_argument("--fraction", type=float, default=1.0, help="抽样比例（须与目标候选清单一致）")
     parser.add_argument("--seed", type=int, default=42, help="抽样种子（须与目标候选清单一致）")
     parser.add_argument("--output", default="-", help="输出路径（默认 - = stdout）")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     batch_files = [b.strip() for b in args.batches.split(",") if b.strip()]
     results, _sources = load_experiment_results_with_sources(
-        args.results_dir, batch_files, allow_schema_mixed=False, pool_seeds=args.pool_seeds
+        args.results_dir, batch_files, allow_schema_mixed=False, pool_seeds=True
     )
     frame = build_sampling_frame(results.get("aitester") or [])
     if not frame:

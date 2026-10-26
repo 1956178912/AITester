@@ -148,7 +148,7 @@ def render_markdown(
     return "\n".join(lines)
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--results-dir", default="experiments/results/main_batch")
     parser.add_argument(
@@ -156,15 +156,14 @@ def main() -> int:
         default=",".join(_DEFAULT_BATCHES),
         help="批次白名单（逗号分隔，相对 results_dir；与 pooled 报告同参）",
     )
-    parser.add_argument("--pool-seeds", action="store_true", default=True, help="多种子拼接（默认开）")
     parser.add_argument("--fraction", type=float, default=0.10, help="每层抽样比例（默认 0.10）")
     parser.add_argument("--seed", type=int, default=42, help="确定性抽样种子（默认 42）")
     parser.add_argument("--output", default="-", help="输出路径（默认 - = stdout）")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     batch_files = [b.strip() for b in args.batches.split(",") if b.strip()]
     results, source_files = load_experiment_results_with_sources(
-        args.results_dir, batch_files, allow_schema_mixed=False, pool_seeds=args.pool_seeds
+        args.results_dir, batch_files, allow_schema_mixed=False, pool_seeds=True
     )
     aitester_rows = results.get("aitester") or []
     frame = build_sampling_frame(aitester_rows)

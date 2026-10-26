@@ -5113,3 +5113,35 @@ X1 门与两个 provenance 字段一律改 `env_flag_opt_out(...)`（与
 4 臂跑批），但该文件被 `.gitignore` 排除且未被跟踪——clean checkout 不存在，
 不属可交付面，本轮不入测、不改动。
 **修 2 处输入契约，锁 5 例（2 红→绿 + 3 口径护栏）。**
+
+## 111. 附：ER 轮（2026-10-27）**布尔开关的关态不可达**；5 处 `store_true + default=True` 只有一种取值，帮助文本却写着「默认开」
+
+**① 声明与可达性之间没有第三种状态。**
+1. `experiments/e7_evidence_prepass.py` / `repair_ceiling_analysis.py` /
+   `repair_review_worksheet.py` / `repair_sample_selection.py`：
+   `--pool-seeds` 声明 `action="store_true", default=True`——传旗标与不传
+   完全等价，argparse 也不生成 `--no-pool-seeds`；帮助文本「默认开」暗示
+   存在关态，实际关态不可达。这四项是 E7 / 修复上限分析的多种子拼接口径
+   （预注册 AB4 固定开）。
+2. `experiments/emse_ult_gold_diagnosis.py`：`--with-generated` 同型。且
+   README §2c 无条件渲染 `generated_gate`——若关态可达，工件会把「没跑」
+   渲染成 0（`n_tasks_with_generated=0`），读者无法与「跑了但全败」区分。
+
+**② 红因可辨（对 HEAD 旧源实跑，零 LLM，$0）。**
+
+| 调用（修前 HEAD 源） | 修前读数 |
+| --- | --- |
+| 4 个分析脚本 `--pool-seeds`（`sys.argv` 注入 + loader 哨兵） | 解析成功，loader 收到 `pool_seeds=True`——传旗标没有改变任何东西 |
+| 同 4 个脚本 `--definitely-unknown`（对照） | `SystemExit(2)`，未知旗标如实拒绝 |
+| `emse_ult_gold_diagnosis.main(["--with-generated"])` | 解析成功并进入真实跑批路径（首个上游加载处被哨兵中断） |
+| 4 个脚本 `--help` / gold `--help` | 均列出对应旗标 |
+| 控制：`statistical_analysis.main` 源 | `--pool-seeds` 无默认（False）、`pool_seeds=args.pool_seeds` 透传——真开关的关态可达，保留 |
+
+**③ 修法：不存在的关态不保留开关；默认语义钉在调用点。**
+删除 5 个旗标；4 个分析脚本的 loader 调用硬编码 `pool_seeds=True`；gold
+诊断的生成门条件只剩「素材非空」（`gen.strip() and fname.strip()`）；
+4 个 `main()` 增加 `argv` 形参（与 gold 诊断同型），使解析面可测。
+**同轮排除**：`experiments/statistical_analysis.py --pool-seeds`（默认关、
+有真实关态、预注册 E2 命令在用）原样保留；`pass_matched_sensitivity` /
+`emse_stats_report` 文本中的 `--pool-seeds` 均指向该脚本，不改。
+**修 5 处开关，锁 20 例（16 红→绿 + 4 口径护栏）。**

@@ -729,12 +729,6 @@ def main(argv: list[str] | None = None) -> int:
         help="结果 JSON 落盘路径（相对仓库根）",
     )
     ap.add_argument("--limit", type=int, default=0, help="只跑前 N 个任务（调试用；0=全量 71）")
-    ap.add_argument(
-        "--with-generated",
-        action="store_true",
-        default=True,
-        help="额外跑生成测试的健全性门两态（项目物化 / 官方前置块），量化对已发布 Mut@k 的影响",
-    )
     ap.add_argument("--keep-tmp", action="store_true", help="保留临时目录（调试用）")
     ap.add_argument(
         "--only-tasks",
@@ -902,7 +896,7 @@ def main(argv: list[str] | None = None) -> int:
             # GP / GO：生成测试健全性门（项目物化 vs 只给模块加官方前置块）
             gp = go = None
             gen = task["generated_test"]
-            if args.with_generated and gen.strip() and fname.strip():
+            if gen.strip() and fname.strip():
                 d = tmp_root / "GP"
                 d.mkdir()
                 (d / f"{fname}.py").write_text(code, encoding="utf-8")

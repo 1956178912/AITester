@@ -18,6 +18,7 @@
 - 文档测试锁改为结构判据（定位区 / 披露小节 / 行数上限 / 索引完备性），退役逐轮标记与行窗口锁。
 
 ### Fixed
+- 布尔开关不再声明不可达的关态（ER 轮）：`e7_evidence_prepass` / `repair_ceiling_analysis` / `repair_review_worksheet` / `repair_sample_selection` 的 `--pool-seeds` 与 `emse_ult_gold_diagnosis` 的 `--with-generated` 都是 `store_true, default=True`——传与不传等价、`--no-*` 不存在，帮助文本却写「默认开」；前者是预注册固定的多种子拼接口径，后者的关态会在 README §2c 渲染成误导性零值（`n_tasks_with_generated=0`）。现按 EQ 先例移除 5 个旗标、把默认语义钉死在调用点（`pool_seeds=True` / 生成门常开），4 个脚本的 `main()` 增加 `argv` 形参使解析面可测；20 例新锁（16 红→绿 + 4 口径护栏，含 `statistical_analysis` 真开关的邻接护栏），`src/` 零改动 ⇒ 覆盖读数不变。
 - 模型目录工具的 `add` 子命令与重放脚本的 `--repeat` 不再与实现脱钩（EQ 轮）：`scripts/tools/expand_models.py add --name/--url/--key` 声明了三个必填旗标，`cmd_add` 却读 `args.model_name/base_url/api_key`——文档里的主命令一给旗标就 `AttributeError`（rc=1），从未成功执行过；`experiments/oracle_examples_replay.py --repeat N` 被接受且全程无 `args.repeat` 读取，用户以为做了 N 次确定性验证（同目录三个重放脚本都实现了整批重复 + body digest 比对，本脚本只抄了旗标）。
   现把三个旗标的 `dest` 对齐 `cmd_add`（CLI 表面不变），删除从未实现的 `--repeat`（同型 `emse_batch5_orchestrator.py --skip-rerun` 因文件被 `.gitignore` 排除、不在跟踪面而不入库）。5 例新锁（2 红→绿 + 3 口径护栏）。
 - 批量配置脚本不再用占位符覆盖真实凭证（EP 轮）：生成物 `scripts/tools/generate_batch_config.py` 只为「模型列表为空」设了防覆盖守卫，缺 `*_API_KEY` 或 provider 时仍以 `w` 模式写出 `your-<provider>-api-key-here`、rc=0——现有可用 `.env.local` 会被伪配置替换；usage / argparse 里声明的 `--template` 从不读取（传了静默忽略）。
@@ -32,8 +33,7 @@
   现让 `_failure_attribution_for_result` 接受已知 `stop_reason`（仅 `final_state=None` 时生效），失败分支四键取归因结果；无原因崩溃仍四键 `None` 并单列。7 例新锁（4 红→绿 + 3 口径护栏），分母口径变化已在 `MEASUREMENT_INTEGRITY` §104 披露。
 - 编排硬上界的崩溃不再被折叠成「无终局状态」（EJ 轮）：`StopReason.RECURSION_LIMIT` 与失效分类法的 `recursion_limit → harness/harness_side` 映射（ADR-0026）都在，但全链路无写入点——基准跑批的异常分支把结果行 `stop_reason` 硬编码为 `None`，图递归上限触顶这一**确定性**原因在工件里退化成「状态信息不足」，分类法承诺的 harness 归因永不命中。
   现新增 `stop_reason_for_exception`（仅 `GraphRecursionError` → `recursion_limit`；普通 `RecursionError` 是节点代码缺陷不得冒充），两条异常分支落盘该标签；桶分布分母口径不变（无终局状态仍单列 unclassified_rows）。10 例新锁（8 红→绿 + 2 口径护栏）。
-- 单次 LLM 调用的全局预算不再被时钟回拨绕过（EH 轮）：`LLM_CALL_BUDGET_SECONDS`（默认 600s）此前用 `time.time()` 算截止点，NTP 阶跃校正 / VM 快照恢复导致墙钟回拨时截止点随之后移、预算永不触发；且检查只在换模型时进行，同一模型内的重试阶梯（1/2/4s）与 429 退避（最长 30s）越预算后仍会继续发请求（与 `COST_MODEL` 的「不继续发请求」相反）。
-  现改 monotonic 计时、每次真实请求前复查、429 等待按剩余预算截断，预算耗尽以 `LlmCallBudgetExceeded` 收口。6 例新锁。
+- 单次 LLM 调用的全局预算不再被时钟回拨绕过（EH 轮）：`LLM_CALL_BUDGET_SECONDS`（默认 600s）此前用 `time.time()` 算截止点，NTP 阶跃校正 / VM 快照恢复导致墙钟回拨时截止点随之后移、预算永不触发；且检查只在换模型时进行，同一模型内的重试阶梯（1/2/4s）与 429 退避（最长 30s）越预算后仍会继续发请求（与 `COST_MODEL` 的「不继续发请求」相反）。 现改 monotonic 计时、每次真实请求前复查、429 等待按剩余预算截断，预算耗尽以 `LlmCallBudgetExceeded` 收口。6 例新锁。
 - 时间预算异常不再被「预算封顶」读者漏认（EI 轮）：`LlmCallBudgetExceeded` 原为 `RuntimeError` 兄弟类，而 planner / generator / debugger 与 `determine_stop_reason` 只认 `BudgetExceededError`——超时照常降级，但 `budget_exceeded` 永不落盘、`BUDGET_EXCEEDED` 终止原因不可达，`.env.example` 的「触发 5.4 预算封顶」承诺落空。现改为 `BudgetExceededError` 子类（`unit="seconds"`、`consumed=None` 表示未知），三节点与停止原因零改动自动同待遇。7 例新锁。
 - 默认开启的安全/质量守卫不再被坏值静默关闭（EG 轮）：venv 沙箱、凭证与 pip 白名单、危险 API、命名契约、注入输出扫描、证据门、P2P 门禁、容器只读/断网共 10 个开关（11 处读取）走正集 `env_flag(name, True)`，`yes` / `enabled` / 拼错 / 空串都会把守卫判关——实测危险补丁被放行、`MYSQL_PASSWORD` 重新进入子进程环境、容器丢掉 `--read-only` 与 `--network=none`。
   现统一改走 `env_flag_opt_out`：仅 `false`/`0`/`off` 关闭，坏值保持开启；默认关的特征/成本开关仍为正集（坏值不得隐式开启）。31 例新锁（24 红→绿 + 7 边界），先红后绿。
