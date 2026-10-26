@@ -13,8 +13,13 @@
        在目录内（允许 CHANGELOG/QUICKSTART 等根目录文件）；
     2. 更新日期同步：中英文版的"最后更新 / Last updated"日期行若都
        存在，必须一致（若英文版无该行 → 警告，不 fail）；
-    3. 章节数粗对齐：中英文版的二级标题（## ）数量允许 ±2 的容差
-       （英文版可省略内部实现章节），超出则警告。
+    3. 章节骨架对照：用语言无关的骨架指纹比对中英版 H2 结构——
+       ① 两侧 H2 编号序列（"一、" / "1." 折算为整数）必须逐位相等
+       （缺章节 / 顺序漂移即命中，即使 H2 总数差在 ±2 容差内）；
+       ② 两侧 H2 数相等时，逐节 H3 小节数向量必须相等。
+       H2 总数仍允许 ±2 容差（英文版可省略内部实现章节；被省略的
+       若是编号章节，①会命中）。骨架漂移或超出容差 → 警告，strict
+       时 fail。
 
 用法：
     python3 scripts/gates/check_bilingual_docs.py [--strict]
@@ -108,29 +113,78 @@ _EXEMPT_NO_EN = frozenset(
 # 日期行匹配（中英文）
 _DATE_RE = re.compile(r"(最后更新|Last\s+updated)[:：]?\s*(\d{4}-\d{2}-\d{2})")
 
-# 12. P2 结构化对照检查：二级标题（## / ##）序列归一化后按序对齐，
-# 检测"英文版缺失某章节 / 章节顺序漂移"。二级标题归一化规则：
-# 去首尾空白、去前置序号（"一、" "1." 等）、转小写，便于中英标题文本
-# 差异下仍按序比对"章节骨架"（非字面翻译校验——翻译口径由人工保证）。
+# 12. P2 结构化对照检查：H2 骨架按序对齐。翻译文档的标题文本天然不同，
+# 因此骨架指纹只取语言无关量：H2 编号（"一、" / "1." 折算为整数）与
+# 每个 H2 下的 H3 小节数。历史实现比对标题字面量——实测 20 对配对中仅
+# CHANGELOG 有 2 个跨语言相同标题，其余 19 对永不触发（ES 轮修复）。
 _H2_RE = re.compile(r"^##\s+(?!#)(\S.*)$")
+_H3_RE = re.compile(r"^###\s+(?!#)(\S.*)$")
+_H2_ORDINAL_AR_RE = re.compile(r"^(\d+)[\.\)、]\s*")
+_H2_ORDINAL_CN_RE = re.compile(r"^([一二三四五六七八九十]+)、\s*")
+_CN_DIGITS = "一二三四五六七八九"
 
 
-def _extract_h2_titles(text: str) -> list[str]:
-    """提取二级标题序列（归一化：去序号前缀 + 转小写 + 去空白）。
+def _cn_numeral_to_int(text: str) -> int | None:
+    """中文序号（一 / 十 / 十一 / 二十三…）折算为整数；非法形态返回 None。"""
+    if not text:
+        return None
+    if "十" in text:
+        head, _, tail = text.partition("十")
+        tens = 1 if not head else _CN_DIGITS.find(head) + 1
+        ones = 0 if not tail else _CN_DIGITS.find(tail) + 1
+        if tens <= 0 or (tail and ones <= 0):
+            return None
+        return tens * 10 + ones
+    if len(text) == 1:
+        value = _CN_DIGITS.find(text) + 1
+        return value or None
+    return None
 
-    用于结构化对照：中英文版的 H2 骨架（章节顺序）应一致；
-    缺失 / 顺序漂移会导致 H2 序列不等（超出 ±2 容差即警告，strict 时 fail）。
-    """
-    titles: list[str] = []
+
+def _h2_ordinal(title: str) -> int | None:
+    """H2 标题前置序号（"1." / "1)" / "一、"）折算为整数；无序号返回 None。"""
+    m = _H2_ORDINAL_AR_RE.match(title)
+    if m:
+        return int(m.group(1))
+    m = _H2_ORDINAL_CN_RE.match(title)
+    if m:
+        return _cn_numeral_to_int(m.group(1))
+    return None
+
+
+def _extract_h2_skeleton(text: str) -> list[tuple[int | None, int]]:
+    """提取 H2 骨架：[(序号, 该节下 H3 小节数), ...]（语言无关，不读标题文本）。"""
+    skeleton: list[tuple[int | None, int]] = []
     for line in text.splitlines():
         m = _H2_RE.match(line)
         if m:
-            t = m.group(1).strip()
-            # 去序号前缀："一、" "二、" ... "1." "2)" 等
-            t = re.sub(r"^[一二三四五六七八九十]+、\s*", "", t)
-            t = re.sub(r"^\d+[\.\)、]\s*", "", t)
-            titles.append(t.lower())
-    return titles
+            skeleton.append((_h2_ordinal(m.group(1).strip()), 0))
+            continue
+        if skeleton and _H3_RE.match(line):
+            ordinal, subsections = skeleton[-1]
+            skeleton[-1] = (ordinal, subsections + 1)
+    return skeleton
+
+
+def _h2_structure_drift(zh: list[tuple[int | None, int]], en: list[tuple[int | None, int]]) -> str | None:
+    """返回中英 H2 骨架的漂移描述；一致返回 None。
+
+    判据（ES 轮，2026-10-27）：
+    1. 编号序列：两侧任一侧存在 H2 序号时，折算后的整数序列必须逐位
+       相等——覆盖"缺章节 / 顺序漂移"，即使 H2 总数差在 ±2 容差内；
+    2. 小节骨架：H2 数相等时，逐节 H3 小节数向量必须相等——覆盖无编号
+       文档的章节内容漂移。
+    """
+    ordinals_zh = [ordinal for ordinal, _ in zh if ordinal is not None]
+    ordinals_en = [ordinal for ordinal, _ in en if ordinal is not None]
+    if (ordinals_zh or ordinals_en) and ordinals_zh != ordinals_en:
+        return f"章节编号序列不等（中文 {ordinals_zh} vs 英文 {ordinals_en}：缺章节或顺序漂移）"
+    if len(zh) == len(en) and zh:
+        subsections_zh = [subsections for _, subsections in zh]
+        subsections_en = [subsections for _, subsections in en]
+        if subsections_zh != subsections_en:
+            return f"每节 H3 小节数不等（中文 {subsections_zh} vs 英文 {subsections_en}）"
+    return None
 
 
 def _find_en_pair(md_path: Path) -> Path | None:
@@ -212,41 +266,16 @@ def check_bilingual(strict: bool = False) -> tuple[list[str], list[str]]:
             else:
                 warnings.append(msg)
 
-        # 12. P2 结构化对照：H2 骨架（章节顺序）按序对齐。
-        # 英文 H2 数量少于中文且骨架前缀不一致（缺章节 / 顺序漂移）时警告；
-        # 数量差 > 2 已被上面的章节数检查覆盖，这里补"顺序漂移"检测。
-        h2_zh = _extract_h2_titles(text_zh)
-        h2_en = _extract_h2_titles(text_en)
-        # 比较"中文 H2 序列中出现在英文序列里的相对顺序"是否保持（子序列匹配）
-        if h2_zh and h2_en:
-            shorter = min(len(h2_zh), len(h2_en))
-            zh_win = h2_zh[:shorter]
-            en_win = h2_en[:shorter]
-            # 宽松判定：英文序列中连续两节的相对顺序若与中文冲突（中文 A 在 B 前，
-            # 英文 B 在 A 前）→ 顺序漂移。仅当两侧窗口均含该对时判定。
-            drift = False
-            # 英文窗口去重保留首现顺序
-            seen_en: list[str] = []
-            for title in en_win:
-                if title not in seen_en:
-                    seen_en.append(title)
-            # 中文窗口去重保留首现顺序
-            zh_dedup: list[str] = []
-            for t in zh_win:
-                if t not in zh_dedup:
-                    zh_dedup.append(t)
-            # 对每对相邻中文节，检查英文中是否出现逆序
-            for i in range(len(zh_dedup) - 1):
-                a, b = zh_dedup[i], zh_dedup[i + 1]
-                if a in seen_en and b in seen_en and seen_en.index(b) < seen_en.index(a):
-                    drift = True
-                    break
-            if drift:
-                msg = f"章节顺序漂移：{rel} vs {en.as_posix()}（H2 骨架逆序）"
-                if strict:
-                    failures.append(msg)
-                else:
-                    warnings.append(msg)
+        # 12. P2 结构化对照：语言无关的 H2 骨架指纹（编号序列 + 每节 H3 数）。
+        # 数量差 > 2 已被上面的章节数检查覆盖；这里补"缺章节 / 顺序漂移 /
+        # 小节骨架漂移"，且对翻译标题同样生效（旧实现比对标题字面量）。
+        drift = _h2_structure_drift(_extract_h2_skeleton(text_zh), _extract_h2_skeleton(text_en))
+        if drift is not None:
+            msg = f"章节骨架漂移：{rel} vs {en.as_posix()}（{drift}）"
+            if strict:
+                failures.append(msg)
+            else:
+                warnings.append(msg)
 
     return failures, warnings
 
