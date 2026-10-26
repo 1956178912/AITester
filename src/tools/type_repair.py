@@ -176,8 +176,8 @@ def _run_mypy_findings(
         return []
     try:
         import mypy.api
-    except ImportError:
-        logger.debug("mypy 未安装，跳过静态类型检查（保持 ast 层口径）")
+    except Exception as exc:  # 装上但坏了（扩展/版本冲突）同样降级为仅 ast 层
+        logger.warning("mypy 不可用，跳过静态类型检查（保持 ast 层口径）: %s", exc)
         _record_static_check_outcome(outcome_sink, "mypy", STATIC_CHECK_UNAVAILABLE, "mypy_not_installed")
         return []
     # 仅消费高置信度错误类别（过滤 mypy 的"推断失败"类低置信度告警）
@@ -335,7 +335,8 @@ def _run_pyright_findings(
                 _pkg_bin = getattr(_pyright_pkg, "pyright", None)
                 if _pkg_bin:
                     backend_cmd = [str(_pkg_bin)]
-            except ImportError:
+            except Exception as exc:  # 装上但坏了同样按不可用降级
+                logger.warning("pyright-python 导入失败，按不可用降级: %s", exc)
                 backend_cmd = None
         if backend_cmd is None:
             logger.debug("pyright 不可用（CLI 与 pyright-python 均未装），跳过静态类型检查")

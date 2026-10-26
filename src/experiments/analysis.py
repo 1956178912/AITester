@@ -25,9 +25,10 @@ try:
     from scipy import stats as scipy_stats
 
     _SCIPY_AVAILABLE = True
-except ImportError:  # pragma: no cover - 依赖缺失的降级分支
+except Exception as exc:  # pragma: no cover - 依赖缺失/损坏的降级分支
     scipy_stats = None
     _SCIPY_AVAILABLE = False
+    logger.warning("scipy 导入失败（显著性检验按 unavailable 降级）: %s", exc)
 
 # 显著性检验所需的最小样本数（与 experiments/statistical_analysis.py 保持一致）
 # 本模块与 experiments/statistical_analysis.py 各自独立实现：
@@ -118,7 +119,7 @@ def _compute_significance(results: dict[str, Any]) -> dict[str, Any]:
         status=ok 时含 method 与 comparisons（每项 comparison/t_stat/p_value/significant）。
     """
     if not _SCIPY_AVAILABLE:
-        return {"status": "unavailable", "note": "scipy 未安装，无法执行显著性检验"}
+        return {"status": "unavailable", "note": "scipy 不可用（未安装或导入失败），无法执行显著性检验"}
 
     baseline = "aitester" if "aitester" in results else next(iter(results))
     base_details = results[baseline].get("details")

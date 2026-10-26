@@ -210,8 +210,8 @@ def _measure_per_test_lines(
         return None
     try:
         import coverage  # noqa: F401
-    except ImportError:
-        logger.debug("O2 FL_spectral 降级：coverage 模块不可用")
+    except Exception as exc:  # 装上但坏了同样视为不可测量（不崩溃、不假读数）
+        logger.warning("O2 FL_spectral 降级：coverage 不可用（%s）", exc)
         return None
 
     exec_dir = cwd or os.path.dirname(os.path.abspath(target_file))

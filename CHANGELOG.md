@@ -22,6 +22,10 @@
   退役逐轮标记与行窗口锁。
 
 ### Fixed
+- 可选依赖「装上但坏了」不再击穿降级契约（ED 轮）：12 处 `try: import 第三方 … except ImportError` 只拦缺包，
+  扩展 ABI / 传递依赖冲突抛出的 RuntimeError/OSError 会穿过去——chromadb 损坏时沿 `cli.app → workflow →
+  graph.rag → retriever` 冒泡，整个 CLI 无法启动。现在导入期任意异常都按「不可用」降级并告警，降级值不变；
+  datasets 下载入口保留 ImportError 契约并链上真实原因。12 例新锁 + 1 例必需依赖负控制。
 - trace 可视化 / 回放的读侧词汇与写侧对齐（EC 轮）：写侧只写 `node` 事件、`passed` 三态与 `token_usage`，读侧却按
   `node_end` / `test_passed` / `token_delta` 读——实测 100 份真实轨迹 100% 渲染成「无节点记录 + FAIL」（写侧 100/100
   通过）。节点时间轴、PASS/FAIL/CRASH 三态、节点 token / 计数与回放状态演化现在都按写侧字段读。12 例新锁；状态通道就地写按棘轮重登记 2/11 → 3/12。
@@ -151,10 +155,5 @@
 ## 更早版本
 
 0.8 / 0.9 系列与更早的逐轮记录见归档（原样保留，链接不保证可达）：
-
-| 归档 | 内容 |
-|---|---|
-| [README_2026-10-26_full.md](docs/history/README_2026-10-26_full.md) | 重写前 README（中文） |
-| [README_2026-10-26_full.en.md](docs/history/README_2026-10-26_full.en.md) | 重写前 README（英文） |
-| [CHANGELOG_2026-10-26_full.md](docs/history/CHANGELOG_2026-10-26_full.md) | 重写前 CHANGELOG（中文） |
-| [CHANGELOG_2026-10-26_full.en.md](docs/history/CHANGELOG_2026-10-26_full.en.md) | 重写前 CHANGELOG（英文） |
+[README（中文）](docs/history/README_2026-10-26_full.md) · [README（英文）](docs/history/README_2026-10-26_full.en.md) ·
+[CHANGELOG（中文）](docs/history/CHANGELOG_2026-10-26_full.md) · [CHANGELOG（英文）](docs/history/CHANGELOG_2026-10-26_full.en.md)。

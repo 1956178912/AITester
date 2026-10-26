@@ -77,12 +77,13 @@ def spec_smt_enabled() -> bool:
 
 
 def smt_available() -> bool:
-    """z3-solver 是否已安装（可选依赖 [formal] extra，缺失时本层整体降级）。"""
+    """z3-solver 是否可用（可选依赖 [formal] extra，缺失或导入失败时本层整体降级）。"""
     try:
         import z3  # noqa: F401  （仅探测可导入性，不触发求解器初始化）
 
         return True
-    except ImportError:
+    except Exception as exc:  # 装上但坏了（CPython 扩展加载失败）同样视为不可用
+        logger.warning("z3 导入失败（SMT 见证层按不可用降级）: %s", exc)
         return False
 
 

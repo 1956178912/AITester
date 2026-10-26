@@ -62,12 +62,16 @@ def _strict_instance_code_enabled() -> bool:
 
 
 # 数据集下载依赖（HuggingFace datasets 库）。可选导入：
-# 未安装时模块仍可加载，download_from_huggingface 会在调用时抛出 ImportError。
+# 未安装或导入失败时模块仍可加载，download_from_huggingface 会在调用时
+# 抛出 ImportError（__cause__ 保留真实导入异常，便于区分"没装"与"装坏了"）。
 # 使用模块级引用（_datasets）以便测试通过 patch 替换，避免真实网络下载。
+_datasets_import_error: Exception | None = None
 try:
     import datasets as _datasets
-except ImportError:
+except Exception as exc:
     _datasets = None
+    _datasets_import_error = exc
+    logger.warning("datasets 导入失败（SWE-bench 下载不可用）: %s", exc)
 
 # ─── 数据模型 ─────────────────────────────────────────────────────────────────
 
@@ -864,7 +868,7 @@ class SWEBenchDataset(BaseDatasetLoader):
             RuntimeError: 网络下载失败时抛出。
         """
         if _datasets is None:
-            raise ImportError("请下载 HuggingFace datasets 库: pip install datasets")
+            raise ImportError("请下载 HuggingFace datasets 库: pip install datasets") from _datasets_import_error
 
         # 与 SWEBenchDataset.data_dir（DEFAULT_CACHE_DIR/swe_bench/）对齐
         target_dir = cache_dir or os.path.join(cls.DEFAULT_CACHE_DIR, cls.DATASET_NAME)

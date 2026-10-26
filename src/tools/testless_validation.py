@@ -208,14 +208,15 @@ def _run_mypy_layer(patched_code: str, target_module: str) -> dict[str, Any]:
 
     try:
         import mypy.api  # noqa: F401  # 探活（缺依赖时降级跳过，不阻断）
-    except ImportError:
+    except Exception as exc:  # 装上但坏了（扩展/版本冲突）同样按不可用降级
+        logger.warning("mypy 不可用（testless 类型层按 unavailable 降级）: %s", exc)
         # U5（2026-10-05 系统性审查落地）：三态化（缺依赖 ≠ 类型通过）
         return {
             "passed": True,
             "infra_degraded": True,
             "status": VALIDATION_UNAVAILABLE,
             "reason": "mypy_not_installed",
-            "detail": "mypy 未安装（ADR-0004 零默认依赖口径），保守跳过",
+            "detail": "mypy 不可用（未安装或导入失败，ADR-0004 零默认依赖口径），保守跳过",
         }
 
     with tempfile.NamedTemporaryFile(suffix=".py", mode="w", encoding="utf-8", delete=False) as f:

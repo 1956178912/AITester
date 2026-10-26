@@ -383,7 +383,8 @@ def _hypothesis_available() -> bool:
         import hypothesis  # noqa: F401  # type: ignore[import-not-found]
 
         return True
-    except ImportError:
+    except Exception as exc:  # 装上但坏了（版本冲突）同样视为不可用
+        logger.warning("hypothesis 导入失败（按不可用降级）: %s", exc)
         return False
 
 

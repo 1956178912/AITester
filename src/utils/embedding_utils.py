@@ -235,8 +235,8 @@ def cosine_similarity(a: list[float], b: list[float]) -> float:
         if na == 0.0 or nb == 0.0:
             return 0.0
         return round(max(0.0, float(np.dot(va, vb)) / (na * nb)), 4)
-    except ImportError:
-        # numpy 缺失：纯 Python 回退
+    except Exception as exc:  # numpy 缺失或损坏：同一条纯 Python 回退
+        logger.debug("numpy 不可用，余弦相似度走纯 Python 回退: %s", exc)
         dot = sum(x * y for x, y in zip(a, b, strict=True))
         na = sum(x * x for x in a) ** 0.5
         nb = sum(y * y for y in b) ** 0.5

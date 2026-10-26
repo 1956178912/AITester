@@ -26,8 +26,9 @@ try:
 
     chromadb = _chromadb
     CHROMA_AVAILABLE = True
-except ImportError:
+except Exception as exc:  # 装上但坏了（扩展 ABI / 传递依赖冲突）与没装同样降级
     CHROMA_AVAILABLE = False
+    logger.warning("chromadb 导入失败（RAG 按不可用降级）: %s", exc)
 
 
 # 缓存配置常量

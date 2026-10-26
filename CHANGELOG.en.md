@@ -26,6 +26,12 @@ This file records externally visible changes only; round-by-round history is arc
   section / line ceilings / index completeness); round markers and line-window locks retired.
 
 ### Fixed
+- Optional integrations that are installed but broken no longer break the degradation contract (ED round):
+  12 `try: import … except ImportError` guards only caught a missing package, so ABIs / transitive-dependency
+  conflicts raising RuntimeError/OSError escaped — a broken chromadb bubbled up `cli.app → workflow →
+  graph.rag → retriever` and the whole CLI failed to start. Any import-time exception now degrades with a
+  warning and the documented value; the datasets download entry keeps ImportError and chains the real cause
+  (12 new locks plus one required-dependency control).
 - Trace visualization and replay now read the writer's vocabulary (EC round): traces only contain `node` events,
   the tri-state `passed` field and `token_usage`, but the viewer read `node_end` / `test_passed` / `token_delta` —
   all 100 real traces rendered as "no node records + FAIL" (the writer recorded 100/100 passes). Node timeline,
@@ -149,12 +155,5 @@ This file records externally visible changes only; round-by-round history is arc
 
 ## Earlier Versions
 
-The 0.8 / 0.9 series and earlier round-by-round records are archived (kept verbatim; links
-are not guaranteed to resolve):
-
-| Archive | Content |
-|---|---|
-| [README_2026-10-26_full.md](docs/history/README_2026-10-26_full.md) | README before the rewrite (Chinese) |
-| [README_2026-10-26_full.en.md](docs/history/README_2026-10-26_full.en.md) | README before the rewrite (English) |
-| [CHANGELOG_2026-10-26_full.md](docs/history/CHANGELOG_2026-10-26_full.md) | CHANGELOG before the rewrite (Chinese) |
-| [CHANGELOG_2026-10-26_full.en.md](docs/history/CHANGELOG_2026-10-26_full.en.md) | CHANGELOG before the rewrite (English) |
+The 0.8 / 0.9 series and earlier round-by-round records are archived (kept verbatim; links are not guaranteed to resolve):
+[README (Chinese)](docs/history/README_2026-10-26_full.md) · [README (English)](docs/history/README_2026-10-26_full.en.md) · [CHANGELOG (Chinese)](docs/history/CHANGELOG_2026-10-26_full.md) · [CHANGELOG (English)](docs/history/CHANGELOG_2026-10-26_full.en.md).

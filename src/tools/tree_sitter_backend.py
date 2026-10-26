@@ -41,9 +41,10 @@ try:
     import tree_sitter  # type: ignore[import-not-found]
 
     _HAS_TREE_SITTER = True
-except ImportError:
+except Exception as exc:  # 装上但坏了（原生扩展加载失败）同样按不可用降级
     tree_sitter = None  # type: ignore[assignment]
     _HAS_TREE_SITTER = False
+    logger.warning("tree_sitter 导入失败（TypeScript AST 后端按词法层降级）: %s", exc)
 
 
 def is_tree_sitter_available() -> bool:

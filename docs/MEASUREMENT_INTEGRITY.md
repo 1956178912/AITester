@@ -4605,3 +4605,30 @@ True=PASS、False=FAIL、None 或缺 `task_end`=CRASH（汇总口径相应改为
 **一般化：读侧的词汇表属于写侧的契约，不是读侧的自选项；测试夹具必须取自写侧产出，
 否则测试只是和读侧互相印证。多值结果（True / False / None / 缺失）要按原样渲染——
 把「崩溃」折叠成「失败」、把「截断」猜成「失败」，都是让观测层说谎。**
+
+## 97. 附：ED 轮（2026-10-27）**「可选」依赖的失败面不止「缺包」**；守卫按能力判据而非异常类型；不可观测的降级不得记成修复
+
+**① `except ImportError` 只覆盖了可选依赖的一半失败面。**
+可选依赖的文档承诺是「不可用时降级」。但「不可用」有两种形态：没装（ImportError）
+与装了但坏（扩展 ABI 不匹配、传递依赖版本冲突、共享库缺失——RuntimeError / OSError /
+ValueError）。本仓 12 处可选导入守卫只捕 ImportError，第二种形态会直接穿透。
+真树复现（子进程把目标包替换成 RuntimeError 后导入消费者）：**12/12 全部逃逸**；
+最重的是 chromadb——`src/rag/retriever.py` 的导入失败沿 `src.cli.app → src/graph/workflow
+→ src/graph/rag → src/rag/retriever` 冒泡，**整个 CLI 无法启动**，而文档承诺的是
+「RAG 增强跳过」。这不是退出码或文案问题，是「可选」被写成了「必需」。
+
+**② 判据是「该依赖是否还能提供能力」，不是「异常的类型」。**
+修法：12 处守卫改为 `except Exception as exc` + 告警，保留原降级值（False / None / []）；
+数据集下载入口保留 `ImportError` 的公开契约，但用 `__cause__` 链上真实导入异常——
+「没装」与「装坏了」在 traceback 里可区分，而不是都提示 `pip install datasets`。
+负控制（必需依赖 click 损坏）仍照常抛出，防止修复退化成吞掉一切导入错误。
+
+**③ 修不改变可观测行为的站点不纳入修复，登记为排除项。**
+`src/cli/output.py` 的 rich 守卫看似同类，但 rich 是 httpx 的硬导入
+（`httpx/_main.py` `import rich.console`），httpx 的 `__init__` 只对 ImportError 降级；
+任何 `src.cli.*` 导入都先经 `src/cli/__init__ → app → langgraph → langchain → httpx`，
+本层捕获 Exception 也救不回 CLI。**处置**：不改该守卫、不出测试锁，在排除项里写明上游证据。
+同时排除：stdlib 平台差异（`resource`）、必需依赖（`langgraph.checkpoint.memory`）、
+内部生成模块（`src.config.config_generator`）、已被外层 `except Exception` 覆盖的
+torch 导入。**一般化：缺陷族按「失败面」枚举，但修复范围按「能否改变可观测行为」收敛；
+把不可观测的防御性改动记成修复，与把缺包写成可用一样，都是让登记册说谎。**
