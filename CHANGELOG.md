@@ -22,10 +22,13 @@
   退役逐轮标记与行窗口锁。
 
 ### Fixed
-- 可选依赖「装上但坏了」不再击穿降级契约（ED 轮）：12 处 `try: import 第三方 … except ImportError` 只拦缺包，
-  扩展 ABI / 传递依赖冲突抛出的 RuntimeError/OSError 会穿过去——chromadb 损坏时沿 `cli.app → workflow →
-  graph.rag → retriever` 冒泡，整个 CLI 无法启动。现在导入期任意异常都按「不可用」降级并告警，降级值不变；
-  datasets 下载入口保留 ImportError 契约并链上真实原因。12 例新锁 + 1 例必需依赖负控制。
+- 可选依赖「装上但坏了」不再击穿降级契约（ED 轮）：12 处 `try: import … except ImportError` 只拦缺包，扩展 ABI /
+  传递依赖冲突抛出的 RuntimeError/OSError 会穿过去——chromadb 损坏时沿 `cli.app → workflow → graph.rag → retriever`
+  冒泡，整个 CLI 无法启动。现在导入期任意异常都按「不可用」降级并告警，datasets 下载入口保留 ImportError 契约并链上原因。12 例新锁 + 1 例负控制。
+- 读侧「损坏」判定不再停在 JSON 语法层（EE 轮）：15 处 JSON/JSONL 读侧只捕 `json.JSONDecodeError`（只覆盖解码后的
+  文本），坏字节（截断多字节 / GBK 保存）在解码期抛 `UnicodeDecodeError`——行级「坏行跳过」变成一行拖垮整份文件，
+  整文件「损坏 → 空值」直接抛出。行级读侧改二进制逐行严格解码（不吞坏字节），整文件补同口径降级，
+  策略库写侧仍 fail-closed 不覆写。15 例新锁。
 - trace 可视化 / 回放的读侧词汇与写侧对齐（EC 轮）：写侧只写 `node` 事件、`passed` 三态与 `token_usage`，读侧却按
   `node_end` / `test_passed` / `token_delta` 读——实测 100 份真实轨迹 100% 渲染成「无节点记录 + FAIL」（写侧 100/100
   通过）。节点时间轴、PASS/FAIL/CRASH 三态、节点 token / 计数与回放状态演化现在都按写侧字段读。12 例新锁；状态通道就地写按棘轮重登记 2/11 → 3/12。
@@ -126,12 +129,9 @@
   改为按组拆分计数，1 例测试锁先红后绿。
 - 可选嵌入后端加载失败必须降级（DG 轮）：`sentence-transformers` 分支只捕 `ImportError`，模型下载失败 / 缓存损坏会击穿
   「不可用即 None」契约；现补同形降级并在显式选择该后端时告警，3 例测试锁先红后绿。
-- 注释语义按文件类型分治（DE 轮）：TeX `%` 按反斜杠奇偶、Typst `//` 与可嵌套块注释、
-  BibTeX 按括号深度且 `\"` 不切换字符串态；修复 `refs.bib` 注释被误算进上一条目字段值造成的假 CJK 红。
-- 论文构建脚本前置判据改为 `--pre-build`：只跳过产物页数对账，源侧判据照常阻断，
-  避免「编辑源文件后无法重建」的自锁。
-- 外部读数登记册更正 `wang2026harnessreeval` 为 arXiv v4 并补齐 v1–v4 版本史；
-  两处强否定改为「所核摘要与正文未见」。
+- 注释语义按文件类型分治（DE 轮）：TeX `%` 按反斜杠奇偶、Typst `//` 与可嵌套块注释、BibTeX 按括号深度且 `\"` 不切换字符串态；修复 `refs.bib` 注释被误算进上一条目字段值造成的假 CJK 红。
+- 论文构建脚本前置判据改为 `--pre-build`：只跳过产物页数对账，源侧判据照常阻断，避免「编辑源文件后无法重建」的自锁。
+- 外部读数登记册更正 `wang2026harnessreeval` 为 arXiv v4 并补齐 v1–v4 版本史；两处强否定改为「所核摘要与正文未见」。
 
 ## [1.0.0] - 2026-10-25
 

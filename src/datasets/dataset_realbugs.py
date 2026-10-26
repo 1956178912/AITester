@@ -231,9 +231,16 @@ class BugsInPyDataset(BaseDatasetLoader):
             return
 
         loaded = skipped = 0
-        with open(manifest, encoding="utf-8") as f:
-            for line_no, raw in enumerate(f, 1):
-                line = raw.strip()
+        # 二进制逐行读 + 严格解码：一行坏字节（非 UTF-8）只损失该行并计入
+        # skipped；文本模式迭代器会在行内 try 之外解码，一行拖垮整份 manifest。
+        with open(manifest, "rb") as f:
+            for line_no, raw_bytes in enumerate(f, 1):
+                try:
+                    line = raw_bytes.decode("utf-8").strip()
+                except UnicodeDecodeError as e:
+                    logger.warning("BugsInPy manifest 第 %d 行不是合法 UTF-8（跳过）: %s", line_no, e)
+                    skipped += 1
+                    continue
                 if not line:
                     continue
                 try:

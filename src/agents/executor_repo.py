@@ -1175,7 +1175,7 @@ class RepoExecutor:
                 try:
                     with open(path, encoding="utf-8") as f:
                         payload = json.load(f)
-                except (OSError, json.JSONDecodeError) as e:
+                except (OSError, json.JSONDecodeError, UnicodeDecodeError) as e:
                     logger.info("M3 官方 swebench 报告文件跳过（%s）: %s", path, e)
                     continue
                 found = cls._official_report_candidate(payload, instance_id)

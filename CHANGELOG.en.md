@@ -32,6 +32,10 @@ This file records externally visible changes only; round-by-round history is arc
   graph.rag → retriever` and the whole CLI failed to start. Any import-time exception now degrades with a
   warning and the documented value; the datasets download entry keeps ImportError and chains the real cause
   (12 new locks plus one required-dependency control).
+- Readers no longer treat "corrupt" as JSON syntax only (EE round): 15 JSON/JSONL readers caught only
+  `json.JSONDecodeError` (raised on decoded text), so byte-level corruption (truncated multi-byte writes, GBK saves)
+  raised `UnicodeDecodeError` during decoding — one bad line killed the whole file, and whole-file readers raised instead
+  of degrading. Line readers now read binary and decode strictly per line; whole-file readers degrade alike; the bank write stays fail-closed. 15 new locks.
 - Trace visualization and replay now read the writer's vocabulary (EC round): traces only contain `node` events,
   the tri-state `passed` field and `token_usage`, but the viewer read `node_end` / `test_passed` / `token_delta` —
   all 100 real traces rendered as "no node records + FAIL" (the writer recorded 100/100 passes). Node timeline,
@@ -43,8 +47,7 @@ This file records externally visible changes only; round-by-round history is arc
   operation **ends**, but the exporter used that timestamp as the start, pushing every interval forward (a real session measured the task_end span ending one task-duration after the export moment). Starts are now `ts − duration`; a duration longer than `ts` is clipped to `[0, ts]` with `span_interval_clamped`. 14 new locks.
 - The OTel export no longer loses the whole-task duration (DZ round): `record_task_end` writes `duration_s`, but the
   exporter only read `duration_ms`, so the task_end span was always 0 ns with no disclosure. Units now follow the field (`duration_s` wins); bad values report `duration_s_*`. 7 new locks.
-- Trace sessions no longer turn tasks into crashes when the trace directory cannot be created (DY round): a path under a
-  regular file raised `NotADirectoryError` and `run` rewrote every task as crashed; it now degrades to memory-only snapshots. 4 new locks.
+- Trace sessions no longer turn tasks into crashes when the trace directory cannot be created (DY round): a path under a regular file raised `NotADirectoryError` and `run` rewrote every task as crashed; it now degrades to memory-only snapshots. 4 new locks.
 - Diagnostic dump arguments and concurrency no longer distort the export (DX round): `limit=0` exported every
   snapshot and negatives sliced backwards; concurrent dumps shared one file. `0`/negatives now raise
   `ValueError`, and `O_EXCL` + numbered retry never overwrites an existing snapshot. 11 new locks.
@@ -124,12 +127,9 @@ This file records externally visible changes only; round-by-round history is arc
   curmi2026harnessmatter / sghaier2026harnesshierarchy). Counting now splits groups, with one regression test written red first.
 - Optional embedding backends now degrade on load failure (DG round): the sentence-transformers
   branch caught only `ImportError`, so download/cache failures escaped `embed_text()` instead of returning `None`; now mirrored and warned (3 tests, red first).
-- Comment semantics are now parsed per file type (DE round): TeX `%` with backslash parity, Typst `//`
-  and nestable block comments, BibTeX by brace depth; fixes a false CJK failure from `refs.bib` comments.
-- The paper build script's pre-flight audit now uses `--pre-build`: it skips only artifact page reconciliation and
-  still blocks on source-side defects, so editing a source file no longer makes the build script impossible to run.
-- The external-readings register corrects `wang2026harnessreeval` to arXiv v4 with the full
-  v1–v4 history and hedges two strong negatives to "not seen in the checked abstract and body".
+- Comment semantics are now parsed per file type (DE round): TeX `%` with backslash parity, Typst `//` and nestable block comments, BibTeX by brace depth; fixes a false CJK failure from `refs.bib` comments.
+- The paper build script's pre-flight audit now uses `--pre-build`: it skips only artifact page reconciliation and still blocks on source-side defects, so editing a source file no longer makes the build script impossible to run.
+- The external-readings register corrects `wang2026harnessreeval` to arXiv v4 with the full v1–v4 history and hedges two strong negatives to "not seen in the checked abstract and body".
 
 ## [1.0.0] - 2026-10-25
 

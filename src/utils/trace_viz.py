@@ -34,15 +34,24 @@ logger = logging.getLogger(__name__)
 
 
 def _parse_jsonl(path: str) -> list[dict[str, Any]]:
-    """读 JSONL → list[dict]（损坏行跳过 + WARNING，保守不崩）。"""
+    """读 JSONL → list[dict]（损坏行跳过 + WARNING，保守不崩）。
+
+    坏字节行（非 UTF-8）与坏 JSON 行同口径：二进制逐行读 + 严格解码，
+    一行坏字节只损失该行（文本模式迭代器会在行内 try 之外解码，一行
+    拖垮整份 trace）。行号 1-based，与其他读侧口径一致。
+    """
     records: list[dict[str, Any]] = []
     p = Path(path)
     if not p.is_file():
         logger.warning("trace 文件不存在: %s", path)
         return records
-    with open(p, encoding="utf-8") as fh:
-        for i, raw_line in enumerate(fh):
-            line = raw_line.strip()
+    with open(p, "rb") as fh:
+        for i, raw_bytes in enumerate(fh, start=1):
+            try:
+                line = raw_bytes.decode("utf-8").strip()
+            except UnicodeDecodeError as e:
+                logger.warning("trace 第 %d 行不是合法 UTF-8，跳过: %s", i, e)
+                continue
             if not line:
                 continue
             try:

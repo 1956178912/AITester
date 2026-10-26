@@ -929,15 +929,23 @@ def _trace_file_path(trace_dir: str, task_uuid: str) -> str:
 
 
 def _read_trace_records(trace_dir: str | None, task_uuid: str) -> list[dict[str, Any]]:
-    """读取单任务 trace JSONL（文件不存在/解析失败 → 空列表；观测层不阻断）。"""
+    """读取单任务 trace JSONL（文件不存在/解析失败 → 空列表；观测层不阻断）。
+
+    坏字节行（非 UTF-8）与坏 JSON 行同口径按行跳过并留痕行号：文本模式
+    迭代器会在行内 try 之外解码，一行坏字节此前会拖垮整份 trace 读取。
+    """
     if not trace_dir:
         return []
     path = _trace_file_path(trace_dir, task_uuid)
     records: list[dict[str, Any]] = []
     try:
-        with open(path, encoding="utf-8") as f:
-            for raw_line in f:
-                line = raw_line.strip()
+        with open(path, "rb") as f:
+            for line_no, raw_bytes in enumerate(f, start=1):
+                try:
+                    line = raw_bytes.decode("utf-8").strip()
+                except UnicodeDecodeError as e:
+                    logger.warning("trace 第 %d 行不是合法 UTF-8（跳过）: %s", line_no, e)
+                    continue
                 if not line:
                     continue
                 try:

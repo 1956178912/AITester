@@ -88,7 +88,9 @@ def load_knowledge_base(path: str | None = None) -> list[dict[str, Any]]:
     try:
         with open(kb_file, encoding="utf-8") as f:
             data = json.load(f)
-    except (json.JSONDecodeError, OSError) as e:
+    except (json.JSONDecodeError, UnicodeDecodeError, OSError) as e:
+        # 整文件读：坏字节（非 UTF-8）与坏 JSON 同属「损坏」，走同一条降级；
+        # json.JSONDecodeError 只在解码后的文本上触发，不覆盖解码期异常。
         logger.warning("失败知识库加载失败（降级为空，不阻断修复）: %s", e)
         return []
     if not isinstance(data, list):

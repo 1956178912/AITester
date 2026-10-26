@@ -162,28 +162,30 @@ class TestProbeFrameSelection:
 class TestOtelNonObjectRecords:
     """N10：合法 JSON 但非对象的行不得让整文件导出崩溃。"""
 
-    def test_null_line_is_isolated_with_line_number(self, caplog):
+    def test_null_line_is_isolated_with_line_number(self, tmp_path, caplog):
         import logging
-        from unittest.mock import mock_open, patch
 
         from src.observability.otel_export import export_trace_jsonl
 
         payload = '{"event": "task_start", "run_id": "abcdef0123456789abcdef0123456789"}\nnull\n{"event": "node", "node": "executor"}\n'
-        with patch("builtins.open", mock_open(read_data=payload)), caplog.at_level(logging.WARNING):
-            spans = export_trace_jsonl("in_memory.trace.jsonl")
+        # 用真实文件而非 mock_open：导出侧按二进制逐行读（EE 轮为坏字节隔离），
+        # mock_open 的文本 read_data 与生产读取模式不同构。
+        path = tmp_path / "in_memory.trace.jsonl"
+        path.write_text(payload, encoding="utf-8")
+        with caplog.at_level(logging.WARNING):
+            spans = export_trace_jsonl(str(path))
 
         assert spans  # 未抛 AttributeError，其余记录照常导出
         assert any("第 2 行" in rec.message and "NoneType" in rec.message for rec in caplog.records)
 
     @pytest.mark.parametrize("bad", ["[]", "0", "false", '"text"'])
-    def test_all_non_object_shapes_skipped(self, bad):
-        from unittest.mock import mock_open, patch
-
+    def test_all_non_object_shapes_skipped(self, bad, tmp_path):
         from src.observability.otel_export import export_trace_jsonl
 
         payload = f'{{"event": "task_start"}}\n{bad}\n{{"event": "node"}}\n'
-        with patch("builtins.open", mock_open(read_data=payload)):
-            spans = export_trace_jsonl("in_memory.trace.jsonl")
+        path = tmp_path / "in_memory.trace.jsonl"
+        path.write_text(payload, encoding="utf-8")
+        spans = export_trace_jsonl(str(path))
 
         assert spans
 

@@ -333,13 +333,22 @@ def export_trace_jsonl(path: str) -> list[dict[str, Any]]:
 
     Raises:
         OSError: 文件不可读时抛出（不静默吞掉，与 fail-closed 口径一致）。
+
+    行级损坏（坏 JSON / 非 UTF-8 字节 / 非对象记录）一律跳过并披露行号，
+    不阻断整文件导出；文件级不可读（OSError）仍 fail-closed。
     """
-    with open(path, encoding="utf-8") as f:
+    # 二进制读 + 逐行严格解码：文本模式下坏字节在 readlines() 就抛出，
+    # 「损坏行跳过」只对解码后的 JSON 语法生效，一行坏字节拖垮整份导出。
+    with open(path, "rb") as f:
         lines = f.readlines()
 
     records: list[dict[str, Any]] = []
     for lineno, raw_line in enumerate(lines, 1):
-        line = raw_line.strip()
+        try:
+            line = raw_line.decode("utf-8").strip()
+        except UnicodeDecodeError:
+            logger.warning("OTel 导出：跳过第 %d 行（不是合法 UTF-8）", lineno)
+            continue
         if not line:
             continue
         try:

@@ -144,7 +144,7 @@ def _load_bank(path: str | None = None) -> dict[str, Any]:
             _bank_cache = data
             _bank_mtime = mtime
             return data
-        except (OSError, json.JSONDecodeError) as e:
+        except (OSError, json.JSONDecodeError, UnicodeDecodeError) as e:
             logger.warning("策略库加载失败（降级为空库，不阻断修复）: %s", e)
             return {"strategies": []}
 
@@ -268,7 +268,7 @@ def record_strategy_outcome(
                 try:
                     with open(bank_file, encoding="utf-8") as f:
                         loaded = json.load(f)
-                except (OSError, json.JSONDecodeError) as e:
+                except (OSError, json.JSONDecodeError, UnicodeDecodeError) as e:
                     logger.warning(
                         "策略库 %s 读取失败，跳过本次 outcome 追加（保留原文件待人工处置，不覆写）: %s",
                         bank_file,

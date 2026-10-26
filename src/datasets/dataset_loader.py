@@ -512,6 +512,9 @@ class SWEBenchDataset(BaseDatasetLoader):
         非 JSON 对象的行、主键是列表或字典的行同样按行跳过后各汇总一条 warning；
         标量主键按 str() 归一（与 _build_task_from_swe_row 的查表口径同源）。
         修复前这两类分别在 `row.get` / 写映射处抛出，中断的是**整份**补充文件的加载。
+        非 UTF-8 字节行与坏 JSON 行同口径按行跳过（含行号告警）：``json.JSONDecodeError``
+        只在解码后的文本上触发，而坏字节在**解码时**就抛出——此前一行坏字节
+        拖垮整份补充文件，行级隔离对「坏字节」不成立。
 
         Args:
             enrichment_path: 补充文件路径（环境变量 SWE_BENCH_ENRICHMENT 指定）。
@@ -525,9 +528,16 @@ class SWEBenchDataset(BaseDatasetLoader):
         missing_id_rows = 0
         non_object_rows = 0
         bad_key_rows = 0
-        with open(enrichment_path, encoding="utf-8") as f:
-            for raw_line in f:
-                line = raw_line.strip()
+        # 二进制逐行读 + 严格解码：文本模式迭代器在进入行内 try 之前解码，
+        # 坏字节会直接终止整个 for 循环（errors="replace" 不可取——替换字符
+        # 可能把坏字节洗成可被 json.loads 接受的错数据，静默串味）。
+        with open(enrichment_path, "rb") as f:
+            for line_num, raw_bytes in enumerate(f, start=1):
+                try:
+                    line = raw_bytes.decode("utf-8").strip()
+                except UnicodeDecodeError as e:
+                    logger.warning("补充文件第 %d 行不是合法 UTF-8，跳过该行: %s", line_num, e)
+                    continue
                 if not line:
                     continue
                 try:
@@ -604,9 +614,17 @@ class SWEBenchDataset(BaseDatasetLoader):
         for jsonl_path in jsonl_paths:
             if not os.path.exists(jsonl_path):
                 continue
-            with open(jsonl_path, encoding="utf-8") as f:
-                for line_num, raw_line in enumerate(f, start=1):
-                    line = raw_line.strip()
+            # 二进制逐行读 + 严格解码：文本模式迭代器在 json.loads 的 try 之外
+            # 解码，一行坏字节（截断的多字节字符 / GBK 保存）会终止整个文件，
+            # 「坏行跳过、其余照常」的行级隔离只对坏 JSON 成立。errors="replace"
+            # 不可取——替换字符可能洗出可被 json.loads 接受的错数据。
+            with open(jsonl_path, "rb") as f:
+                for line_num, raw_bytes in enumerate(f, start=1):
+                    try:
+                        line = raw_bytes.decode("utf-8").strip()
+                    except UnicodeDecodeError as e:
+                        logger.warning("记录不是合法 UTF-8（%s 第 %d 行，已跳过）: %s", jsonl_path, line_num, e)
+                        continue
                     if not line:
                         continue
                     try:

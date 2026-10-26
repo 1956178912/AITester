@@ -400,7 +400,7 @@ def _iter_candidate_docs() -> list[tuple[str, str, str]]:
             text = f"{data.get('prompt', '')}\n{data.get('response', '')}"
             if text.strip():
                 docs.append(("cache", os.path.basename(f), text))
-        except (OSError, json.JSONDecodeError, AttributeError, TypeError):
+        except (OSError, json.JSONDecodeError, UnicodeDecodeError, AttributeError, TypeError):
             continue
     # 2. rag_data 持久化案例（JSON 列表 / 对象扁平化文本）
     # 2026-10-02 审查修复：RAG_PERSIST_PATH 为空时此前仍执行
@@ -415,7 +415,7 @@ def _iter_candidate_docs() -> list[tuple[str, str, str]]:
             text = json.dumps(data, ensure_ascii=False)[:8000]
             if text.strip():
                 docs.append(("rag_data", os.path.basename(f), text))
-        except (OSError, json.JSONDecodeError, TypeError):
+        except (OSError, json.JSONDecodeError, UnicodeDecodeError, TypeError):
             continue
     return docs
 

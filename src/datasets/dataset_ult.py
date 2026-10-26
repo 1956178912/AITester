@@ -129,27 +129,37 @@ def _normalize_row(row: dict[str, Any]) -> dict[str, Any]:
 def _iter_records(manifest: str):
     """逐条产出任务记录：兼容逐行 JSONL（旧 manifest / 转换脚本产物）与
     JSON 数组（官方 ULT.jsonl / ULT_Lite.jsonl——文件名为 .jsonl 但内容
-    为顶层数组，官方仓库 2026-10-12 一手核验）。"""
-    with open(manifest, encoding="utf-8") as f:
+    为顶层数组，官方仓库 2026-10-12 一手核验）。
+
+    字节层损坏（非 UTF-8）与 JSON 语法损坏同口径降级：JSONL 按行跳过并
+    留痕行号（坏行不影响其余行）；顶层数组是单一 JSON 文档，无从按行隔离
+    ⇒ 整份降级为空并告警。形态探测用替换解码只作用于首行副本——坏字节
+    不会进入任何产出记录。
+    """
+    with open(manifest, "rb") as f:
         head = f.readline()
-    stripped = head.lstrip()
+    stripped = head.decode("utf-8", errors="replace").lstrip()
     if stripped.startswith("["):
         # JSON 数组（官方文件格式）
-        with open(manifest, encoding="utf-8") as f:
+        with open(manifest, "rb") as f:
             try:
-                records = json.load(f)
-            except json.JSONDecodeError as e:
-                logger.warning("ULT manifest JSON 数组解析失败: %s", e)
+                records = json.loads(f.read().decode("utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError) as e:
+                logger.warning("ULT manifest JSON 数组解析失败（非法 JSON 或非 UTF-8）: %s", e)
                 return
             if isinstance(records, list):
                 for row in records:
                     if isinstance(row, dict):
                         yield row
         return
-    # 逐行 JSONL
-    with open(manifest, encoding="utf-8") as f:
+    # 逐行 JSONL（二进制读 + 逐行严格解码：一行坏字节只损失该行）
+    with open(manifest, "rb") as f:
         for line_no, raw in enumerate(f, 1):
-            line = raw.strip()
+            try:
+                line = raw.decode("utf-8").strip()
+            except UnicodeDecodeError as e:
+                logger.warning("ULT manifest 第 %d 行不是合法 UTF-8（跳过）: %s", line_no, e)
+                continue
             if not line:
                 continue
             try:

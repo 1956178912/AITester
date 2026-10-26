@@ -4632,3 +4632,38 @@ ValueError）。本仓 12 处可选导入守卫只捕 ImportError，第二种形
 内部生成模块（`src.config.config_generator`）、已被外层 `except Exception` 覆盖的
 torch 导入。**一般化：缺陷族按「失败面」枚举，但修复范围按「能否改变可观测行为」收敛；
 把不可观测的防御性改动记成修复，与把缺包写成可用一样，都是让登记册说谎。**
+
+## 98. 附：EE 轮（2026-10-27）**「损坏」不止坏 JSON**；`json.JSONDecodeError` 只覆盖解码后的文本；行级隔离要隔离到解码之前
+
+**① 读侧的损坏判据停在了解码之后。**
+15 处 JSON/JSONL 读侧的异常处理写成 `except json.JSONDecodeError`（部分另捕 OSError），
+但 `JSONDecodeError` 是 `json.loads` 对**已解码字符串**的报错。字节层损坏——部分写入
+截断的多字节字符、编辑器以 GBK 保存、坏扇区——在更早的**解码步骤**抛
+`UnicodeDecodeError`（⊂ `ValueError`，与 `JSONDecodeError` 无继承关系），完全不在
+捕获域内。文档承诺的「坏行跳过、其余照常」「损坏 → 空列表 / 空库 / 跳过」因此只对
+坏 JSON 成立，对坏字节失效。真树复现（每处写一行 `b"\xff\xfe"` 后调用公开入口）：
+**15/15 全部抛出**。最重的两处——SWE-bench 主数据与 ULT manifest——一行坏字节让整份
+基准加载中断；策略库写侧更危险：读不懂的库文件本应 fail-closed 不覆写，坏字节却
+绕过了该判据直接抛出（本次未覆写是巧合，不是契约）。
+
+**② 行级隔离必须隔离在解码之前。**
+文本模式的 `for line in f` 在进入行内 `try` 之前解码，迭代器一旦解码失败即报废，
+行内再多的 `except` 也救不回同一文件的后续行。**修法**：行级读侧改为二进制读
+（`open(..., "rb")`）+ 逐行 `raw.decode("utf-8")`，解码失败与 `JSONDecodeError` 同口径
+跳过并留痕行号。**不用 `errors="replace"`**——替换字符可能把坏字节洗成一份能被
+`json.loads` 接受的错数据（静默串味），观测层的「跳过」必须可解释为「这段没读」，
+而不是「读成另一个东西」。整文件读侧（info.json / 知识库 / 策略库 / 报告扫描 /
+RAG 兜底材料）是单一 JSON 文档，无从按行隔离 ⇒ 把 `UnicodeDecodeError` 加入处理器
+元组，走文档承诺的降级值；策略库写侧据此保持「读不懂 ⇒ 原文件原样保留」。
+
+**③ 测试夹具必须与生产读取模式同构。**
+BR 轮的 5 个 OTel 用例用 `mock_open(read_data=str)` 模拟文件——生产改二进制读后，
+mock 仍返回 `str`，用例以 `AttributeError` 失败。这不是实现回归，而是**夹具没有
+建模读取模式**：mock 掩盖了「文本模式在解码期崩溃」这一被测属性。处置：改用真实
+临时文件（断言不变），并在用例里写明理由。**一般化：被测行为依赖 I/O 模式（文本 /
+二进制、严格 / 替换解码）时，内存 mock 的默认形态会与被测口径脱节；用真实文件，
+或让 mock 显式建模模式。** 同轮排除：已捕 `ValueError` 的读侧（mdo / cross_file /
+dependency / semantic_cache——`UnicodeDecodeError` 已被覆盖）、子进程自产临时文件
+（fl_spectral / branch_coverage_inject）、必需配置的 fail-fast 读侧
+（config_generator）、解析字符串而非文件的调用。**修 15 处、锁 15 例（ULT 数组分支与
+rag 持久化源各单列一例，其余逐一对应），不把「已覆盖」的站点记成修复。**
