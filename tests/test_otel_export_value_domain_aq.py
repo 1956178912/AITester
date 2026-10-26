@@ -151,15 +151,18 @@ class TestTokenValueDomain:
 
 class TestTimestampValueDomain:
     def test_float_ts_and_duration_conversion(self):
+        # EA（2026-10-27）：node 的 ts 是结束时刻，起点 = ts - duration
         span = _span(ts=1.5, duration_ms=2.0)
-        assert span["start_time_unix_nano"] == 1_500_000_000
+        assert span["start_time_unix_nano"] == 1_498_000_000
         assert span["duration_unix_nano"] == 2_000_000
+        assert span["start_time_unix_nano"] + span["duration_unix_nano"] == 1_500_000_000
         assert _reasons(span) == []
 
     def test_int_ts_and_duration_conversion(self):
         span = _span(ts=1, duration_ms=2)
-        assert span["start_time_unix_nano"] == 1_000_000_000
+        assert span["start_time_unix_nano"] == 998_000_000
         assert span["duration_unix_nano"] == 2_000_000
+        assert span["start_time_unix_nano"] + span["duration_unix_nano"] == 1_000_000_000
         assert _reasons(span) == []
 
     def test_absent_ts_and_duration_are_zero_without_reason(self):

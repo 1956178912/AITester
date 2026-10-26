@@ -1,6 +1,6 @@
 # Changelog
 
-> Last updated: 2026-10-26
+> Last updated: 2026-10-27
 
 This file records externally visible changes only; round-by-round history is archived below.
 
@@ -29,12 +29,12 @@ This file records externally visible changes only; round-by-round history is arc
   section / line ceilings / index completeness); round markers and line-window locks retired.
 
 ### Fixed
-- The OTel export no longer loses the whole-task duration (DZ round): `record_task_end` writes
-  `duration_s` (seconds), but the exporter only read `duration_ms`, so the task_end root span was
-  always 0 ns with no disclosure. Units now follow the field (`duration_s` wins); bad values report `duration_s_*`. 7 new locks.
-- Trace sessions no longer turn tasks into crashes when the directory cannot be created (DY round): `AITESTER_TRACE_DIR` under a
-  regular file raised `NotADirectoryError`, so `run` rewrote every task as crashed; it now warns and degrades to memory-only snapshots
-  (`--dump-trace-on-failure` still works), and `task_end` carries `duration_s` in memory-only mode too. 4 new locks.
+- Exported span intervals no longer sit in the future (EA round): node / task_end records are appended when the
+  operation **ends**, but the exporter used that timestamp as the start, pushing every interval forward (a real session measured the task_end span ending one task-duration after the export moment). Starts are now `ts − duration`; a duration longer than `ts` is clipped to `[0, ts]` with `span_interval_clamped`. 14 new locks.
+- The OTel export no longer loses the whole-task duration (DZ round): `record_task_end` writes `duration_s`, but the
+  exporter only read `duration_ms`, so the task_end span was always 0 ns with no disclosure. Units now follow the field (`duration_s` wins); bad values report `duration_s_*`. 7 new locks.
+- Trace sessions no longer turn tasks into crashes when the trace directory cannot be created (DY round): a path under a
+  regular file raised `NotADirectoryError` and `run` rewrote every task as crashed; it now degrades to memory-only snapshots. 4 new locks.
 - Diagnostic dump arguments and concurrency no longer distort the export (DX round): `limit=0` silently
   exported every snapshot and negatives sliced backwards; same-second / concurrent dumps shared one file
   and later writes truncated earlier ones. Now `0`/negatives raise `ValueError`, and `O_EXCL` + numbered

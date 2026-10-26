@@ -27,8 +27,15 @@
       duration_s 按秒、node 的 duration_ms 按毫秒（两者同时出现时 duration_s
       优先）。不可读的值不导出原值，机制名按处理
       顺序以逗号拼进 aitester.export_value_reasons；非有限时间戳回落到既有
-      的 0 哨兵（不中止整文件导出）。干净记录（真实 trace 的全部数值字段）
-      导出结果逐字不变。
+      的 0 哨兵（不中止整文件导出）。AQ 轮相对改前的干净记录导出逐字不变
+      （EA 轮起区间起点改为由时长反推，见下）。
+    - 区间锚点（EA，2026-10-27）：task_start 的 ts 是操作起点；node /
+      task_end 的 ts 是操作**结束**时刻（记录在完成时追加，duration 从 t0
+      起算）。有可用 duration 时 start_time_unix_nano = ts - duration，
+      区间闭合在记录时刻；ts 不可用（起点 0 哨兵）时不位移；duration > ts
+      时以结束时刻为准把区间裁到 [0, ts] 并披露 span_interval_clamped。
+      此前把 ts 一律当起点，真实会话的 node / task_end 区间整体落在未来
+      （实测 task_end 晚于导出时刻一个任务时长）。
     - 标识与字符串属性值域（AR，2026-10-21）：trace_id 规范化到 32 位小写
       hex、span_id 到 16 位（短 hex 左补零，大小写归一）；一个文件一个
       trace_id（首个可规范化 run_id，缺失时按路径确定性派生），缺失 /
@@ -252,6 +259,18 @@ def _record_to_span(
         duration_field, duration_scale = "duration_ms", 1e6
     duration_ns, duration_reasons = _timestamp_ns(record.get(duration_field), duration_scale, duration_field)
     reasons.extend(duration_reasons)
+    # EA（2026-10-27）：node / task_end 的 ts 是操作**结束**时刻（record_node /
+    # record_task_end 都在完成时取 time.time()；duration 从 t0 起算），把 ts 当
+    # 起点会让整段时长落在未来。task_start 的 ts 是起点，不位移；ts 不可用时
+    # 起点已是 0 哨兵，同样不位移。duration > ts 自相矛盾时以结束时刻为准，
+    # 区间裁到 [0, ts] 并披露。
+    if event != "task_start" and start_ns > 0 and duration_ns > 0:
+        if duration_ns > start_ns:
+            duration_ns = start_ns
+            start_ns = 0
+            reasons.append("span_interval_clamped")
+        else:
+            start_ns -= duration_ns
 
     attributes: dict[str, Any] = {
         "gen_ai.system": "aitester",

@@ -1705,7 +1705,8 @@ JSONL 行却是跳过的。改后非有限 / 负 / 缩放溢出 / 巨大整数�
 判据：**"没有"与"读不动"在导出结构里也要可区分。**
 
 **⑥ 披露有确定形状。** 机制名按 **ts → duration（`duration_s` 优先，其次
-`duration_ms`）→ token（input/output/total）→ budget_remaining → iteration** 的处理顺序逗号拼进
+`duration_ms`）→ 区间锚点（`span_interval_clamped`）→ token（input/output/total）→
+budget_remaining → iteration** 的处理顺序逗号拼进
 `aitester.export_value_reasons`；无坏值时不出现该属性。判据：**披露属性本身也是
 契约，顺序与键名由锁固定，不能靠字典迭代偶然。**
 
@@ -1731,6 +1732,16 @@ JSONL 行却是跳过的。改后非有限 / 负 / 缩放溢出 / 巨大整数�
 选单位并让 `duration_s` 优先（task_end 的 `extra` 注入 `duration_ms` 不得改写任务级
 时长）；坏值机制名为 `duration_s_*`，披露顺序仍在 `ts` 之后、token 之前。判据：
 **生产者与导出器对同一事实的字段名必须由锁对齐，不能靠字段名相似推断。**
+
+**⑪ 记录时刻是操作的结束，区间起点要由时长反推（EA 轮，2026-10-27）。** DZ 让
+task_end 的时长接上了，但 `ts` 仍被一律当作 span 起点：`record_node` /
+`record_task_end` 都在操作**完成时**取 `time.time()`（duration 从 `t0` 起算），
+于是每段时长向未来延伸——真实会话实测 planner span 结束比导出时刻晚 99ms、
+task_end 晚 419ms（整整一个任务时长），父子区间不闭合。现在 `task_start` 的
+`ts` 是起点、不位移；node / task_end 有可用 duration 时 `start = ts - duration`，
+区间闭合在记录时刻；ts 不可用（0 哨兵）不位移；duration > ts 自相矛盾时以结束
+时刻为准裁到 `[0, ts]` 并披露 `span_interval_clamped`。判据：**同一字段在不同
+事件里可以有不同语义，但"起点"只能由该事件的语义给出，不能由字段名想当然。**
 
 ## 36. 附：AR 轮（2026-10-21）导出的标识先合法再谈稳定 — 单 trace、32/16 位 hex、确定性派生
 

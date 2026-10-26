@@ -1,6 +1,6 @@
 # 更新日志
 
-> 最后更新：2026-10-26
+> 最后更新：2026-10-27
 
 本文件只记录对外可见的变化；逐轮历史见下方归档。
 
@@ -25,10 +25,10 @@
   退役逐轮标记与行窗口锁。
 
 ### Fixed
-- OTel 导出的整任务时长不再恒为 0（DZ 轮）：`record_task_end` 写的是 `duration_s`（秒），导出器只读 node 的
-  `duration_ms`，task_end root span 的时长被静默丢成 0 且无披露。现在按字段名选单位（`duration_s` 优先），坏值给出 `duration_s_*` 机制名。7 例新锁。
-- 追踪会话不再因目录不可建而反噬任务（DY 轮）：`AITESTER_TRACE_DIR` 指向普通文件之下曾抛 `NotADirectoryError`，`run` 把每个任务改写成崩溃；
-  现在告警后降级为仅内存快照（`--dump-trace-on-failure` 照常可用），`task_end` 的 `duration_s` 也不再只在文件模式下存在。4 例新锁。
+- OTel 导出的 span 区间不再落在未来（EA 轮）：node / task_end 的记录时刻是操作**结束**，导出器却把它当起点，
+  每段时长向未来延伸（真实会话实测 task_end 晚于导出时刻一个任务时长）。现在起点 = 记录时刻 − 时长，区间闭合在结束时刻；duration > ts 时裁到 `[0, ts]` 并披露 `span_interval_clamped`。14 例新锁。
+- OTel 导出的整任务时长不再恒为 0（DZ 轮）：`record_task_end` 写 `duration_s`（秒）、导出器只读 `duration_ms`，task_end 时长被静默丢成 0。现在按字段名选单位（`duration_s` 优先），坏值给 `duration_s_*`。7 例新锁。
+- 追踪会话不再因目录不可建而反噬任务（DY 轮）：`AITESTER_TRACE_DIR` 指向普通文件之下曾抛 `NotADirectoryError`、`run` 把任务改写成崩溃；现在告警后降级为仅内存快照，`duration_s` 也不再只在文件模式下存在。4 例新锁。
 - 失败追踪导出的参数与并发落点不再失真（DX 轮）：`limit=0` 曾静默导出全部快照、负数反向切片；
   同一秒内的多次 / 并发导出又共用文件名、后写覆盖先写。现在 0 / 负数抛 `ValueError`，`O_EXCL` + 序号重试、绝不覆盖旧快照。11 例新锁。
 - `--dump-trace-on-failure` 的失败态不再静默或反噬任务（DW 轮）：目录创建失败曾把已完成任务改写成崩溃，
