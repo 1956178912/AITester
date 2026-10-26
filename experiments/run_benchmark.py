@@ -126,6 +126,7 @@ from src.observability.failure_taxonomy import (  # noqa: E402
 )
 from src.tools.patch_abstain import evaluate_patch_abstention  # noqa: E402
 from src.tools.patch_validate import evaluate_patch_validation  # noqa: E402
+from src.utils.env_utils import env_flag, env_flag_opt_out  # noqa: E402
 from src.utils.logging_utils import setup_logger_safety  # noqa: E402
 from src.utils.process_utils import run_with_timeout as _run_with_timeout  # noqa: E402
 
@@ -4863,25 +4864,31 @@ def run_benchmark(
             "snapshot_date": datetime.now().strftime("%Y-%m-%d"),
             "execution_isolation": {
                 # R10 起 EXECUTOR_USE_VENV 默认 true（venv 沙箱），
-                # Docker / 内核沙箱为可选增强档位（默认关）
-                "use_venv": os.environ.get("EXECUTOR_USE_VENV", "true").lower() == "true",
-                "use_docker": os.environ.get("EXECUTOR_USE_DOCKER", "false").lower() == "true",
-                "kernel_sandbox": os.environ.get("KERNEL_SANDBOX_ENABLE", "false").lower() == "true",
-                "auto_install_deps": os.environ.get("EXECUTOR_AUTO_INSTALL_DEPS", "false").lower() == "true",
+                # Docker / 内核沙箱为可选增强档位（默认关）。
+                # EN（2026-10-27）：与运行时同一解析器（env_flag*）。手抄
+                # `== "true"` 会把 `yes` / `1` / `on` 判成关——工件自述与
+                # 生效值相反；`EXECUTOR_USE_VENV` 更是 opt-out 开关（EG 轮）。
+                "use_venv": env_flag_opt_out("EXECUTOR_USE_VENV"),
+                "use_docker": env_flag("EXECUTOR_USE_DOCKER"),
+                "kernel_sandbox": env_flag("KERNEL_SANDBOX_ENABLE"),
+                "auto_install_deps": env_flag("EXECUTOR_AUTO_INSTALL_DEPS"),
             },
             "context_strategy": {
-                # 上下文管理：RAG 检索增强 / 分层压缩 / 截断优先（R49）
-                "rag_enabled": os.environ.get("ENABLE_RAG", "false").lower() == "true",
-                "context_tier_downgrade": os.environ.get("CONTEXT_TIER_DOWNGRADE_ENABLE", "false").lower() == "true",
-                "truncation_first": os.environ.get("TRUNCATION_FIRST_ENABLE", "false").lower() == "true",
-                "branch_coverage_inject": os.environ.get("BRANCH_COVERAGE_INJECT_ENABLE", "false").lower() == "true",
+                # 上下文管理：RAG 检索增强 / 分层压缩 / 分支覆盖注入。
+                # EN：rag_enabled 披露 **生效值**（_apply_rag_setting 的结果，
+                # 与顶层 enable_rag 同源）——`--enable-rag` 只改 workflow 模块
+                # 全局、不写 env，重读 env 会让同一份工件自相矛盾。
+                # TRUNCATION_FIRST_ENABLE 全仓零读取方，自述不再宣称该档位。
+                "rag_enabled": rag_enabled,
+                "context_tier_downgrade": env_flag("CONTEXT_TIER_DOWNGRADE_ENABLE"),
+                "branch_coverage_inject": env_flag("BRANCH_COVERAGE_INJECT_ENABLE"),
             },
             "retry_stop_rules": {
                 # 重试与停止：失败重试一次 / 最大迭代 / 预算封顶 /
                 # 测试重生成上限 / 回归检测停止条件（StopReason 统一）
                 "executor_retry_on_fail": 1,
                 "max_iterations": MAX_ITERATIONS,
-                "cost_budget_enabled": os.environ.get("COST_BUDGET_ENABLE", "false").lower() == "true",
+                "cost_budget_enabled": env_flag("COST_BUDGET_ENABLE"),
                 # J-1d（2026-10-17）provenance 纠错：原写法读一个**无人消费**的
                 # `TEST_REGENERATION_CAP` 环境变量（全仓零读侧），默认写 2；实际生效的重生成
                 # 上限是 config.MAX_REGENERATIONS（Z2 已确立单一事实源，当前 1）。即历史批次

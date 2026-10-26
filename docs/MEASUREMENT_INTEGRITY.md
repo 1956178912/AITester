@@ -4925,3 +4925,54 @@ dict（docstring 声称「经 `_build_harness_block` 口径验证」，而该函
 **同轮排除**：不改 harness 块其余字段（执行隔离 / 上下文策略 / 时限 / 模型版本）；
 不改 `StopReason` 枚举本身与 `determine_stop_reason` 判定；不改 summary 顶层键。
 **修 1 个 provenance 字段 + 1 处旧测试 docstring，锁 6 例（3 红→绿 + 3 口径护栏）。**
+
+## 107. 附：EN 轮（2026-10-27）**harness 自述的开关口径不该与运行时解析脱钩**
+
+**① 「执行隔离 / 上下文策略可复核」在取值上与运行时相反。**
+R56 的 harness 块承诺读者可据此复核"这次跑批到底开了什么"。块内 8 个运行时布尔开关
+（`EXECUTOR_USE_VENV` / `EXECUTOR_USE_DOCKER` / `KERNEL_SANDBOX_ENABLE` /
+`EXECUTOR_AUTO_INSTALL_DEPS` / `ENABLE_RAG` / `CONTEXT_TIER_DOWNGRADE_ENABLE` /
+`BRANCH_COVERAGE_INJECT_ENABLE` / `COST_BUDGET_ENABLE`）却用裸
+`os.environ.get(NAME, default).lower() == "true"` 解析；运行时读的是
+`src/utils/env_utils.py` 的 `env_flag`（接受 `true` / `1` / `on`，大小写与空白容忍）与
+`env_flag_opt_out`（EG 轮起 `EXECUTOR_USE_VENV` 的口径：只有 `false` / `0` / `off` 算关）。
+两边唯一的差异就是"真值字面量集合"与 opt-out 方向——恰好覆盖最常见的运维写法。
+另外 `rag_enabled` 重读 `ENABLE_RAG` 环境变量，而 `--enable-rag` 只改
+`src.graph.workflow.ENABLE_RAG` 模块全局、不写 env（`_apply_rag_setting`），
+同一份工件会出现顶层 `enable_rag=true` 与 harness 块 `rag_enabled=false` 并存。
+
+**② 红因可辨（12 场景，零 LLM，$0）。**
+预修实测：每个场景一个子进程（保留 import 期 env 语义），跑真实
+`run_benchmark` 空任务批次并读 `summary["provenance"]["harness"]` 与运行时访问器：
+
+| 场景 | 运行时 | 工件自述（修前） |
+| --- | --- | --- |
+| `EXECUTOR_USE_VENV=yes` | `config.EXECUTOR_USE_VENV=true` | `use_venv=false` |
+| `KERNEL_SANDBOX_ENABLE=on` | `kernel_sandbox_enabled()=true` | `false` |
+| `EXECUTOR_AUTO_INSTALL_DEPS=1` | `config.EXECUTOR_AUTO_INSTALL_DEPS=true` | `false` |
+| `CONTEXT_TIER_DOWNGRADE_ENABLE=1` | `_context_tier_downgrade_enabled()=true` | `false` |
+| `BRANCH_COVERAGE_INJECT_ENABLE=1` | `branch_coverage_inject_enabled()=true` | `false` |
+| `COST_BUDGET_ENABLE=1` | `_budget_enabled()=true` | `false` |
+| `ENABLE_RAG=1` | `config.ENABLE_RAG=true`、顶层 `enable_rag=true` | `rag_enabled=false` |
+| `--enable-rag`（env 未开） | workflow 生效 `true`、顶层 `enable_rag=true` | `rag_enabled=false` |
+| `TRUNCATION_FIRST_ENABLE=true` | 全仓零读取方 | `truncation_first=true`（幻影键） |
+| `EXECUTOR_USE_DOCKER=true`（控制） | `config.EXECUTOR_USE_DOCKER=true` | `true`（两边一致） |
+
+控制组说明缺陷只在"字面量集合差异 / opt-out 方向 / 生效值改写"处暴露，并非解析器整体
+失效。16 例红→绿锁住：opt-out 的 `yes`、6 个 `env_flag` 开关 × `1` / `on` / ` TRUE `、
+`auto_install`、`cost_budget`、RAG 的 CLI / 模块生效值 / `--no-rag` 三面、幻影键移除；
+5 例预修即绿的口径护栏锁"不要过度修"：`off` 与未设置的 opt-out 方向、`docker=true`
+控制组、全部披露值为严格 `bool`、磁盘工件与内存态同值。既有
+`tests/test_r56_harness_disclosure.py` 仍是形状测试（手工内联等价 dict，不读生产块），
+本轮在 docstring 里补上生产路径锁的指向。
+
+**③ 修法：自述回到单一事实源。**
+`use_venv` 改 `env_flag_opt_out("EXECUTOR_USE_VENV")`；其余七个改 `env_flag(...)`
+（与 `config.py` / `kernel_sandbox` / `flags` / `branch_coverage_inject` / `cost_budget`
+的运行时读取同一函数）；`rag_enabled` 直接披露 `_apply_rag_setting` 的生效值
+（与顶层 `enable_rag` 同源，环境变量与 CLI 两条路径都对得上）；删除
+`truncation_first` 幻影键。历史工件一字节不动（旧批次的错值/幻影键是那些批次的时代事实）。
+**同轮排除**：不改开关本身的运行时语义与默认值；不改 summary 顶层 `enable_rag`；
+不改 `env_snapshot`（它存的是原始字符串，本就不做布尔判定）；不改
+`SWE_REPO_VENV_REUSE_BY_REPO` 的接线（唯一读侧就是运行时本身，不存在两套解析）。
+**修 8 个披露字段 + 删 1 个幻影键，锁 21 例（16 红→绿 + 5 口径护栏）。**
