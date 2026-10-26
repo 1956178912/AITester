@@ -4976,3 +4976,61 @@ R56 的 harness 块承诺读者可据此复核"这次跑批到底开了什么"�
 不改 `env_snapshot`（它存的是原始字符串，本就不做布尔判定）；不改
 `SWE_REPO_VENV_REUSE_BY_REPO` 的接线（唯一读侧就是运行时本身，不存在两套解析）。
 **修 8 个披露字段 + 删 1 个幻影键，锁 21 例（16 红→绿 + 5 口径护栏）。**
+
+## 108. 附：EO 轮（2026-10-27）**缓存开关的显式关闭拼写不该只在运行时生效**；同一份工件的原始值、布尔判定与命名空间自设三处打脸
+
+**① 「缓存已关」在三处被静默当成「缓存开启」。**
+`AITESTER_LLM_CACHE` 与 `AITESTER_CACHE_ISOLATE_MODEL` 是 opt-out 开关（默认开，
+`false` / `0` / `off` 关闭），运行时经 `env_flag_opt_out` 读取
+（`src/agents/llm_client.py::_llm_cache_enabled` / `src/agents/base_agent.py`）。
+但 `experiments/run_benchmark.py` 有三处仍手抄 `os.environ.get(NAME, "1") != "0"`
+——只认 `0`，`false` / `off` / 大小写与空白变体全部被判成开：
+
+1. X1 命名空间自设门：缓存已关仍写入 `AITESTER_CACHE_NAMESPACE=seed<N>`，
+   并打印"缓存命名空间"日志——命名空间隔离是为缓存服务的，缓存关闭时这条
+   自设与其日志都是虚假事实；
+2. `provenance.cache_enabled`：工件自述缓存开启；
+3. `provenance.cache_isolate_model`：工件自述跨模型隔离开启。
+
+最尖锐的一种是**同一份工件内部自相矛盾**：
+`env_snapshot.AITESTER_LLM_CACHE = "false"`，而 `cache_enabled = true`
+且 `cache_namespace = "seed42"`——X1 的承诺（"缓存开启且未显式设命名空间时
+自动 seed<N>"）在缓存关闭时被反向执行。
+
+**② 红因可辨（10 场景，零 LLM，$0）。**
+预修实测：每个场景一个子进程（保留 import 期与进程记忆语义），跑真实
+`run_benchmark` 空任务批次并读 `provenance` 与运行时访问器：
+
+| 场景 | 运行时 | 工件自述 / 命名空间（修前） |
+| --- | --- | --- |
+| `AITESTER_LLM_CACHE=false` | 缓存关 | `cache_enabled=true`、`cache_namespace=seed42` |
+| `AITESTER_LLM_CACHE=off` | 缓存关 | `true`、`seed42` |
+| `AITESTER_LLM_CACHE=' FALSE '` | 缓存关 | `true`、`seed42` |
+| `AITESTER_LLM_CACHE=0`（控制） | 缓存关 | `false`、无命名空间（两边一致） |
+| 未设置（控制） | 缓存开 | `true`、`seed42`（X1 原语义） |
+| `AITESTER_CACHE_ISOLATE_MODEL=false` | 隔离关 | `cache_isolate_model=true` |
+| `AITESTER_CACHE_ISOLATE_MODEL=off` | 隔离关 | `true` |
+| `AITESTER_CACHE_ISOLATE_MODEL=' Off '` | 隔离关 | `true` |
+| `AITESTER_CACHE_ISOLATE_MODEL=0`（控制） | 隔离关 | `false`（两边一致） |
+| `cache=false` + 显式 `NAMESPACE=outer` | 缓存关 | 布尔仍 `true`；显式命名空间保留（护栏） |
+
+7 个场景分裂、3 个控制场景一致：缺陷只在"显式关闭拼写不在 `!= \"0\"` 的
+接受集内"处暴露，不是布尔判定整体失效。12 例红→绿锁住：`false` / `off` /
+大小写空白 4 种拼写 × `cache_enabled`、同 4 种 × `cache_isolate_model`、
+3 种拼写下"缓存关 ⇒ 不自设命名空间"、以及"同一工件快照与布尔不矛盾"；
+7 例预修即绿的口径护栏锁"不要过度修"：`0` 与未设置的开关方向（两字段）、
+缓存开启时 X1 仍自设 `seed<N>`、`0` 关闭时同样不自设、显式命名空间不被改写。
+X1 的实际写入值经 fixture 在批次返回前捕获（进程环境随用例恢复，事后读
+`os.environ` 只会看到恢复后的值）。
+
+**③ 修法：三处回到运行时同一解析器。**
+X1 门与两个 provenance 字段一律改 `env_flag_opt_out(...)`（与
+`llm_client` / `base_agent` 的运行时读取同一函数）——只有 `false` / `0` /
+`off`（大小写与空白容忍）算关。缓存开关的运行时语义与默认值一处不动；
+`env_snapshot` 仍存原始字符串（不做二次判定）；X1 的 `seed<N>` 命名规则与
+"用户显式命名空间不覆盖"两条承诺保持；历史工件一字节不动（旧批次的
+错值与虚假命名空间是那些批次的时代事实）。
+**同轮排除**：不改 `AITESTER_LLM_CACHE` 的运行时解析与进程记忆机制；
+不改 `SWE_REPO_VENV_REUSE_BY_REPO`（EN 轮已登记：唯一读侧就是运行时本身，
+不存在两套解析）。
+**修 3 处解析，锁 19 例（12 红→绿 + 7 口径护栏）。**

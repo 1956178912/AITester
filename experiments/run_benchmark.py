@@ -4308,7 +4308,10 @@ def run_benchmark(
     # 复跑共享缓存 = 可复现性保留）。缓存关闭时无需隔离（无缓存可串）。
     # 注意：os.environ 为进程级，--parallel 下同批全部任务同 seed 同批
     # 次共享同一命名空间——正是期望语义（批次内命中 OK，跨 seed 隔离）。
-    if os.environ.get("AITESTER_LLM_CACHE", "1") != "0" and not os.environ.get("AITESTER_CACHE_NAMESPACE"):
+    # EO（2026-10-27）：与运行时同一解析器（env_flag_opt_out）。手抄
+    # `!= "0"` 只认 "0"，`false` / `off` 等显式关闭会被判成开——缓存已关
+    # 仍自设 seed<N> 并打印"缓存命名空间"日志，工件随之留下虚假隔离证据。
+    if env_flag_opt_out("AITESTER_LLM_CACHE") and not os.environ.get("AITESTER_CACHE_NAMESPACE"):
         os.environ["AITESTER_CACHE_NAMESPACE"] = f"seed{seed}"
         logger.info(
             "X1 缓存命名空间：AITESTER_CACHE_NAMESPACE=seed%d（多 seed 复跑独立性隔离；同 seed 复跑仍共享缓存）",
@@ -4843,8 +4846,12 @@ def run_benchmark(
         # 一字节不动（同 BN 口径：归位不改判定，只补可复核性）。
         "save_state": bool(save_state),
         "env_snapshot": _env_snapshot,
-        "cache_enabled": os.environ.get("AITESTER_LLM_CACHE", "1") != "0",
-        "cache_isolate_model": os.environ.get("AITESTER_CACHE_ISOLATE_MODEL", "1") != "0",
+        # EO（2026-10-27）：缓存族 opt-out 开关与运行时同解析器。手抄
+        # `!= "0"` 把 `false` / `off` / `FALSE` 判成开——工件自述
+        # `cache_enabled=true` 而同一份工件的 env_snapshot 原始值为
+        # "false"，X1 命名空间还按"开"自设（三处同时打脸）。
+        "cache_enabled": env_flag_opt_out("AITESTER_LLM_CACHE"),
+        "cache_isolate_model": env_flag_opt_out("AITESTER_CACHE_ISOLATE_MODEL"),
         # X1（P0-4a）：缓存命名空间入 provenance（None/空 + cache_enabled=true
         # = 跨批次复用风险口径，读者可据此判定"多批次"是否独立样本）
         "cache_namespace": os.environ.get("AITESTER_CACHE_NAMESPACE") or None,

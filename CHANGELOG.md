@@ -18,6 +18,8 @@
 - 文档测试锁改为结构判据（定位区 / 披露小节 / 行数上限 / 索引完备性），退役逐轮标记与行窗口锁。
 
 ### Fixed
+- 缓存开关的显式关闭拼写不再只在运行时生效（EO 轮）：`AITESTER_LLM_CACHE` / `AITESTER_CACHE_ISOLATE_MODEL` 是 opt-out 开关，运行时走 `env_flag_opt_out`（`false` / `0` / `off` 关），但 `experiments/run_benchmark.py` 三处仍手抄 `!= "0"`——X1 命名空间自设、`cache_enabled`、`cache_isolate_model` 在 `false` / `off` / 大小写空白变体下全部按「开」处理；同一份工件可同时出现 `env_snapshot="false"`、`cache_enabled=true`、`cache_namespace="seed42"`。
+  三处改用 `env_flag_opt_out`，缓存关闭时不再自设命名空间；19 例新锁（12 红→绿 + 7 口径护栏），历史工件一字节不动，`src/` 零改动 ⇒ 覆盖读数不变。
 - 批次工件自述的 harness 开关不再与运行时解析脱钩（EN 轮）：`provenance.harness` 用裸 `os.environ.get(...).lower() == "true"` 解析 8 个运行时开关 + 1 个零消费者幻影键，而运行时走 `env_flag` / `env_flag_opt_out`——`EXECUTOR_USE_VENV=yes`、`KERNEL_SANDBOX_ENABLE=on`、`COST_BUDGET_ENABLE=1` 等 8 个实测场景工件自述与生效值相反，`--enable-rag` 时同一工件顶层 `enable_rag=true`、harness 块却 `rag_enabled=false`。
   现与运行时同一解析器、RAG 披露 `_apply_rag_setting` 生效值；删除运行时零消费者的 `truncation_first` 幻影键。21 例新锁（16 红→绿 + 5 口径护栏）；`src/` 零改动 ⇒ 覆盖读数不变。
 - 批次 provenance 的停止原因词表不再与 `StopReason` 枚举脱钩（EM 轮）：harness 披露块承诺「停止规则可复核」，但 `retry_stop_rules.stop_reasons` 是手写 7 值字面量、枚举已 13 值——`recursion_limit`（EJ 起可落盘）、`coverage_stall`（P2-4）等 6 个真实终止原因从未出现在工件自述里，读者会以为 harness 只会以旧 7 值停止。
@@ -39,14 +41,12 @@
 - 非有限浮点环境值不再静默改写控制流（EF 轮）：6 处本地解析只捕 `ValueError`，而 `float("nan")` 不抛——
   NaN 夹到上界、`-inf` 夹到下界：语义缓存把无关条目当命中返回、覆盖率停滞恒判、风险中阈值变 1.0 绕过审批、
   失败知识库排序退回插入序、`long_sleep` 守卫失效。解析统一委托 `env_float`（告警 + 默认值），有限值钳制不变。49 例新锁。
-- trace 可视化 / 回放的读侧词汇与写侧对齐（EC 轮）：写侧只写 `node` 事件、`passed` 三态与 `token_usage`，读侧却按
-  `node_end` / `test_passed` / `token_delta` 读——100 份真实轨迹 100% 渲染成「无节点记录 + FAIL」（写侧 100/100 通过）；节点时间轴、三态判定与回放演化现按写侧字段读。12 例新锁；状态通道重登记 2/11 → 3/12。
+- trace 可视化 / 回放的读侧词汇与写侧对齐（EC 轮）：写侧只写 `node` 事件、`passed` 三态与 `token_usage`，读侧却按 `node_end` / `test_passed` / `token_delta` 读——100 份真实轨迹 100% 渲染成「无节点记录 + FAIL」（写侧 100/100 通过）；节点时间轴、三态判定与回放演化现按写侧字段读。12 例新锁；状态通道重登记 2/11 → 3/12。
 - 发布新鲜度门禁的例外登记不再「登记即通行」（EB 轮）：登记表头的两条语法承诺——条目必须写理由、条目
   必须对应当前最新 tag——此前只在「最新 tag 未登记」一个分支检查一次；当前 tag 已登记 / tag == HEAD /
   仓库没有 `v*` tag 三种状态下，失效或空理由条目静默通过。现在两类缺陷在任何绿色分支之前统一判红并逐条
   点名（无理由条目先于网络判定，API 不可达时同样生效）。9 例新锁。
-- OTel 导出的 span 区间不再落在未来（EA 轮）：node / task_end 的记录时刻是操作**结束**，导出器却把它当起点，
-  每段时长向未来延伸（真实会话实测 task_end 晚于导出时刻一个任务时长）。现在起点 = 记录时刻 − 时长，区间闭合在结束时刻；duration > ts 时裁到 `[0, ts]` 并披露 `span_interval_clamped`。14 例新锁。
+- OTel 导出的 span 区间不再落在未来（EA 轮）：node / task_end 的记录时刻是操作**结束**，导出器却把它当起点，每段时长向未来延伸（真实会话实测 task_end 晚于导出时刻一个任务时长）。现在起点 = 记录时刻 − 时长，区间闭合在结束时刻；duration > ts 时裁到 `[0, ts]` 并披露 `span_interval_clamped`。14 例新锁。
 - OTel 导出的整任务时长不再恒为 0（DZ 轮）：`record_task_end` 写 `duration_s`（秒）、导出器只读 `duration_ms`，task_end 时长被静默丢成 0。现在按字段名选单位（`duration_s` 优先），坏值给 `duration_s_*`。7 例新锁。
 - 追踪会话不再因目录不可建而反噬任务（DY 轮）：`AITESTER_TRACE_DIR` 指向普通文件之下曾抛 `NotADirectoryError`、`run` 把任务改写成崩溃；现在告警后降级为仅内存快照，`duration_s` 也不再只在文件模式下存在。4 例新锁。
 - 失败追踪导出的参数与并发落点不再失真（DX 轮）：`limit=0` 曾静默导出全部快照、负数反向切片；
