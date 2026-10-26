@@ -52,7 +52,7 @@ cost_task = Σ_calls ( input_tokens × price_in + output_tokens × price_out ) /
 | 未登记模型的单价 | 未测；`estimate_usd` 返回 `unpriced`，不按 0 计 |
 | 估算与供应商账单的差额 | 未测；只做 standard-price 估算 |
 | 任务 token / USD 硬上限 | `COST_BUDGET_ENABLE`（默认关）；`COST_BUDGET_TOKENS` / `COST_BUDGET_USD` 为 0 表示不限 |
-| 单次调用墙钟上限 | `LLM_CALL_BUDGET_SECONDS`（默认 600s）；超限快速失败，不继续发请求 |
+| 单次调用墙钟上限 | `LLM_CALL_BUDGET_SECONDS`（默认 600s，monotonic 计时）；每次请求前复查，超限快速失败、不再发请求 |
 | 批后处理墙钟告警 | `AITESTER_POSTPROCESS_WARN_S`（默认 600s）；只告警，不改判分 |
 
 本文读数与 `BASELINE.yaml` 冲突时，以 `BASELINE.yaml` 为登记权威；先复核

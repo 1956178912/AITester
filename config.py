@@ -597,7 +597,8 @@ LLM_TIMEOUT: int = _validate_timeout(_LLM_TIMEOUT_RAW, "LLM_TIMEOUT", 30, 300, 6
 # 最小 1：等待 0 秒等于不等待，重试退避失去意义
 LLM_RETRY_WAIT: int = _parse_int_env("LLM_RETRY_WAIT", 30, 1, None)
 # 单次 LLM 调用的全局墙钟总预算（秒）：覆盖"故障转移 × 模型 × 重试"整段，
-# 超出即快速失败（防极端组合下基准跑批被单任务卡死数十分钟；0.7 债务项 2.2）
+# 超出即快速失败（防极端组合下基准跑批被单任务卡死数十分钟；0.7 债务项 2.2）。
+# EH 轮：计时改 monotonic（不受系统时间回拨影响），判定下沉到每次请求前。
 LLM_CALL_BUDGET_SECONDS: int = _parse_int_env("LLM_CALL_BUDGET_SECONDS", 600, 1, None)
 
 # ─── 功能模块自有开关（默认关，不在本文件集中声明）──────────────────────────

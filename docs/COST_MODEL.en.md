@@ -61,7 +61,7 @@ cost_task = Σ_calls ( input_tokens × price_in + output_tokens × price_out ) /
 | Price of an unregistered model | Not measured; `estimate_usd` returns `unpriced`, never 0 |
 | Gap between estimate and provider invoice | Not measured; the model is a standard-price estimate |
 | Per-task token / USD hard caps | `COST_BUDGET_ENABLE` (off by default); `COST_BUDGET_TOKENS` / `COST_BUDGET_USD` of 0 means unlimited |
-| Per-call wall-clock cap | `LLM_CALL_BUDGET_SECONDS` (default 600 s); exceeding it fails fast without further requests |
+| Per-call wall-clock cap | `LLM_CALL_BUDGET_SECONDS` (default 600 s, monotonic clock); re-checked before every request — exceeding it fails fast without further requests |
 | Post-process wall-clock warning | `AITESTER_POSTPROCESS_WARN_S` (default 600 s); warning only, scoring unchanged |
 
 If a reading here conflicts with `BASELINE.yaml`, the latter is the registration

@@ -388,15 +388,20 @@ class TestLlmCallBudget:
     """0.7 债务项 2.2：LLM 调用全局墙钟总预算。"""
 
     def test_budget_exceeded_fast_fails(self, monkeypatch):
-        """预算耗尽时快速失败，不再空耗剩余故障转移组合。"""
+        """预算耗尽时快速失败，不再空耗剩余故障转移组合（EH 轮：monotonic 计时）。"""
         import src.agents.base_agent as ba
 
-        # 伪造时间：第一次 time.time() 返回 0（deadline = 0 + budget），
-        # 后续返回超大值，使内层循环检查立即越过预算触发快速失败。
-        times = iter([0.0, float(10**9)])
-        monkeypatch.setattr(ba.time, "time", lambda: next(times))
+        # 伪造单调时钟：第一次调用用于算 deadline（0 + budget），
+        # 第二次（内层循环顶部）返回超大值，立即越过预算触发快速失败。
+        reads = iter([0.0, float(10**9)])
+        monkeypatch.setattr(ba.time, "monotonic", lambda: next(reads))
         monkeypatch.setattr(ba, "LLM_CALL_BUDGET_SECONDS", 10)
         monkeypatch.setattr(ba, "_get_all_api_configs", lambda: [("k", "https://t.example.com/v1", "m")])
+        monkeypatch.setattr(
+            ba,
+            "_get_or_create_chat_client",
+            lambda *a, **k: pytest.fail("预算耗尽后不得创建客户端/发请求"),
+        )
 
         # 绕过 __init__ 的 LLM 客户端依赖，只测 _call_llm 预算分支
         agent = ba.BaseAgent.__new__(ba.BaseAgent)

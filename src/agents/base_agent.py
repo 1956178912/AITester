@@ -510,6 +510,15 @@ def _pin_thread_api_group(
     return pinned
 
 
+class LlmCallBudgetExceeded(RuntimeError):
+    """单次 LLM 调用的全局墙钟预算耗尽（控制流信号，不进入重试/故障转移）。
+
+    EH 轮（2026-10-27）：预算判定改用 monotonic 时钟并在**每次请求前**复查；
+    本异常是确定性失败，重试器不得退避重试（同 `BudgetExceededError` 待遇）。
+    继承 RuntimeError 保持既有调用方的捕获面不变。
+    """
+
+
 class BaseAgent:
     """
     所有智能体的公共基类。
@@ -987,7 +996,24 @@ class BaseAgent:
 
         # 0.7 债务项 2.2：单次调用的全局墙钟总预算。故障转移 × 模型 × 重试的
         # 最坏组合可达数十分钟，超出预算即快速失败，避免单任务卡死整个基准跑批。
-        deadline = time.time() + LLM_CALL_BUDGET_SECONDS
+        # EH 轮（2026-10-27）两处修正：
+        # - 计时源改 monotonic：墙钟回拨（NTP 阶跃校正 / VM 快照恢复）会让
+        #   time.time() 的截止点随之后移，预算永不触发——与 api_health 熔断
+        #   冷却同口径（"不受系统时间回拨影响"）；
+        # - 判定点下沉到每次真实请求前（`_invoke_openai` 入口 + 重试器
+        #   pre_retry_check），此前只在换模型时检查，单模型内的重试阶梯
+        #   （1/2/4s）与 429 退避（最长 30s）越预算后仍会继续发请求。
+        deadline = time.monotonic() + LLM_CALL_BUDGET_SECONDS
+
+        def _raise_if_call_budget_exhausted() -> None:
+            """预算耗尽即抛确定性信号（不参与重试/故障转移）。"""
+            if time.monotonic() >= deadline:
+                raise LlmCallBudgetExceeded(f"LLM 调用超过全局预算 {LLM_CALL_BUDGET_SECONDS}s，快速失败")
+
+        def _pre_retry_budget_check() -> None:
+            """A11 + EH：重试前复查任务级（token/USD）与单次调用（时间）预算。"""
+            _raise_if_budget_exceeded()
+            _raise_if_call_budget_exhausted()
 
         # 按 base_url 分组配置，支持同一 API 内切换模型
         # 结构：{base_url: [(api_key, model_name), ...]}
@@ -1022,8 +1048,7 @@ class BaseAgent:
         for base_url, models in api_groups.items():
             for api_key, model_name in models:
                 # 每次尝试新模型前先查预算，超出即快速失败（不再空耗剩余组合）
-                if time.time() > deadline:
-                    raise RuntimeError(f"LLM 调用超过全局预算 {LLM_CALL_BUDGET_SECONDS}s，快速失败")
+                _raise_if_call_budget_exhausted()
                 # A11：重试/故障转移前复查任务级预算——上一响应即使被判不可用，
                 # 其 usage 已记账（见 _invoke_openai），预算可能已耗尽；
                 # 超限立即抛 BudgetExceededError，不再尝试后续模型（默认关零变化）。
@@ -1045,6 +1070,9 @@ class BaseAgent:
                         _api_key: str = api_key,
                         _base_url: str = base_url,
                     ) -> str:
+                        # EH 轮：重试/故障转移的每次真实请求前复查时间预算——
+                        # 上一次退避等待可能已睡过截止点（"不继续发请求"）。
+                        _raise_if_call_budget_exhausted()
                         _invoke_kwargs: dict[str, Any] = {"timeout": LLM_TIMEOUT}
                         if eff_json:
                             # DeepSeek JSON Output（官方文档 guides/json_mode）：
@@ -1095,8 +1123,9 @@ class BaseAgent:
                         # N02（2026-10-22 第三方复审 P1）：预算类异常是控制流
                         # 信号（真超限 / 记账不可判定锁存），不得被退避重试
                         # 吞掉——每次重试都是一次无法计量或已越预算的付费请求。
-                        non_retryable_exceptions=(BudgetExceededError,),
-                        pre_retry_check=_raise_if_budget_exceeded,
+                        # EH 轮：时间预算耗尽同属确定性失败，一并列入。
+                        non_retryable_exceptions=(BudgetExceededError, LlmCallBudgetExceeded),
+                        pre_retry_check=_pre_retry_budget_check,
                     )
 
                     # 打印成功日志
@@ -1107,7 +1136,8 @@ class BaseAgent:
                 except Exception as e:
                     # A11：预算超限是控制流信号（非 API 故障），不得进入
                     # 限流等待/跨模型故障转移——否则记账后的预算闸被绕过。
-                    if isinstance(e, BudgetExceededError):
+                    # EH 轮：单次调用时间预算耗尽同属控制流信号，一并直抛。
+                    if isinstance(e, (BudgetExceededError, LlmCallBudgetExceeded)):
                         raise
                     # O15（2026-09-29 审查 P2）：限流（429 RateLimitError）
                     # 可重试分支——此前 except Exception 吞掉所有异常统一
@@ -1119,8 +1149,13 @@ class BaseAgent:
                     _is_rate_limit = _is_rate_limit_error(e)
                     if _is_rate_limit:
                         _retry_after = _extract_retry_after_seconds(e)
-                        # 限流退避：Retry-After 优先，未设则用基础等待 2s，统一封顶 30s
+                        # 限流退避：Retry-After 优先，未设则用基础等待 2s，统一封顶 30s。
+                        # EH 轮：再按剩余预算截断——旧行为在此固定睡满（最长 30s），
+                        # 睡过截止点后才在下一模型顶部发现，等于把预算又花在等待上。
                         _wait = min(max(_retry_after or 0.0, 2.0), 30.0)
+                        _remaining = deadline - time.monotonic()
+                        _raise_if_call_budget_exhausted()
+                        _wait = min(_wait, _remaining)
                         logger.warning(
                             "O15 限流（429）模型 %s：等待 %.1fs 后重试（Retry-After=%s）",
                             model_name,
@@ -1142,7 +1177,9 @@ class BaseAgent:
             logger.warning("API %s 所有模型均失败，尝试备用 API", api_id)
             continue
 
-        # 所有 API 均失败，抛出包含最后一次异常信息的 RuntimeError
+        # 所有 API 均失败。EH 轮：先复查时间预算——最后一个模型的退避把预算
+        # 耗尽时，应以预算信号收口，而不是淹没成"已尝试所有 API"。
+        _raise_if_call_budget_exhausted()
         raise RuntimeError(f"LLM 调用失败，已尝试所有 API: {_redact_log_text(str(last_error))}") from last_error
 
     @staticmethod
@@ -1268,5 +1305,6 @@ def clear_llm_lru_cache() -> None:
 
 __all__ = [
     "BaseAgent",
+    "LlmCallBudgetExceeded",
     "clear_llm_lru_cache",
 ]
