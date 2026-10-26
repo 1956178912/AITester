@@ -29,16 +29,19 @@ This file records externally visible changes only; round-by-round history is arc
   section / line ceilings / index completeness); round markers and line-window locks retired.
 
 ### Fixed
+- The release-freshness gate's exception register is no longer "register and pass" (EB round): the two syntax promises
+  in the register header — a reason per entry, and it must name the current latest tag — were checked only when the
+  latest tag was unregistered; a registered current tag, tag == HEAD or no `v*` tag let stale or reasonless entries pass
+  silently. Both classes now exit 1 before any green branch and name every entry (reasons are judged pre-network). 9 new locks.
 - Exported span intervals no longer sit in the future (EA round): node / task_end records are appended when the
   operation **ends**, but the exporter used that timestamp as the start, pushing every interval forward (a real session measured the task_end span ending one task-duration after the export moment). Starts are now `ts − duration`; a duration longer than `ts` is clipped to `[0, ts]` with `span_interval_clamped`. 14 new locks.
 - The OTel export no longer loses the whole-task duration (DZ round): `record_task_end` writes `duration_s`, but the
   exporter only read `duration_ms`, so the task_end span was always 0 ns with no disclosure. Units now follow the field (`duration_s` wins); bad values report `duration_s_*`. 7 new locks.
 - Trace sessions no longer turn tasks into crashes when the trace directory cannot be created (DY round): a path under a
   regular file raised `NotADirectoryError` and `run` rewrote every task as crashed; it now degrades to memory-only snapshots. 4 new locks.
-- Diagnostic dump arguments and concurrency no longer distort the export (DX round): `limit=0` silently
-  exported every snapshot and negatives sliced backwards; same-second / concurrent dumps shared one file
-  and later writes truncated earlier ones. Now `0`/negatives raise `ValueError`, and `O_EXCL` + numbered
-  retry never overwrites an existing snapshot. 11 new locks.
+- Diagnostic dump arguments and concurrency no longer distort the export (DX round): `limit=0` exported every
+  snapshot and negatives sliced backwards; concurrent dumps shared one file. `0`/negatives now raise
+  `ValueError`, and `O_EXCL` + numbered retry never overwrites an existing snapshot. 11 new locks.
 - `--dump-trace-on-failure` no longer goes silent or corrupts results (DW round): directory creation ran
   outside the `try`, so a blocked path rewrote a completed task as crashed, and empty buffers / write
   failures were silent. The three states are now distinct (`trace_dump_path` / `trace_dump_error` + stderr reason). 9 new locks.
@@ -60,18 +63,15 @@ This file records externally visible changes only; round-by-round history is arc
 - `run`'s help/docs now match reality (DO round): help no longer leaks rich/Markdown markup; detection / repair /
   false_fix are benchmark-only (`experiments/_m1_metrics.py`, gold required); coverage reads met/missed/unmeasured and the threshold never changes rc. 16 new locks.
 - `check-dataset --subset` no longer silently ignores or substitutes the request (DN round):
-  datasets without a subset concept accepted `--subset lite`, exited 0, printed "(subset: lite)"
-  and loaded the full data; ULT also fell back silently when the subset file was missing or
-  `AITESTER_ULT_DATA` named a file. Such requests now exit 2 (unsupported/unknown subset) or 1
-  with the fallback reason; `load_dataset` keeps its recorded ULT fallback. 14 locks, red first.
+  datasets without a subset concept accepted `--subset lite`, exited 0 and loaded the full data;
+  ULT also fell back silently when the subset file was missing. Such requests now exit 2
+  (unsupported/unknown subset) or 1 with the fallback reason; `load_dataset` keeps its ULT fallback. 14 locks.
 - `clean-venv-cache` no longer reports a disk state that does not exist (DM round):
   `shutil.rmtree(..., ignore_errors=True)` swallowed every deletion failure, so a read-only
-  cache directory still printed "✓ removed 1 venv (freed 0.0 MB)" and exited 0 while
-  untouched (the old test mocked rmtree to raise, locking the mock shape). Deletions are now
+  cache still printed "✓ removed 1 venv (freed 0.0 MB)" and exited 0. Deletions are now
   classified by whether the directory actually disappeared (`removed` vs `failed`): failures
-  are listed per entry and exit 1, and freed space counts only real removals. `--list-only`
-  now shares the cleanup predicate and prints `[将删除]` / `[保留]` instead of ignoring the
-  filters (8 real-filesystem locks, red first; the old mock lock was rewritten).
+  exit 1 and freed space counts only real removals; `--list-only` shares the same predicate
+  instead of ignoring the filters (8 real-filesystem locks, red first; the old mock lock was rewritten).
 - `check-dataset` no longer reports "no validator" as a pass (DL round): only the SWE-bench
   family implements `quality_report`; other datasets fell through to `report = {}` and printed
   "✓ full quality check passed (N tasks with no issues)" although no full check ever ran (N can

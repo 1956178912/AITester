@@ -43,7 +43,7 @@ CI / pre-commit 阻断项，`make gates` 跑其中大部分：
 | `check_prompt_artifacts.py` | Instruction artifact 清单哈希锁 |
 | `check_registration_consistency.py` | 登记册 §1「当前口径」数字 ↔ `BASELINE.yaml` 双向对账 |
 | `check_repo_hygiene.py` | 仓库卫生：临时/缓存产物与敏感/私有路径不得被 git 跟踪 + 本清单与盘面一致 |
-| `check_release_freshness.py` | 发布新鲜度：最新 release tag 不得落在 main 后面（落后须登记例外） |
+| `check_release_freshness.py` | 发布新鲜度：最新 release tag 不得落在 main 后面（落后须登记例外；登记语法——理由必填、条目须对应当前最新 tag——每次运行都判，且先于任何绿色） |
 | `check_scheduled_workflows.py` | 远端定时作业巡检：每周跑一次的作业最近一次必须非红（定时红 + 更新的成功手动运行 ⇒ 绿） |
 | `check_state_contract.py` | 未声明 state 键读写 |
 | `check_status_persistence.py` | 状态通道落盘可达性棘轮（声明了却不落盘 = 归档里 0 出现） |

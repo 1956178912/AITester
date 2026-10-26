@@ -20,7 +20,10 @@ perf 定时作业的构造期凭据修复、自变异 harness 的沙箱依赖闭
 - 若 HEAD **领先**该 tag ⇒ 该 tag 已过期（发布产物落后于仓库）；
 - **已登记例外**（`docs/release_freshness_allowlist.txt`，逐条写明 tag 名与理由）⇒ 绿，
   但**必须逐条打印落后多少个提交**（登记是「显式承担」，不是「沉默」）；
-- 例外的 tag 名与当前最新 tag **不一致** ⇒ 例外**已失效** ⇒ 红（tag 前移后必须清理登记）；
+- 登记表的语法承诺**在任何绿色之前生效**：条目没有理由 ⇒ 红；条目不再对应当前
+  最新 tag（含仓库没有任何 `v*` tag）⇒ 红——tag 落后、tag == HEAD、无 tag 三种
+  状态都不豁免（EB，2026-10-27：此前失效条目检查只在「最新 tag 未登记」的分支
+  可达，当前 tag 已登记或 tag == HEAD 时旧条目静默通过）；
 - 未登记的落后 ⇒ 红；
 - 没有 release tag ⇒ `[SKIP]` 披露（项目还没发过版，不是缺陷）。
 
@@ -137,6 +140,34 @@ def load_allowlist() -> dict[str, str]:
     return entries
 
 
+def _reason_problems(allowlist: dict[str, str]) -> list[str]:
+    """本地语法承诺：例外必须写理由（表头声明，与 API 是否可达无关）。"""
+    return [
+        f"{tag}：例外没有写理由（登记表头要求「例外必须写理由」）" for tag, reason in allowlist.items() if not reason
+    ]
+
+
+def _stale_problems(allowlist: dict[str, str], tag_name: str | None) -> list[str]:
+    """登记条目必须对应当前最新 tag（无 tag 时任何条目都没有对应对象）。"""
+    problems: list[str] = []
+    for tag in allowlist:
+        if tag == tag_name:
+            continue
+        if tag_name is None:
+            problems.append(f"{tag}：仓库没有 `v*` release tag，该条例外没有对应对象——请删除该条")
+        else:
+            problems.append(f"{tag}：不再是最新 release tag（当前 {tag_name}），例外已失效——请删除该条")
+    return problems
+
+
+def _print_registration_problems(problems: list[str]) -> int:
+    print(f"[release-freshness] ❌ 例外登记无效（{len(problems)} 条）：")
+    for problem in problems:
+        print(f"[release-freshness]   - {problem}")
+    print("[release-freshness]    处置：清理 docs/release_freshness_allowlist.txt——失效 / 无理由条目不得留在登记表里")
+    return 1
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="发布新鲜度守卫：最新 release tag 不得落在 main 后面")
     parser.add_argument("--list", action="store_true", help="打印例外登记（不改变判定）")
@@ -148,13 +179,24 @@ def main(argv: list[str] | None = None) -> int:
         for tag, reason in allowlist.items():
             print(f"  - {tag}：{reason}")
 
+    # EB（2026-10-27）：登记语法先在本地判，不依赖网络——无理由条目在离线时也是缺陷。
+    # 无理由与失效是**两类**缺陷，一次跑要全部列出（只报一类会让人以为清理完了）。
+    problems = _reason_problems(allowlist)
+
     slug = _repo_slug()
     if slug is None:
+        if problems:
+            return _print_registration_problems(problems)
         print("[release-freshness] [SKIP] 解析不出仓库 owner/repo（无 GITHUB_REPOSITORY 且 git remote 不可用）")
         return 0
 
     try:
         tag_info = latest_release_tag(slug)
+        # EB（2026-10-27）：「失效条目 ⇒ 红」必须在任何绿色分支之前——此前它只在
+        # 「最新 tag 未登记」分支可达，当前 tag 已登记 / tag == HEAD 时静默通过。
+        problems += _stale_problems(allowlist, tag_info[0] if tag_info else None)
+        if problems:
+            return _print_registration_problems(problems)
         if tag_info is None:
             print("[release-freshness] [SKIP] 仓库还没有 `v*` release tag——不是缺陷")
             return 0
@@ -171,6 +213,8 @@ def main(argv: list[str] | None = None) -> int:
         diff = compare(slug, tag_sha, head_sha)
         ahead = int(diff.get("ahead_by", 0))
     except RuntimeError as exc:
+        if problems:
+            return _print_registration_problems(problems)
         print(f"[release-freshness] [SKIP] {exc}")
         return 0
 
@@ -183,12 +227,6 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[release-freshness]    ⇢ 发布产物来自 {tag_sha[:8]}，{default_branch} 在 {head_sha[:8]}")
         return 0
 
-    stale = [name for name in allowlist if name != tag_name]
-    if stale:
-        print(
-            f"[release-freshness] ❌ 例外登记已失效：{stale} 不再是最新 release tag（当前 {tag_name}）——"
-            "请清理或更新 docs/release_freshness_allowlist.txt"
-        )
     print(
         f"[release-freshness] ❌ 最新 release tag {tag_name} 落后 {default_branch} ** {ahead} 个提交**"
         f"（tag={tag_sha[:8]}，head={head_sha[:8]}）——发布的产物缺这些提交里的修复。"

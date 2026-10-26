@@ -25,6 +25,10 @@
   退役逐轮标记与行窗口锁。
 
 ### Fixed
+- 发布新鲜度门禁的例外登记不再「登记即通行」（EB 轮）：登记表头的两条语法承诺——条目必须写理由、条目
+  必须对应当前最新 tag——此前只在「最新 tag 未登记」一个分支检查一次；当前 tag 已登记 / tag == HEAD /
+  仓库没有 `v*` tag 三种状态下，失效或空理由条目静默通过。现在两类缺陷在任何绿色分支之前统一判红并逐条
+  点名（无理由条目先于网络判定，API 不可达时同样生效）。9 例新锁。
 - OTel 导出的 span 区间不再落在未来（EA 轮）：node / task_end 的记录时刻是操作**结束**，导出器却把它当起点，
   每段时长向未来延伸（真实会话实测 task_end 晚于导出时刻一个任务时长）。现在起点 = 记录时刻 − 时长，区间闭合在结束时刻；duration > ts 时裁到 `[0, ts]` 并披露 `span_interval_clamped`。14 例新锁。
 - OTel 导出的整任务时长不再恒为 0（DZ 轮）：`record_task_end` 写 `duration_s`（秒）、导出器只读 `duration_ms`，task_end 时长被静默丢成 0。现在按字段名选单位（`duration_s` 优先），坏值给 `duration_s_*`。7 例新锁。
@@ -62,15 +66,11 @@
   （`experiments/_m1_metrics.py`，需要 gold 材料）并以「不在 CLI 输出中」披露；模块地图
   不再把 M1 记在 `src/measurement/`；批次摘要新增覆盖率三态（达标/未达标/不可测），
   `run --help` 与 api_reference 写明阈值不改变退出码。16 例新锁。
-- `check-dataset --subset` 不再静默忽略或静默替换（DN 轮）：内置示例、QuixBugs、BugsInPy、
-  Defects4J、synthetic 等数据集没有子集概念，此前传 `--subset lite` 仍 rc=0 并输出
-  「（子集: lite）」，实际加载的是全量数据（`check-dataset quixbugs --subset lite` 实测照载
-  50 个任务）；ULT 请求 `lite` 而 `ULT_Lite.jsonl` 缺失、或 `AITESTER_ULT_DATA` 指向显式
-  文件时，也同样静默回退却照称已校验子集。现在：不支持子集的数据集与未知子集名按用法错误
-  rc=2 拒绝（提示由 `dataset_subset_support` 能力表派生，新增数据集只改能力表）；请求的子集
-  未生效时 rc=1 并披露回退原因；子集真正生效时仍 rc=0 且只加载子集文件。
-  `load_dataset` 的程序化契约不变（`subset` 仍被接受，ULT 回退行为保留并新增
-  `subset_fallback_reason` 记录）。14 例真实 CLI/加载器测试锁，先红后绿。
+- `check-dataset --subset` 不再静默忽略或静默替换（DN 轮）：不支持子集的数据集（内置示例、QuixBugs、
+  BugsInPy、Defects4J、synthetic 等）此前传 `--subset lite` 仍 rc=0 并输出「（子集: lite）」，
+  实际加载全量数据；ULT 请求 `lite` 而 `ULT_Lite.jsonl` 缺失时同样静默回退。现在不支持 / 未知子集按
+  用法错误 rc=2 拒绝（提示由 `dataset_subset_support` 能力表派生），请求子集未生效时 rc=1 并披露原因；
+  `load_dataset` 契约不变（`subset` 仍被接受，ULT 回退新增 `subset_fallback_reason`）。14 例新锁。
 - `clean-venv-cache` 的报告不再与磁盘现实脱节（DM 轮）：`shutil.rmtree(..., ignore_errors=True)`
   会吞掉一切删除失败，紧随其后的 `except OSError` 是死分支——实测把缓存目录设为只读后，
   命令仍打印「✓ 已删除 1 个 venv（释放 0.0 MB）」且 rc=0，目录原封不动（旧测试用
