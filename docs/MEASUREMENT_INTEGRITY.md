@@ -4667,3 +4667,43 @@ dependency / semantic_cache——`UnicodeDecodeError` 已被覆盖）、子进�
 （fl_spectral / branch_coverage_inject）、必需配置的 fail-fast 读侧
 （config_generator）、解析字符串而非文件的调用。**修 15 处、锁 15 例（ULT 数组分支与
 rag 持久化源各单列一例，其余逐一对应），不把「已覆盖」的站点记成修复。**
+
+## 99. 附：EF 轮（2026-10-27）**非有限浮点是「解析成功」的坏值**；`float("nan")` 不抛 `ValueError`；`min/max` 会把 NaN 洗成边界值
+
+**① 只捕 `ValueError` 的浮点解析把 NaN/±inf 当成了合法读数。**
+`src/` 里 6 处本地浮点环境解析（deterministic_guard / semantic_cache ×2 /
+workflow / risk_approval / failure_kb）写成 `float(os.getenv(..., default))` 外加
+`except ValueError`。但 `float("nan")` / `float("inf")` / `float("1e999")`
+**不抛异常**——它们是「解析成功」的坏值，异常处理器根本不会触发。紧接着的
+`max(lo, min(hi, value))` 又不传播 NaN：`min(1.0, nan)` 比较为假返回 1.0、
+`max(0.0, nan)` 返回 0.0，于是 NaN 被**静默洗成边界值**，与「用户显式设了极值」
+不可区分。未夹取的三处（守卫睡眠阈值、覆盖率 eps、衰减半衰期）则把 NaN 原样带进比较与幂运算。
+真树复现（逐站设值后调用公开入口，HEAD 全红）：`SEMANTIC_CACHE_THRESHOLD=-inf`
+→ 阈值夹成 0.0、**任意相似度都算命中**（实测返回了无关缓存条目）；`=nan` → 夹成
+1.0、缓存静默失效。`SEMANTIC_FALSE_POSITIVE_SAMPLING=nan` → 夹成 1.0、**每次命中
+都触发误报复核 LLM**。`COVERAGE_STALL_EPS=nan` → `abs(delta) >= nan` 恒 False、
+**停滞恒判**（delta 5.0 的正常轮被判停滞）。`RISK_THRESHOLD_MEDIUM=nan` → 夹成
+1.0、`risk_score >= 1.0` 不可达、medium 级**永不出现**（实测 medium → low）。
+`DETERMINISTIC_GUARD` 睡眠阈值 NaN/inf → `arg_val > threshold` 恒 False、
+**long_sleep 规则静默失效**。`FAILURE_KB_DECAY_DAYS=nan` → `0.5 ** (age/nan)` 得
+NaN，`score <= 0` 恒 False、排序键不可比，**知识库排序退回插入序**（旧条目排到新条目之前）。
+
+**② 非有限判定必须与钳制分离，且判定在钳制之前。**
+项目已有统一的 `env_float`（`src/utils/env_utils.py`）：未设/空白 → 默认值、
+非数字 → 告警 + 默认值、**非有限（NaN/±inf）→ 告警 + 默认值**、越界 → 告警 + 默认值。
+`config._parse_float_env` 早已带 `math.isfinite` 守卫，6 处本地实现是**旁路**。
+修法：解析统一委托 `env_float`，**钳制语义留给调用方**——`risk_approval._env_float`
+保留「有限值越界取边界」的既有契约（与 `env_float` 的「越界回退默认值」刻意不同），
+只把**解析**换成委托；`feedback_compression._clamp_env_int` 只读整数、无 NaN 面，不动。
+顺序不可颠倒：若先钳制再判非有限，NaN 已变成边界值，判定永远看不到它。
+
+**③ 非有限修复必须同时锁「有限口径不变」与「告警可观测」。**
+只测「NaN → 默认值」会漏掉两类回归：（a）顺手把钳制改成回退默认值——`RISK_THRESHOLD_*`
+设 5 会从 1.0 变成默认值，这是把一种静默换成另一种；（b）把非有限值静默吞掉——修复
+成本行，读者仍不知道自己的环境变量没生效。故三组锁并列：非有限值 ×6 字面量 ×6 站点
+回退默认值；有限值钳制/取用回归锁（越界取边界、区间内原样生效）；WARNING 含变量名与
+「非有限值」字样。**同轮排除**：已委托 `env_float` 的调用点、`config._parse_float_env`
+（已有 isfinite 守卫）、`feedback_compression`（整数解析无 NaN 面）。审计闭合复扫
+`src/` + `config.py` 的 `float(` 环境解析，剩余未受护站点 0。**修 6 处、锁 49 例
+（6 站点 × 6 非有限字面量 + 2 例有限口径回归 + 7 例行为后果 + 4 例告警文本），
+不把「已受护」的站点记成修复。**

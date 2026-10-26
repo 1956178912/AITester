@@ -86,7 +86,7 @@ from src.graph.rag import RAG_MODULE_AVAILABLE, TestCaseRetriever, get_rag_retri
 from src.graph.state import AITesterState
 from src.graph.tracing import _trace_local, _trace_node, end_task_trace, start_task_trace  # noqa: F401
 from src.tools.cross_file import cross_file_enabled
-from src.utils.env_utils import env_flag
+from src.utils.env_utils import env_flag, env_float
 
 # 模块级 logger，用于记录工作流执行过程，便于实验追踪和问题排查
 logger = logging.getLogger(__name__)
@@ -640,11 +640,12 @@ def _coverage_stall_rounds() -> int:
 
 
 def _coverage_stall_eps() -> float:
-    """P2-4：覆盖率 delta 停滞阈值 eps（COVERAGE_STALL_EPS，默认 0.5，即 0.5 个百分点）。"""
-    try:
-        return float(os.getenv("COVERAGE_STALL_EPS", "0.5"))
-    except ValueError:
-        return 0.5
+    """P2-4：覆盖率 delta 停滞阈值 eps（COVERAGE_STALL_EPS，默认 0.5，即 0.5 个百分点）。
+
+    EF（2026-10-27）：非有限值回退默认值——`abs(delta) >= nan` 恒 False，
+    历史实现会让**每一轮**都判"停滞"并提前终止。
+    """
+    return env_float("COVERAGE_STALL_EPS", 0.5)
 
 
 def _coverage_stall_detected(state: AITesterState) -> bool:

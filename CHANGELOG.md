@@ -23,15 +23,16 @@
 
 ### Fixed
 - 可选依赖「装上但坏了」不再击穿降级契约（ED 轮）：12 处 `try: import … except ImportError` 只拦缺包，扩展 ABI /
-  传递依赖冲突抛出的 RuntimeError/OSError 会穿过去——chromadb 损坏时沿 `cli.app → workflow → graph.rag → retriever`
-  冒泡，整个 CLI 无法启动。现在导入期任意异常都按「不可用」降级并告警，datasets 下载入口保留 ImportError 契约并链上原因。12 例新锁 + 1 例负控制。
+  传递依赖冲突抛出的 RuntimeError/OSError 会穿过去（chromadb 损坏时整个 CLI 无法启动）；现在导入期任意异常都降级告警。12 例新锁 + 1 例负控制。
 - 读侧「损坏」判定不再停在 JSON 语法层（EE 轮）：15 处 JSON/JSONL 读侧只捕 `json.JSONDecodeError`（只覆盖解码后的
   文本），坏字节（截断多字节 / GBK 保存）在解码期抛 `UnicodeDecodeError`——行级「坏行跳过」变成一行拖垮整份文件，
   整文件「损坏 → 空值」直接抛出。行级读侧改二进制逐行严格解码（不吞坏字节），整文件补同口径降级，
   策略库写侧仍 fail-closed 不覆写。15 例新锁。
+- 非有限浮点环境值不再静默改写控制流（EF 轮）：6 处本地解析只捕 `ValueError`，而 `float("nan")` 不抛——
+  NaN 夹到上界、`-inf` 夹到下界：语义缓存把无关条目当命中返回、覆盖率停滞恒判、风险中阈值变 1.0 绕过审批、
+  失败知识库排序退回插入序、`long_sleep` 守卫失效。解析统一委托 `env_float`（告警 + 默认值），有限值钳制不变。49 例新锁。
 - trace 可视化 / 回放的读侧词汇与写侧对齐（EC 轮）：写侧只写 `node` 事件、`passed` 三态与 `token_usage`，读侧却按
-  `node_end` / `test_passed` / `token_delta` 读——实测 100 份真实轨迹 100% 渲染成「无节点记录 + FAIL」（写侧 100/100
-  通过）。节点时间轴、PASS/FAIL/CRASH 三态、节点 token / 计数与回放状态演化现在都按写侧字段读。12 例新锁；状态通道就地写按棘轮重登记 2/11 → 3/12。
+  `node_end` / `test_passed` / `token_delta` 读——100 份真实轨迹 100% 渲染成「无节点记录 + FAIL」（写侧 100/100 通过）；节点时间轴、三态判定与回放演化现按写侧字段读。12 例新锁；状态通道重登记 2/11 → 3/12。
 - 发布新鲜度门禁的例外登记不再「登记即通行」（EB 轮）：登记表头的两条语法承诺——条目必须写理由、条目
   必须对应当前最新 tag——此前只在「最新 tag 未登记」一个分支检查一次；当前 tag 已登记 / tag == HEAD /
   仓库没有 `v*` tag 三种状态下，失效或空理由条目静默通过。现在两类缺陷在任何绿色分支之前统一判红并逐条

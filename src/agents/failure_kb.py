@@ -33,7 +33,7 @@ import os
 import time
 from typing import Any
 
-from src.utils.env_utils import env_flag
+from src.utils.env_utils import env_flag, env_float
 
 logger = logging.getLogger(__name__)
 
@@ -66,11 +66,13 @@ def _kb_path() -> str:
 
 
 def _decay_half_life_days() -> float:
-    """衰减半衰期（天）（FAILURE_KB_DECAY_DAYS，默认 30；≤0 关闭衰减）。"""
-    try:
-        return float(os.environ.get("FAILURE_KB_DECAY_DAYS", str(_DEFAULT_DECAY_HALF_LIFE_DAYS)))
-    except ValueError:
-        return _DEFAULT_DECAY_HALF_LIFE_DAYS
+    """衰减半衰期（天）（FAILURE_KB_DECAY_DAYS，默认 30；≤0 关闭衰减）。
+
+    EF（2026-10-27）：非有限值由 ``env_float`` 告警后回退默认值。NaN 此前一路
+    经 ``0.5 ** (age / NaN)`` 把排序得分变成 NaN——`score <= 0` 恒 False、
+    排序键不可比，知识库排序静默退回插入序。
+    """
+    return env_float("FAILURE_KB_DECAY_DAYS", _DEFAULT_DECAY_HALF_LIFE_DAYS)
 
 
 def load_knowledge_base(path: str | None = None) -> list[dict[str, Any]]:

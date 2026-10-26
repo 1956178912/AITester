@@ -52,6 +52,12 @@
 一个行号的信息损失"）。合并会把"配置写大了"变成"静默降回默认参数"，属行为退化，
 故保留各自口径。
 
+2026-10-27 EF 轮：``risk_approval._env_float`` 的**解析**部分已委托本模块
+:func:`env_float`（非有限值告警 + 回退默认值），**钳制**部分仍留在本地——钳制与
+非有限判定是两件事：``min/max`` 会把 NaN 静默夹到上界（``RISK_THRESHOLD_MEDIUM=nan``
+→ 1.0，medium/high 永不可达），而"越界取边界值"的既有语义不受影响。
+``feedback_compression._clamp_env_int`` 只解析整数，无 NaN 面，未动。
+
 依赖纪律：仅导入标准库 ``os`` / ``logging`` / ``math``（零内部依赖），可被仓库根
 ``config.py`` 与 ``src/`` 任意模块（含刻意保持轻依赖的叶子模块，如
 ``src/tools/control_flow.py`` 只有 ast/logging/typing）安全导入，

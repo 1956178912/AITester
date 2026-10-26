@@ -22,10 +22,9 @@ DETERMINISTIC_GUARD_ENABLE=false 时恒放行，历史口径）。
 from __future__ import annotations
 
 import ast
-import os
 from dataclasses import dataclass, field
 
-from src.utils.env_utils import env_flag
+from src.utils.env_utils import env_flag, env_float
 
 _GUARD_ENV = "DETERMINISTIC_GUARD_ENABLE"
 _SLEEP_ENV = "DETERMINISTIC_GUARD_SLEEP_THRESHOLD"
@@ -37,11 +36,13 @@ def deterministic_guard_enabled() -> bool:
 
 
 def _sleep_threshold() -> float:
-    """time.sleep 计入"长等待"的秒数阈值（默认 0.5s，测试重试短 sleep 豁免）。"""
-    try:
-        return float(os.getenv(_SLEEP_ENV, "0.5"))
-    except ValueError:
-        return 0.5
+    """time.sleep 计入"长等待"的秒数阈值（默认 0.5s，测试重试短 sleep 豁免）。
+
+    EF（2026-10-27）：非有限值（NaN/±inf）由 ``env_float`` 告警后回退默认值。
+    `float("nan")` 不抛 ValueError，而 `arg_val > nan` 恒 False——历史实现会
+    让 long_sleep 规则静默失效。
+    """
+    return env_float(_SLEEP_ENV, 0.5)
 
 
 @dataclass

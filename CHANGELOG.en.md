@@ -28,18 +28,19 @@ This file records externally visible changes only; round-by-round history is arc
 ### Fixed
 - Optional integrations that are installed but broken no longer break the degradation contract (ED round):
   12 `try: import … except ImportError` guards only caught a missing package, so ABIs / transitive-dependency
-  conflicts raising RuntimeError/OSError escaped — a broken chromadb bubbled up `cli.app → workflow →
-  graph.rag → retriever` and the whole CLI failed to start. Any import-time exception now degrades with a
-  warning and the documented value; the datasets download entry keeps ImportError and chains the real cause
-  (12 new locks plus one required-dependency control).
+  conflicts raising RuntimeError/OSError escaped (a broken chromadb failed the whole CLI start). Any import-time
+  exception now degrades with a warning; the datasets entry keeps ImportError and chains the cause (12 locks + 1 control).
 - Readers no longer treat "corrupt" as JSON syntax only (EE round): 15 JSON/JSONL readers caught only
   `json.JSONDecodeError` (raised on decoded text), so byte-level corruption (truncated multi-byte writes, GBK saves)
   raised `UnicodeDecodeError` during decoding — one bad line killed the whole file, and whole-file readers raised instead
   of degrading. Line readers now read binary and decode strictly per line; whole-file readers degrade alike; the bank write stays fail-closed. 15 new locks.
+- Non-finite float env values no longer silently rewrite control flow (EF round): 6 local parsers caught only `ValueError`,
+  which `float("nan")` never raises; NaN/inf were clamped to a bound, so the semantic cache returned an unrelated entry, coverage
+  stalls always fired, risk approval was bypassed, failure-KB ranking fell back to insertion order and `long_sleep` vanished.
+  Parsing now delegates to `env_float` (warning + default); finite clamping unchanged. 49 new locks.
 - Trace visualization and replay now read the writer's vocabulary (EC round): traces only contain `node` events,
   the tri-state `passed` field and `token_usage`, but the viewer read `node_end` / `test_passed` / `token_delta` —
-  all 100 real traces rendered as "no node records + FAIL" (the writer recorded 100/100 passes). Node timeline,
-  PASS/FAIL/CRASH verdicts, per-node tokens and counts, and replay state evolution now key off the written fields. 12 new locks; the state-channel in-place write census is re-registered from 2/11 to 3/12.
+  all 100 real traces rendered as "no node records + FAIL". Verdicts, per-node tokens and replay evolution now key off the written fields. 12 new locks; the state-channel census is re-registered from 2/11 to 3/12.
 - The release-freshness gate's exception register is no longer "register and pass" (EB round): the header's two promises
   (a reason per entry, entry must name the latest tag) were checked only when the latest tag was unregistered; a registered
   tag, tag == HEAD or no `v*` tag let stale or reasonless entries pass. Both classes now exit 1 before any green branch. 9 locks.

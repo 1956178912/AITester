@@ -48,7 +48,7 @@ import threading
 from dataclasses import dataclass, field
 from typing import Any
 
-from src.utils.env_utils import env_flag
+from src.utils.env_utils import env_flag, env_float
 
 logger = logging.getLogger(__name__)
 
@@ -59,12 +59,13 @@ def _semantic_cache_enabled() -> bool:
 
 
 def _semantic_threshold() -> float:
-    """余弦相似度阈值（SEMANTIC_CACHE_THRESHOLD，默认 0.92 保守口径）。"""
-    try:
-        v = float(os.getenv("SEMANTIC_CACHE_THRESHOLD", "0.92"))
-    except ValueError:
-        v = 0.92
-    return max(0.0, min(1.0, v))
+    """余弦相似度阈值（SEMANTIC_CACHE_THRESHOLD，默认 0.92 保守口径）。
+
+    EF（2026-10-27）：非有限值由 ``env_float`` 告警后回退默认值。此前 NaN 经
+    ``min`` 被夹成 1.0（缓存永不命中）、``-inf`` 夹成 0.0（任何最相似条目都被
+    当命中返回，可能复用无关响应）——都是静默改写，不是钳制。
+    """
+    return max(0.0, min(1.0, env_float("SEMANTIC_CACHE_THRESHOLD", 0.92)))
 
 
 def _max_index_entries() -> int:
@@ -427,12 +428,11 @@ def _false_positive_sampling_rate() -> float:
 
     0.0 关闭抽样（纯统计口径，零额外 LLM 成本）；[0,1] 区间内按命中次数
     确定性采样（每 1/rate 次命中抽 1 次），避免随机数扰动测试可复现性。
+
+    EF（2026-10-27）：非有限值回退默认值——NaN 此前夹成 1.0（每次命中都抽
+    额外 LLM 调用，成本失控）、``-inf`` 夹成 0.0（抽样静默关闭）。
     """
-    try:
-        v = float(os.getenv(_SEMANTIC_FALSE_POSITIVE_SAMPLING_ENV, "0.1"))
-    except ValueError:
-        v = 0.1
-    return max(0.0, min(1.0, v))
+    return max(0.0, min(1.0, env_float(_SEMANTIC_FALSE_POSITIVE_SAMPLING_ENV, 0.1)))
 
 
 # 抽样验证命中计数（确定性采样：第 N/rate 次命中触发，线程安全）

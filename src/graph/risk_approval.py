@@ -38,12 +38,11 @@ G2 风险分级人工回路（Risk Approval，默认关）。
 from __future__ import annotations
 
 import logging
-import os
 from dataclasses import dataclass, field
 from typing import Any
 
 from src.utils.check_status import CHECK_OK
-from src.utils.env_utils import env_flag
+from src.utils.env_utils import env_flag, env_float
 
 logger = logging.getLogger(__name__)
 
@@ -63,12 +62,14 @@ def risk_approval_enabled() -> bool:
 
 
 def _env_float(name: str, default: float, minimum: float, maximum: float) -> float:
-    """读取环境变量浮点值（解析失败时回退默认值，并夹在 [minimum, maximum]）。"""
-    try:
-        value = float(os.getenv(name, str(default)))
-    except ValueError:
-        return default
-    return max(minimum, min(maximum, value))
+    """读取环境变量浮点值（解析失败/非有限值回退默认值，并夹在 [minimum, maximum]）。
+
+    EF（2026-10-27）：解析委托 ``env_float``，非有限值（NaN/±inf）告警后回退
+    默认值——`min/max` 会把 NaN 静默夹到上界（`RISK_THRESHOLD_MEDIUM=nan` →
+    1.0，medium/high 永不可达，人工审批回路被绕过）。有限值仍保持本模块的
+    钳制语义（越界取边界值），与 ``env_float`` 的"越界回退默认值"刻意不同。
+    """
+    return max(minimum, min(maximum, env_float(name, default)))
 
 
 @dataclass
