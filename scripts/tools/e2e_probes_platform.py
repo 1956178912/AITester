@@ -1000,23 +1000,33 @@ def probe_dataset_decontamination() -> ProbeOutcome:
 
 
 def probe_dataset_check_cli() -> ProbeOutcome:
-    """零 LLM：`python main.py check-dataset quixbugs` CLI 冒烟（加载质量检查通路）。"""
+    """零 LLM：`python main.py check-dataset quixbugs` CLI 冒烟（加载计数 + 质量结论披露）。"""
     started = time.perf_counter()
     rc, stdout, stderr = run_cmd([sys.executable, "main.py", "check-dataset", "quixbugs"], timeout=120, cwd=_REPO_ROOT)
     elapsed = time.perf_counter() - started
     combined = f"{stdout}\n{stderr}"
     if rc != 0:
         return fail(f"check-dataset 退出码非 0（rc={rc}）：{combined[-400:]}")
-    match = re.search(r"通过（(\d+) 个任务", combined)
+    # DL 轮口径：质量结论有两种合法形态——提供 quality_report 时给出通过结论；
+    # 不提供时必须显式披露跳过。QuixBugs 属后者，旧探针只认「通过（N 个任务）」，
+    # 把能力缺失报成产品故障，在真实树上恒红（DU 轮同族缺陷的零 LLM 面）。
+    if "全量质量检查通过" in combined:
+        quality_verdict = "verified_pass"
+    elif "未提供 quality_report" in combined:
+        quality_verdict = "skipped"
+    else:
+        return fail(f"check-dataset 未披露质量结论（既无通过结论也无跳过说明）：{combined[-400:]}")
+    match = re.search(r"共加载\s*(\d+)\s*个任务", combined)
     if match is None:
-        return fail(f"check-dataset 输出缺'通过（N 个任务）'形态：{combined[-400:]}")
-    checked = int(match.group(1))
-    if checked < 41:
-        return skip(f"check-dataset 仅检查 {checked} 个任务（<41，数据未全量就位）")
+        return fail(f"check-dataset 输出缺'共加载 N 个任务'形态：{combined[-400:]}")
+    loaded = int(match.group(1))
+    if loaded < 41:
+        return skip(f"check-dataset 仅加载 {loaded} 个任务（<41，数据未全量就位）")
     return ok(
-        f"check-dataset CLI {elapsed:.1f}s rc=0，质量检查 {checked} 个任务无加载问题",
+        f"check-dataset CLI {elapsed:.1f}s rc=0，加载 {loaded} 个任务，质量结论: {quality_verdict}",
         elapsed_s=round(elapsed, 2),
-        checked_tasks=checked,
+        loaded_tasks=loaded,
+        quality_verdict=quality_verdict,
     )
 
 

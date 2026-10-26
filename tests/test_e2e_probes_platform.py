@@ -504,11 +504,48 @@ class TestDatasetProbes:
         outcome = probes.probe_dataset_decontamination()
         assert outcome.status == "pass", outcome.detail
 
-    def test_check_cli_probe_passes(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(probes, "run_cmd", lambda *a, **k: (0, "✓ 全量质量检查通过（50 个任务无加载问题）\n", ""))
+    def test_check_cli_probe_passes_on_capability_skip(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # DL/DQ 轮真实形态：quixbugs 不提供 quality_report，加载数来自「共加载 N 个任务」，
+        # 质量结论是显式跳过而非「通过（N 个任务）」——旧探针在真树上恒红。
+        out = (
+            "ℹ 数据集 quixbugs（子集: 全部）共加载 50 个任务\n"
+            "ℹ 质量检查：该数据集未提供 quality_report，跳过全量校验（SWE-bench 系列提供）\n"
+        )
+        monkeypatch.setattr(probes, "run_cmd", lambda *a, **k: (0, out, ""))
         outcome = probes.probe_dataset_check_cli()
         assert outcome.status == "pass", outcome.detail
-        assert outcome.evidence["checked_tasks"] == 50
+        assert outcome.evidence.get("loaded_tasks") == 50
+        assert outcome.evidence.get("quality_verdict") == "skipped"
+
+    def test_check_cli_probe_passes_on_verified_quality(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        out = "ℹ 数据集 quixbugs（子集: 全部）共加载 50 个任务\n✓ 全量质量检查通过（50 个任务无加载问题）\n"
+        monkeypatch.setattr(probes, "run_cmd", lambda *a, **k: (0, out, ""))
+        outcome = probes.probe_dataset_check_cli()
+        assert outcome.status == "pass", outcome.detail
+        assert outcome.evidence.get("quality_verdict") == "verified_pass"
+
+    def test_check_cli_probe_fails_without_quality_disclosure(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        out = "ℹ 数据集 quixbugs（子集: 全部）共加载 50 个任务\n"
+        monkeypatch.setattr(probes, "run_cmd", lambda *a, **k: (0, out, ""))
+        outcome = probes.probe_dataset_check_cli()
+        assert outcome.status == "fail", outcome.detail
+        assert "质量结论" in outcome.detail
+
+    def test_check_cli_probe_fails_without_loaded_count(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # 旧锁只 mock 了质量通过行；新探针必须要求加载数，否则「旧输出形态」仍会假绿。
+        out = "✓ 全量质量检查通过（50 个任务无加载问题）\n"
+        monkeypatch.setattr(probes, "run_cmd", lambda *a, **k: (0, out, ""))
+        outcome = probes.probe_dataset_check_cli()
+        assert outcome.status == "fail", outcome.detail
+
+    def test_check_cli_probe_skips_when_partial_dataset(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        out = (
+            "ℹ 数据集 quixbugs（子集: 全部）共加载 40 个任务\n"
+            "ℹ 质量检查：该数据集未提供 quality_report，跳过全量校验（SWE-bench 系列提供）\n"
+        )
+        monkeypatch.setattr(probes, "run_cmd", lambda *a, **k: (0, out, ""))
+        outcome = probes.probe_dataset_check_cli()
+        assert outcome.status == "skip", outcome.detail
 
     def test_check_cli_probe_fails_on_nonzero_rc(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(probes, "run_cmd", lambda *a, **k: (2, "", "boom"))

@@ -29,17 +29,17 @@ This file records externally visible changes only; round-by-round history is arc
   section / line ceilings / index completeness); round markers and line-window locks retired.
 
 ### Fixed
-- `check-dataset` no longer exits 0 after finding loading problems (DU round): a non-empty
-  quality report only warned while the command's own docstring promised "0 = no problems",
-  so CI read "problems found" as "dataset healthy". A non-empty report is now listed and
-  exits 1 (same code as a load error, distinguishable text); a missing `quality_report` /
-  `tasks_missing_source` stays a disclosure, and the QuixBugs probe accepts verified-pass
-  or explicit-skip. 11 new locks.
-- `doctor --json` keeps one schema on every exit (DT round): an internal exception emitted only
-  4 keys against 12 on success, so `jq '.conclusion'` failed outright instead of reading a
-  failure, and success lacked `error`. All three exits (success / usage error / internal
-  exception) now share 13 keys; the exception path reports `matrix.status: internal` and `null`
-  for uncollected aggregates (unknown ≠ 0), a masked reason in `error`, and exit 1. 13 new locks.
+- Doctor's `dataset-check-cli` probe no longer requires removed output (DV round): after DL,
+  QuixBugs prints "loaded N tasks" plus an explicit "no quality_report" skip instead of "passed
+  (N tasks)"; the probe still failed on the old text, so a clean-tree doctor reported a missing
+  capability as a fault while its unit test mocked that text. It now accepts verified-pass or
+  explicit-skip (missing verdict is red), reads the loaded count, keeps the <41 skip. 4 net-new locks (6 in all).
+- `check-dataset` no longer exits 0 after finding loading problems (DU round): a non-empty report
+  only warned while the docstring promised "0 = no problems", so CI read "problems found" as
+  "dataset healthy". It now lists them and exits 1; missing `quality_report` stays a disclosure. 11 new locks.
+- `doctor --json` keeps one schema on every exit (DT round): an internal exception emitted 4 keys
+  against 12 on success, so `jq '.conclusion'` failed instead of reading a failure. All exits now
+  share 13 keys; the exception path reports `matrix.status: internal` / `null` aggregates. 13 new locks.
 - A crashed task no longer has a different result shape (DS round): 5 keys vs 14 on success
   (`jq '.coverage_ok'` failed), and human mode hid the reason and fabricated iteration 0. Both paths
   now share all keys (unknowns `null`), reasons go to stderr, iterations show `N/A`. 9 new locks.
