@@ -178,7 +178,6 @@ def generate_batch_config_script() -> str:
 选项：
     --output FILE     输出文件路径（默认：.env.local）
     --models FILE     模型列表文件（JSON 格式）
-    --template FILE   配置模板文件
 """
 
 import argparse
@@ -192,7 +191,6 @@ def parse_args():
     parser = argparse.ArgumentParser(description="批量生成 LLM 配置")
     parser.add_argument("--output", default=".env.local", help="输出文件路径")
     parser.add_argument("--models", help="模型列表文件（JSON）")
-    parser.add_argument("--template", help="配置模板文件")
     return parser.parse_args()
 
 
@@ -219,6 +217,23 @@ def generate_config(models: list[dict[str, Any]], api_keys: dict[str, str]) -> s
     return "\\n".join(lines)
 
 
+def missing_api_inputs(models: list[dict[str, Any]]) -> list[str]:
+    """列出无法生成有效配置的条目（缺 provider 或对应 API Key；空 = 全部可生成）。"""
+    problems = []
+    for idx, model in enumerate(models, start=1):
+        if not isinstance(model, dict):
+            problems.append(f"#{idx} 不是对象")
+            continue
+        provider = str(model.get("provider") or "").strip()
+        if not provider:
+            problems.append(f"#{idx} 缺 provider")
+            continue
+        key_var = f"{provider.upper()}_API_KEY"
+        if not os.getenv(key_var, "").strip():
+            problems.append(f"#{idx} 缺 {key_var}")
+    return problems
+
+
 def main():
     args = parse_args()
 
@@ -232,6 +247,17 @@ def main():
             "错误：模型列表为空。为避免用空文件覆盖现有 .env.local，请通过 --models 指定模型列表 JSON 文件。",
             file=sys.stderr,
         )
+        sys.exit(1)
+
+    # EP（2026-10-27）：缺 Key / 缺 provider 时 generate_config 会写占位符
+    # （your-<provider>-api-key-here）并覆盖现有 .env.local——真实凭证被伪配置
+    # 替换，退出码仍是 0。与空列表同因：输入无法生成有效配置时不得写输出文件。
+    problems = missing_api_inputs(models)
+    if problems:
+        print("错误：以下模型无法生成有效配置：", file=sys.stderr)
+        for item in problems:
+            print(f"  - {item}", file=sys.stderr)
+        print("为避免用占位符覆盖现有配置，未写入输出文件。", file=sys.stderr)
         sys.exit(1)
 
     # 加载 API Keys：按 models 中实际出现的 provider 推导环境变量名

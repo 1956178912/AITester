@@ -22,6 +22,8 @@ This file records externally visible changes only; round-by-round history is arc
 - Documentation test locks moved to structural criteria (positioning preamble / disclosure section / line ceilings / index completeness); round markers and line-window locks retired.
 
 ### Fixed
+- The batch config script no longer overwrites real credentials with placeholders (EP round): the generated `scripts/tools/generate_batch_config.py` guarded only the empty-model-list case; when a provider's `*_API_KEY` was missing it still wrote `your-<provider>-api-key-here` over an existing `.env.local` with rc=0, and the advertised `--template` flag was never read.
+  It now validates every entry's provider and API key before writing, exits 1 with the missing names, and leaves the output untouched (one missing key refuses the whole batch); the phantom flag is gone; the tracked script is byte-compared with its generator. 7 new locks (5 red→green + 2 guards).
 - Cache switches' explicit-off spellings no longer apply only at runtime (EO round): `AITESTER_LLM_CACHE` / `AITESTER_CACHE_ISOLATE_MODEL` are opt-out switches parsed by `env_flag_opt_out` (`false` / `0` / `off` off), but three sites in `experiments/run_benchmark.py` still hand-rolled `!= "0"` — the X1 namespace auto-set, `cache_enabled`, and `cache_isolate_model` all treated `false` / `off` / case-whitespace variants as on. One artifact could simultaneously carry `env_snapshot="false"`, `cache_enabled=true`, and `cache_namespace="seed42"`.
   All three now use `env_flag_opt_out`, so no namespace is invented while cache is off; 19 new locks (12 red→green + 7 caliber guards), archived artifacts untouched, and no `src/` change means coverage readings are unchanged.
 - Harness self-description no longer parses switches differently from runtime (EN round): `provenance.harness` used raw `os.environ.get(...).lower() == "true"` for eight runtime switches plus one runtime-unread phantom key while runtime uses `env_flag` / `env_flag_opt_out` — eight measured scenarios (`EXECUTOR_USE_VENV=yes`, `KERNEL_SANDBOX_ENABLE=on`, `COST_BUDGET_ENABLE=1`, …) disclosed the opposite of the effective value, and `--enable-rag` produced one artifact whose top-level `enable_rag=true` contradicted `harness.rag_enabled=false`.
@@ -67,8 +69,7 @@ This file records externally visible changes only; round-by-round history is arc
   failures were silent. The three states are now distinct (`trace_dump_path` / `trace_dump_error` + stderr reason). 9 new locks.
 - Doctor's `dataset-check-cli` probe no longer requires removed output (DV round): QuixBugs prints
   "loaded N tasks" plus an explicit skip; the probe now accepts verified-pass or explicit-skip (missing verdict is red). 4 net-new locks (6 in all).
-- `check-dataset` no longer exits 0 after finding loading problems (DU round): a non-empty report only warned
-  while the docstring promised "0 = no problems". It now lists them and exits 1; a missing `quality_report` stays a disclosure. 11 new locks.
+- `check-dataset` no longer exits 0 after finding loading problems (DU round): a non-empty report only warned while the docstring promised "0 = no problems". It now lists them and exits 1; a missing `quality_report` stays a disclosure. 11 new locks.
 - `doctor --json` keeps one 13-key schema on every exit (DT round): an internal exception emitted 4 keys
   against 12 on success. The exception path now reports `matrix.status: internal` / `null` aggregates. 13 new locks.
 - A crashed task no longer has a different result shape (DS round): 5 keys vs 14 on success (`jq '.coverage_ok'` failed),

@@ -66,7 +66,7 @@ CI / pre-commit 阻断项，`make gates` 跑其中大部分：
 | `download_swe_bench.py` | SWE-bench 数据下载 |
 | `expand_models.py` | 模型目录扩展 |
 | `export_swe_bench_source.py` | 按 base_commit 导出基准源码 |
-| `generate_batch_config.py` | 批量 LLM 配置脚本生成（由 `src/config/config_generator.py` 写入本目录） |
+| `generate_batch_config.py` | 批量生成 `.env.local` LLM 配置（缺 Key 整批拒绝、不动输出；由 `src/config/config_generator.py` 写入本目录） |
 | `generate_static_report.py` | 静态报告生成（CI 调用，产物非判定） |
 | `list_env_flags.py` | 环境变量开关清单 |
 | `performance_benchmark.py` | 性能基准（perf.yml 调用） |

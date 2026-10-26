@@ -5034,3 +5034,47 @@ X1 门与两个 provenance 字段一律改 `env_flag_opt_out(...)`（与
 不改 `SWE_REPO_VENV_REUSE_BY_REPO`（EN 轮已登记：唯一读侧就是运行时本身，
 不存在两套解析）。
 **修 3 处解析，锁 19 例（12 红→绿 + 7 口径护栏）。**
+
+## 109. 附：EP 轮（2026-10-27）**缺 Key 时批量配置脚本把占位符写进 .env.local**；同一份输入契约里 `--template` 是从未被读取的幻影开关
+
+**① 「生成失败」被写成「生成成功」。**
+`scripts/tools/generate_batch_config.py`（由
+`src/config/config_generator.py::generate_batch_config_script()` 生成的运维
+脚本）只对「模型列表为空」设了防覆盖守卫（DU 轮）。模型列表非空、但某条
+模型的 provider 没有对应 `*_API_KEY` 时，`generate_config` 回落占位符
+`your-<provider>-api-key-here`，脚本仍以 `w` 模式覆盖输出文件、rc=0——
+一次「批量重生成配置」就会把 `.env.local` 里还在用的真实 Key 换成伪配置，
+调用方看到的却是成功。同一契约里，usage 与 argparse 都声明了
+`--template FILE`，但 `main()` 从不读取它：传了静默忽略、rc=0，用户以为
+模板参与了生成。
+
+**② 红因可辨（实跑在盘脚本，零 LLM，$0）。**
+预修实测（子进程、环境剔除全部 `*_API_KEY`、临时输出文件预置
+`LLM_1_API_KEY=keep-me`）：
+
+| 调用 | 修前 |
+| --- | --- |
+| 模型条目的 provider 无 Key | rc=0；`keep-me` → `your-deepseek-api-key-here` |
+| 输出文件不存在 + 无 Key | rc=0；写出占位符文件 |
+| 两个 provider 只配了其中一个的 Key | rc=0；缺 Key 条目写占位符，整批「成功」 |
+| 条目缺 provider | rc=0；`LLM_1_API_KEY=your--api-key-here` |
+| `--template x` | rc=0；参数被忽略，输出照写 |
+| Key 已配置（控制） | rc=0；写入真实 Key（原语义） |
+
+5 个场景红、1 个控制绿：缺陷只在「输入不足以生成有效配置」与
+「声明了却不存在的开关」处暴露，正常配置路径不受影响。
+
+**③ 修法：写前逐条判定，缺任何输入就整批拒绝。**
+`missing_api_inputs()` 在写文件前遍历条目（非对象 / 缺 provider / 缺
+`{PROVIDER}_API_KEY` 三类问题带 1-based 序号与变量名列出），非空即 rc=1
+并显式打印「未写入输出文件」——与空列表守卫同因：输入无法生成有效配置时
+不得动输出文件。**部分条目可生成、部分不可生成时同样整批拒绝**：批量重
+生成是原子意图，写一半的配置比不写更危险（缺 Key 的条目只能写占位符）。
+删除 usage 与 argparse 中的 `--template`（从未实现，保留等于继续对外承诺
+不存在的能力）。在盘脚本由测试与 `generate_batch_config_script()` 逐字节
+对账，防「模板修了、生成物没重生成」的半修。
+**同轮排除**：不改 `validate_llm_configs()` 的目录 schema 校验（面向
+`llm_configs.json` 条目结构而非凭证可用性，两件事）；不改占位符展示文本、
+`--output` 默认值与 `{PROVIDER}_API_KEY` 命名推导；不新增任何入参（本轮
+只收紧既有契约）。
+**修 2 处契约，锁 7 例（5 红→绿 + 2 口径护栏）。**
