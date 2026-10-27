@@ -230,3 +230,88 @@ class TestReorderApiGroupsBranches:
         finally:
             config.LLM_CONFIGS = saved
         assert list(api_groups.keys()) == original_keys  # 原字典顺序/内容不变
+
+
+class TestReorderSameModelMultiEndpoint:
+    """同模型多 provider 端点：成本必须按**实例**取，不能被 model_name 覆盖。
+
+    complexity_router 的文档承诺形状是"同模型不同 provider 端点，或同 provider
+    不同 cost_weight"（MODEL_ROUTING_STRATEGY=complexity_aware 默认开）。历史
+    实现以 model_name 为键建成本表，同模型多端点的 cost_weight 互相覆盖 →
+    三档排序全部退化为原序；APIManager._select_node_by_complexity 已按实例
+    成本排序（A15），两条路由口径必须一致。
+    """
+
+    def _reorder(self, complexity: str, costs: dict[str, float]):
+        import config
+        from config import LLMConfig
+
+        saved = config.LLM_CONFIGS
+        config.LLM_CONFIGS = [
+            LLMConfig(f"key_{url}", url, "deepseek-flash", cost_weight=cost) for url, cost in costs.items()
+        ]
+        api_groups = {url: [(f"key_{url}", "deepseek-flash")] for url in costs}
+        all_configs = [(c.api_key, c.base_url, c.model_name) for c in config.LLM_CONFIGS]
+        try:
+            from src.agents.base_agent import _reorder_api_groups_by_complexity
+
+            return _reorder_api_groups_by_complexity(api_groups, all_configs, complexity)
+        finally:
+            config.LLM_CONFIGS = saved
+
+    def test_simple_routes_same_model_to_cheap_endpoint(self):
+        """simple 档：同模型两端点，0.5 端点必须排在 3.0 端点之前。"""
+        out = self._reorder("simple", {"url_expensive": 3.0, "url_cheap": 0.5})
+        assert next(iter(out)) == "url_cheap"
+
+    def test_complex_routes_same_model_to_expensive_endpoint(self):
+        """complex 档：同模型两端点，3.0 端点必须排在 0.5 端点之前。"""
+        out = self._reorder("complex", {"url_cheap": 0.5, "url_expensive": 3.0})
+        assert next(iter(out)) == "url_expensive"
+
+    def test_medium_routes_same_model_near_one(self):
+        """medium 档：同模型两端点，|1.0-1.0|=0 的端点必须排在 |0.5-1.0| 之前。"""
+        out = self._reorder("medium", {"url_off": 0.5, "url_base": 1.0})
+        assert next(iter(out)) == "url_base"
+
+    def test_unknown_endpoint_does_not_inherit_other_endpoint_cost(self):
+        """无成本信息的端点按 1.0 基准，不继承同模型另一端点的 3.0。"""
+        import config
+        from config import LLMConfig
+        from src.agents.base_agent import _reorder_api_groups_by_complexity
+
+        saved = config.LLM_CONFIGS
+        # 只有 url_priced 在配置里（cost 3.0）；url_unpriced 是同模型的另一端点，
+        # 但没有任何成本信息 → 必须按 1.0 参与排序（simple 档排在 3.0 之前）。
+        config.LLM_CONFIGS = [LLMConfig("key_priced", "url_priced", "deepseek-flash", cost_weight=3.0)]
+        groups = {
+            "url_priced": [("key_priced", "deepseek-flash")],
+            "url_unpriced": [("key_unpriced", "deepseek-flash")],
+        }
+        try:
+            out = _reorder_api_groups_by_complexity(groups, [], "simple")
+        finally:
+            config.LLM_CONFIGS = saved
+        assert next(iter(out)) == "url_unpriced"
+
+    def test_config_without_base_url_falls_back_to_model_weight(self):
+        """无 base_url 的注入配置（外部构造/旧夹具）按模型级成本回退。"""
+        from types import SimpleNamespace
+
+        import config
+        from src.agents.base_agent import _reorder_api_groups_by_complexity
+
+        saved = config.LLM_CONFIGS
+        config.LLM_CONFIGS = [
+            SimpleNamespace(model_name="model-expensive", cost_weight=3.0),
+            SimpleNamespace(model_name="model-cheap", cost_weight=0.5),
+        ]
+        groups = {
+            "url_expensive": [("k1", "model-expensive")],
+            "url_cheap": [("k2", "model-cheap")],
+        }
+        try:
+            out = _reorder_api_groups_by_complexity(groups, [], "simple")
+        finally:
+            config.LLM_CONFIGS = saved
+        assert next(iter(out)) == "url_cheap"

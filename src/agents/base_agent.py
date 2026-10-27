@@ -427,26 +427,45 @@ def _reorder_api_groups_by_complexity(
     - "medium"  → 按 cost_weight 接近 1.0 排序
 
     cost_weight 从 LLM_CONFIGS（config 模块）读取（LLMConfig.cost_weight 字段，
-    未配置为 0.0 = 1.0 基准），与 APIManager._cost_weight_for 同口径。
-    单实例或无多实例差异时排序无效果（历史行为不变）。
+    未配置为 0.0 = 1.0 基准），按**实例**（base_url, model_name）取成本——
+    同模型多 provider 端点各自保留档位，与 APIManager._cost_weight_for 的
+    实例口径一致（A15）。单实例或无多实例差异时排序无效果（历史行为不变）。
 
     Args:
         api_groups: 原 api_groups 字典（{base_url: [(api_key, model_name), ...]}）。
-        all_configs: 全部 LLM 配置（_get_all_api_configs 返回的三元组列表）。
+        all_configs: 全部 LLM 配置三元组（_get_all_api_configs 返回值）。成本
+            权重不在三元组中，故仅作签名兼容/调用方对齐，不参与成本查表。
         complexity_class: 复杂度档位（"simple"/"medium"/"complex"）。
 
     Returns:
         重排后的 api_groups（新字典，原字典不变）。
     """
-    # 构建 cost_weight 查找表（model_name → cost_weight，0.0 视为 1.0）
-    cost_weights: dict[str, float] = {}
+    # 构建 cost_weight 查找表：按**实例**（base_url, model_name）键。历史实现
+    # 以 model_name 为键，同模型多 provider 端点的 cost_weight 互相覆盖 → 各
+    # 组权重相同、排序退化为原序（complexity_router 承诺的主要构型空转）。
+    # 没有 base_url 的配置对象（旧夹具 / 外部注入）退化为模型级键；两者都
+    # 未命中按 1.0 基准，未知端点不会继承同模型另一实例的成本。
+    endpoint_weights: dict[tuple[str, str], float] = {}
+    model_weights: dict[str, float] = {}
     try:
         from config import LLM_CONFIGS
 
         for cfg in LLM_CONFIGS:
-            cost_weights[cfg.model_name] = float(cfg.cost_weight) if cfg.cost_weight else 1.0
+            weight = float(cfg.cost_weight) if cfg.cost_weight else 1.0
+            base_url = getattr(cfg, "base_url", "")
+            if base_url:
+                endpoint_weights[(base_url, cfg.model_name)] = weight
+            else:
+                model_weights[cfg.model_name] = weight
     except Exception:
-        cost_weights = {}
+        endpoint_weights = {}
+        model_weights = {}
+
+    def _endpoint_weight(base_url: str, model_name: str) -> float:
+        """取端点成本：实例键优先，其次模型级回退，未配置按 1.0 基准。"""
+        if (base_url, model_name) in endpoint_weights:
+            return endpoint_weights[(base_url, model_name)]
+        return model_weights.get(model_name, 1.0)
 
     # 按 cost_weight 排序 base_url 键
     def _bw(key: str) -> float:
@@ -454,7 +473,7 @@ def _reorder_api_groups_by_complexity(
         group = api_groups.get(key, [])
         if not group:
             return 1.0
-        return max(cost_weights.get(m, 1.0) for _, m in group)
+        return max(_endpoint_weight(key, m) for _, m in group)
 
     if complexity_class == "complex":
         ordered_keys = sorted(api_groups.keys(), key=_bw, reverse=True)

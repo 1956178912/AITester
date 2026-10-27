@@ -5180,3 +5180,39 @@ H2 骨架记为 `[(序号, 该节 H3 小节数), ...]`：序号把「一、」�
 `_DATE_RE` 保留（`check_registration_consistency` 的拥有者活性锚点）；
 `src/` 零改动 ⇒ 覆盖读数不变。
 **修 1 个惰性判据，锁 6 例（3 检出 + 2 不误报护栏 + 1 真语料分母锁，修前均红）。**
+
+## 113. 附：ET 轮（2026-10-27）**复杂度感知路由对「同模型多 provider 端点」空转**；文档承诺的正是这一构型，实现却按 `model_name` 建成本表
+
+**① 承诺与实现之间隔着一个被覆盖的键。**
+1. `src/api/complexity_router.py` 的模块 docstring 写明档位决定路由标签，供
+   `APIManager` 选择对应 LLM 实例——「同模型不同 provider 端点，或同 provider
+   不同 cost_weight」；`MODEL_ROUTING_STRATEGY=complexity_aware` 是默认值。
+2. `src/graph/nodes.py` 在调用链上写入 `complexity_class`，`base_agent._call_llm`
+   在 `len(all_configs) > 1` 时调用 `_reorder_api_groups_by_complexity`——这条
+   路径即真实请求链（不经 `APIManager`）。
+3. 该函数把 `config.LLM_CONFIGS` 折成 `{model_name: cost_weight}`：同一模型的
+   多端点后写覆盖先写，组权重恒等，`sorted` 的稳定排序退化为原序——simple /
+   medium / complex 三档全部空转。
+4. `APIManager._cost_weight_for(model_name, llm_config)`（A15）已按实例取成本；
+   同一仓库两条路由口径分裂，只有 base_agent 这条退化。
+
+**② 红因可辨（对 HEAD 旧源实测，零 LLM，$0）。**
+
+| 输入（同模型 `deepseek-flash` 两端点） | 修前读数 | 修后读数 |
+| --- | --- | --- |
+| simple 档，成本 3.0 / 0.5（配置顺序 expensive, cheap） | 原序返回（expensive 在前） | cheap 在前 |
+| complex 档，成本 0.5 / 3.0（配置顺序 cheap, expensive） | 原序返回（cheap 在前） | expensive 在前 |
+| medium 档，成本 0.5 / 1.0（配置顺序 off, base） | 原序返回 | base（\|1−1\|=0）在前 |
+| 只有一端点有成本（3.0），另一端点同模型无成本 | 未定价端点继承 3.0 | 按 1.0 基准，simple 档在前 |
+| 注入配置无 `base_url`（`SimpleNamespace`） | 旧实现按模型键即通过（护栏例） | 按模型级成本回退 |
+
+**③ 修法：成本表按实例键建，未知端点不继承。**
+`endpoint_weights[(base_url, model_name)]` 为主表；无 `base_url` 的配置对象进
+`model_weights`（旧夹具 / 外部注入）作为回退；两表都未命中按 1.0 基准。`_bw`
+保持「组内最贵端点代表该组」的既有语义，三档排序判据不变；`_pin_thread_api_group`
+的重排后钉住逻辑不受影响。
+**同轮排除**：`all_configs` 形参仍未参与成本查表（成本不在三元组里），保留签名
+兼容；本机 `.env.local` 只有 1 个 LLM 实例（1 个 base_url、1 个模型），
+`len(all_configs) > 1` 不成立、重排函数不会被调用——缺陷只在文档承诺的多端点构型
+下激活，本轮以注入配置复现并锁定，不主张本机生产影响。
+**修 1 个成本查表口径，锁 5 例（4 红→绿 + 1 口径护栏）；语句分母 20,290 → 20,300、新增 10 条全部被锁执行（行 19,795/20,300 = 97.5123%），分支分母 7,698 → 7,702、新增 4 条全部被覆盖（7,273/7,702 = 94.4300%），`agents/base_agent.py` 422/428 = 98.60%、分支 135/138 = 97.83%。**
