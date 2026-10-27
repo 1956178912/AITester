@@ -31,3 +31,5 @@ src/specs/spec_ir.py:386 @except Exception as exc:  # 装上但坏了（版本�
 src/specs/spec_ir.py:387 @logger.warning("hypothesis 导入失败（按不可用降级）: %s", exc)  # ED 轮子进程负控制：降级必须告警
 src/specs/spec_smt.py:85 @except Exception as exc:  # 装上但坏了（CPython 扩展加载失败）同样视为不可用  # ED 轮子进程负控制：z3 装坏 ⇒ SMT 层整体降级
 src/specs/spec_smt.py:86 @logger.warning("z3 导入失败（SMT 见证层按不可用降级）: %s", exc)  # ED 轮子进程负控制：降级必须告警
+src/agents/fl_spectral.py:213 @except Exception as exc:  # 装上但坏了同样视为不可测量（不崩溃、不假读数）  # ED 轮子进程负控制：coverage 装坏 ⇒ FL 谱系读数不可测量（None）
+src/agents/fl_spectral.py:214 @logger.warning("O2 FL_spectral 降级：coverage 不可用（%s）", exc)  # ED 轮子进程负控制：降级必须告警

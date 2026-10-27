@@ -80,6 +80,20 @@ MUTANTS: list[tuple[str, str, str, str, list[str]]] = [
         [],
     ),
     (
+        "F8-crash-task-dump-success-path-lost",
+        CLI_APP,
+        '        if dump_path is not None:\n            result["trace_dump_path"] = dump_path',
+        '        if False:  # mutation: 崩溃任务导出成功时不再写 trace_dump_path\n            result["trace_dump_path"] = dump_path',
+        [],
+    ),
+    (
+        "F9-glob-magic-dir-not-rejected",
+        CLI_APP,
+        '                    error_msg(f"目标不是普通文件（目录或特殊文件）：{pattern}")\n                    raise SystemExit(2)',
+        '                    error_msg(f"目标不是普通文件（目录或特殊文件）：{pattern}")\n                    raise SystemExit(0)',
+        [],
+    ),
+    (
         # 中性对照：仅改 docstring 措辞，不动任何判据 —— 必须 0 红。
         "F7-control-wording",
         TRACE,

@@ -244,3 +244,47 @@ class TestTraceVizTokenTotal:
     @pytest.mark.parametrize("payload", [None, {}, {"total_tokens": None}, "not-a-dict"])
     def test_non_dict_payload_is_none(self, payload: object) -> None:
         assert _node_token_total(payload) is None
+
+
+class TestRemainingUncoveredPaths:
+    """FD 轮补齐的另外三处：崩溃任务的诊断导出成功路径 + 通配符元字符路径的 rc=2。"""
+
+    def test_crash_task_dump_success_records_path(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """崩溃任务同样做诊断导出（DW 轮承诺）——**导出成功**时结果行必须写 trace_dump_path。
+
+        既有用例只断言了导出**失败**的 `trace_dump_error`，成功分支从未执行。
+        """
+        from src.observability.trace import memory_buffer_snapshot, reset_memory_buffer
+
+        monkeypatch.setenv("TRACE_MEMORY_BUFFER_ENABLE", "true")
+        reset_memory_buffer()
+        memory_buffer_snapshot("crash_task", [{"event": "node", "node": "planner", "task": "crash_task"}])
+
+        results: list[dict] = []
+        cli_app._append_task_error(
+            str(tmp_path / "mod.py"),
+            None,
+            RuntimeError("模拟崩溃"),
+            results,
+            json_output=False,
+            dump_trace_on_failure=True,
+        )
+        assert len(results) == 1
+        assert "trace_dump_path" in results[0], "崩溃任务导出成功时必须写 trace_dump_path"
+        assert "trace_dump_error" not in results[0]
+        reset_memory_buffer()
+
+    def test_glob_magic_path_pointing_at_directory_is_usage_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """路径含通配符元字符但实际指向目录 ⇒ 按用法错误 rc=2 拒绝（不得当任务跑）。
+
+        与「通配符只匹配到目录」是**不同**分支：此处 glob 不命中任何文件，
+        而字面量路径本身存在（且是目录）。
+        """
+        weird_dir = tmp_path / "weird[1]"
+        weird_dir.mkdir()
+        runner = CliRunner()
+        result = runner.invoke(cli_app.cli, ["run", str(weird_dir)])
+        assert result.exit_code == 2, f"目录目标必须按用法错误退出，实际 {result.exit_code}"
+        assert "不是普通文件" in result.output
