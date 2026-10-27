@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "generated_by": "transcribed from paper/tex/manuscript.tex Table tab:reprochain (authoritative paper numbers)",
+  "description": "The reproduction chain, cheapest first. Nothing between make preflight and the L1 chain calls a model; the two model-consuming rows are the only ones that need a provider account.",
+  "upstream_source": "Makefile (target bodies); scripts/reproduce_zero_llm.py; reproduce.sh; Dockerfile.repro; scripts/tools/audit_paper_numbers.py.",
+  "entries": [
+    {
+      "entry": "make preflight",
+      "model_calls": false,
+      "produces": "Quota budget, model fingerprint, working-tree state and orphan processes; a batch may not start until this passes"
+    },
+    {
+      "entry": "make repro",
+      "model_calls": true,
+      "produces": "Runs reproduce.sh; --dataset synthetic --full reproduces the main-batch caliber (87 tasks, three arms, seed 42)"
+    },
+    {
+      "entry": "make reproduce-zero-llm",
+      "model_calls": false,
+      "produces": "The L0 chain: statistical extensions, statistics backfill, mutation x detection cross-check, infrastructure-failure disclosure, pass-rate sensitivity, citation traceability"
+    },
+    {
+      "entry": "make reproduce-zero-llm-l1",
+      "model_calls": false,
+      "produces": "L0 plus the hour-scale full QuixBugs Mut@k recomputation under cosmic-ray"
+    },
+    {
+      "entry": "Dockerfile.repro",
+      "model_calls": true,
+      "produces": "The same batch inside a pinned image; results carry the build-time git SHA through .repro_provenance"
+    },
+    {
+      "entry": "make gates",
+      "model_calls": false,
+      "produces": "The 27-target local chain: toolchain (lint, format, typecheck, tests) plus 29 gate scripts"
+    },
+    {
+      "entry": "make paper-audit",
+      "model_calls": false,
+      "produces": "Re-runs the number-to-source audit of this draft: every claim within 12 lines of a source marker"
+    }
+  ]
+}

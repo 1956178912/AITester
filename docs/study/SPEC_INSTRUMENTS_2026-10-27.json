@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "generated_by": "transcribed from paper/tex/manuscript.tex Table tab:specdetail (authoritative paper numbers)",
+  "description": "Specification-anchoring instruments: the compilability caliber reported under the extended grammar versus the predecessor caliber, on the numeric layers that carry a before/after pair.",
+  "upstream_source": "docs/study/WITHDRAWN_ARTIFACTS_2026-10-24.md (Sect. 3-4); BASELINE.yaml#target_quality.spec_expr_coverage (post-grammar).",
+  "metrics": [
+    {
+      "name": "Clause compilability",
+      "reported": 0.9127,
+      "predecessor": 0.8847,
+      "reported_num": 554,
+      "den": 607
+    },
+    {
+      "name": "Task compilability - QuixBugs",
+      "reported": 0.7161,
+      "predecessor": 0.6321
+    },
+    {
+      "name": "Task compilability - ULT",
+      "reported": 0.5937,
+      "predecessor": 0.5626
+    },
+    {
+      "name": "Task compilability - synthetic",
+      "reported": 0.6397,
+      "predecessor": 0.3102
+    },
+    {
+      "name": "Task mean (grammar-extend)",
+      "reported": 0.911,
+      "predecessor": 0.8809
+    }
+  ]
+}

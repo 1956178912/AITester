@@ -1,0 +1,52 @@
+{
+  "schema": 1,
+  "generated_by": "transcribed from paper/tex/manuscript.tex Table tab:anchor (authoritative paper numbers)",
+  "description": "RQ4 specification anchoring: four anchor arms, each with detection rate vs its same-batch detection-first control, and the paired contrast. No contrast is significant at these sample sizes; the planner-derived replacement row changes sign relative to the withdrawn generation (+5.7 pp here vs a historical -25.7 pp).",
+  "upstream_source": "experiments/results/spec_ab_scale87_20261024/quixbugs_replace and quixbugs_off benchmark JSONs (uncommitted, re-derivable on the author machine); historical direction from docs/study/WITHDRAWN_ARTIFACTS_2026-10-24.md.",
+  "arms": [
+    {
+      "arm": "Planner-derived",
+      "code_in_prompt": "replaced",
+      "det_num": 23,
+      "det_den": 35,
+      "ctrl_num": 21,
+      "ctrl_den": 35,
+      "paired": "3:1",
+      "delta_pp": 5.7,
+      "p_value": 0.625
+    },
+    {
+      "arm": "Independent docstrings",
+      "code_in_prompt": "replaced",
+      "det_num": 23,
+      "det_den": 35,
+      "ctrl_num": 29,
+      "ctrl_den": 36,
+      "paired": "4:9",
+      "delta_pp": -14.8,
+      "p_value": 0.267
+    },
+    {
+      "arm": "Union of both",
+      "code_in_prompt": "replaced",
+      "det_num": 25,
+      "det_den": 34,
+      "ctrl_num": 29,
+      "ctrl_den": 36,
+      "paired": "3:5",
+      "delta_pp": -7.0,
+      "p_value": 0.727
+    },
+    {
+      "arm": "Independent docstrings",
+      "code_in_prompt": "kept",
+      "det_num": 30,
+      "det_den": 35,
+      "ctrl_num": 32,
+      "ctrl_den": 36,
+      "paired": "1:2",
+      "delta_pp": -3.2,
+      "p_value": 1.0
+    }
+  ]
+}

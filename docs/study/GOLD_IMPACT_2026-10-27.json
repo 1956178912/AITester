@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "generated_by": "transcribed from paper/tex/manuscript.tex Table tab:goldimpact (authoritative paper numbers)",
+  "description": "Published versus recomputed contrasts on the synthetic pooled batch, with the 25 structurally undetectable rows removed. The material defect does not create the result; it inflates one effect size. The orchestrated-vs-detection-first deficit narrows by 4.83 pp.",
+  "upstream_source": "docs/study/WITHDRAWN_ARTIFACTS_2026-10-24.md (the 25 affected task keys behind the exclusion; every row above).",
+  "contrasts": [
+    {
+      "name": "Orchestrated vs detection-first",
+      "published_delta_pp": -28.33,
+      "recomputed_delta_pp": -23.5,
+      "published_n": 240,
+      "recomputed_n": 217,
+      "published_discordant": "12:80",
+      "recomputed_discordant": "12:63"
+    },
+    {
+      "name": "Detection-first vs bare prompt",
+      "published_delta_pp": 43.3,
+      "recomputed_delta_pp": 39.83,
+      "published_n": 261,
+      "recomputed_n": 236,
+      "published_discordant": "113:0",
+      "recomputed_discordant": "94:0"
+    },
+    {
+      "name": "Orchestrated vs bare prompt",
+      "published_delta_pp": 14.17,
+      "recomputed_delta_pp": 15.67,
+      "published_n": 240,
+      "recomputed_n": 217,
+      "published_discordant": "37:3",
+      "recomputed_discordant": "37:3"
+    }
+  ]
+}

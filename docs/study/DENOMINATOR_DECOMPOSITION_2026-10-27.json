@@ -1,0 +1,53 @@
+{
+  "schema": 1,
+  "generated_by": "transcribed from paper/tex/manuscript.tex Table tab:denom (authoritative paper numbers)",
+  "description": "Numerators and denominators behind Table tab:main. Each population reports detection over its own measurable set; the paired contrast uses the paired subset. The detection-first column for the pooled batch is 117/261 over its own measurable set but 106/240 over the paired subset.",
+  "upstream_source": "docs/study/WITHDRAWN_ARTIFACTS_2026-10-24.md (pooled numerators, paired denominator, 21 excluded rows); experiments/results/emse_stats_extensions_20261025/ (comparisons.*.n_paired).",
+  "populations": [
+    {
+      "name": "Synthetic, pooled 3 seeds",
+      "pipeline_num": 38,
+      "pipeline_den": 240,
+      "df_num": 117,
+      "df_den": 261,
+      "paired_n": 240,
+      "excluded": "21 pipeline rows (round-0 LOGIC_SPEC_STRICT rejections)"
+    },
+    {
+      "name": "QuixBugs, corrected harness",
+      "pipeline_num": 17,
+      "pipeline_den": 37,
+      "df_num": 31,
+      "df_den": 37,
+      "paired_n": 37,
+      "excluded": "13 of 50 files not measurable in both arms"
+    },
+    {
+      "name": "Synthetic, third batch (E6)",
+      "pipeline_num": 8,
+      "pipeline_den": 87,
+      "df_num": 30,
+      "df_den": 87,
+      "paired_n": 87,
+      "excluded": "none"
+    },
+    {
+      "name": "Synthetic, budget-capped",
+      "pipeline_num": 2,
+      "pipeline_den": 87,
+      "df_num": 23,
+      "df_den": 87,
+      "paired_n": 87,
+      "excluded": "none (pipeline exhausted cap on 87/87)"
+    },
+    {
+      "name": "ULT_Lite accuracy stage",
+      "pipeline_num": null,
+      "pipeline_den": null,
+      "df_num": 42,
+      "df_den": 200,
+      "paired_n": null,
+      "excluded": "0 non-terminating + 0 material-missing rows"
+    }
+  ]
+}

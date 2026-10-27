@@ -1,0 +1,39 @@
+{
+  "schema": 1,
+  "generated_by": "transcribed from paper/tex/manuscript.tex Table tab:mutk (authoritative paper numbers)",
+  "description": "Mutation-score corrections (RQ3, measurement integrity): for each generated-test suite, the mutation score at three stages of the correction chain. The full-mutant sanity-gated stage is the reported caliber; the originally-reported stage was inflated by a random truncation artifact and by trivial kills from suites already red or non-terminating on the unmutated code.",
+  "upstream_source": "docs/design/layered_narrative.md table (three-stage correction chain) and docs/design/repair_caliber_matrix.md row ⑨ (Mut@k full-mutant sanity-gated subset); cosmic-ray 8.7.0, zero-LLM, generation-free (unaffected by the withdrawn generation).",
+  "stages": ["originally_reported", "truncated_sanity", "full_corrected"],
+  "suites": [
+    {
+      "suite": "QuixBugs generated",
+      "n_suites": 29,
+      "n_total": 50,
+      "originally_reported": 0.961,
+      "truncated_sanity": 0.9323,
+      "full_corrected": 0.9396,
+      "full_numerator": 1182,
+      "full_denominator": 1258
+    },
+    {
+      "suite": "ULT replace",
+      "n_suites": 9,
+      "n_total": 46,
+      "originally_reported": 0.9543,
+      "truncated_sanity": 0.7444,
+      "full_corrected": 0.6749,
+      "full_numerator": 1590,
+      "full_denominator": 2356
+    },
+    {
+      "suite": "ULT spec",
+      "n_suites": 5,
+      "n_total": 25,
+      "originally_reported": 0.928,
+      "truncated_sanity": 0.64,
+      "full_corrected": 0.4395,
+      "full_numerator": 847,
+      "full_denominator": 1927
+    }
+  ]
+}

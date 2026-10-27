@@ -7,6 +7,7 @@
 ## [Unreleased]
 
 ### Added
+- 批量补图（第十轮）：稿件图数 8→20 张——锚定检测、成本对比、测量管线、证据阶梯、数据重置时间线、声明率签名、gold 影响、分母分解、门禁家族、gold 材料、复现链、规格仪器共 12 张新图；每张走「入库快照 → `figure_data.py` load 自检 → plot 脚本 → 生成 → 目检」闭环，数字一律读 `docs/study/*_2026-10-27.json` 快照（单一事实源，转录自稿件对应表，上游 = `WITHDRAWN_ARTIFACTS_2026-10-24.md`）；`tests/test_paper_figures.py` 扩到 20 图 + 9 例新内容锚点锁（70 passed）。
 - 前沿补扫（GG 轮 §22）：按论断族（cs.SE 60 条 + 四族补扫，arXiv 官方 API 逐字核验）收口前补扫——检索面内**无新增直接占位**本稿剩余三块增量，但两条既有让渡各获**第二独立实例**：`2607.19843`（官方原句 "test--fix error coupling" 坐实「补丁与测试同源 ⇒ 互相印证」机制非新观察）、`2606.10417`（17.5% 行为缺口 + 高覆盖方法仍有缺口，坐实「覆盖≠检出」非新观察）；邻接不占位 `2610.04921` / `2610.27672`——**散文登记**（未进 `refs.bib`，不建行）。
 - 研究设计总览图（第 5 张，GG 轮）：单栏纵向四段（7 工件 → 三臂效应隔离链 → C1/C2/C3 协议单元 → 两世代），数字经 `figure_data.py::artifact_registry_summary()` 读源码登记表（与 Table 1 同源：7 工件 / 4,303 字符 / 主工件 196 字符）；新增 3 例锁（登记表 1 例 + 图 parametrize 2 例）。
 - 重分类堆叠条图（第 6 张，GH 轮）：RQ4 规格锚定下的任务级重分类——把 `tab:reclass` 的数字墙表还原为其 Typst 原始形态的堆叠条（每臂 41 任务 × control/anchored 两条件 × specific red / over-red / unmeasurable 三分类）；数字读入库快照 `docs/study/RECLASSIFICATION_ANCHOR_2026-10-27.json`（单一事实源，转录自稿件 `tab:reclass`，上游 = 重建世代锚定批 `audit.specificity_gate_verdict`，作者机可复算），`figure_data.py::load_reclassification()` 加载时自检（n=41 / 三分类键齐全 / 每条件合计 41 / 恰 4 臂，不一致即抛错拒绝出图）；新增 3 例锁（reclassification PDF parametrize + PNG parametrize + 快照四臂/三分类**内容锚点**锁）。
@@ -19,6 +20,7 @@
 - 依赖漏洞豁免过期守卫（DF 轮）：`make dependency-audit` 与 CI 阻断步骤真实跑一次**不带** `--ignore-vuln` 的 pip-audit——修复版出现、新 advisory 未登记、版本漂移即红；豁免理由由 `src/` 静态扫描锁定；离线 `[SKIP]` 披露，CI `--require-audit` 把「无法验证」判红（37 例锁）。
 
 ### Changed
+- 投稿材料三件套同步（第十轮）：图数 8→20（title_page 20 figures 22 tables、SUBMISSION Artwork 行 20 张 + caption 命令 33→45）；实测页数 80→89、`refs.bib` 78 条不变；20 张图全部接入稿件并各归其位——表前图用「`\begin{table}`+`\centering`+`\caption`」三行锚点（插在 table 环境之前），避免 figure 落进 table 环境内触发「Not in outer par mode」。
 - 五张图统一 `[!t]` 置顶（GG 轮）：`svjour3` 单栏下 `[t]` 把图顶到附录（实测 `fig:study_design` 落 69 页），`[!t]` 拉回正文（3/22/28/29/34 页）、页数 79→78；投稿材料三件套同步（title_page 4→5 图、77→78 页；SUBMISSION 表头与 Artwork 行）。
 - RQ4 的 `tab:reclass` 表还原为第 6 张图 `fig:reclass`（GH 轮）：表格↔图再平衡——`tab:reclass` 是迁移到 LaTeX 时被拍平的「数字墙」，还原堆叠条既完成再平衡又忠实 Typst 原设计；正文与附录 B 引用 `Table~\ref{tab:reclass}` → `Fig.~\ref{fig:reclass}`；投稿材料三件套同步（title_page 6 figures 22 tables；SUBMISSION 表数 23→22、图数 5→6），实测 78 页 / 78 条不变。
 - 修复覆盖率审计的判决面不再把「已验证」误报成「缺口」（FD 轮）：审计的判决面是**父进程**的 `coverage.xml`，而 ED 轮那批「可选依赖装上但坏了」的负控制正是在**子进程**里验证的——这些路径确实被验证过，审计却把 4 个文件 9 行报成缺口（判决不可信 ⇒ 无人看）。现引入登记表 `docs/fix_coverage_verified_elsewhere.txt`（语法 `<路径>:<行号> @<内容锚点>  # <理由>`，锚点按**内容**而非行号）：登记在册的行从缺口移出、单列为「已在本进程之外验证」；**失效登记不再参与分类**（fail-closed：登记写错不得变成缺口被豁免），且登记表畸形/失效/缺席 ⇒ 审计 rc=1；未登记的未覆盖行**仍是缺口**（分类不得变成橡皮章）。

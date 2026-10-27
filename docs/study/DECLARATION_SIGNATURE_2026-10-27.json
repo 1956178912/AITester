@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "generated_by": "transcribed from paper/tex/manuscript.tex RQ1 declaration paragraph (authoritative paper numbers)",
+  "description": "Declaration rate as an artifact behavioral signature: the 196-character detection-first paragraph reduced declared success on the withdrawn generation, before any adjudication ran. Numerators over the 87-task seed population.",
+  "upstream_source": "docs/study/WITHDRAWN_ARTIFACTS_2026-10-24.md (the withdrawn generation's declaration rows; 69/87 = 79.3%, 65/87 = 74.7%, 47/87 = 54.0%, 41/87 = 47.1%).",
+  "denominator": 87,
+  "seeds": [
+    {"seed": "seed 42", "plain_num": 69, "df_num": 47},
+    {"seed": "second seed", "plain_num": 65, "df_num": 41}
+  ]
+}

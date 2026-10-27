@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "generated_by": "transcribed from paper/tex/manuscript.tex Table tab:goldmat (authoritative paper numbers)",
+  "description": "Gold-material self-consistency per benchmark: how many tasks the benchmark's own gold suite passes on the benchmark's own fixed code within 30 seconds. The ULT row uses the upstream-contract caliber (1/71), not our materialization (0/71), because the zero is our loader's defect, not a material defect.",
+  "upstream_source": "docs/study/WITHDRAWN_ARTIFACTS_2026-10-24.md (the per-benchmark breakdown).",
+  "populations": [
+    {
+      "name": "Synthetic",
+      "predicate": "gold suite on gold fixed code, 261 seed-task rows (87 tasks, 3 seeds), 30 s bound",
+      "pass": 236,
+      "total": 261,
+      "fail_note": "25 rows, one class: residual template import the neutralizer missed"
+    },
+    {
+      "name": "Synthetic (generator fixed)",
+      "predicate": "same predicate after the generator fix",
+      "pass": 261,
+      "total": 261,
+      "fail_note": "0; defect fixed forward-only"
+    },
+    {
+      "name": "QuixBugs",
+      "predicate": "official suite on the fixed program, 50 files (41 defect programs, 9 test drivers)",
+      "pass": 9,
+      "total": 50,
+      "fail_note": "32 fail (31 collection, 1 collects no tests), 9 not materializable"
+    },
+    {
+      "name": "ULT",
+      "predicate": "official gold tests on the fixed revision, 71 tasks, 355 assertions",
+      "pass": 1,
+      "total": 71,
+      "fail_note": "70 of 71 fail under the upstream contract; 4 fail to collect under our loader"
+    }
+  ]
+}

@@ -1,0 +1,72 @@
+{
+  "schema": 1,
+  "generated_by": "transcribed from paper/tex/manuscript.tex Table tab:gates (authoritative paper numbers)",
+  "description": "The 38 gate scripts grouped into 11 families, plus the CI wiring totals. Each family is a red-run semantic; the last family is deliberately outside the blocking path.",
+  "upstream_source": "scripts/gates/*.py (38 scripts); .github/workflows/ci.yml (36 wired, 39 call sites, 35 blocking, 2 non-blocking); Makefile (27 targets, 29 commands).",
+  "totals": {
+    "scripts_total": 38,
+    "ci_unique_scripts": 36,
+    "ci_call_sites": 39,
+    "blocking_steps": 35,
+    "non_blocking_steps": 2,
+    "make_targets": 27,
+    "make_commands": 29
+  },
+  "families": [
+    {
+      "family": "Evidence-to-artifact reconciliation",
+      "scripts": ["check_artifact_doc_consistency", "checksum_results", "check_artifacts_tracked", "check_json_contract_sites"],
+      "blocking": true
+    },
+    {
+      "family": "Baseline as single source",
+      "scripts": ["check_baseline", "check_baseline_numbers", "check_docs_history_drift", "check_registration_consistency"],
+      "blocking": true
+    },
+    {
+      "family": "Coverage floor and ratchet",
+      "scripts": ["check_branch_coverage", "coverage_ratchet"],
+      "blocking": true
+    },
+    {
+      "family": "Prompt and environment provenance",
+      "scripts": ["check_prompt_artifacts", "check_model_fingerprint", "check_env_snapshot_keys", "check_env_budget", "check_flag_effect"],
+      "blocking": true
+    },
+    {
+      "family": "State and serialization contracts",
+      "scripts": ["check_state_contract", "check_json_strict", "check_ast_parse_guards", "check_status_persistence"],
+      "blocking": true
+    },
+    {
+      "family": "Test-suite hygiene",
+      "scripts": ["check_zero_assert_tests"],
+      "blocking": true
+    },
+    {
+      "family": "Toolchain and dependency pins",
+      "scripts": ["check_lock_sync", "check_tool_versions", "check_llm_configs_schema", "check_dependency_exemptions", "check_dependency_audit"],
+      "blocking": true
+    },
+    {
+      "family": "Documentation and citations",
+      "scripts": ["check_bilingual_docs", "check_doc_links", "check_citations", "check_doc_commands", "check_bibtex_compilability"],
+      "blocking": true
+    },
+    {
+      "family": "Credential and log hygiene",
+      "scripts": ["check_credential_scrub", "audit_log_redaction"],
+      "blocking": true
+    },
+    {
+      "family": "Gate wiring and repository hygiene",
+      "scripts": ["check_invocation_caliber", "check_repo_hygiene", "check_scheduled_workflows", "check_release_freshness"],
+      "blocking": true
+    },
+    {
+      "family": "Deliberately outside the blocking path",
+      "scripts": ["check_perf_regression", "check_swe_bench_pro_ready"],
+      "blocking": false
+    }
+  ]
+}

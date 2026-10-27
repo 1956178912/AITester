@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "generated_by": "transcribed from paper/tex/manuscript.tex Table tab:cost (authoritative paper numbers)",
+  "description": "Recorded cost on the withdrawn pooled main batch (three seeds, n=261 rows per arm; frozen 2026-10-21). Token ratio pipeline vs detection-first is 6.18; dollar ratio is 5.70. These figures are historical and not transferred to the regenerated corpus.",
+  "upstream_source": "docs/study/WITHDRAWN_ARTIFACTS_2026-10-24.md table W-1 (frozen per-arm cost, commit d5bda23e; tokens_per_task_bootstrap95, usd_per_task, in:out mixes, 35/261 zero-usage count).",
+  "arms": [
+    {
+      "arm": "aitester (full pipeline)",
+      "tokens_per_task": 26114.9,
+      "tokens_ci_lo": 24226.3,
+      "tokens_ci_hi": 28086.0,
+      "usd_per_task": 0.025885,
+      "input_tokens": 1581326,
+      "output_tokens": 5234651
+    },
+    {
+      "arm": "plain_llm (bare prompt)",
+      "tokens_per_task": 3209.4,
+      "tokens_ci_lo": 2964.0,
+      "tokens_ci_hi": 3474.2,
+      "usd_per_task": 0.003359,
+      "input_tokens": 142783,
+      "output_tokens": 694881
+    },
+    {
+      "arm": "plain_llm_df (detection-first)",
+      "tokens_per_task": 4223.1,
+      "tokens_ci_lo": 3822.9,
+      "tokens_ci_hi": 4642.5,
+      "usd_per_task": 0.004543,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "rows_without_usage": 35
+    }
+  ]
+}
