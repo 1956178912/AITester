@@ -27,6 +27,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
 import subprocess
 import sys
@@ -191,9 +192,31 @@ class TestRedactionConsistency:
 # ─────────────────────────── 4. 端到端：check-dataset CLI 可读 ───────────────────────────
 
 
+def _quixbugs_data_present() -> bool:
+    """QuixBugs 语料是否就位（与 CLI 同源：环境变量覆盖，否则默认缓存目录）。
+
+    EZ 轮（2026-10-27）：本文件的端到端用例原本把 skip 写在 `rc == 0` 断言
+    **之后**——CI（fresh clone，无 `~/.cache/aitester`）先撞 rc=1 直接判红，
+    skip 永远到不了。守卫必须先于它要保护的断言。
+    """
+    override = os.environ.get("AITESTER_QUIXBUGS_DATA")
+    root = Path(override) if override else Path.home() / ".cache" / "aitester" / "quixbugs" / "python_programs"
+    return root.is_dir()
+
+
+def test_quixbugs_guard_reads_the_same_source_as_the_cli(tmp_path, monkeypatch) -> None:
+    """接线锁：守卫必须读环境变量覆盖，否则「数据在别处」时会把可跑的用例 skip 掉。"""
+    monkeypatch.setenv("AITESTER_QUIXBUGS_DATA", str(tmp_path))
+    assert _quixbugs_data_present() is True
+    monkeypatch.setenv("AITESTER_QUIXBUGS_DATA", str(tmp_path / "absent"))
+    assert _quixbugs_data_present() is False
+
+
 class TestCheckDatasetCliOverRedaction:
     def test_check_dataset_gold_path_readable(self) -> None:
         """真实症状回归：CLI 输出的 gold 路径不得含 `.<REDACTED_KEY>`。"""
+        if not _quixbugs_data_present():
+            pytest.skip("QuixBugs 语料不在场（fresh clone / CI 无该缓存）——数据就位时本用例覆盖真实症状")
         proc = subprocess.run(
             [sys.executable, "main.py", "check-dataset", "quixbugs"],
             capture_output=True,

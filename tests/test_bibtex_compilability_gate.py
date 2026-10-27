@@ -181,8 +181,22 @@ class TestRealCompileProbe:
         assert result.status == "error", result
         assert "样式文件缺席" in result.reason
 
-    def test_empty_bib_is_an_error_not_a_pass(self, gate):
-        result = gate._compile_probe("% only a comment\n")
+    def test_empty_bib_is_an_error_not_a_pass(self, gate, tmp_path):
+        # EZ 轮（2026-10-27）：旧版不传 bst，走仓库内的 paper/tex/spbasic.bst——
+        # fresh clone 没有 paper/（.gitignore 双盲纪律），于是先返回「样式文件缺席」，
+        # CI 三个 Python 版本同红。空库判定不该依赖稿件树：显式给一个临时 bst。
+        bst = tmp_path / "probe.bst"
+        bst.write_text("% minimal bst for the empty-bib path\n", encoding="utf-8")
+        result = gate._compile_probe("% only a comment\n", bst=bst)
+        assert result.status == "error", result
+        assert "没有可探测" in result.reason
+
+    def test_empty_bib_check_does_not_require_paper_tree(self, gate, tmp_path, monkeypatch):
+        """护栏：仓库 BST 缺席（= fresh clone）时，空库判定的结论必须不变。"""
+        monkeypatch.setattr(gate, "BST", tmp_path / "absent.bst")
+        bst = tmp_path / "probe.bst"
+        bst.write_text("% minimal bst\n", encoding="utf-8")
+        result = gate._compile_probe("% only a comment\n", bst=bst)
         assert result.status == "error", result
         assert "没有可探测" in result.reason
 
