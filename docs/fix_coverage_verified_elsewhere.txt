@@ -1,0 +1,33 @@
+# 「已在本进程之外验证」的路径登记（`scripts/tools/audit_fix_coverage.py`）
+#
+# 语义：本表登记**不需要在本进程内被执行**就能确认契约成立的新增行。它们从
+#       「修复新增但从未被测试执行」的缺口清单里剔除，改列为「已在本进程之外验证」。
+#
+# 为什么要这张表：审计工具的判决面是**父进程**的 `coverage.xml`，而**子进程**
+#       里跑的测试对它不可见——ED 轮那批「可选依赖装上但坏了」的负控制正是
+#       在子进程里把目标包变成 RuntimeError 后验证降级契约的（见
+#       `tests/test_optional_backend_broken_ed.py`）。本表把这类路径逐条登记，
+#       否则工具会把**已验证**的路径报成缺口（实测：4 个文件 9 行），
+#       而这正是该工具「长期无人跑」的主因——判决不可信 ⇒ 无人看。
+#
+# 语法：`<路径>:<行号> @<内容锚点>  # <理由>`
+#   - 路径相对仓库根；
+#   - 锚点 = 该行内容的唯一片段（**不用行号当键**：行号会随上方插行漂移）；
+#   - 理由必须写——「没时间」不是理由；
+#   - 锚点内容在该文件里消失 ⇒ 登记**失效**，审计以 rc=1 判红并要求重新判定
+#     （内容改了 = 契约可能变了，必须重新确认，不能靠旧登记蒙混）。
+#
+# 本表为空 = 没有需要靠「进程外验证」兜底的路径。
+#
+# FD 轮（2026-10-27）建立：首批 9 条全部来自 ED 轮（可选依赖「装上但坏了」的
+# 导入期降级契约），它们由 `tests/test_optional_backend_broken_ed.py` 的
+# 子进程负控制验证（子进程里 `builtins.__import__` 被替换为目标包抛 RuntimeError）。
+src/datasets/dataset_loader.py:71 @except Exception as exc:  # ED 轮子进程负控制：datasets 装坏 ⇒ 降级不击穿
+src/datasets/dataset_loader.py:73 @_datasets_import_error = exc  # ED 轮子进程负控制：真实异常被保留（能区分「没装」与「装坏了」）
+src/datasets/dataset_loader.py:74 @logger.warning("datasets 导入失败（SWE-bench 下载不可用）: %s", exc)  # ED 轮子进程负控制：降级必须告警
+src/rag/retriever.py:29 @except Exception as exc:  # 装上但坏了（扩展 ABI / 传递依赖冲突）与没装同样降级  # ED 轮子进程负控制：chromadb 装坏 ⇒ CLI 仍可启动
+src/rag/retriever.py:31 @logger.warning("chromadb 导入失败（RAG 按不可用降级）: %s", exc)  # ED 轮子进程负控制：降级必须告警
+src/specs/spec_ir.py:386 @except Exception as exc:  # 装上但坏了（版本冲突）同样视为不可用  # ED 轮子进程负控制：hypothesis 装坏 ⇒ 探针报不可用
+src/specs/spec_ir.py:387 @logger.warning("hypothesis 导入失败（按不可用降级）: %s", exc)  # ED 轮子进程负控制：降级必须告警
+src/specs/spec_smt.py:85 @except Exception as exc:  # 装上但坏了（CPython 扩展加载失败）同样视为不可用  # ED 轮子进程负控制：z3 装坏 ⇒ SMT 层整体降级
+src/specs/spec_smt.py:86 @logger.warning("z3 导入失败（SMT 见证层按不可用降级）: %s", exc)  # ED 轮子进程负控制：降级必须告警

@@ -22,6 +22,7 @@
   跨行函数签名的参数行、多行字面量；自建判定会把 `def` 的每行参数误算成
   可执行行（实测假阳性 885/1400，占 63%）；
 - **缺口**：新增行中 hits==0 的行。
+- **已在本进程之外验证**（FD 轮）：判决面是**父进程**的 `coverage.xml`，**子进程**里跑的测试对它不可见——ED 轮那批「可选依赖装上但坏了」的负控制正是在子进程里验证的。这类路径登记在 `docs/fix_coverage_verified_elsewhere.txt`，从缺口清单剔除并单列；若登记行的**内容锚点**在该文件里已消失（内容被改写），登记即**失效**，审计以 rc=1 判红并要求重新判定。
 
 注意：`coverage.xml` 必须由**当前 HEAD 代码**产出（`make test-cov`）。
 旧数据行号会与代码错位，把未改动行误报为缺口。
@@ -32,7 +33,8 @@
     python scripts/tools/audit_fix_coverage.py
     python scripts/tools/audit_fix_coverage.py --base ff15a2f --json out.json
 
-退出码：0 = 执行完成（**有缺口也返回 0**，本工具是审计而非门禁）。
+退出码：0 = 执行完成（**有缺口也返回 0**，本工具是审计而非门禁）；
+1 = **登记表畸形或失效**（登记完整性是判决的输入，坏了就不能继续出判决）。
 """
 
 from __future__ import annotations
@@ -52,6 +54,12 @@ HUNK_RE = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
 #: `auto` = 最近一次改动审计范围的提交（修复起点的语义化默认；CS 轮取代写死的 V 轮起点）。
 DEFAULT_BASE = "auto"
 DEFAULT_COVERAGE_XML = PROJECT_ROOT / "coverage.xml"
+#: 「已在本进程之外验证」的路径登记表（FD 轮）：子进程里验证的路径对父进程 coverage 不可见。
+DEFAULT_REGISTRY = PROJECT_ROOT / "docs" / "fix_coverage_verified_elsewhere.txt"
+#: 登记表语法：`<路径>:<行号> @<内容锚点>  # <理由>`（锚点为该行内容的唯一片段）。
+_REGISTRY_LINE = re.compile(
+    r"^(?P<path>[A-Za-z0-9_./-]+\.py):(?P<line>\d+)\s*@(?P<anchor>.+?)\s*(?:#\s*(?P<reason>.*))?$"
+)
 
 
 def resolve_base(base: str, root: Path, pathspec: str = "src/") -> str:
@@ -71,6 +79,49 @@ def resolve_base(base: str, root: Path, pathspec: str = "src/") -> str:
         check=False,
     )
     return proc.stdout.strip()
+
+
+def load_registry(path: Path | None) -> tuple[dict[tuple[str, int], tuple[str, str]], list[str]]:
+    """解析「已在本进程之外验证」登记表。
+
+    语法：``<路径>:<行号> @<内容锚点>  # <理由>``。
+
+    Returns:
+        ``(entries, errors)``——``entries[(路径, 行号)] = (锚点, 理由)``；
+        ``errors`` 为畸形行（语法不符 / 缺理由 / 路径不存在）的可读描述。
+    """
+    if path is None:
+        return {}, []
+    if not path.is_file():
+        return {}, [f"{path} 缺席：登记表是判决的输入，缺它就不能把「已验证」与「缺口」分开"]
+    entries: dict[tuple[str, int], tuple[str, str]] = {}
+    errors: list[str] = []
+    for lineno, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        match = _REGISTRY_LINE.match(line)
+        if not match:
+            errors.append(f"{path}:{lineno} 登记语法不符（应为 `<路径>:<行号> @<锚点>  # <理由>`）：{line}")
+            continue
+        reason = (match.group("reason") or "").strip()
+        if not reason:
+            errors.append(f"{path}:{lineno} 登记缺少理由")
+            continue
+        key = (match.group("path"), int(match.group("line")))
+        if key in entries:
+            errors.append(f"{path}:{lineno} 登记重复（{key[0]}:{key[1]} 已在册）")
+            continue
+        entries[key] = (match.group("anchor"), reason)
+    return entries, errors
+
+
+def anchor_present(root: Path, rel: str, anchor: str) -> bool:
+    """锚点内容是否仍存在于该路径的文件里（内容被改写 ⇒ 登记失效）。"""
+    target = root / rel
+    if not target.is_file():
+        return False
+    return anchor in target.read_text(encoding="utf-8")
 
 
 def added_lines_by_file(base: str, root: Path, pathspec: str = "src/") -> dict[str, list[int]]:
@@ -130,7 +181,13 @@ def coverage_lines(xml_path: Path, prefix: str = "src/") -> dict[str, dict[int, 
     return result
 
 
-def audit(base: str, xml_path: Path, root: Path, pathspec: str = "src/") -> dict[str, Any]:
+def audit(
+    base: str,
+    xml_path: Path,
+    root: Path,
+    pathspec: str = "src/",
+    registry_path: Path | None = None,
+) -> dict[str, Any]:
     """执行审计，返回结构化结果（供 CLI 与测试共用）。
 
     Args:
@@ -139,25 +196,55 @@ def audit(base: str, xml_path: Path, root: Path, pathspec: str = "src/") -> dict
         root: 仓库根。
         pathspec: 审计范围前缀（``src/`` 或 ``experiments/``），同时用于
             还原 coverage.xml 的相对路径前缀。
+        registry_path: 「已在本进程之外验证」登记表路径（None = 不启用该分类）。
     """
     resolved = resolve_base(base, root, pathspec)
     if not resolved:
         raise ValueError(f"无法解析 base={base!r}（pathspec={pathspec!r} 无历史提交）")
     added = added_lines_by_file(resolved, root, pathspec)
     cov = coverage_lines(xml_path, pathspec)
+    entries, registry_errors = load_registry(registry_path)
+    # 登记失效（锚点内容已消失）⇒ 该登记**不再参与分类**：失效登记不得继续把
+    # 真缺口藏起来（fail-closed）——否则「登记写错了」会变成「缺口被豁免」。
+    stale_keys = {key for key, (anchor, _reason) in entries.items() if not anchor_present(root, key[0], anchor)}
+    effective_entries = {key: value for key, value in entries.items() if key not in stale_keys}
 
     files: list[dict[str, Any]] = []
-    total_added = total_uncovered = 0
+    total_added = total_uncovered = total_verified = 0
     for rel, lines in sorted(added.items()):
         hits = cov.get(rel)
         if hits is None:
-            files.append({"file": rel, "added": 0, "uncovered": 0, "missing_lines": [], "note": "未被 coverage 测量"})
+            files.append(
+                {
+                    "file": rel,
+                    "added": 0,
+                    "uncovered": 0,
+                    "missing_lines": [],
+                    "verified_lines": [],
+                    "note": "未被 coverage 测量",
+                }
+            )
             continue
         effective = [ln for ln in lines if ln in hits]
         uncovered = [ln for ln in effective if hits[ln] == 0]
+        # FD 轮：登记在册的「已在本进程之外验证」路径不计缺口（子进程里已验证）。
+        verified = [ln for ln in uncovered if (rel, ln) in effective_entries]
+        gaps = [ln for ln in uncovered if (rel, ln) not in effective_entries]
         total_added += len(effective)
-        total_uncovered += len(uncovered)
-        files.append({"file": rel, "added": len(effective), "uncovered": len(uncovered), "missing_lines": uncovered})
+        total_uncovered += len(gaps)
+        total_verified += len(verified)
+        files.append(
+            {
+                "file": rel,
+                "added": len(effective),
+                "uncovered": len(gaps),
+                "missing_lines": gaps,
+                "verified_lines": verified,
+            }
+        )
+
+    # 登记失效 = 锚点内容在该路径下已不存在（内容被改写 / 行被删）⇒ 必须重新判定。
+    stale: list[str] = [f"{rel}:{ln} @锚点「{entries[(rel, ln)][0]}」" for (rel, ln) in sorted(stale_keys)]
 
     return {
         "base": resolved,
@@ -165,8 +252,11 @@ def audit(base: str, xml_path: Path, root: Path, pathspec: str = "src/") -> dict
         "coverage_xml": str(xml_path),
         "total_added": total_added,
         "total_uncovered": total_uncovered,
+        "total_verified_elsewhere": total_verified,
         "ratio": round(total_uncovered / total_added, 4) if total_added else 0.0,
         "files": files,
+        "registry_errors": registry_errors,
+        "registry_stale": stale,
     }
 
 
@@ -182,6 +272,25 @@ def render(result: dict[str, Any]) -> str:
         flag = "!!" if item["uncovered"] else "  "
         detail = item.get("note") or ", ".join(str(n) for n in item["missing_lines"][:25])
         lines.append(f"{flag} {item['file']:<42}{item['added']:>6}{item['uncovered']:>7}  {detail}")
+    verified_total = result.get("total_verified_elsewhere") or 0
+    if verified_total:
+        lines.append("")
+        lines.append(f"已在本进程之外验证（登记在册，不计缺口）：{verified_total} 行")
+        lines.extend(
+            f"   {item['file']:<40}{', '.join(str(n) for n in item['verified_lines'][:25])}"
+            for item in result["files"]
+            if item.get("verified_lines")
+        )
+    stale = result.get("registry_stale") or []
+    if stale:
+        lines.append("")
+        lines.append("登记表失效（锚点内容已消失 ⇒ 必须重新判定）：")
+        lines.extend(f"   {item}" for item in stale)
+    errors = result.get("registry_errors") or []
+    if errors:
+        lines.append("")
+        lines.append("登记表畸形：")
+        lines.extend(f"   {item}" for item in errors)
     return "\n".join(lines)
 
 
@@ -199,6 +308,11 @@ def main() -> int:
     )
     parser.add_argument("--coverage-xml", default=str(DEFAULT_COVERAGE_XML), help="coverage.xml 路径（须与 HEAD 对齐）")
     parser.add_argument("--json", default="-", help="JSON 输出路径（默认 - = 不输出）")
+    parser.add_argument(
+        "--registry",
+        default=str(DEFAULT_REGISTRY),
+        help="「已在本进程之外验证」登记表路径（默认 docs/fix_coverage_verified_elsewhere.txt）",
+    )
     args = parser.parse_args()
 
     xml_path = Path(args.coverage_xml)
@@ -206,12 +320,21 @@ def main() -> int:
         print(f"错误：找不到 {xml_path}——先跑 `make test-cov` 产出与 HEAD 对齐的覆盖率", file=sys.stderr)
         return 2
 
-    result = audit(args.base, xml_path, PROJECT_ROOT, args.pathspec)
+    result = audit(
+        args.base,
+        xml_path,
+        PROJECT_ROOT,
+        args.pathspec,
+        registry_path=Path(args.registry),
+    )
     print(render(result))
 
     if args.json != "-":
         Path(args.json).write_text(json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False), encoding="utf-8")
         print(f"\nJSON 已写入 {args.json}")
+    # 登记完整性是判决的输入：登记表畸形或失效 ⇒ 判决不可信 ⇒ rc=1。
+    if result["registry_errors"] or result["registry_stale"]:
+        return 1
     return 0
 
 
