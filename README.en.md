@@ -6,7 +6,7 @@ Current version 1.0.0 · [Changelog](CHANGELOG.en.md) · [Documentation index](d
 
 > **As the EMSE replication package**: every number in the paper is reached by the zero-LLM recompute path (`make reproduce-zero-llm`, and `make reproduce-zero-llm-l1` for L1). The quota-consuming entry points in this repository, `reproduce.sh` and `experiments/run_main_batch.py`, only **regenerate a batch** under the pre-registered configuration; they are not on the path from an artifact to a reported number. [INVENTORY.md](INVENTORY.md) answers the six open-science criteria one by one and lists which branches of the chain currently report `skipped` rather than `passed`.
 
-> Last updated: 2026-10-26
+> Last updated: 2026-10-27
 
 ## What It Is
 

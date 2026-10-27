@@ -1,6 +1,6 @@
 # 快速开始
 
-> 最后更新：2026-10-26 · English: [QUICKSTART.en.md](QUICKSTART.en.md)
+> 最后更新：2026-10-27 · English: [QUICKSTART.en.md](QUICKSTART.en.md)
 
 ## 1. 安装
 

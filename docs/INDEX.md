@@ -1,6 +1,6 @@
 # 文档索引
 
-> 最后更新：2026-10-26 · English: [INDEX.en.md](INDEX.en.md)
+> 最后更新：2026-10-27 · English: [INDEX.en.md](INDEX.en.md)
 
 本索引是全仓文档的入口：按角色给出最短阅读路径，并列出核心文档。历史批次记录统一归档在
 [history/](history/)，不再逐条维护。

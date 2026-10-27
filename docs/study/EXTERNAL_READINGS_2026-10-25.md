@@ -603,3 +603,81 @@ HDA 把 harness 演化的增益**分解为三块**：artifact 驱动的过拟合
    证据是**确认/修复的缺陷数**，不测「测试把错误行为断言成期望」，不构成占位。
 
 **让渡口径不变**：三块增量（①false-fix 口径分解 ②声明率被协议扰动 ③测量效度 × 声明率联立）不受本节五篇影响。
+
+## 15. FB 轮（2026-10-27）APR 实验设置七维契约：工程对齐项，**散文登记，未引用**
+
+**检索与核验面**：本轮先用多源研究检索定位「测试生成 / 修复 / oracle / 测量效度」候选，再只把能回到一手页面的内容写入本节。
+`arXiv:2608.19626`（audit-and-placebo）与 `arXiv:2610.19447`（BenchChecker）经官方摘要页复核后确认已分别登记于 §9 与 §8 备选索引，
+**不重复计数、不新增读数**。下列一篇是本轮新登记；标题、作者、日期、七维字段与引文均按 arXiv 官方摘要页逐字核验，未采用搜索摘要中的二手扩展。
+
+1. **Experimental Settings in LLM-Based Program Repair: A Study of Inputs, Tool Access, Feedback, and Validation** —
+   `arXiv:2609.17993v1`（Dai, Cai, Luo, Tseng；2026-09-16；cs.SE；无出版商 DOI）。官方摘要原句：
+   "benchmark identity alone is insufficient to reconstruct the evaluated task or determine the appropriate scope of comparison across reported repair rates"。
+   论文把每个 APR 结果显式刻画为 **task unit / fault-localization assumptions / initial input / tool access / repair-time feedback /
+   final validation / resource budget** 七维，并提出机器可读 schema。
+2. **对本仓库的边界**：当前批次工件已有 dataset / subset / seed / baselines / environment / env_snapshot / 模型与预算等 provenance，
+   但「已有若干字段」不等于「已完整实现该七维 schema」。本轮仅登记差距与后续对齐方向，**不声明兼容、不伪造新读数**；
+   1.0.0 稳定批次只修已证实的运行期缺陷，七维结构的显式映射与校验列入 1.x 候选。
+3. **对 novelty 的影响**：该文占位「只写 benchmark 名称不足以复构 APR 任务」这一一般论断；本仓库不得把「需要披露实验设置」写成新发现。
+   可保留的仍是本稿自己的分母分解、声明率扰动与测量效度联立，不借该 schema 给现有能力加冕。
+
+本节为散文登记，未进入 `refs.bib`，故不新增表格行（读者链纪律同 §14）。
+
+## 16. FC 轮（2026-10-27）「测试通过却没检出缺陷」族三篇：其中一篇**直接占位**本稿核心现象，让渡口径再核
+
+**检索面（按论断族，不按关键词）**：族名 = 「passing tests ≠ 检出缺陷 / 验证证据的判别力 / 修复过程幻觉」。
+分类集合 = cs.SE + cs.CR + cs.AI（arXiv 官方 API `export.arxiv.org/api/query`，`sortBy=submittedDate`）；
+二手聚合站（connectedresearchers / theneuralfeed / bytenote 等）只作**发现入口**，读数一律回一手页面取，
+本节三篇的标题、作者、日期、分类与引文均按 `export.arxiv.org` 官方条目逐字核验。
+本轮另复核了 §8 已登记为表格行 `bai2026silentfailures` 的 `arXiv:2610.06163v1`
+（"Where Did the Repair First Go Wrong? Localizing the Origins of Silent Failures in Agentic Vulnerability Repair"；
+Bai / Waseem / Rasheed / Peltonen / Abrahamsson；2026-10-05）——**已登记在册，不重复计数**；
+且它与下述第 1 篇**作者组完全相同、数据集相同**（同一条研究线的先后两篇），
+故第 1 篇不是独立团队的独立证据，见该条的让渡说明。
+
+1. **When Passing Tests Hides Vulnerabilities: An Empirical Study of Silent Failures in Agentic Systems** —
+   `arXiv:2609.10548v1`（Bai, Waseem, Rasheed, Peltonen, Abrahamsson；2026-06-25；cs.SE, cs.CR；无出版商 DOI）。
+   官方摘要原句：
+   "We conducted an empirical study using 1,030 valid execution traces produced by seven agent frameworks with GPT-4o-mini across two security-focused datasets, SecurityEval and CVEfixes. Through three iterations of qualitative coding and manual verification, 170 confirmed silent failures were identified."
+   官方摘要原句：
+   "Current test-passing evaluation and LLM-based reviewer roles were insufficient to expose or intercept these failures in the confirmed cases."
+   **同研究线说明**：本文作者组与 §8 表行 `bai2026silentfailures`（`arXiv:2610.06163v1`）**完全相同**，
+   数据集同为 SecurityEval / CVEfixes——两篇是同一条线的先后工作（本文 2026-06-25 早于该表行 2026-10-05），
+   **不得计为两次独立命中**，也不得据此宣称"多方独立复现"。
+2. **Validation Evidence in LLM Repair Agents: How Much of What Passes Actually Tests the Bug?** —
+   `arXiv:2607.28871v1`（Xu, Wu；2026-07-30；cs.SE, cs.AI；无出版商 DOI）。官方摘要原句：
+   "Across 3,730 events in 643 rollouts on 110 tasks, 46.0% of positive comparable events carry no bug-discriminating information; 23.8% of baseline rollouts, with no feedback injected, close with a patch whose entire positive evidence base is of this kind."
+   官方摘要原句：
+   "Bug-contrast feedback reduces evidence-inadequate closure by 7.8 percentage points relative to an attention-matched reminder (p = 0.0029) and raises bug-discriminating evidence by 7.4 points (p = 0.011)"。
+3. **Better Understanding, Better Fixes? A Study of Hallucination in LLM-based Automated Program Repair** —
+   `arXiv:2609.04909v2`（Cai, Liu, Yang, Ma, Jiang；2026-09-04 首发，v2 2026-09-28；cs.SE, cs.AI；无出版商 DOI）。
+   官方摘要原句：
+   "Across models and settings, only 21.0%-55.9% of generated patches pass the developer-written test suite."
+   官方摘要原句：
+   "Manual analysis of 812 sampled repairs identifies repair hallucinations in 72.7% of cases, including patches that pass all available tests; incorrect causal localization and incorrect repair strategies account for 45.9% and 18.5% of these hallucinations, respectively."
+
+**构念对照（逐篇写明差别，不得并列引用）**：
+
+- 第 1 篇的**对象是安全漏洞**（SecurityEval / CVEfixes 两个安全数据集），测的是「补丁通过功能验证却仍保留/引入漏洞」，
+  分类学是 Omission / Introduction / Inadequacy。它是**漏洞检出**问题，不是本稿的**功能缺陷检出**问题；
+  且其读数来自人工编码（170 例确认），本稿读数来自工件复算（无人工裁决）。
+- 第 2 篇的**对象是修复智能体自身的验证行为**，方法是把每条验证命令回放到 buggy / candidate / gold 三个代码状态上，
+  据此给每个"通过"事件定一个**证据角色**。它与本稿的"条件 / 边际口径分解"同属**分母层面的度量问题**，
+  但**测量对象不同**：它测「某次通过是否携带判别力」，本稿测「一批声明里假修复占多大比例」。
+- 第 3 篇的**对象是修复过程幻觉**（补丁与中间件产物：触发测试识别、覆盖行预测、附加测试生成），
+  与本稿的 false-fix **不同构**：假修复是「补丁让测试通过但缺陷仍在」，幻觉是「产物没有忠实锚定在可用证据上」。
+
+**让渡口径（本轮新增让渡，累计让渡再核）**：
+
+- 第 1 篇**直接占位**「测试通过 ≠ 缺陷被检出」这一**一般论断**（在其安全域内）。本仓库因此**不得**把
+  "通过测试不代表修好了"写成新发现，也不得把本稿的 59.58% 当作该现象的**首次**观测。
+  且该文与 §8 表行 `bai2026silentfailures` 同作者同数据集，**只有一次独立命中**，不得写成多方独立复现。
+- 第 2、3 篇分别占位「通过事件携带的证据判别力」与「修复幻觉的比例化刻画」两条邻接论断；
+  本稿不得声称首次提出「按证据角色给通过事件分档」或「首次把修复幻觉比例化」。
+- **本稿仍可主张的增量不变**（三块，均为分母层面而非现象层面）：
+  ① false-fix 的**条件 / 边际口径分解**（同一批声明在两个分母下的两个数，并列披露）；
+  ② **声明率本身被协议扰动**（换协议即换声明率，故"通过率"不是装置无关量）；
+  ③ **测量效度 × 声明率联立**（效度与声明率不可分别汇报）。
+- 三篇的读数**不得**与本稿读数并列（对象、域、方法、人工介入程度均不同）——沿用 §5/§9 起的既有纪律。
+
+本节为散文登记，未进入 `refs.bib`，故不新增表格行（读者链纪律同 §14/§15）。

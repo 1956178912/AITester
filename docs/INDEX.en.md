@@ -1,6 +1,6 @@
 # Documentation Index
 
-> Last updated: 2026-10-26 · 中文版: [INDEX.md](INDEX.md)
+> Last updated: 2026-10-27 · 中文版: [INDEX.md](INDEX.md)
 
 This index is the entry point to all repository documentation: shortest reading paths by role,
 plus the core document list. Historical batch records live under [history/](history/) and are

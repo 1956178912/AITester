@@ -7,13 +7,19 @@
 ## [Unreleased]
 
 ### Added
+- 前沿登记补扫三篇（FC 轮）：按 arXiv 官方 API（`export.arxiv.org/api/query`）逐字核验 `2609.10548`（安全域 silent failures，**直接占位**「测试通过 ≠ 缺陷被检出」这一一般论断）、`2607.28871`（BSG-VA：验证证据的判别力）、`2609.04909`（APR 修复幻觉）后**散文登记**（未进 `refs.bib`，不建行）；并查明 `2609.10548` 与已登记的 `2610.06163` **同作者同数据集** ⇒ 只有一次独立命中，**不得写成多方独立复现**；本稿可主张的增量仍限三块分母层面的分解。
+- APR 实验设置前沿登记（FB 轮）：按 arXiv 官方摘要页核验 `2609.17993`，登记 task unit / fault-localization assumptions / initial input / tool access / repair-time feedback / final validation / resource budget 七维机器可读契约；当前 provenance 不声明已完全符合该 schema，后续对齐列入 1.x，不在 1.0.0 稳定批次借“前沿”名义引入未验证新功能。
 - 依赖漏洞豁免过期守卫（DF 轮）：`make dependency-audit` 与 CI 阻断步骤真实跑一次**不带** `--ignore-vuln` 的 pip-audit——修复版出现、新 advisory 未登记、版本漂移即红；豁免理由由 `src/` 静态扫描锁定；离线 `[SKIP]` 披露，CI `--require-audit` 把「无法验证」判红（37 例锁）。
 
 ### Changed
+- 更新日志门面瘦身（FC 轮）：`CHANGELOG.md` 的 162 行顶破了简洁度棘轮（`tests/test_doc_concision.py`：≤ 160 行）——把 `[Unreleased]` 的 DI–DL 四轮逐条条目移入 `docs/history/CHANGELOG_2026-10-27_batches.md`（**原文逐字保留，未删改**；英文版同目录 `.en.md`），门面只保留近期轮次。
 - 投稿材料按实测刷新（DG / DE 轮）：按导出脚本重算 `docs/study/PAPER_CITATION_KEYS.md`（64 行，6 行形态计数随生成器修复变化，读者链全绿）；重建投稿 PDF 70 页、`refs.bib` 79 条 ↔ 79 个 `\bibitem`、0 未定义引用，`PAPER_BUILD.md` 与 `paper/tex/README.md` 的旧读数同步。
 - 文档门面与测试锁重写（DD 轮）：README / QUICKSTART / CONTRIBUTING / MODEL_CARD / REPLICATION / docs 核心改为简洁结构，中英同步，旧叙事归档 `docs/history/`；文档锁改结构判据（定位区 / 披露小节 / 行数上限 / 索引完备性），退役逐轮标记与行窗口锁。
 
 ### Fixed
+- champion 守卫不再把「假修复率无观测」读作 0（FC 轮）：`select_champion` 的防「刷 passed」约束原式为 `mean_false_fix <= 0.5`，而 `mean_false_fix` 由 `_mean(arm_false_fix[arm])` 计算——**零样本时返回 0.0**，于是「一条假修复率观测都没有」的臂**空洞通过**该守卫并被选为 champion：**「没测」被读成了「测得 0」**。真值语义在 `experiments/_m1_metrics.py`：`repair_rate` 为 None（无 gold 材料 / gold 套件全 skip / rc==5 / 执行超时）时 `false_fix_rate` 恒为 None，而 `detection_rate` 由**另一条**路径独立计算 ⇒ 「检出率可测、假修复率不可测」真实可达。现要求 `n_false_fix >= 1` 才谈得上守卫，报告新增 `n_false_fix` 披露观测数，Markdown 表格零观测显示「不可测」，未过约束逐臂点名成因。10 例新锁（含 2 例反向对照）。
+- 运行期守卫被 `python -O` 静默删除不再只修一处（FC 轮）：FB 轮把 FB 的点修复（`assert_no_credit_coupling`）升级为**类锁**——普查 `src/**` 的全部 `assert`（按**内容锚点**登记，禁行号：行号会随上方插行漂移），登记册只收纯类型收窄、新增未登记项即红，并以 `compile(..., optimize=2)` 的字节码探针证明守卫没被优化器删掉（附负对照）；普查顺带查出**另外两处承重守卫**——`src/cli/app.py::_run_single_task` 与 `src/db/mysql_client.py::cursor` 的 `assert` 在 `-O` 下会退化成 AttributeError（前者正是其注释明写要避免的 NPE 形态），改显式 `if` + `raise AssertionError`，异常类型与消息逐字不变。11 例新锁。
+- 防 reward-hacking 的运行期守卫不再被 `python -O` 删除（FB 轮）：`assert_no_credit_coupling` 用 `assert banned not in source` 防止 `OrchestrationSearch` 把 hindsight credit 引入 UCB 臂选择，但优化模式会移除整条断言语句；既有测试只验证当前源码无耦合，从未构造「禁用引用 + `-O`」的负向路径。现改为显式 `if` + `raise AssertionError`，保留公开函数名与异常类型。新增 3 例锁：AST 不得含可删除的 `Assert`、禁用引用必须点名拒绝、真实 `python -O` 子进程仍拒绝；修前 2 红 / 1 绿（优化模式实测放行），修后新增与编排搜索既有测试共 72 例全绿。
 - 引用豁免表的键从「行号」改为「行号 + 内容锚点」（FA 轮）：6 条豁免只写 `路径:行号`，任何上方插行都让整表失效——EZ 轮一天内被同一道承重锁抓到三次，只能手工重排数字。现条目形态为 `路径:行号 @锚点`（锚点 = 该行内容的唯一片段），扫描按「行号精确命中 → 锚点命中」两级判定，锚点命中逐条披露「行号已漂移，内容未变」；**内容一改锚点消失即恢复命中、要求重判**，锚点只对同一路径生效；真实清单强制每条带锚点。`load_allowlist` 同时由 `set` 改为有序条目列表（不再静默合并重复）。5 例新锁，两方向实测：插入 2 行 ⇒ 绿 + 6 条披露（旧口径 3 红）；改写 M-5 标题 ⇒ 红 + 3 例红。
 - 测试与提交守卫的两处静默分叉不再成立（EZ 轮）：① 语料形状锁的判定面不再取作者机盘面——AR/AQ 三个锁把真实 trace 语料钉成「1,456 份文件 / 9,502 span / 4,368 token 属性 / 逐字段核对 ≥ 3,306」，扫描面却是 `rglob` 的**盘面**——`experiments/results/**` 按 Zenodo 纪律不入库，入库面只有 760 份，而盘面随本地重跑长到 1,495 份 ⇒ 作者机必红；fresh clone 又达不到 `require_full_corpus()` 的 1,456 盘面下界 ⇒ CI 必 skip，同一批断言在两份环境里都不执行。现形状断言只吃入库面（`git ls-files` ∩ 盘面），单一事实源收在 `tests/_corpus_guard.py`（`archived_trace_files()` / `local_extra_trace_files()` / `shape_problem()` / 四个钉值），本地未入库的 735 份语料只跑不变量、不进分母；git 不可用时显式 skip 而不降级到盘面。另设 `AUTHOR_ONLY_LOCKS` 登记表 + AST 普查锁：仍以全归档为前提的 5 个锁逐条写明理由，新增未登记的作者机专属锁即红——「CI 里永不执行」不再能是新增测试的默认形态。7 例新锁（含 3 条变异锚点实测全红），`src/` 零改动 ⇒ 覆盖读数不变。 ② pre-commit 钩子不再在本机恒红：钩子用系统 `python3`（缺 PyYAML），`check_baseline.py` 因此走最小行解析兜底，而该兜底把**每个**非缩进行都当成节起点——顶层标量 `last_verified` / `error_categories` 被读成 `{}`，结构校验恒红 2 项（HEAD 实测：系统解释器 rc=1、venv rc=0）；后果不是少判一项，而是唯一提交路径变成 `--no-verify`，把密钥泄漏 / 仓库卫生 / ruff 三道守卫一起关掉。现兜底按 YAML 语义区分「冒号后有值 = 标量 / 冒号后为空 = 节」、解析抽成 `_parse_baseline_text()` 使其可测，钩子优先选用 `.venv/bin/python3`（与同文件 RUFF 选择逻辑同口径）；5 例新锁（含缺 PyYAML 端到端 rc=0 与钩子接线），变异退回旧解析 ⇒ 4 红。 ③ 远端 CI 在两条「只在 fresh clone 成立」的前置上真红（ec0edce2，3.12/3.13/3.14 同红）：空库 bibtex 判定走仓库 `paper/tex/spbasic.bst`（`paper/` 不入库）⇒ 先报「样式文件缺席」；`check-dataset` 端到端用例把 skip 写在 `rc == 0` 断言之后 ⇒ 无缓存时先判红。现空库判定显式给临时 bst（加「仓库 BST 缺席时结论不变」护栏），数据守卫前移并读 `AITESTER_QUIXBUGS_DATA`（附接线锁）；fresh clone + 空 HOME 复跑 = 2 passed / 1 skipped。 ④ **`v1.0.0` 前移**到本轮收口提交（作者明确同意 force-update 已发布引用）：发布产物与仓库重新一致，`docs/release_freshness_allowlist.txt` 的例外条目随之删除（表为空 = 没有需要承担的落后）；该门的接线锁原本断言「例外表必非空」——与前移后的状态自相矛盾，现改按本地落后数双向判（落后未登记 ⇒ 红；不落后而表非空 ⇒ 红）。
 - SPEC 链的「三开关一体」校验不再只查显式键（EY 轮）：`ArmSpec.__post_init__` 用 `if k in self.env` 过滤后比状态，只写一个/两个 `SPEC_*` 键的臂全部通过；而干净基线把缺省键压成 `false`，运行期就是拆开的链——只开 IR 有 `spec_ir` 却没有 compile_rate 与 oracle 判定，只开 oracle 经 `test_plan.logic_analysis` 注入而 IR/DSL 观测恒 `None`，结果无法按「SPEC 链」归因；登记表测试复制同一盲点（`if k in arm.env`）与实现互相认证。现按生效值比较（缺省 = false）、错误消息列出三键生效态，登记表测试改整链判据；11 例新锁（修前 7 red：6 条部分链 + 生效态消息例；4 例负向对照/护栏）。
@@ -95,33 +101,7 @@
   释放空间不再虚报。同时 `--list-only` 此前静默忽略 `--max-age-days` / `--max-size-mb`，
   预览列出全部条目；现在与清理复用同一判定，输出 `[将删除]` / `[保留]`，预览名单与实删
   名单同源（8 例真实文件系统测试锁，先红后绿；旧 mock 锁按新契约改写）。
-- `check-dataset` 不再把「没有校验器」报成通过（DL 轮）：`quality_report` 只有 SWE-bench
-  系列实现，其他数据集（内置示例、QuixBugs、ULT 等）此前走 `report = {}` 的空分支，输出
-  「✓ 全量质量检查通过（N 个任务无加载问题）」——N 可能远大于 `--limit` 实际展示的任务数，
-  全量校验从未发生；`tasks_missing_source` 缺失时则完全静默，读者会误以为「无缺失源码」。
-  现在两种能力缺失都显式披露「未提供 …，跳过」（退出码仍为 0，与 `doctor` 的 unavailable
-  不计失败同口径）；实现了 `quality_report` 且返回空报告时仍输出经过校验的通过结论
-  （5 例测试锁，先红后绿）。
-- CLI 用法错误与运行失败的退出码不再混淆（DK 轮）：诊断命令 `check-dataset` 此前对未知
-  数据集名静默降级为内置示例并报「全量质量检查通过」（rc=0），`--limit -5` 走 Python 负切片
-  取尾部，加载异常只打印错误仍 rc=0，数据未就位（加载到 0 个任务）同样报通过；`run` 无有效
-  目标或数值选项非法返回 1，与「任务失败」无法区分；`clean-venv-cache --max-age-days -5`
-  的负数过滤在删除逻辑里恒真（`age_days > -5`），实测 rc=0 且删光全部缓存。现在用法错误
-  统一 rc=2（未知数据集名并列出合法名单、负 `--limit`、负缓存过滤、空目标、
-  `--coverage-threshold=nan`），运行失败 rc=1（加载异常 / 0 个任务），`0` 过滤保持
-  「全部过期」的显式语义。数据集名单改由模块级注册表派生（新增
-  `normalize_dataset_name` 与 `_DATASET_REGISTRY`，消除手工平行名单的漂移面）；工厂
-  `load_dataset` 对未知名称仍按契约降级为内置示例（21 例测试锁，先红后绿）。
-- `doctor` 用法错误与安装面不可用不再伪装成系统故障（DJ 轮）：拼错分组名或
-  `--groups` 解析为空原本都报 `matrix.status="error"`（或静默跑满全量矩阵）；
-  pip 安装的 wheel 因不含 `scripts/tools/e2e_probe.py` 使 `aitester doctor`
-  恒红且不可行动。现在探针框架对未知 `--group`/`--name` 在过滤前报错并列出
-  合法值（rc=2）；`doctor` 把子进程 rc=2 映射为 `usage`（退出码 2，不伪造
-  error 行）、脚本缺件映射为 `unavailable`（不计失败，`--strict` 下退 1），
-  空 `--groups` 直接走用法错误路径且不采集检查/不跑矩阵（10 例测试锁，先红后绿）。
-- 门禁链子进程全部带超时预算（DI 轮）：10 处 `subprocess` 调用缺 `timeout`——git 锁、ruff、mypy 与 pytest 收集任一挂起都会让 `make gates` / CI 无限挂起（没有读数、没有失败行，只有被平台上限回收的作业）。
-  补齐预算并钉死超时语义：登记面对账超时抛 `RuntimeError` 判红（返回 `None` 会被读成 `[SKIP]` 静默放行）、基线收集降级为 `None`、仓库卫生抛 `RuntimeError`、工件门合成 rc=124、静态快照记 `(124, 超时)`；
-  删除 `check_invocation_caliber` 的死 helper；AST 结构锁覆盖 `scripts/gates/*.py` 与两个工具脚本（7 例，先红后绿）。
+- 更早四轮（DI–DL）的逐条记录已归档到 [docs/history/CHANGELOG_2026-10-27_batches.md](docs/history/CHANGELOG_2026-10-27_batches.md)（**原文逐字保留，未删改**；英文版同目录 `.en.md`）。
 - CI 作业预算补齐（DH 轮）：`ci.yml` 的 `smoke-llm` 是唯一没有 `timeout-minutes`
   的作业——LLM 端点挂起时会被平台默认的 360 分钟兜底回收；补 15 分钟预算，并新增
   `tests/test_ci_job_timeouts.py` 锁全部 workflow 作业的预算声明与 (0,60] 值域

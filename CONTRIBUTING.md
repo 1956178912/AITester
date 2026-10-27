@@ -1,6 +1,6 @@
 # 贡献指南
 
-> 最后更新：2026-10-26 · English: [CONTRIBUTING.en.md](CONTRIBUTING.en.md)
+> 最后更新：2026-10-27 · English: [CONTRIBUTING.en.md](CONTRIBUTING.en.md)
 
 ## 开发环境
 

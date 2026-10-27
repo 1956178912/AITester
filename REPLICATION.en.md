@@ -1,6 +1,6 @@
 # AITester Replication Guide
 
-Last updated: 2026-10-26
+Last updated: 2026-10-27
 
 How to reproduce AITester experiments: the zero-LLM recompute path, the LLM-dependent re-run
 path, and how mounting and the test gate behave. **Raw LLM responses are not distributed**, so

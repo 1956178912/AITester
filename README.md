@@ -6,7 +6,7 @@
 
 > **作为 EMSE 复制包**：论文里的每个数字都走零 LLM 复算路径（`make reproduce-zero-llm`，L1 是 `make reproduce-zero-llm-l1`）。本仓库中需要消耗 API 配额的 `reproduce.sh` 与 `experiments/run_main_batch.py` 只是按预注册配置**重新跑批**，不在「工件 → 论文数值」的链路上。六个开放科学维度的逐条回答、以及包内哪些支路当前是 `skipped` 而非 `passed`，写在 [INVENTORY.md](INVENTORY.md)。
 
-> 最后更新：2026-10-26
+> 最后更新：2026-10-27
 
 ## 它是什么
 

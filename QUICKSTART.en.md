@@ -1,6 +1,6 @@
 # Quick Start
 
-> Last updated: 2026-10-26 · 简体中文: [QUICKSTART.md](QUICKSTART.md)
+> Last updated: 2026-10-27 · 简体中文: [QUICKSTART.md](QUICKSTART.md)
 
 ## 1. Install
 

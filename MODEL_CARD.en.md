@@ -3,7 +3,7 @@
 A **detection-first** research system for repair-evaluation (attribution-aware) Python test
 generation and repair. Covers model usage, data, evaluation calibers, and known limitations.
 
-Last updated: 2026-10-26
+Last updated: 2026-10-27
 
 ## 1. System Overview
 

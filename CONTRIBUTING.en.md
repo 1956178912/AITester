@@ -1,6 +1,6 @@
 # Contributing
 
-> Last updated: 2026-10-26 · 简体中文: [CONTRIBUTING.md](CONTRIBUTING.md)
+> Last updated: 2026-10-27 · 简体中文: [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ## Development Setup
 

@@ -5512,3 +5512,90 @@ CJ 轮记录的「重复登记对读者不可见」的根因；现在重复会�
 **④ 预登记读数。** 13,441 passed / 1 failed / 268 skipped、collected 13,710 → 刷新后 **13,442 / 0 / 268 / 13,710**。
 `src/` 零改动 ⇒ 语句/分支分母与覆盖读数不变（19,833/20,336 = 97.5266%；7,283/7,712 = 94.4372%）；
 `ruff format --check .` 1,054 份（无新增文件）/ mypy 137；全量 `-n 4 --dist loadfile` 139.54s。
+
+## 121. 附：FB 轮（2026-10-27）**运行期策略守卫会被 `python -O` 整条删除**；既有测试只验证「源码当前干净」，从未构造负向路径
+
+**① 缺陷形态。** `src/graph/orchestration_search.py::assert_no_credit_coupling` 用
+`assert banned not in source` 禁止 `OrchestrationSearch` 把 hindsight credit 引入 UCB 臂选择
+（BOAD 的 credit 是归因诊断信号；一旦进入臂选择即构成 reward hacking，ADR-0016 教训）。
+CPython 实测：`python -O`（以及 `compile(..., optimize=1/2)`）会**删除整条 assert 语句，连同它的消息常量**——
+于是该守卫在优化模式下**静默消失**，被判据本该拦住的耦合直接放行，且**不留任何痕迹**（没有异常、没有日志）。
+既有测试 `test_credit_functions_not_coupled_to_search_loop` 只调用该函数验证「当前源码无耦合」，
+**从未构造「禁用引用 + `-O`」的负向路径**——这正是「测试了逻辑、没测接线」的典型形态。
+
+**② 修法：显式分支 + 同类型异常。** 改为
+```python
+if banned in source:
+    raise AssertionError(f"OrchestrationSearch 引用禁用的信用符号 {banned!r}（reward hacking 风险）")
+```
+公开函数名与异常类型（`AssertionError`）逐字不变 ⇒ 调用方（`tests/` 与代码评审流程）无须改动。
+
+**③ 三层新锁（`tests/test_optimized_policy_guard_fb.py`）。**
+1. AST 层：`assert_no_credit_coupling` 的函数体不得含任何 `ast.Assert` 节点（可删除的判据即红灯）。
+2. 行为层（负向对照）：桩出「含 `hindsight_credits` 的源码」⇒ 必须点名该符号并拒绝通过。
+3. 运行期层：真实 `python -O` **子进程**里跑同一负向路径 ⇒ 仍必须拒绝。
+
+**④ 实测。** 修前 2 红 / 1 绿（优化模式实测放行）；修后新增 3 例与编排搜索既有测试共 72 例全绿。
+
+## 122. 附：FC 轮（2026-10-27）**champion 守卫把「假修复率无观测」读作 0**；「没测」被当成「测得 0」
+
+**① 缺陷形态。** `select_champion` 的第 3 条约束（规格 §8.1）是「防『刷 passed』配置」：
+`mean false_fix ≤ max_false_fix`（默认 0.5）。而 `mean_false_fix` 由
+`_mean(list(arm_false_fix.get(arm_id, ())))` 计算——**空序列时 `_mean` 返回 0.0**。
+于是「一条假修复率观测都没有」的臂拿到 `mean_false_fix = 0.0`，**空洞通过**该守卫并被选为 champion：
+守卫在关键处**从未真正判读**。这正是本仓库反复登记的那一族——「取不到测量值 ⇒ 当作 0」。
+
+**② 真值语义与可达性（读侧核验，非构造）。** `experiments/_m1_metrics.py`：
+- `_compute_false_fix_rate`：`repair_rate` 为 None 时**恒**返回 None；
+- `_compute_repair_rate` 返回 None 的真实路径：无 gold 材料（`_extract_gold_material` 为 None）、
+  执行不稳定（`_is_flaky_unverified`）、gold 套件全 skip/xfail（`_suite_has_effective_pass` 为假）、
+  `rc == 5`（no tests collected）、执行超时（`_run_pytest_in_tmp` 返回 None）；
+- 而 `_compute_detection_rate` 走的是**另一条**路径——它跑的是**生成测试**在 buggy / gold-fixed 两侧，
+  不是 gold 套件在系统补丁上。
+
+⇒ **「检出率可测、假修复率不可测」是真实可达的组合**（生成测试完美 fail-to-pass、而 gold 套件在打补丁后的代码上跑不起来），
+不是理论构造。
+
+**③ 修法（三处，缺一不可）。**
+| 面 | 改前 | 改后 |
+| --- | --- | --- |
+| 判据 | `mean_false_fix <= 0.5`（零样本 ⇒ 0.0 ⇒ 放行） | 要求 `n_false_fix >= 1` 才判读；无观测 ⇒ 该臂**未过约束**并点名成因 |
+| 报告 | `arm_stats[*]` 只有 `mean_false_fix` | 新增 `n_false_fix`（观测数）；读者据此区分「测得 0」与「没测」 |
+| 人读面 | 表格只印 `mean false_fix` | 表格新增 `n false_fix` 列；零观测时该格显示「**不可测**」而非 `0.0000` |
+
+未过约束的原因逐臂点名（`臂名（成因）`），不再只有一句笼统的「token 超 2× 或 false_fix > 0.5」。
+
+**④ 同轮第二处：`src/` 的 `assert` 普查与另外两处承重守卫。** FB 轮修的是**点**，
+FC 轮把它升级为**类锁**：普查 `src/**/*.py` 的全部 `ast.Assert`，按**内容锚点**登记
+（**不用行号**——行号会随上方插行漂移，FA 轮刚为此付过代价），登记册只收**纯类型收窄**
+（`isinstance(...)` / `x is not None`），新增未登记 assert 即红；
+并以 `compile(..., optimize=2)` 的**字节码探针**证明守卫没被优化器删掉
+（CPython 实测：`optimize=1` 与 `optimize=2` **都会**删掉 assert 及其消息常量，`optimize=0` 才保留），
+附**负对照**（合成函数：optimize=2 下消息常量消失、optimize=0 下仍在）证明探针非空转。
+
+普查顺带查出**另外两处承重守卫**——它们不是类型收窄，而是运行期失败路径：
+
+| 位置 | 改前 | `-O` 下的后果 | 改后 |
+| --- | --- | --- | --- |
+| `src/cli/app.py::_run_single_task` | `assert final_state is not None` | 后续 `final_state.get(...)` 退化成 `AttributeError`——**正是其注释明写要避免的 NPE 形态** | 显式 `if` + `raise AssertionError`（类型与消息逐字不变，上层 `except Exception` 行为不变） |
+| `src/db/mysql_client.py::cursor` | `assert self._pool is not None` | `self._pool.connection()` 退化成 `AttributeError`，「连接池未初始化」的诊断信息全丢 | 同上 |
+
+**⑤ 变异闭环（`scripts/tools/fc_mutation_verify.py`）。** 5 个变异全部转红：
+① 守卫退回「无观测也放行」⇒ 4 红；② 报告不再披露观测数 ⇒ 3 红；③ 渲染层缺证据照写 `0.0000` ⇒ 1 红；
+④ CLI 守卫退回 `assert` ⇒ 3 红；⑤ MySQL 守卫退回 `assert` ⇒ 4 红；
+**中性对照**（只改 docstring 措辞）⇒ **0 红**；collected 57 全程稳定；变异后按原字节 + sha256 还原。
+
+**⑥ 预登记读数（2026-10-27，同一棵树）。** 预登记跑 13,462 passed / 5 failed / 268 skipped、collected 13,735
+（5 红全部是登记数字未刷新：登记一致性 2 例 + BASELINE 一致性 1 例 + CHANGELOG 行数上限 1 例 + 发布新鲜度 1 例，
+**非运行时回归**）→ 刷新后 **13,467 / 0 / 268 / 13,735**。
+`src/` 改动使语句分母 20,337 → 20,353、覆盖 19,834 → 19,850 ⇒ 行覆盖 **19,850/20,353 = 97.5300%**（两位小数不变）；
+分支分母 7,714 → 7,728、覆盖 7,285 → 7,299、缺弧 429 不变 ⇒ 分支覆盖 **7,299/7,728 = 94.4500%**（94.44 → 94.45）。
+静态检查 `ruff format --check .` **1,060** 份（+5 = 三份新增 `.py` + 两份新增归档 `.md`）/ mypy 源文件 **137**（未变，0 错误）；
+全量 `-n 4 --dist loadfile` 带覆盖率实测 134.77s。
+
+**⑦ 同轮前沿登记（散文登记，未进 `refs.bib`，故不建行）。** 按论断族检索（cs.SE + cs.CR + cs.AI，
+官方 API 逐字核验）新增三篇：`arXiv:2609.10548`（安全域 silent failures，**直接占位**「测试通过 ≠ 缺陷被检出」
+这一一般论断）、`arXiv:2607.28871`（BSG-VA 验证证据判别力）、`arXiv:2609.04909`（APR 修复幻觉）；
+并查明 `2609.10548` 与已登记的 `2610.06163` **作者组完全相同、数据集相同** ⇒ 只有**一次**独立命中，
+**不得写成多方独立复现**。本稿可主张的增量仍限三块**分母层面**的分解（条件/边际口径分解、声明率被协议扰动、
+测量效度 × 声明率联立）。详见 `docs/study/EXTERNAL_READINGS_2026-10-25.md` §16。
