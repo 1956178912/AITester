@@ -94,6 +94,20 @@ MUTANTS: list[tuple[str, str, str, str, list[str]]] = [
         [],
     ),
     (
+        "F10-doctor-usage-text-lies",
+        CLI_APP,
+        '            conclusion_text = "用法错误（参数未通过校验；功能矩阵未执行，环境检查见上）"',
+        '            conclusion_text = "用法错误（未执行任何检查）"  # mutation: 谎称环境检查未执行',
+        [],
+    ),
+    (
+        "F11-doctor-strict-reason-dropped",
+        CLI_APP,
+        '        reason = "；--strict 下 warn/skip 视为不通过"',
+        '        reason = ""  # mutation: --strict 的理由不再披露',
+        [],
+    ),
+    (
         # 中性对照：仅改 docstring 措辞，不动任何判据 —— 必须 0 红。
         "F7-control-wording",
         TRACE,

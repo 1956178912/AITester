@@ -288,3 +288,38 @@ class TestRemainingUncoveredPaths:
         result = runner.invoke(cli_app.cli, ["run", str(weird_dir)])
         assert result.exit_code == 2, f"目录目标必须按用法错误退出，实际 {result.exit_code}"
         assert "不是普通文件" in result.output
+
+
+class TestDoctorConclusionText:
+    """doctor 的两处结论文案分支（此前无任何用例执行）。"""
+
+    @staticmethod
+    def _report(**overrides: object) -> dict:
+        base: dict = {
+            "conclusion": "fail",
+            "exit_code": 2,
+            "strict": False,
+            "checks": [{"label": "环境", "status": "pass", "detail": "ok"}],
+            "matrix": {"status": "usage", "detail": "未知分组", "stderr_tail": ""},
+        }
+        base.update(overrides)
+        return base
+
+    def test_usage_conclusion_mentions_checks_ran(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """矩阵是**子进程用法错误**且环境检查已跑过 ⇒ 措辞不得谎称「未执行环境检查」。"""
+        cli_app._doctor_print_human(self._report())
+        out = capsys.readouterr().out
+        assert "用法错误（参数未通过校验；功能矩阵未执行，环境检查见上）" in out
+
+    def test_strict_reason_is_disclosed_for_warn(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """`--strict` 下 warn/skip 视为不通过 ⇒ 结论行必须点名这条理由。"""
+        cli_app._doctor_print_human(
+            self._report(
+                conclusion="warn",
+                exit_code=1,
+                strict=True,
+                matrix={"status": "skip", "detail": "跳过", "stderr_tail": ""},
+            )
+        )
+        out = capsys.readouterr().out
+        assert "--strict 下 warn/skip 视为不通过" in out
