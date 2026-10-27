@@ -376,14 +376,12 @@ class TestArmRegistry:
                     assert arm.debugger, f"{arm.arm_id} 开 {dep} 但 debugger=False"
 
     def test_spec_chain_atomic(self):
-        """SPEC 链三开关在登记表中同进同退。"""
+        """SPEC 链三开关在登记表中按生效值同进同退（缺省键在干净基线下为 false）。"""
         for arm in ARM_REGISTRY:
             states = {
-                arm.env.get(k)
-                for k in ("SPEC_IR_ENABLE", "SPEC_IR_DSL_ENABLE", "SPEC_ORACLE_EXEC_ENABLE")
-                if k in arm.env
+                arm.env.get(k, "false") for k in ("SPEC_IR_ENABLE", "SPEC_IR_DSL_ENABLE", "SPEC_ORACLE_EXEC_ENABLE")
             }
-            assert len(states) <= 1, f"{arm.arm_id} 拆开 SPEC 链"
+            assert len(states) == 1, f"{arm.arm_id} 拆开 SPEC 链"
 
     def test_allow_regeneration_resolution(self):
         """再生路由解析：df_incumbent/gates_only_noregen=True；plain_llm_floor/全拓扑=False。"""

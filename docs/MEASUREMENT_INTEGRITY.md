@@ -5413,3 +5413,39 @@ collected 13,669；3 红全部为基线 / 登记守卫（`test_registration_read
 链内 pytest 145.52s / 144.21s / 147.32s（第三跑向上取整 = `suite_seconds` 148），
 墙钟 271s / 170s / 166s（首跑含冷缓存）。
 
+## 118. 附：EY 轮（2026-10-27）**「三开关一体」校验只查显式键**：干净基线把缺省键压成 false，部分链在臂空间里合法落地，登记表测试复制同一盲点
+
+**① 承诺与实现之间隔着一次「键存在即参与比较」的偷换。**
+1. 臂空间把 SPEC 链声明为单一旋钮：模块注释写明三键一体、拆开即 `ArmSpecError`（`src/graph/orchestration_search.py:129-132`），类文档同口径。
+2. `ArmSpec.__post_init__` 的实现只收集**显式**键：`chain_states = {self.env.get(k) for k in _SPEC_CHAIN_KEYS if k in self.env}`（旧 181 行）——只写一个或两个键时集合大小 ≤1，校验直接放行。
+3. 干净基线 `establish_clean_baseline()` 把全部已知臂键压为 `"false"`（`src/graph/orchestration_search.py:486`），运行期缺省键就是 false ⇒ `{SPEC_ORACLE_EXEC_ENABLE: "true"}` 实跑的是「oracle 开、IR/DSL 关」的拆链。
+4. 三层在运行时各有独立降级（`src/graph/nodes.py:561` 的 DSL 自行重解析；`src/graph/nodes.py:225-246` 的 oracle 四源材料回退），所以后果不是崩溃，而是**静默换了测量面**：只开 IR 写出 `spec_ir`/findings 而 compile_rate 与 oracle 判定恒缺；只开 oracle 经 `test_plan.logic_analysis` 注入而 IR/DSL 观测恒 None——结果无法按「SPEC 链」归因，臂名却宣称开关的是整条链。
+5. 登记表测试 `tests/test_orchestration_search.py::test_spec_chain_atomic`（旧 378 行）复制同一盲点（`if k in arm.env`）：未来任何部分链臂都会被它发合格证，实现与测试互相认证。
+6. 反例（负向对照）：全开 / 全关 / 完全不写三种形态在旧实现下就合法，修复后仍合法——缺陷只在「部分写 + 部分缺」时显形。
+
+**② 红因可辨（对 HEAD 旧源实测，零 LLM，$0）。**
+
+| 锁 / 输入 | 修前读数 | 修后读数 |
+| --- | --- | --- |
+| `test_partial_spec_chain_is_rejected[ir-only]` | 未抛（`{IR: true}` 被接受） | `ArmSpecError`「SPEC 链」 |
+| `[dsl-only]` | 未抛 | 抛（缺省 IR/oracle 按 false） |
+| `[oracle-only]` | 未抛 | 抛（缺省 IR/DSL 按 false） |
+| `[missing-oracle]`（IR+DSL） | 未抛 | 抛（oracle 缺省 false 生效） |
+| `[missing-dsl]`（IR+oracle） | 未抛 | 抛 |
+| `[missing-ir]`（DSL+oracle） | 未抛 | 抛 |
+| `[explicit-mixed]`（`{IR:true, DSL:false}`，既有锁） | 已抛（修前即绿） | 抛，消息列三键生效态 |
+| `test_error_message_reports_effective_states_including_omitted_keys` | 未抛（无消息可查） | 消息含三键、无 `None` |
+| `test_full_chain_true_is_accepted`（负向对照） | 绿 | 绿 |
+| `test_all_off_and_absent_are_accepted`（负向对照） | 绿 | 绿 |
+| `test_registry_arms_are_atomic_under_clean_baseline`（护栏） | 绿 | 绿 |
+| 旧 `test_spec_chain_atomic` 判据 | 只比显式键（部分链臂全绿） | 三键生效态必须唯一（`.get(k, "false")`） |
+
+红阶段 7 failed / 4 passed（失败均为 `DID NOT RAISE ArmSpecError`）；绿阶段新文件 11 passed / 0 failed；含登记表与矩阵两文件的关联面 80 passed，全仓引用 `orchestration_search` 的 8 个测试文件 143 passed。
+
+**③ 修法：按生效值比较；消息按运行期口径陈述。**
+- `__post_init__` 改为 `effective_chain = {k: self.env.get(k, _FALSY) for k in _SPEC_CHAIN_KEYS}`，`len(set(...)) > 1` 即拒（`src/graph/orchestration_search.py:183-185`）；错误消息列出三键**生效态**（缺省补 false，不出现 `None`）。
+- 登记表测试改为生效值判据：`{arm.env.get(k, "false") for k in 三键}` 必须恰好一个状态（`tests/test_orchestration_search.py:378`）。
+- 修正模块注释：原「DSL 编译依赖 IR 解析、oracle 执行依赖 DSL 产物」与 nodes.py 的独立降级不符，改为「三层运行时有独立降级，但拆开后的臂无法按链归因，故只接受同进同退」。
+- **同轮排除**：不改 `establish_clean_baseline` 的压平语义（空白基线是臂空间自洽的前提）；不把 SPEC 链拆成三个独立可调旋钮（那是臂空间口径变更，需另立 ADR）；不放宽 `ArmSpecError` 到告警；不动 `full_logic_equiv` / `full_df_gates_spec` 两个全链臂；`excluded_structurally` / `unmeasurable_exceeded` 措辞漂移与 champion 不筛 excluded 仍是另族。
+
+**④ 预登记读数（2026-10-27，同一棵树）。** 预登记跑 13,431 passed / 3 failed / 257 skipped、collected 13,691；3 红全部为基线 / 登记守卫（`test_registration_readers_cf` 2 例 + `test_2026_10_10_optimization_batch` 1 例），刷新后 13,434 / 0 / 257 / 13,691。语句分母 20,336 不变（`src/` 改动为同一控制流表达式的等价重写：3 条语句 → 3 条语句，均为既有单行语句）⇒ **19,833/20,336 = 97.5266%**（97.53；覆盖数与分母均不变）；分支覆盖 **7,285/7,712 = 94.4632%**（94.46；无新增判定弧）。静态检查：`ruff format --check .` 1,052 份（+1 = 新增测试文件）/ mypy 源文件 137（未变）。三次独立串行终跑链均 rc=0（13,434 passed / 257 skipped、collected 13,691 三跑一致）：链内 pytest 147.72s / 146.69s / 168.29s（第三跑向上取整 = `suite_seconds` 169），墙钟 291s / 164s / 185s（首跑含冷缓存）。

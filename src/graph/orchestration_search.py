@@ -126,8 +126,9 @@ KNOWN_ARM_ENV_KEYS: tuple[str, ...] = (
     ENV_SPEC_ORACLE_EXEC,
 )
 
-# SPEC 规约链：三开关一体（DSL 编译依赖 IR 解析、oracle 执行依赖 DSL 产物），
-# 臂空间作为单一旋钮处理，拆开无语义
+# SPEC 规约链：三开关一体——臂空间把它作为单一旋钮处理。三层在运行时各有
+# 独立降级（nodes.py 的 DSL 重解析与 oracle 四源材料回退），但拆开后的臂
+# 无法按「SPEC 链」归因，故登记表只接受同进同退
 _SPEC_CHAIN_KEYS: tuple[str, ...] = (ENV_SPEC_IR, ENV_SPEC_IR_DSL, ENV_SPEC_ORACLE_EXEC)
 
 # 臂 env 合法取值（项目开关读取口径：.lower() in ("true","1","on")；臂登记
@@ -177,12 +178,11 @@ class ArmSpec:
                 raise ArmSpecError(f"臂 {self.arm_id} 含未知 env 键 {key!r}（已知集合：{KNOWN_ARM_ENV_KEYS}）")
             if value not in (_TRUTHY, _FALSY):
                 raise ArmSpecError(f"臂 {self.arm_id} 的 {key} 取值须为 'true'/'false'，得到 {value!r}")
-        # SPEC 链一体性：三键同进同退
-        chain_states = {self.env.get(k) for k in _SPEC_CHAIN_KEYS if k in self.env}
-        if len(chain_states) > 1:
-            raise ArmSpecError(
-                f"臂 {self.arm_id} 拆开了 SPEC 链（三开关须一体）：{ {k: self.env.get(k) for k in _SPEC_CHAIN_KEYS} }"
-            )
+        # SPEC 链一体性：三键同进同退；缺省键在干净基线下按 false 生效，
+        # 故按生效值比较（只查显式键会放行「oracle 单开」这类效应拆链）
+        effective_chain = {k: self.env.get(k, _FALSY) for k in _SPEC_CHAIN_KEYS}
+        if len(set(effective_chain.values())) > 1:
+            raise ArmSpecError(f"臂 {self.arm_id} 拆开了 SPEC 链（三开关须一体，缺省按 false）：{effective_chain}")
         # 依赖：mutation_advisor / fl_spectral 由 debugger 路径消费，无修复循环时惰性
         for dep_key in (ENV_MUTATION_ADVISOR, ENV_FL_SPECTRAL):
             if self.env.get(dep_key) == _TRUTHY and not self.debugger:
