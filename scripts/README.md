@@ -77,7 +77,9 @@ CI / pre-commit 阻断项，`make gates` 跑其中大部分：
 | `verify_swe_bench_export.py` | 源码导出结果校验 |
 | `verify_synthetic_templates.py` | 合成模板三重不变量自验证 |
 | `audit_paper_numbers.py` | 论文数字 `// SRC:` 与工件对账（`make paper-audit`；paper/ 为本地件） |
-| `audit_fix_coverage.py` | 修复覆盖率缺口审计：找出「修复新增但从未被测试执行」的代码行（`make fix-coverage`；基线默认 auto） |
+| `audit_fix_coverage.py` | 修复覆盖率缺口审计：找出「修复新增但从未被测试执行」的代码行（`make fix-coverage`；基线默认 auto）；FD 轮起区分「真缺口」与「已在本进程之外验证」（登记表 `docs/fix_coverage_verified_elsewhere.txt`，登记失效 ⇒ rc=1） |
+| `fc_mutation_verify.py` | FC 轮变异验证：champion 守卫「无观测 ≠ 0」与 `src/` 断言类锁的 6 处回归锚点（零 LLM） |
+| `fd_mutation_verify.py` | FD 轮变异验证：未验证路径补锁与审计登记分类的 6 处回归锚点（零 LLM） |
 | `check_doc_commands.py` | 文档命令可执行性门禁：文档引用的脚本与 `make` 目标必须存在（`make doc-commands`） |
 | `export_paper_citation_keys.py` | 论文外部读数引用键快照生成 / 校验（`make paper-citation-keys`；paper/ 为本地件，缺失时明确失败） |
 | `convert_ult_manifest.py` | ULT 官方 manifest 转换 / 适配 |
