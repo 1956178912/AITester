@@ -22,6 +22,11 @@
   跨行函数签名的参数行、多行字面量；自建判定会把 `def` 的每行参数误算成
   可执行行（实测假阳性 885/1400，占 63%）；
 - **缺口**：新增行中 hits==0 的行。
+- **未测量**（FE 轮）：本作用域的文件**根本没被 coverage.xml 测量**（例如 `--pathspec experiments/`
+  配 `--cov=src` 产出的 coverage.xml）。**「未测量」不等于「零缺口」**——FE 轮修掉的正是这个
+  沉默零：改前此类情形会被读成「新增 0 行 / 未执行 0 行 / 0.00%」并以 rc=0 通过，
+  与 FC 轮 champion 守卫「无观测被读作 0」同族。现要求：**作用域内存在未测量文件 ⇒ rc=1**
+  （判决的输入不完整 ⇒ 判决不可信），并在输出中单列未测量清单。
 - **已在本进程之外验证**（FD 轮）：判决面是**父进程**的 `coverage.xml`，**子进程**里跑的测试对它不可见——ED 轮那批「可选依赖装上但坏了」的负控制正是在子进程里验证的。这类路径登记在 `docs/fix_coverage_verified_elsewhere.txt`，从缺口清单剔除并单列；若登记行的**内容锚点**在该文件里已消失（内容被改写），登记即**失效**，审计以 rc=1 判红并要求重新判定。
 
 注意：`coverage.xml` 必须由**当前 HEAD 代码**产出（`make test-cov`）。
@@ -211,9 +216,18 @@ def audit(
 
     files: list[dict[str, Any]] = []
     total_added = total_uncovered = total_verified = 0
+    unmeasured_files: list[str] = []
+    unmeasured_added_lines = 0
     for rel, lines in sorted(added.items()):
         hits = cov.get(rel)
         if hits is None:
+            # FE 轮：**未测量 ≠ 零缺口**。这些文件的新增行**根本没被测过**——
+            # 改前它们被记成「新增 0 / 未覆盖 0」，于是整片未测量会被读成
+            # 「0 行缺口（0.00%）」并以 rc=0 通过（与 FC 轮 champion 守卫同族）。
+            # 现单列未测量清单，并让它们**不进入分母**（分母只含真被测量的行），
+            # 同时把「作用域内存在未测量文件」作为判决不可信的信号上报。
+            unmeasured_files.append(rel)
+            unmeasured_added_lines += len(lines)
             files.append(
                 {
                     "file": rel,
@@ -221,6 +235,8 @@ def audit(
                     "uncovered": 0,
                     "missing_lines": [],
                     "verified_lines": [],
+                    "unmeasured": True,
+                    "unmeasured_lines": len(lines),
                     "note": "未被 coverage 测量",
                 }
             )
@@ -253,6 +269,9 @@ def audit(
         "total_added": total_added,
         "total_uncovered": total_uncovered,
         "total_verified_elsewhere": total_verified,
+        "total_unmeasured_files": len(unmeasured_files),
+        "total_unmeasured_added_lines": unmeasured_added_lines,
+        "unmeasured_files": unmeasured_files,
         "ratio": round(total_uncovered / total_added, 4) if total_added else 0.0,
         "files": files,
         "registry_errors": registry_errors,
@@ -261,10 +280,15 @@ def audit(
 
 
 def render(result: dict[str, Any]) -> str:
+    unmeasured = result.get("unmeasured_files") or []
+    unmeasured_lines = result.get("total_unmeasured_added_lines") or 0
+    scope_note = (
+        f"（**另有 {len(unmeasured)} 个文件 / {unmeasured_lines} 行未被测量，未计入分母**）" if unmeasured else ""
+    )
     lines = [
         f"基线 {result['base']} → HEAD；{result['pathspec']} 修复新增且被 coverage 测量的行 "
         f"{result['total_added']}，其中未执行 {result['total_uncovered']}"
-        f"（{result['ratio']:.2%}）",
+        f"（{result['ratio']:.2%}）{scope_note}",
         "",
         f"{'':<3}{'文件':<42}{'新增':>6}{'未覆盖':>7}  未覆盖行号",
     ]
@@ -272,6 +296,14 @@ def render(result: dict[str, Any]) -> str:
         flag = "!!" if item["uncovered"] else "  "
         detail = item.get("note") or ", ".join(str(n) for n in item["missing_lines"][:25])
         lines.append(f"{flag} {item['file']:<42}{item['added']:>6}{item['uncovered']:>7}  {detail}")
+    if unmeasured:
+        lines.append("")
+        lines.append("**未被 coverage 测量**（判决不可信 ⇒ 必须用同口径的 coverage.xml 重跑）：")
+        lines.extend(
+            f"   {item['file']:<40}{item.get('unmeasured_lines', 0)} 行新增从未被测过"
+            for item in result["files"]
+            if item.get("unmeasured")
+        )
     verified_total = result.get("total_verified_elsewhere") or 0
     if verified_total:
         lines.append("")
@@ -334,6 +366,17 @@ def main() -> int:
         print(f"\nJSON 已写入 {args.json}")
     # 登记完整性是判决的输入：登记表畸形或失效 ⇒ 判决不可信 ⇒ rc=1。
     if result["registry_errors"] or result["registry_stale"]:
+        return 1
+    # FE 轮：**未测量 ≠ 零缺口**。作用域内存在未被 coverage 测量的文件 ⇒
+    # 判决的输入不完整（分母只覆盖了被测量的那部分）⇒ 判决不可信 ⇒ rc=1。
+    # 改前此处报「0 行缺口（0.00%）」并 rc=0 通过——「没测」被读成了「测得 0」。
+    if result.get("total_unmeasured_files"):
+        print(
+            f"错误：作用域内有 {result['total_unmeasured_files']} 个文件未被 coverage 测量"
+            f"（共 {result.get('total_unmeasured_added_lines', 0)} 行新增从未被测过）——"
+            f"「未测量」不等于「零缺口」；请用与 --pathspec 同口径的 --cov 目标重跑覆盖率",
+            file=sys.stderr,
+        )
         return 1
     return 0
 
