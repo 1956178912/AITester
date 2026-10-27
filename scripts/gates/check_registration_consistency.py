@@ -285,6 +285,7 @@ def _untracked_paths(root: Path) -> list[str] | None:
         capture_output=True,
         text=True,
         check=False,
+        timeout=30,  # DI 轮：门禁链子进程一律带超时预算（挂起即无人收割）
     )
     if proc.returncode != 0:
         return None
