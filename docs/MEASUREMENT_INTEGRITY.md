@@ -5301,6 +5301,24 @@ miss 9 → 8〔BoolOp 锁〕与 `budget/cost_budget.py` miss 1 → 2 总量抵�
 
 红阶段 4 failed / 1 passed，绿阶段 17 passed（5 新 + 12 既有）。
 
+**③ 修法：删掉不可执行的形参，把承诺映射到真实存在的机制，并披露做不到的部分。**
+- 移除 `timeout=` / `idle_timeout=` 及其死常量 `_POOL_IDLE_TIMEOUT`；
+- `MYSQL_POOL_TIMEOUT` → `connect_timeout=`（驱动侧建立连接超时，与注释承诺同义）；
+- 显式 `ping=1`（PooledDB 默认值；取连接时探测服务端 `wait_timeout` 断开的空闲连接）；
+- **同轮排除**：DBUtils 3.1.2 没有「池耗尽时等待空闲连接」的形参，`blocking=True` 会一直
+  等到有连接归还——本轮不发明新的获取语义，只在 `config.py` 注释与 `.env.example` 里披露
+  该限制；也不顺手改 `cursor()` 在 `conn.cursor()` 抛异常时连接不归还的问题（另一族，另轮）；
+- 删 1 个 mock 合格证测试（`test_pool_construction_passes_idle_timeout`），锁 5 例（新文件
+  4 红→绿 + 1 负向对照；既有 12 例保持绿）。
+
+**④ 预登记读数（2026-10-27，同一棵树）。** 预登记跑 13,409 passed / 3 failed / 257 skipped、
+collected 13,669；3 红全部为基线 / 登记守卫（`test_registration_readers_cf` 2 例 +
+`test_2026_10_10_optimization_batch` 1 例），刷新后 13,412 / 0 / 257 / 13,669。语句分母
+20,337 → 20,336（删死常量 1 行）、覆盖数 19,834 不变 ⇒ **19,834/20,336 = 97.5315%**；分支
+覆盖 +1 / 分母 7,712 不变 ⇒ **7,286/7,712 = 94.4761%**（缺弧 427 → 426，来自真实 PooledDB
+取连接异常路径；+1 弧落在历史 ±1 抖动带内，不作行为主张）。静态检查：`ruff format --check .`
+1,049 份（+1 = 新增测试文件）/ mypy 源文件 137（未变）。
+
 ## 116. 附：EW 轮（2026-10-27）**config.py 声明了键，消费链不读**：一个预算旋钮从未接线（构造默认恒生效），两个幽灵键与一个死符号零读者
 
 **① 承诺与实现之间隔着一层没人读的配置面。**
@@ -5356,20 +5374,42 @@ miss 9 → 8〔BoolOp 锁〕与 `budget/cost_budget.py` miss 1 → 2 总量抵�
 改动只是报告字典多一个已被执行的字面量键，不新增语句或分支判定面。静态检查：
 `ruff format --check .` 1,050 份（+1 = 新增测试文件）/ mypy 源文件 137（未变）。
 
-**③ 修法：删掉不可执行的形参，把承诺映射到真实存在的机制，并披露做不到的部分。**
-- 移除 `timeout=` / `idle_timeout=` 及其死常量 `_POOL_IDLE_TIMEOUT`；
-- `MYSQL_POOL_TIMEOUT` → `connect_timeout=`（驱动侧建立连接超时，与注释承诺同义）；
-- 显式 `ping=1`（PooledDB 默认值；取连接时探测服务端 `wait_timeout` 断开的空闲连接）；
-- **同轮排除**：DBUtils 3.1.2 没有「池耗尽时等待空闲连接」的形参，`blocking=True` 会一直
-  等到有连接归还——本轮不发明新的获取语义，只在 `config.py` 注释与 `.env.example` 里披露
-  该限制；也不顺手改 `cursor()` 在 `conn.cursor()` 抛异常时连接不归还的问题（另一族，另轮）；
-- 删 1 个 mock 合格证测试（`test_pool_construction_passes_idle_timeout`），锁 5 例（新文件
-  4 红→绿 + 1 负向对照；既有 12 例保持绿）。
 
-**④ 预登记读数（2026-10-27，同一棵树）。** 预登记跑 13,409 passed / 3 failed / 257 skipped、
-collected 13,669；3 红全部为基线 / 登记守卫（`test_registration_readers_cf` 2 例 +
-`test_2026_10_10_optimization_batch` 1 例），刷新后 13,412 / 0 / 257 / 13,669。语句分母
-20,337 → 20,336（删死常量 1 行）、覆盖数 19,834 不变 ⇒ **19,834/20,336 = 97.5315%**；分支
-覆盖 +1 / 分母 7,712 不变 ⇒ **7,286/7,712 = 94.4761%**（缺弧 427 → 426，来自真实 PooledDB
-取连接异常路径；+1 弧落在历史 ±1 抖动带内，不作行为主张）。静态检查：`ruff format --check .`
-1,049 份（+1 = 新增测试文件）/ mypy 源文件 137（未变）。
+## 117. 附：EX 轮（2026-10-27）**「设计集」分母被观测覆盖顶替**：预算截断时同一行自相矛盾，且真实分母在工件中不可恢复
+
+**① 承诺与实现之间隔着一次「行数即分母」的偷换。**
+1. 归因报告「实验口径」首行承诺给出设计集：`设计集：synthetic {task_count} 任务 × 种子 {seeds} = {n_cells} cell`（`experiments/run_orchestration_search.py:160`）。
+2. `build_search_report` 的 `config.n_cells` 却取 `rows` 里 distinct `(task_id, seed)`（`src/graph/orchestration_search.py` 旧 1359 行）——那是**本次实际触达**的 cell 数。预算先到即停、或全部臂提前退出时，搜索不会触达全部设计集 cell ⇒ 同一行变成自相矛盾：「12 任务 × 3 种子 = 16 cell」。
+3. 后果不是显示瑕疵：设计集的真实分母在 `search_result.json` 中不可恢复（`rows` 只有观测到的），下游无法区分「全设计集阴性」与「只跑了 44% 的截断阴性」。
+4. 反例（负向对照）：默认预算 240 evals / 36 cell 时，全局游标会把 36 cell 全部扫到，旧字段恰好正确——所以该缺陷只在截断跑里显形，靠默认跑批发现的概率为零。
+
+**② 红因可辨（对 HEAD 旧源实测，零 LLM，$0）。**
+
+| 锁 / 输入 | 修前读数 | 修后读数 |
+| --- | --- | --- |
+| `test_design_set_size_survives_a_truncated_search`（36 cell / max_evals=16） | `config.n_cells == 16`（= 观测数） | `config.n_cells == 36`；`coverage.cells_observed == 16` |
+| `test_full_coverage_equals_design_set`（2 cell 全扫） | `KeyError: 'coverage'` | `n_cells == 2` / `cells_observed == 2` |
+| `test_duplicate_cells_count_once_in_design_set`（`[c0, c0, c1]`） | `KeyError: 'coverage'` | `n_cells == 2`（重复不放大分母）/ `cells_observed == 2` |
+| `test_attribution_md_reports_design_set_and_coverage` | MD 行「12 任务 × 3 种子 = 16 cell」 | 「= 36 cell」+「覆盖：16 / 36 cell（44.4%）」 |
+| `test_attribution_md_full_coverage_is_hundred_percent`（负向对照） | 无覆盖行 | 「覆盖：2 / 2 cell（100.0%）」 |
+
+红阶段 5 failed / 0 passed；绿阶段 5 passed（新文件 5 例）。真实 CLI 复核（2026-10-27，`--task-count 4 --seeds 42 --max-evals 2`，2 次真实 LLM 评估、10,573 tokens，非零成本）：`config.n_cells == 4` / `coverage.cells_observed == 2`；MD 输出「设计集… = 4 cell」+「覆盖：2 / 4 cell（50.0%）」。修前同一输入会写「= 2 cell」。
+
+**③ 修法：分母归分母，覆盖归覆盖；不发明新指标。**
+- `OrchestrationSearch.run()` 把设计集唯一 `(task, seed)` 数传给 `build_search_report(n_cells=...)`；`config.n_cells` 恢复为设计集分母（与预算/提前停止无关）；
+- 新增顶层 `coverage.cells_observed`（同源 `rows` 计算）披露本次实际触达的 distinct cell 数；
+- 归因 MD 在「设计集」行后新增「覆盖：observed / total cell（pct）」行——截断跑不再隐藏分母（`experiments/run_orchestration_search.py:165`）；
+- **同轮排除**：不升 `schema` 版本（字段语义纠错 + 纯增键；ADR-0034 明示该组件从未实跑、无历史工件需要迁移；仓库内 `config.n_cells` 的唯一读者就是本 MD）；不改 champion 门槛 / 预算停止语义（另族）；不把覆盖数塞进 `config`（反向的同一类错误）；`excluded_structurally` / `unmeasurable_exceeded` 的措辞漂移是另一族，本轮不顺手改。
+- 顺带修复 EW 轮插入位置错误：本文件 115 段（EV）的 ③④ 曾被 116 段（EW）截断（115 标题+①② → 116 全段 → EV ③④），本轮把 EV ③④ 移回 115 段尾部，116 段保持完整，117 段追加在文末。
+
+**④ 预登记读数（2026-10-27，同一棵树）。** 预登记跑 13,420 passed / 3 failed / 257 skipped、collected 13,680；3 红全部为基线 / 登记守卫
+（`test_registration_readers_cf` 2 例 + `test_2026_10_10_optimization_batch` 1 例），
+刷新后 13,423 / 0 / 257 / 13,680。语句分母 20,336 不变（`src/` 的三处改动都在既有
+语句内：重命名、报告 dict 增键、`n_cells=` 多行实参）⇒ **19,833/20,336 = 97.5266%**
+（97.53；覆盖 −1 行落 ±2 行噪声带）；分支覆盖 **7,285/7,712 = 94.4632%**（94.46；
+覆盖 −1 弧落 ±1 弧抖动带）——两处均归因测试集组成，不作退化主张。静态检查：
+`ruff format --check .` 1,051 份（+1 = 新增测试文件）/ mypy 源文件 137（未变）。
+三次独立串行终跑链均 rc=0（13,423 passed / 257 skipped、collected 13,680 三跑一致）：
+链内 pytest 145.52s / 144.21s / 147.32s（第三跑向上取整 = `suite_seconds` 148），
+墙钟 271s / 170s / 166s（首跑含冷缓存）。
+

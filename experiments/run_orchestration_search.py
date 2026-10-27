@@ -159,6 +159,10 @@ def _render_attribution_md(report: dict, attribution: dict[str, dict[str, float]
     lines.append(
         f"- 设计集：synthetic {meta['task_count']} 任务 × 种子 {meta['seeds']} = {report['config']['n_cells']} cell"
     )
+    n_cells = report["config"]["n_cells"]
+    cells_observed = report["coverage"]["cells_observed"]
+    coverage_pct = (100.0 * cells_observed / n_cells) if n_cells else 0.0
+    lines.append(f"- 覆盖：{cells_observed} / {n_cells} cell（{coverage_pct:.1f}%）")
     lines.append(f"- 臂空间：{report['config']['n_arms']} 臂（M1 精选；全因子上界 3072）")
     lines.append(
         f"- 预算：max_evals={report['budget']['max_evals']} / max_tokens={report['budget']['max_total_tokens']}"

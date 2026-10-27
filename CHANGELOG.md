@@ -7,9 +7,7 @@
 ## [Unreleased]
 
 ### Added
-- 依赖漏洞豁免过期守卫（DF 轮）：`make dependency-audit` 与 CI 阻断步骤真实跑一次**不带**
-  `--ignore-vuln` 的 pip-audit——修复版出现、新 advisory 未登记、版本漂移即红；豁免理由由
-  `src/` 静态扫描锁定；离线 `[SKIP]` 披露，CI `--require-audit` 把「无法验证」判红（37 例锁）。
+- 依赖漏洞豁免过期守卫（DF 轮）：`make dependency-audit` 与 CI 阻断步骤真实跑一次**不带** `--ignore-vuln` 的 pip-audit——修复版出现、新 advisory 未登记、版本漂移即红；豁免理由由 `src/` 静态扫描锁定；离线 `[SKIP]` 披露，CI `--require-audit` 把「无法验证」判红（37 例锁）。
 
 ### Changed
 - 重算论文引用键快照（DG 轮）：稿件在快照后被外部改动，按导出脚本重算 `docs/study/PAPER_CITATION_KEYS.md`（64 行，6 行形态计数随生成器修复变化），读者链全绿。
@@ -18,6 +16,7 @@
 - 文档测试锁改为结构判据（定位区 / 披露小节 / 行数上限 / 索引完备性），退役逐轮标记与行窗口锁。
 
 ### Fixed
+- 搜索报告的「设计集」分母不再被观测覆盖顶替（EX 轮）：`build_search_report` 把 `rows` 里 distinct `(task, seed)` 写进 `config.n_cells`，而归因 MD 把它标注为「设计集」——预算先到即停或臂提前退出时，同一行自相矛盾（「12 任务 × 3 种子 = 16 cell」），真实分母在工件中不可恢复。现 `config.n_cells` = 设计集唯一 cell 数，新增 `coverage.cells_observed` 披露实触达数，MD 增「覆盖：observed / total cell（pct）」行；5 例锁（4 红→绿 + 1 负向对照），真实 CLI 复核 4 cell 设计集 / 2 cell 覆盖显示 50.0%。
 - config.py 声明的键不再有「零读者」（EW 轮）：51 个公开键里 4 个在 `src/` / `experiments/` / `scripts/` 零引用——`ORCHESTRATION_SEARCH_MAX_UNMEASURABLE` 的注释承诺「单臂不可测累计超过上限即退出 UCB 池」，但唯一构造点 `experiments/run_orchestration_search.py` 从不传该参数，构造默认 5 恒生效（设置环境变量不改变任何行为）；`DOCKER_ENABLED` / `DOCKER_IMAGE` 是 `EXECUTOR_USE_DOCKER` / `EXECUTOR_DOCKER_IMAGE` 的幽灵重复（全仓零读者），`DEFAULT_LLM_CONFIG` 是纯死符号。现给实验驱动补 `--max-unmeasurable`（默认读 config）、报告 `config` 披露生效上限，删除三个零读者键及其 `.env.example` / 环境变量登记 / 设计文档引用；6 例新锁（4 红→绿 + 2 负向对照：合成的死键必须被普查抓到、`from config import` 与 `getattr(cfg, ...)` 读法必须被认作消费），`src/` 改动仅报告披露 ⇒ 覆盖读数不变。
 - MySQL 连接池的构造契约不再只由 mock 认证（EV 轮）：`MySQLClient.__init__` 把 `timeout` 与 `idle_timeout` 传给 `PooledDB`，但 DBUtils 3.1.2 没有这两个形参——多余关键字被转发给 `pymysql.connect`（同样不认），真实构造/取连接必抛 `TypeError`；既有测试把 `PooledDB` 整体 mock、只断言收到了 `idle_timeout`，等于给不可执行的构造契约发证书。现移除两个无效形参，`MYSQL_POOL_TIMEOUT` 改落到驱动支持的 `connect_timeout`（兑现「建立连接超时」，并披露池耗尽时 `blocking=True` 无获取超时），死连接探测显式声明 `ping=1`；5 例新锁（4 红→绿 + 1 判据负对照），删除认证缺陷的旧 mock 断言。
 - 复杂度感知路由不再只在 benchmark harness 激活（EU 轮）：`MODEL_ROUTING_STRATEGY=complexity_aware` 是默认值，但 `complexity_class` 的唯一写入点是 `experiments/run_benchmark.py` 的事后补写，`create_initial_state`（CLI `aitester run` / 编排搜索 / e2e 探针的共同入口）把四个路由字段初始化为 `None`——`APIManager._build_node_list` 的复杂度分支与 `BaseAgent._reorder_api_groups_by_complexity` 在 CLI 下永不触发，`fixed` 与 `complexity_aware` 不可区分。现把评分收敛到 `complexity_router.score_source_complexity` / `score_task_complexity`（单一实现），`create_initial_state` 构造时按策略写入四字段（`fixed` 保持历史 `medium`），benchmark 只传 `task_metadata`（保留 `num_files` 与解析失败时的 `cyclomatic_complexity` 兜底）并删除内联重复实现，编排搜索同步传 metadata；12 例新锁（先红后绿）+ 迁移文件 8 例（原 6 例改为驱动真实共享入口，新增 2 例：解析优先与导入计数异常兜底）。

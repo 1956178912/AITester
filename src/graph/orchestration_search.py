@@ -1236,6 +1236,7 @@ class OrchestrationSearch:
             seed=self._seed,
             min_evals_per_arm=self._min_evals_per_arm,
             max_unmeasurable=self._max_unmeasurable,
+            n_cells=len({(cell.task_id, cell.seed) for cell in self._cells}),
         )
 
 
@@ -1320,6 +1321,7 @@ def build_search_report(
     seed: int,
     min_evals_per_arm: int,
     max_unmeasurable: int,
+    n_cells: int,
 ) -> dict[str, Any]:
     """汇总搜索报告（结果 JSON 的直接载体）。
 
@@ -1336,9 +1338,11 @@ def build_search_report(
         seed: 搜索种子。
         min_evals_per_arm: champion 资格门槛。
         max_unmeasurable: 单臂不可测累计上限（超过即退出 UCB 池）。
+        n_cells: 设计集唯一 cell 数（(task, seed) 去重；与预算/提前停止无关）。
 
     Returns:
-        报告 dict（schema = "orchestration_search_v1"）。
+        报告 dict（schema = "orchestration_search_v1"；`config.n_cells` 是设计集
+        分母，`coverage.cells_observed` 是本次实际触达的 distinct cell 数）。
     """
     arm_stats: dict[str, dict[str, Any]] = {}
     for arm_id in arm_order:
@@ -1356,7 +1360,7 @@ def build_search_report(
             "repair_any": bool(arm_repair_any.get(arm_id, False)),
         }
     champion, champion_reason = select_champion(arm_stats, min_evals=min_evals_per_arm)
-    distinct_cells = len({(str(r.get("task_id")), int(r.get("seed", 0))) for r in rows})
+    cells_observed = len({(str(r.get("task_id")), int(r.get("seed", 0))) for r in rows})
     return {
         "schema": "orchestration_search_v1",
         "config": {
@@ -1365,11 +1369,12 @@ def build_search_report(
             "min_evals_per_arm": min_evals_per_arm,
             "max_unmeasurable": max_unmeasurable,
             "n_arms": len(arm_order),
-            "n_cells": distinct_cells,
+            "n_cells": n_cells,
         },
         "arms": {arm_id: arms[arm_id].to_dict() for arm_id in arm_order},
         "arm_stats": arm_stats,
         "budget": budget.to_dict(),
+        "coverage": {"cells_observed": cells_observed},
         "champion": champion,
         "champion_reason": champion_reason,
         "pull_sequence": list(pull_sequence),
