@@ -57,14 +57,18 @@
 # 以下均为**内部指标/轮次叙述行**（登记册轮次明细），行内数字是项目自身指标
 # （12,745 passed、+3 tasks、百分比等），不是外部文献引用。行号漂移后需重新
 # 判定（命中会重现，不会静默失效）。
-docs/PROJECT_STATUS_REGISTER.md:214
-docs/PROJECT_STATUS_REGISTER.md:226
-docs/PROJECT_STATUS_REGISTER.md:234
-docs/PROJECT_STATUS_REGISTER.md:251
-docs/PROJECT_STATUS_REGISTER.md:299
-docs/PROJECT_STATUS_REGISTER.md:313
+# EZ 轮（2026-10-27）重判：登记册 §3.2 顶部插入本轮两行（语料锁 / pre-commit 键
+# 全局 +2（内容与判定不变，仅行号跟随；漂移由 tests/test_citations_gate.py 的
+# 承重锁保证可见——它本轮以「6 条全部失效」的形态报警了两次，这就是行号为键的
+# 代价：任何在其上方插行的改动都必须同步本表，否则 3 个测试 + 1 道门禁同时红）。
+docs/PROJECT_STATUS_REGISTER.md:217
+docs/PROJECT_STATUS_REGISTER.md:229
+docs/PROJECT_STATUS_REGISTER.md:237
+docs/PROJECT_STATUS_REGISTER.md:254
+docs/PROJECT_STATUS_REGISTER.md:302
+docs/PROJECT_STATUS_REGISTER.md:316
 
 # ── 2026-10-25 CM 轮补登记（1 条）────────────────────────────────────
-# 1.0.0 发布行（登记册 §3.2 首行）：行内 26,114.9 / 0.025885 / 35-of-261 是
+# 1.0.0 发布行（登记册 §3.2 的 CM 轮行；EZ 轮起不再是首行）：行内 26,114.9 / 0.025885 / 35-of-261 是
 # **已撤回世代**的内部成本读数（权威落点 WITHDRAWN_ARTIFACTS 表 W-1），不是外部
 # 文献引用；「数字是否真在工件里」由论文审计器的 `// SRC-CHECK: strict` 块判定。

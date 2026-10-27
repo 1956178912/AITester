@@ -5449,3 +5449,37 @@ collected 13,669；3 红全部为基线 / 登记守卫（`test_registration_read
 - **同轮排除**：不改 `establish_clean_baseline` 的压平语义（空白基线是臂空间自洽的前提）；不把 SPEC 链拆成三个独立可调旋钮（那是臂空间口径变更，需另立 ADR）；不放宽 `ArmSpecError` 到告警；不动 `full_logic_equiv` / `full_df_gates_spec` 两个全链臂；`excluded_structurally` / `unmeasurable_exceeded` 措辞漂移与 champion 不筛 excluded 仍是另族。
 
 **④ 预登记读数（2026-10-27，同一棵树）。** 预登记跑 13,431 passed / 3 failed / 257 skipped、collected 13,691；3 红全部为基线 / 登记守卫（`test_registration_readers_cf` 2 例 + `test_2026_10_10_optimization_batch` 1 例），刷新后 13,434 / 0 / 257 / 13,691。语句分母 20,336 不变（`src/` 改动为同一控制流表达式的等价重写：3 条语句 → 3 条语句，均为既有单行语句）⇒ **19,833/20,336 = 97.5266%**（97.53；覆盖数与分母均不变）；分支覆盖 **7,285/7,712 = 94.4632%**（94.46；无新增判定弧）。静态检查：`ruff format --check .` 1,052 份（+1 = 新增测试文件）/ mypy 源文件 137（未变）。三次独立串行终跑链均 rc=0（13,434 passed / 257 skipped、collected 13,691 三跑一致）：链内 pytest 147.72s / 146.69s / 168.29s（第三跑向上取整 = `suite_seconds` 169），墙钟 291s / 164s / 185s（首跑含冷缓存）。
+
+## 119. 附：EZ 轮（2026-10-27）**两份环境都不判定的锁 + 只能靠 `--no-verify` 绕过的钩子**：语料形状锁判的是作者机盘面，而 pre-commit 的降级解析把顶层标量读成空 dict
+
+**① 承诺与实现之间隔着一次「盘面 = 语料全集」的偷换。**
+1. AR / AQ 三个锁把「真实 trace 语料形状」钉成精确数字：文件 1,456 份 / span 9,502 个 / token 属性 4,368 个 / 逐字段核对 ≥ 3,306。
+2. 扫描面是 `root.rglob("*.trace.jsonl")`——**盘面**。而 `experiments/results/**` 按 `.gitignore:190` 与 Zenodo 纪律不入库，只有 pinned 批次被 `git add -f`：`git ls-files '*.trace.jsonl'` 实测 **760** 份。
+3. 盘面随本地重跑增长：同一次读实测 **1,495** 份 / **9,658** span（+735 份未入库语料，多为 `position_aware_*` 合成批）⇒ 钉值 1,456 / 9,502 在作者机**永不成立**。
+4. fresh clone 只有 760 份，达不到 `require_full_corpus()` 的盘面下界 1,456 ⇒ 三个锁在 CI **全部 skip**（`tests/_corpus_guard.py` 的 BZ 轮守卫按设计放行）。
+5. 净效果：**同一批断言在两份环境里都不执行**——本地红（长期红被当噪声）、CI 绿（skip 混在 268 例里），与「判干净」不可区分。
+6. 反例（负向对照）：同模块 `test_corpus_repeat_export_is_stable` 不钉数字、只判「重复导出逐字稳定」，在两份环境都成立——说明「真实语料」类测试并非必须依赖盘面全集。
+
+**② 红因可辨（对 HEAD 旧源实测，零 LLM，$0）。**
+
+| 锁 / 输入 | 修前读数 | 修后读数 |
+| --- | --- | --- |
+| AR 文件数（盘面 → 入库面） | 盘面 1,495 ≠ 1,456 ⇒ 红 | 入库面 760 == 760 ⇒ 绿 |
+| AR span 总数 | 未到达（先红在文件数）；盘面口径 9,658 ≠ 9,502 | 入库面 4,139 == 4,139 ⇒ 绿 |
+| AQ span / token 属性 | 盘面 9,658 ≠ 9,502 ⇒ 红（token 属性同批） | 入库面 4,139 / 2,280 ⇒ 绿 |
+| AQ 逐字段核对 | `>= 3,306`（盘面旧读数；入库面实测 2,280 ⇒ 恒假） | 2,280 == 2,280 ⇒ 绿 |
+| fresh clone（760 份语料） | `require_full_corpus()` ⇒ 三例全 skip | 三例执行并断言（CI 侧从「不判定」变「真判定」） |
+| 变异：`archived_trace_files()` 退回盘面 | — | 2 红（AR 形状锁 + 钉值可达锁） |
+| 变异：`ARCHIVED_TRACE_FILES` 760 → 761 | — | 2 红 |
+| 变异：新增未登记的 `require_full_corpus()` 调用点 | — | 1 红（登记表普查） |
+
+**③ 修法：形状断言的判定面 = 入库面；本地额外语料只扩覆盖面，不进分母。**
+- `tests/_corpus_guard.py` 新增单一事实源：`archived_trace_files()`（`git ls-files` ∩ 盘面）、`local_extra_trace_files()`（盘面 − 入库面）、`shape_problem()`（统一的漂移消息），以及四个入库面钉值 `ARCHIVED_TRACE_FILES = 760` / `ARCHIVED_SPANS = 4,139` / `ARCHIVED_TOKEN_ATTRS = 2,280` / `ARCHIVED_TOKEN_FIELD_CHECKS = 2,280`。
+- git 不可用时**不降级到盘面**：显式 skip 并说明「无法区分入库面与盘面」——降级会把「入库面」偷换成「盘面」，正是本轮修掉的缺陷。
+- 三个锁的**形状断言**只吃入库面；**不变量**（单 trace、span_id 唯一、parent 同文件、零披露、token 值域、raw↔span 逐字段相等）在入库面 + 本地额外语料上照跑，覆盖面不缩。
+- 作者机专属锁（仍需全归档才能成立「任何批次」量词的 0 实例断言）登记进 `AUTHOR_ONLY_LOCKS` 并逐条写明理由；`tests/test_corpus_census_ez.py` 用 AST 普查锁住「调用点集合 == 登记表」，**新增未登记的作者机专属锁即红**——不允许「CI 里永不执行」成为新增测试的默认形态。
+- **同轮排除**：不把 5 个作者机专属锁改判入库面（会静默缩小「任何/全仓」量词的扫描面，属口径变更，需另立判据）；不改 `require_full_corpus()` 的盘面下界（它只回答「作者机重归档在不在」）；不引入语料快照工具。
+
+**④ 同轮第二处：pre-commit 钩子在本机恒红 ⇒ 唯一提交路径是 `--no-verify`。** 钩子把解释器写成 `PY="${PYTHON:-python3}"`（系统解释器，本机无 PyYAML），于是 `check_baseline.py` 走最小行解析兜底；该兜底把**每个**非缩进行都当成节起点（`data[key] = {}`），顶层标量 `last_verified` 与 `error_categories` 被读成 `{}`，结构校验恒红 2 项（HEAD 实测：`python3 …/check_baseline.py` rc=1；`.venv/bin/python3 …` rc=0）。这不是「少判一项」：提交必须 `--no-verify`，而它同时跳过密钥泄漏 / 仓库卫生 / ruff 三道守卫——守卫被训练成被绕过，等于没有。现兜底按 YAML 语义区分「冒号后有值 = 顶层标量 / 冒号后为空 = 节起点」，并把解析抽成 `_parse_baseline_text()` 使其可测；钩子优先选用 `.venv/bin/python3`（与同文件 RUFF 的选择逻辑同口径）。5 例新锁：顶层标量不是节、空值才开节、两个解析器在本门**消费的键**上逐键一致、缺 PyYAML 时端到端 rc=0、钩子解释器接线；变异（退回「每个顶层行都当节」）⇒ 4 红。
+
+**⑤ 预登记读数（2026-10-27，同一棵树）。** 预登记跑 13,432 passed / 3 failed / 268 skipped、collected 13,703；3 红全部为登记前状态锁（`test_registration_readers_cf` 2 例 + `test_2026_10_10_optimization_batch` 1 例），刷新后 13,435 / 0 / 268 / 13,703。**口径**：本会话为嵌套沙箱（宿主限制类 skip 14 例，完整环境对应 257 skipped / 13,446 passed），两个数都出自实测输出，未做换算填充。`src/` 零改动 ⇒ 语句分母 20,336、分支分母 7,712 不变，覆盖 **19,833/20,336 = 97.5266%**、分支 **7,285/7,712 = 94.4632%**（`coverage.xml` 逐行复算，与本轮前一致）；静态检查 `ruff format --check .` 1,054 份（+2 = 两个新增测试文件）/ mypy 源文件 137（未变）；全量 `-n 4 --dist loadfile` 末次 142.63s（同轮另两次 132.11s / 133.06s，同机波动）。

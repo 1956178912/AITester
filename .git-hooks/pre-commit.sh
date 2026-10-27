@@ -20,7 +20,18 @@ set -e
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "$REPO_ROOT"
 
-PY="${PYTHON:-python3}"
+PY="${PYTHON:-}"
+if [ -z "$PY" ]; then
+  # EZ 轮（2026-10-27）：优先用仓库虚拟环境解释器。系统 python3 常缺 PyYAML，
+  # 会落到 check_baseline.py 的最小解析兜底；该兜底此前把顶层标量
+  # （last_verified / error_categories）读成 {}，使本钩子在本机**恒红 2 项**，
+  # 唯一的提交路径变成 `--no-verify`——那会同时关掉密钥/卫生/ruff 三道守卫。
+  if [ -x ".venv/bin/python3" ]; then
+    PY=".venv/bin/python3"
+  else
+    PY="python3"
+  fi
+fi
 
 echo "[pre-commit] 运行 CI 同源守卫（check_lock_sync / check_credential_scrub / check_baseline_numbers / check_baseline / check_bilingual_docs / check_secret_leak / check_repo_hygiene）…"
 

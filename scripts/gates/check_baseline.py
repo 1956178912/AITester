@@ -46,6 +46,44 @@ _MEASURE_TOLERANCE = 0.02
 _COLLECT_TIMEOUT_S = 300.0
 
 
+def _parse_baseline_text(text: str) -> dict:
+    """最小解析兜底（无 PyYAML 时用）：`key: value` 扁平读取。
+
+    EZ 轮（2026-10-27）：旧实现把**每个**非缩进行都当成节起点
+    （`data[key] = {}`），于是顶层标量 `last_verified: "2026-10-27"` 与
+    `error_categories: 18` 都被读成空 dict——本门在缺 PyYAML 的环境里
+    （= pre-commit 钩子用系统 `python3`）**恒红 2 项**，唯一的提交路径
+    变成 `--no-verify`，那等于把密钥/卫生/ruff 三道守卫一起关掉。
+    现按 YAML 语义区分：冒号后有值 ⇒ 顶层标量；冒号后为空 ⇒ 节起点。
+    """
+    data: dict = {}
+    current_top: str | None = None
+    for raw in text.splitlines():
+        stripped = raw.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        line = raw.split("#", 1)[0].rstrip()
+        if not line.strip():
+            continue
+        if not raw.startswith((" ", "\t")):  # 顶层
+            key, sep, val = line.partition(":")
+            if not sep:  # 非 `key: value` 形态，忽略（结构校验会各自报错）
+                continue
+            key, val = key.strip(), val.strip()
+            if val:
+                data[key] = _parse_scalar(val)
+                current_top = None
+            else:
+                data[key] = {}
+                current_top = key
+            continue
+        if current_top is None:  # 缩进行但还没有所属节
+            continue
+        key, _, val = line.strip().partition(":")
+        data[current_top][key.strip()] = _parse_scalar(val.strip())
+    return data
+
+
 def _load_baseline() -> dict:
     """加载 BASELINE.yaml（pyyaml 缺失时用最小行解析兜底）。"""
     if not BASELINE_PATH.exists():
@@ -58,20 +96,7 @@ def _load_baseline() -> dict:
             print("  [FAIL] BASELINE.yaml 顶层不是映射")
             sys.exit(2)
         return data
-    # 最小解析兜底：`key: value` 扁平读取（仅覆盖本文件用到的顶层+两节）
-    data: dict = {}
-    current_top: str | None = None
-    for raw in text.splitlines():
-        line = raw.split("#", 1)[0].rstrip() if not raw.lstrip().startswith("#") else ""
-        if not line.strip():
-            continue
-        if not raw.startswith(" ") and raw.strip():
-            current_top = raw.split(":", 1)[0].strip()
-            data[current_top] = {}
-        elif current_top and ":" in line:
-            key, _, val = line.strip().partition(":")
-            data[current_top][key.strip()] = _parse_scalar(val.strip())
-    return data
+    return _parse_baseline_text(text)
 
 
 def _parse_scalar(val: str):

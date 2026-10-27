@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import json
 import math
-from pathlib import Path
 
 import pytest
 
@@ -34,7 +33,14 @@ from src.observability.otel_export import (
     _token_attributes,
     export_trace_jsonl,
 )
-from tests._corpus_guard import require_full_corpus
+from tests._corpus_guard import (
+    ARCHIVED_SPANS,
+    ARCHIVED_TOKEN_ATTRS,
+    ARCHIVED_TOKEN_FIELD_CHECKS,
+    archived_trace_files,
+    local_extra_trace_files,
+    shape_problem,
+)
 
 TRACE = "t" * 32
 BASE = {"event": "node", "node": "n1", "ts": 1.5, "duration_ms": 2.0, "span_id": "b" * 16}
@@ -379,51 +385,75 @@ class TestExportEndToEnd:
         # 实测读数（tests/_corpus_guard.py）。
         # 2026-10-23 provider 清理后复测：span 129058 → 126408、
         # token 属性 27135 → 26166（文件面 9086 → 8763，见 AR 同批锁定）。
-        require_full_corpus()
-        root = Path(__file__).resolve().parents[1]
-        files = sorted(root.rglob("*.trace.jsonl"))
-        assert files, "真实 trace 语料缺失"
+        # EZ 轮（2026-10-27）：形状断言改吃**入库面**（`git ls-files`）——旧口径钉
+        # 盘面 9,502 span / 4,368 token 属性，盘面一增长（9,658 / 实测 4,420）作者机
+        # 必红、CI 又 skip；现在入库面 4,139 / 2,280，本地未入库语料只跑不变量。
+        archived = archived_trace_files()
+        assert archived, "入库 trace 语料缺失"
         spans = 0
         token_attrs = 0
-        for path in files:
-            for span in export_trace_jsonl(str(path)):
-                spans += 1
-                attrs = span["attributes"]
-                assert _VALUE_REASONS_ATTRIBUTE not in attrs, path
-                for key in TOKEN_KEYS:
-                    if key in attrs:
-                        token_attrs += 1
-                        assert type(attrs[key]) is int, (path, key)
-                        assert attrs[key] >= 0, (path, key)
-                assert type(span["start_time_unix_nano"]) is int, path
-                assert span["start_time_unix_nano"] >= 0, path
-                assert type(span["duration_unix_nano"]) is int, path
-                assert span["duration_unix_nano"] >= 0, path
-        assert spans == 9502  # v0.8.0 语料稳态回钉（原精确 126408）
-        assert token_attrs == 4368  # v0.8.0 语料稳态回钉，按本测试口径实测（原精确 26166）
+        for path in archived:
+            file_spans, file_token_attrs = _export_counts(path)
+            spans += file_spans
+            token_attrs += file_token_attrs
+        problem = shape_problem(spans, ARCHIVED_SPANS, "入库 trace 的 span 总数")
+        assert not problem, problem
+        problem = shape_problem(token_attrs, ARCHIVED_TOKEN_ATTRS, "入库 trace 的 token 属性数")
+        assert not problem, problem
+        for path in local_extra_trace_files():
+            _export_counts(path)
 
     def test_real_token_attributes_match_raw_task_end_records(self):
         # BZ 轮：checked 下界以全归档 trace 语料为扫描面——同
         # test_real_traces_have_zero_disclosures_and_clean_types 的显式 skip 口径。
         # 2026-10-23 provider 清理后复测：checked 27135 → 26166，下界同步下调。
-        require_full_corpus()
-        root = Path(__file__).resolve().parents[1]
+        # EZ 轮（2026-10-27）：口径同上一例——分母是入库面，锁的是精确值。
         checked = 0
-        for path in sorted(root.rglob("*.trace.jsonl")):
-            raw_tokens = {}
-            for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
-                try:
-                    record = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                if isinstance(record, dict) and isinstance(record.get("token_usage"), dict):
-                    raw_tokens = record["token_usage"]
-            if not raw_tokens:
-                continue
-            end_span = next((s for s in export_trace_jsonl(str(path)) if s["name"] == "task_task_end"), None)
-            assert end_span is not None, path
-            for field, key in zip(("input_tokens", "output_tokens", "total_tokens"), TOKEN_KEYS, strict=True):
-                if field in raw_tokens:
-                    assert end_span["attributes"][key] == raw_tokens[field], (path, field)
-                    checked += 1
-        assert checked >= 3306  # CI 重建 2026-10-24：新语料（原 26000）
+        for path in archived_trace_files():
+            checked += _token_field_checks(path)
+        problem = shape_problem(checked, ARCHIVED_TOKEN_FIELD_CHECKS, "入库 trace 的 token 字段核对数")
+        assert not problem, problem
+        for path in local_extra_trace_files():
+            _token_field_checks(path)
+
+
+def _export_counts(path) -> tuple[int, int]:
+    """单文件导出：返回 (span 数, token 属性数)，同时断言值域与零披露。"""
+    spans = 0
+    token_attrs = 0
+    for span in export_trace_jsonl(str(path)):
+        spans += 1
+        attrs = span["attributes"]
+        assert _VALUE_REASONS_ATTRIBUTE not in attrs, path
+        for key in TOKEN_KEYS:
+            if key in attrs:
+                token_attrs += 1
+                assert type(attrs[key]) is int, (path, key)
+                assert attrs[key] >= 0, (path, key)
+        assert type(span["start_time_unix_nano"]) is int, path
+        assert span["start_time_unix_nano"] >= 0, path
+        assert type(span["duration_unix_nano"]) is int, path
+        assert span["duration_unix_nano"] >= 0, path
+    return spans, token_attrs
+
+
+def _token_field_checks(path) -> int:
+    """单文件逐字段核对：task_end span 的 token 属性必须等于原始记录。返回核对数。"""
+    raw_tokens = {}
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(record, dict) and isinstance(record.get("token_usage"), dict):
+            raw_tokens = record["token_usage"]
+    if not raw_tokens:
+        return 0
+    end_span = next((s for s in export_trace_jsonl(str(path)) if s["name"] == "task_task_end"), None)
+    assert end_span is not None, path
+    checked = 0
+    for field, key in zip(("input_tokens", "output_tokens", "total_tokens"), TOKEN_KEYS, strict=True):
+        if field in raw_tokens:
+            assert end_span["attributes"][key] == raw_tokens[field], (path, field)
+            checked += 1
+    return checked

@@ -33,7 +33,6 @@ import hashlib
 import json
 import math
 import re
-from pathlib import Path
 
 import pytest
 
@@ -45,7 +44,14 @@ from src.observability.otel_export import (
     _record_to_span,
     export_trace_jsonl,
 )
-from tests._corpus_guard import require_full_corpus
+from tests._corpus_guard import (
+    ARCHIVED_SPANS,
+    ARCHIVED_TRACE_FILES,
+    archived_trace_files,
+    disk_trace_files,
+    local_extra_trace_files,
+    shape_problem,
+)
 
 TRACE_HEX = re.compile(r"[0-9a-f]{32}")
 SPAN_HEX = re.compile(r"[0-9a-f]{16}")
@@ -403,29 +409,41 @@ class TestRealCorpus:
         # 实测读数（tests/_corpus_guard.py）。
         # 2026-10-23 provider 清理（删除 323 份含非 DeepSeek provider 的 trace
         # 归档）后复测：文件 9086 → 8763、span 129058 → 126408。
-        require_full_corpus()
-        root = Path(__file__).resolve().parents[1]
-        files = sorted(root.rglob("*.trace.jsonl"))
-        assert len(files) == 1456, "真实 trace 语料文件数变化（先复测再改锁；v0.8.0 稳态）"  # 原 8763
+        # EZ 轮（2026-10-27）：形状断言的判定面改为**入库面**（`git ls-files`）。
+        # 旧口径钉盘面 1,456 份 / 9,502 span，而盘面随本地重跑增长（实测 1,495 /
+        # 9,658）、入库面只有 760 份 ⇒ 作者机必红、CI 被 skip，两边都不判定。
+        # 现在：形状 = 入库面（760 / 4,139），本地未入库语料只跑不变量、不进分母。
+        archived = archived_trace_files()
+        problem = shape_problem(len(archived), ARCHIVED_TRACE_FILES, "入库 trace 文件数")
+        assert not problem, (
+            f"{problem}（盘面 {len(disk_trace_files())} 份 / 未入库 {len(local_extra_trace_files())} 份）"
+        )
         total = 0
-        for path in files:
-            spans = export_trace_jsonl(str(path))
-            trace_ids = {s["trace_id"] for s in spans}
-            assert len(trace_ids) == 1, path
-            trace_id = next(iter(trace_ids))
-            assert TRACE_HEX.fullmatch(trace_id), path
-            span_ids = [s["span_id"] for s in spans]
-            assert len(set(span_ids)) == len(span_ids), path
-            for span in spans:
-                assert span["trace_id"] == trace_id, path
-                assert SPAN_HEX.fullmatch(span["span_id"]), path
-                if span["parent_span_id"] is not None:
-                    assert span["parent_span_id"] in span_ids, path
-                assert _VALUE_REASONS_ATTRIBUTE not in span["attributes"], path
-            total += len(spans)
-        assert total == 9502  # v0.8.0 语料稳态回钉（原精确 126408）
+        for path in archived:
+            total += _assert_trace_invariants(path)
+        problem = shape_problem(total, ARCHIVED_SPANS, "入库 trace 的 span 总数")
+        assert not problem, problem
+        for path in local_extra_trace_files():
+            _assert_trace_invariants(path)
 
     def test_corpus_repeat_export_is_stable(self):
-        root = Path(__file__).resolve().parents[1]
-        for path in sorted(root.rglob("*.trace.jsonl")):
+        for path in disk_trace_files():
             assert export_trace_jsonl(str(path)) == export_trace_jsonl(str(path)), path
+
+
+def _assert_trace_invariants(path) -> int:
+    """单文件不变量：一个 trace_id、span_id 无重复、parent 同文件、零披露。返回 span 数。"""
+    spans = export_trace_jsonl(str(path))
+    trace_ids = {s["trace_id"] for s in spans}
+    assert len(trace_ids) == 1, path
+    trace_id = next(iter(trace_ids))
+    assert TRACE_HEX.fullmatch(trace_id), path
+    span_ids = [s["span_id"] for s in spans]
+    assert len(set(span_ids)) == len(span_ids), path
+    for span in spans:
+        assert span["trace_id"] == trace_id, path
+        assert SPAN_HEX.fullmatch(span["span_id"]), path
+        if span["parent_span_id"] is not None:
+            assert span["parent_span_id"] in span_ids, path
+        assert _VALUE_REASONS_ATTRIBUTE not in span["attributes"], path
+    return len(spans)
