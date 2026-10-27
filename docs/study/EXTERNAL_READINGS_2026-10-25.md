@@ -846,3 +846,66 @@ CLI 判红 + stderr 点名 / 测量齐全负对照 rc=0）；变异闭环扩为 
 （57 表格行 + 27 散文登记），逐条与官方 API 当前返回比对——**带版本键 84/84 逐字一致**；
 §18 两篇新登记论文（`2607.16646v2`、`2609.09315v1`）的官方标题 / 摘要 / 引文逐句核验通过。
 本节为散文登记，未进入 `refs.bib`（读者链纪律同 §14–§18）。
+
+## 20. FF 轮（2026-10-27）「覆盖率 ≠ 检出能力」族：一篇**直接占位本稿③的测量手段**，两篇邻接
+
+**检索面（按论断族 + 官方 API）**：族名 = 「执行了什么 ≠ 检出了什么 / 覆盖报告不证明检出 /
+结构化 oracle 与回归检出」。分类集合 = cs.SE（辅以按论断关键词的全库检索）；检索式 = arXiv
+官方 API `search_query=cat:cs.SE`（submittedDate 降序，取最近 40 条）+
+`all:"false fix" OR all:"patch correctness" OR all:"test oracle"`（降序 25 条），逐条回官方条目取
+标题 / 作者 / 日期 / 摘要原句（2026-10-27 实测，快照键已入库）。
+
+1. **Covered Is Not Checked: Which Branch Outcomes Would Your Tests Notice?** —
+   `arXiv:2610.33708v1`（Rahman / Canbaz / Hossain；2026-10-24；cs.SE；无出版商 DOI）。
+   官方摘要原句："Code coverage reports what tests execute, not whether tests detect faults."
+   官方摘要原句："We find that 18% of covered outcomes can be changed without failing any test,
+   exposing weaknesses hidden by coverage."；官方摘要原句："code locations controlled by weakly
+   checked outcomes are 12.4--54.7 percentage points more likely to have an undetected independent
+   fault than locations controlled by checked outcomes."
+2. **Silent and Costly: Characterizing and Detecting Prompt-Caching Mis-Integration in LLM
+   Agents** — `arXiv:2610.34817v1`（Zhang / Guo / Liu / Deng / Li / Liu / Zhang；2026-10-26；
+   cs.SE）。官方摘要原句："most mis-integrations fail silently without causing observable runtime
+   failures."。
+3. **Behavioral Regression Detection for Pull Requests via Structured Oracles** —
+   `arXiv:2610.35223v1`（Fu / Qi / Li / Liu / Sun / Gao；2026-10-26；cs.SE）。官方摘要原句：
+   "Existing methods rely on incomplete tests or directly analyze PRs via LLMs, lacking structured
+   behavioral reasoning and explicit oracles."
+
+**构念对照（逐篇写明差别，不得并列引用）**：
+
+- 第 1 篇测的是**覆盖率判据侧**：它的对象是「被覆盖的对象分支 outcome」，问的是「翻转它会不会
+  有测试失败」——给出 18% 的「covered but unchecked」读数与 12.4–54.7pp 的弱检关联。
+  本稿测的是**声明侧**（「测试通过」这个声明里有多少是假修复）。它给判据侧的检出证据工具
+  （Veritas），本稿给声明侧的真假分解——同一族（「执行 ≠ 检出」）不同对象，**不得并列读数**。
+- 第 2 篇的对象是 **LLM agent 的 prompt-caching 集成故障**（120 PR 实证 + CACHELINT
+  0.71/0.78），与本稿不同构（不是测试声明），登记防重复检索；其「静默且昂贵」属
+  silent-failure 一般论断族的又一域实例。
+- 第 3 篇给的是**结构化 oracle 合成与 PR 回归检出**（RegBench-Py 154 PR），与本稿不同构。
+
+**让渡口径（本轮新增让渡，累计让渡再核）**：
+
+- 第 1 篇占位「**覆盖报告不证明检出能力**」这一构念的**直接测量工具化**（且给了读数与
+  弱检关联）。本稿**不得**把「覆盖 ≠ 检出」写成新观察；本稿③的可主张部分继续收窄为：
+  测量效度问题在**声明侧的分母构成**上如何表现（条件 vs 边际口径的差异），而非
+  「覆盖报告有盲区」这一既有构念。
+- 与已登记让渡的关系：本稿增量仍限三块——① false-fix 口径分解（条件 + 边际并列）、
+  ② 声明率被协议扰动（分母构成层面）、③ 测量效度 × 声明率联立（声明侧），
+  三块的边界本轮未变，但③的「效度」侧必须显式承认 Veritas 类判据侧工具的存在。
+
+本节三篇均为**散文登记**，未进入 `refs.bib`，故不新增表格行（读者链纪律同 §14–§19）。
+
+## 21. FF 轮（2026-10-27）：引文核验门禁的 `main()` rc 判定路径补锁
+
+**发现路径（可复跑）**：FE 收口轮修掉「新守卫无测试锁」后普查同型形态——
+citation-quotes 门禁已接为 CI 阻断步骤，但 `verify_citation_quotes.py::main()` 的
+rc 判定路径（快照缺席 ⇒ rc=2 / 引文未核 ⇒ rc=1 / 输入坏 ⇒ rc=2 / `--list-ids` /
+`--refresh --xml-dir` / `--json` 落盘）**此前零测试**：CI 跑的就是 main()，
+verify() 函数层测得再好，若 main() 把未核判成 rc=0，整条 CI 阻断步骤就是装饰品。
+
+**处置**：`tests/test_citation_quote_verification_fe.py` 新增 `TestMainEntryRc` 7 例
+（未核 ⇒ rc=1 且点名 / 全核 ⇒ rc=0 负对照 / 快照缺席 ⇒ rc=2 / 快照坏 ⇒ rc=2 /
+--list-ids rc=0 / --refresh 缺目录 rc=2 / --json 落盘合法）。
+**变异锚点**（`fe_mutation_verify.py` G7）：把 `main()` 的未核判定改成 `return 0` ⇒
+实测转红（6 锚点全红 + 中性对照 0 红）。
+
+本节为机制登记，未进入 `refs.bib`。

@@ -71,6 +71,14 @@ MUTANTS: list[tuple[str, str, str, str, list[str]]] = [
         [],
     ),
     (
+        # FF 轮：门禁 main() 的 rc 判定路径——未核引文被放行（门禁变装饰品）。
+        "G7-main-unverified-returns-zero",
+        VERIFY,
+        '    if report["counts"].get("unverified") or report["counts"].get("no_snapshot"):\n        return 1\n    return 0',
+        '    if report["counts"].get("unverified") or report["counts"].get("no_snapshot"):\n        return 0  # mutation: 未核引文不报红\n    return 0',
+        [],
+    ),
+    (
         # 中性对照：仅改 docstring 措辞，不动任何判据 —— 必须 0 红。
         "G5-control-wording",
         VERIFY,
