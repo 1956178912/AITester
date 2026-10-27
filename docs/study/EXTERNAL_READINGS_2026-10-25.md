@@ -909,3 +909,47 @@ verify() 函数层测得再好，若 main() 把未核判成 rc=0，整条 CI 阻
 实测转红（6 锚点全红 + 中性对照 0 红）。
 
 本节为机制登记，未进入 `refs.bib`。
+
+## 22. GG 轮（2026-10-27）「继续更新论文」前沿补扫：无新增直接占位，两条既有让渡获第二独立实例
+
+**检索面（按论断族 + 官方 API，散文登记）**：本轮随「继续更新论文（含文字/表格/图片）」
+做一次收口前补扫。分类集合 = cs.SE（辅以 cs.CR/cs.AI）；检索式 = arXiv 官方 API
+`search_query=cat:cs.SE`（submittedDate 降序，取最近 60 条）+ 补扫四族
+`all:"false fix"` / `all:"fail-to-pass"` / `all:"declared pass"` / `all:"test adequacy"`
+（各降序 30 条，2026-10-27 实测，官方 `summary` 逐字取回）。核验方式与 §20 同源
+（`export.arxiv.org/api/query` 的 `summary` 字段逐字命中）。
+
+**结论**：检索面内（截至 2026-10-27）**无新增直接占位**本稿剩余三块增量
+（① false-fix 口径分解 ② 声明率被协议扰动 ③ 测量效度 × 声明率联立）。但两条
+**既有让渡**各获得**第二独立实例**，进一步坐实「本稿不得把这些构念写成新观察」：
+
+1. **`arXiv:2607.19843v1` "Beyond Fail-to-Pass: Iterative Hardening of Co-Generated
+   Bug Reproduction Tests and Fixes"**（2026-07-22；cs.SE）。官方摘要原句：
+   "co-generation introduces test--fix error coupling, where the in-trajectory
+   fail-to-pass (F->P) check can pass even when both the generated patch and
+   generated test are wrong."
+   ⇒ 这是 §11.1 `tao2026execcritic`（2609.09133「同一轨迹既写补丁又写测试 ⇒ 错误
+   互相印证」）之外的**第二个独立实例**，直接写出本稿 false-fix 的**机制表述**。
+   本稿「补丁与测试同源 ⇒ 互相印证 ⇒ 虚假信心」这条机制**必须**写为「已被多方
+   独立观测」，不得再作新观察。它不触及口径/声明率三块（对象是 BRT 的 rigor/lax
+   二分，不是声明侧分母构成）。
+2. **`arXiv:2606.10417v1` "Beyond Coverage and Kill Scores: Empirically Measuring
+   Test Suite Behavioural Gaps"**（2026-06-09；cs.SE）。官方摘要原句："17.5% of
+   detected expected behaviours remain entirely untested"；"the majority of
+   untested behaviours occur in methods that already have high line coverage, and
+   over half persist in methods with high mutation kill score."
+   ⇒ 这是 §20 `2610.33708`（Covered Is Not Checked）之外「覆盖/杀分 ≠ 行为检出」族的
+   **第二个独立实例**（行为缺口这一维度）。本稿③的「覆盖 ≠ 检出」侧继续让渡，
+   剩余可主张仍限「声明侧分母构成」。
+3. **邻接、不同构（登记防重复检索，不占位）**：`arXiv:2610.04921v1` "Complex
+   Agents, Shallow Tests"（2026-10-04；对象是 **agent harness 自身的测试覆盖不足**，
+   非本稿「生成测试的假修复」，属测试充分性另一支）；`arXiv:2610.27672v1`
+   "Reusing Assurance Evidence in AI Pipelines"（2026-10-20；对象是 ML 流水线的
+   证据复用与 fail-closed 发布门禁，非测试生成）。
+
+**让渡口径（本轮不变）**：本稿增量仍限三块——① false-fix 口径分解（条件 + 边际
+并列）② 声明率被协议扰动（分母构成层面）③ 测量效度 × 声明率联立（声明侧）；
+机制表述与「覆盖 ≠ 检出」两族已让渡，且各有两个以上独立实例，正文不得写
+「to our knowledge 首次」一类完备性断言。
+
+本节均为**散文登记**，未进入 `refs.bib`，故不新增表格行（读者链纪律同 §14–§21）。
