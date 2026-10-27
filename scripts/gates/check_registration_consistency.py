@@ -271,13 +271,42 @@ def _summary_line(out: str) -> str:
     return lines[-1] if lines else ""
 
 
+def _untracked_paths(root: Path) -> list[str] | None:
+    """工作树里**未跟踪**且未被 ignore 的文件（相对仓库根）。
+
+    FD 轮（2026-10-27）：`已格式化` 的受检面必须与 **CI 的干净检出**同口径——
+    工作树里任何未跟踪文件（并行会话产物 / 本地临时件）都会让读数漂移，
+    而 CI 检出的是**跟踪面**。与 EZ 轮「语料形状锁判作者机盘面」同型：
+    判的是本地现实，量的却是发布产物。
+    git 不可用时返回 None（环境性前提，由调用方按不可用处置）。
+    """
+    proc = subprocess.run(
+        ["git", "-C", str(root), "ls-files", "--others", "--exclude-standard"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        return None
+    return [line.strip() for line in proc.stdout.splitlines() if line.strip()]
+
+
 def ruff_surface(root: Path = REPO_ROOT) -> tuple[dict[str, int] | None, str | None]:
     """`ruff format --check .` 的受检面：(读数, 不可用成因)。
+
+    FD 轮：受检面 = **跟踪面**（整树扫描后按未跟踪文件逐个排除）——
+    与 CI 干净检出口径一致；工作树里的未跟踪文件不再让读数漂移。
 
     口径含 `.md`（ruff 会把 Markdown 的代码栅栏一并计入），因此新增一份分册也会让
     计数 +1——**登记值必须在所有文件落盘后复算**，否则本门在终跑转红。
     """
-    res = _run([sys.executable, "-m", "ruff", "format", "--check", "."], root)
+    untracked = _untracked_paths(root)
+    if untracked is None:
+        return None, "git 不可用（无法确定跟踪面：未跟踪文件无法排除）"
+    excludes: list[str] = []
+    for rel in untracked:
+        excludes += ["--exclude", rel]
+    res = _run([sys.executable, "-m", "ruff", "format", "--check", *excludes, "."], root)
     if res is None:
         return None, "ruff 模块不可用（子进程未能启动）"
     summary = _summary_line(res.stdout + res.stderr)

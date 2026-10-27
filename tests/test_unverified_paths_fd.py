@@ -25,6 +25,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
 import pytest
@@ -323,3 +324,55 @@ class TestDoctorConclusionText:
         )
         out = capsys.readouterr().out
         assert "--strict 下 warn/skip 视为不通过" in out
+
+
+class TestRegistrationSurfaceTracksTrackedSurface:
+    """登记一致性门的「已格式化」受检面 = **跟踪面**（= CI 干净检出）。"""
+
+    @staticmethod
+    def _gate():
+        import importlib.util
+
+        script = Path(__file__).resolve().parents[1] / "scripts" / "gates" / "check_registration_consistency.py"
+        spec = importlib.util.spec_from_file_location("_check_registration_consistency_fd", script)
+        assert spec and spec.loader
+        module = importlib.util.module_from_spec(spec)
+        sys.modules["_check_registration_consistency_fd"] = module
+        spec.loader.exec_module(module)
+        return module
+
+    def test_untracked_file_does_not_shift_the_surface_count(self) -> None:
+        """工作树里多出一份未跟踪 `.py` ⇒ 「已格式化」读数**不得**变化。
+
+        否则本地并行会话的产物会让登记数漂移，而 CI（干净检出）读数不同 ⇒
+        登记面与运行面口径分叉（EZ 轮「语料形状锁判作者机盘面」的同型病灶）。
+        """
+        module = self._gate()
+        repo = Path(__file__).resolve().parents[1]
+        before, reason = module.ruff_surface(repo)
+        assert before is not None, f"ruff 受检面复算不可用：{reason}"
+        stray = repo / "zz_fd_untracked_probe.py"
+        assert not stray.exists()
+        stray.write_text("x = 1\n", encoding="utf-8")
+        try:
+            after, reason2 = module.ruff_surface(repo)
+            assert after is not None, f"ruff 受检面复算不可用：{reason2}"
+            assert after["已格式化"] == before["已格式化"], (
+                f"未跟踪文件改变了受检面读数：{before['已格式化']} → {after['已格式化']}"
+            )
+        finally:
+            stray.unlink()
+
+    def test_untracked_file_is_discovered_by_the_untracked_helper(self) -> None:
+        """未跟踪清单必须真的被算出来（否则上一例会假绿）。"""
+        module = self._gate()
+        repo = Path(__file__).resolve().parents[1]
+        stray = repo / "zz_fd_untracked_probe2.py"
+        assert not stray.exists()
+        stray.write_text("y = 2\n", encoding="utf-8")
+        try:
+            untracked = module._untracked_paths(repo)
+            assert untracked is not None
+            assert "zz_fd_untracked_probe2.py" in untracked
+        finally:
+            stray.unlink()

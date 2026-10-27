@@ -108,6 +108,13 @@ MUTANTS: list[tuple[str, str, str, str, list[str]]] = [
         [],
     ),
     (
+        "F12-registration-surface-includes-untracked",
+        "scripts/gates/check_registration_consistency.py",
+        '    for rel in untracked:\n        excludes += ["--exclude", rel]',
+        "    for rel in untracked:  # mutation: 未跟踪文件不再排除（受检面回到工作树）\n        pass",
+        [],
+    ),
+    (
         # 中性对照：仅改 docstring 措辞，不动任何判据 —— 必须 0 红。
         "F7-control-wording",
         TRACE,
