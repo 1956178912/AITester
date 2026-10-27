@@ -5301,6 +5301,61 @@ miss 9 → 8〔BoolOp 锁〕与 `budget/cost_budget.py` miss 1 → 2 总量抵�
 
 红阶段 4 failed / 1 passed，绿阶段 17 passed（5 新 + 12 既有）。
 
+## 116. 附：EW 轮（2026-10-27）**config.py 声明了键，消费链不读**：一个预算旋钮从未接线（构造默认恒生效），两个幽灵键与一个死符号零读者
+
+**① 承诺与实现之间隔着一层没人读的配置面。**
+1. `config.py` 现有 51 个公开全大写键。普查口径：AST 的 `Name` 读点、属性名、
+   `ImportFrom` 绑定名，以及**非 docstring** 字符串字面量（覆盖 `env_flag("X")` /
+   `getattr(_cfg, "X", ...)` 两种间接读法）；扫描面 = `src/**/*.py` +
+   `experiments/**/*.py` + `scripts/**/*.py`。`tests/` **刻意不算消费方**——测试会给
+   死键背书（EV 轮「mock 合格证」的同型教训）。
+2. `ORCHESTRATION_SEARCH_MAX_UNMEASURABLE`（`config.py` 声明 + 注释承诺「单臂不可测
+   累计超过上限即退出 UCB 池」+ 环境变量登记表在册）在消费面**零引用**：唯一构造点
+   `experiments/run_orchestration_search.py` 已把四个兄弟旋钮（`--max-evals` /
+   `--max-tokens` / `--ucb-c` / `--search-seed`）从 config 解析并传入，唯独该参数不传
+   ⇒ `OrchestrationSearch` 构造默认 `max_unmeasurable=5` 恒生效，设置环境变量不改变
+   任何行为。
+3. `DOCKER_ENABLED` / `DOCKER_IMAGE` 是 `EXECUTOR_USE_DOCKER` / `EXECUTOR_DOCKER_IMAGE`
+   的幽灵重复：Python 消费面零读者，只有 `.env.example` 的注释行、环境变量登记表与
+   设计文档的一处示例提到它们；`DEFAULT_LLM_CONFIG` 是纯死符号（全仓零引用）。
+4. 反例说明普查为何必须认字符串间接读法：`ORCHESTRATION_SEARCH_ENABLE`
+   （`env_flag("...")`）、`ORCHESTRATION_SEARCH_HINDSIGHT_GAMMA`
+   （`getattr(_config, "...", 0.5)`）、`SWE_REPO_VENV_ISOLATION`
+   （`getattr(_cfg, "...", False)`）都不用模块常量，但环境变量本身被真实消费——
+   只认 AST `Name` 会把这三个活键误报为死键（本文件的第 3 条负向对照锁住这一点）。
+
+**② 红因可辨（对 HEAD 旧源实测，零 LLM，$0）。**
+
+| 锁 / 输入 | 修前读数 | 修后读数 |
+| --- | --- | --- |
+| `test_every_public_config_key_is_read_by_a_consumer`（51 键对三类消费面做差） | 零读者 = `{'DEFAULT_LLM_CONFIG', 'DOCKER_ENABLED', 'DOCKER_IMAGE', 'ORCHESTRATION_SEARCH_MAX_UNMEASURABLE'}` | 空集 |
+| `test_config_cap_reaches_the_real_search`（真实 CLI 主函数 + 真实 `OrchestrationSearch`；只桩数据集与单 cell 评估，config cap=2） | `KeyError: 'max_unmeasurable'`（报告不披露；构造默认 5，60 次评估无任何排除） | 报告 `config.max_unmeasurable == 2`；16 臂全部 `unmeasurable_exceeded`；`evals_used == 48` |
+| `test_cap_five_does_not_exclude_at_the_boundary`（cap=5、首臂恰好 5 次不可测） | `KeyError: 'max_unmeasurable'` | 20 evals、最高 `unmeasurable == 5`、无排除、`stop_reason == "max_evals"` |
+| `test_cli_flag_overrides_config_cap`（config 10 + `--max-unmeasurable 2`） | `SystemExit: 2`（`unrecognized arguments: --max-unmeasurable 2`） | 报告 `config.max_unmeasurable == 2`；全部排除 |
+| `test_census_flags_synthetic_dead_key` / `test_census_accepts_plain_load_and_attribute_reads`（负向对照） | 通过（红阶段即绿） | 通过 |
+
+红阶段 4 failed / 2 passed，绿阶段 6 passed。
+
+**③ 修法：把该接的线接到真实构造点，把没人读的名字删掉；不发明新语义。**
+- `experiments/run_orchestration_search.py` 新增 `--max-unmeasurable`（默认 `None` →
+  读 `config.ORCHESTRATION_SEARCH_MAX_UNMEASURABLE`），传给 `OrchestrationSearch`；
+  报告 `config` 块与归因报告的口径行披露生效上限；
+- 删除 `DEFAULT_LLM_CONFIG`、`DOCKER_ENABLED`、`DOCKER_IMAGE` 三个零读者键，并同步
+  删除 `.env.example` 的注释行、`docs/env_budget.yaml` 的两个名字（`env_total`
+  253 → 251）、设计文档里以 `DOCKER_ENABLED` 为例的 import 期调用示意（改用
+  `EXECUTOR_USE_DOCKER`）；`docs/history/` 是历史快照，不动；
+- **同轮排除**：排除判据仍是严格 `>`（本轮的边界锁只证明这一点，不改语义）；不改
+  `OrchestrationSearch` 的库默认 5（实验驱动才是接线点）；不动 champion 门槛
+  `min_evals_per_arm`（另一族）；不顺手改 `DOCKER_*` 其余有真实读者的键。
+
+**④ 预登记读数（2026-10-27，同一棵树）。** 预登记跑 13,415 passed / 3 failed /
+257 skipped、collected 13,675；3 红全部为基线 / 登记守卫
+（`test_registration_readers_cf` 2 例 + `test_2026_10_10_optimization_batch` 1 例），
+刷新后 13,418 / 0 / 257 / 13,675。语句分母 20,336 与覆盖数 19,834 均不变 ⇒
+**19,834/20,336 = 97.5315%**；分支覆盖 **7,286/7,712 = 94.4761%** 不变——`src/` 的
+改动只是报告字典多一个已被执行的字面量键，不新增语句或分支判定面。静态检查：
+`ruff format --check .` 1,050 份（+1 = 新增测试文件）/ mypy 源文件 137（未变）。
+
 **③ 修法：删掉不可执行的形参，把承诺映射到真实存在的机制，并披露做不到的部分。**
 - 移除 `timeout=` / `idle_timeout=` 及其死常量 `_POOL_IDLE_TIMEOUT`；
 - `MYSQL_POOL_TIMEOUT` → `connect_timeout=`（驱动侧建立连接超时，与注释承诺同义）；

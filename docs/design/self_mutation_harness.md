@@ -233,7 +233,7 @@ Markdown 是同一事实源的人读镜像：测量口径、运行环境、总�
 **invalid / timeout 归因（不进分母）**：
 
 - env_utils 的 8 个 invalid 全部是 rc=4：变异体破坏 `env_flag`/`env_int` 后，
-  `config.py` 在 **import 期**调用这些函数（`DOCKER_ENABLED = env_flag(...)` 等），
+  `config.py` 在 **import 期**调用这些函数（`EXECUTOR_USE_DOCKER = env_flag(...)` 等），
   而测试套件的 `tests/conftest.py` import `config` → 收集阶段直接崩溃。这是
   "套件根本没成功运行"，按 §4.6 口径记 invalid（既不算测试弱、也不算检测成功）。
 - helpers 的 1 个 timeout（`aug_assign_swap`，line 512）让测试陷入 >60s 死循环，

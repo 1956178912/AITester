@@ -167,7 +167,10 @@ def _render_attribution_md(report: dict, attribution: dict[str, dict[str, float]
         f"- 实际：evals={report['budget']['evals_used']} / tokens={report['budget']['tokens_used']}"
         f" / stop_reason={report['budget']['stop_reason']}"
     )
-    lines.append(f"- UCB1：c={report['config']['ucb_c']}，search_seed={report['config']['seed']}")
+    lines.append(
+        f"- UCB1：c={report['config']['ucb_c']}，search_seed={report['config']['seed']}"
+        f"，max_unmeasurable={report['config']['max_unmeasurable']}"
+    )
     lines.append(f"- 确定性：serial + temp=0.0 + cache_namespace={meta['cache_namespace']}")
     lines.append("")
     lines.append("## 逐臂结果（主奖励 = M1 detection，gold 材料独立裁决（自动化 oracle，无人工参与）；None 不进分母）")
@@ -256,6 +259,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--search-seed", type=int, default=None, help="搜索种子（默认读 config.ORCHESTRATION_SEARCH_SEED）"
     )
+    parser.add_argument(
+        "--max-unmeasurable",
+        type=int,
+        default=None,
+        help="单臂不可测累计上限（默认读 config.ORCHESTRATION_SEARCH_MAX_UNMEASURABLE）",
+    )
     args = parser.parse_args(argv)
 
     # 主开关守卫（默认 false：拒绝运行，退出码 2——对既有流程零侵入）
@@ -275,6 +284,9 @@ def main(argv: list[str] | None = None) -> int:
     search_seed = args.search_seed if args.search_seed is not None else _config.ORCHESTRATION_SEARCH_SEED
     max_evals = args.max_evals if args.max_evals is not None else _config.ORCHESTRATION_SEARCH_MAX_EVALS
     max_tokens = args.max_tokens if args.max_tokens is not None else _config.ORCHESTRATION_SEARCH_MAX_TOTAL_TOKENS
+    max_unmeasurable = (
+        args.max_unmeasurable if args.max_unmeasurable is not None else _config.ORCHESTRATION_SEARCH_MAX_UNMEASURABLE
+    )
 
     # 输出目录与运行标识（缓存命名空间按 search_seed 稳定：同 seed 重跑命中缓存）
     run_id = f"orchestration_search_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
@@ -299,13 +311,14 @@ def main(argv: list[str] | None = None) -> int:
         "trace_dir": trace_dir,
     }
     logger.info(
-        "编排搜索启动：%s（臂 %d，预算 evals≤%d / tokens≤%d，UCB c=%.2f，seed=%d）",
+        "编排搜索启动：%s（臂 %d，预算 evals≤%d / tokens≤%d，UCB c=%.2f，seed=%d，unmeasurable 上限=%d）",
         run_id,
         len(ARM_REGISTRY),
         max_evals,
         max_tokens,
         ucb_c,
         search_seed,
+        max_unmeasurable,
     )
 
     exit_code = 0
@@ -338,6 +351,7 @@ def main(argv: list[str] | None = None) -> int:
             budget=budget,
             ucb_c=ucb_c,
             seed=search_seed,
+            max_unmeasurable=max_unmeasurable,
             evaluator=_evaluator,
             trace_dir=trace_dir,
         )

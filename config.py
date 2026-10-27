@@ -299,9 +299,6 @@ def _load_llm_configs() -> list[LLMConfig]:
 # 使所有持有方都能看到刷新后的值，而不是得到一个隔离的快照。
 LLM_CONFIGS: list[LLMConfig] = _load_llm_configs()
 
-# 默认使用的 LLM 配置（取第一个，即 LLM_1）
-DEFAULT_LLM_CONFIG: LLMConfig | None = LLM_CONFIGS[0] if LLM_CONFIGS else None
-
 
 def refresh_llm_configs() -> list[LLMConfig]:
     """重新扫描 LLM_N_* 环境变量并原地刷新 LLM_CONFIGS 列表。
@@ -371,9 +368,6 @@ def _validate_timeout(value: int, name: str, min_val: int, max_val: int, default
 
 
 # ─── 执行环境配置 ────────────────────────────────────────────────────────────
-DOCKER_ENABLED: bool = env_flag("DOCKER_ENABLED")
-# 锁定依赖集（scipy==1.18.0 等）要求 Python >= 3.12，镜像须匹配
-DOCKER_IMAGE: str = os.getenv("DOCKER_IMAGE", "python:3.12-slim")
 # 先容错解析（坏值回退默认 30），再走 _validate_timeout 范围校验（[10, 300]）
 _EXECUTION_TIMEOUT_RAW = _parse_int_env("EXECUTION_TIMEOUT", 30)
 EXECUTION_TIMEOUT: int = _validate_timeout(_EXECUTION_TIMEOUT_RAW, "EXECUTION_TIMEOUT", 10, 300, 30)

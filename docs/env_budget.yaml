@@ -3,7 +3,7 @@
 # 规则：本地运行 check_env_budget.py（无 --check）发现新名自动登记写回，
 # 由贡献者随改动提交——'登记'即'修改本文件'，PR diff 强制可见（P0-5 冻结决策）。
 # CI 以 --check 模式阻断未登记新增；删名允许（表随之收缩）。
-env_total: 253
+env_total: 251
 # R-2（2026-10-18）：SPEC_EXAMPLES_SELF_VALIDATE = 示例自校验过滤器开关
 # （默认 true；设 false/0/off 关闭）。仅登记展示键，不改变扫描/阻断逻辑。
 names:
@@ -71,8 +71,6 @@ names:
   - DIAGNOSIS_NODE_ENABLE
   - DOCKER_CPU_LIMIT
   - DOCKER_DEFAULT_NETWORK_NONE
-  - DOCKER_ENABLED
-  - DOCKER_IMAGE
   - DOCKER_MEM_LIMIT_MB
   - DOCKER_NETWORK_ALLOWLIST
   - DOCKER_NETWORK_ISOLATION

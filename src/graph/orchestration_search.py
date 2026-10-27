@@ -1235,6 +1235,7 @@ class OrchestrationSearch:
             pull_sequence=self._pull_sequence,
             seed=self._seed,
             min_evals_per_arm=self._min_evals_per_arm,
+            max_unmeasurable=self._max_unmeasurable,
         )
 
 
@@ -1318,6 +1319,7 @@ def build_search_report(
     pull_sequence: Sequence[str],
     seed: int,
     min_evals_per_arm: int,
+    max_unmeasurable: int,
 ) -> dict[str, Any]:
     """汇总搜索报告（结果 JSON 的直接载体）。
 
@@ -1333,6 +1335,7 @@ def build_search_report(
         pull_sequence: 拉取序列（复现/审计用）。
         seed: 搜索种子。
         min_evals_per_arm: champion 资格门槛。
+        max_unmeasurable: 单臂不可测累计上限（超过即退出 UCB 池）。
 
     Returns:
         报告 dict（schema = "orchestration_search_v1"）。
@@ -1360,6 +1363,7 @@ def build_search_report(
             "ucb_c": bandit.c,
             "seed": seed,
             "min_evals_per_arm": min_evals_per_arm,
+            "max_unmeasurable": max_unmeasurable,
             "n_arms": len(arm_order),
             "n_cells": distinct_cells,
         },
