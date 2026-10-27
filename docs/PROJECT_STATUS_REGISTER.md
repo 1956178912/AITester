@@ -92,7 +92,7 @@
 
 | 事项 | 交付物 | 验证入口 |
 |---|---|---|
-| **EZ 轮（2026-10-27）前沿补扫三篇**：`TestJack`（arXiv:2610.10619，34.4% 被判正确的试验违反要求 / 分辨率 50.6%→33.2%）、`Verification Trap`（arXiv:2610.05170，验证者继承生成者错误前提，0.846 AUROC 可预测）、`SCALF`（arXiv:2610.27694，RL 训练 bug-exposing 测试）——三篇均按官方摘要页逐字核验（`export.arxiv.org/abs/<id>`）；构念对照写明「评测器不足 ≠ false-fix」与「验证者盲点 = 同一现象的另一测量面」，让渡口径（三块增量）不变 | `docs/study/EXTERNAL_READINGS_2026-10-25.md` §14（3 行） | `pytest tests/test_external_readings_rows.py` ⇒ 98 passed（行级判据：读数必须逐字出现在引文列）；`scripts/gates/check_citations.py --traceability` 绿 |
+| **EZ 轮（2026-10-27）前沿补扫三篇**：`TestJack`（arXiv:2610.10619，34.4% 被判正确的试验违反要求 / 分辨率 50.6%→33.2%）、`Verification Trap`（arXiv:2610.05170，验证者继承生成者错误前提，0.846 AUROC 可预测）、`SCALF`（arXiv:2610.27694，RL 训练 bug-exposing 测试）——三篇均按官方摘要页逐字核验（`export.arxiv.org/abs/<id>`）；构念对照写明「评测器不足 ≠ false-fix」与「验证者盲点 = 同一现象的另一测量面」，让渡口径（三块增量）不变 | `docs/study/EXTERNAL_READINGS_2026-10-25.md` §14（3 篇，散文登记、**未进 refs.bib**，故不建行） | `pytest tests/test_external_readings_rows.py` ⇒ 95 passed（未新增行）；`tests/test_external_readings_citation_chain.py` ⇒ 登记-快照双射不变（散文登记不产生「只写不读」的行）；`check_citations.py --traceability` 绿 |
 | 声明→证据→范围对账表（11 条声明含 **3 条 `contradicted`**：C2/C5/C11） | `docs/EVALUATION_SCOPE.md` | 人工阅读；数字可用 `make mutation-det-correlation` 等复算 |
 | 结构化效度威胁专章（四类 × open/reduced/mitigated + 5 个 OPEN 项处置） | `docs/VALIDITY.md` + `.en.md` | `scripts/gates/check_bilingual_docs.py --strict` |
 | 四起测量伪影方法学章（口径分叉审计） | `docs/MEASUREMENT_INTEGRITY.md` | 各 ADR + `make repair-replay` / `make corrected-metrics` |
