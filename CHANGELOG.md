@@ -18,6 +18,7 @@
 - 文档测试锁改为结构判据（定位区 / 披露小节 / 行数上限 / 索引完备性），退役逐轮标记与行窗口锁。
 
 ### Fixed
+- 复杂度感知路由不再只在 benchmark harness 激活（EU 轮）：`MODEL_ROUTING_STRATEGY=complexity_aware` 是默认值，但 `complexity_class` 的唯一写入点是 `experiments/run_benchmark.py` 的事后补写，`create_initial_state`（CLI `aitester run` / 编排搜索 / e2e 探针的共同入口）把四个路由字段初始化为 `None`——`APIManager._build_node_list` 的复杂度分支与 `BaseAgent._reorder_api_groups_by_complexity` 在 CLI 下永不触发，`fixed` 与 `complexity_aware` 不可区分。现把评分收敛到 `complexity_router.score_source_complexity` / `score_task_complexity`（单一实现），`create_initial_state` 构造时按策略写入四字段（`fixed` 保持历史 `medium`），benchmark 只传 `task_metadata`（保留 `num_files` 与解析失败时的 `cyclomatic_complexity` 兜底）并删除内联重复实现，编排搜索同步传 metadata；12 例新锁（先红后绿）+ 迁移文件 8 例（原 6 例改为驱动真实共享入口，新增 2 例：解析优先与导入计数异常兜底）。
 - 复杂度感知路由不再在多 provider 端点构型下空转（ET 轮）：`src/agents/base_agent.py::_reorder_api_groups_by_complexity` 以 `model_name` 为唯一键建成本表——同一模型挂在多个 provider 端点、各端点 `cost_weight` 不同时后写覆盖先写，所有分组权重恒等，`sorted` 的稳定排序退化为原序，simple / medium / complex 三档全部空转；而 `complexity_router.py` 承诺的正是「同模型不同 provider 端点，或同 provider 不同 cost_weight」，A15 的 `APIManager._cost_weight_for` 也已按实例取成本，两条路由口径分裂。现按实例键 `(base_url, model_name)` 建表，无 `base_url` 的注入配置回退模型级键，未知端点保持 1.0 基准（不继承同模型另一端点成本）。5 例新锁（4 红→绿 + 1 口径护栏）；本机 `.env.local` 只有 1 个 LLM 实例（`len(all_configs) > 1` 不成立、重排函数不会被调用），缺陷仅在文档承诺的多端点构型下激活。
 - 双语文档门禁的「H2 骨架按序对齐」不再对翻译文档空转（ES 轮）：`check_bilingual_docs.py` 的 P2 结构化对照把中英 H2 标题归一化后做**字面**比对，翻译标题天然不同——实测 20 对配对中仅 CHANGELOG 有 2 个跨语言相同标题，其余 19 对永不触发；合成「编号章节互换」与「少一章（总数差 1，在 ±2 容差内）」两个样本旧实现均判无漂移。现改用语言无关的骨架指纹：H2 编号序列（"一、"/"1." 折算整数）逐位相等，H2 数相等时逐节比对 H3 小节数；真语料 13 对带编号、20/20 骨架一致（strict 零警告），6 例新锁（含「可比分母 ≥10」反空转锁），`src/` 零改动 ⇒ 覆盖读数不变。
 - 布尔开关不再声明不可达的关态（ER 轮）：`e7_evidence_prepass` / `repair_ceiling_analysis` / `repair_review_worksheet` / `repair_sample_selection` 的 `--pool-seeds` 与 `emse_ult_gold_diagnosis` 的 `--with-generated` 都是 `store_true, default=True`——传与不传等价、`--no-*` 不存在，帮助文本却写「默认开」；前者是预注册固定的多种子拼接口径，后者的关态会在 README §2c 渲染成误导性零值（`n_tasks_with_generated=0`）。现按 EQ 先例移除 5 个旗标、把默认语义钉死在调用点（`pool_seeds=True` / 生成门常开），4 个脚本的 `main()` 增加 `argv` 形参使解析面可测；20 例新锁（16 红→绿 + 4 口径护栏，含 `statistical_analysis` 真开关的邻接护栏），`src/` 零改动 ⇒ 覆盖读数不变。
@@ -38,8 +39,7 @@
 - 默认开启的安全/质量守卫不再被坏值静默关闭（EG 轮）：venv 沙箱、凭证与 pip 白名单、危险 API、命名契约、注入输出扫描、证据门、P2P 门禁、容器只读/断网共 10 个开关（11 处读取）走正集 `env_flag(name, True)`，`yes` / `enabled` / 拼错 / 空串都会把守卫判关——实测危险补丁被放行、`MYSQL_PASSWORD` 重新进入子进程环境、容器丢掉 `--read-only` 与 `--network=none`。
   现统一改走 `env_flag_opt_out`：仅 `false`/`0`/`off` 关闭，坏值保持开启；默认关的特征/成本开关仍为正集（坏值不得隐式开启）。31 例新锁（24 红→绿 + 7 边界），先红后绿。
 - 可选依赖「装上但坏了」不再击穿降级契约（ED 轮）：12 处 `try: import … except ImportError` 只拦缺包，扩展 ABI / 传递依赖冲突抛出的 RuntimeError/OSError 会穿过去（chromadb 损坏时整个 CLI 无法启动）；现在导入期任意异常都降级告警。12 例新锁 + 1 例负控制。
-- 读侧「损坏」判定不再停在 JSON 语法层（EE 轮）：15 处 JSON/JSONL 读侧只捕 `json.JSONDecodeError`（只覆盖解码后文本），坏字节（截断多字节 / GBK 保存）在解码期抛 `UnicodeDecodeError`——行级「坏行跳过」变成一行拖垮整份文件，整文件「损坏 → 空值」直接抛出。
-  行级读侧改二进制逐行严格解码（不吞坏字节），整文件补同口径降级，策略库写侧仍 fail-closed 不覆写。15 例新锁。
+- 读侧「损坏」判定不再停在 JSON 语法层（EE 轮）：15 处 JSON/JSONL 读侧只捕 `json.JSONDecodeError`（只覆盖解码后文本），坏字节（截断多字节 / GBK 保存）在解码期抛 `UnicodeDecodeError`——行级「坏行跳过」变成一行拖垮整份文件，整文件「损坏 → 空值」直接抛出。 行级读侧改二进制逐行严格解码（不吞坏字节），整文件补同口径降级，策略库写侧仍 fail-closed 不覆写。15 例新锁。
 - 非有限浮点环境值不再静默改写控制流（EF 轮）：6 处本地解析只捕 `ValueError`，而 `float("nan")` 不抛——
   NaN 夹到上界、`-inf` 夹到下界：语义缓存把无关条目当命中返回、覆盖率停滞恒判、风险中阈值变 1.0 绕过审批、
   失败知识库排序退回插入序、`long_sleep` 守卫失效。解析统一委托 `env_float`（告警 + 默认值），有限值钳制不变。49 例新锁。

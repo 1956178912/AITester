@@ -96,11 +96,6 @@ from experiments.postprocess_wall import (  # noqa: E402
     build_postprocess_wall,
     postprocess_warn_s,
 )
-from src.api.complexity_router import (  # noqa: E402
-    complexity_class_to_routing_hints,
-    compute_complexity_score,
-    routing_enabled,
-)
 from src.budget.token_usage import aggregate_row_token_usage, token_metric_reading  # noqa: E402
 from src.datasets.dataset_loader import (  # noqa: E402
     BenchmarkTask,
@@ -2832,6 +2827,8 @@ def run_single_task(
             # P1-6：问题描述入 state（注入防护的外部可控文本主源——此前
             # state.get("problem_statement") 读未声明键恒 None，防护空转）
             problem_statement=getattr(task, "problem_statement", None),
+            # P0 1.2 复杂度评分由工厂统一计算；metadata 提供数据集统计兜底
+            task_metadata=task.metadata,
         )
 
         # 2026-10 改进：跨文件任务预置 cross_file_deps（供 _resolve_target_module
@@ -2852,81 +2849,17 @@ def run_single_task(
         except Exception:
             pass
 
-        # P0 1.2 复杂度感知路由（MODEL_ROUTING_STRATEGY=complexity_aware）：
-        # 按任务代码行数 / import 数量 / 圈复杂度计算复杂度分数，写入
-        # state["complexity_class"]（"simple" | "medium" | "complex"），
-        # 供 LLM 调用路径选择对应档位的 LLM 实例。策略=fixed 时恒为 "medium"。
-        if routing_enabled():
-            num_lines = len(task.instance_code.splitlines())
-            # 2026-10-12 ULT 实跑勘误：metadata 键"存在但为显式 None"时
-            # （如 ULT_Lite 无 cyclomatic_complexity 字段 → 加载器写 None），
-            # dict.get(key, default) 返回的是 None 而非 default → int(None)
-            # TypeError，46 任务全崩。用 `or` 兜底 None/缺键双态。
-            num_files = int(task.metadata.get("num_files") or 1)
-            # P0 审查修正：num_deps / cyclomatic_complexity 此前仅从
-            # task.metadata 读取，而合成数据集 / SWE-bench 官方任务从未
-            # 写入这两个键 → 永远走默认值（num_deps=0 / cc=1），评分退化为
-            # "仅按行数分档"。现按需从 instance_code 直接计算（AST 口径，
-            # 与 complexity_router.count_imports / code_analyzer 一致）。
-            # 2026-09-26 优化：单次 ast.parse 复用——此前 count_imports 内部
-            # 再 parse 一次（本函数第二次解析），--parallel 多任务热路径上
-            # 每任务 2 次 200ms 级解析。现统一 parse 一次，count_imports
-            # 经 _tree 参数复用（独立调用方不传 _tree 时行为不变）。
-            num_deps = 0
-            # 2026-10-12 ULT 实跑勘误：`or` 兜底"键存在但 None"态
-            # （ULT_Lite 无 cyclomatic_complexity 字段 → 加载器写 None，
-            # dict.get(key, 1) 返回 None → int(None) 崩溃）
-            cc = int(task.metadata.get("cyclomatic_complexity") or 1)
-            try:
-                import ast as _ast
-
-                _tree = _ast.parse(task.instance_code)
-                _funcs = [n for n in _ast.walk(_tree) if isinstance(n, (_ast.FunctionDef, _ast.AsyncFunctionDef))]
-
-                def _count_cc(node: _ast.AST) -> int:
-                    """圈复杂度（函数级）：1 + if/for/while/except/and/or/assert 计数。"""
-                    cc = 1
-                    for n in _ast.walk(node):
-                        if isinstance(n, (_ast.If, _ast.For, _ast.While, _ast.ExceptHandler, _ast.BoolOp, _ast.Assert)):
-                            if isinstance(n, _ast.BoolOp):
-                                cc += len(n.values) - 1
-                            else:
-                                cc += 1
-                    return cc
-
-                cc = max((_count_cc(f) for f in _funcs), default=1)
-            except (SyntaxError, ValueError):
-                # 解析失败（含 MemoryError 等 ValueError 子类保守口径）：
-                # cc 回退 metadata（历史口径），count_imports 走独立 parse 路径
-                # 2026-10-12 ULT 实跑勘误：同上用 `or` 兜底 None 态
-                cc = int(task.metadata.get("cyclomatic_complexity") or 1)
-                _tree = None
-            try:
-                from src.api.complexity_router import count_imports
-
-                num_deps = count_imports(task.instance_code, _tree=_tree)
-            except Exception:
-                num_deps = int(task.metadata.get("num_imports") or 0)
-            score_obj = compute_complexity_score(
-                lines=num_lines,
-                num_files=num_files,
-                num_deps=num_deps,
-                cyclomatic_complexity=cc,
-            )
-            routing_hints = complexity_class_to_routing_hints(score_obj.complexity_class)
-            initial_state["complexity_class"] = score_obj.complexity_class
-            initial_state["complexity_score"] = score_obj.score
-            initial_state["complexity_breakdown"] = score_obj.breakdown
-            initial_state["routing_hints"] = routing_hints
+        # P0 1.2 复杂度感知路由：评分由 create_initial_state 统一计算
+        # （CLI / 搜索 / benchmark 共用 complexity_router.score_task_complexity）；
+        # benchmark 传入 task.metadata，保留 num_files / 圈复杂度等数据集兜底口径。
+        if initial_state.get("complexity_score") is not None:
             logger.debug(
                 "P0 1.2 任务 %s 复杂度评分：score=%.3f class=%s (%s)",
                 task.task_id,
-                score_obj.score,
-                score_obj.complexity_class,
-                routing_hints.get("hint_text", ""),
+                initial_state["complexity_score"],
+                initial_state["complexity_class"],
+                (initial_state.get("routing_hints") or {}).get("hint_text", ""),
             )
-        else:
-            initial_state["complexity_class"] = "medium"  # 历史口径
 
         # 为每个基线分配 API
         # O31（2026-09-29 审查 P0 + 2026-09-30 修复验证 D.4-1）：基线模型混淆修复。

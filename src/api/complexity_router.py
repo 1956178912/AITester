@@ -32,7 +32,9 @@ from __future__ import annotations
 import ast
 import logging
 import os
+from collections.abc import Mapping
 from dataclasses import dataclass, field
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -183,6 +185,65 @@ def compute_complexity_score(
         breakdown,
     )
     return ComplexityScore(score=round(score, 4), complexity_class=complexity_class, breakdown=breakdown)
+
+
+def _function_cyclomatic(node: ast.AST) -> int:
+    """函数级圈复杂度：1 + if/for/while/except/assert 计数，BoolOp 按分支数累加。"""
+    complexity = 1
+    for child in ast.walk(node):
+        if isinstance(child, (ast.If, ast.For, ast.While, ast.ExceptHandler, ast.Assert)):
+            complexity += 1
+        elif isinstance(child, ast.BoolOp):
+            complexity += len(child.values) - 1
+    return complexity
+
+
+def score_source_complexity(
+    source_code: str,
+    *,
+    num_files: int = 1,
+    fallback_cyclomatic: int = 1,
+    fallback_imports: int = 0,
+) -> ComplexityScore:
+    """从源码直接计算复杂度评分（CLI / 搜索 / benchmark 共用唯一实现）。
+
+    行数、import 数、函数级圈复杂度均从 source_code 推导；num_files 由调用方
+    提供（数据集 metadata 或默认 1）。源码不可解析时圈复杂度回退
+    fallback_cyclomatic、import 数按 0 计（与 count_imports 自身解析失败
+    口径一致）；仅当 import 计数本身抛异常时才回退 fallback_imports。
+    """
+    num_lines = len(source_code.splitlines())
+    try:
+        tree: ast.Module | None = ast.parse(source_code)
+    except (SyntaxError, ValueError):
+        tree = None
+    if tree is None:
+        cc = int(fallback_cyclomatic or 1)
+        num_deps = 0
+    else:
+        functions = [n for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
+        cc = max((_function_cyclomatic(f) for f in functions), default=1)
+        try:
+            num_deps = count_imports(source_code, _tree=tree)
+        except Exception:
+            num_deps = int(fallback_imports or 0)
+    return compute_complexity_score(
+        lines=num_lines,
+        num_files=int(num_files or 1),
+        num_deps=num_deps,
+        cyclomatic_complexity=cc,
+    )
+
+
+def score_task_complexity(source_code: str, metadata: Mapping[str, Any] | None = None) -> ComplexityScore:
+    """按任务 metadata 的统计口径评分（数据集字段仅作兜底，源码口径优先）。"""
+    md = metadata or {}
+    return score_source_complexity(
+        source_code,
+        num_files=int(md.get("num_files") or 1),
+        fallback_cyclomatic=int(md.get("cyclomatic_complexity") or 1),
+        fallback_imports=int(md.get("num_imports") or 0),
+    )
 
 
 def complexity_class_to_routing_hints(complexity_class: str) -> dict[str, object]:

@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Mapping
 from typing import Any, TypedDict
 
 
@@ -254,8 +255,8 @@ class AITesterState(TypedDict, total=False):
     # 全文注入 prompt）；None = 单文件任务 / 未启用跨文件
     cross_file_contexts: dict[str, str] | None
     # P0 1.2 复杂度感知路由（MODEL_ROUTING_STRATEGY=complexity_aware）：
-    # run_benchmark 按任务代码行数 / import 数量 / 圈复杂度计算复杂度分数，
-    # 写入 state 供 LLM 调用路径选择对应档位 LLM 实例。
+    # create_initial_state 按任务代码行数 / import 数量 / 圈复杂度计算复杂度
+    # 分数并写入 state，供 LLM 调用路径选择对应档位 LLM 实例。
     # complexity_class: "simple" | "medium" | "complex"（routing_enabled() 时）
     # complexity_score: [0, 1] 综合分数
     # complexity_breakdown: 各维度归一化分量
@@ -693,6 +694,28 @@ class AITesterState(TypedDict, total=False):
     patch_evidence_level: str | None
 
 
+def _complexity_routing_fields(
+    target_code: str,
+    task_metadata: Mapping[str, Any] | None,
+) -> tuple[str, float | None, dict[str, float] | None, dict[str, object] | None]:
+    """按 MODEL_ROUTING_STRATEGY 产出复杂度路由四字段（所有入口同一口径）。"""
+    from src.api.complexity_router import (
+        complexity_class_to_routing_hints,
+        routing_enabled,
+        score_task_complexity,
+    )
+
+    if not routing_enabled():
+        return "medium", None, None, None
+    score = score_task_complexity(target_code, task_metadata)
+    return (
+        score.complexity_class,
+        score.score,
+        score.breakdown,
+        complexity_class_to_routing_hints(score.complexity_class),
+    )
+
+
 def create_initial_state(
     task_uuid: str,
     target_file: str,
@@ -704,6 +727,7 @@ def create_initial_state(
     task_description: str | None = None,
     execution_timeout: int | None = None,
     coverage_threshold: float | None = None,
+    task_metadata: Mapping[str, Any] | None = None,
 ) -> AITesterState:
     """
     创建初始工作流状态的唯一工厂函数。
@@ -726,13 +750,22 @@ def create_initial_state(
             Executor 回退 config.EXECUTION_TIMEOUT。
         coverage_threshold: 覆盖率达标阈值百分比（CLI 注入）；None 时
             CLI 汇总回退 config.COVERAGE_THRESHOLD。
+        task_metadata: 数据集任务 metadata（benchmark / 搜索入口传入）。仅用于
+            complexity_aware 评分时取 num_files / cyclomatic_complexity /
+            num_imports 作为源码口径的兜底；None 时按单文件与源码口径计算。
 
     Returns:
         完整初始化的 AITesterState，所有 TypedDict 字段均显式赋值
-        （未提供的可选项为 None，列表项为初始空值）。
+        （未提供的可选项为 None，列表项为初始空值）。复杂度路由四字段
+        在此按 MODEL_ROUTING_STRATEGY 统一计算，CLI / 搜索 / benchmark
+        无需各自补写。
     """
     if module_name is None:
         module_name = os.path.splitext(os.path.basename(target_file))[0]
+
+    complexity_class, complexity_score, complexity_breakdown, routing_hints = _complexity_routing_fields(
+        target_code, task_metadata
+    )
 
     return AITesterState(
         # 任务标识
@@ -800,11 +833,12 @@ def create_initial_state(
         cross_file_plan=None,
         # P0 1.1 跨文件调用链上下文（由 cross_file_analyzer 节点按需写入）
         cross_file_contexts=None,
-        # P0 1.2 复杂度感知路由（routing_enabled() 时由 run_benchmark 写入）
-        complexity_class=None,
-        complexity_score=None,
-        complexity_breakdown=None,
-        routing_hints=None,
+        # P0 1.2 复杂度感知路由：构造时按 MODEL_ROUTING_STRATEGY 统一评分
+        # （complexity_aware 按源码/metadata 分档；fixed 保持历史 "medium" 档）
+        complexity_class=complexity_class,
+        complexity_score=complexity_score,
+        complexity_breakdown=complexity_breakdown,
+        routing_hints=routing_hints,
         # 1.2 变异反馈闭环（默认 None，由 run_benchmark 变异评估后注入）
         mutation_feedback=None,
         # P2 一期（观测级压缩）：压缩反馈产物默认 None（开关默认关，

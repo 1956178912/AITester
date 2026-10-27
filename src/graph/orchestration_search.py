@@ -1000,6 +1000,8 @@ def run_arm_cell(arm: ArmSpec, cell: Cell, *, trace_dir: str | None = None) -> C
             # 臂级 max_iterations 覆盖（None 沿用 config 单一事实源）
             max_iterations=arm.max_iterations if arm.max_iterations is not None else _config.MAX_ITERATIONS,
             problem_statement=getattr(task, "problem_statement", None),
+            # 复杂度评分由工厂统一计算；metadata 提供数据集统计兜底
+            task_metadata=task.metadata,
         )
         # AC2 门①材料管道：gold 修复代码注入（评估/门禁专用，禁入 agent prompt；
         # 无 gold 材料保持 None，门①自动降级 unavailable）

@@ -5216,3 +5216,57 @@ H2 骨架记为 `[(序号, 该节 H3 小节数), ...]`：序号把「一、」�
 `len(all_configs) > 1` 不成立、重排函数不会被调用——缺陷只在文档承诺的多端点构型
 下激活，本轮以注入配置复现并锁定，不主张本机生产影响。
 **修 1 个成本查表口径，锁 5 例（4 红→绿 + 1 口径护栏）；语句分母 20,290 → 20,300、新增 10 条全部被锁执行（行 19,795/20,300 = 97.5123%），分支分母 7,698 → 7,702、新增 4 条全部被覆盖（7,273/7,702 = 94.4300%），`agents/base_agent.py` 422/428 = 98.60%、分支 135/138 = 97.83%。**
+
+## 114. 附：EU 轮（2026-10-27）**复杂度感知路由只在 benchmark harness 里生效**；承诺的默认策略在 CLI / 编排搜索 / e2e 入口上不可观测
+
+**① 承诺与实现之间隔着一个唯一写入点。**
+1. `MODEL_ROUTING_STRATEGY` 默认即 `complexity_aware`（`routing_strategy()` 未设环境变量时
+   返回该值），`src/api/complexity_router.py` 的 docstring 承诺按任务复杂度把请求路由到
+   不同成本档位。
+2. 生产消费点有两处：`APIManager._build_node_list`（complex ⇒ `max_candidates=3` /
+   `extra_iteration=1`）与 `BaseAgent._reorder_api_groups_by_complexity`（ET 轮刚修好
+   同模型多端点成本表）；两者都读 `state["complexity_class"]`。
+3. 但唯一写入点在 `experiments/run_benchmark.py`：先 `create_initial_state(...)` 构造
+   state（四字段写 None），再按任务源码事后补写。`create_initial_state` 的四个调用点中，
+   CLI `aitester run`（`src/cli/app.py:516`）、`src/graph/orchestration_search.py:994`、
+   `scripts/tools/e2e_probe.py:180` 都只调用工厂，从不补写。
+4. 消费者读到 None 即走默认分支（`complexity_class` 非 "complex" / "simple" 按 medium
+   处理），于是 `fixed` 与 `complexity_aware` 在生产入口上不可区分——默认策略等价于
+   关闭，且没有任何披露。
+
+**② 红因可辨（对 HEAD 旧源实测，零 LLM，$0）。**
+
+| 入口 / 输入（584 行 / 20 imports / 函数级 cc 31） | 修前读数 | 修后读数 |
+| --- | --- | --- |
+| `create_initial_state`（不设策略，走默认值） | 四字段全 None（class=None） | class=complex、score=0.80、hints.max_candidates=3 |
+| `create_initial_state`（`MODEL_ROUTING_STRATEGY=fixed`） | 四字段全 None（与 aware 不可区分） | class=medium、score/breakdown/hints 均 None（历史口径） |
+| CLI `aitester run <file> --json`（aware，捕获送入 `graph.invoke` 的 state） | class=None | class=complex、hints.max_candidates=3 |
+| CLI 同一文件（fixed） | class=None（与 aware 相同） | class=medium、score=None（可观测差异） |
+| `task_metadata={"num_files": 5}` + 500 行 padding 源 | 工厂忽略 metadata | class=medium（raw_files=5 进入评分） |
+| 可解析源码 + metadata `cyclomatic_complexity=25` | — | raw_cc=1（源码优先，metadata 仅在解析失败时兜底） |
+| 不可解析源码 + metadata cc=25 | — | raw_cc=25、class=medium（解析失败兜底） |
+| `count_imports` 抛 RuntimeError + metadata `num_imports=20` | — | raw_deps=20、class=medium（仅计数异常兜底） |
+| `experiments/run_benchmark.py` 源码 | 含约 75 行内联评分（`compute_complexity_score(` / `_count_cc(`） | 两符号均不再出现；改为 `task_metadata=task.metadata` 委托工厂 |
+
+**③ 修法：评分收敛到唯一构造点，benchmark 退化为调用方。**
+`score_source_complexity` 单次 `ast.parse`：可解析 ⇒ 函数级 cc 取最大值
+（`if/for/while/except/assert` 各 +1，`BoolOp` 按 `len(values)-1` 展开）+ `count_imports`
+模块级计数；解析失败 ⇒ cc 用 metadata 兜底、deps=0（与原 benchmark 语义一致）；仅当可解析
+但 `count_imports` 抛异常时 deps 回退 metadata `num_imports`。`score_task_complexity`
+负责 `num_files` 与上述两种兜底值。`create_initial_state` 增加 `task_metadata` 形参，
+构造时调用一次 `_complexity_routing_fields`：`fixed` 返回 `("medium", None, None, None)`
+（与 benchmark 历史 else 分支一致），`complexity_aware` 返回评分与路由提示。benchmark
+删除整段内联实现，只传 `task_metadata` 并保留评分日志；`orchestration_search` 同样传入。
+**同轮排除**：四字段中只有 `complexity_class` 有生产消费点；`complexity_score` /
+`complexity_breakdown` / `routing_hints` 目前只作披露字段，本轮不新增消费点，也不主张
+它们改变行为。`complexity_class_to_routing_hints` 的 `context_budget` 仍无读取点
+（既有口径，注释已披露）。
+**修 1 个入口一致性口径，锁 20 例（新文件 12：工厂 4 / CLI 2 / 共享评分 4 / benchmark
+委托 2；迁移文件 6 → 8：None metadata 兜底 5 + benchmark 委托 3，其中 6 例改为驱动真实
+共享入口）；预登记 4 红 = 3 个基线守卫（BASELINE / 登记册未刷新）+ 1 个 AST 守卫站点
+棘轮（合法新增站点 79 → 80，`score_source_complexity` 的解析站点直接捕获
+`(SyntaxError, ValueError)`，EXEMPT 与命中数不变）。语句分母 20,300 → 20,337、覆盖 +39
+⇒ 19,834/20,337 = 97.5267%（未覆盖 503；本轮两次读数之间 `api/complexity_router.py`
+miss 9 → 8〔BoolOp 锁〕与 `budget/cost_budget.py` miss 1 → 2 总量抵消，逐文件读数不作
+行为主张）；分支覆盖 +12 / 分母 +10 ⇒ 7,285/7,712 = 94.4632%（缺弧 427；同口径逐文件
+`complexity_router.py` 缺弧 1 → 0 与 `cost_budget.py` 3 → 4 持平）。**
