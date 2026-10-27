@@ -5270,3 +5270,51 @@ H2 骨架记为 `[(序号, 该节 H3 小节数), ...]`：序号把「一、」�
 miss 9 → 8〔BoolOp 锁〕与 `budget/cost_budget.py` miss 1 → 2 总量抵消，逐文件读数不作
 行为主张）；分支覆盖 +12 / 分母 +10 ⇒ 7,285/7,712 = 94.4632%（缺弧 427；同口径逐文件
 `complexity_router.py` 缺弧 1 → 0 与 `cost_budget.py` 3 → 4 持平）。**
+
+## 115. 附：EV 轮（2026-10-27）**连接池的构造契约只被 mock 认证**：两个 `PooledDB` 根本不存在的形参让真实构造必抛 `TypeError`，`MYSQL_POOL_TIMEOUT` 承诺的「获取连接等待超时」从未生效
+
+**① 承诺与实现之间隔着一条从未真实执行过的构造路径。**
+1. `config.py` 的 `MYSQL_POOL_TIMEOUT` 注释承诺「连接池获取连接的超时」，`.env.example`
+   同样宣称。
+2. `MySQLClient.__init__` 把它以 `timeout=` 传给 `PooledDB`（`0e12ba44` 引入），另传
+   `idle_timeout=600`（`2ae66820` 为「接通死常量」新增，并配了一条断言 mock 收到该参数的
+   回归测试）。
+3. 但本机 **DBUtils 3.1.2** 的 `PooledDB.__init__` 形参只有 `creator / mincached /
+   maxcached / maxshared / maxconnections / blocking / maxusage / setsession / reset /
+   failures / ping`，**整个 `PooledDB` 源码里 `timeout` 出现 0 次**；多出的关键字参数被
+   转发给 creator `pymysql.connect`，而 **PyMySQL 1.2.0** 只有 `connect_timeout`，同样不认
+   `timeout` / `idle_timeout`。⇒ 真实构造必抛 `TypeError`。
+4. 13 个既有测试全部整体替换 `PooledDB`，替换后的 mock 照单全收任何关键字；
+   `test_pool_construction_passes_idle_timeout` 还断言 mock 收到了 `idle_timeout`——
+   **为一条永远跑不起来的构造路径签了合格证**。这类绿不是「没测到」，而是「测的是一个
+   不存在的契约」。
+
+**② 红因可辨（对 HEAD 旧源实测，零 LLM，$0）。**
+
+| 锁 / 输入 | 修前读数 | 修后读数 |
+| --- | --- | --- |
+| `test_pool_kwargs_are_supported_by_real_dependencies`（生产 kwargs 对真实 `PooledDB.__init__` + `pymysql.connect` 形参集做差） | 不支持的关键字 = `{'idle_timeout', 'timeout'}` | 空集 |
+| `test_pool_knobs_map_to_supported_params`（四个旋钮的落点） | `KeyError: 'connect_timeout'` | `maxconnections` / `mincached` / `maxcached` / `connect_timeout` 全部就位，且不再出现 `timeout` / `idle_timeout` |
+| `test_dead_connection_probe_is_wired` | `KeyError: 'ping'` | `ping == 1` |
+| `test_real_pooleddb_construction_reaches_driver`（真 `PooledDB` + 真驱动 + 本机刚释放的端口） | `TypeError: Connection.__init__() got an unexpected keyword argument 'timeout'` | 池构造成功；`cursor()` 在取连接时抛 `pymysql.err.OperationalError`（2003，连接被拒） |
+| `test_contract_checker_flags_known_unsupported_kwarg`（负向对照：喂合成的 `idle_timeout` / `timeout`） | 通过（红阶段即绿） | 通过 |
+
+红阶段 4 failed / 1 passed，绿阶段 17 passed（5 新 + 12 既有）。
+
+**③ 修法：删掉不可执行的形参，把承诺映射到真实存在的机制，并披露做不到的部分。**
+- 移除 `timeout=` / `idle_timeout=` 及其死常量 `_POOL_IDLE_TIMEOUT`；
+- `MYSQL_POOL_TIMEOUT` → `connect_timeout=`（驱动侧建立连接超时，与注释承诺同义）；
+- 显式 `ping=1`（PooledDB 默认值；取连接时探测服务端 `wait_timeout` 断开的空闲连接）；
+- **同轮排除**：DBUtils 3.1.2 没有「池耗尽时等待空闲连接」的形参，`blocking=True` 会一直
+  等到有连接归还——本轮不发明新的获取语义，只在 `config.py` 注释与 `.env.example` 里披露
+  该限制；也不顺手改 `cursor()` 在 `conn.cursor()` 抛异常时连接不归还的问题（另一族，另轮）；
+- 删 1 个 mock 合格证测试（`test_pool_construction_passes_idle_timeout`），锁 5 例（新文件
+  4 红→绿 + 1 负向对照；既有 12 例保持绿）。
+
+**④ 预登记读数（2026-10-27，同一棵树）。** 预登记跑 13,409 passed / 3 failed / 257 skipped、
+collected 13,669；3 红全部为基线 / 登记守卫（`test_registration_readers_cf` 2 例 +
+`test_2026_10_10_optimization_batch` 1 例），刷新后 13,412 / 0 / 257 / 13,669。语句分母
+20,337 → 20,336（删死常量 1 行）、覆盖数 19,834 不变 ⇒ **19,834/20,336 = 97.5315%**；分支
+覆盖 +1 / 分母 7,712 不变 ⇒ **7,286/7,712 = 94.4761%**（缺弧 427 → 426，来自真实 PooledDB
+取连接异常路径；+1 弧落在历史 ±1 抖动带内，不作行为主张）。静态检查：`ruff format --check .`
+1,049 份（+1 = 新增测试文件）/ mypy 源文件 137（未变）。

@@ -335,7 +335,9 @@ MYSQL_DATABASE: str = os.getenv("MYSQL_DATABASE", "aitester")
 MYSQL_POOL_MIN_CACHED: int = _parse_int_env("MYSQL_POOL_MIN_CACHED", 5, 0, None)
 MYSQL_POOL_MAX_CACHED: int = _parse_int_env("MYSQL_POOL_MAX_CACHED", 10, 0, None)
 MYSQL_POOL_MAX_CONNECTIONS: int = _parse_int_env("MYSQL_POOL_MAX_CONNECTIONS", 20, 1, None)
-# 获取连接的等待超时（秒），范围 [1, 600]：0 意味着拿不到连接就失败，无意义
+# 建立数据库连接的超时（秒），范围 [1, 600]：0 意味着拿不到连接就失败，无意义。
+# 注意：DBUtils 3.1.2 没有"获取空闲连接等待超时"形参，池耗尽时 blocking=True
+# 会一直等待归还；本值只约束驱动侧 connect_timeout。
 MYSQL_POOL_TIMEOUT: int = _parse_int_env("MYSQL_POOL_TIMEOUT", 30, 1, 600)
 
 

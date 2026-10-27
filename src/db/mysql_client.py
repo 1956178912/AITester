@@ -38,9 +38,12 @@ _POOL_MIN_CACHED = MYSQL_POOL_MIN_CACHED
 _POOL_MAX_CACHED = MYSQL_POOL_MAX_CACHED
 _POOL_MAX_CONNECTIONS = MYSQL_POOL_MAX_CONNECTIONS
 _POOL_CONNECTION_TIMEOUT = MYSQL_POOL_TIMEOUT
-# 连接空闲超过此秒数后被回收（0 表示不回收）；DBUtils PooledDB 的
-# idle_timeout 参数，保持模块内常量（使用频率低，不单独开放环境变量）
-_POOL_IDLE_TIMEOUT = 600
+# DBUtils 3.1.2 的 PooledDB 没有 timeout / idle_timeout 形参：多出的关键字参数
+# 会被转发给 creator（pymysql.connect），而 PyMySQL 同样不认这两个名字 ⇒ 真实
+# 构造必抛 TypeError。可用的两个机制：connect_timeout（驱动侧，约束建立连接）
+# 与 ping=1（PooledDB 默认，取连接时探测服务端 wait_timeout 断开的空闲连接）。
+# 注意 connect_timeout 不约束"池耗尽时等待空闲连接"——DBUtils 没有该形参，
+# blocking=True 会一直等到有连接归还。
 
 
 class MySQLClient:
@@ -81,10 +84,8 @@ class MySQLClient:
                 mincached=_POOL_MIN_CACHED,
                 maxcached=_POOL_MAX_CACHED,
                 blocking=True,
-                timeout=_POOL_CONNECTION_TIMEOUT,
-                # 空闲连接超过 600s 回收（防 MySQL 服务端 wait_timeout 长连接被断开），
-                # 此前该常量定义后从未传入构造参数（死常量），现接通
-                idle_timeout=_POOL_IDLE_TIMEOUT,
+                connect_timeout=_POOL_CONNECTION_TIMEOUT,
+                ping=1,
                 host=MYSQL_HOST,
                 port=MYSQL_PORT,
                 user=MYSQL_USER,
