@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "generated_by": "transcribed from paper/tex/manuscript.tex Table tab:reclass (authoritative paper numbers)",
+  "description": "Task-level reclassification under specification anchoring (RQ4): for each anchor arm, the composition of the 41 defect programs by specificity-gate verdict, in the control (plain_llm_df) and anchored conditions. Each condition sums to 41.",
+  "upstream_source": "experiments/results/emse_docstring_anchor_20261017/benchmark_quixbugs_20261024_*.json and emse_docstring_augment_20261017/benchmark_quixbugs_20261025_*.json, field results.*.details[].specificity_gate_verdict, filtered to the 41 defect programs (9 official test drivers excluded); uncommitted, re-derivable on the author machine.",
+  "n_programs": 41,
+  "categories": ["specific_red", "over_red", "unmeasurable"],
+  "conditions": ["control", "anchored"],
+  "arms": [
+    {
+      "arm": "Planner anchor",
+      "control": {"specific_red": 31, "over_red": 9, "unmeasurable": 1},
+      "anchored": {"specific_red": 20, "over_red": 17, "unmeasurable": 4}
+    },
+    {
+      "arm": "Independent anchor",
+      "control": {"specific_red": 33, "over_red": 6, "unmeasurable": 2},
+      "anchored": {"specific_red": 22, "over_red": 15, "unmeasurable": 4}
+    },
+    {
+      "arm": "Union of both",
+      "control": {"specific_red": 33, "over_red": 6, "unmeasurable": 2},
+      "anchored": {"specific_red": 22, "over_red": 13, "unmeasurable": 6}
+    },
+    {
+      "arm": "Independent anchor appended",
+      "control": {"specific_red": 31, "over_red": 8, "unmeasurable": 2},
+      "anchored": {"specific_red": 31, "over_red": 7, "unmeasurable": 3}
+    }
+  ]
+}
