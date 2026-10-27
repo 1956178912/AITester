@@ -34,6 +34,7 @@ import sys
 import urllib.error
 import urllib.request
 from pathlib import Path
+from typing import NamedTuple
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
@@ -158,16 +159,43 @@ def collect_files(extra_files: list[str]) -> list[Path]:
     return unique
 
 
-def load_allowlist(path: Path | None) -> set[str]:
-    """读取豁免清单（每行 `相对路径:行号`，`#` 开头为注释）。"""
+ANCHOR_SEP = " @"
+
+
+class AllowEntry(NamedTuple):
+    """一条豁免登记：`相对路径:行号` 或 `相对路径:行号 @内容锚点`。
+
+    EZ 轮之前只有行号——任何在它上方插行的文档改动都会让整表失效（本轮之前
+    同一道承重锁在一天内报了三轮）。锚点是该行内容的唯一片段：**行号漂移时
+    按锚点仍能命中，内容一变则锚点失效、必须重新判定**——把「键」从位置改成
+    内容，同时保留「内容变了就得重看」这条纪律。
+    """
+
+    key: str
+    path: str
+    line: int
+    anchor: str | None
+
+
+def parse_allow_entry(raw: str) -> AllowEntry:
+    """解析一条登记。形态非法时 line=0（由调用方判红），不在解析层抛异常。"""
+    body, _, anchor = raw.partition(ANCHOR_SEP)
+    body = body.strip()
+    anchor = anchor.strip() or None
+    rel, _, lineno = body.rpartition(":")
+    return AllowEntry(key=body, path=rel, line=int(lineno) if lineno.isdigit() else 0, anchor=anchor)
+
+
+def load_allowlist(path: Path | None) -> list[AllowEntry]:
+    """读取豁免清单（每行 `相对路径:行号[@锚点]`，`#` 开头为注释）。"""
     target = path if path is not None else PROJECT_ROOT / DEFAULT_ALLOWLIST
     if not target.exists():
-        return set()
-    out: set[str] = set()
+        return []
+    out: list[AllowEntry] = []
     for raw in target.read_text(encoding="utf-8", errors="replace").splitlines():
         line = raw.strip()
         if line and not line.startswith("#"):
-            out.add(line)
+            out.append(parse_allow_entry(line))
     return out
 
 
@@ -217,7 +245,25 @@ def check_url_exists(url: str) -> tuple[str, str]:
         return "network_error", repr(e)[:120]
 
 
-def scan_traceability(files: list[Path], window: int = 3, allowlist: set[str] | None = None) -> list[str]:
+def _entry_matches(entry: AllowEntry, rel: str, lineno: int, text: str) -> str | None:
+    """一条登记是否覆盖本行：返回 "line" / "anchor" / None。
+
+    行号精确命中优先；锚点命中其次（行号已漂移，内容仍是当初判定的那行）。
+    锚点**不是**宽匹配：它必须原样出现在行内，且只对登记的同一路径生效。
+    """
+    if entry.key == f"{rel}:{lineno}":
+        return "line"
+    if entry.anchor and entry.path == rel and entry.anchor in text:
+        return "anchor"
+    return None
+
+
+def scan_traceability(
+    files: list[Path],
+    window: int = 3,
+    allowlist: list[AllowEntry] | None = None,
+    drift_report: list[str] | None = None,
+) -> list[str]:
     """检查"数值型外部引用"是否在**邻域**内带可追溯标识（DOI / arXiv / URL）。
 
     只做机械可判定的那一半：**可追溯性**。归属正确性仍需人工核验
@@ -231,7 +277,7 @@ def scan_traceability(files: list[Path], window: int = 3, allowlist: set[str] | 
       （如 "CANDOR（ICST 2026，one-shot 88.35%…）"）。只出现 venue 名
       （"对比 EvoSuite/Defects4J"）或只出现百分比（内部指标）都不报；
     - 项目自身指标行（含 aitester / detection / BASELINE.yaml 等）直接豁免；
-    - 剩余误报用 `docs/citation_allowlist.txt` 逐条豁免（每行 `相对路径:行号`），
+    - 剩余误报用 `docs/citation_allowlist.txt` 逐条豁免（每行 `相对路径:行号 @内容锚点`），
       豁免即等于**人工已判定"该行不是外部引用"**，因此是有成本的承诺，
       不应无脑批量加入。
     """
@@ -255,9 +301,22 @@ def scan_traceability(files: list[Path], window: int = 3, allowlist: set[str] | 
             if any(TRACEABLE_RE.search(lines[j]) for j in range(lo, hi)):
                 continue
             key = f"{_rel(path)}:{idx + 1}"
-            if allowlist and key in allowlist:
-                continue
-            findings.append(f"{key}: {line.strip()[:160]}")
+            text = line.strip()
+            if allowlist:
+                matched: tuple[AllowEntry, str] | None = None
+                for entry in allowlist:
+                    how = _entry_matches(entry, _rel(path), idx + 1, text)
+                    if how:
+                        matched = (entry, how)
+                        break
+                if matched is not None:
+                    entry, how = matched
+                    if how == "anchor" and drift_report is not None:
+                        drift_report.append(
+                            f"{entry.key} 按锚点「{entry.anchor}」命中第 {idx + 1} 行（行号已漂移，内容未变）"
+                        )
+                    continue
+            findings.append(f"{key}: {text[:160]}")
     return findings
 
 
@@ -311,7 +370,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.traceability:
         allowlist = load_allowlist(args.allowlist)
-        trace_findings = scan_traceability(files, allowlist=allowlist)
+        drift: list[str] = []
+        trace_findings = scan_traceability(files, allowlist=allowlist, drift_report=drift)
         if trace_findings:
             print(f"\n[FAIL] 可追溯性检查：{len(trace_findings)} 处数值型外部引用缺少 DOI/arXiv/URL")
             for item in trace_findings:
@@ -321,6 +381,10 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 1
         print("\n[INFO] 可追溯性检查通过：未发现缺标识的数值型外部引用。")
+        if drift:
+            print(f"[INFO] 另有 {len(drift)} 条豁免按内容锚点命中（行号已漂移，内容未变）：")
+            for item in drift:
+                print(f"  - {item}")
 
     if not args.online:
         return 0
