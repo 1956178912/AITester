@@ -321,3 +321,9 @@ build/
 *.egg-info/
 .sbom-venv/
 sbom.cyclonedx.json
+
+# ── 投稿图产物（插图轮 2026-10-27）──────────────────────────────────────────
+# scripts/figures/ 下的出图脚本与 **PDF 矢量图**入库（投稿产物的单一事实源，
+# 审稿人 fresh clone 可直接取用）；**PNG 仅本地预览**，不入库——
+# PDF 已足够排版，PNG 是同内容的高体积冗余（每张 ~200KB vs PDF ~35KB）。
+scripts/figures/figures/*.png
