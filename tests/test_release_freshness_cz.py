@@ -25,6 +25,7 @@
 from __future__ import annotations
 
 import importlib.util
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -34,6 +35,31 @@ import pytest
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 _SCRIPT = PROJECT_ROOT / "scripts" / "gates" / "check_release_freshness.py"
 ALLOWLIST = PROJECT_ROOT / "docs" / "release_freshness_allowlist.txt"
+
+
+def _local_gap() -> tuple[str | None, int]:
+    """本地判定「最新 v* tag 落后 HEAD 多少提交」（不打网络）。
+
+    与门禁的 API 判定同一事实、两条实现：门禁问的是远端最新 release，本地问的是
+    本地 tag；tag 已前移时两者都应为 0。
+    """
+    tag = subprocess.run(
+        ["git", "-C", str(PROJECT_ROOT), "tag", "--sort=-v:refname", "--list", "v*"],
+        capture_output=True,
+        text=True,
+    )
+    names = [line for line in tag.stdout.splitlines() if line.strip()]
+    if tag.returncode != 0 or not names:
+        return None, 0
+    latest = names[0].strip()
+    count = subprocess.run(
+        ["git", "-C", str(PROJECT_ROOT), "rev-list", "--count", f"{latest}..HEAD"],
+        capture_output=True,
+        text=True,
+    )
+    if count.returncode != 0:
+        return latest, 0
+    return latest, int(count.stdout.strip() or "0")
 
 
 def _load() -> Any:
@@ -131,12 +157,21 @@ class TestReleaseFreshnessWiring:
         assert "scripts/gates/check_release_freshness.py" in ci
 
     def test_current_tag_gap_is_registered(self) -> None:
-        """当前的 tag 落后必须**登记在例外表**里（显式承担，不沉默）。"""
+        """落后必须登记；**不落后时例外表必须为空**（EZ 轮：前移后旧断言自我矛盾）。
+
+        旧版断言 `entries` 非空，而失败消息自己写着「若当前 tag 已不落后，应当删除该表
+        并让门禁自行判定」——两个方向互相打架：一旦作者前移 tag，本锁必红。现按本地
+        落后数分两支判，两个方向都咬人。
+        """
         assert ALLOWLIST.is_file(), "缺少 docs/release_freshness_allowlist.txt"
         entries = gate.load_allowlist()
-        assert entries, "例外表为空——若当前 tag 已不落后，应当删除该表并让门禁自行判定"
-        for tag, reason in entries.items():
-            assert reason, f"{tag} 的例外登记没有写理由"
+        tag, gap = _local_gap()
+        if gap <= 0:
+            assert entries == {}, f"当前 tag 不落后（{tag}），例外表应为空，实际：{sorted(entries)}"
+            return
+        assert tag in entries, f"{tag} 落后 HEAD {gap} 个提交，但未登记例外"
+        for name, reason in entries.items():
+            assert reason, f"{name} 的例外登记没有写理由"
 
     def test_list_switch_is_readable(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """`--list` 必须真参与调度（CG 门判「判据档无读者即红」，本文件即该开关的代码锁）。"""
