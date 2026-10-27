@@ -559,3 +559,20 @@ HDA 把 harness 演化的增益**分解为三块**：artifact 驱动的过拟合
   剩余增量经本轮后**收窄为两条半**：①**声明率作为被协议扰动的量**（口径矩阵里的
   第三个量，HDA / Skills-Utility 均无对应物）；②**功能级共享分母的裁决**（落在测试
   生成流水线）+ 预注册零 LLM 复算链 + 公开装置自身上限。
+
+## 14. EZ 轮（2026-10-27）三篇：评测器不足与「验证者继承生成者盲点」——两篇与本稿构念相邻但不等同
+
+**检索面（诚实汇报）**：2026-10-27 用两条检索式（`LLM generated tests encode buggy behavior false fix oracle mismatch 2026`、`arXiv cs.SE test generation LLM bug reproduction benchmark October 2026`，时间窗 d7 / m1）在 Web 通道补扫，命中 3 篇与本稿构念相邻的工作；三篇均按**官方摘要页**逐字核验（`export.arxiv.org/abs/<id>`，2026-10-27），不采用二手转述的读数（这正是 §13 与 WC 轮记过的失败形态：转述页会把「约」和单位抹平）。
+
+| 键 | 读数 | 原文表述 | 出处 |
+|---|---|---|---|
+| `yao2026testjack` | 34.4 / 50.6 / 33.2 | "we find that about 34.4% of the model trials currently judged correct violate the task requirements, lowering the overall resolution rate from 50.6% to 33.2%" | arXiv:2610.10619v1（2026-10-07；官方摘要页 2026-10-27 核验） |
+| `he2026verificationtrap` | 0.846 | "a lightweight gold-free predictor using verifier-visible features reaches 0.846 AUROC" | arXiv:2610.05170v1（2026-10-04，EMNLP 2026；官方摘要页 2026-10-27 核验） |
+| `gan2026scalf` | 2.97 / 5.26 / 3.53 | "SCALF outperforms strong prompting and post-training baselines by up to 2.97, 5.26, and 3.53 percentage points in joint success rate, output correctness rate, and bug-triggering rate" | arXiv:2610.27694v1（2026-10-20；官方摘要页 2026-10-27 核验） |
+
+**构念对照（不得混引）**：
+- `yao2026testjack` 量的是**评测器不足**：固定单测覆盖不到 prompt 的全部要求，于是 34.4% 被判正确的试验实际违反要求。因果链是「测试太弱」，它不区分「弱测试」与「错误预言」，因此**不能**与 false-fix 率并列（同 §6 对 9.21% / 59.29% 的口径纪律）。
+- `he2026verificationtrap` 与本稿最接近：验证者（测试）继承生成者的错误前提，选择器因此挑中 hidden-test-wrong 的候选；其证据是选择失败与 0.846 AUROC 的**可预测性**，不是 false-fix 率——同一现象的不同测量面。
+- `gan2026scalf` 是方法侧（RL 训练 bug-exposing 测试），不提供测量口径；仅作 `bug_triggering_rate` 这一指标名的出处登记。
+
+**让渡口径不变**：本稿增量仍为三块（①false-fix 口径分解〔条件 + 边际并列〕②声明率本身被协议扰动 ③测量效度 × 声明率联立）。本节三篇不改变该结论，只补两处「相邻构念不得互相冒充」的边界。
