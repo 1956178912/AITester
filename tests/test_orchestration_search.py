@@ -67,10 +67,16 @@ class StubEvaluator:
         rewards: dict[str, float | None] | None = None,
         tokens: dict[str, int] | None = None,
         default_reward: float | None = 0.0,
+        false_fix_rate: float | None = 0.0,
     ) -> None:
         self._rewards = rewards or {}
         self._tokens = tokens or {}
         self._default_reward = default_reward
+        # FC 轮：桩评估器默认**给出**假修复率观测（0.0 = 已测、无假修复）。
+        # 冠军守卫要求有观测才判读（无观测 ⇒ 不得读作 0 放行），故缺省给
+        # 实测值而非 None；"不可测"分支由 tests/test_champion_false_fix_
+        # evidence_fc.py 单独构造。
+        self._false_fix_rate = false_fix_rate
         self.calls: list[tuple[str, str, int]] = []
 
     def __call__(self, arm: ArmSpec, cell: Cell) -> CellResult:
@@ -80,6 +86,7 @@ class StubEvaluator:
             task_id=cell.task_id,
             seed=cell.seed,
             detection=self._rewards.get(arm.arm_id, self._default_reward),
+            false_fix_rate=self._false_fix_rate,
             total_tokens=self._tokens.get(arm.arm_id, 1000),
             llm_calls=2,
             duration_s=1.5,
@@ -496,16 +503,37 @@ class TestMemoizeAndInvariants:
 
     def test_champion_constraints_unit(self):
         """champion 选拔单元测试：token 超 2×  incumbent 的臂即使 detection 高也落选。"""
+        # FC 轮：arm_stats 每臂须带 `n_false_fix`（假修复率观测数）——守卫
+        # 要求有观测才判读；此处各臂均有观测，约束语义与改前一致。
         arm_stats = {
-            "df_incumbent": {"n_measurable": 10, "mean_detection": 0.45, "mean_tokens": 4000.0, "mean_false_fix": 0.0},
+            "df_incumbent": {
+                "n_measurable": 10,
+                "mean_detection": 0.45,
+                "mean_tokens": 4000.0,
+                "n_false_fix": 10,
+                "mean_false_fix": 0.0,
+            },
             "expensive_best": {
                 "n_measurable": 10,
                 "mean_detection": 0.90,
                 "mean_tokens": 20000.0,
+                "n_false_fix": 10,
                 "mean_false_fix": 0.0,
             },
-            "cheap_good": {"n_measurable": 10, "mean_detection": 0.55, "mean_tokens": 6000.0, "mean_false_fix": 0.1},
-            "thin_evidence": {"n_measurable": 2, "mean_detection": 0.99, "mean_tokens": 100.0, "mean_false_fix": 0.0},
+            "cheap_good": {
+                "n_measurable": 10,
+                "mean_detection": 0.55,
+                "mean_tokens": 6000.0,
+                "n_false_fix": 10,
+                "mean_false_fix": 0.1,
+            },
+            "thin_evidence": {
+                "n_measurable": 2,
+                "mean_detection": 0.99,
+                "mean_tokens": 100.0,
+                "n_false_fix": 2,
+                "mean_false_fix": 0.0,
+            },
         }
         champion, reason = select_champion(arm_stats, min_evals=5)
         assert champion == "cheap_good"  # expensive_best 超 token 约束；thin_evidence 证据不足
@@ -514,17 +542,39 @@ class TestMemoizeAndInvariants:
     def test_champion_false_fix_guard(self):
         """假修复守卫：false_fix > 0.5 的臂落选（防"刷 passed"配置）。"""
         arm_stats = {
-            "df_incumbent": {"n_measurable": 10, "mean_detection": 0.45, "mean_tokens": 4000.0, "mean_false_fix": 0.0},
-            "hacky": {"n_measurable": 10, "mean_detection": 0.80, "mean_tokens": 4000.0, "mean_false_fix": 0.9},
+            "df_incumbent": {
+                "n_measurable": 10,
+                "mean_detection": 0.45,
+                "mean_tokens": 4000.0,
+                "n_false_fix": 10,
+                "mean_false_fix": 0.0,
+            },
+            "hacky": {
+                "n_measurable": 10,
+                "mean_detection": 0.80,
+                "mean_tokens": 4000.0,
+                "n_false_fix": 10,
+                "mean_false_fix": 0.9,
+            },
         }
         champion, reason = select_champion(arm_stats, min_evals=5)
         assert champion is None
         assert "阴性" in reason
+        # 原因必须点名被拒臂与**具体**成因——否则本例可能因别的理由落选
+        # （测试"因为错误的原因而绿"是沉默分叉的一种）。
+        assert "hacky" in reason
+        assert "mean_false_fix" in reason
 
     def test_champion_none_when_incumbent_unavailable(self):
         """incumbent 不可用 → 无从比较（None + 原因）。"""
         arm_stats = {
-            "df_incumbent": {"n_measurable": 1, "mean_detection": 0.0, "mean_tokens": 0.0, "mean_false_fix": 0.0}
+            "df_incumbent": {
+                "n_measurable": 1,
+                "mean_detection": 0.0,
+                "mean_tokens": 0.0,
+                "n_false_fix": 1,
+                "mean_false_fix": 0.0,
+            }
         }
         champion, reason = select_champion(arm_stats, min_evals=5)
         assert champion is None

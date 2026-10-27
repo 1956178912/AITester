@@ -1264,10 +1264,20 @@ def select_champion(
        ——搜索的命题是"自动发现优于手工设计"，打平/更差均为阴性结果；
     3. 约束：mean tokens/任务 ≤ incumbent × max_token_ratio（默认 2×）且
        mean false_fix ≤ max_false_fix（默认 0.5，防"刷 passed"配置）；
-    4. 过约束的臂中 mean detection 最大者（tie-break = 登记序，dict 插入序）。
+    4. **假修复率须有观测**（`n_false_fix ≥ 1`）才谈得上第 3 条的守卫：
+       FC 轮修复前 `mean_false_fix` 在零样本时取 `_mean([]) = 0.0`，于是
+       "无任何假修复率观测"的臂**空洞通过**防刷 passed 守卫并被选为
+       champion——「取不到测量值」被读成了「测得 0」。真值语义见
+       `experiments/_m1_metrics.py::_compute_false_fix_rate`：`repair_rate`
+       为 None（无 gold 材料 / gold 套件全 skip / rc==5 / 执行超时）时
+       `false_fix_rate` 恒为 None，而 `detection_rate` 独立计算——两者
+       可同时出现"检出率可测、假修复率不可测"。现按"取不到测量值 ⇒
+       披露并判红"处理：该臂不通过约束，原因逐条点名。
+    5. 过约束的臂中 mean detection 最大者（tie-break = 登记序，dict 插入序）。
 
     Args:
-        arm_stats: {arm_id: 统计 dict}（`build_search_report` 的 arm_stats）。
+        arm_stats: {arm_id: 统计 dict}（`build_search_report` 的 arm_stats；
+            每个臂须带 `n_false_fix` = 假修复率观测数）。
         incumbent_arm_id: incumbent 臂 id。
         min_evals: 最小可测评估数。
         max_token_ratio: token 成本约束（相对 incumbent 均值的倍数）。
@@ -1290,16 +1300,35 @@ def select_champion(
     if not better:
         return None, "无臂 detection 严格优于 incumbent——阴性结果（按 ADR-0016 可发表）"
 
-    def _passes_constraints(stats: Mapping[str, Any]) -> bool:
-        token_ok = inc_tokens <= 0.0 or float(stats.get("mean_tokens", 0.0)) <= inc_tokens * max_token_ratio
-        false_fix_ok = float(stats.get("mean_false_fix", 0.0)) <= max_false_fix
-        return token_ok and false_fix_ok
+    def _constraint_failure(stats: Mapping[str, Any]) -> str | None:
+        """返回该臂违反约束的原因；None = 过约束。
 
-    constrained = [aid for aid in better if _passes_constraints(arm_stats[aid])]
+        FC 轮：假修复率**零观测**时守卫无从判读（`_mean([])` 会给出 0.0，
+        那不是"测得没有假修复"，而是"没测"）⇒ 判为未过约束并点名。
+        """
+        token_ok = inc_tokens <= 0.0 or float(stats.get("mean_tokens", 0.0)) <= inc_tokens * max_token_ratio
+        if not token_ok:
+            return f"mean_tokens > {max_token_ratio:g}× incumbent"
+        n_false_fix = int(stats.get("n_false_fix", 0))
+        if n_false_fix < 1:
+            return "假修复率无观测（守卫无法判读，不得读作 0）"
+        if float(stats.get("mean_false_fix", 0.0)) > max_false_fix:
+            return f"mean_false_fix > {max_false_fix:g}"
+        return None
+
+    constrained: list[str] = []
+    failures: dict[str, str] = {}
+    for aid in better:
+        why = _constraint_failure(arm_stats[aid])
+        if why is None:
+            constrained.append(aid)
+        else:
+            failures[aid] = why
     if not constrained:
+        detail = "；".join(f"{aid}（{why}）" for aid, why in failures.items())
         return (
             None,
-            "有臂 detection 更优但未过成本/假修复约束（token > 2× incumbent 或 false_fix > 0.5）——阴性结果（按 ADR-0016 可发表）",
+            f"有臂 detection 更优但未过成本/假修复约束（{detail}）——阴性结果（按 ADR-0016 可发表）",
         )
     champion = max(constrained, key=lambda aid: float(arm_stats[aid].get("mean_detection", 0.0)))
     return champion, f"champion={champion}（mean_detection={arm_stats[champion].get('mean_detection'):.4f}）"
@@ -1342,12 +1371,15 @@ def build_search_report(
 
     Returns:
         报告 dict（schema = "orchestration_search_v1"；`config.n_cells` 是设计集
-        分母，`coverage.cells_observed` 是本次实际触达的 distinct cell 数）。
+        分母，`coverage.cells_observed` 是本次实际触达的 distinct cell 数；
+        FC 轮起 `arm_stats[*].n_false_fix` 披露假修复率的观测数——
+        `mean_false_fix` 在零样本时是 0.0，须与 `n_false_fix` 合读）。
     """
     arm_stats: dict[str, dict[str, Any]] = {}
     for arm_id in arm_order:
         stats = bandit.stats(arm_id)
         tokens = list(arm_tokens.get(arm_id, ()))
+        false_fix_samples = list(arm_false_fix.get(arm_id, ()))
         arm_stats[arm_id] = {
             "n_measurable": stats.n,
             "unmeasurable": stats.unmeasurable,
@@ -1356,7 +1388,11 @@ def build_search_report(
             "se_detection": round(stats.se, 6),
             "mean_tokens": round(_mean(tokens), 3),
             "mean_duration_s": round(_mean(list(arm_durations.get(arm_id, ()))), 3),
-            "mean_false_fix": round(_mean(list(arm_false_fix.get(arm_id, ()))), 6),
+            # FC 轮：假修复率观测数——`mean_false_fix` 在零样本时是 `_mean([])=0.0`，
+            # 那个 0 不是"测得没有假修复"而是"没测"。读者与 champion 守卫都靠
+            # 这个计数区分两者（`n_false_fix == 0` ⇒ 不可测，不得当 0 用）。
+            "n_false_fix": len(false_fix_samples),
+            "mean_false_fix": round(_mean(false_fix_samples), 6),
             "repair_any": bool(arm_repair_any.get(arm_id, False)),
         }
     champion, champion_reason = select_champion(arm_stats, min_evals=min_evals_per_arm)
@@ -1391,7 +1427,9 @@ def assert_no_credit_coupling() -> None:
     """
     source = inspect.getsource(OrchestrationSearch)
     for banned in ("hindsight", "credit", "attribute_mechanisms"):
-        assert banned not in source, f"OrchestrationSearch 引用禁用的信用符号 {banned!r}（reward hacking 风险）"
+        # 运行期策略守卫不能用 assert：`python -O` 会删除整条判据，静默放行信用耦合。
+        if banned in source:
+            raise AssertionError(f"OrchestrationSearch 引用禁用的信用符号 {banned!r}（reward hacking 风险）")
 
 
 __all__ = [

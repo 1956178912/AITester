@@ -235,7 +235,10 @@ case-sensitive = true
 # 段 → bandit 直接报配置错误，扫描从未真正执行）。
 # skip 口径（本地 bandit 1.9.4 实测 79 条 findings 逐类核对后的"已接受风险"
 # 清单；新增类型如 B100 exec / B601 shell / B302 pickle / B701 jinja2 仍会命中）：
-#   B101 assert        — src 内 5 处为 mypy 类型窄化（路由/mock 路径），非运行时校验
+#   B101 assert        — src 内 3 处为 mypy 类型窄化（路由/mock 路径），非运行时校验
+#                        （FC 轮：承重的运行期判据已全部改为显式 raise，`python -O`
+#                        下不会被删除；`tests/test_optimized_mode_guard_fc.py` 普查
+#                        src/ 的 assert 并按内容锚点登记，新增未登记项即红）
 #   B105 hardcode-pwd  — 枚举值/合成数据集模板字符串误报（"password" 常量名命中）
 #   B108 tmp-path      — docker --tmpfs 参数误报（非真实落盘）
 #   B110 try-except-pass — 3 处均有注释说明"卫生性操作不阻断主流程"

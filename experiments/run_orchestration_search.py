@@ -180,13 +180,17 @@ def _render_attribution_md(report: dict, attribution: dict[str, dict[str, float]
     lines.append("## 逐臂结果（主奖励 = M1 detection，gold 材料独立裁决（自动化 oracle，无人工参与）；None 不进分母）")
     lines.append("")
     lines.append(
-        "| 臂 | n可测 | n不可测 | mean detection | SE | mean tokens | mean false_fix | repair_any | 退出原因 |"
+        "| 臂 | n可测 | n不可测 | mean detection | SE | mean tokens | n false_fix | mean false_fix | repair_any | 退出原因 |"
     )
-    lines.append("|---|---|---|---|---|---|---|---|---|")
+    lines.append("|---|---|---|---|---|---|---|---|---|---|")
     for arm_id, stats in report["arm_stats"].items():
+        # FC 轮：假修复率零观测时 mean_false_fix 的 0.0 是"没测"而不是"测得 0"，
+        # 表格须显示为不可测，否则读者会把缺证据读成"无假修复"。
+        n_false_fix = int(stats.get("n_false_fix", 0))
+        false_fix_cell = f"{stats['mean_false_fix']:.4f}" if n_false_fix > 0 else "不可测"
         lines.append(
             f"| {arm_id} | {stats['n_measurable']} | {stats['unmeasurable']} | {stats['mean_detection']:.4f} "
-            f"| {stats['se_detection']:.4f} | {stats['mean_tokens']:.0f} | {stats['mean_false_fix']:.4f} "
+            f"| {stats['se_detection']:.4f} | {stats['mean_tokens']:.0f} | {n_false_fix} | {false_fix_cell} "
             f"| {stats['repair_any']} | {stats['excluded_reason'] or '-'} |"
         )
     lines.append("")
@@ -195,7 +199,9 @@ def _render_attribution_md(report: dict, attribution: dict[str, dict[str, float]
     lines.append(f"- champion：{report['champion']}")
     lines.append(f"- 依据：{report['champion_reason']}")
     lines.append(
-        "- 约束：mean tokens ≤ 2× df_incumbent 且 mean false_fix ≤ 0.5；无臂过约束 = 阴性结果（按 ADR-0016 可发表）"
+        "- 约束：mean tokens ≤ 2× df_incumbent 且 mean false_fix ≤ 0.5；"
+        "假修复率无观测（n false_fix = 0）的臂不参与冠军评选（守卫无从判读）；"
+        "无臂过约束 = 阴性结果（按 ADR-0016 可发表）"
     )
     lines.append("")
     lines.append("## 机制归因（hindsight credit——**仅诊断，不进臂选择**）")

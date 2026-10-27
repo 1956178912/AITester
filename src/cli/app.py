@@ -545,9 +545,13 @@ def _run_single_task(
 
     # graph.invoke 是 LangGraph 同步调用，正常返回必为非 None dict；为 None 说明
     # invoke 内部状态异常（非预期），按失败结果处理而非 NPE。mypy 沿"已赋值"
-    # 路径仍判 dict|None（invoke 返回 Any 但 try/finally 语义下不做收窄），显式 assert
-    # 收窄，运行期异常路径已由上层 _run_single_task 的调用方捕获
-    assert final_state is not None, "graph.invoke 未返回状态（非预期）"
+    # 路径仍判 dict|None（invoke 返回 Any 但 try/finally 语义下不做收窄），显式
+    # 收窄，运行期异常路径已由上层 _run_single_task 的调用方捕获。
+    # FC 轮：不得用 `assert` 承载这条运行期判据——`python -O` 会删除整条断言，
+    # 届时 `final_state.get(...)` 退化成 AttributeError（正是本注释要避免的
+    # NPE 形态）。改显式 if + raise，异常类型与消息与改前逐字一致。
+    if final_state is None:
+        raise AssertionError("graph.invoke 未返回状态（非预期）")
 
     # 覆盖率达标判定：无覆盖率数据（None）时为 None（未知），否则与阈值比较
     # 注意用 is not None 判断——0.0 是合法的"覆盖率数据"，不可被 falsy 误判为缺失

@@ -114,8 +114,12 @@ class MySQLClient:
         并在 finally 中归还连接到池。
         """
         # _pool 由 __init__ 双检锁初始化；mypy 沿实例路径看到 PooledDB | None
-        # （类属性默认 None），此处 assert 收窄为 PooledDB
-        assert self._pool is not None, "MySQLClient 连接池未初始化"
+        # （类属性默认 None），此处显式收窄为 PooledDB。
+        # FC 轮：不得用 `assert` 承载这条运行期判据——`python -O` 会删除整条断言，
+        # 届时 `self._pool.connection()` 退化成 AttributeError（无连接池的诊断
+        # 信息全丢）。改显式 if + raise，异常类型与消息与改前逐字一致。
+        if self._pool is None:
+            raise AssertionError("MySQLClient 连接池未初始化")
         conn = self._pool.connection()
         cur = conn.cursor()
         try:
