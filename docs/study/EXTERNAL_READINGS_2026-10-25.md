@@ -587,3 +587,19 @@ HDA 把 harness 演化的增益**分解为三块**：artifact 驱动的过拟合
 
 **让渡口径不变**：本稿增量仍为三块（①false-fix 口径分解〔条件 + 边际并列〕②声明率本身被协议扰动 ③测量效度 × 声明率联立）。
 本节三篇不改变该结论，只补两处「相邻构念不得互相冒充」的边界。
+
+### 14.1 FA 轮补扫（2026-10-27，同两条检索式、时间窗 d3）：两篇方法侧新作，均**不占位**本稿构念
+
+均按官方摘要页逐字核验（`export.arxiv.org/abs/<id>`，2026-10-27），散文登记、不建行（理由同 §14 开头：未进 `refs.bib` 的行会被「只写不读」判据抓）。
+
+4. **ORION** — `arXiv:2610.35223v1`（Fu, Qi, Li, Liu, Sun, Gao；2026-10-26）。官方摘要原句：
+   "ORION achieves F1-scores of 0.6125 (DeepSeek-Chat-V3.2) and 0.5578 (Claude-4.5-haiku), outperforming baselines including
+   Testora, Codex and Claude Code"；另 "On 1,459 merged PRs, ORION finds 9 reproducible regression candidates, 8 confirmed by maintainers"。
+   构念边界：它做的是 **PR 级回归检测**，预言由 **PR 意图**合成（structured behavioral oracles）——与「code-first 预言偏差」方向相反；
+   指标是 F1 与维护者确认数，**没有** false-fix 率，不构成占位。
+5. **LLM 写 property-based tests 的多域研究** — `arXiv:2610.34487v1`（Naziri, Qin, Patel, d'Amorim；2026-10-25）。官方摘要原句：
+   "We filed 180 bug reports, 44 of which duplicate reports that others filed after the models' knowledge cutoffs;
+   maintainers have confirmed 65 of the others, in all five domains, and fixed 23"。构念边界：方法/田野研究（PBT 写手在 5 域 10 程序上的泛化），
+   证据是**确认/修复的缺陷数**，不测「测试把错误行为断言成期望」，不构成占位。
+
+**让渡口径不变**：三块增量（①false-fix 口径分解 ②声明率被协议扰动 ③测量效度 × 声明率联立）不受本节五篇影响。
