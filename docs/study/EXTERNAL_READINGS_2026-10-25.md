@@ -257,7 +257,7 @@ v2 的 0.524 单列并标注"v3 已改"），正文同步改写。**教训：版
 | `tan2026beyondfailtopass` | 69.4 / 78.9 / 9.6 / 7.9 | "Experiments show that CoHarden reaches 69.4% Resolved and 78.9% F->P on SWE-bench Verified, outperforming the strongest fix-only and cogeneration baselines by +9.6 and +7.9 percentage points in Resolved, respectively"；"F->P alone is insufficient when the goal of a BRT is to improve downstream" | arXiv:2607.19843v1（2026-07-22；Tan / Yang / Yang / Yao / Kang / Wang / Zhao / Zhang / Ma / Lin / Rajm；cs.SE；无出版商 DOI） |
 | `liang2026tddsurvey` | 87 / 83 | "The review integrates 87 research and supporting records, with method- or protocol-level extraction for 83 records"；"aggregate improvements can also conceal different outcomes across models, tasks, and denominators" | arXiv:2609.12012v1（2026-09-10；Liang / Gan / Ying / Wei / Cui / Ni；cs.SE；无出版商 DOI） |
 | `liang2026oracleaudit` | 142 / 114 / 138 / 27.79 / 50.12 / 9.46-14.85 / 6.01-18.83 | "We audit this failure mode in feedback-driven test generation using 142 development tasks, 114 locked external tasks, and 138 held-out tasks"；"generated outputs match the panel on only 27.79% and 50.12% of cases"；"A single-reference oracle inflates the measured gain from evolution by 9.46-14.85 percentage points"；"equal-budget independent resampling outperforms mutation-based evolution by 6.01-18.83 points" | arXiv:2608.19626v1（2026-08-20；Liang / Gan / Ying / Wei / Cui / Ni；cs.SE；无出版商 DOI） |
-| `yu2026sweabs` | 78.80 / 50.2 / 25.1x | "The SWE-Bench Verified leaderboard is approaching saturation, with the top system achieving 78.80%"；"On SWE-Bench Verified (500 instances), SWE-ABS strengthens 50.2% of instances, a 25.1x improvement over prior work" | arXiv:2603.00520v1（2026-02-28；Yu / Cao / Zhang / Lin / Xu / Zhong / Xu / Wang / Cao / Cheung / He / Briand；cs.SE；无出版商 DOI） |
+| `yu2026sweabs` | 78.80 / 50.2 / 25.1x / 19.71 / 62.20 | "The SWE-Bench Verified leaderboard is approaching saturation, with the top system achieving 78.80%"；"On SWE-Bench Verified (500 instances), SWE-ABS strengthens 50.2% of instances, a 25.1x improvement over prior work"；"SWE-ABS strengthens 50.2% of instances, a 25.1x improvement over prior work, and rejects 19.71% of previously passing patches"；"the top agent's score decreases from 78.80% to 62.20%" | arXiv:2603.00520v1（2026-02-28；Yu / Cao / Zhang / Lin / Xu / Zhong / Xu / Wang / Cao / Cheung / He / Briand；cs.SE；无出版商 DOI） |
 | `paul2026behaviouralgaps` | 8,922 / 20,729 / 93.1 / 17.5 | "We evaluate the approach across ten popular open-source Java libraries comprising 8,922 methods, extracting 20,729 behaviours with 93.1% precision"；"Our empirical analysis conservatively estimates that 17.5% of detected expected behaviours remain entirely untested" | arXiv:2606.10417v1（2026-06-09；Paul / Holmes；cs.SE；无出版商 DOI） |
 | `alahmad2026classleveltests` | 无数字 | "Human and LLM suites are evaluated on unequal executable subsets, so their relative mutation scores do not establish superiority"；"Structural coverage is consistently near its ceiling and offers little discrimination among configurations" | arXiv:2609.24341v1（2026-09-21；Al-Ahmad / Harshvardhan / El-Fakih / AlSobeh；cs.SE；无出版商 DOI） |
 | `liang2026sectdd` | 2,705 / 31 / 16 / 19.3 / 80 / 83 / 453 | "Across 2,705 trajectories, 31 task instances, three secure-code benchmarks, 16 CWE categories, and two model families, showing all visible tests upfront increases hidden functional-and-security joint success by 19.3 percentage points on average"；"structured feedback repairs 80 initially unsuccessful candidates with no joint regressions; fixed raw feedback repairs 83 but causes three regressions"；"Structured and raw feedback are otherwise nearly indistinguishable head-to-head (six wins, six losses, and 453 ties)" | arXiv:2608.09740v2（2026-08-10 提交 / 2026-08-11 v2；Liang / Gan / Ying / Wei / Cui / Ni；cs.SE；无出版商 DOI） |
@@ -320,7 +320,7 @@ IEEE Xplore 上线、未同步 arXiv 的 9/10 月论文未被本轮覆盖**。
 | `zhu2026selfreportleakage` | 43.4 pp / 13.3 pp / F1 0.75–0.78 / 0.77–0.81 | "Withholding it improves trace-only dangerous-misreport recall by 43.4 percentage points with Qwen3.5-35B-A3B and 13.3 percentage points with DeepSeek-284B-A13B"；"an unhedged success claim that the trace does not support as causal accomplishment during the run"；"The auditor achieves F1 0.75--0.78 on the 465-record audit-target set and 0.77--0.81 on held-out Batch 2, outperforming claim-aware and prompt-blind controls in recall and F1." | arXiv:2610.29609v1（2026-10-21；cs.SE；ICSE 2027 Research Track 已接收；无出版商 DOI） |
 | `yin2026verifierbench` | 19 模型 / 10.6–62.1 | "Across 19 models in a common agent harness, normalized balanced accuracy ranges from 10.6 to 62.1, with generated verifiers consistently rejecting invalid solutions more reliably than they accept valid ones"；"These errors survive self-testing because agents test solutions that share the verifier's mistaken assumptions, or submit verifiers without confirming that any correct solution passes." | arXiv:2610.28679v1（2026-10-19；cs.SE；无出版商 DOI） |
 | `weber2026evaluationscarcity` | 经验报告（单开发者 / 单系统 / 无对照） | "Several defects passed the test suite: they sat at the boundaries the tests had mocked, the browser and the language-model API, or appeared only in real use."；"Writing code becomes abundant. Reliable evaluation-knowing whether a result is correct and meets the actual need-remains necessary at every iteration and becomes the binding constraint." | arXiv:2610.30916v1（2026-10-22；cs.SE；经验报告（证据等级最低）；无出版商 DOI） |
-| `mukhopadhyay2026assuranceevidence` | 83.4% / 3.3% / 31% | "Reuse is safe only if each control's declared dependencies cover everything that can change its outcome, and only if the release gate checks that reused evidence describes the candidate being released."；"Reusing stage results according to declared dependencies avoids 83.4% of stage executions, but in 3.3% of commits it reuses a stage whose imported code or referenced configuration changed, and 31% of pipelines are affected." | arXiv:2610.27672v1（2026-10-20；cs.CV；无出版商 DOI） |
+| `mukhopadhyay2026assuranceevidence` | 83.4% / 3.3% / 31% / 38,083 / 714 | "Reuse is safe only if each control's declared dependencies cover everything that can change its outcome, and only if the release gate checks that reused evidence describes the candidate being released."；"Reusing stage results according to declared dependencies avoids 83.4% of stage executions, but in 3.3% of commits it reuses a stage whose imported code or referenced configuration changed, and 31% of pipelines are affected."；"A replay of 38,083 commits from 714 public Data Version Control (DVC) pipelines measures that failure mode." | arXiv:2610.27672v1（2026-10-20；cs.CV；无出版商 DOI） |
 | `quan2026agentest` | 60% | "about 60% of bug-triggering runs cannot be detected from the final state alone, highlighting the need to check the full interaction against explicit business rules"；"Violating such rules can lead to business logic bugs, even when a task appears successful." | arXiv:2610.28116v1（2026-10-20；cs.SE；无出版商 DOI） |
 
 ### 10.1 三处 novelty 再收窄（本轮新增占位者）
@@ -953,3 +953,153 @@ verify() 函数层测得再好，若 main() 把未核判成 rc=0，整条 CI 阻
 「to our knowledge 首次」一类完备性断言。
 
 本节均为**散文登记**，未进入 `refs.bib`，故不新增表格行（读者链纪律同 §14–§21）。
+
+## 23. GJ 轮（2026-10-28）跨分类 + 27 条检索式的前沿补扫：一个**逆向条件同族实例**（同作者同数据，只算一次）、一个**方法论同构实例**、两个同向实例
+
+**检索面（逐项写明分类集合与检索式，2026-10-28 实测）**：分类集合 = cs.SE / cs.CR / cs.AI /
+cs.PL / cs.MA / cs.SI / cs.LF（cs.LF 当日**零**新条目，据此记「该分类本轮无命中」，不留白）；
+检索式 27 条，全部经 arXiv 官方 API `https://export.arxiv.org/api/query`
+（`sortBy=submittedDate&sortOrder=descending`）取回 `summary` 原文：
+
+- 分类降序：`cat:cs.SE`（150 条）、`cat:cs.CR`（40）、`cat:cs.AI`（40）、`cat:cs.PL`（25）、
+  `cat:cs.MA`（25）、`cat:cs.SI`（25）、`cat:cs.LF`（25）；
+- 论断族：`all:"silent failure"`、`all:"false fix"`、`all:"fail-to-pass"`、`all:"declared pass"`、
+  `all:"test adequacy"`、`all:"checked coverage"`、`all:"mutation score"`、
+  `all:"test generation" AND cat:cs.SE`、`cat:cs.SE AND all:"repair" AND all:"test"`、
+  `abs:"fail-to-pass"`、`abs:"false positive" AND abs:"patch"`、
+  `abs:"self-consistency" AND cat:cs.SE`、`abs:"oracle" AND cat:cs.SE AND abs:"LLM"`、
+  `abs:"declared" AND abs:"test"`、`abs:"measurement" AND cat:cs.SE`、
+  `abs:"plausible" AND abs:"patch"`、`abs:"test generation" AND abs:"repair"`、
+  `abs:"benchmark" AND abs:"contamination" AND cat:cs.SE`、`abs:"mutation testing" AND cat:cs.SE`。
+
+两轮检索面去重后 **472 篇**；与登记册已收录的 98 个 arXiv ID 求差 ⇒ **未登记 443 篇**；
+再按论断族关键词打分（族命中 ≥ 4）筛出 **4 篇**高相关候选，逐篇读官方摘要后判定如下。
+
+**结论**：本稿剩余增量（① false-fix 口径分解 ② 声明率被协议扰动 ③ 效度 × 声明率联立）
+**无新增直接占位**。但本轮取得四处对定位有实质约束的新读数，其中一处是本稿核心现象的
+**逆向条件**形态（不可与本稿 59.58% 并列），一处是**方法论同构**实例（本稿「测量装置即
+贡献」的主张有了外部同类工作）。
+
+### 23.1 表格行（引文逐字命中官方摘要，受 `verify_citation_quotes.py` 机器核验）
+
+| 键 | 读数 | 原文表述 | 出处 |
+|---|---|---|---|
+| `wu2026errornarratives` | 70% | "about 70% of silent failures were caught by human user-view observation, not tests or audits" | arXiv:2606.14589v1（2026-06-12），DOI 10.48550/arXiv.2606.14589 |
+| `wu2026errornarratives` | 4,286 / 827 | "defended by 4,286 unit tests and 827 governance checks" | 同上（arXiv:2606.14589v1） |
+| `wu2026errornarratives` | 0% / 87% | "a retrospective audit of 15 incidents found 0% ex-ante prevention but 87% regression blocking -- audits are regression engines, not prediction engines" | 同上（arXiv:2606.14589v1） |
+| `wu2026usereye` | 6/6 / 0/4 | "the deterministic layer achieves 6/6 regression detection with 0/4 false positives, each detector proven load-bearing by sabotage" | arXiv:2610.05981v1（2026-10-05） |
+| `wu2026usereye` | 0/4 | "held-out recall on novel patterns is 0/4" | 同上（arXiv:2610.05981v1） |
+| `wu2026usereye` | 16 / 24 | "16 of 24 are structurally invisible to any content-reading observer, and we say so" | 同上（arXiv:2610.05981v1） |
+| `wu2026usereye` | 12 | "That window (12 observed days) fired zero verdicts; per the pre-registered path we report live precision as undefined rather than narrating quiet as success" | 同上（arXiv:2610.05981v1） |
+| `wu2026usereye` | ten | "The observer also produced ten silent failures of its own, confirming that the judge inherits the taxonomy it judges." | 同上（arXiv:2610.05981v1） |
+| `mamun2026beyondqasecclaw` | 1→50 / 49 倍 | "increasing the context count from 1 to 50 increases token use 49-fold without improving unsafe clearance" | arXiv:2610.36947v1（2026-10-27） |
+| `mamun2026beyondqasecclaw` | 12.7→22.0 / one→seven | "raw verifier feedback raises mean correct model verdicts from 12.7 to 22.0, but also raises incorrect verdicts from one to seven" | 同上（arXiv:2610.36947v1） |
+| `mamun2026beyondqasecclaw` | 70-100% | "models reject 70-100% of applicable counterexamples, while construction-specific scope checks classify every package correctly" | 同上（arXiv:2610.36947v1） |
+| `shi2026blindspoteval` | 15.6% | "Incorrect assertions account for 15.6% of test failures, illustrating that coverage alone does not establish oracle correctness." | arXiv:2610.32548v1（2026-10-23） |
+| `shi2026blindspoteval` | 34.8% / 23.8% / 38.8% / 93% | "coverage of null, negative, and empty arguments reaches only 34.8%, 23.8%, and 38.8%, compared with average coverage above 93% for booleans" | 同上（arXiv:2610.32548v1） |
+| `shi2026blindspoteval` | 895 / 700 / 14,320 | "a complexity-stratified Java benchmark comprising 895 complex and 700 low-complexity functions with source-side obligation annotations"；"Evaluating 14,320 tests from four LLMs under four prompting strategies reveals systematic blind spots" | 同上（arXiv:2610.32548v1） |
+| `bao2026batchinvariance` | 19 / 83 | "We find 19 confirmed BI violations among 83 batch-applicable released artifacts." | arXiv:2610.36623v1（2026-10-27） |
+| `bao2026batchinvariance` | 67.6%→91.9% / 91.8% | "improves the BI pass rate from 67.6\% to 91.9\% while retaining 91.8\% of the baseline geometric mean speedup" | 同上（arXiv:2610.36623v1） |
+
+### 23.2 `wu2026errornarratives` + `wu2026usereye`（arXiv:2606.14589 / 2610.05981）：本稿核心现象的**逆向条件**形态——同作者同数据，**只算一个独立实例**
+
+**`2606.14589`** "When Errors Become Narratives: A Longitudinal Taxonomy of Silent Failures in a
+Production LLM Agent Runtime"（2026-06-12；cs.SE/cs.AI/cs.DC；作者 Wei Wu）。官方摘要原句：
+"about 70% of silent failures were caught by human user-view observation, not tests or audits"；
+被防御的一侧是 "defended by 4,286 unit tests and 827 governance checks"。另有
+"0% ex-ante prevention but 87% regression blocking"。
+
+**`2610.05981`** "Mechanizing the User's Eye: Pre-Registered Deployment of a Sabotage-Validated
+Fail-Plausible Observer in a Production LLM Agent Runtime"（2026-10-05；cs.SE；**同一作者
+Wei Wu**，同一生产运行时、同一批事故复盘）。
+
+**为什么只算一个实例**：两篇是**同一作者、同一数据**（后者的 ground truth 是前者的 24 份
+已标注生产复盘）。按 §11.1 `tao2026execcritic` 起的既有纪律（同作者同数据只算一次），
+本轮新增的独立实例数 = **1**，不是 2。后者对 70% 的复述**不是**第二个实例。
+
+**它对本稿的约束（关键，不可略）**：这篇是本稿核心现象的**逆向条件**形态——
+
+| | 分母 | 读数 | 问题 |
+|---|---|---|---|
+| 本稿 false-fix | **声明为真的那批**（240） | 59.58%（143/240） | 「声明通过的里，有多少是假的？」 |
+| `2606.14589` | **真实失败的那批**（22 起事故 / 28 次显现） | 70% 由人眼而非测试/审计发现 | 「失败的那些里，有多少被自动检查抓到？」 |
+
+两者是**互为逆条件**的两个条件概率，**分母不同、问题不同**，可以同时为真且互不蕴含。
+⇒ **严禁与本稿 59.58% 并列陈述、严禁换算、严禁互证**（既有纪律见 §11 与本册 §20 末的
+「不得并列」条款）。它对本稿的作用是**反向设限**：它证明「测试与治理检查全绿 ≠ 没有真实
+失败」这一前提**在外部早已被观测**，因此本稿不能把该前提本身写成新发现；本稿可主张的只有
+**声明侧的分母构成**——即「在一个会自我声明成功的系统里，声明的分布本身有多少是假的」。
+
+**`2610.05981` 同时是本稿「测量装置即贡献」主张的外部同类工作**（同构而非占位）：它的装置
+形态与本仓逐条对应——① 五个确定性信号先于 LLM 判定（= 本仓的门禁先于断言）；
+② "an LLM judge whose verdicts must cite verbatim evidence or be discarded"（= 本仓
+`verify_citation_quotes.py` 的引文逐字命中，否则判未核）；③ "each detector proven load-bearing
+by sabotage"（= 本仓变异锚点，干净副本 pass + 变异 fail）；④ "we report live precision as
+undefined rather than narrating quiet as success"（= 本仓「零观测不得读作成功」纪律；
+其 held-out recall 是 "0/4"，即**回归引擎而非预测引擎**）；⑤ 诚实边界披露
+"16 of 24 are structurally invisible to any content-reading observer, and we say so"；
+⑥ 披露观察器自身也产出 "ten silent failures of its own"。
+
+⇒ 后果有两面，都要写进正文：**本稿的装置纪律不是首创**（外部已有同构实现），
+**但本稿的装置被用来回答一个该领域尚未测量的问题**（声明侧分母构成）。这比「我���首创
+这套装置」诚实，也比隐去这篇更经得起核查。
+
+### 23.3 `mamun2026beyondqasecclaw`（arXiv:2610.36947）：编排/上下文扩展的**同向实例** + 确定性裁决优于 LLM 判定的同向实例
+
+"Beyond QASecClaw: Agent Scaling, Verifier Feedback, and Evidence Reliability in Software
+Assurance"（2026-10-27；cs.SE/cs.AI）。官方摘要原句：
+"increasing the context count from 1 to 50 increases token use 49-fold without improving unsafe
+clearance"；"raw verifier feedback raises mean correct model verdicts from 12.7 to 22.0, but also
+raises incorrect verdicts from one to seven"；"models reject 70-100% of applicable
+counterexamples, while construction-specific scope checks classify every package correctly"。
+
+- **对本稿 RQ2（编排净 −28pp）的意义**：这是「扩大上下文/角色规模 ⇒ 成本暴涨而判定质量
+  不升」的**独立同向实例**（对象不同：软件安全保证 vs 本稿的测试生成与修复）。它使本稿
+  「编排不贡献」从「本装置下的一个阴性结果」升级为「与外部一致的方向」——**但不是同一个
+  测量**，不可换算、不可并列。
+- **对本稿裁决设计的意义**："construction-specific scope checks classify every package
+  correctly"（确定性范围检查 100% 正确）vs 模型只拒绝 70-100% 的反例 ⇒ 外部证据支持本稿
+  的核心设计取向：**能用确定性裁决判的，不要交给 LLM 自由文本**（本仓 ADR-0013 分类器可
+  解释性 / ADR-0020 弃权门 / ADR-0022 test-hacking 守卫）。同理 "raises correct verdicts … but
+  also raises incorrect verdicts from one to seven" 提示**加证据不是单调收益**——这与本稿
+  「加断言可能加假修复」的机制同形。
+
+### 23.4 `shi2026blindspoteval`（arXiv:2610.32548）：「覆盖 / 杀分 ≠ 行为检出」族的**第三个独立实例**（本稿该侧继续让渡）
+
+"Beyond Coverage and Mutation: A Blind-Spot Analysis of LLM-Generated Unit Tests"（2026-10-23；
+cs.SE）。官方摘要原句："Existing evaluation protocols for unit tests rely on aggregate metrics
+such as branch coverage and mutation score."；"Incorrect assertions account for 15.6% of test
+failures, illustrating that coverage alone does not establish oracle correctness."；另给出
+null/negative/empty 参数覆盖仅 34.8% / 23.8% / 38.8%，而 boolean 平均覆盖 > 93%。
+
+⇒ 这是 §20 `2610.33708`（Veritas，覆盖不等于检出）、§22 `2606.10417`（行为缺口）之外的
+**第三个独立实例**，且落在**新维度（oracle 强度 / 断言错误）**上。本稿③在「覆盖 ≠ 检出」
+一侧**继续让渡**，可主张仍限「声明侧分母构成」。
+**口径纪律**：其 15.6% 是「生成测试的失败里有多少源于断言写错」（分母 = 测试失败），
+本稿 59.58% 是「声明通过里有多少是假修复」（分母 = 声明通过）——**两个不同的条件概率，
+不得并列、不得互相换算**。
+
+### 23.5 `bao2026batchinvariance`（arXiv:2610.36623）：邻接、不同构（登记防重复检索，不占位）
+
+"God Does Not Play Dice: Enforcing Batch Invariance in Agentic Kernel Generation"（2026-10-27；
+cs.AI/cs.LG/cs.SE）。官方摘要原句："We find 19 confirmed BI violations among 83
+batch-applicable released artifacts."；BI 通过率 67.6%→91.9% 而保留 91.8% 几何平均加速比。
+
+⇒ 对象是 **GPU kernel 在动态批处理下的数值可复现性**，与本稿的「声明侧分母构成」不同构。
+登记的唯一作用是：**同一请求在不同上下文下产出不同结果**这一现象族已在别处被独立测量，
+本稿不得把它写成新现象（与 §13 起的让渡口径一致）。
+
+### 23.6 本轮让渡口径更新（与 §22 相比**收窄一项**、**新增一项**）
+
+1. **收窄**：§22 记「机制表述（补丁与测试同源 ⇒ 互相印证）与『覆盖 ≠ 检出』两族已让渡」。
+   本轮补上**「测试/治理全绿 ≠ 无真实失败」这一前提本身**已由 `wu2026errornarratives`
+   独立观测 ⇒ 正文**不得**把该前提写成本稿的新观察，只能把贡献落在**声明侧分母构成**。
+2. **新增让渡**：本稿的**装置纪律**（确定性前置、引文逐字核验、变异/破坏式验证、零观测
+   不读作成功、披露自身失败）已有外部同构实现（`wu2026usereye`）⇒ 正文**不得**宣称
+   「本稿首创这套纪律」，只能主张「本稿用它测量了一个尚未被测量的量」。
+3. **不变**：本稿增量仍限三块——① false-fix 口径分解（条件 + 边际并列）② 声明率被协议扰动
+   （分母构成层面）③ 测量效度 × 声明率联立（声明侧）。
+4. **引用面**：本轮 `wu2026errornarratives`、`wu2026usereye`、`mamun2026beyondqasecclaw`
+   三篇**进入 `refs.bib` 并在正文引用**（外部已有同构/同族工作而正文不引，是不可接受的
+   定位缺口）；`shi2026blindspoteval` 与 `bao2026batchinvariance` 为**散文 + 表格登记**
+   （前者该族已由 `2606.10417` 承担、后者不同构），不进 `refs.bib`。

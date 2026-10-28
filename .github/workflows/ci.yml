@@ -425,6 +425,20 @@ jobs:
         if: matrix.python-version == '3.14'
         run: python scripts/tools/verify_citation_quotes.py
 
+      - name: Check paper external numbers (GJ - manuscript external readings must land in the register)
+        # GJ（2026-10-28）：稿件里的**外部文献数字**（高精度口径：千分位整数或
+        # ≥2 位小数）必须逐条落在外部读数登记册的某一行上。此前三道机制各管一段，
+        # 跨段的那一格没人管：行级锁只做行内自洽（读数列的数字在本行引文里）、
+        # 引文核验只管引文↔官方摘要、审计器只查「SRC 所指工件里有没有这个数」
+        # （查无只是披露，不判红）。GJ 轮实测三处真漏登（19.71 / 62.20 /
+        # 38,083+714）——稿件数字与官方摘要一致，是**登记册漏登**，后果是该格
+        # 不可复核。本门把那一格补上。
+        # paper/ 按双盲纪律不入库 ⇒ CI 侧校验**入库快照**
+        # docs/study/PAPER_EXTERNAL_NUMBERS.md 与登记册的一致性；`--check` 在无稿件
+        # 环境只查快照侧（缺落点 ⇒ rc=1），稿件在场时再加稿件↔快照一致性。
+        if: matrix.python-version == '3.14'
+        run: python scripts/tools/export_paper_external_numbers.py --check
+
       - name: Check BibTeX gate contract (CI has no paper/ -> [SKIP])
         # DB（2026-10-26）：BibTeX 在**百分号注释**里遇到 at 符号会**重启条目扫描**
         # ⇒ `pass@1` 被读成条目类型 `1` ⇒ 报 "missing an entry type" 并**静默跳过该行之后

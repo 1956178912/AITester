@@ -5,7 +5,7 @@
 #
 # 用法：make help 查看全部目标。
 
-.PHONY: help install lint format typecheck test test-cov docs-check env-budget baseline-check state-contract env-snapshot model-fingerprint tool-versions json-contract-sites json-strict prompt-artifacts-check preflight artifact-doc-consistency proc-hygiene perf-bench perf-check zero-assert ast-guards status-persistence self-mutation self-mutation-ci gates repro power self-check clean-traces build-check cpr-idr repair-replay cf-upper-bound corrected-metrics target-quality mutation-det-correlation swebench-disclosure pass-matched emse-stats
+.PHONY: help install lint format typecheck test test-cov docs-check env-budget baseline-check state-contract env-snapshot model-fingerprint tool-versions json-contract-sites json-strict prompt-artifacts-check preflight artifact-doc-consistency proc-hygiene perf-bench perf-check zero-assert ast-guards status-persistence self-mutation self-mutation-ci gates repro power self-check clean-traces build-check cpr-idr repair-replay cf-upper-bound corrected-metrics target-quality mutation-det-correlation swebench-disclosure pass-matched emse-stats citation-quotes paper-external-numbers paper-citation-keys
 
 PY := .venv/bin/python
 
@@ -41,6 +41,9 @@ docs-check:  ## 双语文档同步 + 文档链接完整性门禁（strict，CI �
 
 citation-quotes:  ## 外部读数登记册的**引文逐字核验**门禁（FE 轮：引文必须逐字命中官方摘要，或显式标注为正文层级；CI 阻断项）
 	$(PY) scripts/tools/verify_citation_quotes.py
+
+paper-external-numbers:  ## 稿件**外部文献数字** ↔ 登记册落点门禁（GJ 轮：稿件里的外部数字必须逐条登记过；CI 阻断项）
+	$(PY) scripts/tools/export_paper_external_numbers.py --check
 
 doc-commands:  ## 文档命令可执行性门禁（CU 轮：文档引用的脚本路径与 make 目标必须存在；CI 阻断项）
 	$(PY) scripts/gates/check_doc_commands.py
@@ -145,7 +148,7 @@ perf-check:  ## 性能回归比对（默认 non-blocking 告警；本地同机�
 tool-versions:  ## CI/pre-commit/lock 三方工具版本一致守卫（AK4 接入 CI）
 	$(PY) scripts/gates/check_tool_versions.py
 
-gates: lint format typecheck test docs-check citation-quotes doc-commands env-budget baseline-check state-contract env-snapshot model-fingerprint tool-versions json-contract-sites json-strict artifact-doc-consistency zero-assert ast-guards status-persistence registration-consistency invocation-caliber flag-effect repo-hygiene scheduled-workflows release-freshness bibtex-compilability dependency-audit  ## 本地全部门禁（合并前自检；format = ruff format --check，2026-10-12 质量债清偿批次补入；zero-assert = K 轮补入，此前 CI 阻断但本地 gates 缺席；json-strict = AF 轮补入；ast-guards = BK 轮补入，捕获面棘轮；status-persistence = BN 轮补入，落盘可达性棘轮；registration-consistency = CF 轮补入，登记面当前口径与分册清单对账；repo-hygiene = CX 轮补入，临时/缓存产物不得被跟踪；scheduled-workflows = CY 轮补入，远端定时作业最近一次必须非红；bibtex-compilability = DB 轮补入，引用库注释行的 at 符号会静默丢条目；dependency-audit = DF 轮补入，豁免必须随修复版失效）
+gates: lint format typecheck test docs-check citation-quotes paper-external-numbers doc-commands env-budget baseline-check state-contract env-snapshot model-fingerprint tool-versions json-contract-sites json-strict artifact-doc-consistency zero-assert ast-guards status-persistence registration-consistency invocation-caliber flag-effect repo-hygiene scheduled-workflows release-freshness bibtex-compilability dependency-audit  ## 本地全部门禁（合并前自检；format = ruff format --check，2026-10-12 质量债清偿批次补入；zero-assert = K 轮补入，此前 CI 阻断但本地 gates 缺席；json-strict = AF 轮补入；ast-guards = BK 轮补入，捕获面棘轮；status-persistence = BN 轮补入，落盘可达性棘轮；registration-consistency = CF 轮补入，登记面当前口径与分册清单对账；repo-hygiene = CX 轮补入，临时/缓存产物不得被跟踪；scheduled-workflows = CY 轮补入，远端定时作业最近一次必须非红；bibtex-compilability = DB 轮补入，引用库注释行的 at 符号会静默丢条目；dependency-audit = DF 轮补入，豁免必须随修复版失效；paper-external-numbers = GJ 轮补入，稿件外部数字必须逐条登记过）
 
 repro:  ## 复现主批次（详见 reproduce.sh；消耗 LLM 配额，勿自动触发）
 	bash reproduce.sh
