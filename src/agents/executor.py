@@ -398,11 +398,23 @@ class ExecutorAgent:
                     result_dict["kernel_sandbox_launch_failed"] = True
             # 执行路径结束（成功/失败）：清理实例级内核沙箱状态，
             # 避免下次调用（含关闭开关的场景）透传旧观测层
+            # GJ 轮（2026-10-28）：本清理此前只挂在**正常路径**上，
+            # 早退分支（EARLY_RETURN / UNAVAILABLE，:351）直接 return ⇒
+            # 实例级 `_kernel_sandbox_obs` 残留到下一次调用 ⇒ 该次调用即便
+            # **根本没有沙箱**，`sandbox_launch_failure` 启发式也会被陈旧 obs
+            # 触发，把 error_info.type 改写成 kernel_sandbox_unavailable
+            # （污染失败归因与 M1 观测口径，正是本段注释要防的事）。
+            # ⇒ 清理移到 `finally`（见下），覆盖**全部**退出路径。
             self._kernel_sandbox_executable = None
             self._kernel_sandbox_obs = {}
 
             return result_dict
         finally:
+            # 清理实例级内核沙箱状态：**所有**退出路径（正常返回 / 早退 /
+            # 异常）都必须清——残留会让下一次调用透传旧观测层（GJ 轮实测：
+            # 陈旧 obs 把 `test_failure` 误改写成 `kernel_sandbox_unavailable`）。
+            self._kernel_sandbox_executable = None
+            self._kernel_sandbox_obs = {}
             self._cleanup_temp_file(test_file)  # type: ignore[attr-defined]
 
 

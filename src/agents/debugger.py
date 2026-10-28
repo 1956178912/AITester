@@ -984,6 +984,15 @@ class DebuggerAgent(BaseAgent):
             file_base = probe_file.rsplit("/", 1)[-1]
             if not (file_base.startswith(target_module) or file_base == f"{target_module}.py"):
                 return result
+        # 探针文件（`{module}_probe.py`，内容是**生成的测试代码**）里的帧，
+        # 其行号属于**测试文件**，与 target_code（目标模块全文）的行号**不同源**
+        # ——拿它索引目标代码的 AST 会定位到无关的函数并把该指引注入修复提示。
+        # GJ 轮（2026-10-28）实测：目标 `add()` 在第 2 行、探针帧在测试文件第 6 行
+        # ⇒ 定位到目标里的 `multiply()`（误导）。
+        # 「不误导」优先于「定位到某个函数」⇒ 探针文件的帧一律降级
+        # （与本方法 docstring 的"首帧文件名不符 → focused=False（不误导）"同口径）。
+        if probe_file.rsplit("/", 1)[-1].endswith("_probe.py"):
+            return result
         # 行号落在被测代码（original_target_code）内才有效
         code_lines = target_code.count("\n") + 1
         if probe_line > code_lines:

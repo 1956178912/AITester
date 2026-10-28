@@ -102,6 +102,22 @@ _RANDOM_ATTRS = {
 _SLEEP_CALL = "time.sleep"
 
 
+def _is_random_qual(qual: str) -> bool:
+    """限定名是否属**随机数家族**（`random.*` / `numpy.random.*`）。
+
+    GJ 轮（2026-10-28）修复：此前判定写成 `qual.split(".")[0] in _RANDOM_ATTRS`
+    ——而 `_RANDOM_ATTRS` 里存的是 `"numpy.random"`（**两段**），
+    `split(".")[0]` 永远只给出**一段**的顶层名 ⇒ `numpy.random.seed` 判不出、
+    `import numpy`（无别名）写法**完全漏检**（模块 docstring 第 13 行明示
+    numpy.random 纳入检测）。实测：`np.random.seed(1)` 被标成 `random.numpy`
+    （别名展开写错了位置，见 `_qualified_attr`），`import numpy` 一条 finding 都没有。
+
+    现按**前缀**判定：`qual` 等于族名或以 `族名.` 开头 ⇒ 命中。
+    「`numpy` 本身」不算（`numpy.array` 不是随机数）。
+    """
+    return any(qual == attr or qual.startswith(f"{attr}.") for attr in _RANDOM_ATTRS)
+
+
 def _qualified_attr(node: ast.AST) -> str | None:
     """把 Attribute 链展开为模块限定名（a.b.c）；`import numpy as np` 的
     别名展开为 "numpy.random" 等真实模块名（测试可拦截 numpy.random）。"""
@@ -113,10 +129,13 @@ def _qualified_attr(node: ast.AST) -> str | None:
     if isinstance(cur, ast.Name):
         alias = cur.id
         # 模块别名展开：import numpy as np → np.random ≡ numpy.random
-        if alias in _IMPORT_ALIASES:
-            parts[0] = _IMPORT_ALIASES[alias]
-        else:
-            parts.append(alias)
+        #
+        # GJ 轮（2026-10-28）修复：此前写 `parts[0] = _IMPORT_ALIASES[alias]`
+        # ——`parts` 是**逆序**累积的（`np.random.seed` ⇒ ["seed","random"]），
+        # `parts[0]` 是**最外层属性名**（"seed"）而不是基名 ⇒ 展开结果变成
+        # "random.numpy"（限定名被打乱，族判定随之失效）。
+        # 正确写法：**追加**展开后的真实模块名（基名本来就不在 parts 里）。
+        parts.append(_IMPORT_ALIASES.get(alias, alias))
         return ".".join(reversed(parts))
     return None
 
@@ -162,7 +181,7 @@ def scan_test_file(source: str, filename: str = "<memory>") -> GuardReport:
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
             qual = _qualified_attr(node.func)
             if qual:
-                if qual.split(".")[0] in _RANDOM_ATTRS:
+                if _is_random_qual(qual):
                     report.findings.append(
                         GuardFinding("random_usage", f"随机数调用 {qual}（测试不可复现）", node.lineno)
                     )
