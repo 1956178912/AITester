@@ -2,15 +2,15 @@
   "schema": 1,
   "generated_by": "transcribed from paper/tex/manuscript.tex Table tab:gates (authoritative paper numbers)",
   "description": "The 38 gate scripts grouped into 11 families, plus the CI wiring totals. Each family is a red-run semantic; the last family is deliberately outside the blocking path.",
-  "upstream_source": "scripts/gates/*.py (38 scripts); .github/workflows/ci.yml (36 wired, 39 call sites, 35 blocking, 2 non-blocking); Makefile (27 targets, 29 commands).",
+  "upstream_source": "scripts/gates/*.py (38 scripts); .github/workflows/ci.yml (36 wired, 39 call sites, 35 blocking, 2 non-blocking); Makefile (28 targets, 30 commands).",
   "totals": {
     "scripts_total": 38,
     "ci_unique_scripts": 36,
     "ci_call_sites": 39,
     "blocking_steps": 35,
     "non_blocking_steps": 2,
-    "make_targets": 27,
-    "make_commands": 29
+    "make_targets": 28,
+    "make_commands": 30
   },
   "families": [
     {

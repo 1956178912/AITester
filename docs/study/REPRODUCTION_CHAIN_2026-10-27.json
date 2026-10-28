@@ -32,7 +32,7 @@
     {
       "entry": "make gates",
       "model_calls": false,
-      "produces": "The 27-target local chain: toolchain (lint, format, typecheck, tests) plus 29 gate scripts"
+      "produces": "The 28-target local chain: toolchain (lint, format, typecheck, tests) plus 24 gate scripts, expanding to 30 commands"
     },
     {
       "entry": "make paper-audit",
