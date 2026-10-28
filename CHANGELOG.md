@@ -1,6 +1,6 @@
 # 更新日志
 
-> 最后更新：2026-10-27
+> 最后更新：2026-10-28
 
 本文件只记录对外可见的变化；逐轮历史见下方归档。
 
@@ -22,6 +22,10 @@
 - 依赖漏洞豁免过期守卫（DF 轮）：`make dependency-audit` 与 CI 阻断步骤真实跑一次**不带** `--ignore-vuln` 的 pip-audit——修复版出现、新 advisory 未登记、版本漂移即红；豁免理由由 `src/` 静态扫描锁定；离线 `[SKIP]` 披露，CI `--require-audit` 把「无法验证」判红（37 例锁）。
 
 ### Changed
+- 稿件对齐 EMSE 语体与修稿轮（GK 轮）：按本地 100 篇 EMSE OA 论文（1,488,314 词）的实测阈值逐项对账——**句长/分号/破折号/连接词/被动/we 时态 7 项达标**，句内 `\textbf{}` 强调降级 41 处为纯文本或 `\emph{}`（段首小节式标签、itemize 标签、逐字引文块保留不动），口语程度副词清零，普适断言（`structurally impossible` → `structurally unavailable`）与修辞化表达（`contributes less than nothing` → `accounts for the remaining −20.6 pp`）按修订清单 P3-2/P3-3 改写；摘要结论句改 EMSE 惯用的 `These results suggest that …`（并压缩 6 词，保持 229 词 / 严格口径 244 词，不触 250 上限）。新增只读判据 `paper/check_emse_style_fit.py`（本稿 vs 语料逐项对照，口径复用 `check_manuscript_style.py` 的现成函数）。
+- 修正门禁口径漂移（GK 轮）：GJ 轮新增 `paper-external-numbers` 门禁后 `BASELINE.yaml` 的 `make_targets` / `make_commands` 已更新为 **28 / 30**，但稿件（`paper/` 双盲不入库）仍写 27 / 29；且原句「29 of those 38 scripts」**把命令数当成了脚本数**——实测 `make gates` 的 28 个目标 = 4 个 toolchain + 24 个门禁目标，链上可达门禁脚本恰 **24** 个。稿件正文 3 处、图注 1 处、表注 1 处与入库快照 `docs/study/GATES_FAMILIES_2026-10-27.json` / `REPRODUCTION_CHAIN_2026-10-27.json` 同步为 28 目标 / 30 命令 / 24 脚本；`fig:gates_families` 重画（脚注同步 37 步 / 39 调用点 / 35 阻断 / 2 非阻断）。
+- 修正门禁图注的非阻断步数（GK 轮）：实测 `ci.yml` 的 37 个门禁步骤中**非阻断有 2 个**（citation check 走 `continue-on-error`、history-drift 走 `--warn-only`），稿件图注原写「one non-blocking citation check」漏计另一个，表注「35 of the 36 are blocking steps」把步骤数与脚本数混了口径；两处按 `check_invocation_caliber.py` 的实测分解改写，图脚本脚注同步。
+- 修复表引用顺序判据的假阳性（GK 轮）：`paper/check_emse_compliance.py` 的 `prose_only()` 只抹白表格环境、**不剥注释行**，稿件 L103 的 `% SRC:` 溯源注释里带 `\ref{tab:falsefix}` ⇒ 该表被当成「正文首次提及」，凭空造出 4 处乱序告警。判据改为同时剥注释（保留行数、行号不漂），实测真乱序为 **0**，22 张表散文口径一致。
 - 投稿材料与稿件同步（GJ 轮）：新增 5 条文献引用（`refs.bib` 78→**83 条**）后重建投稿 PDF——**89→90 页**、83 个 `\bibitem`、0 未定义引用、0 致命错误；`title_page.tex` 的「Manuscript body: 90 pages」与 `SUBMISSION.md` 的页数格 / 条数格同步；投稿包构建走「判据 → 编译 → 判据」三步，前置判据实测抓到 `SUBMISSION.md` 的 `refs.bib` 条数脱节（登记 78 vs 实测 83）并**阻断编译**，改后才产出。
 - 批量补图（第十轮）投稿材料三件套同步：图数 8→20（title_page 20 figures 22 tables、SUBMISSION Artwork 行 20 张 + caption 命令 33→45）；实测页数 80→89、`refs.bib` 78 条不变；20 张图全部接入稿件并各归其位——表前图用「`\begin{table}`+`\centering`+`\caption`」三行锚点（插在 table 环境之前），避免 figure 落进 table 环境内触发「Not in outer par mode」。
 - 五张图统一 `[!t]` 置顶（GG 轮）：`svjour3` 单栏下 `[t]` 把图顶到附录（实测 `fig:study_design` 落 69 页），`[!t]` 拉回正文（3/22/28/29/34 页）、页数 79→78；投稿材料三件套同步（title_page 4→5 图、77→78 页；SUBMISSION 表头与 Artwork 行）。
@@ -32,6 +36,7 @@
 - 文档门面与测试锁重写（DD 轮）：README / QUICKSTART / CONTRIBUTING / MODEL_CARD / REPLICATION / docs 核心改为简洁结构，中英同步，旧叙事归档 `docs/history/`；文档锁改结构判据（定位区 / 披露小节 / 行数上限 / 索引完备性），退役逐轮标记与行窗口锁。
 
 ### Fixed
+- 门禁家族图上的门禁数字不再硬编码（GJ 轮）：图脚本把标题、图例与 caption 里的门禁数字**写死成文案**（caption 写「35 blocking, **1** non-blocking」，而入库快照 `totals` 里是 `non_blocking_steps: **2**`⇒ 图上数字与单一事实源漂移，正文附录 G 与图对不上，且没有任何机制会红）；现全部改为从快照派生（`figure_data.load_gate_inventory()` 新增 `totals` 读出 + 家族/盘面自检），并补 2 例锁：caption 的每个数字都等于快照值 + 改快照则 caption 必须跟着变（负对照）。
 - 新门禁自身的漏洞由 fresh clone 模拟抓到（GJ 轮）：CI clone 里没有 `paper/`（双盲纪律）⇒ 只有「无稿件分支」可走，而该分支原先只判「落点非空」——**空快照、指向不存在行的落点全部判绿**；已补「落点 ↔ 登记册」语义核验（每行落点必须仍指向该键的真实登记行、且那一行逐字记着该数字）+ 快照行数下界（空/被清空的快照按空目录判红），并补变异锚点 H6 与两例负对照。
 - 外部读数登记册补登三处漏登数字（GJ 轮）：稿件里的 `19.71%` / `62.20%`（SWE-ABS）与 `38,083` / `714`（复用证据重放）在官方摘要里**逐字一致**、但登记册**没有对应行** ⇒ 那一格对读者不可复核；已补登并把引文接到官方摘要（引文核验门禁的可核引文 60→**76 条**，摘要逐字命中 73 / 标注正文 3 / **未核 0**），官方摘要快照同步刷新（新增 5 篇 × 按版本存）。
 - 新门禁的判据漏洞由变异锚点当场抓到（GJ 轮）：「缺登记」标记的断言原本用**裸子串**判断，而快照页眉的判据说明里也有「缺登记」三字 ⇒ 断言被页眉满足、成了假绿（变异锚点 H4 实测 0 红暴露）；改为断言落在**表行**上，4 个变异锚点现已全部转红 + 中性对照 0 红。
