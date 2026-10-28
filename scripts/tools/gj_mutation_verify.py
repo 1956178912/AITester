@@ -60,6 +60,15 @@ MUTANTS: list[tuple[str, str, str, str, list[str]]] = [
         [],
     ),
     (
+        # GJ 轮（fresh clone 模拟实测后补）：无稿件环境（CI）下「快照 ↔ 登记册」的
+        # 语义核验被跳过 ⇒ 坏快照 / 空快照判绿。
+        "H6-no-draft-register-semantics-skipped",
+        TOOL,
+        "            problems = verify_snapshot_against_register(rows, reg)",
+        "            problems = []  # mutation: 无稿件环境的语义核验被跳过",
+        [],
+    ),
+    (
         # 中性对照：仅改 docstring 措辞，不动任何判据 —— 必须 0 红。
         "H5-control-wording",
         TOOL,
