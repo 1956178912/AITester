@@ -918,6 +918,7 @@ class SWEBenchDataset(BaseDatasetLoader):
 from src.datasets.dataset_defects4j import Defects4JPYDataset  # noqa: E402, I001
 from src.datasets.dataset_realbugs import BugsInPyDataset, QuixBugsDataset  # noqa: E402
 from src.datasets.dataset_ult import ULTDataset  # noqa: E402
+from src.datasets.dataset_testgeneval import TestGenEvalDataset  # noqa: E402
 from src.datasets.dataset_inmemory import InMemoryDataset  # noqa: E402
 
 
@@ -956,6 +957,11 @@ _DATASET_REGISTRY: dict[str, type] = {
     # score（Mut@k）为主评测指标；目录缺失时优雅降级（与 bugsinpy 同口径）。
     "ult": ULTDataset,
     "unleaked_testbench": ULTDataset,
+    # TGE（2026-10-28）：TestGenEvalLite（Meta AI，ICLR 2025；SWE-bench 转化，
+    # 160 对真实 repo code/test 文件对）。tmp-tree 协议（无 Docker），数字
+    # 不可与官方直接比——口径标签见 dataset_testgeneval 模块 docstring。
+    "testgeneval": TestGenEvalDataset,
+    "testgenevallite": TestGenEvalDataset,
     "in_memory": InMemoryDataset,
 }
 

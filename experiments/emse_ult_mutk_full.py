@@ -42,7 +42,6 @@ if str(_REPO_ROOT) not in sys.path:
 from experiments._m1_metrics import _suite_has_effective_pass  # noqa: E402
 from experiments.emse_ult_mutk import (  # noqa: E402
     _gold_tests_to_pytest_code,
-    _load_detail_rows,
 )
 from experiments.ult_adapter import (  # noqa: E402
     cosmic_ray_config_hash,
@@ -60,7 +59,7 @@ TIMEOUT_SECONDS = 120
 SANITY_TIMEOUT_SECONDS = 30
 
 _PROBE_JSON = "experiments/results/emse_ult_specir_probe_20261014/benchmark_ult_20261014_130937.json"
-_LITE46_GLOB = "experiments/results/spec_ab_scale87_20261012/ult_lite46_replace/benchmark_ult_*.json"
+_LITE46_GLOB = "experiments/results/spec_ab_scale87_*/ult_lite46_replace/benchmark_ult_*.json"
 _OUT_DIR = _REPO_ROOT / "experiments/results/emse_ult_mutk_full_20261015"
 
 # 组注册表：组名 → （标签、任务源、测试来源）
@@ -199,6 +198,18 @@ def _resolve_group_source(spec: dict[str, str]) -> Path | None:
     return max(candidates, key=lambda p: p.stat().st_mtime) if candidates else None
 
 
+def _load_rows_any_arm(path: Path) -> tuple[list[dict[str, Any]], str]:
+    """加载 detail 行：优先 aitester 臂，缺失（如 2026-10-29 df 单臂批）则取
+    第一个有 details 的臂——返回 (rows, arm 名)。零行返回 ([], "")."""
+    data = json.loads(path.read_text(encoding="utf-8"))
+    results = data.get("results") or {}
+    for arm in ("aitester", "plain_llm_df", "plain_llm"):
+        det = (results.get(arm) or {}).get("details")
+        if isinstance(det, list) and det:
+            return det, arm
+    return [], ""
+
+
 def _dump(payload: dict[str, Any], out_path: Path) -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     atomic_write_json(out_path, payload, indent=2, mode=0o644)
@@ -212,6 +223,17 @@ def main(argv: list[str] | None = None) -> int:
         "--groups",
         default="replace",
         help="逗号分隔的组名（specir | replace | gold；默认 replace——控制单批算力）",
+    )
+    ap.add_argument(
+        "--source",
+        default=None,
+        help="自定义任务源（benchmark_*.json 路径；与 --groups 一起给出时覆盖该组源——"
+        "供新语料分片并发复用同口径，2026-10-29 ULT 全量 df 臂语料）",
+    )
+    ap.add_argument(
+        "--shard",
+        default=None,
+        help="分片 'i/N'（1 起始）——只处理 tasks 的第 i 片（并发多实例用，0 填充落盘互不覆盖）",
     )
     ap.add_argument("--out", default=str(_OUT_DIR / "MUTK_ULT_FULL.json"), help="结果落盘路径")
     ap.add_argument("--dry-run", action="store_true", help="只打印计划，不执行")
@@ -255,19 +277,33 @@ def main(argv: list[str] | None = None) -> int:
     }
 
     for gname in group_names:
-        spec = GROUPS[gname]
+        spec = dict(GROUPS[gname])
         source_path = _resolve_group_source(spec)
+        if args.source:
+            # 自定义源覆盖（分片并发口径）：组标签加 shard 后缀避免互写
+            source_path = Path(args.source)
+            if args.shard:
+                spec["label"] = f"{spec['label']}_shard{args.shard.split('/')[0]}"
         if source_path is None:
             print(f"[ult-mutk-full] {gname}: 任务源未定位（{spec['source']}）——跳过该组")
             payload["groups"].append({"label": spec["label"], "source": None, "note": "任务源未定位——本组 skipped"})
             _dump(payload, out_path)
             continue
-        rows = _load_detail_rows(source_path)
+        rows, loaded_arm = _load_rows_any_arm(source_path)
+        if args.shard:
+            shard_i, shard_n = (int(x) for x in args.shard.split("/"))
+            rows = rows[shard_i - 1 :: shard_n]  # 1 起始：第 i 片 = 每隔 N 取一个（均匀分片）
         print(
-            f"[ult-mutk-full] {gname}（{spec['label']}）：{len(rows)} 任务；源 {source_path.name}；"
+            f"[ult-mutk-full] {gname}（{spec['label']}）：{len(rows)} 任务（臂={loaded_arm or '空'}）；源 {source_path.name}；"
             f"全变异体口径 + 健全性门 {SANITY_TIMEOUT_SECONDS}s",
             flush=True,
         )
+        if not rows:
+            payload["groups"].append(
+                {"label": spec["label"], "source": str(source_path), "note": "任务源零行——本组 skipped"}
+            )
+            _dump(payload, out_path)
+            continue
         results: list[dict[str, Any]] = []
         for index, row in enumerate(rows, 1):
             res = measure_task(row, spec["test_kind"])

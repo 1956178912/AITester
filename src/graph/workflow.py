@@ -731,8 +731,13 @@ def _should_debug(state: AITesterState) -> str:
         # 上限保护：regeneration_count < _MAX_REGENERATIONS（与 generator 侧
         # 计数 +1 联动，防 executor↔generator 乒乓撞 recursion_limit）。
         # 执行过判定：execution_trace 非空（防未执行态误路由）。
+        # TGE（2026-10-28）：TestGenEval 任务（task_uuid 以 tge__ 前缀）是
+        # "为正常代码生成测试"（绿即可 = accuracy 口径），无缺陷检出语义——
+        # 首轮全绿是**正确结果**而非"未检出"，不得触发先红后绿再生成
+        # （否则把通过测试的任务重生成成失败，冒烟实测 2/2 反转）。
         if (
             detection_first_enabled()
+            and not str(state.get("task_uuid", "")).startswith("tge__")
             and int(state.get("iteration", 0)) == 0
             and not state.get("detection_first_red_seen")
             and int(state.get("regeneration_count", 0)) < _MAX_REGENERATIONS
