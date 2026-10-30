@@ -6,3 +6,6 @@ ROUTE1-3 DONE 18:37:47
 [q07_off_synthetic] exit=0 (18:53:44)
 [q07_on_quixbugs] exit=0 (19:17:59)
 ALL DONE 19:17:59
+[q03_on_synthetic] exit=0 (20:04:39)
+[q03_off_synthetic] exit=0 (20:04:52)
+Q03 DONE 20:04:52
