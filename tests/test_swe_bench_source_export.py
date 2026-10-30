@@ -10,6 +10,7 @@
 import json
 import os
 import sys
+from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -139,3 +140,97 @@ class TestExportInstanceSources:
         results = mod.export_instance_sources(self._instances(), tmp_path, dry_run=True)
         assert all(r.ok for r in results)
         assert results[0].source_code == "(dry-run)"
+
+
+class TestResolveRepoDirRequiresGitDir:
+    """2026-10-30 实跑缺陷：同名文件/同名非仓库子目录被当成克隆根。
+
+    NodeBB 仓库根有一个可执行脚本 `NodeBB`、openlibrary 仓库根有一个同名包
+    目录——旧实现用 `exists()` 判定，把二者当克隆根，git 随后在非仓库路径
+    上执行（38 + 1 条实例被误判为"仓库未克隆"）。
+    """
+
+    def _make_repo(self, path):
+        (path / ".git").mkdir(parents=True)
+        (path / "impl.py").write_text("x = 1\n", encoding="utf-8")
+
+    def test_same_named_file_does_not_shadow_repo(self, tmp_path):
+        repo = tmp_path / "NodeBB"
+        self._make_repo(repo)
+        (repo / "NodeBB").write_text("#!/usr/bin/env node\n", encoding="utf-8")
+        resolved = mod.resolve_repo_dir("NodeBB/NodeBB", tmp_path)
+        assert resolved == repo
+        assert (resolved / ".git").is_dir()
+
+    def test_exact_plain_dir_falls_back_to_basename_repo(self, tmp_path):
+        repo = tmp_path / "openlibrary"
+        self._make_repo(repo)
+        (repo / "openlibrary").mkdir()
+        resolved = mod.resolve_repo_dir("internetarchive/openlibrary", tmp_path)
+        assert resolved == repo
+
+    def test_missing_repo_returns_none(self, tmp_path):
+        assert mod.resolve_repo_dir("no/such", tmp_path) is None
+
+
+class TestExtractTargetFiles:
+    """多路径回退的候选顺序：去重、跳过测试文件与 /dev/null。"""
+
+    def test_ordered_dedup_and_test_filter(self):
+        patch = (
+            "+++ b/changelogs/fragments/1.yml\n"
+            "+++ b/lib/ansible/mod.py\n"
+            "+++ b/lib/ansible/mod.py\n"
+            "+++ b/tests/test_mod.py\n"
+            "+++ /dev/null\n"
+        )
+        assert mod.extract_target_files_from_patch(patch) == [
+            "changelogs/fragments/1.yml",
+            "lib/ansible/mod.py",
+        ]
+
+    def test_empty(self):
+        assert mod.extract_target_files_from_patch("") == []
+        assert mod.extract_target_files_from_patch(None) == []
+
+
+class TestExportMultiPathFallback:
+    """首文件在 base_commit 不存在时，按补丁内顺序回退到真实存在的源码。"""
+
+    def _init_repo(self, repo: Path) -> str:
+        import subprocess
+
+        repo.mkdir(parents=True)
+        env = {
+            **os.environ,
+            "GIT_AUTHOR_NAME": "t",
+            "GIT_AUTHOR_EMAIL": "t@example.com",
+            "GIT_COMMITTER_NAME": "t",
+            "GIT_COMMITTER_EMAIL": "t@example.com",
+        }
+        subprocess.run(["git", "init", "-q"], cwd=repo, check=True, env=env)
+        (repo / "impl.py").write_text("def f():\n    return 1\n", encoding="utf-8")
+        subprocess.run(["git", "add", "."], cwd=repo, check=True, env=env)
+        subprocess.run(["git", "commit", "-qm", "init"], cwd=repo, check=True, env=env)
+        head = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=repo, check=True, capture_output=True, text=True, env=env
+        )
+        return head.stdout.strip()
+
+    def test_falls_back_to_existing_file(self, tmp_path):
+        repo = tmp_path / "repos" / "org" / "r"
+        commit = self._init_repo(repo)
+        instances = [
+            {
+                "instance_id": "r__1",
+                "repo": "org/r",
+                "base_commit": commit,
+                # 首文件是补丁新建的 changelog（base 上不存在），第二文件才存在
+                "patch": ("+++ b/changelog/1.yml\n+new: yes\n+++ b/impl.py\n-return 1\n+return 2\n"),
+            }
+        ]
+        results = mod.export_instance_sources(instances, tmp_path / "repos")
+        assert len(results) == 1
+        assert results[0].ok, "应通过多路径回退导出成功"
+        assert results[0].target_file == "impl.py"
+        assert "return 1" in results[0].source_code

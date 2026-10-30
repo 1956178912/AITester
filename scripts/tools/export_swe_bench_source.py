@@ -112,17 +112,50 @@ def extract_target_file_from_patch(patch_text: str) -> str | None:
     return None
 
 
+def extract_target_files_from_patch(patch_text: str) -> list[str]:
+    """从补丁里按出现顺序取出全部非测试目标文件路径（去重，供多路径回退）。
+
+    Pro 语料的补丁常同时改动 changelog / 新建文件与既有源码：首文件在
+    ``base_commit`` 上往往不存在，而后续文件才是被测源码。本函数只做
+    "候选顺序"提取，是否存在由 ``git show`` 判定（不猜）。
+    """
+    if not patch_text:
+        return []
+    paths: list[str] = []
+    for line in patch_text.splitlines():
+        m = _RE_NEW_FILE_PATH.match(line.strip())
+        if not m:
+            continue
+        path = m.group(1)
+        if path == "/dev/null":
+            continue
+        if any(marker in path for marker in _TEST_FILE_MARKERS):
+            continue
+        if path not in paths:
+            paths.append(path)
+    return paths
+
+
 def resolve_repo_dir(repository: str, repos_dir: str | Path) -> Path | None:
     """在 --repos-dir 下定位仓库克隆目录（支持 org/name 与任意子目录匹配）。"""
     repos_root = Path(repos_dir).expanduser()
     if not repos_root.exists():
         return None
-    # 优先精确 org/name；回退为按 basename 匹配（如 django/django → django）
+    # 优先精确 org/name；回退为按 basename 匹配（如 django/django → django）。
+    # 必须用 is_dir()：NodeBB 仓库根有一个同名可执行脚本 `NodeBB`、openlibrary
+    # 仓库根有一个同名包目录——`exists()` 会把它们当成克隆根，git 随后在
+    # 非仓库路径上执行并报 "Not a directory"/"not a git repository"
+    # （2026-10-30 实测：38 条 NodeBB + 1 条 openlibrary 因此误判为失败）。
     exact = repos_root / repository
-    if exact.exists():
+    if exact.is_dir() and (exact / ".git").exists():
         return exact
     candidate = repos_root / repository.split("/")[-1]
-    if candidate.exists():
+    if candidate.is_dir() and (candidate / ".git").exists():
+        return candidate
+    # 兼容裸仓库/子目录布局：仍要求是目录，但允许 .git 为文件（worktree）
+    if exact.is_dir():
+        return exact
+    if candidate.is_dir():
         return candidate
     return None
 
@@ -227,6 +260,19 @@ def export_instance_sources(
             continue
 
         source.source_code = git_show_file(repo_dir, base_commit, target_file, timeout=timeout)
+        # 多路径回退（2026-10-30）：Pro 语料常见「patch 首文件是 changelog/新建文件」
+        # ——该路径在 base_commit 上并不存在，但补丁里另一个文件存在且就是被测源码。
+        # 首个路径取不到时按 patch 内顺序回退，命中即改写 target_file 并记录
+        # fallback_from，避免「一条都导不出」被误读成「仓库没克隆」。
+        if source.source_code is None:
+            for candidate in extract_target_files_from_patch(data.get("patch", "")):
+                if candidate == target_file:
+                    continue
+                fallback = git_show_file(repo_dir, base_commit, candidate, timeout=timeout)
+                if fallback is not None:
+                    source.target_file = candidate
+                    source.source_code = fallback
+                    break
         results.append(source)
 
     return results
