@@ -739,12 +739,16 @@ class TestComparabilityAndScannedSurface:
         surface = gate.corpus_surface()
         # 收口回钉（2026-10-25，v0.8.0 二次回钉：b1_lite 七格入库）：34/4/16/34/34/34
         # （CI 重建期下界 25/4/5/25/25/25；原历史 239/64/107/122/87/85）
-        assert surface["on_disk"] == 34, surface
+        # B1 批上调（2026-10-30，只升不降）：2026-10-25 锁定后新增批次自然落盘
+        # （TestGenEval / SWE 诊断 / E8 三格 / B2 指纹 / ULT 定标等 benchmark_*.json）
+        # + specir probe 归档入库 ⇒ 46/4/17/46/46/46；结构层数以测试报数迭代回填。
+        assert surface["on_disk"] == 46, surface
         assert surface["top_level"] == 4, surface
-        assert surface["tracked"] == 16, surface
-        assert surface["with_provenance"] == 34, surface
-        assert surface["with_fingerprint"] == 34, surface
-        assert surface["pinned_true"] == 34, surface
+        assert surface["tracked"] == 17, surface
+        assert surface["with_provenance"] == 46, surface
+        # 45 = specir probe 旧工件（2026-10-14，pinned=False / 无 fingerprint）
+        assert surface["with_fingerprint"] == 45, surface
+        assert surface["pinned_true"] == 45, surface
         assert surface["unsupported_alias"] == 0, surface
         assert surface["alias_mismatch_true"] == 0, surface
 

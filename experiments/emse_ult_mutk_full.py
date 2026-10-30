@@ -51,7 +51,7 @@ from experiments.ult_adapter import (  # noqa: E402
     ult_mutation_score,
 )
 from src.utils.atomic_io import atomic_write_json  # noqa: E402
-from src.utils.process_utils import run_with_timeout  # noqa: E402
+from src.utils.process_utils import nested_pytest_env, run_with_timeout  # noqa: E402
 
 # 全变异体哨兵：cosmic-ray 生成多少评估多少（不截断）。
 _FULL_MUTANTS = 10**9
@@ -88,13 +88,17 @@ def _sanity_gate(fixed_code: str, test_code: str, module_name: str) -> dict[str,
             # autoload 在 pytest 收尾时挂死（测试 0.1s 跑完、进程挂 121s 被超时
             # 杀——96 流下 Mut@k 分母全灭的终版根因）。sanity 的单文件物化
             # 不需要任何插件，禁 autoload 后 rc=0 wall=0.1s（实测对照）。
+            # nested_pytest_env（2026-10-30，B1 批）：`{**os.environ, ...}` 会把
+            # 宿主 PYTEST_PLUGINS/PYTEST_ADDOPTS 与凭证整体带进嵌套 pytest
+            # （test_nested_pytest_env_convergence 抓到的 H2 缺陷形态）——改走
+            # 仓内统一净环境构造器，禁 autoload 作为显式 override 保留。
             proc = run_with_timeout(
                 [sys.executable, "-m", "pytest", tf, "-q", "--no-header", "-p", "no:cacheprovider"],
                 cwd=str(td),
                 capture_output=True,
                 text=True,
                 timeout=SANITY_TIMEOUT_SECONDS,
-                env={**os.environ, "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1"},
+                env=nested_pytest_env(PYTEST_DISABLE_PLUGIN_AUTOLOAD="1"),
             )
         except subprocess.TimeoutExpired:
             return {"status": "nonterminate", "rc": None, "wall_s": round(time.time() - t0, 1)}

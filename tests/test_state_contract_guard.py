@@ -163,7 +163,10 @@ class TestChannelCoverage:
         """
         cov = channel_coverage()
         assert len(cov.declared) == 118
-        assert (len(cov.read_keys), cov.read_sites) == (57, 353)
+        # 353 → 354（B1 批 2026-10-30 复算）：4a9512e3 在
+        # `src/graph/workflow.py::_should_debug` 加 `state.get("task_uuid")`
+        # 读点（tge__ 前缀豁免，TestGenEval 口径修复）⇒ 读站点 +1、键集不变。
+        assert (len(cov.read_keys), cov.read_sites) == (57, 354)
         assert (len(cov.inplace_write_keys), cov.inplace_write_sites) == (3, 12)
         assert (len(cov.update_write_keys), cov.update_write_sites) == (47, 99)
         assert (len(cov.untouched), len(cov.untouched_elsewhere), len(cov.untouched_nowhere)) == (34, 33, 1)

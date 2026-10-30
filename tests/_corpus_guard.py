@@ -61,10 +61,13 @@ _FULL_CORPUS_TRACE_FILES = 1456
 #   入库面 760 份 / 4,139 span / 2,280 token 属性 / 2,280 逐字段核对
 #   盘面   1,495 份 / 9,658 span（+735 份本地重跑语料，按 .gitignore 不入库）
 # 只升不降：语料入库后同步刷新；盘面增长不改变这些数字。
-ARCHIVED_TRACE_FILES = 760
-ARCHIVED_SPANS = 4139
-ARCHIVED_TOKEN_ATTRS = 2280
-ARCHIVED_TOKEN_FIELD_CHECKS = 2280
+# B1 批（2026-10-30）：specir/gold probe 归档 25 份 trace 随证据整批入库
+# （emse_ult_specir_probe_20261014/traces/，见 f725a3d2）⇒ 785 / 4,487；
+# token 属性与逐字段核对 2,280 → 2,355（otel 形状测试实测报数，同批刷新）。
+ARCHIVED_TRACE_FILES = 785
+ARCHIVED_SPANS = 4487
+ARCHIVED_TOKEN_ATTRS = 2355
+ARCHIVED_TOKEN_FIELD_CHECKS = 2355
 
 # 作者机专属锁登记表：(测试文件, 为什么不能改判入库面)。
 # 这些锁的扫描面本身就是「全归档」（含未入库批次），改吃入库面会把断言静默

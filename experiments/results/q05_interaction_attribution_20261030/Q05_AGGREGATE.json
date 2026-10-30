@@ -1,0 +1,1602 @@
+{
+ "schema": "aitester_q05_interaction_attribution/1",
+ "generated_on": "2026-10-30",
+ "caliber": "聚合单元=批次目录×臂；分层=编排臂(aitester)/对照臂；数字全部来自工件 failure_bucket_distribution",
+ "n_files": 46,
+ "n_have": 44,
+ "units": [
+  {
+   "batch": "b1_lite_20261025/df",
+   "file": "benchmark_quixbugs_20261025_123250.json",
+   "arm": "plain_llm_df",
+   "tier": "baseline",
+   "total": 50,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 0,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 0,
+    "harness": 0,
+    "uncategorized": 50
+   },
+   "fault_side_counts": {
+    "model_side": 0,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 50
+   }
+  },
+  {
+   "batch": "b1_lite_20261025/df_notext",
+   "file": "benchmark_quixbugs_20261025_123906.json",
+   "arm": "plain_llm_df",
+   "tier": "baseline",
+   "total": 50,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 0,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 0,
+    "harness": 3,
+    "uncategorized": 47
+   },
+   "fault_side_counts": {
+    "model_side": 0,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 50
+   }
+  },
+  {
+   "batch": "b1_lite_20261025/df_notext_s2",
+   "file": "benchmark_quixbugs_20261025_130811.json",
+   "arm": "plain_llm_df",
+   "tier": "baseline",
+   "total": 50,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 0,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 0,
+    "harness": 3,
+    "uncategorized": 47
+   },
+   "fault_side_counts": {
+    "model_side": 0,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 50
+   }
+  },
+  {
+   "batch": "b1_lite_20261025/df_notext_s3",
+   "file": "benchmark_quixbugs_20261025_132404.json",
+   "arm": "plain_llm_df",
+   "tier": "baseline",
+   "total": 50,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 0,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 0,
+    "harness": 2,
+    "uncategorized": 48
+   },
+   "fault_side_counts": {
+    "model_side": 0,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 50
+   }
+  },
+  {
+   "batch": "b1_lite_20261025/df_s2",
+   "file": "benchmark_quixbugs_20261025_130025.json",
+   "arm": "plain_llm_df",
+   "tier": "baseline",
+   "total": 50,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 0,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 0,
+    "harness": 0,
+    "uncategorized": 50
+   },
+   "fault_side_counts": {
+    "model_side": 0,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 50
+   }
+  },
+  {
+   "batch": "b1_lite_20261025/df_s3",
+   "file": "benchmark_quixbugs_20261025_131616.json",
+   "arm": "plain_llm_df",
+   "tier": "baseline",
+   "total": 50,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 0,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 0,
+    "harness": 0,
+    "uncategorized": 50
+   },
+   "fault_side_counts": {
+    "model_side": 0,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 50
+   }
+  },
+  {
+   "batch": "b1_lite_20261025/plain",
+   "file": "benchmark_quixbugs_20261025_124521.json",
+   "arm": "plain_llm",
+   "tier": "baseline",
+   "total": 50,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 0,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 0,
+    "harness": 3,
+    "uncategorized": 47
+   },
+   "fault_side_counts": {
+    "model_side": 0,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 50
+   }
+  },
+  {
+   "batch": "b2_fingerprint_20261029/seed42",
+   "file": "benchmark_synthetic_20261029_141253.json",
+   "arm": "aitester",
+   "tier": "orchestration",
+   "total": 87,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 8,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 6,
+    "harness": 73,
+    "uncategorized": 0
+   },
+   "fault_side_counts": {
+    "model_side": 14,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 73
+   }
+  },
+  {
+   "batch": "b2_fingerprint_20261029/seed42",
+   "file": "benchmark_synthetic_20261029_141253.json",
+   "arm": "plain_llm",
+   "tier": "baseline",
+   "total": 87,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 0,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 0,
+    "harness": 66,
+    "uncategorized": 21
+   },
+   "fault_side_counts": {
+    "model_side": 0,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 87
+   }
+  },
+  {
+   "batch": "b2_fingerprint_20261029/seed42",
+   "file": "benchmark_synthetic_20261029_141253.json",
+   "arm": "plain_llm_df",
+   "tier": "baseline",
+   "total": 87,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 0,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 0,
+    "harness": 49,
+    "uncategorized": 38
+   },
+   "fault_side_counts": {
+    "model_side": 0,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 87
+   }
+  },
+  {
+   "batch": "b2_fingerprint_20261029_r2/seed43",
+   "file": "benchmark_synthetic_20261029_170735.json",
+   "arm": "aitester",
+   "tier": "orchestration",
+   "total": 87,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 12,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 9,
+    "harness": 66,
+    "uncategorized": 0
+   },
+   "fault_side_counts": {
+    "model_side": 21,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 66
+   }
+  },
+  {
+   "batch": "b2_fingerprint_20261029_r2/seed43",
+   "file": "benchmark_synthetic_20261029_170735.json",
+   "arm": "plain_llm",
+   "tier": "baseline",
+   "total": 87,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 0,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 0,
+    "harness": 66,
+    "uncategorized": 21
+   },
+   "fault_side_counts": {
+    "model_side": 0,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 87
+   }
+  },
+  {
+   "batch": "b2_fingerprint_20261029_r2/seed43",
+   "file": "benchmark_synthetic_20261029_170735.json",
+   "arm": "plain_llm_df",
+   "tier": "baseline",
+   "total": 87,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 0,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 0,
+    "harness": 40,
+    "uncategorized": 47
+   },
+   "fault_side_counts": {
+    "model_side": 0,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 87
+   }
+  },
+  {
+   "batch": "b2_fingerprint_20261029_r2/seed44",
+   "file": "benchmark_synthetic_20261029_181956.json",
+   "arm": "aitester",
+   "tier": "orchestration",
+   "total": 87,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 11,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 5,
+    "harness": 71,
+    "uncategorized": 0
+   },
+   "fault_side_counts": {
+    "model_side": 16,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 71
+   }
+  },
+  {
+   "batch": "b2_fingerprint_20261029_r2/seed44",
+   "file": "benchmark_synthetic_20261029_181956.json",
+   "arm": "plain_llm",
+   "tier": "baseline",
+   "total": 87,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 0,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 0,
+    "harness": 69,
+    "uncategorized": 18
+   },
+   "fault_side_counts": {
+    "model_side": 0,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 87
+   }
+  },
+  {
+   "batch": "b2_fingerprint_20261029_r2/seed44",
+   "file": "benchmark_synthetic_20261029_181956.json",
+   "arm": "plain_llm_df",
+   "tier": "baseline",
+   "total": 87,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 0,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 0,
+    "harness": 45,
+    "uncategorized": 42
+   },
+   "fault_side_counts": {
+    "model_side": 0,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 87
+   }
+  },
+  {
+   "batch": ".",
+   "file": "benchmark_examples_20261024_160528.json",
+   "arm": "aitester",
+   "tier": "orchestration",
+   "total": 3,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 0,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 0,
+    "harness": 3,
+    "uncategorized": 0
+   },
+   "fault_side_counts": {
+    "model_side": 0,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 3
+   }
+  },
+  {
+   "batch": ".",
+   "file": "benchmark_examples_20261024_160528.json",
+   "arm": "plain_llm",
+   "tier": "baseline",
+   "total": 3,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 0,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 0,
+    "harness": 1,
+    "uncategorized": 2
+   },
+   "fault_side_counts": {
+    "model_side": 0,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 3
+   }
+  },
+  {
+   "batch": ".",
+   "file": "benchmark_examples_20261024_160528.json",
+   "arm": "single_agent",
+   "tier": "baseline",
+   "total": 3,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 0,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 0,
+    "harness": 3,
+    "uncategorized": 0
+   },
+   "fault_side_counts": {
+    "model_side": 0,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 3
+   }
+  },
+  {
+   "batch": ".",
+   "file": "benchmark_examples_20261024_160728.json",
+   "arm": "aitester",
+   "tier": "orchestration",
+   "total": 3,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 0,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 0,
+    "harness": 3,
+    "uncategorized": 0
+   },
+   "fault_side_counts": {
+    "model_side": 0,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 3
+   }
+  },
+  {
+   "batch": ".",
+   "file": "benchmark_examples_20261024_160728.json",
+   "arm": "plain_llm",
+   "tier": "baseline",
+   "total": 3,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 0,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 0,
+    "harness": 1,
+    "uncategorized": 2
+   },
+   "fault_side_counts": {
+    "model_side": 0,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 3
+   }
+  },
+  {
+   "batch": ".",
+   "file": "benchmark_examples_20261024_160728.json",
+   "arm": "single_agent",
+   "tier": "baseline",
+   "total": 3,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 0,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 0,
+    "harness": 3,
+    "uncategorized": 0
+   },
+   "fault_side_counts": {
+    "model_side": 0,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 3
+   }
+  },
+  {
+   "batch": ".",
+   "file": "benchmark_quixbugs_20261024_170238.json",
+   "arm": "aitester",
+   "tier": "orchestration",
+   "total": 50,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 0,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 26,
+    "harness": 24,
+    "uncategorized": 0
+   },
+   "fault_side_counts": {
+    "model_side": 26,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 24
+   }
+  },
+  {
+   "batch": ".",
+   "file": "benchmark_quixbugs_20261024_170238.json",
+   "arm": "plain_llm",
+   "tier": "baseline",
+   "total": 50,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 0,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 0,
+    "harness": 3,
+    "uncategorized": 47
+   },
+   "fault_side_counts": {
+    "model_side": 0,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 50
+   }
+  },
+  {
+   "batch": ".",
+   "file": "benchmark_quixbugs_20261024_170238.json",
+   "arm": "single_agent",
+   "tier": "baseline",
+   "total": 50,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 0,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 0,
+    "harness": 29,
+    "uncategorized": 21
+   },
+   "fault_side_counts": {
+    "model_side": 0,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 50
+   }
+  },
+  {
+   "batch": ".",
+   "file": "benchmark_synthetic_20261024_161048.json",
+   "arm": "aitester",
+   "tier": "orchestration",
+   "total": 20,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 0,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 0,
+    "harness": 20,
+    "uncategorized": 0
+   },
+   "fault_side_counts": {
+    "model_side": 0,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 20
+   }
+  },
+  {
+   "batch": ".",
+   "file": "benchmark_synthetic_20261024_161048.json",
+   "arm": "plain_llm",
+   "tier": "baseline",
+   "total": 20,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 0,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 0,
+    "harness": 19,
+    "uncategorized": 1
+   },
+   "fault_side_counts": {
+    "model_side": 0,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 20
+   }
+  },
+  {
+   "batch": ".",
+   "file": "benchmark_synthetic_20261024_161048.json",
+   "arm": "single_agent",
+   "tier": "baseline",
+   "total": 20,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 0,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 0,
+    "harness": 20,
+    "uncategorized": 0
+   },
+   "fault_side_counts": {
+    "model_side": 0,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 20
+   }
+  },
+  {
+   "batch": "cross_file_ab_level3/cross_file_off",
+   "file": "benchmark_synthetic_20261024_181652.json",
+   "arm": "aitester",
+   "tier": "orchestration",
+   "total": 50,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 0,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 0,
+    "harness": 50,
+    "uncategorized": 0
+   },
+   "fault_side_counts": {
+    "model_side": 0,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 50
+   }
+  },
+  {
+   "batch": "cross_file_ab_level3/cross_file_on",
+   "file": "benchmark_synthetic_20261024_181756.json",
+   "arm": "aitester",
+   "tier": "orchestration",
+   "total": 50,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 0,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 0,
+    "harness": 50,
+    "uncategorized": 0
+   },
+   "fault_side_counts": {
+    "model_side": 0,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 50
+   }
+  },
+  {
+   "batch": "e6_matched_newsnapshot_20261029",
+   "file": "benchmark_synthetic_20261029_203359.json",
+   "arm": "aitester",
+   "tier": "orchestration",
+   "total": 87,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 0,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 0,
+    "harness": 87,
+    "uncategorized": 0
+   },
+   "fault_side_counts": {
+    "model_side": 0,
+    "harness_side": 87,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 0
+   }
+  },
+  {
+   "batch": "e6_matched_newsnapshot_20261029",
+   "file": "benchmark_synthetic_20261029_203359.json",
+   "arm": "plain_llm_df",
+   "tier": "baseline",
+   "total": 87,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 0,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 0,
+    "harness": 40,
+    "uncategorized": 47
+   },
+   "fault_side_counts": {
+    "model_side": 0,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 87
+   }
+  },
+  {
+   "batch": "e8_2x2_20261028/current-off/seed42",
+   "file": "benchmark_synthetic_20261028_194104.json",
+   "arm": "aitester",
+   "tier": "orchestration",
+   "total": 87,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 9,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 8,
+    "harness": 70,
+    "uncategorized": 0
+   },
+   "fault_side_counts": {
+    "model_side": 17,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 70
+   }
+  },
+  {
+   "batch": "e8_2x2_20261028/current-off/seed42",
+   "file": "benchmark_synthetic_20261028_194104.json",
+   "arm": "plain_llm",
+   "tier": "baseline",
+   "total": 87,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 0,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 0,
+    "harness": 62,
+    "uncategorized": 25
+   },
+   "fault_side_counts": {
+    "model_side": 0,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 87
+   }
+  },
+  {
+   "batch": "e8_2x2_20261028/current-off/seed42",
+   "file": "benchmark_synthetic_20261028_194104.json",
+   "arm": "plain_llm_df",
+   "tier": "baseline",
+   "total": 87,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 1,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 0,
+    "harness": 46,
+    "uncategorized": 40
+   },
+   "fault_side_counts": {
+    "model_side": 1,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 86
+   }
+  },
+  {
+   "batch": "e8_2x2_20261028/current-on/seed42",
+   "file": "benchmark_synthetic_20261028_232114.json",
+   "arm": "aitester",
+   "tier": "orchestration",
+   "total": 87,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 3,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 39,
+    "harness": 45,
+    "uncategorized": 0
+   },
+   "fault_side_counts": {
+    "model_side": 42,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 45
+   }
+  },
+  {
+   "batch": "e8_2x2_20261028/current-on/seed42",
+   "file": "benchmark_synthetic_20261028_232114.json",
+   "arm": "plain_llm",
+   "tier": "baseline",
+   "total": 87,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 0,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 0,
+    "harness": 82,
+    "uncategorized": 5
+   },
+   "fault_side_counts": {
+    "model_side": 0,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 87
+   }
+  },
+  {
+   "batch": "e8_2x2_20261028/current-on/seed42",
+   "file": "benchmark_synthetic_20261028_232114.json",
+   "arm": "plain_llm_df",
+   "tier": "baseline",
+   "total": 87,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 4,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 0,
+    "harness": 12,
+    "uncategorized": 71
+   },
+   "fault_side_counts": {
+    "model_side": 4,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 83
+   }
+  },
+  {
+   "batch": "emse_docstring_anchor_20261017",
+   "file": "benchmark_quixbugs_20261024_212034.json",
+   "arm": "plain_llm_df",
+   "tier": "baseline",
+   "total": 50,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 0,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 0,
+    "harness": 0,
+    "uncategorized": 50
+   },
+   "fault_side_counts": {
+    "model_side": 0,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 50
+   }
+  },
+  {
+   "batch": "emse_docstring_anchor_20261017",
+   "file": "benchmark_quixbugs_20261024_222314.json",
+   "arm": "plain_llm_df_doc",
+   "tier": "baseline",
+   "total": 50,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 0,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 0,
+    "harness": 0,
+    "uncategorized": 50
+   },
+   "fault_side_counts": {
+    "model_side": 0,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 50
+   }
+  },
+  {
+   "batch": "emse_docstring_anchor_20261017",
+   "file": "benchmark_quixbugs_20261024_233002.json",
+   "arm": "plain_llm_df_doc_union",
+   "tier": "baseline",
+   "total": 50,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 0,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 0,
+    "harness": 1,
+    "uncategorized": 49
+   },
+   "fault_side_counts": {
+    "model_side": 0,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 50
+   }
+  },
+  {
+   "batch": "emse_docstring_augment_20261017",
+   "file": "benchmark_quixbugs_20261025_003250.json",
+   "arm": "plain_llm_df",
+   "tier": "baseline",
+   "total": 50,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 0,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 0,
+    "harness": 0,
+    "uncategorized": 50
+   },
+   "fault_side_counts": {
+    "model_side": 0,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 50
+   }
+  },
+  {
+   "batch": "emse_docstring_augment_20261017",
+   "file": "benchmark_quixbugs_20261025_003844.json",
+   "arm": "plain_llm_df_doc_augment",
+   "tier": "baseline",
+   "total": 50,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 0,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 0,
+    "harness": 0,
+    "uncategorized": 50
+   },
+   "fault_side_counts": {
+    "model_side": 0,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 50
+   }
+  },
+  {
+   "batch": "emse_oracle_enabled_validation_20261017",
+   "file": "benchmark_quixbugs_20261025_102728.json",
+   "arm": "plain_llm_df_spec",
+   "tier": "baseline",
+   "total": 20,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 0,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 0,
+    "harness": 0,
+    "uncategorized": 20
+   },
+   "fault_side_counts": {
+    "model_side": 0,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 20
+   }
+  },
+  {
+   "batch": "emse_oracle_enabled_validation_20261017",
+   "file": "benchmark_quixbugs_20261025_102731.json",
+   "arm": "plain_llm_df_spec",
+   "tier": "baseline",
+   "total": 20,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 1,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 0,
+    "harness": 1,
+    "uncategorized": 18
+   },
+   "fault_side_counts": {
+    "model_side": 1,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 19
+   }
+  },
+  {
+   "batch": "p_round_b8_ablation_20261018",
+   "file": "benchmark_synthetic_20261024_193143.json",
+   "arm": "aitester",
+   "tier": "orchestration",
+   "total": 10,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 0,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 0,
+    "harness": 10,
+    "uncategorized": 0
+   },
+   "fault_side_counts": {
+    "model_side": 0,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 10
+   }
+  },
+  {
+   "batch": "p_round_b8_ablation_20261018",
+   "file": "benchmark_synthetic_20261024_193144.json",
+   "arm": "aitester",
+   "tier": "orchestration",
+   "total": 10,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 0,
+    "generator_to_executor": 1,
+    "debugger_to_executor": 0,
+    "harness": 9,
+    "uncategorized": 0
+   },
+   "fault_side_counts": {
+    "model_side": 1,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 9
+   }
+  },
+  {
+   "batch": "position_aware_off",
+   "file": "benchmark_synthetic_20261024_181241.json",
+   "arm": "aitester",
+   "tier": "orchestration",
+   "total": 30,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 0,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 0,
+    "harness": 30,
+    "uncategorized": 0
+   },
+   "fault_side_counts": {
+    "model_side": 0,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 30
+   }
+  },
+  {
+   "batch": "position_aware_on",
+   "file": "benchmark_synthetic_20261024_181319.json",
+   "arm": "aitester",
+   "tier": "orchestration",
+   "total": 30,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 0,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 0,
+    "harness": 30,
+    "uncategorized": 0
+   },
+   "fault_side_counts": {
+    "model_side": 0,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 30
+   }
+  },
+  {
+   "batch": "rag_ab/rag_off",
+   "file": "benchmark_synthetic_20261024_181037.json",
+   "arm": "aitester",
+   "tier": "orchestration",
+   "total": 20,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 0,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 0,
+    "harness": 20,
+    "uncategorized": 0
+   },
+   "fault_side_counts": {
+    "model_side": 0,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 20
+   }
+  },
+  {
+   "batch": "rag_ab/rag_off",
+   "file": "benchmark_synthetic_20261024_192411.json",
+   "arm": "aitester",
+   "tier": "orchestration",
+   "total": 20,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 0,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 0,
+    "harness": 20,
+    "uncategorized": 0
+   },
+   "fault_side_counts": {
+    "model_side": 0,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 20
+   }
+  },
+  {
+   "batch": "rag_ab/rag_off",
+   "file": "benchmark_synthetic_20261024_193302.json",
+   "arm": "aitester",
+   "tier": "orchestration",
+   "total": 20,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 0,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 0,
+    "harness": 20,
+    "uncategorized": 0
+   },
+   "fault_side_counts": {
+    "model_side": 0,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 20
+   }
+  },
+  {
+   "batch": "rag_ab/rag_on",
+   "file": "benchmark_synthetic_20261024_181008.json",
+   "arm": "aitester",
+   "tier": "orchestration",
+   "total": 20,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 0,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 0,
+    "harness": 20,
+    "uncategorized": 0
+   },
+   "fault_side_counts": {
+    "model_side": 0,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 20
+   }
+  },
+  {
+   "batch": "rag_ab/rag_on",
+   "file": "benchmark_synthetic_20261024_192340.json",
+   "arm": "aitester",
+   "tier": "orchestration",
+   "total": 20,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 0,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 0,
+    "harness": 20,
+    "uncategorized": 0
+   },
+   "fault_side_counts": {
+    "model_side": 0,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 20
+   }
+  },
+  {
+   "batch": "rag_ab/rag_on",
+   "file": "benchmark_synthetic_20261024_193231.json",
+   "arm": "aitester",
+   "tier": "orchestration",
+   "total": 20,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 0,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 0,
+    "harness": 20,
+    "uncategorized": 0
+   },
+   "fault_side_counts": {
+    "model_side": 0,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 20
+   }
+  },
+  {
+   "batch": "spec_ab_scale87_20261024/quixbugs_off",
+   "file": "benchmark_quixbugs_20261024_183918.json",
+   "arm": "aitester",
+   "tier": "orchestration",
+   "total": 50,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 0,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 27,
+    "harness": 23,
+    "uncategorized": 0
+   },
+   "fault_side_counts": {
+    "model_side": 27,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 23
+   }
+  },
+  {
+   "batch": "spec_ab_scale87_20261024/quixbugs_off",
+   "file": "benchmark_quixbugs_20261024_183918.json",
+   "arm": "plain_llm_df",
+   "tier": "baseline",
+   "total": 50,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 0,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 0,
+    "harness": 0,
+    "uncategorized": 50
+   },
+   "fault_side_counts": {
+    "model_side": 0,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 50
+   }
+  },
+  {
+   "batch": "spec_ab_scale87_20261024/quixbugs_replace",
+   "file": "benchmark_quixbugs_20261024_185143.json",
+   "arm": "aitester",
+   "tier": "orchestration",
+   "total": 50,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 0,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 27,
+    "harness": 23,
+    "uncategorized": 0
+   },
+   "fault_side_counts": {
+    "model_side": 27,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 23
+   }
+  },
+  {
+   "batch": "spec_ab_scale87_20261024/ult_lite46_off",
+   "file": "benchmark_ult_20261024_190203.json",
+   "arm": "aitester",
+   "tier": "orchestration",
+   "total": 45,
+   "unclassified_rows": 1,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 0,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 32,
+    "harness": 13,
+    "uncategorized": 0
+   },
+   "fault_side_counts": {
+    "model_side": 32,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 13
+   }
+  },
+  {
+   "batch": "spec_ab_scale87_20261024/ult_lite46_off",
+   "file": "benchmark_ult_20261024_190203.json",
+   "arm": "plain_llm_df",
+   "tier": "baseline",
+   "total": 46,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 0,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 0,
+    "harness": 5,
+    "uncategorized": 41
+   },
+   "fault_side_counts": {
+    "model_side": 0,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 46
+   }
+  },
+  {
+   "batch": "spec_ab_scale87_20261024/ult_lite46_replace",
+   "file": "benchmark_ult_20261024_190841.json",
+   "arm": "aitester",
+   "tier": "orchestration",
+   "total": 45,
+   "unclassified_rows": 1,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 0,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 27,
+    "harness": 18,
+    "uncategorized": 0
+   },
+   "fault_side_counts": {
+    "model_side": 27,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 18
+   }
+  },
+  {
+   "batch": "swe_diag_20261028",
+   "file": "benchmark_swe_bench_20261029_003646.json",
+   "arm": "plain_llm_df",
+   "tier": "baseline",
+   "total": 0,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 3,
+   "edge_counts": {
+    "planner_to_generator": 0,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 0,
+    "harness": 0,
+    "uncategorized": 0
+   },
+   "fault_side_counts": {
+    "model_side": 0,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 0
+   }
+  },
+  {
+   "batch": "tge_full_20261028",
+   "file": "benchmark_testgeneval_20261028_235554.json",
+   "arm": "plain_llm_df",
+   "tier": "baseline",
+   "total": 160,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 0,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 0,
+    "harness": 16,
+    "uncategorized": 144
+   },
+   "fault_side_counts": {
+    "model_side": 0,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 160
+   }
+  },
+  {
+   "batch": "tge_smoke2_20261028",
+   "file": "benchmark_testgeneval_20261028_195135.json",
+   "arm": "plain_llm_df",
+   "tier": "baseline",
+   "total": 2,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 0,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 0,
+    "harness": 0,
+    "uncategorized": 2
+   },
+   "fault_side_counts": {
+    "model_side": 0,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 2
+   }
+  },
+  {
+   "batch": "tge_smoke_20261028",
+   "file": "benchmark_testgeneval_20261028_192334.json",
+   "arm": "plain_llm_df",
+   "tier": "baseline",
+   "total": 2,
+   "unclassified_rows": 0,
+   "harness_invalid_rows": 0,
+   "edge_counts": {
+    "planner_to_generator": 0,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 0,
+    "harness": 0,
+    "uncategorized": 2
+   },
+   "fault_side_counts": {
+    "model_side": 0,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 2
+   }
+  }
+ ],
+ "summary": {
+  "orchestration": {
+   "units": 26,
+   "total_rows": 1088,
+   "edge_counts": {
+    "planner_to_generator": 43,
+    "generator_to_executor": 1,
+    "debugger_to_executor": 206,
+    "harness": 838,
+    "uncategorized": 0
+   },
+   "fault_side_counts": {
+    "model_side": 250,
+    "harness_side": 87,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 751
+   },
+   "edge_shares": {
+    "planner_to_generator": 0.0395,
+    "generator_to_executor": 0.0009,
+    "debugger_to_executor": 0.1893,
+    "harness": 0.7702,
+    "uncategorized": 0.0
+   },
+   "fault_side_shares": {
+    "model_side": 0.2298,
+    "harness_side": 0.08,
+    "environment": 0.0,
+    "grader": 0.0,
+    "uncategorized": 0.6903
+   }
+  },
+  "baseline": {
+   "units": 39,
+   "total_rows": 2009,
+   "edge_counts": {
+    "planner_to_generator": 6,
+    "generator_to_executor": 0,
+    "debugger_to_executor": 0,
+    "harness": 690,
+    "uncategorized": 1313
+   },
+   "fault_side_counts": {
+    "model_side": 6,
+    "harness_side": 0,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 2003
+   },
+   "edge_shares": {
+    "planner_to_generator": 0.003,
+    "generator_to_executor": 0.0,
+    "debugger_to_executor": 0.0,
+    "harness": 0.3435,
+    "uncategorized": 0.6536
+   },
+   "fault_side_shares": {
+    "model_side": 0.003,
+    "harness_side": 0.0,
+    "environment": 0.0,
+    "grader": 0.0,
+    "uncategorized": 0.997
+   }
+  },
+  "all": {
+   "units": 65,
+   "total_rows": 3097,
+   "edge_counts": {
+    "planner_to_generator": 49,
+    "generator_to_executor": 1,
+    "debugger_to_executor": 206,
+    "harness": 1528,
+    "uncategorized": 1313
+   },
+   "fault_side_counts": {
+    "model_side": 256,
+    "harness_side": 87,
+    "environment": 0,
+    "grader": 0,
+    "uncategorized": 2754
+   },
+   "edge_shares": {
+    "planner_to_generator": 0.0158,
+    "generator_to_executor": 0.0003,
+    "debugger_to_executor": 0.0665,
+    "harness": 0.4934,
+    "uncategorized": 0.424
+   },
+   "fault_side_shares": {
+    "model_side": 0.0827,
+    "harness_side": 0.0281,
+    "environment": 0.0,
+    "grader": 0.0,
+    "uncategorized": 0.8892
+   }
+  }
+ }
+}

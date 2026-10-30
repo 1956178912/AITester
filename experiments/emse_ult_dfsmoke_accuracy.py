@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import subprocess
 import sys
 import tempfile
@@ -34,7 +33,7 @@ if str(REPO) not in sys.path:
 
 from experiments._m1_metrics import _suite_has_effective_pass  # noqa: E402
 from src.utils.atomic_io import atomic_write_json  # noqa: E402
-from src.utils.process_utils import run_with_timeout  # noqa: E402
+from src.utils.process_utils import nested_pytest_env, run_with_timeout  # noqa: E402
 
 CAP_SECONDS = 30
 
@@ -51,13 +50,15 @@ def _run_one(module_name: str, fixed_code: str, test_code: str) -> dict[str, Any
             # PYTEST_DISABLE_PLUGIN_AUTOLOAD（2026-10-30）：主仓 venv 某插件
             # autoload 在 pytest 收尾时挂死（测试 0.1s 跑完、进程挂满 CAP_SECONDS
             # 被杀——全量 3909 任务 ≈32h 烧在挂死上、20h 未完成的真因）。
+            # nested_pytest_env（2026-10-30，B1 批）：同 mutk——raw 继承宿主
+            # 环境会把 PYTEST_PLUGINS/PYTEST_ADDOPTS 与凭证带进嵌套 pytest。
             proc = run_with_timeout(
                 [sys.executable, "-m", "pytest", tf, "-q", "--no-header", "-p", "no:cacheprovider"],
                 cwd=str(td),
                 capture_output=True,
                 text=True,
                 timeout=CAP_SECONDS,
-                env={**os.environ, "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1"},
+                env=nested_pytest_env(PYTEST_DISABLE_PLUGIN_AUTOLOAD="1"),
             )
         except subprocess.TimeoutExpired:
             return {
