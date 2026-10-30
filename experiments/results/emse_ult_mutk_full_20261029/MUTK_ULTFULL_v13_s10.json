@@ -1,0 +1,4182 @@
+{
+  "caliber": "cosmic-ray full mutants (no truncation) + sanity gate (terminates & passes on fixed, 30s)",
+  "cosmic_ray_version": "8.7.0",
+  "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+  "timeout_seconds": 120,
+  "timeout_counts_as_killed": true,
+  "sanity_gate": {
+    "timeout_seconds": 120,
+    "criteria": "generated/gold test must terminate AND pass (rc=0) on task_metadata.fixed"
+  },
+  "groups": [
+    {
+      "label": "replace_generated_shard10",
+      "source": "/Users/wangchenyu/Workspace/AITester-w-head/experiments/results/ult_full_20261029/benchmark_ult_20261029_090742.json",
+      "test_kind": "generated",
+      "aggregate": {
+        "n_tasks": 244,
+        "n_measured": 76,
+        "n_skipped": 168,
+        "skip_reasons": [
+          "test_fails_on_fixed",
+          "test_nonterminating_on_fixed"
+        ],
+        "n_sanity_gate_excluded": 168,
+        "mutants_killed": 9536,
+        "mutants_total": 13903,
+        "pooled_mutation_score": 0.685895,
+        "mean_mutation_score": 0.789906
+      },
+      "per_task": [
+        {
+          "task_id": "ult__get_edge_point_delta",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 4.2
+          }
+        },
+        {
+          "task_id": "ult__test_init",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.685714,
+          "mutants_killed": 48,
+          "mutants_total": 70,
+          "elapsed_s": 41.4,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.0
+          }
+        },
+        {
+          "task_id": "ult__quick_select",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 3.1
+          }
+        },
+        {
+          "task_id": "ult__iterate_pagerank",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.3
+          }
+        },
+        {
+          "task_id": "ult__get_per_pollutant_index",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.3
+          }
+        },
+        {
+          "task_id": "ult__miller_rabin_test",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 4.7
+          }
+        },
+        {
+          "task_id": "ult__compute_confuse_matrix",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.969231,
+          "mutants_killed": 63,
+          "mutants_total": 65,
+          "elapsed_s": 33.6,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.0
+          }
+        },
+        {
+          "task_id": "ult__get_db",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.4
+          }
+        },
+        {
+          "task_id": "ult__get_method_scores",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.929961,
+          "mutants_killed": 239,
+          "mutants_total": 257,
+          "elapsed_s": 137.8,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.3
+          }
+        },
+        {
+          "task_id": "ult__calc_query_pos_from_cigar",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 3.7
+          }
+        },
+        {
+          "task_id": "ult__printSingleCut",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.4
+          }
+        },
+        {
+          "task_id": "ult__get_mode_and_register_values",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.71875,
+          "mutants_killed": 92,
+          "mutants_total": 128,
+          "elapsed_s": 59.4,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.3
+          }
+        },
+        {
+          "task_id": "ult__isBinarySearchTree",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.962963,
+          "mutants_killed": 26,
+          "mutants_total": 27,
+          "elapsed_s": 16.6,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.4
+          }
+        },
+        {
+          "task_id": "ult__factor_modulus",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 3.8
+          }
+        },
+        {
+          "task_id": "ult__computeFramesPerTexture",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.7
+          }
+        },
+        {
+          "task_id": "ult__alive_neighbours",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 2,
+            "wall_s": 3.3
+          }
+        },
+        {
+          "task_id": "ult__initiate_board",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.9
+          }
+        },
+        {
+          "task_id": "ult__rows_from_chunks",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 3.4
+          }
+        },
+        {
+          "task_id": "ult__hashnum",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 10.8
+          }
+        },
+        {
+          "task_id": "ult__find_min_year_with_same_digits",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.8
+          }
+        },
+        {
+          "task_id": "ult__is_read_on_correct_strand",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.5
+          }
+        },
+        {
+          "task_id": "ult__conv_unit",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.6
+          }
+        },
+        {
+          "task_id": "ult__collate2iters",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.9,
+          "mutants_killed": 27,
+          "mutants_total": 30,
+          "elapsed_s": 262.4,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.2
+          }
+        },
+        {
+          "task_id": "ult__compare_line_by_line",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.921875,
+          "mutants_killed": 118,
+          "mutants_total": 128,
+          "elapsed_s": 84.4,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 3.2
+          }
+        },
+        {
+          "task_id": "ult__the_work",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.8
+          }
+        },
+        {
+          "task_id": "ult__are_aabb_colliding",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.84,
+          "mutants_killed": 147,
+          "mutants_total": 175,
+          "elapsed_s": 102.4,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.6
+          }
+        },
+        {
+          "task_id": "ult__get_days_as_ints",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.7
+          }
+        },
+        {
+          "task_id": "ult__check_answers",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 3.2
+          }
+        },
+        {
+          "task_id": "ult__make_cluster",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.65625,
+          "mutants_killed": 63,
+          "mutants_total": 96,
+          "elapsed_s": 49.0,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.6
+          }
+        },
+        {
+          "task_id": "ult__verb_stem",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.315436,
+          "mutants_killed": 47,
+          "mutants_total": 149,
+          "elapsed_s": 74.0,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.9
+          }
+        },
+        {
+          "task_id": "ult__besselap",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.7
+          }
+        },
+        {
+          "task_id": "ult__gen_wbs_master_arbiter",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.7
+          }
+        },
+        {
+          "task_id": "ult__st_state",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.848739,
+          "mutants_killed": 101,
+          "mutants_total": 119,
+          "elapsed_s": 54.7,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.7
+          }
+        },
+        {
+          "task_id": "ult__featurize_finance",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 1.0,
+          "mutants_killed": 384,
+          "mutants_total": 384,
+          "elapsed_s": 416.1,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.2
+          }
+        },
+        {
+          "task_id": "ult__p_selection",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.916084,
+          "mutants_killed": 262,
+          "mutants_total": 286,
+          "elapsed_s": 125.1,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.3
+          }
+        },
+        {
+          "task_id": "ult__parse_ultaReviews",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 3.5
+          }
+        },
+        {
+          "task_id": "ult__calc_skier_code",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.96,
+          "mutants_killed": 168,
+          "mutants_total": 175,
+          "elapsed_s": 353.2,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 4.2
+          }
+        },
+        {
+          "task_id": "ult__quickSelect",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.7
+          }
+        },
+        {
+          "task_id": "ult__sql_cols",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.842857,
+          "mutants_killed": 59,
+          "mutants_total": 70,
+          "elapsed_s": 31.1,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.2
+          }
+        },
+        {
+          "task_id": "ult__two_options",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.8
+          }
+        },
+        {
+          "task_id": "ult__for_nine",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.8
+          }
+        },
+        {
+          "task_id": "ult__calculate_season_outcomes",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.777778,
+          "mutants_killed": 49,
+          "mutants_total": 63,
+          "elapsed_s": 28.0,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.2
+          }
+        },
+        {
+          "task_id": "ult__test_added_fields",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.5
+          }
+        },
+        {
+          "task_id": "ult__obs_direction",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.6
+          }
+        },
+        {
+          "task_id": "ult__get_span",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.6
+          }
+        },
+        {
+          "task_id": "ult__RobotCoin",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.6
+          }
+        },
+        {
+          "task_id": "ult__translate_pattern",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.9
+          }
+        },
+        {
+          "task_id": "ult__moveSnake",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.830601,
+          "mutants_killed": 152,
+          "mutants_total": 183,
+          "elapsed_s": 76.4,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.6
+          }
+        },
+        {
+          "task_id": "ult__three_month",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 3.2
+          }
+        },
+        {
+          "task_id": "ult__multi_slice_multiply",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.767857,
+          "mutants_killed": 43,
+          "mutants_total": 56,
+          "elapsed_s": 29.4,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.7
+          }
+        },
+        {
+          "task_id": "ult__smoothness_score",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.903614,
+          "mutants_killed": 150,
+          "mutants_total": 166,
+          "elapsed_s": 64.9,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.2
+          }
+        },
+        {
+          "task_id": "ult__intersect_or_on",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.6
+          }
+        },
+        {
+          "task_id": "ult__weighted_precision",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.6
+          }
+        },
+        {
+          "task_id": "ult__std_empty_row",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 3.2
+          }
+        },
+        {
+          "task_id": "ult__gem_stat_requirement",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.7
+          }
+        },
+        {
+          "task_id": "ult__getMut",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.2
+          }
+        },
+        {
+          "task_id": "ult__default_output_mixer_channel",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.6
+          }
+        },
+        {
+          "task_id": "ult__compare_ops",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.893617,
+          "mutants_killed": 42,
+          "mutants_total": 47,
+          "elapsed_s": 21.5,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.5
+          }
+        },
+        {
+          "task_id": "ult__strat_bottom",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.4
+          }
+        },
+        {
+          "task_id": "ult__for_HEART",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.7
+          }
+        },
+        {
+          "task_id": "ult__process_negative_numbers",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.3
+          }
+        },
+        {
+          "task_id": "ult__get_US_and_EN_tweets",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.7
+          }
+        },
+        {
+          "task_id": "ult__concat_gn",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.830357,
+          "mutants_killed": 93,
+          "mutants_total": 112,
+          "elapsed_s": 48.5,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.1
+          }
+        },
+        {
+          "task_id": "ult__CheckIfExperimentExists",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 3.7
+          }
+        },
+        {
+          "task_id": "ult__utm_zone",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 5.5
+          }
+        },
+        {
+          "task_id": "ult__classify_facility_type",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 4.1
+          }
+        },
+        {
+          "task_id": "ult__crosscount",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.8
+          }
+        },
+        {
+          "task_id": "ult__calc_entropia",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 4.3
+          }
+        },
+        {
+          "task_id": "ult__get_new_cont",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.3
+          }
+        },
+        {
+          "task_id": "ult__updateCategoricalDateFeatures",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.886364,
+          "mutants_killed": 78,
+          "mutants_total": 88,
+          "elapsed_s": 36.4,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.3
+          }
+        },
+        {
+          "task_id": "ult__bound_line_in_box",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.5
+          }
+        },
+        {
+          "task_id": "ult__mirror_matrix",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.6
+          }
+        },
+        {
+          "task_id": "ult__get_randoms",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.5
+          }
+        },
+        {
+          "task_id": "ult__m82_wind_radial",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 3.0
+          }
+        },
+        {
+          "task_id": "ult__copyNumberOnChrom",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.882353,
+          "mutants_killed": 30,
+          "mutants_total": 34,
+          "elapsed_s": 15.2,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.3
+          }
+        },
+        {
+          "task_id": "ult__yohan_consensus",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 3.1
+          }
+        },
+        {
+          "task_id": "ult__operation_length",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.889908,
+          "mutants_killed": 97,
+          "mutants_total": 109,
+          "elapsed_s": 42.6,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.5
+          }
+        },
+        {
+          "task_id": "ult__get_optimal_min_max",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.9
+          }
+        },
+        {
+          "task_id": "ult__determine_segment_distribution",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.510135,
+          "mutants_killed": 151,
+          "mutants_total": 296,
+          "elapsed_s": 115.8,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.5
+          }
+        },
+        {
+          "task_id": "ult__bDiagWin",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 3.1
+          }
+        },
+        {
+          "task_id": "ult__atom_solvation",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.928571,
+          "mutants_killed": 78,
+          "mutants_total": 84,
+          "elapsed_s": 40.2,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.4
+          }
+        },
+        {
+          "task_id": "ult__is_effective",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.7
+          }
+        },
+        {
+          "task_id": "ult__find_dict_value",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.622951,
+          "mutants_killed": 114,
+          "mutants_total": 183,
+          "elapsed_s": 66.2,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.4
+          }
+        },
+        {
+          "task_id": "ult__transform_coors",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 3.2
+          }
+        },
+        {
+          "task_id": "ult__how_long",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 4.2
+          }
+        },
+        {
+          "task_id": "ult__check_action_type",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.883721,
+          "mutants_killed": 76,
+          "mutants_total": 86,
+          "elapsed_s": 42.7,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.7
+          }
+        },
+        {
+          "task_id": "ult__get_shot_stats",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.7
+          }
+        },
+        {
+          "task_id": "ult__expand_9mer_peptides",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.6
+          }
+        },
+        {
+          "task_id": "ult__isSumSubset",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 3.0
+          }
+        },
+        {
+          "task_id": "ult__getAngleDirection",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 3.0
+          }
+        },
+        {
+          "task_id": "ult__get_highest_density_window",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.2
+          }
+        },
+        {
+          "task_id": "ult__zodiac",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 4.5
+          }
+        },
+        {
+          "task_id": "ult__multiple_locations",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.5,
+          "mutants_killed": 9,
+          "mutants_total": 18,
+          "elapsed_s": 9.8,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.3
+          }
+        },
+        {
+          "task_id": "ult__curtain_slatlength",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.051948,
+          "mutants_killed": 20,
+          "mutants_total": 385,
+          "elapsed_s": 132.7,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.4
+          }
+        },
+        {
+          "task_id": "ult__outlaw_program",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 1.0,
+          "mutants_killed": 2,
+          "mutants_total": 2,
+          "elapsed_s": 3.8,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.1
+          }
+        },
+        {
+          "task_id": "ult__moody_action_alt",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 3.3
+          }
+        },
+        {
+          "task_id": "ult__verifyValues",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 3.1
+          }
+        },
+        {
+          "task_id": "ult__beginMovement",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 7.0
+          }
+        },
+        {
+          "task_id": "ult__assert_consistent_env_configs",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 3.8
+          }
+        },
+        {
+          "task_id": "ult__signal_name",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.7
+          }
+        },
+        {
+          "task_id": "ult__calc_eta_FC",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.8
+          }
+        },
+        {
+          "task_id": "ult__getInherited2",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.866667,
+          "mutants_killed": 13,
+          "mutants_total": 15,
+          "elapsed_s": 11.0,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 3.1
+          }
+        },
+        {
+          "task_id": "ult__getLCCoeff",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 1.0,
+          "mutants_killed": 233,
+          "mutants_total": 233,
+          "elapsed_s": 98.9,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.7
+          }
+        },
+        {
+          "task_id": "ult__convertirRGBtoLAB",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.9
+          }
+        },
+        {
+          "task_id": "ult__remove_wall",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.826816,
+          "mutants_killed": 148,
+          "mutants_total": 179,
+          "elapsed_s": 69.2,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.6
+          }
+        },
+        {
+          "task_id": "ult__rolling_avg",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.8
+          }
+        },
+        {
+          "task_id": "ult__qcheck",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 3.4
+          }
+        },
+        {
+          "task_id": "ult__remove_from_inventory",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.864583,
+          "mutants_killed": 83,
+          "mutants_total": 96,
+          "elapsed_s": 36.7,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.3
+          }
+        },
+        {
+          "task_id": "ult__LookupInterconnect",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 3.3
+          }
+        },
+        {
+          "task_id": "ult__boundary_points",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.6
+          }
+        },
+        {
+          "task_id": "ult__sort_shell",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.8
+          }
+        },
+        {
+          "task_id": "ult__scoring_ngrams",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 3.0
+          }
+        },
+        {
+          "task_id": "ult__parse_server_msg_file",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 3.3
+          }
+        },
+        {
+          "task_id": "ult__skip_i_delete_j",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.8
+          }
+        },
+        {
+          "task_id": "ult__checkMedian",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 3.2
+          }
+        },
+        {
+          "task_id": "ult__add_taper",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.919831,
+          "mutants_killed": 218,
+          "mutants_total": 237,
+          "elapsed_s": 104.8,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.4
+          }
+        },
+        {
+          "task_id": "ult__generate_bar_widths",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.759563,
+          "mutants_killed": 139,
+          "mutants_total": 183,
+          "elapsed_s": 81.1,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.6
+          }
+        },
+        {
+          "task_id": "ult__FindPossiblePositions",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.758427,
+          "mutants_killed": 270,
+          "mutants_total": 356,
+          "elapsed_s": 155.6,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.5
+          }
+        },
+        {
+          "task_id": "ult__count_passwords",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.937107,
+          "mutants_killed": 149,
+          "mutants_total": 159,
+          "elapsed_s": 263.2,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 3.1
+          }
+        },
+        {
+          "task_id": "ult__reduce_row",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.8
+          }
+        },
+        {
+          "task_id": "ult__subarray_sort",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 3.2
+          }
+        },
+        {
+          "task_id": "ult__sumPoints",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.070119,
+          "mutants_killed": 65,
+          "mutants_total": 927,
+          "elapsed_s": 336.1,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.4
+          }
+        },
+        {
+          "task_id": "ult__pph2sph",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.92437,
+          "mutants_killed": 110,
+          "mutants_total": 119,
+          "elapsed_s": 67.0,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.7
+          }
+        },
+        {
+          "task_id": "ult__edMusFiles",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 4.0
+          }
+        },
+        {
+          "task_id": "ult__add_trio_genotypes_both_parents",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.7
+          }
+        },
+        {
+          "task_id": "ult__char_comparison",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.4
+          }
+        },
+        {
+          "task_id": "ult__sort_item_types",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.909091,
+          "mutants_killed": 20,
+          "mutants_total": 22,
+          "elapsed_s": 11.1,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.2
+          }
+        },
+        {
+          "task_id": "ult__dsmvwl",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.891304,
+          "mutants_killed": 82,
+          "mutants_total": 92,
+          "elapsed_s": 36.6,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.4
+          }
+        },
+        {
+          "task_id": "ult__calc_breakdown_dist",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.8
+          }
+        },
+        {
+          "task_id": "ult__oPify",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 3.0
+          }
+        },
+        {
+          "task_id": "ult__accumulate_orientation",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.8375,
+          "mutants_killed": 67,
+          "mutants_total": 80,
+          "elapsed_s": 41.6,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.8
+          }
+        },
+        {
+          "task_id": "ult__arrange_turns",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.768199,
+          "mutants_killed": 401,
+          "mutants_total": 522,
+          "elapsed_s": 193.8,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.9
+          }
+        },
+        {
+          "task_id": "ult__patch_blocking",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.9
+          }
+        },
+        {
+          "task_id": "ult__mtable_to_json",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.662651,
+          "mutants_killed": 55,
+          "mutants_total": 83,
+          "elapsed_s": 34.1,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.5
+          }
+        },
+        {
+          "task_id": "ult__determine_moves_neutron_soldier",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.7
+          }
+        },
+        {
+          "task_id": "ult__navBar",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.8
+          }
+        },
+        {
+          "task_id": "ult__getResampling",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.863636,
+          "mutants_killed": 57,
+          "mutants_total": 66,
+          "elapsed_s": 26.1,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.2
+          }
+        },
+        {
+          "task_id": "ult__parse_individual_genotype",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 3.5
+          }
+        },
+        {
+          "task_id": "ult__calcMasks",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 4.8
+          }
+        },
+        {
+          "task_id": "ult__ipDictToString",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.5
+          }
+        },
+        {
+          "task_id": "ult__is_config_valid",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.9
+          }
+        },
+        {
+          "task_id": "ult__offense_bin",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 1.0,
+          "mutants_killed": 58,
+          "mutants_total": 58,
+          "elapsed_s": 23.3,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.4
+          }
+        },
+        {
+          "task_id": "ult__generate_title",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.832402,
+          "mutants_killed": 298,
+          "mutants_total": 358,
+          "elapsed_s": 131.4,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.2
+          }
+        },
+        {
+          "task_id": "ult__integral_threshold_crossing",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.6
+          }
+        },
+        {
+          "task_id": "ult__convert_to_label",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.5
+          }
+        },
+        {
+          "task_id": "ult__question_number",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 3.3
+          }
+        },
+        {
+          "task_id": "ult__update_hash",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.7
+          }
+        },
+        {
+          "task_id": "ult__getErrorRates",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.3
+          }
+        },
+        {
+          "task_id": "ult__tt2ut",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.484925,
+          "mutants_killed": 965,
+          "mutants_total": 1990,
+          "elapsed_s": 713.4,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.4
+          }
+        },
+        {
+          "task_id": "ult__set_green_element_connectivity_info",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.5
+          }
+        },
+        {
+          "task_id": "ult__make_sql_select_command",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.899676,
+          "mutants_killed": 278,
+          "mutants_total": 309,
+          "elapsed_s": 111.8,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.3
+          }
+        },
+        {
+          "task_id": "ult__get_edits1",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.6
+          }
+        },
+        {
+          "task_id": "ult__evaluate_interval",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.678788,
+          "mutants_killed": 112,
+          "mutants_total": 165,
+          "elapsed_s": 57.3,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.3
+          }
+        },
+        {
+          "task_id": "ult__getCellHash",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.9
+          }
+        },
+        {
+          "task_id": "ult__chi_sq",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.2
+          }
+        },
+        {
+          "task_id": "ult__buildMaskSplit",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.961722,
+          "mutants_killed": 201,
+          "mutants_total": 209,
+          "elapsed_s": 74.8,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.2
+          }
+        },
+        {
+          "task_id": "ult__get_end_zone",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.822857,
+          "mutants_killed": 288,
+          "mutants_total": 350,
+          "elapsed_s": 122.6,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.9
+          }
+        },
+        {
+          "task_id": "ult__compare_2_lists",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.9
+          }
+        },
+        {
+          "task_id": "ult__find_optimal_bst",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.6
+          }
+        },
+        {
+          "task_id": "ult__is_circle_list2",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_nonterminating_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "nonterminate",
+            "rc": -9,
+            "wall_s": 120.1
+          }
+        },
+        {
+          "task_id": "ult__parralell",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.2
+          }
+        },
+        {
+          "task_id": "ult__zone_from_raw",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 3.3
+          }
+        },
+        {
+          "task_id": "ult__correct_data",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.814815,
+          "mutants_killed": 66,
+          "mutants_total": 81,
+          "elapsed_s": 25.0,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.9
+          }
+        },
+        {
+          "task_id": "ult__getAngleBetweenTwoPoints",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 3.1
+          }
+        },
+        {
+          "task_id": "ult__lps",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.6
+          }
+        },
+        {
+          "task_id": "ult__dir_to_command",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.979798,
+          "mutants_killed": 97,
+          "mutants_total": 99,
+          "elapsed_s": 32.2,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.3
+          }
+        },
+        {
+          "task_id": "ult__streak_tracker",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.6
+          }
+        },
+        {
+          "task_id": "ult__guess_d_type",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.9
+          }
+        },
+        {
+          "task_id": "ult__is_solution_except_time",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.555556,
+          "mutants_killed": 35,
+          "mutants_total": 63,
+          "elapsed_s": 22.5,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.6
+          }
+        },
+        {
+          "task_id": "ult__grid_column",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.909091,
+          "mutants_killed": 60,
+          "mutants_total": 66,
+          "elapsed_s": 24.3,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.2
+          }
+        },
+        {
+          "task_id": "ult__print_wc",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.4
+          }
+        },
+        {
+          "task_id": "ult__WeFeedTheAccnt",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.72093,
+          "mutants_killed": 62,
+          "mutants_total": 86,
+          "elapsed_s": 28.9,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.3
+          }
+        },
+        {
+          "task_id": "ult__annotation_to_schema",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 2,
+            "wall_s": 3.4
+          }
+        },
+        {
+          "task_id": "ult__getSevSegStr",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.7
+          }
+        },
+        {
+          "task_id": "ult__corr_parse_files",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 3.4
+          }
+        },
+        {
+          "task_id": "ult__mul_column_vector",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.852273,
+          "mutants_killed": 75,
+          "mutants_total": 88,
+          "elapsed_s": 36.2,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.7
+          }
+        },
+        {
+          "task_id": "ult__RemoveCurrent",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.2
+          }
+        },
+        {
+          "task_id": "ult__match_diagonal_right_left",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.2
+          }
+        },
+        {
+          "task_id": "ult__while_S",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.7
+          }
+        },
+        {
+          "task_id": "ult__detect_tabletmode_thresholds",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 3.0
+          }
+        },
+        {
+          "task_id": "ult__floyd",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.882979,
+          "mutants_killed": 83,
+          "mutants_total": 94,
+          "elapsed_s": 36.6,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.6
+          }
+        },
+        {
+          "task_id": "ult__get_support_updated",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.526316,
+          "mutants_killed": 40,
+          "mutants_total": 76,
+          "elapsed_s": 25.2,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 1.9
+          }
+        },
+        {
+          "task_id": "ult__sentence_position",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.7
+          }
+        },
+        {
+          "task_id": "ult__unpadd_symetric",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.9
+          }
+        },
+        {
+          "task_id": "ult__realign",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.5
+          }
+        },
+        {
+          "task_id": "ult__countPenaltyForCurriculumCompactness",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.5
+          }
+        },
+        {
+          "task_id": "ult__rawspell_dist1",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.5
+          }
+        },
+        {
+          "task_id": "ult__stability_iterator",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 3.2
+          }
+        },
+        {
+          "task_id": "ult__primitive_type_str",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.888889,
+          "mutants_killed": 72,
+          "mutants_total": 81,
+          "elapsed_s": 33.2,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.8
+          }
+        },
+        {
+          "task_id": "ult__write_kappa_site",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.4
+          }
+        },
+        {
+          "task_id": "ult__interpret_netCDF_filetype",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.4
+          }
+        },
+        {
+          "task_id": "ult__breakthroughBetterEval",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.9
+          }
+        },
+        {
+          "task_id": "ult__shouldKeep",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.4
+          }
+        },
+        {
+          "task_id": "ult__time_management",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.5
+          }
+        },
+        {
+          "task_id": "ult__fahrenheit_to_rgb",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.790476,
+          "mutants_killed": 166,
+          "mutants_total": 210,
+          "elapsed_s": 73.2,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.4
+          }
+        },
+        {
+          "task_id": "ult__which_points_lie",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.5
+          }
+        },
+        {
+          "task_id": "ult__is_matching_name",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 3.2
+          }
+        },
+        {
+          "task_id": "ult__compute_elo",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.4
+          }
+        },
+        {
+          "task_id": "ult__record_balances",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 3.0
+          }
+        },
+        {
+          "task_id": "ult__measure_metrics",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.6
+          }
+        },
+        {
+          "task_id": "ult__getTokenStr",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 3.0
+          }
+        },
+        {
+          "task_id": "ult__validate_phone",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.9
+          }
+        },
+        {
+          "task_id": "ult__standardize_Serial",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.7
+          }
+        },
+        {
+          "task_id": "ult__clean_tweets",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.8
+          }
+        },
+        {
+          "task_id": "ult__GetRandomBIOSIntAndStrValues",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 3.3
+          }
+        },
+        {
+          "task_id": "ult__finddirs",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.6
+          }
+        },
+        {
+          "task_id": "ult__bid_algorithm",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 3.4
+          }
+        },
+        {
+          "task_id": "ult__get_create_subnet_param",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.6
+          }
+        },
+        {
+          "task_id": "ult__convert_number_to_color",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.804734,
+          "mutants_killed": 136,
+          "mutants_total": 169,
+          "elapsed_s": 57.9,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.4
+          }
+        },
+        {
+          "task_id": "ult__f_alleine",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.758945,
+          "mutants_killed": 403,
+          "mutants_total": 531,
+          "elapsed_s": 185.5,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.2
+          }
+        },
+        {
+          "task_id": "ult__dump_to_python",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.888889,
+          "mutants_killed": 16,
+          "mutants_total": 18,
+          "elapsed_s": 9.6,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.5
+          }
+        },
+        {
+          "task_id": "ult__score_resource_cost",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.816594,
+          "mutants_killed": 187,
+          "mutants_total": 229,
+          "elapsed_s": 87.6,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.7
+          }
+        },
+        {
+          "task_id": "ult__get_parsed_args_log_level",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.8
+          }
+        },
+        {
+          "task_id": "ult__compute_slicing_len_for_negative_stride",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.860577,
+          "mutants_killed": 179,
+          "mutants_total": 208,
+          "elapsed_s": 77.2,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.4
+          }
+        },
+        {
+          "task_id": "ult__secondsToText",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.8
+          }
+        },
+        {
+          "task_id": "ult__find_intervals_below_threshold",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.5
+          }
+        },
+        {
+          "task_id": "ult__lexico_permutations",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.3
+          }
+        },
+        {
+          "task_id": "ult__getDayOfWeek",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.9
+          }
+        },
+        {
+          "task_id": "ult__join_with_overlap",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.7
+          }
+        },
+        {
+          "task_id": "ult__get_axis_data",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.8
+          }
+        },
+        {
+          "task_id": "ult__get_left_top_corner",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 3.1
+          }
+        },
+        {
+          "task_id": "ult__poly_gyz",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.573276,
+          "mutants_killed": 133,
+          "mutants_total": 232,
+          "elapsed_s": 92.8,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.3
+          }
+        },
+        {
+          "task_id": "ult__consecutive_times",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.4
+          }
+        },
+        {
+          "task_id": "ult__factorise_by_trial_division",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 3.0
+          }
+        },
+        {
+          "task_id": "ult__get_column_information",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 1.0,
+          "mutants_killed": 19,
+          "mutants_total": 19,
+          "elapsed_s": 9.9,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.4
+          }
+        },
+        {
+          "task_id": "ult__setup_r_array",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.097826,
+          "mutants_killed": 18,
+          "mutants_total": 184,
+          "elapsed_s": 59.9,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.1
+          }
+        },
+        {
+          "task_id": "ult__create_cache_directories",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 3.3
+          }
+        },
+        {
+          "task_id": "ult__can_hike_to",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.4
+          }
+        },
+        {
+          "task_id": "ult__calcProb",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.3
+          }
+        },
+        {
+          "task_id": "ult__fault_stat",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.423729,
+          "mutants_killed": 75,
+          "mutants_total": 177,
+          "elapsed_s": 59.0,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.4
+          }
+        },
+        {
+          "task_id": "ult__find_closest_lattice_point_to_line",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.5
+          }
+        },
+        {
+          "task_id": "ult__addAllBTagSFs",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.4
+          }
+        },
+        {
+          "task_id": "ult__count_n",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.927007,
+          "mutants_killed": 127,
+          "mutants_total": 137,
+          "elapsed_s": 48.1,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 2.0
+          }
+        },
+        {
+          "task_id": "ult__totalEnergy",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.6
+          }
+        },
+        {
+          "task_id": "ult__addType4",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.3
+          }
+        },
+        {
+          "task_id": "ult__ignorable_for_controller_if_unavailable",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 0.792308,
+          "mutants_killed": 103,
+          "mutants_total": 130,
+          "elapsed_s": 37.8,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 1.9
+          }
+        },
+        {
+          "task_id": "ult__isThreeofAKind",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 3.7
+          }
+        },
+        {
+          "task_id": "ult__yang_filter",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": false,
+          "skip_reason": "",
+          "mutation_score": 1.0,
+          "mutants_killed": 46,
+          "mutants_total": 46,
+          "elapsed_s": 20.8,
+          "sanity": {
+            "status": "pass",
+            "rc": 0,
+            "wall_s": 1.8
+          }
+        },
+        {
+          "task_id": "ult__test_surroundings",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.6
+          }
+        },
+        {
+          "task_id": "ult__translate_pattern",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.9
+          }
+        },
+        {
+          "task_id": "ult__selectie_valida",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.1
+          }
+        },
+        {
+          "task_id": "ult__ctypeToFullTypeEnum",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.1
+          }
+        },
+        {
+          "task_id": "ult__construct_6d_grid",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 3.3
+          }
+        },
+        {
+          "task_id": "ult__get_filepaths_ltpFR2",
+          "test_source": "generated_test",
+          "cosmic_ray_version": "8.7.0",
+          "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+          "skipped": true,
+          "skip_reason": "test_fails_on_fixed",
+          "mutation_score": null,
+          "mutants_killed": 0,
+          "mutants_total": 0,
+          "elapsed_s": 0.0,
+          "sanity": {
+            "status": "fail",
+            "rc": 1,
+            "wall_s": 2.9
+          }
+        }
+      ]
+    }
+  ]
+}

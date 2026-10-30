@@ -148,7 +148,12 @@ def main() -> int:
     passed = sum(1 for r in records if r["verdict"] == "PASS")
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     Path(args.out).write_text(
-        json.dumps({"schema": "aitester_bugsinpy_judge/1", "records": records}, ensure_ascii=False, indent=1),
+        json.dumps(
+            {"schema": "aitester_bugsinpy_judge/1", "records": records},
+            ensure_ascii=False,
+            indent=1,
+            allow_nan=False,
+        ),
         encoding="utf-8",
     )
     for r in records:

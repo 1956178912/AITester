@@ -28,6 +28,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -139,8 +140,27 @@ def ensure_line_venv(spec: dict[str, Any]) -> tuple[str | None, str, str]:
             timeout=600,
             env=uv_env(),
         )
+        uv_ok = r.returncode == 0
+        uv_err = f"uv venv 失败: {(r.stderr or r.stdout)[-200:]}"
     except subprocess.TimeoutExpired:
-        return None, f"uv venv 超时（python={python_version}）", ""
+        uv_ok = False
+        uv_err = f"uv venv 超时（python={python_version}）"
+    if not uv_ok:
+        # 通用 fallback：uv 的 python-build-standalone 缺老版本（3.10 也被
+        # 新版 release 丢弃）→ micromamba（conda-forge 全版本 osx-arm64）
+        if not Path("/tmp/micromamba").is_file():
+            return None, uv_err, ""
+        shutil.rmtree(env_dir, ignore_errors=True)
+        env_dir.parent.mkdir(parents=True, exist_ok=True)
+        rm = subprocess.run(
+            ["/tmp/micromamba", "create", "-y", "-p", str(env_dir), f"python={python_version}", "-c", "conda-forge"],
+            capture_output=True,
+            text=True,
+            timeout=900,
+            env=uv_env(),
+        )
+        if rm.returncode != 0:
+            return None, f"{uv_err} | micromamba 也失败: {(rm.stderr or rm.stdout)[-200:]}", fallback_note
     if r.returncode != 0:
         return None, f"uv venv 失败: {(r.stderr or r.stdout)[-200:]}", ""
     pkgs = (spec.get("specs") or {}).get("pip_packages") or []
@@ -179,10 +199,57 @@ def ensure_line_venv(spec: dict[str, Any]) -> tuple[str | None, str, str]:
     return str(venv_py), "", fallback_note
 
 
-def run_ftps(venv_py: str, mat: Path, spec: dict[str, Any], test_patch: str) -> tuple[bool, str]:
+def _grade_ftps(ftps: list[str], output: str) -> tuple[bool, str]:
+    """官方评分语义：逐测试判定 FAIL_TO_PASS 是否全过（rc 代理会被模块内
+    无关测试拖累——django 11001 实测 121 测试中 2 失败即整模块判红）。
+
+    pytest -rA 摘要行：`PASSED node::id` / `FAILED node::id`；
+    django runtests --verbosity 2：`test_x (module.Class) ... ok`。
+    """
+    passed_pytest = set()
+    passed_sympy: set[str] = set()
+    passed_django = []  # (name, module)——FTPS 的 module 可能无类名，须前缀匹配
+    for line in output.splitlines():
+        s = line.strip()
+        m = re.match(r"^(PASSED|FAILED|ERROR)\s+(.+)$", s)
+        if m:
+            if m.group(1) == "PASSED":
+                passed_pytest.add(m.group(2).strip())
+            continue
+        m2 = re.match(r"^(\w+) \(([\w.]+)\)\s*\.\.\.\s*(ok|FAIL|ERROR)", s)
+        if m2 and m2.group(3) == "ok":
+            passed_django.append((m2.group(1), m2.group(2)))
+            continue
+        # sympy bin/test --verbose：`test_Name ok` 逐测试一行（FTPS 是裸测试名）
+        # 行尾常带填充与文件级标记（"... ok    [FAIL]"）——只锚定状态词
+        m4 = re.match(r"^(test\w*) (ok|F|E|s)(?:\s|\[|$)", s)
+        if m4 and m4.group(2) == "ok":
+            passed_sympy.add(m4.group(1))
+    if not passed_pytest and not passed_django and not passed_sympy:
+        return False, "no-parseable-test-results: " + output[-300:]
+
+    def _ftp_passed(t: str) -> bool:
+        if t in passed_pytest or t in passed_sympy:
+            return True
+        # sympy 裸测试名（test_Derivative）
+        if re.match(r"^test\w*$", t):
+            return t in passed_sympy
+        m3 = re.match(r"^(\w+) \(([\w.]+)\)$", t)
+        if m3:
+            name, module = m3.groups()
+            return any(
+                (n == name and mod.startswith(module + ".")) or (n == name and mod == module)
+                for n, mod in passed_django
+            )
+        return False
+
+    missing = [t for t in ftps if not _ftp_passed(t)]
+    return (not missing), f"FTPS 未过 {len(missing)}/{len(ftps)}: {missing[:3]}"
+
+
+def run_ftps(venv_py: str, mat: Path, spec: dict[str, Any], test_patch: str, ftps: list[str]) -> tuple[bool, str]:
     """官方协议：test_patch 的**测试模块**（get_test_directives，django 系
-    自动转 module 路径）接在原生 test_cmd 后——FAIL_TO_PASS 只用于评分，
-    运行粒度是模块（官方 eval 同形；rc==0 ⇔ 全部通过，含 FTPS）。"""
+    自动转 module 路径）接在原生 test_cmd 后；verdict 按 FTPS 逐测试评分。"""
     test_cmd = (spec.get("specs") or {}).get("test_cmd") or "pytest -rA"
     env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
     # 注意：此处**不禁**插件 autoload——判定 venv 只装官方 pin 的插件
@@ -194,10 +261,18 @@ def run_ftps(venv_py: str, mat: Path, spec: dict[str, Any], test_patch: str) -> 
     from swebench.harness.utils import get_test_directives
 
     directives = get_test_directives({"repo": spec["repo"], "test_patch": test_patch})
-    cmd = [*(test_cmd.split()), *directives]
+    # test_cmd 可带 shell 环境前缀（sympy: PYTHONWARNINGS='...' bin/test ...）
+    # ——list 形式 subprocess 不能执行"VAR=val"令牌，解析进 env（去引号）
+    parts = test_cmd.split()
+    while parts and re.match(r"^[A-Z_][A-Z0-9_]*=", parts[0]):
+        _k, _, _v = parts[0].partition("=")
+        env[_k] = _v.strip("'\"")
+        parts = parts[1:]
+    cmd = [*parts, *directives]
     try:
         proc = subprocess.run(cmd, cwd=str(mat), capture_output=True, text=True, timeout=1200, env=env)
-        return proc.returncode == 0, ((proc.stdout or "") + (proc.stderr or ""))[-1800:]
+        output = (proc.stdout or "") + (proc.stderr or "")
+        return _grade_ftps(ftps, output)
     except subprocess.TimeoutExpired:
         return False, ">1200s timeout"
 
@@ -292,8 +367,9 @@ def judge_instance(inst: dict[str, Any], line_index: dict[tuple[str, str], dict[
         if r.returncode != 0:
             rec["verdict"], rec["stage"], rec["error"] = "test_patch_failed", "test_patch", (r.stderr or "")[-200:]
             return rec
-        # 基线（buggy）：预期红
-        red_ok, red_tail = run_ftps(venv_py, mat, spec, inst["test_patch"])
+        ftps = json.loads(inst["FAIL_TO_PASS"]) if isinstance(inst["FAIL_TO_PASS"], str) else inst["FAIL_TO_PASS"]
+        # 基线（buggy）：预期红（FTPS 未全过）
+        red_ok, red_tail = run_ftps(venv_py, mat, spec, inst["test_patch"], ftps)
         rec["baseline_red"] = not red_ok
         if red_ok:
             rec["verdict"], rec["stage"], rec["tail"] = "baseline_not_red", "baseline", red_tail
@@ -305,7 +381,7 @@ def judge_instance(inst: dict[str, Any], line_index: dict[tuple[str, str], dict[
         if r.returncode != 0:
             rec["verdict"], rec["stage"], rec["error"] = "gold_patch_failed", "gold_patch", (r.stderr or "")[-200:]
             return rec
-        green_ok, green_tail = run_ftps(venv_py, mat, spec, inst["test_patch"])
+        green_ok, green_tail = run_ftps(venv_py, mat, spec, inst["test_patch"], ftps)
         rec["fix_green"] = green_ok
         rec["verdict"] = "PASS" if green_ok else "fix_not_green"
         rec["tail"] = green_tail
@@ -322,6 +398,7 @@ def main() -> int:
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--instances", default="")
     ap.add_argument("--parallel", type=int, default=4)
+    ap.add_argument("--resume", action="store_true", help="续跑：跳过 out 文件中已判定的实例")
     args = ap.parse_args()
 
     spec_data = json.loads(Path(args.spec).read_text(encoding="utf-8"))
@@ -334,6 +411,13 @@ def main() -> int:
         instances = [x for x in instances if x["instance_id"] in wanted]
     if args.limit:
         instances = instances[: args.limit]
+    records: list[dict[str, Any]] = []
+    if args.resume and Path(args.out).is_file():
+        prev = json.loads(Path(args.out).read_text(encoding="utf-8"))
+        records = list(prev.get("records") or [])
+        done_ids = {r["instance_id"] for r in records}
+        instances = [x for x in instances if x["instance_id"] not in done_ids]
+        print(f"resume：已完成 {len(done_ids)}，续判 {len(instances)}", flush=True)
     print(f"实例 {len(instances)} | spec 线 {len(line_index)}", flush=True)
     t0 = time.time()
 
@@ -354,7 +438,6 @@ def main() -> int:
             print(f"  [venv {k}/{len(need_lines)}] ({time.time() - t0:.0f}s)", flush=True)
     print(f"venv 预建完成：失败 {len(env_fail)} 线 {[(k[0], k[1]) for k in list(env_fail)[:5]]}", flush=True)
 
-    records = []
     t0 = time.time()
     with ProcessPoolExecutor(max_workers=args.parallel) as pool:
         futs = {pool.submit(judge_instance, inst, line_index): inst for inst in instances}
@@ -374,6 +457,7 @@ def main() -> int:
                     {"schema": "aitester_swebench_full_judge/1", "n": len(records), "records": records},
                     ensure_ascii=False,
                     indent=1,
+                    allow_nan=False,
                 ),
                 encoding="utf-8",
             )

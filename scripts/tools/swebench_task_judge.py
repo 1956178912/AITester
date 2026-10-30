@@ -152,7 +152,7 @@ def main() -> int:
     print(json.dumps(record, ensure_ascii=False, indent=1))
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     out = OUT_DIR / f"JUDGE_{args.instance.replace('/', '__')}.json"
-    out.write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
+    out.write_text(json.dumps(record, ensure_ascii=False, indent=2, allow_nan=False), encoding="utf-8")
     return 0 if record["verdict"] == "PASS" else 1
 
 

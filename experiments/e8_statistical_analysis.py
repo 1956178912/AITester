@@ -151,7 +151,7 @@ def main() -> int:
         "selected": verdict,
         "note": "预注册 H 判据为冻结原文；legacy-off 缺格使 2×2 降为 3 格，判定语义按缺格披露折算",
     }
-    Path(args.out).write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    Path(args.out).write_text(json.dumps(report, ensure_ascii=False, indent=2, allow_nan=False), encoding="utf-8")
     print(f"报告写入：{args.out}")
     for cell, s in report["cells"].items():
         print(

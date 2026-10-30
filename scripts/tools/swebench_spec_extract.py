@@ -151,7 +151,7 @@ def main() -> int:
     }
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(json.dumps(out, ensure_ascii=False, indent=2), encoding="utf-8")
+    out_path.write_text(json.dumps(out, ensure_ascii=False, indent=2, allow_nan=False), encoding="utf-8")
     print(f"线数: {len(lines)} | 错误: {len(errors)} → {out_path}")
     for line in out["lines"][:6]:
         print(

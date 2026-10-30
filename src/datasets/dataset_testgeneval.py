@@ -50,6 +50,7 @@ import os
 from typing import Any
 
 from src.datasets.dataset_loader import BaseDatasetLoader, BenchmarkTask
+from src.utils.check_status import AST_UNREADABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -63,10 +64,15 @@ _SPLIT_FILES: dict[str, str] = {
 
 
 def _count_test_functions(test_src: str) -> int:
-    """静态计数 test 文件中的 ``def test_*`` 函数数（ast 口径，语法失败按 0）。"""
+    """静态计数 test 文件中的 ``def test_*`` 函数数（ast 口径，语法失败按 0）。
+
+    只捕 ``SyntaxError`` 会让 ``ValueError`` 族（含 3.14 对孤立代理位抛的
+    ``UnicodeEncodeError``）从守卫里抛穿到调用方，故按仓内统一口径
+    ``AST_UNREADABLE_ERRORS`` 判定（与 ``parses_as_module`` 同源）。
+    """
     try:
         tree = ast.parse(test_src)
-    except SyntaxError:
+    except AST_UNREADABLE_ERRORS:
         return 0
     return sum(
         1

@@ -1,0 +1,46 @@
+Traceback (most recent call last):
+  File "/Users/wangchenyu/Workspace/AITester/experiments/emse_ult_mutk_full.py", line 395, in <module>
+    raise SystemExit(main())
+                     ~~~~^^
+  File "/Users/wangchenyu/Workspace/AITester/experiments/emse_ult_mutk_full.py", line 333, in main
+    sanity_map = dict(pool.map(_sanity_of, rows))
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/_base.py", line 645, in result_iterator
+    yield _result_or_cancel(fs.pop())
+          ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/_base.py", line 312, in _result_or_cancel
+    return fut.result(timeout)
+           ~~~~~~~~~~^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/_base.py", line 454, in result
+    return self.__get_result()
+           ~~~~~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/_base.py", line 396, in __get_result
+    raise self._exception
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/thread.py", line 86, in run
+    result = ctx.run(self.task)
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/thread.py", line 73, in run
+    return fn(*args, **kwargs)
+  File "/Users/wangchenyu/Workspace/AITester/experiments/emse_ult_mutk_full.py", line 327, in _sanity_of
+    s = _sanity_gate(
+        meta.get("fixed") or "", row.get("generated_test") or "", meta.get("function_name") or ""
+    )
+  File "/Users/wangchenyu/Workspace/AITester/experiments/emse_ult_mutk_full.py", line 80, in _sanity_gate
+    with tempfile.TemporaryDirectory(prefix="ult_sanity_") as td_s:
+         ~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/tempfile.py", line 907, in __init__
+    self.name = mkdtemp(suffix, prefix, dir)
+                ~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/tempfile.py", line 381, in mkdtemp
+    _os.mkdir(file, 0o700)
+    ~~~~~~~~~^^^^^^^^^^^^^
+  File "/Applications/WorkBuddy.app/Contents/Resources/app.asar.unpacked/cli/vendor/shim/sitecustomize.py", line 613, in _brokered_os_mkdir
+    if abs_path and isinstance(mode, int) and _broker_request_host_operation(
+                                              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        "mkdir", abs_path, path=abs_path, mode=mode
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ):
+    ^
+  File "/Applications/WorkBuddy.app/Contents/Resources/app.asar.unpacked/cli/vendor/shim/sitecustomize.py", line 508, in _broker_request_host_operation
+    raise PermissionError(
+    ...<2 lines>...
+    )
+PermissionError: Brokered host mkdir requires an available runtime file rule

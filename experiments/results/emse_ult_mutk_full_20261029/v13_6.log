@@ -1,0 +1,248 @@
+[ult-mutk-full] replace 健全性门预筛完成：94/244 通过（6 线程）
+[ult-mutk-full] replace（replace_generated_shard6）：244 任务（臂=plain_llm_df）；源 benchmark_ult_20261029_090742.json；全变异体口径 + 健全性门 120s
+[ult-mutk-full] replace 1/244 ult__starve_nests: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 2/244 ult__filterLocations: 0.732143 (41/56) 49.1s
+[ult-mutk-full] replace 3/244 ult__date_to_jd: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 4/244 ult__graph_ifield: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 5/244 ult__is_unit: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 6/244 ult__generateHeader: 0.994505 (181/182) 124.9s
+[ult-mutk-full] replace 7/244 ult__gen_2d_fractal: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 8/244 ult__create_three_random_v_indices: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 9/244 ult__getDirection: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 10/244 ult__for_G: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 11/244 ult__get_sign_for_date_obj: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 12/244 ult__z_array: 0.868613 (238/274) 160.3s
+[ult-mutk-full] replace 13/244 ult__color_define_parser: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 14/244 ult__sched_cycle_ids_max: 0.930435 (107/115) 56.4s
+[ult-mutk-full] replace 15/244 ult__count_ips_per_hop: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 16/244 ult__compute_moments_weights_slow: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 17/244 ult__won: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 18/244 ult__check_squares: 0.92126 (351/381) 182.3s
+[ult-mutk-full] replace 19/244 ult__cellsize: 0.971193 (236/243) 189.5s
+[ult-mutk-full] replace 20/244 ult__is_valid_value: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 21/244 ult__remove_forts: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 22/244 ult__get_left_right_class_counts: 0.861111 (62/72) 34.1s
+[ult-mutk-full] replace 23/244 ult__detect: 0.822222 (74/90) 46.4s
+[ult-mutk-full] replace 24/244 ult__getRectTransform: 0.862385 (376/436) 224.0s
+[ult-mutk-full] replace 25/244 ult__balancing_data: 0.929619 (317/341) 162.4s
+[ult-mutk-full] replace 26/244 ult__determinar_saltos: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 27/244 ult__set_compr: 0.883721 (76/86) 41.9s
+[ult-mutk-full] replace 28/244 ult__is_ship_correct: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 29/244 ult__compute_tm_ox: 0.935484 (87/93) 43.0s
+[ult-mutk-full] replace 30/244 ult__spell_num_with_and: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 31/244 ult__get_elastic_moduli: 0.995892 (1212/1217) 543.0s
+[ult-mutk-full] replace 32/244 ult__r_measure: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 33/244 ult__distinct_variables: 1.0 (1/1) 3.7s
+[ult-mutk-full] replace 34/244 ult__targets_needs_rebuild: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 35/244 ult__index_minchild: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 36/244 ult__filtered_by_ts: 1.0 (35/35) 16.6s
+[ult-mutk-full] replace 37/244 ult__reduce_matches_dict: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 38/244 ult__get_sockets: 0.787234 (37/47) 21.4s
+[ult-mutk-full] replace 39/244 ult__BuildPairs: 0.977401 (173/177) 92.7s
+[ult-mutk-full] replace 40/244 ult__normalize_lons: 0.724138 (105/145) 57.3s
+[ult-mutk-full] replace 41/244 ult__get_primes_limits: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 42/244 ult__get_trains: 0.72093 (62/86) 47.2s
+[ult-mutk-full] replace 43/244 ult__test_teams: 1.0 (23/23) 16.6s
+[ult-mutk-full] replace 44/244 ult__probGene: 0.92891 (196/211) 108.3s
+[ult-mutk-full] replace 45/244 ult__create_station_dict: 0.95122 (39/41) 19.0s
+[ult-mutk-full] replace 46/244 ult__rollDie: 0.923077 (60/65) 33.0s
+[ult-mutk-full] replace 47/244 ult__generate_bib: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 48/244 ult__generate_stream_command_new_style: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 49/244 ult__yield_sections: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 50/244 ult__is_sink: 0.055556 (4/72) 25.2s
+[ult-mutk-full] replace 51/244 ult__airtime: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 52/244 ult__check_recommendation: 0.75 (51/68) 27.7s
+[ult-mutk-full] replace 53/244 ult__gameOfLife: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 54/244 ult__get_platform_bools: 0.803279 (49/61) 26.4s
+[ult-mutk-full] replace 55/244 ult__test_default: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 56/244 ult__end_of_expr: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 57/244 ult__write_sorted_long: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 58/244 ult__yield_symmetric_images: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 59/244 ult__artworkAreaR6: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 60/244 ult__date_transform: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 61/244 ult__reward_function: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 62/244 ult__set_job_options: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 63/244 ult__random_temperature: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 64/244 ult__dynamic_oracle: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 65/244 ult__playerinteracted: 0.822674 (283/344) 179.9s
+[ult-mutk-full] replace 66/244 ult__calculate_circular_pile_set_positions: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 67/244 ult__get_background_parts: 0.87 (87/100) 36.3s
+[ult-mutk-full] replace 68/244 ult__parameters_num: 0.938854 (737/785) 497.6s
+[ult-mutk-full] replace 69/244 ult__match_dati_reverse: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 70/244 ult__lz77_compression: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 71/244 ult__filelist_cleaner: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 72/244 ult__calculate_N: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 73/244 ult__ksingular: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 74/244 ult__getCollisionManifold: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 75/244 ult__get_venue_from_response: 1.0 (11/11) 8.2s
+[ult-mutk-full] replace 76/244 ult__get_top_k: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 77/244 ult__messaging_events: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 78/244 ult__compare_interval: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 79/244 ult__split_hunk: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 80/244 ult__set_spec: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 81/244 ult__contaminate: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 82/244 ult__path_finder: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 83/244 ult__zeros_on_zigzag: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 84/244 ult__find_period: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 85/244 ult__actor_phrase_match: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 86/244 ult__dynamic_coin_change2: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 87/244 ult__edits1: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 88/244 ult__find_limit_violatons: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 89/244 ult__affine_align: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 90/244 ult__palindrome_tester: 0.157895 (33/209) 115.3s
+[ult-mutk-full] replace 91/244 ult__is_maxmin: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 92/244 ult__pick_new_key: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 93/244 ult__score_a2m_global: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 94/244 ult__convert_to_letter_month: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 95/244 ult__while_six: 0.908257 (99/109) 280.5s
+[ult-mutk-full] replace 96/244 ult__unmet_compare: 0.846939 (83/98) 47.3s
+[ult-mutk-full] replace 97/244 ult__tmp_replace: 0.746269 (50/67) 32.6s
+[ult-mutk-full] replace 98/244 ult__find_out_cct_mode: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 99/244 ult__fun_detect_subcategory: 0.929231 (906/975) 504.2s
+[ult-mutk-full] replace 100/244 ult__compute_l: 0.794444 (143/180) 137.1s
+[ult-mutk-full] replace 101/244 ult__build_pairs: 0.977401 (173/177) 68.5s
+[ult-mutk-full] replace 102/244 ult__pairwise_support_cycle_check: 0.788618 (97/123) 41.2s
+[ult-mutk-full] replace 103/244 ult__check_relation: 0.52381 (99/189) 61.8s
+[ult-mutk-full] replace 104/244 ult__add_jira_status: 0.805556 (29/36) 13.7s
+[ult-mutk-full] replace 105/244 ult__permute_one_zero: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 106/244 ult__as_place_record: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 107/244 ult__processQuery: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 108/244 ult__make_save_dirs: 1.0 (30/30) 18.0s
+[ult-mutk-full] replace 109/244 ult__get_hetero_type: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 110/244 ult__get_mpc_clip_size: 0.941176 (96/102) 39.1s
+[ult-mutk-full] replace 111/244 ult__get_board_winner: 0.851852 (230/270) 111.5s
+[ult-mutk-full] replace 112/244 ult__normalize_data_cluster: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 113/244 ult__score_formula1: 0.92233 (95/103) 36.5s
+[ult-mutk-full] replace 114/244 ult__to_one_line_string: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 115/244 ult__look_for_read_in_sim: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 116/244 ult__get_mcc: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 117/244 ult__merge_pairs: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 118/244 ult__adapt_htable: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 119/244 ult__mbondi2_radii: 0.775701 (83/107) 39.7s
+[ult-mutk-full] replace 120/244 ult__material_advantage: 0.862928 (277/321) 143.2s
+[ult-mutk-full] replace 121/244 ult__win_column: 0.125 (14/112) 63.6s
+[ult-mutk-full] replace 122/244 ult__convert_to_cardinal_direction: 0.851562 (109/128) 47.3s
+[ult-mutk-full] replace 123/244 ult__navigate1: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 124/244 ult__Neighbourgs: 0.930769 (121/130) 43.6s
+[ult-mutk-full] replace 125/244 ult__cenitpolar: 0.859155 (122/142) 84.4s
+[ult-mutk-full] replace 126/244 ult__check_for_uom_id: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 127/244 ult__extract_text_quant_words: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 128/244 ult__simple_filler: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 129/244 ult__gen_compositions: 0.93913 (108/115) 563.0s
+[ult-mutk-full] replace 130/244 ult__verificar_limite_movimiento: 0.774834 (117/151) 54.5s
+[ult-mutk-full] replace 131/244 ult__getContiguousLayout: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 132/244 ult__check_if_files: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 133/244 ult__find_middle_snake_myers_original: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 134/244 ult__time_format: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 135/244 ult__calcfwhm: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 136/244 ult__address_combinations: 0.965517 (252/261) 141.9s
+[ult-mutk-full] replace 137/244 ult__pixel_hsl_rgb: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 138/244 ult__binarySolve: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 139/244 ult__data_to_result: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 140/244 ult__filter_one_group: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 141/244 ult__extract_from_fasta: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 142/244 ult__makeSubDataDict: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 143/244 ult__test_config_structure: 0.916667 (22/24) 14.0s
+[ult-mutk-full] replace 144/244 ult__inputHandler: 0.092702 (47/507) 150.6s
+[ult-mutk-full] replace 145/244 ult__cuyahoga_county_name_street_parser: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 146/244 ult__poker_test: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 147/244 ult__array_calculo: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 148/244 ult__categorize_prs: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 149/244 ult__get_combined_access: 1.0 (5/5) 4.4s
+[ult-mutk-full] replace 150/244 ult__get_cell_color_from_code: 0.550388 (71/129) 46.0s
+[ult-mutk-full] replace 151/244 ult__nm_to_rgb: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 152/244 ult__checkPossibilities: 0.564516 (140/248) 78.9s
+[ult-mutk-full] replace 153/244 ult__display_solution: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 154/244 ult__GetAttrScores2: 0.912281 (364/399) 153.0s
+[ult-mutk-full] replace 155/244 ult__findCloser: 0.939815 (203/216) 98.4s
+[ult-mutk-full] replace 156/244 ult__postprocess_front_tags_for_s2orc: 0.8 (12/15) 8.2s
+[ult-mutk-full] replace 157/244 ult__parse_iraf_region: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 158/244 ult__new_buy_zero: 0.895561 (343/383) 138.2s
+[ult-mutk-full] replace 159/244 ult__transpose_conv_output_shape: 0.980769 (204/208) 76.0s
+[ult-mutk-full] replace 160/244 ult__process_environment_vars: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 161/244 ult__rpg_die: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 162/244 ult__spaceup: 0.432836 (58/134) 40.1s
+[ult-mutk-full] replace 163/244 ult__offset_correction: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 164/244 ult__dijkstra_ssp_noheap: 0.730769 (76/104) 507.0s
+[ult-mutk-full] replace 165/244 ult__affichage_http: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 166/244 ult__register_integrations: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 167/244 ult__get_tile_edges: 0.825 (99/120) 32.3s
+[ult-mutk-full] replace 168/244 ult__check_course_dates: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 169/244 ult__while_t: 0.948052 (73/77) 264.2s
+[ult-mutk-full] replace 170/244 ult__remove_type_bracket_block_from_args_str: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 171/244 ult__solve_case: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 172/244 ult__type_and_length_are_valid: 0.78836 (149/189) 86.8s
+[ult-mutk-full] replace 173/244 ult__schedule_exam: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 174/244 ult__coverage_test: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 175/244 ult__sort_method_list: 0.916667 (11/12) 6.6s
+[ult-mutk-full] replace 176/244 ult__change_mask: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 177/244 ult__measure_performance: 0.910653 (265/291) 95.1s
+[ult-mutk-full] replace 178/244 ult__movement_of_standard_element: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 179/244 ult__is_word_appropriate_type: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 180/244 ult__escape_requests_responses_json: 0.785714 (22/28) 15.3s
+[ult-mutk-full] replace 181/244 ult__form_formatstr: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 182/244 ult__bestFormatString: 0.87013 (67/77) 44.7s
+[ult-mutk-full] replace 183/244 ult__Arraydiscarder: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 184/244 ult__random_f: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 185/244 ult__to_me_lane_marking_type: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 186/244 ult__join_geojson_with_keys: 0.933333 (14/15) 7.9s
+[ult-mutk-full] replace 187/244 ult__get_conv_gradweights_shape_1axis: 0.933824 (127/136) 51.2s
+[ult-mutk-full] replace 188/244 ult__passes_standard_cuts: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 189/244 ult__getAsymmetricJazzScales: 0.841202 (196/233) 111.7s
+[ult-mutk-full] replace 190/244 ult__get_icon_for_note_asset: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 191/244 ult__coupon_collector: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 192/244 ult__str_equation: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 193/244 ult__rule_based_classify: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 194/244 ult__printsummary: 0.955556 (215/225) 79.0s
+[ult-mutk-full] replace 195/244 ult__in_hit_seq: 0.767442 (66/86) 27.4s
+[ult-mutk-full] replace 196/244 ult__check_bracket_frompos: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 197/244 ult__gc_convert: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 198/244 ult__check_validation: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 199/244 ult__push_negations_to_literals: 0.872727 (48/55) 18.2s
+[ult-mutk-full] replace 200/244 ult__generate_labeldict: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 201/244 ult__like_pattern: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 202/244 ult__prefAdj: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 203/244 ult__calculateFScore: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 204/244 ult__compute_prefix: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 205/244 ult__dtheta_on_inst: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 206/244 ult__decrypt_caesar: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 207/244 ult__func_vbr: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 208/244 ult__flip_tiles_diagonally: 0.639847 (167/261) 75.1s
+[ult-mutk-full] replace 209/244 ult__scoreStrand: 0.285714 (16/56) 18.3s
+[ult-mutk-full] replace 210/244 ult__gen_starting_points: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 211/244 ult__is_subgraph_has_inner_outgoing_edges: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 212/244 ult__generate_order: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 213/244 ult__get_codec_rank_static: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 214/244 ult__Levenshtein: 0.905594 (259/286) 96.7s
+[ult-mutk-full] replace 215/244 ult__get_crossed_points: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 216/244 ult__rebuild_sequence_digg: 0.929348 (171/184) 74.0s
+[ult-mutk-full] replace 217/244 ult__RRSch: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 218/244 ult__getUserPermissions: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 219/244 ult__has_connection: 0.862745 (176/204) 72.0s
+[ult-mutk-full] replace 220/244 ult__getUserName: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 221/244 ult__equal_sum_recursive: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 222/244 ult__prepare_ref_params: 1.0 (13/13) 9.4s
+[ult-mutk-full] replace 223/244 ult__get_ai_move: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 224/244 ult__use_default_module_1: 0.858934 (274/319) 102.7s
+[ult-mutk-full] replace 225/244 ult__win_check: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 226/244 ult__get_neighbours: 0.911894 (207/227) 72.7s
+[ult-mutk-full] replace 227/244 ult__defilter_scanline: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 228/244 ult__process_role_options: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 229/244 ult__get_major_report_type: 0.864662 (115/133) 48.0s
+[ult-mutk-full] replace 230/244 ult__TextFeatures: 0.474359 (37/78) 23.3s
+[ult-mutk-full] replace 231/244 ult__validate_transaction_format: 0.764045 (204/267) 80.9s
+[ult-mutk-full] replace 232/244 ult__makeMarkovTable: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 233/244 ult__calc_promo_rate: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 234/244 ult__get_metrics: 0.893333 (67/75) 27.6s
+[ult-mutk-full] replace 235/244 ult__HorizontalRoughness: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 236/244 ult__parse_source_field: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 237/244 ult__dpd_to_int: 0.656649 (874/1331) 451.4s
+[ult-mutk-full] replace 238/244 ult__nice_to_pegasus: 0.959016 (117/122) 48.2s
+[ult-mutk-full] replace 239/244 ult__whatCanBePlanted: 0.299559 (68/227) 80.5s
+[ult-mutk-full] replace 240/244 ult__makeMood: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 241/244 ult__checkFilters: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 242/244 ult__get_class_of_op: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 243/244 ult__exported_weighted_energy_stepA: 0.928105 (142/153) 52.4s
+[ult-mutk-full] replace 244/244 ult__lucas_sequence: skipped:test_fails_on_fixed
+[ult-mutk-full] replace 完成：pooled=0.811488 (14481/17845, n=94, skip=150 含健全性门 150)
+[ult-mutk-full] 工件：/Users/wangchenyu/Workspace/AITester/experiments/results/emse_ult_mutk_full_20261029/MUTK_ULTFULL_v13_s6.json

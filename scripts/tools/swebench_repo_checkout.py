@@ -138,7 +138,7 @@ def main() -> int:
     payload["all_reachable"] = all_ok
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     out = OUT_DIR / "REPO_CHECKOUT.json"
-    out.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    out.write_text(json.dumps(payload, ensure_ascii=False, indent=2, allow_nan=False), encoding="utf-8")
     print(f"[checkout] 报告：{out} | all_reachable={all_ok}", flush=True)
     return 0 if all_ok else 1
 

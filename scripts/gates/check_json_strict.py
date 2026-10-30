@@ -46,6 +46,15 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 _ALLOWLIST: dict[str, str] = {
     # CI 轮第三批（2026-10-24）：三条历史 trace 豁免随 experiments/results/
     # 全量数据清除一并删除（「文件消失 ⇒ 删登记」）；重跑生成新工件后按需重建。
+    # B1 批（2026-10-30）：specir/gold probe 归档随 D3 证据整批入库（此前只在
+    # worktree），其中 1 份 trace 保留着 A20 修根因**之前**的 400 字符硬截断行
+    # （第 10 行，`len=400`，止于 `min(s, key=<REDACTED>`）——损坏本身是「trace
+    # 写入截断导致 JSON 不完整」这一历史缺陷的留痕，且该目录带 `SHA256SUMS`
+    # 完整性校验，按「受保护工件不重写」保留。当前 `trace._summarize_field`
+    # 已改为头尾各半加 `…[truncated N chars]…` 标记（合法 JSON），无此形态。
+    (
+        "experiments/results/emse_ult_specir_probe_20261014/traces/ult__string_contrast_aitester_1791954227.trace.jsonl"
+    ): "A20 前的 400 字符硬截断行（第 10 行）留痕；归档受 SHA256SUMS 保护不重写",
 }
 
 _EXCLUDE_PARTS = {
