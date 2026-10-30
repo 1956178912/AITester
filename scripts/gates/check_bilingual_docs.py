@@ -107,6 +107,10 @@ _EXEMPT_NO_EN = frozenset(
         #   （已完成/遗留/阻断三类状态 + 每项验证入口 + 口径纪律；
         #    属内部交接与自查工件，随 BASELINE 同步刷新）
         "docs/PROJECT_STATUS_REGISTER.md",
+        #   preregistration_c8_bugsinpy_draft_20261029.md = C8 外部效度小样
+        #   预注册（冻结版；内部过程与口径记录，判据/协议/成本上限均在案；
+        #   属"过程记录"非对外参考文档——与上方 EMSE 批次同口径）
+        "docs/preregistration_c8_bugsinpy_draft_20261029.md",
     }
 )
 

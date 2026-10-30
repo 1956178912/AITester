@@ -42,6 +42,7 @@ import hashlib
 import importlib.util
 import json
 import logging
+import os
 import sqlite3
 import subprocess
 import sys
@@ -127,13 +128,27 @@ def cosmic_ray_config_hash() -> str | None:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
-def _cosmic_ray_base_cmd() -> list[str]:
+def _cosmic_ray_base_cmd(http_mode: bool = False) -> list[str]:
     """cosmic-ray CLI 基础命令（经当前解释器执行包内 cli 入口）。
 
     cosmic-ray 8.x 无 ``run`` 子命令，工作流为 ``init → exec → dump``；
     包 ``cosmic_ray`` 无 ``__main__``，须经 ``cosmic_ray.cli`` 模块入口
     执行（等价于控制台脚本 ``cosmic-ray``）。
+
+    http_mode=True（D3 加速，2026-10-29）：cosmic_ray.distribution.http 的
+    ``asyncio.get_event_loop()`` 在 Python 3.14 无隐式事件循环 ⇒ RuntimeError
+    ——改用 -c 包装预建事件循环再进 cli（click 按sys.argv[1:] 解析，参数
+    透传等价）。worker 本身（http-worker）不受影响。
     """
+    if http_mode:
+        wrapper = (
+            "import asyncio\n"
+            "loop = asyncio.new_event_loop()\n"
+            "asyncio.set_event_loop(loop)\n"
+            "from cosmic_ray.cli import cli\n"
+            "cli()\n"
+        )
+        return [sys.executable, "-c", wrapper]
     return [sys.executable, "-m", "cosmic_ray.cli"]
 
 
@@ -143,7 +158,11 @@ def _write_cosmic_ray_config(config_path: Path, module_name: str, test_file_name
     ``test-command`` 用当前解释器跑 pytest（与 cosmic-ray 同环境，保证
     pytest 与依赖可用），由 cosmic-ray 内部 ``shlex.split`` 解析。
     """
-    test_command = f"{sys.executable} -m pytest {test_file_name} -q"
+    # PYTEST_DISABLE_PLUGIN_AUTOLOAD（2026-10-29）：主仓 venv 的某插件 autoload
+    # 在 pytest 收尾时挂死（测试跑完进程挂 121s 被超时杀）——cosmic-ray 的
+    # 120s 变异体预算会被挂死吃光（挂死记 killed 是口径、但全部变异体变假
+    # killed——禁插件恢复真实击杀判定）。env 前缀经 shlex.split 正确解析。
+    test_command = f"env PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 {sys.executable} -m pytest {test_file_name} -q"
     content = (
         "[cosmic-ray]\n"
         f'module-path = "{module_name}.py"\n'
@@ -155,6 +174,94 @@ def _write_cosmic_ray_config(config_path: Path, module_name: str, test_file_name
         'name = "local"\n'
     )
     config_path.write_text(content, encoding="utf-8")
+
+
+def _write_cosmic_ray_config_http(
+    config_path: Path, module_name: str, test_file_name: str, timeout: float, worker_urls: list[str]
+) -> None:
+    """写入 http distributor 配置（变异体级并行；结果语义与 local 逐位一致）。
+
+    区别仅在 distributor 与 worker-urls——session 初始化、变异体枚举、
+    dump 解析完全共用，mutation_score 不受 distributor 影响。
+    """
+    # PYTEST_DISABLE_PLUGIN_AUTOLOAD（2026-10-29）：主仓 venv 的某插件 autoload
+    # 在 pytest 收尾时挂死（测试跑完进程挂 121s 被超时杀）——cosmic-ray 的
+    # 120s 变异体预算会被挂死吃光（挂死记 killed 是口径、但全部变异体变假
+    # killed——禁插件恢复真实击杀判定）。env 前缀经 shlex.split 正确解析。
+    test_command = f"env PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 {sys.executable} -m pytest {test_file_name} -q"
+    urls_toml = json.dumps(worker_urls)
+    content = (
+        "[cosmic-ray]\n"
+        f'module-path = "{module_name}.py"\n'
+        f"timeout = {float(timeout)!r}\n"
+        "excluded-modules = []\n"
+        f"test-command = {json.dumps(test_command)}\n"
+        "\n"
+        "[cosmic-ray.distributor]\n"
+        'name = "http"\n'
+        "\n"
+        "[cosmic-ray.distributor.http]\n"
+        f"worker-urls = {urls_toml}\n"
+    )
+    config_path.write_text(content, encoding="utf-8")
+
+
+def _spawn_http_workers(worker_count: int, tmpdir: Path) -> tuple[list[subprocess.Popen[Any]], list[str]]:
+    """为单任务起 worker_count 个 http-worker（端口按 pid 派生避免分片间冲突）。
+
+    Returns:
+        (worker 进程列表, worker-urls)。worker 启动失败（如端口占用）的
+        进程会被丢弃；若全部失败返回空列表（调用方回退 local 口径）。
+    """
+    port_base = 20000 + (os.getpid() % 18000)
+    procs: list[subprocess.Popen[Any]] = []
+    urls: list[str] = []
+    for i in range(worker_count):
+        port = port_base + i
+        try:
+            proc = subprocess.Popen(
+                [
+                    sys.executable,
+                    "-m",
+                    "cosmic_ray.cli",
+                    "http-worker",
+                    "--port",
+                    str(port),
+                ],
+                cwd=str(tmpdir),
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                stdin=subprocess.DEVNULL,
+                # 脱离进程组：分片主进程经 nohup 后台启动时，bash 退出向进程组
+                # 发 SIGHUP 会杀掉未受保护的 worker 孙进程 ⇒ exec 无 worker 可用
+                # 而挂起（2026-10-29 实测 24 分片全停摆）。start_new_session 使
+                # worker 自成会话，免疫组长信号。
+                start_new_session=True,
+            )
+            procs.append(proc)
+            urls.append(f"http://127.0.0.1:{port}")
+        except OSError:
+            continue
+    # 就绪等待：worker 的 aiohttp 启动需 ~1s；轮询 TCP 连接（最多 5s）
+    import socket
+    import time
+
+    deadline = time.time() + 5.0
+    ready: list[subprocess.Popen[Any]] = []
+    ready_urls: list[str] = []
+    for proc, url in zip(procs, urls, strict=True):
+        port = int(url.rsplit(":", 1)[1])
+        while time.time() < deadline:
+            try:
+                with socket.create_connection(("127.0.0.1", port), timeout=0.5):
+                    ready.append(proc)
+                    ready_urls.append(url)
+                    break
+            except OSError:
+                if proc.poll() is not None:
+                    break  # worker 已崩（端口占用等）
+                time.sleep(0.2)
+    return ready, ready_urls
 
 
 def _trim_work_items(session_path: str, max_mutants: int) -> None:
@@ -307,39 +414,66 @@ def ult_mutation_score(
             (tmpdir / test_file_name).write_text(test_code, encoding="utf-8")
             config_path = tmpdir / "cosmic_ray_config.toml"
             session_path = tmpdir / "session.sqlite"
-            _write_cosmic_ray_config(config_path, module_name, test_file_name, timeout_seconds)
 
-            base = _cosmic_ray_base_cmd()
+            # 变异体级并行（D3 加速，2026-10-29）：AITESTER_CR_WORKERS>0 时用
+            # http distributor + worker 池（结果语义与 local 逐位一致——
+            # session/变异体枚举/dump 解析共用，仅执行分发方式不同）。
+            # 默认 0 = local 串行（历史口径不变）。
+            worker_count = int(os.environ.get("AITESTER_CR_WORKERS", "0"))
+            worker_procs: list[subprocess.Popen[Any]] = []
+            try:
+                if worker_count > 0:
+                    worker_procs, worker_urls = _spawn_http_workers(worker_count, tmpdir)
+                    if worker_procs:
+                        _write_cosmic_ray_config_http(
+                            config_path, module_name, test_file_name, timeout_seconds, worker_urls
+                        )
+                    else:
+                        # worker 全部启动失败 → 回退 local（保守口径兜底）
+                        _write_cosmic_ray_config(config_path, module_name, test_file_name, timeout_seconds)
+                else:
+                    _write_cosmic_ray_config(config_path, module_name, test_file_name, timeout_seconds)
 
-            def _run(args: list[str], timeout: float) -> subprocess.CompletedProcess[str]:
-                from src.utils.process_utils import run_with_timeout
+                base = _cosmic_ray_base_cmd(http_mode=bool(worker_procs))
 
-                proc = run_with_timeout(
-                    base + args,
-                    cwd=str(tmpdir),
-                    capture_output=True,
-                    text=True,
-                    timeout=timeout,
-                )
-                if proc.returncode != 0:
-                    raise RuntimeError(
-                        f"cosmic-ray {' '.join(args)} 退出码 {proc.returncode}: "
-                        f"{(proc.stderr or proc.stdout).strip()[:400]}"
+                def _run(args: list[str], timeout: float) -> subprocess.CompletedProcess[str]:
+                    from src.utils.process_utils import run_with_timeout
+
+                    proc = run_with_timeout(
+                        base + args,
+                        cwd=str(tmpdir),
+                        capture_output=True,
+                        text=True,
+                        timeout=timeout,
                     )
-                return proc
+                    if proc.returncode != 0:
+                        raise RuntimeError(
+                            f"cosmic-ray {' '.join(args)} 退出码 {proc.returncode}: "
+                            f"{(proc.stderr or proc.stdout).strip()[:400]}"
+                        )
+                    return proc
 
-            _run(["init", str(config_path), str(session_path)], timeout=120)
-            _trim_work_items(str(session_path), max_mutants)
-            # 整体执行超时 = **trim 后实际条目数** × 单变异体超时 + 缓冲
-            # （cosmic-ray 内部已有逐变异体 timeout，此处为兜底防整体挂死）。
-            # 2026-10-15 批次八修复：原实现按 max_mutants × timeout + 60
-            # 计算，全变异体哨兵（如 10**9）产出 ~1.2e11s 超时值，超出 C 层
-            # PyTime_t（≈9.22e9s）⇒ subprocess 抛 OverflowError ⇒ 全变异体
-            # 口径每任务以 skipped 失败（不可执行）。改按实测条目数计算，
-            # 既精确又天然免疫哨兵溢出。
-            exec_timeout = _count_work_items(str(session_path)) * timeout_seconds + 60
-            _run(["exec", str(config_path), str(session_path)], timeout=exec_timeout)
-            dump_stdout = _run(["dump", str(session_path)], timeout=60).stdout
+                _run(["init", str(config_path), str(session_path)], timeout=120)
+                _trim_work_items(str(session_path), max_mutants)
+                # 整体执行超时 = **trim 后实际条目数** × 单变异体超时 + 缓冲
+                # （cosmic-ray 内部已有逐变异体 timeout，此处为兜底防整体挂死）。
+                # 2026-10-15 批次八修复：原实现按 max_mutants × timeout + 60
+                # 计算，全变异体哨兵（如 10**9）产出 ~1.2e11s 超时值，超出 C 层
+                # PyTime_t（≈9.22e9s）⇒ subprocess 抛 OverflowError ⇒ 全变异体
+                # 口径每任务以 skipped 失败（不可执行）。改按实测条目数计算，
+                # 既精确又天然免疫哨兵溢出。
+                exec_timeout = _count_work_items(str(session_path)) * timeout_seconds + 60
+                _run(["exec", str(config_path), str(session_path)], timeout=exec_timeout)
+                dump_stdout = _run(["dump", str(session_path)], timeout=60).stdout
+            finally:
+                # worker 池清理（所有退出路径——含 exec 异常/超时）
+                for proc in worker_procs:
+                    proc.terminate()
+                for proc in worker_procs:
+                    try:
+                        proc.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        proc.kill()
 
         killed, total = _parse_cosmic_ray_dump(dump_stdout)
         if total <= 0:

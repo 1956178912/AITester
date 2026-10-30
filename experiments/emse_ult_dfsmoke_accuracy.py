@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -47,12 +48,16 @@ def _run_one(module_name: str, fixed_code: str, test_code: str) -> dict[str, Any
         (td / tf).write_text(test_code, encoding="utf-8")
         t0 = time.time()
         try:
+            # PYTEST_DISABLE_PLUGIN_AUTOLOAD（2026-10-30）：主仓 venv 某插件
+            # autoload 在 pytest 收尾时挂死（测试 0.1s 跑完、进程挂满 CAP_SECONDS
+            # 被杀——全量 3909 任务 ≈32h 烧在挂死上、20h 未完成的真因）。
             proc = run_with_timeout(
                 [sys.executable, "-m", "pytest", tf, "-q", "--no-header", "-p", "no:cacheprovider"],
                 cwd=str(td),
                 capture_output=True,
                 text=True,
                 timeout=CAP_SECONDS,
+                env={**os.environ, "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1"},
             )
         except subprocess.TimeoutExpired:
             return {
@@ -60,6 +65,16 @@ def _run_one(module_name: str, fixed_code: str, test_code: str) -> dict[str, Any
                 "rc": None,
                 "wall_s": round(time.time() - t0, 1),
                 "tail": f">{CAP_SECONDS}s",
+            }
+        # 口径修正（2026-10-30，与 emse_ult_mutk_full 同族）：run_with_timeout
+        # 超时终止返回 rc=-9（SIGKILL）且**不抛 TimeoutExpired**——rc=-9 是
+        # "没跑完"，按 nonterminate 归因，不得落入下方 fail 分支。
+        if proc.returncode == -9:
+            return {
+                "status": "nonterminate",
+                "rc": proc.returncode,
+                "wall_s": round(time.time() - t0, 1),
+                "tail": "killed(SIGKILL)",
             }
     tail = ""
     stdout = (proc.stdout or "").strip()

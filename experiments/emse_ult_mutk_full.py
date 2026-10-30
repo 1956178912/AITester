@@ -28,6 +28,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -56,7 +57,7 @@ from src.utils.process_utils import run_with_timeout  # noqa: E402
 _FULL_MUTANTS = 10**9
 TIMEOUT_SECONDS = 120
 # 健全性前置门的上限：生成测试在正确代码上的终止界限（秒）。
-SANITY_TIMEOUT_SECONDS = 30
+SANITY_TIMEOUT_SECONDS = 120
 
 _PROBE_JSON = "experiments/results/emse_ult_specir_probe_20261014/benchmark_ult_20261014_130937.json"
 _LITE46_GLOB = "experiments/results/spec_ab_scale87_*/ult_lite46_replace/benchmark_ult_*.json"
@@ -71,10 +72,10 @@ GROUPS: dict[str, dict[str, str]] = {
 
 
 def _sanity_gate(fixed_code: str, test_code: str, module_name: str) -> dict[str, Any]:
-    """健全性前置门：在**正确代码**上跑一次测试（30s 上限）。
+    """健全性前置门：在**正确代码**上跑一次测试（120s 上限）。
 
     Returns:
-        {"status": "pass" | "fail" | "nonterminate", "rc": int | None, "wall_s": float}
+        {"status": "pass" | "fail" | "nonterminate" | "unverifiable", "rc": int | None, "wall_s": float}
     """
     with tempfile.TemporaryDirectory(prefix="ult_sanity_") as td_s:
         td = Path(td_s)
@@ -83,15 +84,27 @@ def _sanity_gate(fixed_code: str, test_code: str, module_name: str) -> dict[str,
         (td / tf).write_text(test_code, encoding="utf-8")
         t0 = time.time()
         try:
+            # PYTEST_DISABLE_PLUGIN_AUTOLOAD（2026-10-29）：主仓 venv 的某插件
+            # autoload 在 pytest 收尾时挂死（测试 0.1s 跑完、进程挂 121s 被超时
+            # 杀——96 流下 Mut@k 分母全灭的终版根因）。sanity 的单文件物化
+            # 不需要任何插件，禁 autoload 后 rc=0 wall=0.1s（实测对照）。
             proc = run_with_timeout(
                 [sys.executable, "-m", "pytest", tf, "-q", "--no-header", "-p", "no:cacheprovider"],
                 cwd=str(td),
                 capture_output=True,
                 text=True,
                 timeout=SANITY_TIMEOUT_SECONDS,
+                env={**os.environ, "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1"},
             )
         except subprocess.TimeoutExpired:
             return {"status": "nonterminate", "rc": None, "wall_s": round(time.time() - t0, 1)}
+        # 口径修正（2026-10-29）：run_with_timeout 超时终止返回 rc=-9（SIGKILL）
+        # 且**不抛 TimeoutExpired**——rc=-9 是"没跑完"，按 nonterminate 归因，
+        # 不得落入 rc!=0 的 fail 分支（96 流并发下 pytest 启动超 30s 曾把全部
+        # 任务误判 test_fails_on_fixed ⇒ Mut@k 分母全灭——MEASUREMENT_INTEGRITY
+        # §48"无证据的数字"同族）。
+        if proc.returncode == -9:
+            return {"status": "nonterminate", "rc": proc.returncode, "wall_s": round(time.time() - t0, 1)}
     # BB（2026-10-21，F03 同型）：rc==0 但无有效通过 ⇒ unverifiable（fail-closed）
     return {
         "status": "pass"
@@ -102,8 +115,13 @@ def _sanity_gate(fixed_code: str, test_code: str, module_name: str) -> dict[str,
     }
 
 
-def measure_task(row: dict[str, Any], test_kind: str) -> dict[str, Any]:
-    """单任务全变异体 Mut@k（键集合同构；健全性门 + 跳过/失败保守口径）。"""
+def measure_task(row: dict[str, Any], test_kind: str, sanity: dict[str, Any] | None = None) -> dict[str, Any]:
+    """单任务全变异体 Mut@k（键集合同构；健全性门 + 跳过/失败保守口径）。
+
+    sanity 参数（D3 加速，2026-10-29）：调用方已并行预筛健全性门时传入其
+    结果，本函数跳过重复 sanity 直达 exec（两阶段并行口径）；None = 历史
+    单任务口径（内部自跑 sanity）。
+    """
     task_id = row.get("task_id", "")
     meta = row.get("task_metadata") or {}
     fixed_code = meta.get("fixed") or ""
@@ -138,7 +156,8 @@ def measure_task(row: dict[str, Any], test_kind: str) -> dict[str, Any]:
     if not is_cosmic_ray_available():
         return _skip("cosmic-ray_not_installed")
 
-    sanity = _sanity_gate(fixed_code, test_code, function_name)
+    if sanity is None:
+        sanity = _sanity_gate(fixed_code, test_code, function_name)
     if sanity["status"] != "pass":
         # BB（2026-10-21，F03 同型）：unverifiable（rc==0 但无有效通过）
         # 与 fail 同样阻断测量——不得把"没跑起来"当成"在 fixed 上通过"。
@@ -293,6 +312,30 @@ def main(argv: list[str] | None = None) -> int:
         if args.shard:
             shard_i, shard_n = (int(x) for x in args.shard.split("/"))
             rows = rows[shard_i - 1 :: shard_n]  # 1 起始：第 i 片 = 每隔 N 取一个（均匀分片）
+        # D3 加速两级（2026-10-29）：健全性门并行预筛——fail 任务的 30s 超时
+        # 等待是串行口径的最大空转源。AITESTER_MUTK_SANITY_THREADS>1 时先
+        # 线程池并行预筛全部任务，pass 的任务再串行进 exec（http worker 并行
+        # 变异体）。默认 1 = 历史串行口径。gold 组（test_code 包装口径不同）
+        # 不走预筛。
+        sanity_threads = int(os.environ.get("AITESTER_MUTK_SANITY_THREADS", "1"))
+        sanity_map: dict[int, dict[str, Any]] = {}
+        if sanity_threads > 1 and spec["test_kind"] == "generated":
+            from concurrent.futures import ThreadPoolExecutor
+
+            def _sanity_of(row: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+                meta = row.get("task_metadata") or {}
+                s = _sanity_gate(
+                    meta.get("fixed") or "", row.get("generated_test") or "", meta.get("function_name") or ""
+                )
+                return id(row), s
+
+            with ThreadPoolExecutor(max_workers=sanity_threads) as pool:
+                sanity_map = dict(pool.map(_sanity_of, rows))
+            n_pass = sum(1 for s in sanity_map.values() if s["status"] == "pass")
+            print(
+                f"[ult-mutk-full] {gname} 健全性门预筛完成：{n_pass}/{len(rows)} 通过（{sanity_threads} 线程）",
+                flush=True,
+            )
         print(
             f"[ult-mutk-full] {gname}（{spec['label']}）：{len(rows)} 任务（臂={loaded_arm or '空'}）；源 {source_path.name}；"
             f"全变异体口径 + 健全性门 {SANITY_TIMEOUT_SECONDS}s",
@@ -306,7 +349,7 @@ def main(argv: list[str] | None = None) -> int:
             continue
         results: list[dict[str, Any]] = []
         for index, row in enumerate(rows, 1):
-            res = measure_task(row, spec["test_kind"])
+            res = measure_task(row, spec["test_kind"], sanity=sanity_map.get(id(row)))
             results.append(res)
             if res.get("skipped"):
                 print(
