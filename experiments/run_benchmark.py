@@ -967,7 +967,23 @@ def _dump_state_artifacts(output_dir: str, task: BenchmarkTask, baseline: str, f
     os.makedirs(raw_dir, exist_ok=True)
     artifact_file = os.path.join(raw_dir, f"{baseline}.json")
     with open(artifact_file, "w", encoding="utf-8") as f:
-        json.dump(artifact, f, ensure_ascii=False, indent=2, allow_nan=False)
+        json.dump(_sanitize_nonfinite(artifact), f, ensure_ascii=False, indent=2, allow_nan=False)
+
+
+def _sanitize_nonfinite(obj: Any) -> Any:
+    """递归把非有限浮点（NaN/Inf）折成 None（写盘防抛，B1 批 2026-10-30）。
+
+    背景：`allow_nan=False`（json_strict 门禁口径）在 summary 含 NaN 时
+    `json.dump` 抛 ValueError ⇒ 整批产物丢失（跑完 16 分钟白跑）。正确
+    修法是写盘前清洗——NaN → None（缺测语义），门禁合规与数据安全兼得。
+    """
+    if isinstance(obj, float) and (obj != obj or obj in (float("inf"), float("-inf"))):
+        return None
+    if isinstance(obj, dict):
+        return {k: _sanitize_nonfinite(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_sanitize_nonfinite(v) for v in obj]
+    return obj
 
 
 def _compute_contamination_risk_level(
@@ -4851,7 +4867,7 @@ def run_benchmark(
     timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_file = os.path.join(output_dir, f"benchmark_{dataset_name}_{timestamp_str}.json")
     with open(output_file, "w", encoding="utf-8") as f:
-        json.dump(summary, f, ensure_ascii=False, indent=2, allow_nan=False)
+        json.dump(_sanitize_nonfinite(summary), f, ensure_ascii=False, indent=2, allow_nan=False)
 
     logger.info("基准测试完成，结果已保存至: %s", output_file)
     logger.info("汇总：总耗时=%.1fs", total_time)

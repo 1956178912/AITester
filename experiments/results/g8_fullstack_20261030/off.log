@@ -1,0 +1,24 @@
+⚠️ 非合成数据集 swe_bench_pro：--task-count=10 按任务上限生效（等价 --task-limit；历史口径该参数被静默忽略，L 轮修复）
+R4 主批次：dataset=swe_bench_pro task_count=10 seed=42（全量数据集前 10 个任务）
+基线：aitester；输出：experiments/results/g8_fullstack_20261030/off；确定性采样：开（temp=0.0）
+基准测试 [aitester]:   0%|          | 0/10 [00:00<?, ?task/s]S6 conftest 守卫：2 个 conftest.py 命中硬拒特征，拒绝在该仓库执行 pytest（test/units/module_utils/xenserver/conftest.py: importlib.import_module; test/units/modules/cloud/xenserver/conftest.py: importlib.import_module）
+S6 conftest 守卫：2 个 conftest.py 命中硬拒特征，拒绝在该仓库执行 pytest（test/units/module_utils/xenserver/conftest.py: importlib.import_module; test/units/modules/cloud/xenserver/conftest.py: importlib.import_module）
+M3 P2P 门禁：任务 instance_ansible__ansible-164881d871964aa64e0f911d03ae270acbad253c-v390e508d27db7a51eece36bb6d9698b63a5b638a 不可解（harness_invalid），标记 harness_invalid 剔除
+M3 P2P 门禁：任务 instance_ansible__ansible-164881d871964aa64e0f911d03ae270acbad253c-v390e508d27db7a51eece36bb6d9698b63a5b638a 基线 P2P 不达标（harness_invalid），标记 harness_invalid
+基准测试 [aitester]:  10%|█         | 1/10 [00:01<00:15,  1.70s/task]基准测试 [aitester] - 耗时: 0.0s:  10%|█         | 1/10 [00:01<00:15,  1.70s/task]M3 P2P 门禁：任务 instance_ansible__ansible-11c1777d56664b1acb56b387a1ad6aeadef1391d-v0f01c69f1e2528b935359cfe578530722bca2c59 不可解（f2p_not_fixed），标记 harness_invalid 剔除
+M3 P2P 门禁：任务 instance_ansible__ansible-11c1777d56664b1acb56b387a1ad6aeadef1391d-v0f01c69f1e2528b935359cfe578530722bca2c59 基线 P2P 不达标（f2p_not_fixed），标记 harness_invalid
+基准测试 [aitester] - 耗时: 0.0s:  20%|██        | 2/10 [00:04<00:17,  2.16s/task]基准测试 [aitester] - 耗时: 0.0s:  20%|██        | 2/10 [00:04<00:17,  2.16s/task]M3 P2P 门禁：任务 instance_ansible__ansible-cd9c4eb5a6b2bfaf4a6709f001ce3d0c92c1eed2-v0f01c69f1e2528b935359cfe578530722bca2c59 不可解（f2p_not_fixed），标记 harness_invalid 剔除
+M3 P2P 门禁：任务 instance_ansible__ansible-cd9c4eb5a6b2bfaf4a6709f001ce3d0c92c1eed2-v0f01c69f1e2528b935359cfe578530722bca2c59 基线 P2P 不达标（f2p_not_fixed），标记 harness_invalid
+基准测试 [aitester] - 耗时: 0.0s:  30%|███       | 3/10 [00:10<00:27,  3.97s/task]基准测试 [aitester] - 耗时: 0.0s:  30%|███       | 3/10 [00:10<00:27,  3.97s/task]M3 P2P 门禁：任务 instance_ansible__ansible-106909db8b730480615f4a33de0eb5b710944e78-v0f01c69f1e2528b935359cfe578530722bca2c59 不可解（harness_invalid），标记 harness_invalid 剔除
+M3 P2P 门禁：任务 instance_ansible__ansible-106909db8b730480615f4a33de0eb5b710944e78-v0f01c69f1e2528b935359cfe578530722bca2c59 基线 P2P 不达标（harness_invalid），标记 harness_invalid
+基准测试 [aitester] - 耗时: 0.0s:  40%|████      | 4/10 [00:12<00:20,  3.46s/task]基准测试 [aitester] - 耗时: 0.0s:  40%|████      | 4/10 [00:12<00:20,  3.46s/task]M3 P2P 门禁：任务 instance_ansible__ansible-d9f1866249756efc264b00ff7497e92c11a9885f-v0f01c69f1e2528b935359cfe578530722bca2c59 不可解（harness_invalid），标记 harness_invalid 剔除
+M3 P2P 门禁：任务 instance_ansible__ansible-d9f1866249756efc264b00ff7497e92c11a9885f-v0f01c69f1e2528b935359cfe578530722bca2c59 基线 P2P 不达标（harness_invalid），标记 harness_invalid
+基准测试 [aitester] - 耗时: 0.0s:  50%|█████     | 5/10 [00:17<00:18,  3.67s/task]基准测试 [aitester] - 耗时: 0.0s:  50%|█████     | 5/10 [00:17<00:18,  3.67s/task][safe-delete][SAFE_DELETE_BULK_CONFIRM_REQUIRED] {"count":1747,"threshold":50,"scope":"turn","targets":["/Users/wangchenyu/.cache/aitester/repo_envs/openlibrary/1a3fab3f0b31/repo"],"targetCount":1}
+[safe-delete][SAFE_DELETE_BULK_CONFIRM_REQUIRED] {"count":1746,"threshold":50,"scope":"turn","targets":["/Users/wangchenyu/.cache/aitester/repo_envs/openlibrary/2f590171b1d9/repo"],"targetCount":1}
+M3 P2P 门禁：任务 instance_ansible__ansible-3889ddeb4b780ab4bac9ca2e75f8c1991bcabe83-v0f01c69f1e2528b935359cfe578530722bca2c59 不可解（harness_invalid），标记 harness_invalid 剔除
+M3 P2P 门禁：任务 instance_ansible__ansible-3889ddeb4b780ab4bac9ca2e75f8c1991bcabe83-v0f01c69f1e2528b935359cfe578530722bca2c59 基线 P2P 不达标（harness_invalid），标记 harness_invalid
+M3 P2P 门禁：任务 instance_ansible__ansible-a1569ea4ca6af5480cf0b7b3135f5e12add28a44-v0f01c69f1e2528b935359cfe578530722bca2c59 不可解（harness_invalid），标记 harness_invalid 剔除
+M3 P2P 门禁：任务 instance_ansible__ansible-a1569ea4ca6af5480cf0b7b3135f5e12add28a44-v0f01c69f1e2528b935359cfe578530722bca2c59 基线 P2P 不达标（harness_invalid），标记 harness_invalid
+M3 P2P 门禁：任务 instance_ansible__ansible-d62496fe416623e88b90139dc7917080cb04ce70-v0f01c69f1e2528b935359cfe578530722bca2c59 不可解（harness_invalid），标记 harness_invalid 剔除
+M3 P2P 门禁：任务 instance_ansible__ansible-d62496fe416623e88b90139dc7917080cb04ce70-v0f01c69f1e2528b935359cfe578530722bca2c59 基线 P2P 不达标（harness_invalid），标记 harness_invalid
+基准测试 [aitester] - 耗时: 0.0s:  50%|█████     | 5/10 [02:00<02:00, 24.20s/task]

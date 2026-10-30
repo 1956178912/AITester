@@ -63,9 +63,12 @@ _SENSITIVE_RE='sk-[A-Za-z0-9._-]{10,}|[A-Fa-f0-9]{32,}|[A-Z][A-Z_]*(PASSWORD|PAS
 #     目录（2026-10-30 收口）自带 SHA256SUMS 完整性清单（64 位 hex 摘要）。
 #   - experiments/results/swe_pro_judge_20261030/：SWE-bench Pro 判定工件
 #     目录（2026-10-30 收口）自带 SHA256SUMS 完整性清单（64 位 hex 摘要）。
-# 五处均为记录而非凭证；命中仅打印供人工复核，不阻断。命中文件非占位符时照常阻断。
+#   - experiments/results/q04q07_ab_20261030/ 与 g8_fullstack_20261030/：
+#     六臂 LLM 批 + G8 工件（2026-10-30 晚收口），SHA256SUMS/批次 provenance
+#     的 git_sha 与 trace 内 system_fingerprint 均为记录而非凭证。
+# 七处均为记录而非凭证；命中仅打印供人工复核，不阻断。命中文件非占位符时照常阻断。
 # 维护：新增误报文档时同步加入 _KNOWN_FP 正则，并在头部登记。
-_KNOWN_FP='^docs/history/CHANGELOG_2026-10-26_full(\.en)?\.md$|^experiments/results/emse_ult_mutk_full_20261029/|^experiments/results/emse_ult_specir_probe_20261014/|^experiments/results/q05_interaction_attribution_20261030/|^experiments/results/swe_pro_judge_20261030/'
+_KNOWN_FP='^docs/history/CHANGELOG_2026-10-26_full(\.en)?\.md$|^experiments/results/emse_ult_mutk_full_20261029/|^experiments/results/emse_ult_specir_probe_20261014/|^experiments/results/q05_interaction_attribution_20261030/|^experiments/results/swe_pro_judge_20261030/|^experiments/results/q04q07_ab_20261030/|^experiments/results/g8_fullstack_20261030/'
 
 LEAKED=""
 while IFS= read -r f; do

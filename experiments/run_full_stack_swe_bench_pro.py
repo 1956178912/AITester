@@ -87,8 +87,16 @@ def _apply_full_stack_env(output_dir: str) -> dict[str, str]:
         "P2P_GATE_THRESHOLD",
         "LOGIC_SPEC_STRICT_ENABLE",
     }
+    # 凭证脱敏（2026-10-30 G8 冒烟实测）：env_snapshot 曾把 LLM_1_API_KEY
+    # 原样写进结果 JSON/MD（密钥卫生缺陷）——复用 credential_scrub 的脱敏
+    # 口径：值打码后仍保留键名在场（可观测性不丢、凭证不出盘）。
+    from src.utils.credential_scrub import scrub_os_environ
+
+    _scrubbed = scrub_os_environ()
     env_snapshot: dict[str, str | None] = {
-        k: v for k, v in os.environ.items() if k in _SNAPSHOT_EXACT or any(k.startswith(p) for p in _SNAPSHOT_PREFIXES)
+        k: _scrubbed.get(k, "[REDACTED]")
+        for k in os.environ
+        if k in _SNAPSHOT_EXACT or any(k.startswith(p) for p in _SNAPSHOT_PREFIXES)
     }
     env["env_snapshot"] = json.dumps(env_snapshot, ensure_ascii=False, sort_keys=True)
     return env
