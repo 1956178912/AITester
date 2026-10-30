@@ -59,19 +59,12 @@ def setup_and_run(
         env = dict(subprocess.os.environ)
         env.pop("PYTHONPATH", None)
         env["PATH"] = f"{Path(py).parent}:{env.get('PATH', '')}"
-        # setup（python setup.py install + 额外 pip 依赖）
-        for cmd_line in ([setup_cmd] if setup_cmd else []) + []:
-            r = subprocess.run(
-                ["bash", "-c", cmd_line], cwd=str(mat), capture_output=True, text=True, timeout=600, env=env
-            )
-            if r.returncode != 0:
-                return False, f"setup 失败: {(r.stderr or r.stdout)[-150:]}"
-        # requirements（bug 2/3 的 pip 依赖在 requirements.txt）
+        # requirements **先装**（官方 BugsInPy 顺序：依赖在位后 setup.py install
+        # 才不会走 easy_install 抓 egg——websockets 8.1 egg 抓取失败实测）；
+        # 老 pin 在 arm64 可能无 wheel，逐包安装失败逐包披露
         reqs = bug_dir / "requirements.txt"
         req_text = _read_text_any_encoding(reqs) if reqs.is_file() else ""
         if req_text.strip():
-            # 过滤注释/空行/本地路径行，逐包安装（老 pin 在 arm64 可能无 wheel，
-            # 失败时逐包披露而非整批失败）
             req_items = [
                 line.strip()
                 for line in req_text.splitlines()
@@ -88,9 +81,18 @@ def setup_and_run(
                 )
                 if r.returncode != 0:
                     failed_pkgs.append(item)
-            rec_pkg = f" (deps 失败: {failed_pkgs})" if failed_pkgs else ""
+            # best-effort：失败包**披露不阻断**（pywin32=Windows 专用、
+            # numpy 1.18.4/cryptography 2.9.2 无 arm64 wheel——均为原始
+            # CI 环境 freeze 的非 sanic 运行时依赖；阻断会误杀全部实例）
             if failed_pkgs:
-                return False, f"requirements 部分失败{rec_pkg}"
+                print(f"  [deps 披露] 未装上 {len(failed_pkgs)} 包: {failed_pkgs[:5]}", flush=True)
+        # setup（python setup.py build/install + extras；依赖已在位）
+        if setup_cmd:
+            r = subprocess.run(
+                ["bash", "-c", setup_cmd], cwd=str(mat), capture_output=True, text=True, timeout=1800, env=env
+            )
+            if r.returncode != 0:
+                return False, f"setup 失败: {(r.stderr or r.stdout)[-250:]}"
         r = subprocess.run(["bash", "-c", run_cmd], cwd=str(mat), capture_output=True, text=True, timeout=600, env=env)
         return r.returncode == 0, ((r.stdout or "") + (r.stderr or ""))[-250:]
     finally:
