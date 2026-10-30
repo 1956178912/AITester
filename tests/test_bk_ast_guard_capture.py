@@ -673,7 +673,10 @@ class TestCaptureRatchetGate:
         # EU（2026-10-27）：+1 = `complexity_router.score_source_complexity`——
         # 复杂度评分收敛为单一入口后新增一次解析；捕获 `(SyntaxError, ValueError)`，
         # 不新增豁免（EXEMPT 与命中数不变）。
-        assert sites == 80
+        # B1 批（2026-10-30）：+1 = `datasets/dataset_testgeneval._count_test_functions`
+        # （TestGenEval-Lite 接入，4a9512e3）；捕获共享 AST_UNREADABLE_ERRORS，
+        # 不新增豁免（EXEMPT 与命中数不变）。
+        assert sites == 81
         assert len(hits) == sum(quota for quota, _ in gate.EXEMPT.values()) == 20
         assert set(gate.EXEMPT) == set(hits)
 

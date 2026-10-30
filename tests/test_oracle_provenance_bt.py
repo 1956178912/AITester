@@ -508,15 +508,37 @@ class TestReportSurface:
         手册 §6 自纠）；本锁让"缺键 ≠ 错标"成为可重跑断言，而不是一句叙述。
         """
         paths = sorted(p for p in (ROOT / "experiments" / "results").rglob("*.json") if "g8_" in str(p.parent))
-        if not paths:
-            pytest.skip("g8 仓库级批次工件不在本地")
+        # B1 批（2026-10-30）口径收紧：历史 6 份 g8 批次已随 2026-10-24 清除退场；
+        # 今天新增的 g8_fullstack_20261030 复测目录会被 "g8_" 前缀误命中，但其
+        # 任务全部被 M3 门禁剔除（repo_rows=0）——前提（存在含 repo_rows 的
+        # g8 批次工件）不成立时显式 skip，不把"没有可断言对象"折成断言失败。
+        import json as _json
+
+        has_repo_rows = False
+        for _p in paths:
+            try:
+                _pl = _json.loads(_p.read_text(encoding="utf-8"))
+            except (OSError, _json.JSONDecodeError, UnicodeDecodeError):
+                continue
+            for _blk in (_pl.get("results") or {}).values():
+                _det = _blk.get("details") if isinstance(_blk, dict) else None
+                if isinstance(_det, list) and any(isinstance(r, dict) and r.get("repo_rows") for r in _det):
+                    has_repo_rows = True
+                    break
+            if has_repo_rows:
+                break
+        if not paths or not has_repo_rows:
+            pytest.skip(
+                "含 repo_rows 的 g8 批次工件不在本地（历史批次已随 2026-10-24 清除退场；"
+                "新 g8 复测目录任务全被 M3 剔除）——实钉前提不成立，显式跳过"
+            )
         import json
 
         repo_rows = unrecorded = violations = consistent = arms = 0
         for path in paths:
             try:
                 payload = json.loads(path.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+            except (OSError, _json.JSONDecodeError, UnicodeDecodeError):
                 continue
             results = payload.get("results") if isinstance(payload, dict) else None
             if not isinstance(results, dict):

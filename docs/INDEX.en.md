@@ -34,6 +34,12 @@ other documents.**
 
 1. [reviews/README.md](reviews/README.md) → [VALIDITY.en.md](VALIDITY.en.md) → [preregistration.en.md](preregistration.en.md)
 
+### 2.4 Batch pre-registration volumes (criteria frozen before data)
+
+[preregistration_q04q07_ab_20261030.en.md](preregistration_q04q07_ab_20261030.en.md) ·
+[preregistration_g8_fullstack_20261030.en.md](preregistration_g8_fullstack_20261030.en.md) ·
+[preregistration_c8_bugsinpy_draft_20261029.md](preregistration_c8_bugsinpy_draft_20261029.md)
+
 ### 2.3 Maintainer
 
 1. [api_reference.en.md](api_reference.en.md) → 2. [performance_guide.en.md](performance_guide.en.md) →

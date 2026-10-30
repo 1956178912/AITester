@@ -739,16 +739,15 @@ class TestComparabilityAndScannedSurface:
         surface = gate.corpus_surface()
         # 收口回钉（2026-10-25，v0.8.0 二次回钉：b1_lite 七格入库）：34/4/16/34/34/34
         # （CI 重建期下界 25/4/5/25/25/25；原历史 239/64/107/122/87/85）
-        # B1 批上调（2026-10-30，只升不降）：2026-10-25 锁定后新增批次自然落盘
-        # （TestGenEval / SWE 诊断 / E8 三格 / B2 指纹 / ULT 定标等 benchmark_*.json）
-        # + specir probe 归档入库 ⇒ 46/4/17/46/46/46；结构层数以测试报数迭代回填。
-        assert surface["on_disk"] == 46, surface
+        # B1 批二次上调（2026-10-30 晚，只升不降）：Q03/Q04/Q07/S09 六臂 + N10
+        # 批 benchmark 落盘入库 ⇒ 57/4/28/57/56/56（56 = specir probe 旧工件
+        # pinned=False 系数不变）；结构层数以测试报数迭代回填。
+        assert surface["on_disk"] == 57, surface
         assert surface["top_level"] == 4, surface
-        assert surface["tracked"] == 17, surface
-        assert surface["with_provenance"] == 46, surface
-        # 45 = specir probe 旧工件（2026-10-14，pinned=False / 无 fingerprint）
-        assert surface["with_fingerprint"] == 45, surface
-        assert surface["pinned_true"] == 45, surface
+        assert surface["tracked"] == 28, surface
+        assert surface["with_provenance"] == 57, surface
+        assert surface["with_fingerprint"] == 56, surface
+        assert surface["pinned_true"] == 56, surface
         assert surface["unsupported_alias"] == 0, surface
         assert surface["alias_mismatch_true"] == 0, surface
 

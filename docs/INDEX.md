@@ -33,6 +33,12 @@
 
 1. [reviews/README.md](reviews/README.md) → [VALIDITY.md](VALIDITY.md) → [preregistration.md](preregistration.md)
 
+### 2.4 批次预注册分册（判据冻结先于取数）
+
+[preregistration_q04q07_ab_20261030.md](preregistration_q04q07_ab_20261030.md)（Q03/Q04/Q07/S09 六臂 + 诚实条款）·
+[preregistration_g8_fullstack_20261030.md](preregistration_g8_fullstack_20261030.md)（G8 全开链路）·
+[preregistration_c8_bugsinpy_draft_20261029.md](preregistration_c8_bugsinpy_draft_20261029.md)（C8 判定器草案）
+
 ### 2.3 维护者
 
 1. [api_reference.md](api_reference.md) → 2. [performance_guide.md](performance_guide.md) →

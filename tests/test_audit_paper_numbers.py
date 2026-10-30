@@ -217,6 +217,23 @@ class TestBibAudit:
         assert "missing_key_2026" in result["missing_keys"]
         assert any("不在 refs.bib" in f for f in result["failures"])
 
+    def test_email_address_is_not_a_citation_key(self, tmp_path):
+        """邮箱里的 `@域名` 不得被当成引用键（2026-10-29：通讯邮箱落稿后
+        `a1956178912@outlook.com` 被截成假键 @outlook，前置判据误红）。"""
+        bib = tmp_path / "refs.bib"
+        bib.write_text("@article{k, note={DOI: 10.1145/1}}\n", encoding="utf-8")
+        result = audit_mod.audit_bib(bib, "Corresponding: \\email{a1956178912@outlook.com}; see @k for details.")
+        assert result["missing_keys"] == []
+        assert result["failures"] == []
+
+    def test_paragraph_citations_ignore_emails(self):
+        """段落引文归属同样剥离邮箱：第一段只有邮箱 ⇒ 无引文键；第二段真键保留。"""
+        blocks = audit_mod._paragraph_citations(
+            ["Contact a1956178912@outlook.com for data.", "", "@zhao2026misguidance reports 44.8%."]
+        )
+        assert blocks[0] == set()
+        assert "zhao2026misguidance" in blocks[1]
+
     def test_entry_without_identifier_and_without_todo_is_failure(self, tmp_path):
         bib = tmp_path / "refs.bib"
         bib.write_text("@article{k, title={T}, year={2026}}\n", encoding="utf-8")

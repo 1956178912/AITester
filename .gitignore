@@ -46,6 +46,11 @@ venv_old/
 # Logs
 *.log
 
+# LaTeX 编译中间产物（docs/reports 的 .tex/.pdf/.json 是入库件，只有中间产物不入库）
+*.aux
+*.toc
+docs/reports/*.out
+
 # Testing
 .pytest_cache/
 .mypy_cache/

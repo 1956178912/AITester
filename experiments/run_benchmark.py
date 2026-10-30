@@ -4554,6 +4554,14 @@ def run_benchmark(
         "LLM_THINKING_MODE",
         "LLM_REASONING_EFFORT",
         "LLM_MAX_OUTPUT_TOKENS",
+        # B1 批（2026-10-30）：Q03/Q04 实验开关入快照——ORACLE_CONTEXT_TIER
+        # 不在工件导致 Q04 两臂干预不可审计（E8 教训第 4 次重演：每个新
+        # A/B 开关必须显式入列表，_ENABLE 形态的自动覆盖不保证非标准名）；
+        # DETERMINISTIC/FL_GOLD 显式化防回归；N06 原始响应开关同批登记。
+        "ORACLE_CONTEXT_TIER",
+        "DETERMINISTIC_REPAIR_FIRST_ENABLE",
+        "FL_GOLD_INJECTION_ENABLE",
+        "AITESTER_TRACE_RAW_RESPONSE_ENABLE",
         # 2026-10-14 LLM_JSON_MODE：DeepSeek JSON Output（response_format=
         # json_object，Planner/Debugger 的 JSON 调用点）——改变结构化输出
         # 的采样约束，跨批次质量对比必须可审计；默认 on，off=历史口径。

@@ -385,7 +385,7 @@ class TestRealCorpusApplicability:
         # 并带实测读数（tests/_corpus_guard.py），不把"没扫到"折成"扫过且干净"。
         require_full_corpus()
         files = sorted(glob.glob(str(ROOT / "experiments" / "results" / "**" / "benchmark_*.json"), recursive=True))
-        assert len(files) == 34  # v0.8.0 收拢后实测（b1_lite 七格入库）
+        assert len(files) == 57  # B1 批二次回钉（2026-10-30 晚：Q03/Q04/Q07/S09 六臂 + N10 批落盘）
         marked = 0
         det1 = 0
         for path in files:
@@ -409,5 +409,8 @@ class TestRealCorpusApplicability:
                         marked += 1
                         if row.get("detection_rate") == 1.0:
                             det1 += 1
-        assert marked == 11  # v0.8.0 二次回钉（b1_lite 入库；原精确 111）
-        assert det1 == 0  # 收口回钉 2026-10-25（原精确 12；新语料 marked 行中无 detection_rate=1.0）
+        assert marked == 48  # B1 批二次回钉（2026-10-30 晚实测；原 11 = 旧语料）
+        # det1=3（B1 批实测）：新语料出现 3 行「非 oracle、含 skip/xfail 标记、
+        # detection_rate==1.0」——**伪 green 形态的实证样本**，正式归因见登记册
+        # §B1 批（synthetic 饱和语料的生成测试行为）；本锁保持"只升不降+计数对账"。
+        assert det1 == 3

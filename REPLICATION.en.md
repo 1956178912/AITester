@@ -34,9 +34,10 @@ make reproduce-zero-llm-l1
 ```
 
 L0 runs statistical extensions, mutation × detection cross-validation, SWE-bench disclosure,
-citation checks, and per-directory SHA256SUMS verification; L1 adds the full QuixBugs Mut@k
-recompute (hours). Results are tri-state: `ok` / `FAILED` / `skipped` — branches whose source
-artifacts were withdrawn print `[SKIP]`, and **skip is not a pass**. The exit code depends only on failed commands plus SHA256SUMS failures.
+citation checks, and SHA256SUMS verification; L1 adds the full QuixBugs Mut@k recompute
+(hours). Results are tri-state: `ok` / `FAILED` / `skipped` — withdrawn source artifacts
+print `[SKIP]`, and **skip is not a pass**; the exit code counts only failed commands and
+SHA256SUMS failures.
 
 **B. LLM-dependent single-batch re-run (API key required)**:
 
@@ -45,21 +46,22 @@ bash reproduce.sh --dataset synthetic --full
 ```
 
 `--full` = 87 tasks / `--max-pattern-repeat 2` / seed 42 / three arms (`aitester`,
-`plain_llm`, `plain_llm_df`). This script runs one seed; the full three-seed protocol entry
-point is `experiments/run_main_batch.py`, and **batches from different seeds must not be pooled**. Outputs land in `experiments/results/` (run-produced, never committed).
+`plain_llm`, `plain_llm_df`). One seed per run; the three-seed entry is
+`experiments/run_main_batch.py`, and **different-seed batches must not be pooled**.
+Outputs land in `experiments/results/` (run-produced, never committed).
 
 **C. Dockerized reproduction**:
 
 ```bash
-docker build --build-arg GIT_SHA=$(git rev-parse HEAD) -f Dockerfile.repro -t aitester-repro:$(git rev-parse --short HEAD) .
-docker run --rm \
-  -v $(pwd)/experiments/results:/workspace/experiments/results \
+docker build --build-arg GIT_SHA=$(git rev-parse HEAD) -f Dockerfile.repro \
+  -t aitester-repro:$(git rev-parse --short HEAD) .
+docker run --rm -v $(pwd)/experiments/results:/workspace/experiments/results \
   -v $(pwd)/.env.local:/workspace/.env.local:ro \
   aitester-repro:<sha> bash reproduce.sh --dataset synthetic --full
 ```
 
-The image has no `.git`, so provenance reads `GIT_SHA` from the build-time
-`.repro_provenance` marker; when no build-arg is passed the value stays `unknown` and is never treated as a commit SHA.
+The image has no `.git`; provenance reads `GIT_SHA` from the build-time `.repro_provenance`
+marker — with no build-arg it stays `unknown` and is never treated as a commit SHA.
 
 ## 3. Historical Input and Mounting
 
@@ -93,6 +95,12 @@ When skipped, conclusions **exclude test verification** — that is a disclosure
 | Artifact checksums | `experiments/results/**/SHA256SUMS` |
 | License and citation | `LICENSE`, `CITATION.cff` |
 
-The historical main batch (n=261/arm) was withdrawn with the 2026-10-24 data purge and is
-historical only; current readings come from `BASELINE.yaml` and the rebuilt batches, one
-batch at a time. Known gaps: no raw LLM responses are archived, so re-runs are subject to server-side drift; the historical batch had `git_dirty=true` and no model fingerprint.
+The historical main batch (n=261/arm) was withdrawn with the 2026-10-24 purge; current
+readings come from `BASELINE.yaml` and rebuilt batches. Gaps: raw LLM responses not
+archived (server-side drift); the historical batch has no model fingerprint.
+
+## 6. Environment Quadruple (N08, frozen 2026-10-30)
+
+New batches must pin the quadruple — **seed / model alias+fingerprint / temperature /
+dataset version content fingerprint** (any missing ⇒ fail-closed; no pooling across
+quadruples). Details: `docs/design/replication_quadruple_n08.en.md`.

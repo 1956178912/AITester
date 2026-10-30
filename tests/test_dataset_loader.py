@@ -910,6 +910,9 @@ class TestGetAvailableDatasets:
             "swebench_rebench",
             "swe_bench_pro",
             "swebench_pro",
+            # B1 批（2026-10-29/30）：TestGenEval-Lite 接入（4a9512e3）
+            "testgeneval",
+            "testgenevallite",
             "defects4j_python",
             "d4j_py",
             # W4（2026-10-05 审查落地）：真实缺陷基准阶梯 L1/L2

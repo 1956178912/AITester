@@ -66,11 +66,6 @@ MANIFEST: tuple[str, ...] = (
 EVIDENCE_DIR_EXEMPTIONS: dict[str, str] = {
     # 2026-10-25：四个重跑期目录已全部 git add -f 入库（锚表/机制重放/
     # oracle 注入批/b8 消融批），按「已全部入库 ⇒ 删登记」清空豁免表。
-    # B1 批（2026-10-30）：`emse_ult_mutk_full_20261015/` 只有 1 份 586 字节的
-    # `MUTK_ULT_FULL.json`，payload 为空（`rows` 缺失），是 D3 全量 Mut@k 首跑
-    # 的残骸；结论性读数（v13 分片 + pooled MS=0.7786）已由
-    # `emse_ult_mutk_full_20261029/` 整批入库取代（见登记册 §D3）。
-    "emse_ult_mutk_full_20261015": "空 payload 残骸（586B，rows 缺失），已由 emse_ult_mutk_full_20261029 整批入库取代",
 }
 
 # 向后兼容别名（T 轮前仅扫 emse_*；既有测试/调用方仍可用旧名）。
