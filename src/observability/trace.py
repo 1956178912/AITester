@@ -80,6 +80,15 @@ def trace_enabled() -> bool:
 _FIELD_MAX_CHARS = 2000
 
 
+def raw_response_enabled() -> bool:
+    """原始 LLM 响应归档开关（N06，2026-10-30；默认关）。
+
+    打开后 `record_node(raw_llm_response=...)` 的原文**不截断**写入 JSONL
+    （体积/合规敏感：响应可能含代码与长文本，故默认关、按批次显式开启）。
+    """
+    return os.getenv("AITESTER_TRACE_RAW_RESPONSE_ENABLE", "false").strip().lower() == "true"
+
+
 def _summarize(value: Any) -> Any:
     """生成单字段的可 JSON 序列化摘要（长文本截断、嵌套结构原样保留）。
 
@@ -317,6 +326,7 @@ class TraceSession:
         decision_reason: str | None = None,
         strategy_selected: str | None = None,
         budget_remaining: int | float | None = None,
+        raw_llm_response: str | None = None,
     ) -> None:
         """记录一次智能体节点的输入输出与决策结果（4.1 核心事件）。
 
@@ -337,6 +347,9 @@ class TraceSession:
             input_summary: 输入摘要（本节点消费的关键 state 字段，可选）。
             token_usage: 本节点 LLM 调用的 token 消耗快照（可选，
                 由调用方经 token_usage.get_usage().as_dict() 提取增量）。
+            raw_llm_response: 本节点 LLM 原始响应全文（N06 可选）。仅当
+                `AITESTER_TRACE_RAW_RESPONSE_ENABLE=true` 时**不截断**落盘；
+                开关关闭（默认）时整体忽略——调用方无需自行判开关。
             decision_reason: 决策原因的自然语言说明（可选，如
                 "error_category=assertion, iteration>=max → done"）。
             strategy_selected: 本节点选中的修复/生成策略标签（可选，
@@ -378,6 +391,10 @@ class TraceSession:
             record["strategy_selected"] = strategy_selected
         if budget_remaining is not None:
             record["budget_remaining"] = budget_remaining
+        # N06（2026-10-30）：原始 LLM 响应归档——仅开关开启时落盘且**不截断**
+        # （原文对失败归因/复现分析不可替代；默认关是体积与合规默认）。
+        if raw_llm_response is not None and raw_response_enabled():
+            record["raw_llm_response"] = raw_llm_response
         self._append(record)
 
     def record_task_end(
