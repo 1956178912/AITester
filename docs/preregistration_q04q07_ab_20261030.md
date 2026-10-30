@@ -47,3 +47,9 @@
 | D1 | 共同口径："Q07 另跑 quixbugs 50"（配合"每臂 `--baselines aitester` 单臂"） | 只落盘 `q07_on_quixbugs`（50 任务），**无 off 对照臂** | 真实语料上无法计算 on−off 配对差 δ，只能给单臂描述读数（19/50 = 38%） | 主判据仍以 synthetic 87 的 δ=−3.45pp 为准，判负结论不变；quixbugs 单臂读数只作描述、不得与 synthetic 并列或换算；补 off 臂须另批预算 |
 | D2 | Q04 主终点 spec_compile_rate | 一致（两臂均落盘） | 无 | — |
 | D3 | Q03 以实装开关为准 | 一致（两臂均落盘） | 无 | — |
+
+**D1 关闭记录（2026-10-30 22:54，exit=0）**：off 对照臂已补跑（QuixBugs 50）。
+on 臂 success 19/50、detection 25/36；off 臂 success 20/50、detection 26/35
+⇒ 两语料同向（on 不优），合成语料的判负结论不变。**两臂可测分母相差 1
+（36 vs 35），detection 率不是同分母配对差**，只能报计数与各自率，不得据此
+计算 δ 或 bootstrap CI。

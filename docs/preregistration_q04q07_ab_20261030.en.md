@@ -55,3 +55,11 @@ Last updated: 2026-10-30
 | D1 | Common protocol: "Q07 additionally runs quixbugs 50" (together with "each arm, `--baselines aitester`") | Only `q07_on_quixbugs` (50 tasks) was produced; **no off control arm** | The paired on−off difference δ cannot be computed on the real corpus; only a single-arm descriptive reading exists (19/50 = 38%) | The primary verdict stays with the synthetic-87 comparison (δ = −3.45 pp), which remains negative; the quixbugs single-arm reading is descriptive only and must not be juxtaposed with, or converted into, the synthetic figure; adding the off arm requires a separate budget batch |
 | D2 | Q04 primary endpoint spec_compile_rate | As preregistered (both arms produced) | None | — |
 | D3 | Q03 follows the implemented switch | As preregistered (both arms produced) | None | — |
+
+**D1 closure (2026-10-30 22:54, exit=0)**: the missing off control arm has been run
+(QuixBugs 50). On arm: success 19/50, detection 25/36; off arm: success 20/50,
+detection 26/35 ⇒ both corpora point the same way (no advantage for on), so the
+negative synthetic verdict stands. **The two arms differ by one measurable task
+(36 vs 35), so the detection rates are not a same-denominator paired difference**;
+only counts and per-arm rates may be reported, and no δ or bootstrap CI may be
+computed from them.
