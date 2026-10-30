@@ -4559,6 +4559,10 @@ def run_benchmark(
         # A/B 开关必须显式入列表，_ENABLE 形态的自动覆盖不保证非标准名）；
         # DETERMINISTIC/FL_GOLD 显式化防回归；N06 原始响应开关同批登记。
         "ORACLE_CONTEXT_TIER",
+        # H1 载荷等价（预注册 docs/design/payload_equivalence_prereg.md §2.2）：
+        # Generator 载荷水平是 H1 的**唯一**自变量，不入快照则干预不可从工件
+        # 证明（A1/D3/RT1 同类事故第 4 次重演的风险面）。
+        "GENERATOR_PAYLOAD",
         "DETERMINISTIC_REPAIR_FIRST_ENABLE",
         "FL_GOLD_INJECTION_ENABLE",
         "AITESTER_TRACE_RAW_RESPONSE_ENABLE",

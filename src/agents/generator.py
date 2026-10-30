@@ -17,6 +17,7 @@ from __future__ import annotations
 import ast
 import json
 import logging
+import os
 import re
 from typing import Any, ClassVar
 
@@ -41,6 +42,78 @@ _FROM_IMPORT_RE = re.compile(r"^from\s+(\S+)\s+import", re.MULTILINE)
 def _assertion_augment_enabled() -> bool:
     """3.4 断言增强开关：环境变量 ASSERTION_AUGMENT_ENABLE=true 时启用（默认 false）。"""
     return env_flag("ASSERTION_AUGMENT_ENABLE")
+
+
+# ─── H1 载荷等价实验（预注册 docs/design/payload_equivalence_prereg.md §2.2）──
+# GENERATOR_PAYLOAD 控制 Generator 收到的载荷水平：
+#   full      —— 现状（历史口径逐字节不变，ADR-0003 默认关惯例）
+#   df_parity —— 仅被测代码 + module_name/import 约束（与 plain_llm_df 同载荷）
+#   structure —— plan 骨架，剥除 oracle-来自-实现的三个锚点（探索性，默认不跑）
+# 非法值回退 full 并告警（与 ORACLE_CONTEXT_TIER 同口径）；臂级核验由
+# experiments/run_payload_ab.py 的 provenance.env_snapshot 对账承担。
+_GENERATOR_PAYLOAD_ENV = "GENERATOR_PAYLOAD"
+_GENERATOR_PAYLOAD_LEVELS = ("full", "df_parity", "structure")
+
+# structure 水平保留的 test_cases 键（其余一律剥除，含 expected_output）
+_STRUCTURE_CASE_KEYS = ("case_name", "input_args", "category", "description", "logic_coverage")
+# structure 水平从 logic_analysis 剥除的两个 oracle-来自-实现锚点
+_STRUCTURE_STRIPPED_ANALYSIS_KEYS = frozenset({"output_domain", "postconditions"})
+
+
+def generator_payload() -> str:
+    """Generator 载荷水平（full | df_parity | structure，默认 full；非法值回退 full）。"""
+    raw = os.getenv(_GENERATOR_PAYLOAD_ENV, "full").strip().lower()
+    if raw in _GENERATOR_PAYLOAD_LEVELS:
+        return raw
+    logger.warning(
+        "GENERATOR_PAYLOAD=%r 非法，回退 full（允许值 %s）",
+        raw,
+        _GENERATOR_PAYLOAD_LEVELS,
+    )
+    return "full"
+
+
+def _plan_structure_only(plan: Any) -> Any:
+    """structure 水平纯函数：只留 plan 骨架，剥除三个 oracle-来自-实现的锚点。
+
+    保留：``function_name`` / ``description`` / ``test_cases[]`` 的
+    ``case_name`` / ``input_args`` / ``category`` / ``description`` /
+    ``logic_coverage``，以及 ``logic_analysis`` 除两键外的全部字段。
+    剥除：``test_cases[].expected_output``、``logic_analysis.output_domain``、
+    ``logic_analysis.postconditions``（预注册 §2.2）。
+    非 dict 入参原样返回（不抛异常、不产出半成品结构）。
+    """
+    if not isinstance(plan, dict):
+        return plan
+    out: dict[str, Any] = {}
+    for key in ("function_name", "description"):
+        if key in plan:
+            out[key] = plan[key]
+    cases = plan.get("test_cases")
+    if isinstance(cases, list):
+        out["test_cases"] = [
+            {k: case[k] for k in _STRUCTURE_CASE_KEYS if k in case} for case in cases if isinstance(case, dict)
+        ]
+    analysis = plan.get("logic_analysis")
+    if isinstance(analysis, dict):
+        out["logic_analysis"] = {k: v for k, v in analysis.items() if k not in _STRUCTURE_STRIPPED_ANALYSIS_KEYS}
+    return out
+
+
+def _build_df_parity_query(target_code: str, module_name: str) -> str:
+    """df_parity 载荷：只含被测代码 + module_name/import 约束（预注册 §2.2）。
+
+    不含 plan JSON、RAG 参考、断言增强、变异反馈、分支覆盖/边界三元组等
+    增强段；检出优先协议文本由 nodes 层注入，不在此处重复。
+    """
+    query = f"目标代码：\n```\n{target_code}\n```"
+    if module_name:
+        query += (
+            f"\n\n被测模块名：{module_name}"
+            f"\n\n【重要约束】import 语句必须使用以下模块名：`{module_name}`，"
+            f"即 `from {module_name} import ...`"
+        )
+    return query
 
 
 def _plan_without_expected_output(plan: Any) -> Any:
@@ -477,10 +550,21 @@ class GeneratorAgent(BaseAgent):
         主因）。None / 空串 = 历史口径逐字节不变（与上面 replace 段互斥，
         由 _generator_node 的模式分支保证）。
         """
+        # H1 载荷分派（预注册 §2.2 / P-1）：df_parity 在三处增强之前返回，
+        # 保证该臂 prompt 只含被测代码与 import 约束；full 走原路径，
+        # 逐字节不变（ADR-0003）。
+        payload = generator_payload()
+        if payload == "df_parity":
+            return _build_df_parity_query(target_code, module_name)
+
         # A1 消融（PLAN_STRIP_EXPECTED_OUTPUT_ENABLE，默认关）：剥除 Planner 由
         # 缺陷代码派生的 expected_output，切断 oracle-from-implementation 锚点。
         # 默认关时 _plan_without_expected_output 原样返回同一引用，行为零变化。
         test_plan = _plan_without_expected_output(test_plan)
+        # structure 水平（探索性）：剥除三个 oracle-来自-实现的锚点后继续走
+        # full 的其余增强段（预注册 §2.2）。
+        if payload == "structure":
+            test_plan = _plan_structure_only(test_plan)
         # 将测试计划序列化为 JSON 字符串，便于 LLM 理解结构
         plan_json = json.dumps(test_plan, ensure_ascii=False, indent=2)
 

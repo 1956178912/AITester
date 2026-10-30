@@ -57,7 +57,13 @@ SNAPSHOT_FILE = PROJECT_ROOT / "experiments" / "run_benchmark.py"
 SNAPSHOT_VAR = "_env_snapshot_keys"
 DEFAULT_ALLOWLIST = PROJECT_ROOT / "review_2026" / "E2_env_snapshot_allowlist.txt"
 DEFAULT_SCAN_ROOTS = ("src",)
-DEFAULT_SELECT = r"_ENABLE$"
+# H1（2026-10-30）：除 `_ENABLE` 布尔开关外，还有**枚举型**载荷/档位开关
+# （GENERATOR_PAYLOAD / ORACLE_CONTEXT_TIER）——它们同样改变臂间干预，
+# 同样必须入 provenance 快照。
+# 注意**不要**写成裸 `_TIER$`：`src/tools/patch_applier.py` 的 `CONTEXT_TIER`
+# 是补丁重试降级链的**运行期内部变量**（由程序自己逐级改写），不是批次级
+# 自变量；入快照只会记录"最后一个降级层"的瞬时值，是噪声而非审计证据。
+DEFAULT_SELECT = r"(_ENABLE|_PAYLOAD|^ORACLE_CONTEXT_TIER)$"
 
 # 开关 helper 名（项目约定：`_flag("X")` 等薄封装直接读 env）。任务书点名
 # `_flag`；其余为同族命名，一并覆盖——新增 helper 时在此登记即可。

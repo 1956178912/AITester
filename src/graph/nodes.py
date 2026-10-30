@@ -1185,9 +1185,15 @@ def _build_generator_prompt_sections(state: AITesterState, test_plan: dict[str, 
         段落与观测标记字典，键集合固定（主节点按名消费）。
     """
     # 消融档只解析一次，两组段落共用同一口径（避免中途环境变化造成分叉）
+    # H1（2026-10-30，预注册 docs/design/payload_equivalence_prereg.md §2.2）：
+    # GENERATOR_PAYLOAD=df_parity 复用同一 `ctx_minimal` 闸门——分支覆盖 /
+    # 反馈压缩 / AST 边界锚点 / 路径枚举 / 操作图 / 蜕变 / 差分七段全部不注入，
+    # 使该臂载荷与 plain_llm_df 同构；full（默认）时返回值恒为 False 路径，
+    # 历史口径逐字节不变（ADR-0003）。
+    from src.agents.generator import generator_payload as _generator_payload
     from src.tools.logic_spec import oracle_context_minimal as _oracle_ctx_minimal
 
-    _ctx_minimal = _oracle_ctx_minimal()
+    _ctx_minimal = _oracle_ctx_minimal() or _generator_payload() == "df_parity"
     sections = _build_generator_static_sections(state, _ctx_minimal)
     sections.update(_build_generator_oracle_sections(state, test_plan, _ctx_minimal))
     return sections
