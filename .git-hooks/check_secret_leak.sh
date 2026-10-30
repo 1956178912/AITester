@@ -49,8 +49,19 @@ _SENSITIVE_RE='sk-[A-Za-z0-9._-]{10,}|[A-Fa-f0-9]{32,}|[A-Z][A-Z_]*(PASSWORD|PAS
 
 # 已知误报登记（占位符形式，与头部"已知误报登记"注释同步）。
 # 原 5 项基线核查类文档已删除（2026-10-09 清理批次），登记清空；
-# 未来新增误报文档时请扩展本正则并同步头部注释。
-_KNOWN_FP='^docs/history/CHANGELOG_2026-10-26_full(\.en)?\.md$'
+# 2026-10-26（DU 收口提交批次）新增：`docs/history/CHANGELOG_2026-10-26_full*.md`
+# 是冻结的历史归档，正文含 sha256 摘要（64 位 hex）与「曾误报的占位值」说明
+# 文字（如 AKIA+PLACEHOLDER），均为记录而非凭证。
+# 2026-10-30（B1 批收口提交）新增两项证据目录：
+#   - experiments/results/emse_ult_mutk_full_20261029/：D3 全量 Mut@k 终版
+#     分片工件，每份的 `cosmic_ray_config_hash` 是 cosmic-ray 配置文件内容
+#     指纹（40 位 hex），非凭证；
+#   - experiments/results/emse_ult_specir_probe_20261014/：specir/gold probe
+#     归档（带 SHA256SUMS 完整性清单，64 位 hex 摘要）与批次 provenance 的
+#     `git_sha`（40 位 hex）。
+# 三处均为记录而非凭证；命中仅打印供人工复核，不阻断。命中文件非占位符时照常阻断。
+# 维护：新增误报文档时同步加入 _KNOWN_FP 正则，并在头部登记。
+_KNOWN_FP='^docs/history/CHANGELOG_2026-10-26_full(\.en)?\.md$|^experiments/results/emse_ult_mutk_full_20261029/|^experiments/results/emse_ult_specir_probe_20261014/'
 
 LEAKED=""
 while IFS= read -r f; do
