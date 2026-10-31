@@ -1,14 +1,14 @@
 # Replication package inventory
 
-This file is the map the EMSE Open Science Board reviews. It states, for each of
-the journal's six questions, what the package can and cannot do as it ships.
+This file is the open-science checklist map. It states, for each of
+the six review questions, what the package can and cannot do as it ships.
 
-**The headline numbers of this paper are recomputed without a model call.** Two
+**The headline numbers of the study are recomputed without a model call.** Two
 paths in the package do consume LLM quota, and both are *regeneration*, not
 evidence for a reported number: `reproduce.sh --dataset synthetic --full` reruns
 one pre-registered batch under seed 42, and `experiments/run_main_batch.py` reruns
 the three-seed protocol. Neither is on the path from an archived artifact to a
-number in the paper. The zero-LLM path is `make reproduce-zero-llm` (L0) and
+reported number. The zero-LLM path is `make reproduce-zero-llm` (L0) and
 `make reproduce-zero-llm-l1` (L0 plus the hour-scale cosmic-ray `Mut@k`
 re-execution). Both write `experiments/results/REPRODUCTION_REPORT.md`, which
 prints the outcome of every command instead of only the passing ones.
@@ -105,7 +105,7 @@ scripts that need it warn and stop rather than silently substituting a default.
 `DOCSTRING_AUGMENT_PREREG_2026-10-17.md`,
 `QUIXBUGS_SPECIR_EXPAND_PREREG_2026-10-14.md`,
 `ULT_DF200_PREREG_2026-10-17.md`, `ULT_DFSMOKE_PREREG_2026-10-17.md`).
-The instruction artifacts measured by the paper are extracted verbatim from
+The instruction artifacts measured in the study are extracted verbatim from
 source and pinned by SHA-256, so the exact prompt text is checkable from the
 archive.
 

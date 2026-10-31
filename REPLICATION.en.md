@@ -8,13 +8,11 @@ the LLM path must spend new API quota; only metrics from committed artifacts rep
 
 ## 1. Prerequisites
 
-- Python 3.12+ (`pyproject.toml` sets `requires-python = ">=3.12"`; CI matrix
-  3.12/3.13/3.14). Use the repository `.venv`.
+- Python 3.12+ (`pyproject.toml` sets `requires-python = ">=3.12"`; CI matrix 3.12/3.13/3.14). Use the repository `.venv`.
 - Dependencies: `pip install -r requirements.txt` (or `make install`); wheel installs that
   run the executor also need `pip install "aitester[execution]"`.
 - The LLM path needs `LLM_1_API_KEY` / `LLM_1_BASE_URL` / `LLM_1_MODEL` in `.env.local`
-  (copied from `config.local.example`); **keys are never committed**, and scripts warn when
-  they are missing.
+  (copied from `config.local.example`); **keys are never committed**; scripts warn when missing.
 - Optional: Docker (`Dockerfile.repro`); sandboxes are controlled by switches such as
   `EXECUTOR_USE_VENV`, with the venv sandbox on by default.
 
@@ -34,10 +32,9 @@ make reproduce-zero-llm-l1
 ```
 
 L0 runs statistical extensions, mutation × detection cross-validation, SWE-bench disclosure,
-citation checks, and SHA256SUMS verification; L1 adds the full QuixBugs Mut@k recompute
-(hours). Results are tri-state: `ok` / `FAILED` / `skipped` — withdrawn source artifacts
-print `[SKIP]`, and **skip is not a pass**; the exit code counts only failed commands and
-SHA256SUMS failures.
+citation checks, and SHA256SUMS verification; L1 adds the hour-scale QuixBugs Mut@k recompute.
+Results are tri-state: `ok` / `FAILED` / `skipped` — withdrawn artifacts print `[SKIP]`, and
+**skip is not a pass**; the exit code counts only failed commands and checksum failures.
 
 **B. LLM-dependent single-batch re-run (API key required)**:
 
@@ -46,9 +43,8 @@ bash reproduce.sh --dataset synthetic --full
 ```
 
 `--full` = 87 tasks / `--max-pattern-repeat 2` / seed 42 / three arms (`aitester`,
-`plain_llm`, `plain_llm_df`). One seed per run; the three-seed entry is
-`experiments/run_main_batch.py`, and **different-seed batches must not be pooled**.
-Outputs land in `experiments/results/` (run-produced, never committed).
+`plain_llm`, `plain_llm_df`). One seed per run; the three-seed entry is `experiments/run_main_batch.py`,
+and **different-seed batches must not be pooled**. Outputs land in `experiments/results/` (never committed).
 
 **C. Dockerized reproduction**:
 
@@ -66,10 +62,9 @@ marker — with no build-arg it stays `unknown` and is never treated as a commit
 ## 3. Historical Input and Mounting
 
 `.dockerignore` excludes `experiments/results`, so the image does **not** contain that
-directory. The mounted directory is both **historical input** (the full test suite uses
-archived artifacts there as fixtures) and output (this run's results): mount a complete
-directory with archived results; starting from an empty directory makes the Step 3 test
-suite fail, so the test gate must be skipped explicitly.
+directory. The mounted directory is both **historical input** (the test suite uses archived
+artifacts there as fixtures) and output: mount a complete directory with archived results;
+starting from an empty directory makes the Step 3 suite fail, so the gate must be skipped explicitly.
 
 ## 4. Test-Gate Escapes
 
@@ -95,12 +90,11 @@ When skipped, conclusions **exclude test verification** — that is a disclosure
 | Artifact checksums | `experiments/results/**/SHA256SUMS` |
 | License and citation | `LICENSE`, `CITATION.cff` |
 
-The historical main batch (n=261/arm) was withdrawn with the 2026-10-24 purge; current
-readings come from `BASELINE.yaml` and rebuilt batches. Gaps: raw LLM responses not
-archived (server-side drift); the historical batch has no model fingerprint.
+The historical main batch (n=261/arm) was withdrawn on 2026-10-24; readings come from
+`BASELINE.yaml` and rebuilt batches. Gaps: raw LLM responses not archived; no model fingerprint.
 
 ## 6. Environment Quadruple (N08, frozen 2026-10-30)
 
 New batches must pin the quadruple — **seed / model alias+fingerprint / temperature /
-dataset version content fingerprint** (any missing ⇒ fail-closed; no pooling across
-quadruples). Details: `docs/design/replication_quadruple_n08.en.md`.
+dataset version content fingerprint** (any missing ⇒ fail-closed; no pooling across quadruples);
+details: `docs/design/replication_quadruple_n08.en.md` (archived in the paper repository).
