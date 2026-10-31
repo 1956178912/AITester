@@ -257,13 +257,27 @@ class RepoExecutor:
                         logger.info("仓库环境命中缓存（锁内复检）: %s", env_dir)
                 if not cached:
                     os.makedirs(env_dir, exist_ok=True)
-                    # 清掉旧 repo 目录（部分失败残留）
+                    # R-head-reuse（2026-10-31）：repo 目录 HEAD 已在目标 commit
+                    # 时它不是"部分失败残留"——清掉重 clone 纯属浪费，且大批量
+                    # 删除在受限环境（宿主 safe-delete bulk 守卫）会被拦截，拦截
+                    # 后 ignore_errors 吞掉失败 → clone 落在非空目录必失败 →
+                    # 全部任务 harness_invalid（G8 openlibrary / Lite astropy
+                    # 实测）。marker 缺失只影响本层缓存语义；venv 就绪性由共享
+                    # venv 侧依赖指纹 + editable 绑定复检兜底（F10 fail-closed），
+                    # per-commit venv/全局模式由下方 pip 序列如实重装。此处复用
+                    # repo 目录仅跳过 clone，不虚报 pip 状态。
+                    reuse_repo_dir = False
                     if os.path.isdir(repo_dir):
-                        shutil.rmtree(repo_dir, ignore_errors=True)
+                        _head = _run(["git", "rev-parse", "HEAD"], repo_dir, 30)
+                        reuse_repo_dir = _head.returncode == 0 and _head.stdout.strip() == base_commit
+                    if not reuse_repo_dir:
+                        # 清掉旧 repo 目录（部分失败残留）
+                        if os.path.isdir(repo_dir):
+                            shutil.rmtree(repo_dir, ignore_errors=True)
 
-                    env_error = self._clone_and_checkout(repo_url, base_commit, repo_dir)
-                    if env_error:
-                        return {"workdir": repo_dir, "cached": False, "error": env_error}
+                        env_error = self._clone_and_checkout(repo_url, base_commit, repo_dir)
+                        if env_error:
+                            return {"workdir": repo_dir, "cached": False, "error": env_error}
 
                     if self.use_venv:
                         if self.venv_reuse_by_repo:

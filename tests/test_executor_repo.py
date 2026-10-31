@@ -137,6 +137,55 @@ class TestSetup:
         env = ex.setup(repo_env["repo_url"], "deadbeef" * 4)
         assert env["error"] is not None
 
+    def test_setup_reuses_repo_when_marker_missing_but_head_matches(self, repo_env, tmp_path, monkeypatch):
+        """R-head-reuse：marker 缺失 + HEAD 已在目标 commit → 复用 repo，不 rmtree/clone。
+
+        背景：宿主 safe-delete bulk 守卫会拦截大批量删除（G8 openlibrary /
+        Lite astropy 实测），ignore_errors 吞掉失败后 clone 落在非空目录必败，
+        全部任务 harness_invalid。HEAD==base_commit 的目录不是残留，跳过清理。
+        """
+        ex = _executor(tmp_path)
+        # 先正常 setup 一次（写入 marker），再删掉 marker 模拟"判定轮遗留环境"
+        first = ex.setup(repo_env["repo_url"], repo_env["base_commit"])
+        assert first["error"] is None
+        marker = os.path.join(os.path.dirname(first["workdir"]), ".venv_pip_installed")
+        if os.path.isfile(marker):
+            os.remove(marker)
+
+        clone_calls: list[str] = []
+        orig_clone = ex._clone_and_checkout
+
+        def _spy_clone(url, commit, dest):
+            clone_calls.append(commit)
+            return orig_clone(url, commit, dest)
+
+        monkeypatch.setattr(ex, "_clone_and_checkout", _spy_clone)
+        second = ex.setup(repo_env["repo_url"], repo_env["base_commit"])
+        assert second["error"] is None, second
+        assert clone_calls == [], "HEAD 正确时不得重新 clone"
+        # repo 目录仍是原 checkout（未被删除重建）
+        head = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=second["workdir"], capture_output=True, text=True
+        ).stdout.strip()
+        assert head == repo_env["base_commit"]
+
+    def test_setup_rebuilds_when_head_drifts_even_without_marker(self, repo_env, tmp_path):
+        """R-head-reuse 负例：marker 缺失且 HEAD 漂移（错 commit 残留）→ 必须重建。"""
+        ex = _executor(tmp_path)
+        first = ex.setup(repo_env["repo_url"], repo_env["base_commit"])
+        assert first["error"] is None
+        marker = os.path.join(os.path.dirname(first["workdir"]), ".venv_pip_installed")
+        if os.path.isfile(marker):
+            os.remove(marker)
+        # 漂移：checkout 到别的 commit（新空 commit）
+        subprocess.run(["git", "commit", "--allow-empty", "-q", "-m", "drift"], cwd=first["workdir"], check=True)
+        second = ex.setup(repo_env["repo_url"], repo_env["base_commit"])
+        assert second["error"] is None, second
+        head = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=second["workdir"], capture_output=True, text=True
+        ).stdout.strip()
+        assert head == repo_env["base_commit"], "漂移残留必须重建回目标 commit"
+
 
 class TestVerify:
     def test_verify_pass_with_llm_fix(self, repo_env, tmp_path):
