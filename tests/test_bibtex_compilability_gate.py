@@ -149,7 +149,22 @@ class TestStaticScan:
 
 
 class TestRealCompileProbe:
-    """真实编译探针：门禁必须**真跑 bibtex**，不靠正则猜测。"""
+    """真实编译探针：门禁必须**真跑 bibtex**，不靠正则猜测。
+
+    环境守卫（2026-10-31）：探针依赖 `paper/tex/spbasic.bst` 样式文件，
+    而 `paper/` 不入库（私有投稿仓）——fresh clone / CI 无此文件时探针
+    报 `样式文件缺席`（status=error），3 例全红。与 require_full_corpus
+    同款纪律：前提不成立显式 skip 并带原因，不把「没跑」折成「跑过且
+    通过」；本地检出（paper/ 在盘）时照常真编译。
+    """
+
+    _STYLE_FILE = PROJECT_ROOT / "paper" / "tex" / "spbasic.bst"
+
+    def setup_method(self) -> None:
+        if not self._STYLE_FILE.exists():
+            pytest.skip(
+                "paper/tex/spbasic.bst 缺席（paper/ 不入库，fresh clone/CI 无此文件）——真实编译探针需本地 paper 检出"
+            )
 
     def test_probe_detects_at_sign_trap(self, gate):
         """注入陷阱 ⇒ 探针失败（这是本门禁存在的根本理由）。"""
