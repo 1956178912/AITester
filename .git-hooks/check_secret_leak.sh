@@ -96,7 +96,9 @@ while IFS= read -r f; do
 "
   fi
 done < .tmp_secret_leak_candidates.txt
-rm -f .tmp_secret_leak_candidates.txt
+# 清理临时文件：在受限环境（沙箱/EDR 对仓库根隐藏文件 rm 施加保护）下 rm 可能
+# 失败；临时文件为空且被 .gitignore 覆盖，残留无害，故清理失败不阻断提交。
+rm -f .tmp_secret_leak_candidates.txt || true
 
 if [ -n "$LEAKED" ]; then
   echo "[pre-commit] 密钥泄漏守卫（O17 全口径）：检测到疑似真实凭证："
