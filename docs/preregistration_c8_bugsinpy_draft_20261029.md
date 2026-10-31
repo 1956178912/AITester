@@ -46,3 +46,18 @@
    实例（Python 3.6/3.7 时代），**Python 版本矩阵可能需要 3.8/3.9**（uv 可装）。
 2. BugsInPy gold test 的 pytest 兼容性未验证——首任务端到端验证是执行前置。
 3. 20 任务小样**不构成**统计外推主张——声明限定"方向性外部效度证据"。
+
+## 偏离表（2026-10-31 补登；此前违反"偏离须登记"条款，追记）
+
+| # | 冻结选型 | 实际执行 | 影响 | 处置 |
+|---|---|---|---|---|
+| D1 | 项目子集 = pallets/flask + psf/requests | PySnooper（3 bugs）+ sanic（5 bugs） | flask/requests **不在 BugsInPy 17 项目集**（冻结选型调研失实，结构性不可得） | 已执行部分降级为"判定器验证小样"（红绿翻转协议可用性），不得作为 C8 主读数引用 |
+| D2 | 每项目 10 bug（20 任务） | PySnooper 3 + sanic 5（共 8） | 候选轻依赖项目无一满 10 bug | 同上 |
+| D3 | 2 臂 LLM 批（aitester + plain_llm_df） | 零 LLM 判定（gold 红绿翻转） | **C8 主读数（2 臂检出率 + δ）未产出** | 主批待修订选型后另批执行 |
+
+**修订选型候选（待用户确认后重新冻结）**：以实际存在的项目重选——
+tqdm（9）+ thefuck（32）/ scrapy（40）子集分层抽样，或 tornado（16）+
+black（23）；规模口径（每项目 bug 数上限、总任务量）随选型重冻。
+manifest 导出工具链（bugsinpy-checkout → BugsInPyDataset manifest）在
+主批前须先用 1 个 bug 冒烟验证（PySnooper/sanic 判定走的是
+swebench_task_judge 独立通路，不等于 manifest 通路可用）。
