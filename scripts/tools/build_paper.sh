@@ -25,7 +25,7 @@ set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PY="${AITESTER_PY:-$REPO_ROOT/.venv/bin/python3}"
-AUDIT="$REPO_ROOT/scripts/tools/audit_paper_numbers.py"
+AUDIT="$REPO_ROOT/paper/scripts/tools/audit_paper_numbers.py"
 PAPER_DIR="$REPO_ROOT/paper"
 TEX_DIR="$PAPER_DIR/tex"
 
