@@ -74,3 +74,13 @@ swebench_task_judge 独立通路，不等于 manifest 通路可用）。
 | 工具链 | `export_bugsinpy_manifest.py`（新，manifest 导出 8/8）+ `judge_c8_generated_tests.py`（新，复用 bugsinpy_judge 环境管理） |
 | 成本实测 | 主批 2 臂 8 任务 158k tokens ≈ **$0.16**（冒烟 + 主批，冻结估算 $0.25 内） |
 | 冒烟 | 1 任务通路验证通过（加载→生成→执行反馈环，10,958 tok） |
+
+## v3 扩样修订（2026-10-31 21:05 冻结执行，数据产生前落盘）
+
+| 项 | 冻结值 |
+|---|---|
+| 扩样选型 | **tqdm（9 bugs 全跑）+ tornado（16 bugs 字典序前 11）= 20 任务**——向原冻结规模 20 靠拢；tornado 抽样规则 = bugs 目录字典序（确定性可复现） |
+| 环境事实 | tqdm 全部 py3.6.9、tornado 全部 py3.7.0——判定统一用 py3.8.20 判定 venv（3.6/3.7 代码向后兼容至 3.8；依赖 requirements best-effort 装失败逐包披露）；repos 已 clone、25/25 commit 可达 |
+| 判据 | v2 同款：检出 = 生成测试 buggy 上红（failed≥1）∧ fixed 上绿（exit 0）；invalid_test / env_error 不进检出分母并披露 |
+| 成本预估 | 2 臂 × 20 任务 × ~8k tok ≈ 320k tok ≈ **$0.35** |
+| 与 v2 关系 | v2 读数（PySnooper+sanic 8）保留为「判定器已验证分母」层；v3 扩样为「规模对齐冻结口径」层——两层并列披露、分母不混池 |
