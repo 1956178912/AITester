@@ -211,6 +211,29 @@ _VALID_APIS_REDACTED = [
 ]
 
 
+def _derive_module_name(task: Any) -> str:
+    """任务模块名派生（generator 的 import 强制约束消费）。
+
+    - 默认（全部既有数据集）：task_id 末段派生（历史口径，与落盘文件名
+      一致——单文件执行环境 import 即可命中）。
+    - C8 v2（2026-10-31）：BugsInPy 真实仓库任务改用 metadata.file_path
+      的包内全路径（sanic/app.py → sanic.app）。v1 用 task_id 派生名
+      （sanic_1_app）经 generator 的 import 强制约束进入生成 prompt，
+      LLM 生成的测试在 repo 级判定环境无法收集（构念缺陷，见
+      c8_bugsinpy_20261031/C8_STATISTICAL_REPORT.md）。落盘文件名仍按
+      task_id 派生（executor 收集口径不变）；单文件执行环境对包依赖
+      任务本就 degraded，C8 判据只依赖 generated_test 文本 + repo 级
+      判定，不受影响。
+    """
+    meta = getattr(task, "metadata", None) or {}
+    fp = meta.get("file_path")
+    if meta.get("source") == "bugs_in_py" and fp:
+        base = str(fp)[:-3] if str(fp).endswith(".py") else str(fp)
+        return base.replace("/", ".")[:50]
+    raw_name = str(task.task_id).split("__")[-1]
+    return raw_name.replace("-", "_")[:50]
+
+
 def _get_api_for_task(task_index: int) -> dict:
     """根据任务索引分配 API（轮询分摊限流压力）。"""
     if not _VALID_APIS:
@@ -2816,8 +2839,8 @@ def run_single_task(
         # 派生规则不变即自动中性（单点派生，generator 看到的文件名不含
         # pattern 语义）
         raw_name = task.task_id.split("__")[-1]
-        module_name = raw_name.replace("-", "_")[:50]
-        instance_file = os.path.join(tmp_dir, f"{module_name}.py")
+        module_name = _derive_module_name(task)
+        instance_file = os.path.join(tmp_dir, f"{raw_name.replace('-', '_')[:50]}.py")
         with open(instance_file, "w", encoding="utf-8") as f:
             f.write(task.instance_code)
 
