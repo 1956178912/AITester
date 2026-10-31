@@ -102,8 +102,9 @@ class TestZ3RepoCacheCommitExactMatch(unittest.TestCase):
         """静态守卫：executor_repo 不得再用 12 位前缀比较 commit。"""
         src = _read("src/agents/executor_repo.py")
         self.assertNotIn("startswith(base_commit[:12])", src)
-        # 两处缓存校验（首检 + 锁内复检）均为全等
-        self.assertEqual(src.count("head.stdout.strip() == base_commit"), 2)
+        # 三处缓存校验（首检 + 锁内复检 + R-head-reuse 复用判定）均为全等——
+        # 第三处为 2aed6761 的 HEAD 复用检查（同全等口径，Z3 语义扩展）
+        self.assertEqual(src.count("head.stdout.strip() == base_commit"), 3)
 
 
 # ═══ Z4：telemetry 占位符清理 ═══════════════════════════════════════════════

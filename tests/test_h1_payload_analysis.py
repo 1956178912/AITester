@@ -12,6 +12,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -44,9 +46,10 @@ class TestDetectionMap:
 
     def test_missing_baseline_raises(self) -> None:
         """基线名缺失必须报错，而不是静默返回空表（空表会把操纵检查算成 0% 检出）。"""
-        import pytest as _pytest
-
-        with _pytest.raises(KeyError):
+        # 注意：U3 守卫按 `pytest.raises` 字面形态扫描——不得使用
+        # `import pytest as _pytest` 别名（守卫 AST 扫描不识别别名，
+        # 会被判为零断言用例，CI U3 门禁红）。
+        with pytest.raises(KeyError):
             detection_map({"results": {}}, baseline="plain_llm_df")
 
 

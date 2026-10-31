@@ -743,17 +743,15 @@ class TestComparabilityAndScannedSurface:
         # 批 benchmark 落盘入库 ⇒ 57/4/28/57/56/56（56 = specir probe 旧工件
         # pinned=False 系数不变）；结构层数以测试报数迭代回填。
         assert (
-            surface["on_disk"] == 68
-        )  # 工具链迁移批回钉（2026-10-31：Q07 补跑 6 臂 + H1 三臂 + 冒烟 3；与 effective_green_ba 同一扫描面）, surface
+            surface["on_disk"] == 77
+        )  # C8 批回钉（2026-10-31：C8 v1/v2 生成批 4 + 冒烟 1 + G8 恢复 1 + B3 Lite 冒烟 3 = 较工具链迁移批 68 +9）
         assert surface["top_level"] == 4, surface
         assert surface["tracked"] == 28, surface
-        assert surface["with_provenance"] == 68, (
+        assert surface["with_provenance"] == 77, surface  # C8 批回钉（2026-10-31：新增 9 份均带 provenance）
+        assert surface["with_fingerprint"] == 76, (
             surface
-        )  # 工具链迁移批回钉（2026-10-31：+Q07 补跑 6 臂 + H1 三臂 + 冒烟 3，均带 provenance）
-        assert surface["with_fingerprint"] == 67, (
-            surface
-        )  # 工具链迁移批回钉（2026-10-31）：68 盘面 −1 = E8 legacy-on 格（预注册披露：切点早于 S29 指纹机制，以披露替代）
-        assert surface["pinned_true"] == 67, surface  # 同上：legacy-on 格以披露替代 pinned
+        )  # C8 批回钉（2026-10-31）：77 盘面 −1 = E8 legacy-on 格（预注册披露：切点早于 S29 指纹机制，以披露替代）
+        assert surface["pinned_true"] == 76, surface  # 同上：legacy-on 格以披露替代 pinned
         assert surface["unsupported_alias"] == 0, surface
         assert surface["alias_mismatch_true"] == 0, surface
 

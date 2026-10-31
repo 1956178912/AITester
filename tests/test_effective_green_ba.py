@@ -386,8 +386,8 @@ class TestRealCorpusApplicability:
         require_full_corpus()
         files = sorted(glob.glob(str(ROOT / "experiments" / "results" / "**" / "benchmark_*.json"), recursive=True))
         assert (
-            len(files) == 68
-        )  # 工具链迁移批回钉（2026-10-31：Q07 真实语料补跑 6 臂 + H1 三臂 + 冒烟 3 份落盘；较 10-30 晚的 57 +11）
+            len(files) == 77
+        )  # C8 批回钉（2026-10-31：C8 v1/v2 生成批 4 + 冒烟 1 + G8 恢复 off 臂 1 + B3 Lite 冒烟 3 份落盘；较工具链迁移批 68 +9）
         marked = 0
         det1 = 0
         for path in files:
