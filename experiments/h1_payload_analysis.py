@@ -199,7 +199,7 @@ def main() -> int:
     }
 
     out_json = Path(args.out) if args.out else root / "H1_STATISTICAL_REPORT.json"
-    out_json.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    out_json.write_text(json.dumps(report, ensure_ascii=False, indent=2, allow_nan=False), encoding="utf-8")
 
     lines = [
         "# H1 载荷等价实验——统计报告",
