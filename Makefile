@@ -5,7 +5,7 @@
 #
 # 用法：make help 查看全部目标。
 
-.PHONY: help install lint format typecheck test test-cov docs-check env-budget baseline-check state-contract env-snapshot model-fingerprint tool-versions json-contract-sites json-strict prompt-artifacts-check preflight artifact-doc-consistency proc-hygiene perf-bench perf-check zero-assert ast-guards status-persistence self-mutation self-mutation-ci gates repro power self-check clean-traces build-check cpr-idr repair-replay cf-upper-bound corrected-metrics target-quality mutation-det-correlation swebench-disclosure pass-matched emse-stats paper-citation-keys
+.PHONY: help install lint format typecheck test test-cov docs-check env-budget baseline-check state-contract env-snapshot model-fingerprint tool-versions json-contract-sites json-strict prompt-artifacts-check preflight artifact-doc-consistency proc-hygiene perf-bench perf-check zero-assert ast-guards status-persistence self-mutation self-mutation-ci gates repro power self-check clean-traces build-check cpr-idr repair-replay cf-upper-bound corrected-metrics target-quality mutation-det-correlation swebench-disclosure pass-matched emse-stats
 
 PY := .venv/bin/python
 
@@ -211,11 +211,7 @@ e2e-probe:  ## 全功能端到端探针（零 LLM 子集；功能矩阵报告）
 e2e-probe-llm:  ## 全功能端到端探针（含真实 LLM 探针；消耗配额，默认不接 CI）
 	AITESTER_E2E_LLM=true $(PY) scripts/tools/e2e_probe.py --all --include-llm --json-out experiments/results/e2e_probe_llm_latest.json --md-out experiments/results/e2e_probe_llm_latest.md
 
-paper-audit:  ## 论文草稿数字-SRC 一致性审计（Q11 独立评审；本地工具，paper/ 不入库，缺失时跳过）
-	$(PY) scripts/tools/audit_paper_numbers.py --md docs/study/PAPER_CONSISTENCY_AUDIT_2026-10-25.md --strict
 
-paper-citation-keys:  ## 论文外部读数引用键快照：--check 只校验（不一致 rc=1）；不带 --check 则覆盖写入
-	$(PY) scripts/tools/export_paper_citation_keys.py --check
 
 paper-build:  ## 投稿 PDF 构建（**先跑判据 → 再编译 → 再跑判据**；CZ 轮起，判据不通过就不编译）
 	bash scripts/tools/build_paper.sh
