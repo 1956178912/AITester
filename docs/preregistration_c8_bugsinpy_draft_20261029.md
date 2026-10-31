@@ -61,3 +61,16 @@ black（23）；规模口径（每项目 bug 数上限、总任务量）随选�
 manifest 导出工具链（bugsinpy-checkout → BugsInPyDataset manifest）在
 主批前须先用 1 个 bug 冒烟验证（PySnooper/sanic 判定走的是
 swebench_task_judge 独立通路，不等于 manifest 通路可用）。
+
+## v1 修订选型（2026-10-31 16:50 冻结执行；文档落盘滞后于主批启动，如实记录）
+
+| 项 | 冻结值 |
+|---|---|
+| 项目子集 | **PySnooper（3 bugs）+ sanic（5 bugs）= 8 bugs**——判定器已验证红绿翻转可用的分母（10-30 判定轮），repos 已克隆、micromamba py3.8.20 环境在位 |
+| 臂 | aitester + plain_llm_df（原冻结不变） |
+| 任务形态 | BugsInPyDataset manifest（buggy_code/fixed_code/test_code，单文件上下文 + gold_patch 扩展字段）；`AITESTER_BUGSINPY_DATA` 指向 |
+| 生成判定 | **检出 = 生成测试在 buggy 上「红」（pytest failed≥1）∧ 在 fixed 上「绿」（退出码 0）**；收集失败 = invalid_test 不计检出；环境失败 = env_error 不进分母 |
+| 偏离 | 规模 8 vs 20（D2 延续：候选项目 bug 不足）；manifest 单文件上下文截断（多文件 bug 的次要文件不进 LLM 上下文，gold_patch 完整用于判定） |
+| 工具链 | `export_bugsinpy_manifest.py`（新，manifest 导出 8/8）+ `judge_c8_generated_tests.py`（新，复用 bugsinpy_judge 环境管理） |
+| 成本实测 | 主批 2 臂 8 任务 158k tokens ≈ **$0.16**（冒烟 + 主批，冻结估算 $0.25 内） |
+| 冒烟 | 1 任务通路验证通过（加载→生成→执行反馈环，10,958 tok） |
