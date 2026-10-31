@@ -385,7 +385,9 @@ class TestRealCorpusApplicability:
         # 并带实测读数（tests/_corpus_guard.py），不把"没扫到"折成"扫过且干净"。
         require_full_corpus()
         files = sorted(glob.glob(str(ROOT / "experiments" / "results" / "**" / "benchmark_*.json"), recursive=True))
-        assert len(files) == 57  # B1 批二次回钉（2026-10-30 晚：Q03/Q04/Q07/S09 六臂 + N10 批落盘）
+        assert (
+            len(files) == 68
+        )  # 工具链迁移批回钉（2026-10-31：Q07 真实语料补跑 6 臂 + H1 三臂 + 冒烟 3 份落盘；较 10-30 晚的 57 +11）
         marked = 0
         det1 = 0
         for path in files:

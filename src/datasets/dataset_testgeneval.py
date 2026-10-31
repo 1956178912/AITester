@@ -47,7 +47,7 @@ from __future__ import annotations
 import ast
 import logging
 import os
-from typing import Any
+from typing import Any, ClassVar
 
 from src.datasets.dataset_loader import BaseDatasetLoader, BenchmarkTask
 from src.utils.check_status import AST_UNREADABLE_ERRORS
@@ -90,7 +90,7 @@ class TestGenEvalDataset(BaseDatasetLoader):
     """
 
     DATASET_NAME = "testgeneval"
-    SUPPORTS_SUBSET: bool = True
+    SUPPORTS_SUBSET: ClassVar[bool] = True
     SUPPORTED_SUBSETS = frozenset(_SPLIT_FILES)
 
     def _split_file(self) -> str | None:
@@ -116,7 +116,7 @@ class TestGenEvalDataset(BaseDatasetLoader):
             logger.warning("TestGenEvalLite 数据未找到：%s", self.subset_fallback_reason)
             return
 
-        import pyarrow.parquet as pq
+        import pyarrow.parquet as pq  # type: ignore[import-untyped]
 
         table = pq.read_table(path).to_pylist()
         loaded = skipped = 0

@@ -3,7 +3,7 @@
 # 规则：本地运行 check_env_budget.py（无 --check）发现新名自动登记写回，
 # 由贡献者随改动提交——'登记'即'修改本文件'，PR diff 强制可见（P0-5 冻结决策）。
 # CI 以 --check 模式阻断未登记新增；删名允许（表随之收缩）。
-env_total: 252
+env_total: 253
 names:
   - ADVERSARIAL_DEBUGGING_ENABLE
   - AGENT_TELEMETRY_ENABLE
@@ -124,6 +124,7 @@ names:
   - FL_SPECTRAL_ENABLE
   - FL_SPECTRAL_TIMEOUT
   - FL_SPECTRAL_TOP_K
+  - GENERATOR_PAYLOAD
   - GRAPH_RAG_ENABLE
   - GRAPH_RAG_MAX_HOPS
   - GRAPH_RAG_TOP_K_SNIPPETS

@@ -42,8 +42,12 @@ class TestDetectionMap:
         assert none_rows == 1
         assert "c" not in mapping, "None 行必须从分母剔除，不能记成 False"
 
-    def test_missing_details_is_empty(self) -> None:
-        assert detection_map({}) == ({}, 0)
+    def test_missing_baseline_raises(self) -> None:
+        """基线名缺失必须报错，而不是静默返回空表（空表会把操纵检查算成 0% 检出）。"""
+        import pytest as _pytest
+
+        with _pytest.raises(KeyError):
+            detection_map({"results": {}}, baseline="plain_llm_df")
 
 
 class TestMcNemarOneSided:

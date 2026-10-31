@@ -742,12 +742,18 @@ class TestComparabilityAndScannedSurface:
         # B1 批二次上调（2026-10-30 晚，只升不降）：Q03/Q04/Q07/S09 六臂 + N10
         # 批 benchmark 落盘入库 ⇒ 57/4/28/57/56/56（56 = specir probe 旧工件
         # pinned=False 系数不变）；结构层数以测试报数迭代回填。
-        assert surface["on_disk"] == 57, surface
+        assert (
+            surface["on_disk"] == 68
+        )  # 工具链迁移批回钉（2026-10-31：Q07 补跑 6 臂 + H1 三臂 + 冒烟 3；与 effective_green_ba 同一扫描面）, surface
         assert surface["top_level"] == 4, surface
         assert surface["tracked"] == 28, surface
-        assert surface["with_provenance"] == 57, surface
-        assert surface["with_fingerprint"] == 56, surface
-        assert surface["pinned_true"] == 56, surface
+        assert surface["with_provenance"] == 68, (
+            surface
+        )  # 工具链迁移批回钉（2026-10-31：+Q07 补跑 6 臂 + H1 三臂 + 冒烟 3，均带 provenance）
+        assert surface["with_fingerprint"] == 67, (
+            surface
+        )  # 工具链迁移批回钉（2026-10-31）：68 盘面 −1 = E8 legacy-on 格（预注册披露：切点早于 S29 指纹机制，以披露替代）
+        assert surface["pinned_true"] == 67, surface  # 同上：legacy-on 格以披露替代 pinned
         assert surface["unsupported_alias"] == 0, surface
         assert surface["alias_mismatch_true"] == 0, surface
 
