@@ -177,8 +177,25 @@ class TestSetup:
         marker = os.path.join(os.path.dirname(first["workdir"]), ".venv_pip_installed")
         if os.path.isfile(marker):
             os.remove(marker)
-        # 漂移：checkout 到别的 commit（新空 commit）
-        subprocess.run(["git", "commit", "--allow-empty", "-q", "-m", "drift"], cwd=first["workdir"], check=True)
+        # 漂移：checkout 到别的 commit（新空 commit）。显式 -c 注入 ident——
+        # clone 仓不继承源仓的 user.* 配置，CI 容器无全局 git ident 时
+        # commit 会以 empty ident 失败（漂移建不成 ⇒ 测试语义失效）。
+        subprocess.run(
+            [
+                "git",
+                "-c",
+                "user.name=t",
+                "-c",
+                "user.email=t@t",
+                "commit",
+                "--allow-empty",
+                "-q",
+                "-m",
+                "drift",
+            ],
+            cwd=first["workdir"],
+            check=True,
+        )
         second = ex.setup(repo_env["repo_url"], repo_env["base_commit"])
         assert second["error"] is None, second
         head = subprocess.run(

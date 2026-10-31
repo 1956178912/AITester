@@ -166,6 +166,11 @@ class TestReleaseFreshnessWiring:
         assert ALLOWLIST.is_file(), "缺少 docs/release_freshness_allowlist.txt"
         entries = gate.load_allowlist()
         tag, gap = _local_gap()
+        if tag is None:
+            # CI 浅克隆（actions/checkout 默认 fetch-depth=1）无 tag 数据——
+            # 「无观测当 0」会把无 tag 误判成不落后；前提不成立显式 skip
+            # （与 require_full_corpus 同款纪律），完整历史下本测试照常咬人。
+            pytest.skip("浅克隆/无 v* tag 数据——release freshness 对账需完整 git 历史")
         if gap <= 0:
             assert entries == {}, f"当前 tag 不落后（{tag}），例外表应为空，实际：{sorted(entries)}"
             return
