@@ -42,7 +42,7 @@ from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_ARTIFACT = _REPO_ROOT / "experiments" / "results" / "main_batch" / "mutation_detection_correlation.md"
-DEFAULT_DOCS = (_REPO_ROOT / "docs" / "emse" / "OPTIMIZATION_2026-10-15.md",)
+DEFAULT_DOCS = (_REPO_ROOT / "docs" / "study" / "OPTIMIZATION_2026-10-15.md",)
 ARMS = ("aitester", "plain_llm", "plain_llm_df")
 
 # 列名 → 归一化键（中英/空格/加粗差异由 _norm 吸收）

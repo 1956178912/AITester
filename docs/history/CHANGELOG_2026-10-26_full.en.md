@@ -8674,7 +8674,7 @@ SHA256SUMS `e4b1dd5f…` 101 entries verified). Round-Q budget reconciliation: i
 >   artifacts [n=35 / 2:5 / δ=−8.57pp / p=0.4531 / BF10=0.5625 /
 >   MDE=16.57pp → not_confirmed], identical to `QUIXB_EXPAND_AB_REPORT.json`;
 > - **Submission material closure**
->   (`docs/study/SUBMISSION_CHECKLIST_2026-10-15.md`, gitignored
+>   (`(私有 paper 仓 docs/workspace/SUBMISSION_CHECKLIST_2026-10-15.md)`, gitignored
 >   submission-workflow internal): claim→artifact index [441 tracked
 >   artifacts + Docker reproduction entry], caliber-label list [8 number
 >   families with mandatory labels], 8-question reviewer pre-mortem

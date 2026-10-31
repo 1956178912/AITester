@@ -139,12 +139,8 @@ paper/
 # Sensitive local artifacts (academic/review/security) — kept out of GitHub
 .gitignore-sensitive
 INDEPENDENT_REVIEW_*.md
-docs/study/SUBMISSION_*.md
-docs/study/OPTIMIZATION_APPENDIX_*.md
 docs/study/SPECEXPR_SYNTH_CONFIRM_PREREG_*.md
 docs/study/QUIXBUGS_SPECIR_EXPAND_PREREG_*.md
-docs/study/BATCH8_MUTK_VALIDITY_*.md
-docs/study/GOLD_CONFORMANCE_*.md
 docs/study/DF_SPEC_PREREG_*.md
 docs/study/DOCSTRING_ANCHOR_PREREG_*.md
 docs/study/DOCSTRING_AUGMENT_PREREG_*.md

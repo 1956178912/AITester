@@ -184,7 +184,7 @@ class TestCitationPropagation:
     def test_submission_skeleton_uses_standard_g(self) -> None:
         # BZ 轮：投稿骨架按 .gitignore:124（学术文件，local use only）不入库；
         # 同 paper 的口径——缺席显式 skip 并点名原因。
-        skeleton = REPO / "docs" / "emse" / "SUBMISSION_SKELETON_2026-10-16.md"
+        skeleton = REPO / "docs" / "study" / "SUBMISSION_SKELETON_2026-10-16.md"
         if not skeleton.exists():
             pytest.skip(
                 "SUBMISSION_SKELETON_2026-10-16.md 不入库（.gitignore:124 学术文件纪律）——本锁仅在骨架在场环境执行"

@@ -188,7 +188,6 @@ class TestPrivatePathRules:
             ".env.local.bak_g8",
             ".gitignore-sensitive",
             "INDEPENDENT_REVIEW_2026-01-01.md",
-            "docs/study/SUBMISSION_v1.md",
             "docs/study/OPTIMIZATION_APPENDIX_v1.md",
             "docs/study/ULT_DF200_PREREG_2026-10-20.md",
             "docs/study/BATCH8_MUTK_VALIDITY_2026.md",

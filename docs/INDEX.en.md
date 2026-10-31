@@ -76,7 +76,7 @@ other documents.**
 - [PROJECT_STATUS_REGISTER.md](PROJECT_STATUS_REGISTER.md) ·
   [HUMAN_ADJUDICATION_PROTOCOL.md](HUMAN_ADJUDICATION_PROTOCOL.md)
 - Review booklets entry: [reviews/README.md](reviews/README.md)
-- Archive and topic directories: [adr/](adr/) · [design/](design/) · [emse/](emse/) · [security/](security/) ·
+- Archive and topic directories: [adr/](adr/) · [design/](design/) · [study/](study/) · [security/](security/) ·
   [history/](history/)
 
 ## 4. Links and Bilingual Maintenance

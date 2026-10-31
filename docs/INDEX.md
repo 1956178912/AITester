@@ -75,7 +75,7 @@
 - [PROJECT_STATUS_REGISTER.md](PROJECT_STATUS_REGISTER.md) ·
   [HUMAN_ADJUDICATION_PROTOCOL.md](HUMAN_ADJUDICATION_PROTOCOL.md)
 - 评审分册入口：[reviews/README.md](reviews/README.md)
-- 归档与专题目录：[adr/](adr/) · [design/](design/) · [emse/](emse/) · [security/](security/) ·
+- 归档与专题目录：[adr/](adr/) · [design/](design/) · [study/](study/) · [security/](security/) ·
   [history/](history/)
 
 ## 4. 链接与双语维护

@@ -7171,7 +7171,7 @@ Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 �
 >   定案值（n=35 / 2:5 / δ=−8.57pp / p=0.4531 / BF10=0.5625 /
 >   MDE=16.57pp → not_confirmed），与 `QUIXB_EXPAND_AB_REPORT.json`
 >   完全一致；
-> - **投稿材料收口**（`docs/study/SUBMISSION_CHECKLIST_2026-10-15.md`，
+> - **投稿材料收口**（`(私有 paper 仓 docs/workspace/SUBMISSION_CHECKLIST_2026-10-15.md)`，
 >   gitignored 投稿工作流内部件）：论断→工件索引（441 入库工件 + Docker
 >   复现入口）、口径标签清单（8 个数字族强制标签）、审稿人预演 8 问
 >   （证据强度/合成基准效度/temp=0 缓存/过红归因/覆盖率-检出/功效/

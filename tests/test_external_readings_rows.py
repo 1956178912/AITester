@@ -24,7 +24,7 @@ from pathlib import Path
 
 import pytest
 
-REGISTER_DIR = Path(__file__).resolve().parents[1] / "docs" / "emse"
+REGISTER_DIR = Path(__file__).resolve().parents[1] / "docs" / "study"
 _REGISTER_FILES = sorted(REGISTER_DIR.glob("EXTERNAL_READINGS_*.md"))
 # 读者按**文件名发现**登记册：新一轮若新建一份，下面的「恰有一份」测试当场红，
 # 不会出现「锁还在读上一代登记册、新登记册无人校验」的静默过期。

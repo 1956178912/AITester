@@ -110,7 +110,6 @@ _PRIVATE_FILE_PREFIXES: tuple[tuple[str, str], ...] = ((".env.local.bak", "密�
 
 #: 路径模式禁跟踪（相对仓库根的 glob）——学术/评审/投稿类文档。
 _PRIVATE_PATH_GLOBS: tuple[tuple[str, str], ...] = (
-    ("docs/study/SUBMISSION_*.md", "期刊投稿文档"),
     ("docs/study/OPTIMIZATION_APPENDIX_*.md", "投稿优化附录"),
     ("docs/study/*_PREREG_*.md", "预注册文档（论文数字未公开前的口径）"),
     ("docs/study/BATCH8_MUTK_VALIDITY_*.md", "批八变异体效度文档"),
