@@ -1,22 +1,48 @@
 #!/usr/bin/env python3
-"""judge_b3_docker.py — B3 判定的 docker 驱动版（官方 x86 镜像，arm64 经 Rosetta）。
+"""judge_b3_docker.py — B3 判定的 docker 驱动版 v2（daocloud x86 基础镜像）。
 
-对每个 instance：docker pull 官方镜像 → 容器内 code/test 物化 → pytest 生成
-测试（buggy 红绿翻转口径）→ 判完 docker rmi 释放磁盘。
-镜像命名：swebench/sweb.eval.x86_64.{instance_id 大写化双下划线}:latest
-（官方 harness 命名规则，swebench 2.1.8）。
+链路（2026-11-01 全链验证）：daocloud 拉 python:{spec_py}-slim x86 基础镜像
+（Rosetta 跑 x86——arm64 失败的 C 扩展 wheel 在 x86 pypi 全有，astropy 实证）
+→ 容器内 pip 走宿主代理（host.docker.internal）装官方 spec requirements →
+worktree 挂载 /testbed → 生成测试 pytest（buggy/fixed 红绿翻转）。
+官方 swebench 镜像因 dockerhub 白名单与 1-3TB 拉取量不可行，本方案等价重建。
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 import time
 from pathlib import Path
 
 DOCKER = "/Applications/Docker.app/Contents/Resources/bin/docker"
+
+_SPEC_PATH = Path(
+    "/Users/wangchenyu/Workspace/AITester/experiments/results/swebench_repo_checkout_20261029/SPEC_EXTRACT.json"
+)
+_SPECS: dict[str, tuple[str, list[str]]] = {}
+
+
+def _load_specs() -> dict[str, tuple[str, list[str]]]:
+    out: dict[str, tuple[str, list[str]]] = {}
+    try:
+        d = json.loads(_SPEC_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return out
+    for ln in d.get("lines", []):
+        repo = ln["repo"].split("/")[-1]
+        script = ln.get("setup_env_script", "")
+        py_m = re.search(r"conda create -n \w+ python=([\d.]+)", script)
+        m = re.search(r"cat <<'EOF_\d+' > \$HOME/requirements.txt\n(.*?)\nEOF_\d+", script, re.S)
+        reqs = [x.strip() for x in m.group(1).splitlines() if x.strip() and not x.startswith("#")] if m else []
+        out[f"{repo}@{ln['version']}"] = (py_m.group(1) if py_m else "3.9", reqs)
+    return out
+
+
+_SPECS = _load_specs()
 
 
 def img_name(instance_id: str) -> str:
@@ -33,48 +59,144 @@ def sh(args: list[str], timeout: int = 3600, **kw) -> subprocess.CompletedProces
     return subprocess.run(args, capture_output=True, text=True, timeout=timeout, **kw)
 
 
-def judge_one(inst: dict, gen: str, workdir: Path) -> dict:
+def judge_one(inst: dict, gen: str, workdir: Path, slice_id: int) -> dict:
     iid = inst["instance_id"]
     rec: dict = {"task_id": iid}
     t0 = time.time()
-    img = real_img(iid)
-
-    # 拉镜像（已存在则跳过）
-    r = sh([DOCKER, "image", "inspect", img], timeout=60)
+    repo = inst["repo"].split("/")[-1]
+    spec_key = f"{repo}@{inst.get('version', '')}"
+    spec_py, reqs = _SPECS.get(spec_key, ("3.9", []))
+    base_img = f"docker.m.daocloud.io/library/python:{spec_py}-slim"
+    # 基础镜像（x86）——已拉则跳过
+    r = sh([DOCKER, "image", "inspect", base_img], timeout=60)
     if r.returncode != 0:
-        print(f"[pull] {img} ...", flush=True)
-        r = sh([DOCKER, "pull", img], timeout=5400)
+        print(f"[pull] {base_img} ...", flush=True)
+        r = sh([DOCKER, "pull", "--platform", "linux/amd64", base_img], timeout=1800)
         if r.returncode != 0:
             rec["verdict"] = "env_error"
-            rec["tail"] = f"pull: {r.stderr[-180:]}"
+            rec["tail"] = f"pull base: {r.stderr[-150:]}"
             return rec
-
-    # 物化生成测试与 code 覆盖脚本
-    workdir.mkdir(parents=True, exist_ok=True)
-    test_file = workdir / f"{iid.replace('/', '_')}_gen.py"
-    test_file.write_text(gen, encoding="utf-8")
-
-    # 容器内：尝试 import 并跑生成测试（测试与 repo 同环境）
-    # 官方镜像内 repo 位于 /testbed；生成测试直接放 /testbed 下跑
-    container = f"b3judge_{iid.replace('/', '_')}"
-    sh([DOCKER, "rm", "-f", container], timeout=60)
-    # 将生成测试拷入容器 /testbed
-    r_cp = sh([DOCKER, "run", "--name", container, "-d", img, "sleep", "infinity"], timeout=120)
-    if r_cp.returncode != 0:
-        rec["verdict"] = "env_error"
-        rec["tail"] = f"run: {r_cp.stderr[-150:]}"
+    # worktree 物化（宿主机）——git worktree per instance
+    wt = workdir / f"wt_{iid.replace('/', '_')[-50:]}"
+    repo_dir = Path.home() / ".cache/aitester/swe_bench/repos" / repo
+    if not repo_dir.is_dir():
+        rec["verdict"] = "repo_missing"
         return rec
-    sh([DOCKER, "cp", str(test_file), f"{container}:/testbed/_gen_test.py"], timeout=60)
-    # 跑生成测试（testbed 内 pytest——镜像含 conda testbed env）
-    cmd = "source activate testbed 2>/dev/null || conda activate testbed; cd /testbed && python -m pytest _gen_test.py -q --no-header -W ignore::DeprecationWarning -x 2>&1 | tail -5"
-    r_run = sh([DOCKER, "exec", container, "bash", "-lc", cmd], timeout=600)
-    out = (r_run.stdout or "") + (r_run.stderr or "")
-    rec["verdict"] = "green" if r_run.returncode == 0 else "red"
-    rec["tail"] = out[-200:]
-    rec["wall_s"] = round(time.time() - t0, 1)
-    sh([DOCKER, "rm", "-f", container], timeout=60)
-    sh([DOCKER, "rmi", img], timeout=300)  # 判完删镜像释放磁盘
-    return rec
+    sh(["git", "-C", str(repo_dir), "worktree", "remove", str(wt), "--force"], timeout=60)
+    sh(["git", "-C", str(repo_dir), "worktree", "prune"], timeout=60)
+    r = sh(["git", "-C", str(repo_dir), "worktree", "add", str(wt), inst["base_commit"]], timeout=180)
+    if r.returncode != 0:
+        rec["verdict"] = "env_error"
+        rec["tail"] = f"worktree: {r.stderr[-120:]}"
+        return rec
+    try:
+        # code_src 覆盖（修复后代码——gold patch 已含）
+        # 生成测试写入
+        test_file = wt / "_gen_test.py"
+        test_file.write_text(gen, encoding="utf-8")
+        # 容器：挂载 worktree + 代理 + spec deps + editable + pytest
+        # 线级镜像缓存（deps 装好 commit 成镜像，同线后续单元秒起）
+        line_img = f"b3line_{repo}_{inst.get('version', 'x').replace('.', '_')}_s{slice_id}"
+        r_img = sh([DOCKER, "image", "inspect", line_img], timeout=60)
+        if r_img.returncode != 0:
+            container = f"b3build_{repo}_{slice_id}"
+            sh([DOCKER, "rm", "-f", container], timeout=60)
+            sh(
+                [
+                    DOCKER,
+                    "run",
+                    "--platform",
+                    "linux/amd64",
+                    "--name",
+                    container,
+                    "-d",
+                    "-e",
+                    "HTTP_PROXY=http://host.docker.internal:51006",
+                    "-e",
+                    "HTTPS_PROXY=http://host.docker.internal:51006",
+                    "-e",
+                    "http_proxy=http://host.docker.internal:51006",
+                    "-e",
+                    "https_proxy=http://host.docker.internal:51006",
+                    base_img,
+                    "sleep",
+                    "infinity",
+                ],
+                timeout=180,
+            )
+            req_args_b = " ".join(f"'{x}'" for x in reqs)
+            sh(
+                [
+                    DOCKER,
+                    "exec",
+                    container,
+                    "bash",
+                    "-lc",
+                    f"set -o pipefail; pip install -q pytest {req_args_b} 2>&1 | tail -1",
+                ],
+                timeout=1800,
+            )
+            sh([DOCKER, "commit", container, line_img], timeout=600)
+            sh([DOCKER, "rm", "-f", container], timeout=60)
+        container = f"b3d_{iid.replace('/', '_')[-40:]}_{slice_id}"
+        sh([DOCKER, "rm", "-f", container], timeout=60)
+        proxy = "http://host.docker.internal:51006"
+        envs = [
+            "-e",
+            f"HTTP_PROXY={proxy}",
+            "-e",
+            f"HTTPS_PROXY={proxy}",
+            "-e",
+            "http_proxy=" + proxy,
+            "-e",
+            "https_proxy=" + proxy,
+            "-e",
+            "NO_PROXY=localhost,127.0.0.1",
+        ]
+        r_run = sh(
+            [
+                DOCKER,
+                "run",
+                "--platform",
+                "linux/amd64",
+                "--name",
+                container,
+                "-d",
+                "-v",
+                f"{wt}:/testbed",
+                "-w",
+                "/testbed",
+                *envs,
+                base_img,
+                "sleep",
+                "infinity",
+            ],
+            timeout=180,
+        )
+        if r_run.returncode != 0:
+            rec["verdict"] = "env_error"
+            rec["tail"] = f"run: {r_run.stderr[-150:]}"
+            return rec
+        # editable + pytest（deps 已在线级镜像内）
+        setup = (
+            "set -o pipefail; "
+            "pip install -q -e /testbed 2>&1 | tail -1; "
+            "cd /testbed && python -m pytest _gen_test.py -q --no-header -W ignore::DeprecationWarning -x 2>&1 | tail -5"
+        )
+        r_run = sh([DOCKER, "exec", container, "bash", "-lc", setup], timeout=1800)
+        out = (r_run.stdout or "") + (r_run.stderr or "")
+        # editable 失败（C 扩展真编译失败）仍判 env_error
+        if "pip install -q -e /testbed" in out and "ERROR" in out and "Successfully installed" not in out:
+            rec["verdict"] = "env_error"
+            rec["tail"] = out[-200:]
+        else:
+            rec["verdict"] = "green" if r_run.returncode == 0 else "red"
+            rec["tail"] = out[-200:]
+        rec["wall_s"] = round(time.time() - t0, 1)
+        return rec
+    finally:
+        sh([DOCKER, "rm", "-f", container], timeout=60)
+        sh(["git", "-C", str(repo_dir), "worktree", "remove", str(wt), "--force"], timeout=60)
 
 
 def main() -> int:
@@ -107,7 +229,7 @@ def main() -> int:
             records.append({"task_id": iid, "verdict": "no_instance_or_no_gen"})
             continue
         print(f"[judge] {iid} ...", flush=True)
-        records.append(judge_one(inst, gen, Path("/tmp/b3_docker")))
+        records.append(judge_one(inst, gen, Path("/tmp/b3_docker"), args.slice))
 
     from collections import Counter
 
