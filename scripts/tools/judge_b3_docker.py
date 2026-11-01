@@ -125,10 +125,27 @@ def judge_one(inst: dict, gen: str, workdir: Path, slice_id: int) -> dict:
                     container,
                     "bash",
                     "-lc",
-                    f"set -o pipefail; pip install -q -i https://pypi.tuna.tsinghua.edu.cn/simple pytest {req_args_b} 2>&1 | tail -1",
+                    "apt-get update -qq 2>&1 | tail -1; apt-get install -y -qq gcc g++ 2>&1 | tail -1",
+                ],
+                timeout=900,
+            )
+            r_dep = sh(
+                [
+                    DOCKER,
+                    "exec",
+                    container,
+                    "bash",
+                    "-lc",
+                    f"set -o pipefail; pip install -i https://pypi.tuna.tsinghua.edu.cn/simple pytest {req_args_b} 2>&1 | tail -4",
                 ],
                 timeout=1800,
             )
+            print(f"[line-build] {line_img} rc={r_dep.returncode} out_tail={(r_dep.stdout or '')[-150:]}", flush=True)
+            if r_dep.returncode != 0:
+                sh([DOCKER, "rm", "-f", container], timeout=60)
+                rec["verdict"] = "env_error"
+                rec["tail"] = f"line build deps: {(r_dep.stdout or r_dep.stderr)[-250:]}"
+                return rec
             sh([DOCKER, "commit", container, line_img], timeout=600)
             sh([DOCKER, "rm", "-f", container], timeout=60)
         container = f"b3d_{iid.replace('/', '_')[-40:]}_{slice_id}"
