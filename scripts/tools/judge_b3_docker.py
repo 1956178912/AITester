@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -140,7 +141,12 @@ def judge_one(inst: dict, gen: str, workdir: Path, slice_id: int) -> dict:
             sh([DOCKER, "rm", "-f", container], timeout=60)
         container = f"b3d_{iid.replace('/', '_')[-40:]}_{slice_id}"
         sh([DOCKER, "rm", "-f", container], timeout=60)
-        proxy = "http://host.docker.internal:51006"
+        _cur_proxy = (os.environ.get("HTTPS_PROXY") or os.environ.get("HTTP_PROXY") or "").strip()
+        proxy = (
+            _cur_proxy.replace("127.0.0.1", "host.docker.internal")
+            if _cur_proxy
+            else "http://host.docker.internal:51006"
+        )
         envs = [
             "-e",
             f"HTTP_PROXY={proxy}",
