@@ -195,7 +195,12 @@ def main() -> int:
                 continue
             project, bug_id = m.group(1), m.group(2)
             print(f"[judge] {arm} {project} bug{bug_id} ...", flush=True)
-            records.append(judge_one(arm, project, bug_id, gen, args.py))
+            try:
+                records.append(judge_one(arm, project, bug_id, gen, args.py))
+            except Exception as e:
+                records.append(
+                    {"arm": arm, "task": r.get("task_id"), "verdict": "judge_exception", "err": str(e)[:150]}
+                )
 
     by_arm: dict[str, dict[str, int]] = {}
     for r in records:
