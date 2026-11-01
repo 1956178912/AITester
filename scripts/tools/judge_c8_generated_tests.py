@@ -158,6 +158,19 @@ def judge_one(arm: str, project: str, bug_id: str, gen_code: str, py: str) -> di
 
 
 def main() -> int:
+    # 2026-11-01 根治：脱离控制终端（fork+setsid）——后台写 tty 的 SIGTTOU
+    # 挂起（zsh suspended (tty output) 三次实证）从机制上不可能再发生。
+    # fork 后父进程立即退出（命令行 wait 语义变为"启动即返回"），判定在
+    # daemon 子进程继续；进度看 --out json 与 stderr 重定向文件。
+    if (os.environ.get("JUDGE_NO_DAEMON") != "1" and os.isatty(0) is False) or True:
+        try:
+            if os.fork() > 0:
+                print("[daemon] parent exit, judge continues in background", flush=True)
+                sys.exit(0)
+            os.setsid()
+        except OSError:
+            pass  # 已是会话首（重复 daemonize 防御）
+
     ap = argparse.ArgumentParser()
     ap.add_argument("--bench-dir", required=True)
     ap.add_argument("--py", required=True)
