@@ -39,13 +39,14 @@ from bugsinpy_judge import sh
 
 SWE_REPOS = Path.home() / ".cache/aitester/swe_bench/repos"
 MAT = Path("/tmp/swebench_gen_mat")
+_SLICE_ID = [0]  # judge_one 深处的 venv 隔离需要 slice 号（模块级单元素列表）
 _PYTEST_FAIL = re.compile(r"(\d+) failed")
 _PYTEST_ERROR = re.compile(r"(\d+) error")
 
 
-def _project_venv(project: str, base_py: str) -> str:
+def _project_venv(project: str, base_py: str, slice_id: int = 0) -> str:
     """每项目独立 venv（复用 judge_c8 的隔离纪律——跨项目 egg 污染防御）。"""
-    venv = Path(f"/tmp/b3_venv_{project}")
+    venv = Path(f"/tmp/b3_venv_{project}_s{slice_id}")  # 切片隔离：并发切片进程共写同 venv 会 pip 冲突死锁
     vpy = venv / "bin" / "python"
     if not vpy.exists():
         subprocess.run([base_py, "-m", "venv", str(venv)], capture_output=True, text=True, timeout=300)
@@ -68,7 +69,7 @@ def setup_and_pytest(repo_dir: str, commit: str, gen_code: str, py: str, tag: st
     try:
         dst = mat / "test_generated_b3.py"
         dst.write_text(gen_code, encoding="utf-8")
-        py = _project_venv(repo_dir.split("/")[-1], py)
+        py = _project_venv(repo_dir.split("/")[-1], py, _SLICE_ID[0])
         env = dict(os.environ)
         env.pop("PYTHONPATH", None)
         env["PATH"] = f"{Path(py).parent}:{env.get('PATH', '')}"
@@ -140,7 +141,7 @@ def judge_one(
                 return rec
         dst = mat / "test_generated_b3.py"
         dst.write_text(gen_code, encoding="utf-8")
-        py2 = _project_venv(repo_dir.split("/")[-1], py)
+        py2 = _project_venv(repo_dir.split("/")[-1], py, _SLICE_ID[0])
         env = dict(os.environ)
         env.pop("PYTHONPATH", None)
         env["PATH"] = f"{Path(py2).parent}:{env.get('PATH', '')}"
@@ -194,6 +195,7 @@ def main() -> int:
                 d = json.loads(line)
                 inst_map[d["instance_id"]] = d
 
+    _SLICE_ID[0] = args.slice
     bench = Path(args.bench_dir)
     records: list[dict] = []
     for arm in ("aitester", "plain_llm_df"):
@@ -201,8 +203,22 @@ def main() -> int:
         if not bjs:
             print(f"[warn] {arm} 无 benchmark JSON", file=sys.stderr)
             continue
-        d = json.loads(bjs[-1].read_text(encoding="utf-8"))
-        _details = d["results"][arm]["details"][args.slice :: args.nslices]
+        # 分片容错聚合（2026-11-01）：全部 json 按 task_id 去重，**有 generated_test
+        # 的记录优先**（空壳 json——被杀实例的骨架——被真产物覆盖）
+        merged: dict[str, dict] = {}
+        for bj in bjs:
+            try:
+                _d = json.loads(bj.read_text(encoding="utf-8"))
+            except Exception as e:
+                print(f"[warn] {bj.name} 解析失败跳过: {e}", file=sys.stderr)
+                continue
+            for r in _d["results"][arm]["details"]:
+                tid = r.get("task_id", f"__{len(merged)}")
+                if r.get("generated_test") or tid not in merged:
+                    merged[tid] = r
+        details_all = list(merged.values())
+        print(f"[info] {arm} 聚合 {len(bjs)} json → {len(details_all)} 任务", file=sys.stderr)
+        _details = details_all[args.slice :: args.nslices]
         print(f"[info] {arm} 切片 {args.slice}/{args.nslices} → {len(_details)} 任务本进程", file=sys.stderr)
         for r in _details:
             gen = r.get("generated_test") or ""
