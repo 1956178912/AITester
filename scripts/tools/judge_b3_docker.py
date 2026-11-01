@@ -125,7 +125,7 @@ def judge_one(inst: dict, gen: str, workdir: Path, slice_id: int) -> dict:
                     container,
                     "bash",
                     "-lc",
-                    "apt-get update -qq 2>&1 | tail -1; apt-get install -y -qq gcc g++ 2>&1 | tail -1",
+                    "sed -i 's|deb.debian.org|mirrors.tuna.tsinghua.edu.cn|g; s|security.debian.org|mirrors.tuna.tsinghua.edu.cn/debian-security|g' /etc/apt/sources.list* 2>/dev/null; apt-get update -qq 2>&1 | tail -1; apt-get install -y -qq gcc g++ 2>&1 | tail -1",
                 ],
                 timeout=900,
             )
