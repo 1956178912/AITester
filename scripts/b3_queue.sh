@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # b3_queue.sh — 流 B：B3 Lite 生成 + 判定（与流 A 的 df/TGE 并行）
 set -u
+export HOME=/Users/wangchenyu
 cd /Users/wangchenyu/Workspace/AITester
 LOG=/tmp/b3_queue.log
 echo "[$(date +%H:%M:%S)] b3 stream start" >> "$LOG"

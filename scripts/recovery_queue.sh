@@ -1,24 +1,30 @@
 #!/usr/bin/env bash
 # recovery_queue.sh — 2026-11-01 晨：恢复中断的晚间队列（aitester 臂已完成）
 set -u
+export HOME=/Users/wangchenyu
 cd /Users/wangchenyu/Workspace/AITester
 LOG=/tmp/recovery_queue.log
 echo "[$(date +%H:%M:%S)] recovery start" >> "$LOG"
 
-# ── 步骤 R1：C8 plain_llm_df 臂生成（173 任务，并行 4）──
-mkdir -p experiments/results/c8_full_20261031/plain_llm_df
-if ! ls experiments/results/c8_full_20261031/plain_llm_df/benchmark_*.json >/dev/null 2>&1; then
+# ── 步骤 R1：C8 df 臂生成（4 分片容错，单片死不丢全批）──
+for SHARD in 1 2 3 4; do
+  SHARD_DIR="experiments/results/c8_full_20261031/plain_llm_df/shard${SHARD}"
+  mkdir -p "$SHARD_DIR"
+  if ls "$SHARD_DIR"/benchmark_*.json >/dev/null 2>&1; then
+    echo "[$(date +%H:%M:%S)] R1 shard${SHARD} done, skip" >> "$LOG"; continue
+  fi
   env -u CODEBUDDY_SANDBOX_BROKER_IPC_ADDRESS -u CODEBUDDY_SANDBOX_HOST_FILE_OPERATION_COMMAND -u HTTP_PROXY -u HTTPS_PROXY -u http_proxy -u https_proxy -u ALL_PROXY -u all_proxy \
-    AITESTER_BUGSINPY_DATA="$HOME/.cache/aitester/bugsinpy/bugs_in_py_manifest_full.jsonl" \
+    AITESTER_BUGSINPY_DATA="$HOME/.cache/aitester/bugsinpy/bugs_in_py_manifest_full_shard${SHARD}.jsonl" \
     AITESTER_PROFILE=logic TEMPERATURE=0.0 LLM_THINKING_MODE=disabled MAX_ITERATIONS=3 \
     EXECUTION_TIMEOUT=30 PYTEST_TIMEOUT_ENABLE=true PYTEST_TIMEOUT_SECONDS=20 ENABLE_RAG=false AITESTER_LLM_CACHE=0 \
     COST_BUDGET_ENABLE=true COST_BUDGET_USD=20.0 AITESTER_BATCH_MAX_USD=60.0 \
-    AITESTER_CACHE_NAMESPACE=c8full_df \
+    AITESTER_CACHE_NAMESPACE=c8full_df_shard${SHARD} \
     .venv/bin/python3 experiments/run_benchmark.py -d bugsinpy -b plain_llm_df --seed 42 \
-    -n 173 -p 1 -o experiments/results/c8_full_20261031/plain_llm_df --no-rag \
-    >> /tmp/c8full_df.log 2>&1
-  echo "[$(date +%H:%M:%S)] R1 df gen exit=$?" >> "$LOG"
-fi
+    -n 26 -p 1 -o "$SHARD_DIR" --no-rag \
+    >> "/tmp/c8full_df_shard${SHARD}.log" 2>&1
+  echo "[$(date +%H:%M:%S)] R1 shard${SHARD} exit=$?" >> "$LOG"
+done
+echo "[$(date +%H:%M:%S)] R1 df gen all shards done" >> "$LOG"
 
 # ── 步骤 R2：C8 判定（两臂）──
 env -u CODEBUDDY_SANDBOX_BROKER_IPC_ADDRESS -u CODEBUDDY_SANDBOX_HOST_FILE_OPERATION_COMMAND -u HTTP_PROXY -u HTTPS_PROXY -u http_proxy -u https_proxy -u ALL_PROXY -u all_proxy \

@@ -170,8 +170,19 @@ def main() -> int:
         if not bjs:
             print(f"[warn] {arm} 无 benchmark JSON", file=sys.stderr)
             continue
-        d = json.loads(bjs[-1].read_text(encoding="utf-8"))
-        for r in d["results"][arm]["details"]:
+        # 分片容错（2026-11-01）：聚合目录下全部分片 json，按 task_id 去重取最后写盘者
+        merged: dict[str, dict] = {}
+        for bj in bjs:
+            try:
+                d = json.loads(bj.read_text(encoding="utf-8"))
+            except Exception as e:
+                print(f"[warn] {bj.name} 解析失败跳过: {e}", file=sys.stderr)
+                continue
+            for r in d["results"][arm]["details"]:
+                merged[r.get("task_id", f"__idx_{len(merged)}")] = r
+        details = list(merged.values())
+        print(f"[info] {arm} 聚合 {len(bjs)} 分片 → {len(details)} 任务", file=sys.stderr)
+        for r in details:
             gen = r.get("generated_test") or ""
             if not gen:
                 records.append({"arm": arm, "task": r.get("task_id"), "verdict": "no_generated_test"})
