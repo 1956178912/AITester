@@ -32,3 +32,9 @@
   的 collection_failed 实例**不进 G8 主批分母**（无观测 ≠ 0）；
 - 单 seed 42、单模型 deepseek-flash 无 thinking；ON/OFF 同代码态
   （provenance git_sha 记录）。
+
+## 偏离表（增补，2026-11-01 跑前登记）
+
+| # | 原文 | 实际执行 | 影响 | 处置 |
+|---|---|---|---|---|
+| D1 | 主批规模 30（选样规则未冻结，恢复重跑复用 g8_ready10） | **全量 178**（enrichment_g8.jsonl 全池原序冻结清单 `~/.cache/aitester/swe_bench_pro/g8_full178/`，用户 2026-11-01 指令"跑全量吧，不抽去 30"） | 规模 30 → 178（ansible 24 / internetarchive 81 / qutebrowser 73），统计力增强；判据、四开关、预算闸口径不变（批次闸 $6 → $10，178 任务上界外推） | 清单跑前冻结；runner `experiments/run_g8_full178.sh`（--parallel 32，用户确认 DeepSeek 并发限额 2500）；10-31 resume 的 10 任务读数作为子集对照保留，不混池 |
