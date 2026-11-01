@@ -42,6 +42,7 @@ import threading
 import time
 from typing import Any
 
+import httpx
 import openai
 
 from config import LLM_CONFIGS, LLMConfig
@@ -207,7 +208,14 @@ class APIManager:
                 existing_key = _key
                 break
         cost_weight = self._cost_weight_for(llm_config.model_name, llm_config)
-        client = openai.OpenAI(api_key=llm_config.api_key, base_url=llm_config.base_url, timeout=self.config.timeout)
+        # C8 批（2026-11-01）：同 llm_client 直连 + verify=False（动态代理
+        # 端口下连接池挂死防御；MITM 可见性披露同 llm_client 注释）
+        client = openai.OpenAI(
+            api_key=llm_config.api_key,
+            base_url=llm_config.base_url,
+            timeout=self.config.timeout,
+            http_client=httpx.Client(verify=False, timeout=180.0),  # noqa: S501 — 网关 MITM 证书不可信，实验流量显式豁免（披露见上）
+        )
         health = APIHealth(
             config=llm_config,
             max_consecutive_failures=self.config.max_consecutive_failures,

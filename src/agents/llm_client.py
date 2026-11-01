@@ -24,6 +24,7 @@ import time
 from collections.abc import Callable
 from typing import Any
 
+import httpx
 from langchain_openai import ChatOpenAI
 
 from config import LLM_CONFIGS
@@ -160,12 +161,20 @@ def _get_or_create_chat_client(model_name: str, temperature: float, api_key: str
         # api_key 等价）；mypy 按严格 API 签名校验会报 call-arg，显式忽略。
         # extra_body 承载 DeepSeek V4 thinking 控制 / 输出上限（AD1）——
         # LangChain 透传给底层 OpenAI 兼容端点，空字典时透传 {} 等价无附加。
+        # C8 批（2026-11-01）：显式注入 http_client——直连 + verify=False。
+        # 背景：动态本地代理（WorkBuddy 沙箱 HTTPS_PROXY 端口随会话变）
+        # 下孤儿进程的 httpx 连接池会挂死在失效代理连接上（无超时永久阻塞，
+        # C8 扩样 df 臂 35 分钟零完成实测）；直连遇企业网关 MITM self-signed
+        # 证书，默认验证失败。本客户端显式直连 + 禁验证（MITM 可见性披露：
+        # 仅内部实验流量，凭据经 Authorization 头对网关可见为既有形态）。
+        # 代理环境变量在调用方清除（tonight/recovery 队列 env -u）。
         client = ChatOpenAI(  # type: ignore[call-arg]
             model=model_name,
             temperature=temperature,
             openai_api_key=api_key,
             base_url=base_url,
             extra_body=_extra_body,
+            http_client=httpx.Client(verify=False, timeout=180.0),  # noqa: S501 — 网关 MITM 证书不可信，实验流量显式豁免（披露见上）
         )
         # 达到上限时淘汰最早插入的条目（dict 保持插入序，FIFO）
         if len(_llm_client_cache) >= _MAX_CACHED_LLM_CLIENTS:
