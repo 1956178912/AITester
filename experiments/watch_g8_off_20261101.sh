@@ -21,8 +21,8 @@ ON_PAT="g8_fullstack_full178/on"
 OFF_PAT="g8_fullstack_full178/off"
 
 STALL_MIN="${STALL_MIN:-10}"
-LIMIT_MIN="${LIMIT_MIN:-270}"
-MAX_ATTEMPTS="${MAX_ATTEMPTS:-3}"
+LIMIT_MIN="${LIMIT_MIN:-720}"       # 过夜模式：总时限默认 12h（无人值守）
+MAX_ATTEMPTS="${MAX_ATTEMPTS:-999}" # 过夜模式：不限重启次数，靠总时限兜底
 POLL_SEC="${POLL_SEC:-30}"
 REPORT_EVERY="${REPORT_EVERY:-8}"   # 每 N 次 poll 打一条心跳（默认 4 分钟）
 G8_ALLOW_CONCURRENT="${G8_ALLOW_CONCURRENT:-0}"
@@ -67,8 +67,8 @@ if [ "${1:-}" = "--selftest" ]; then
   echo "SELFTEST FAIL: wait rc=$rc（期望 143/137）"; exit 1
 fi
 
-log "======== G8 off 臂看护启动（STALL=${STALL_MIN}min LIMIT=${LIMIT_MIN}min ATTEMPTS=${MAX_ATTEMPTS}）========"
-log "事故背景: off 臂 177/178 卡死被强杀；无断点续跑，stall 即整批重启"
+log "======== G8 off 臂看护启动（过夜模式：STALL=${STALL_MIN}min LIMIT=${LIMIT_MIN}min ATTEMPTS=${MAX_ATTEMPTS}）========"
+log "事故背景: off 臂 177/178 卡死被强杀；增量落盘断点续跑 + 必卡任务两轮交叉 skip，无人值守"
 
 # ---- fail-closed：on 臂在跑则等待（进程存活 或 其 WATCHDOG_LOG 5 分钟内有心跳）----
 wait_on_arm() {
@@ -101,10 +101,16 @@ trap cleanup INT TERM
 
 overall_deadline=$(( $(date +%s) + LIMIT_MIN * 60 ))
 success=0
+last_stuck=""
 
 for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
   PROG="$RUN/PROGRESS_attempt${attempt}.log"
   : > "$PROG"
+  # 看护识别的必卡任务清单（连续两轮 stall 交叉定位）→ 透传给跑批过滤
+  if [ -f "$RUN/SKIPPED_TASK_IDS.txt" ]; then
+    export AITESTER_SKIP_TASK_IDS="$(paste -sd, "$RUN/SKIPPED_TASK_IDS.txt" 2>/dev/null)"
+    log "生效 skip 清单: $AITESTER_SKIP_TASK_IDS"
+  fi
   launch_batch "$PROG"
   pgid=$!
   log "attempt $attempt/$MAX_ATTEMPTS 启动（PGID=${pgid}，进度日志 PROGRESS_attempt${attempt}.log）"
@@ -158,7 +164,22 @@ for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
     log "attempt $attempt 正常退出 rc=0"
     break
   fi
-  log "attempt $attempt 失败（rc=${rc:-unknown}），$( [ "$attempt" -lt "$MAX_ATTEMPTS" ] && echo "自动重启" || echo "已达重启上限" )"
+
+  # 卡死任务两轮交叉定位：最后一条"开始处理任务"日志的任务 id。
+  # 单轮证据不 skip（并行窗口下定位有噪声）；连续两轮卡在同一 id 才加入
+  # skip 清单（跑批侧 AITESTER_SKIP_TASK_IDS 过滤）。增量落盘使重启零成本，
+  # 最多损失两轮 stall 检测时间即可锁定必卡任务。
+  stuck="$(tail -c 200000 "$PROG" 2>/dev/null | /usr/bin/grep -oE '开始处理任务: [^ ]+' | tail -1 | sed 's/^开始处理任务: //')"
+  if [ -n "$stuck" ] && [ "$stuck" = "$last_stuck" ]; then
+    touch "$RUN/SKIPPED_TASK_IDS.txt"
+    if ! /usr/bin/grep -qxF "$stuck" "$RUN/SKIPPED_TASK_IDS.txt"; then
+      echo "$stuck" >> "$RUN/SKIPPED_TASK_IDS.txt"
+      log "连续两轮卡死同一任务 → 加入 skip: $stuck（下轮起跑批自动跳过）"
+    fi
+  fi
+  last_stuck="$stuck"
+
+  log "attempt $attempt 失败（rc=${rc:-unknown}，卡死候选=${stuck:-未知}），自动重启"
 done
 
 if [ "$success" -eq 1 ]; then
@@ -167,5 +188,6 @@ if [ "$success" -eq 1 ]; then
   log "下一步: 两臂齐后跑 G8 判定流水（off-on 唯一差异=四开关）"
   exit 0
 fi
-log "看护放弃：$MAX_ATTEMPTS 次尝试均失败或超总时限——需人工介入（排查卡死任务根因，如 LLM 挂死/环境锁）"
+log "看护退出：总时限 ${LIMIT_MIN}min 已到——已完成任务的结果都在 INCREMENTAL_RESULTS.jsonl（断点续跑可继续），"
+log "必卡任务清单见 SKIPPED_TASK_IDS.txt；白日人工排查卡死根因（LLM 挂死/环境锁）后重跑本看护即可续"
 exit 1

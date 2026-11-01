@@ -3338,6 +3338,9 @@ def _run_tasks_sliding_window(
             task = next(task_iter)
         except StopIteration:
             return
+        # 过夜跑批的卡死定位基础：提交即打 task_id（看护从 PROGRESS 日志
+        # 提取"最后开始"的任务做两轮交叉验证，判定必卡任务后加入 skip）
+        logger.info("开始处理任务: %s", task.task_id)
         fut = executor.submit(
             _run_task_with_progress, (task, baselines, output_dir, verbose, save_state, per_task_token_caps)
         )
@@ -3359,6 +3362,58 @@ def _run_tasks_sliding_window(
             on_task_done(task, task_results)
             # 完成一个补一个，保持在途 ≤ max_inflight
             _submit_next()
+
+
+def _append_incremental_result(output_dir: str, task_id: str, task_results: dict[str, Any]) -> None:
+    """任务级增量落盘（过夜跑批断点续跑的基础，2026-11-01 G8 全量 178 事故）。
+
+    背景：结果此前统一批末落盘，过夜跑批中单任务卡死触发看护整批重启时，
+    已完成任务的产物全部丢失。改为每任务完成即 append 一行 JSONL +
+    flush+fsync，重启后由 _load_incremental_results 恢复进汇总。
+
+    口径：只记非空 task_results——空结果（任务异常未产出）不落盘，
+    恢复时自然重跑该任务（异常可能系暂时性）；半行损坏（击杀瞬间截断）
+    在读取端按行忽略，不影响其余行。
+    """
+    if not task_results:
+        return
+    path = Path(output_dir) / "INCREMENTAL_RESULTS.jsonl"
+    record = {"task_id": task_id, "results": task_results}
+    with open(path, "a", encoding="utf-8") as fh:
+        fh.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
+        fh.flush()
+        os.fsync(fh.fileno())
+
+
+def _load_incremental_results(output_dir: str) -> dict[str, dict[str, Any]]:
+    """读增量文件 → {task_id: {baseline: result}}（后行覆盖，防御重复行）。"""
+    path = Path(output_dir) / "INCREMENTAL_RESULTS.jsonl"
+    if not path.exists():
+        return {}
+    done: dict[str, dict[str, Any]] = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            rec = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        task_id = rec.get("task_id")
+        results = rec.get("results")
+        if task_id and isinstance(results, dict) and results:
+            done[str(task_id)] = results
+    return done
+
+
+def _parse_skip_task_ids() -> set[str]:
+    """AITESTER_SKIP_TASK_IDS（逗号分隔）→ 跳过任务集合。
+
+    来源：看护程序从连续两轮 stall 的日志交叉定位的必卡任务（单轮证据
+    不 skip，防误杀并行窗口内的正常任务）。
+    """
+    raw = (os.environ.get("AITESTER_SKIP_TASK_IDS") or "").strip()
+    return {part.strip() for part in raw.split(",") if part.strip()}
 
 
 def _apply_rag_setting(enable_rag: bool | None) -> bool:
@@ -4352,6 +4407,21 @@ def run_benchmark(
         task_limit = None
     if task_limit:
         tasks = tasks[:task_limit]
+    # 2026-11-01 过夜跑批断点续跑：增量恢复 + 双重过滤。
+    # 重启后已完成任务不重跑（结果从 INCREMENTAL_RESULTS.jsonl 恢复进汇总）；
+    # 看护识别的必卡任务经 AITESTER_SKIP_TASK_IDS 剔除，数量全部入日志披露。
+    _resume_done = _load_incremental_results(output_dir)
+    _skip_ids = _parse_skip_task_ids()
+    if _resume_done or _skip_ids:
+        _before_count = len(tasks)
+        tasks = [t for t in tasks if t.task_id not in _resume_done and t.task_id not in _skip_ids]
+        logger.info(
+            "断点续跑：增量恢复 %d 个已完成任务（结果并入汇总），看护 skip %d 个任务，待运行 %d→%d",
+            len(_resume_done),
+            len(_skip_ids),
+            _before_count,
+            len(tasks),
+        )
     logger.info("可用 API 配置数: %d", len(_VALID_APIS))
 
     if parallel is None:
@@ -4366,6 +4436,13 @@ def run_benchmark(
     all_results: dict[str, list[dict[str, Any]]] = {bl: [] for bl in baselines}
     total_time = 0.0
 
+    # 断点续跑：恢复的结果与正常完成同构，直接并入聚合与累计耗时
+    for _resumed_results in _resume_done.values():
+        for _bl, _res in _resumed_results.items():
+            if _bl in all_results:
+                all_results[_bl].append(_res)
+        total_time += sum(r.get("elapsed_seconds", 0) or 0 for r in _resumed_results.values() if isinstance(r, dict))
+
     desc = f"基准测试 [{', '.join(baselines)}]"
 
     with ProgressBar(len(tasks), desc=desc, enabled=use_progress) as pbar:
@@ -4378,6 +4455,7 @@ def run_benchmark(
                     nonlocal total_time
                     for baseline, result in task_results.items():
                         all_results[baseline].append(result)
+                    _append_incremental_result(output_dir, task.task_id, task_results)
                     elapsed_this = sum(r["elapsed_seconds"] for r in task_results.values())
                     total_time += elapsed_this
                     pbar.update(1)
@@ -4405,6 +4483,7 @@ def run_benchmark(
 
                 for baseline, result in task_results.items():
                     all_results[baseline].append(result)
+                _append_incremental_result(output_dir, task.task_id, task_results)
 
                 elapsed_this = sum(r["elapsed_seconds"] for r in task_results.values())
                 total_time += elapsed_this
