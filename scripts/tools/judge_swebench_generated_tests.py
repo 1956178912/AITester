@@ -43,7 +43,7 @@ MAT = Path("/tmp/swebench_gen_mat")
 _SPEC_PATH = Path(
     "/Users/wangchenyu/Workspace/AITester/experiments/results/swebench_repo_checkout_20261029/SPEC_EXTRACT.json"
 )
-_SPECS: dict[str, list[str]] = {}
+_SPECS: dict[str, tuple[str, list[str]]] = {}
 
 
 def _load_specs() -> dict[str, list[str]]:
@@ -60,7 +60,8 @@ def _load_specs() -> dict[str, list[str]]:
         )
         if m:
             reqs = [x.strip() for x in m.group(1).splitlines() if x.strip() and not x.startswith("#")]
-            out[f"{repo}@{ln['version']}"] = reqs
+            py_m = re.search(r"conda create -n \w+ python=([\d.]+)", ln.get("setup_env_script", ""))
+            out[f"{repo}@{ln['version']}"] = (py_m.group(1) if py_m else "3.9", reqs)
     return out
 
 
@@ -73,15 +74,24 @@ _PYTEST_ERROR = re.compile(r"(\d+) error")
 
 def _project_venv(project: str, base_py: str, slice_id: int = 0) -> str:
     """每项目独立 venv（复用 judge_c8 的隔离纪律——跨项目 egg 污染防御）。"""
-    # 2026-11-01 基座升级：py3.8 → py3.14（主仓 venv 基座）——django 4.x/5.x
-    # requires py>=3.10 在 py3.8 装不上（env_error 246 实证）；py3.14 满足
-    # >=3.10 且纯 Python 项目全兼容。sklearn/astropy 的 C 扩展 arm64 结构性
-    # 失败保持 env_error 披露。
-    base_py = "/Users/wangchenyu/Workspace/AITester/.venv/bin/python3"
-    venv = Path(f"/tmp/b3_venv_{project}_s{slice_id}")  # 切片隔离：并发切片进程共写同 venv 会 pip 冲突死锁
-    vpy = venv / "bin" / "python"
+    # 2026-11-01 conda 驱动：env 按【官方 spec python 版本】创建——miniconda
+    # 逐字执行 make_test_spec 的 conda create；env 键含 project@spec_py
+    # （同 version 线共享，64 线去重后一次性构建）+ 切片隔离。
+    conda = Path.home() / "miniconda3" / "bin" / "conda"
+    env_dir = Path(f"/tmp/b3conda_{project}_s{slice_id}")
+    vpy = env_dir / "bin" / "python"
     if not vpy.exists():
-        subprocess.run([base_py, "-m", "venv", str(venv)], capture_output=True, text=True, timeout=300)
+        _sp_py = (
+            _SPECS.get(project, ("3.9", []))[0]
+            if "@" in project
+            else _SPECS.get(next((k for k in _SPECS if k.split("@")[0] == project), f"{project}@x"), ("3.9", []))[0]
+        )
+        subprocess.run(
+            [str(conda), "create", "-p", str(env_dir), f"python={_sp_py}", "-y", "-q"],
+            capture_output=True,
+            text=True,
+            timeout=900,
+        )
         if vpy.exists():
             subprocess.run(
                 [str(vpy), "-m", "pip", "install", "-q", "pytest"], capture_output=True, text=True, timeout=600
@@ -89,7 +99,9 @@ def _project_venv(project: str, base_py: str, slice_id: int = 0) -> str:
     return str(vpy) if vpy.exists() else base_py
 
 
-def setup_and_pytest(repo_dir: str, commit: str, gen_code: str, py: str, tag: str) -> tuple[str, str]:
+def setup_and_pytest(
+    repo_dir: str, commit: str, gen_code: str, py: str, tag: str, version: str = ""
+) -> tuple[str, str]:
     """物化 commit + editable 安装 + 跑生成测试；返回 (kind, tail)。"""
     mat = MAT / f"{repo_dir.split('/')[-1]}_{tag}"
     if mat.exists():
@@ -109,7 +121,7 @@ def setup_and_pytest(repo_dir: str, commit: str, gen_code: str, py: str, tag: st
         # env_error 如实披露，不进检出分母）
         # 官方 spec deps 预装（repo 维度并集 best-effort——env_error 主因=deps 全缺）
         _reqs: list[str] = []
-        for _k, _req_list in _SPECS.items():
+        for _k, (_sp_py, _req_list) in _SPECS.items():
             if _k.split("@")[0] == repo_dir.split("/")[-1]:
                 for _x in _req_list:
                     if _x not in _reqs:
@@ -144,14 +156,21 @@ def setup_and_pytest(repo_dir: str, commit: str, gen_code: str, py: str, tag: st
 
 
 def judge_one(
-    arm: str, instance_id: str, repo_dir: str, base_commit: str, gold_patch: str, gen_code: str, py: str
+    arm: str,
+    instance_id: str,
+    repo_dir: str,
+    base_commit: str,
+    gold_patch: str,
+    gen_code: str,
+    py: str,
+    version: str = "",
 ) -> dict:
 
     tf = Path(tempfile.mkdtemp(prefix="b3gen_")) / "gen_test.py"
     tf.write_text(gen_code, encoding="utf-8")
     rec: dict = {"arm": arm, "instance_id": instance_id}
     t0 = time.time()
-    red_kind, red_tail = setup_and_pytest(repo_dir, base_commit, gen_code, py, f"b3_{arm}_buggy")
+    red_kind, red_tail = setup_and_pytest(repo_dir, base_commit, gen_code, py, f"b3_{arm}_buggy", version)
     rec["buggy_kind"] = red_kind
     if red_kind != "red":
         rec["verdict"] = "not_detected" if red_kind == "invalid_test" else red_kind
@@ -309,7 +328,9 @@ def main() -> int:
                 records.append({"arm": arm, "instance_id": iid, "verdict": "repo_missing"})
                 continue
             print(f"[judge] {arm} {iid} ...", flush=True)
-            records.append(judge_one(arm, iid, repo_dir, m["base_commit"], m.get("patch", ""), gen, args.py))
+            records.append(
+                judge_one(arm, iid, repo_dir, m["base_commit"], m.get("patch", ""), gen, args.py, m.get("version", ""))
+            )
 
     from collections import Counter
 
