@@ -161,11 +161,12 @@ def main() -> int:
     ap.add_argument("--bench-dir", required=True)
     ap.add_argument("--py", required=True)
     ap.add_argument("--out", required=True)
+    ap.add_argument("--arms", default="aitester,plain_llm_df", help="逗号分隔的臂列表")
     args = ap.parse_args()
 
     bench = Path(args.bench_dir)
     records: list[dict] = []
-    for arm in ("aitester", "plain_llm_df"):
+    for arm in args.arms.split(","):
         bjs = sorted((bench / arm).rglob("benchmark_*.json"))
         if not bjs:
             print(f"[warn] {arm} 无 benchmark JSON", file=sys.stderr)
