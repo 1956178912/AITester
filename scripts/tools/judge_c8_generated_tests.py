@@ -187,7 +187,9 @@ def main() -> int:
             if not gen:
                 records.append({"arm": arm, "task": r.get("task_id"), "verdict": "no_generated_test"})
                 continue
-            m = re.match(r"bugsinpy__(\w+)_(\w+)_(\w+)", r.get("task_id", ""))
+            m = re.match(
+                r"bugsinpy__(.+?)_(\w+)_(\w+)", r.get("task_id", "")
+            )  # 非贪婪 project（支持 youtube-dl 连字符）
             if not m:
                 records.append({"arm": arm, "task": r.get("task_id"), "verdict": "unparsable_task_id"})
                 continue
