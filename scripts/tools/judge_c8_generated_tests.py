@@ -166,7 +166,7 @@ def main() -> int:
     bench = Path(args.bench_dir)
     records: list[dict] = []
     for arm in ("aitester", "plain_llm_df"):
-        bjs = sorted((bench / arm).glob("benchmark_*.json"))
+        bjs = sorted((bench / arm).rglob("benchmark_*.json"))
         if not bjs:
             print(f"[warn] {arm} 无 benchmark JSON", file=sys.stderr)
             continue
