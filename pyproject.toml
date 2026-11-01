@@ -134,6 +134,9 @@ line-length = 120
 extend-exclude = [
   "tmp_apr_baseline",
   "experiments/results",
+  # 2026-11-01：shell 脚本非 Python 面（ruff format 曾把 .sh 当 Python
+  # 重排破坏语法——queue_watchdog/gen_batch_driver 实证），显式排除
+  "*.sh",
 ]
 
 [tool.ruff.lint]
