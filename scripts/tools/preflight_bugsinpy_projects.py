@@ -115,7 +115,7 @@ def main() -> int:
             out.append({"project": p, "editable_ok": False, "reason": f"exception: {e}"[:150]})
         print("   →", out[-1], flush=True)
     dst = Path.home() / ".cache/aitester/bugsinpy/c8_preflight.json"
-    dst.write_text(json.dumps(out, ensure_ascii=False, indent=1), encoding="utf-8")
+    dst.write_text(json.dumps(out, ensure_ascii=False, indent=1, allow_nan=False), encoding="utf-8")
     ok = [r["project"] for r in out if r.get("editable_ok")]
     print(f"\n合格项目（{len(ok)}/{len(out)}）: {ok}")
     return 0
