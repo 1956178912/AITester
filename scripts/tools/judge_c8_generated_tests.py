@@ -33,16 +33,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from bugsinpy_judge import FW, REPOS, _read_text_any_encoding, sh
 
 MAT = Path("/tmp/bugsinpy_mat")
+_SLICE_ID = [0]
 _PYTEST_FAIL = re.compile(r"(\d+) failed")
 _PYTEST_ERROR = re.compile(r"(\d+) error")
 
 
-def _project_venv(project: str, base_py: str) -> str:
+def _project_venv(project: str, base_py: str, slice_id: int = 0) -> str:
     """每项目独立 venv（py3.8 派生）——修复共享 mm_py38 的跨项目 egg 污染
     （sanic setup install 进全局 site-packages 后 asgi.py 的 import 链会
     在 PySnooper 判定的 pytest 收集期触发）。venv 内预装 pytest；venv 失败
     回退 base_py。"""
-    venv = Path(f"/tmp/c8_venv_{project}")
+    venv = Path(f"/tmp/c8_venv_{project}_s{slice_id}")  # 切片隔离：并发切片共写 venv 会 pip 死锁
     vpy = venv / "bin" / "python"
     if not vpy.exists():
         subprocess.run([base_py, "-m", "venv", str(venv)], capture_output=True, text=True, timeout=300)
@@ -166,6 +167,7 @@ def main() -> int:
     ap.add_argument("--nslices", type=int, default=1, help="切片总数（并行加速）")
     args = ap.parse_args()
 
+    _SLICE_ID[0] = args.slice
     bench = Path(args.bench_dir)
     records: list[dict] = []
     for arm in args.arms.split(","):
