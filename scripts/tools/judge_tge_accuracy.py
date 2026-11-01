@@ -42,12 +42,20 @@ def _meta() -> dict[str, dict]:
             "code_file": str(r["code_file"]),
             "test_file": str(r["test_file"]),
             "code_src": str(r["code_src"]),
+            "version": str(r.get("version", "")),
         }
     return out
 
 
-def _project_venv(project: str, base_py: str, arm: str) -> str:
-    venv = Path(f"/tmp/tge_venv_{project}_{arm}")
+def _project_venv(project: str, base_py: str, arm: str, version: str = "") -> str:
+    # version 分层（2026-11-01）：django 5.0 等新版本 requires py>=3.10——
+    # py3.8 判定 venv 装不上（env_error 实证）→ 新版本用主仓 py3.14 基座
+    try:
+        if version and float(version.split(".")[0]) >= 4:
+            base_py = "/Users/wangchenyu/Workspace/AITester/.venv/bin/python3"
+    except ValueError:
+        pass
+    venv = Path(f"/tmp/tge_venv_{project}_{arm}_v{version.replace('.', '_')}")
     vpy = venv / "bin" / "python"
     if not vpy.exists():
         subprocess.run([base_py, "-m", "venv", str(venv)], capture_output=True, text=True, timeout=300)
@@ -87,7 +95,7 @@ def judge_one(arm: str, task_id: str, gen: str, meta: dict, base_py: str) -> dic
         test_dst = mat / m["test_file"]
         test_dst.parent.mkdir(parents=True, exist_ok=True)
         test_dst.write_text(gen, encoding="utf-8")
-        py = _project_venv(repo_short, base_py, arm)
+        py = _project_venv(repo_short, base_py, arm, m.get("version", ""))
         env = dict(os.environ)
         env.pop("PYTHONPATH", None)
         env["PATH"] = f"{Path(py).parent}:{env.get('PATH', '')}"
