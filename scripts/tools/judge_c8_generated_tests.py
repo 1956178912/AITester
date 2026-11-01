@@ -162,6 +162,8 @@ def main() -> int:
     ap.add_argument("--py", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--arms", default="aitester,plain_llm_df", help="逗号分隔的臂列表")
+    ap.add_argument("--slice", type=int, default=0, help="切片号（0 起）")
+    ap.add_argument("--nslices", type=int, default=1, help="切片总数（并行加速）")
     args = ap.parse_args()
 
     bench = Path(args.bench_dir)
@@ -183,6 +185,8 @@ def main() -> int:
                 merged[r.get("task_id", f"__idx_{len(merged)}")] = r
         details = list(merged.values())
         print(f"[info] {arm} 聚合 {len(bjs)} 分片 → {len(details)} 任务", file=sys.stderr)
+        details = details[args.slice :: args.nslices]
+        print(f"[info] {arm} 切片 {args.slice}/{args.nslices} → {len(details)} 任务本进程", file=sys.stderr)
         for r in details:
             gen = r.get("generated_test") or ""
             if not gen:
