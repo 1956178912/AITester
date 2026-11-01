@@ -46,6 +46,11 @@ _PYTEST_ERROR = re.compile(r"(\d+) error")
 
 def _project_venv(project: str, base_py: str, slice_id: int = 0) -> str:
     """每项目独立 venv（复用 judge_c8 的隔离纪律——跨项目 egg 污染防御）。"""
+    # 2026-11-01 基座升级：py3.8 → py3.14（主仓 venv 基座）——django 4.x/5.x
+    # requires py>=3.10 在 py3.8 装不上（env_error 246 实证）；py3.14 满足
+    # >=3.10 且纯 Python 项目全兼容。sklearn/astropy 的 C 扩展 arm64 结构性
+    # 失败保持 env_error 披露。
+    base_py = "/Users/wangchenyu/Workspace/AITester/.venv/bin/python3"
     venv = Path(f"/tmp/b3_venv_{project}_s{slice_id}")  # 切片隔离：并发切片进程共写同 venv 会 pip 冲突死锁
     vpy = venv / "bin" / "python"
     if not vpy.exists():
