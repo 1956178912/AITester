@@ -1,0 +1,339 @@
+{
+ "summary": {
+  "plain_llm_df": {
+   "red": 24,
+   "env_error": 23,
+   "accuracy": 0.0
+  }
+ },
+ "records": [
+  {
+   "arm": "plain_llm_df",
+   "task_id": "tge__django__django-17087",
+   "verdict": "red",
+   "tail": "ntime state: core initialized\nOSError: [Errno 9] Bad file descriptor\n\nCurrent thread 0x00000001ef0cd300 (most recent call first):\n  <no Python frame>\n",
+   "wall_s": 9.6
+  },
+  {
+   "arm": "plain_llm_df",
+   "task_id": "tge__sympy__sympy-14774",
+   "verdict": "red",
+   "tail": " 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!\n!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!\n5 warnings, 1 error in 0.19s\n",
+   "wall_s": 2.9
+  },
+  {
+   "arm": "plain_llm_df",
+   "task_id": "tge__sympy__sympy-17022",
+   "verdict": "red",
+   "tail": "ode_known_functions - Asse...\n!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!\n1 failed, 1 passed, 1 warning in 0.22s\n",
+   "wall_s": 3.2
+  },
+  {
+   "arm": "plain_llm_df",
+   "task_id": "tge__django__django-11797",
+   "verdict": "red",
+   "tail": "n_lookup_as_sql - AttributeError: 'D...\n!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!\n1 failed, 18 passed in 0.35s\n",
+   "wall_s": 3.3
+  },
+  {
+   "arm": "plain_llm_df",
+   "task_id": "tge__sympy__sympy-21612",
+   "verdict": "red",
+   "tail": "r 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!\n!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!\n1 warning, 1 error in 0.30s\n",
+   "wall_s": 3.3
+  },
+  {
+   "arm": "plain_llm_df",
+   "task_id": "tge__scikit-learn__scikit-learn-13779",
+   "verdict": "env_error",
+   "tail": "editable: riginates from a subprocess, and is likely not a problem with pip.\n\n[notice] A new release of pip is available: 23.0.1 -> 25.0.1\n[notice] To update, run: pip install --upgrade pip\n",
+   "wall_s": 1.9
+  },
+  {
+   "arm": "plain_llm_df",
+   "task_id": "tge__sympy__sympy-20049",
+   "verdict": "red",
+   "tail": "t_vel_auto_calculation - ...\n!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!\n1 failed, 14 passed, 1 warning in 0.48s\n",
+   "wall_s": 3.6
+  },
+  {
+   "arm": "plain_llm_df",
+   "task_id": "tge__scikit-learn__scikit-learn-10949",
+   "verdict": "env_error",
+   "tail": "editable: riginates from a subprocess, and is likely not a problem with pip.\n\n[notice] A new release of pip is available: 23.0.1 -> 25.0.1\n[notice] To update, run: pip install --upgrade pip\n",
+   "wall_s": 1.6
+  },
+  {
+   "arm": "plain_llm_df",
+   "task_id": "tge__scikit-learn__scikit-learn-14087",
+   "verdict": "env_error",
+   "tail": "editable: riginates from a subprocess, and is likely not a problem with pip.\n\n[notice] A new release of pip is available: 23.0.1 -> 25.0.1\n[notice] To update, run: pip install --upgrade pip\n",
+   "wall_s": 1.9
+  },
+  {
+   "arm": "plain_llm_df",
+   "task_id": "tge__sympy__sympy-24213",
+   "verdict": "red",
+   "tail": "ntities.py::test_extend - ImportErro...\n!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!\n1 failed, 27 passed in 0.46s\n",
+   "wall_s": 3.2
+  },
+  {
+   "arm": "plain_llm_df",
+   "task_id": "tge__django__django-13925",
+   "verdict": "env_error",
+   "tail": "editable: sys standard streams\nPython runtime state: core initialized\nOSError: [Errno 9] Bad file descriptor\n\nCurrent thread 0x00000001ef0cd300 (most recent call first):\n  <no Python frame>\n",
+   "wall_s": 1.2
+  },
+  {
+   "arm": "plain_llm_df",
+   "task_id": "tge__pytest-dev__pytest-5227",
+   "verdict": "env_error",
+   "tail": "editable: sys standard streams\nPython runtime state: core initialized\nOSError: [Errno 9] Bad file descriptor\n\nCurrent thread 0x00000001ef0cd300 (most recent call first):\n  <no Python frame>\n",
+   "wall_s": 0.2
+  },
+  {
+   "arm": "plain_llm_df",
+   "task_id": "tge__django__django-13933",
+   "verdict": "env_error",
+   "tail": "editable: sys standard streams\nPython runtime state: core initialized\nOSError: [Errno 9] Bad file descriptor\n\nCurrent thread 0x00000001ef0cd300 (most recent call first):\n  <no Python frame>\n",
+   "wall_s": 1.2
+  },
+  {
+   "arm": "plain_llm_df",
+   "task_id": "tge__pytest-dev__pytest-5692",
+   "verdict": "env_error",
+   "tail": "editable: sys standard streams\nPython runtime state: core initialized\nOSError: [Errno 9] Bad file descriptor\n\nCurrent thread 0x00000001ef0cd300 (most recent call first):\n  <no Python frame>\n",
+   "wall_s": 0.3
+  },
+  {
+   "arm": "plain_llm_df",
+   "task_id": "tge__sympy__sympy-23117",
+   "verdict": "red",
+   "tail": "opping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!\n!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!\n1 error in 0.31s\n",
+   "wall_s": 3.9
+  },
+  {
+   "arm": "plain_llm_df",
+   "task_id": "tge__django__django-12453",
+   "verdict": "red",
+   "tail": "py::test_create_test_db_success - dj...\n!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!\n1 failed, 11 passed in 0.39s\n",
+   "wall_s": 3.7
+  },
+  {
+   "arm": "plain_llm_df",
+   "task_id": "tge__sympy__sympy-15011",
+   "verdict": "red",
+   "tail": "r 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!\n!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!\n1 warning, 1 error in 0.36s\n",
+   "wall_s": 3.0
+  },
+  {
+   "arm": "plain_llm_df",
+   "task_id": "tge__django__django-14534",
+   "verdict": "env_error",
+   "tail": "editable: sys standard streams\nPython runtime state: core initialized\nOSError: [Errno 9] Bad file descriptor\n\nCurrent thread 0x00000001ef0cd300 (most recent call first):\n  <no Python frame>\n",
+   "wall_s": 1.1
+  },
+  {
+   "arm": "plain_llm_df",
+   "task_id": "tge__sympy__sympy-22714",
+   "verdict": "red",
+   "tail": "::test_point_contains - assert 1 in ...\n!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!\n1 failed, 10 passed in 0.37s\n",
+   "wall_s": 3.3
+  },
+  {
+   "arm": "plain_llm_df",
+   "task_id": "tge__pylint-dev__pylint-7993",
+   "verdict": "red",
+   "tail": "::TestTextReporter::test_handle_message\n!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!\n1 failed, 17 passed in 0.08s\n",
+   "wall_s": 8.4
+  },
+  {
+   "arm": "plain_llm_df",
+   "task_id": "tge__sympy__sympy-12171",
+   "verdict": "red",
+   "tail": " 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!\n!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!\n3 warnings, 1 error in 0.16s\n",
+   "wall_s": 2.3
+  },
+  {
+   "arm": "plain_llm_df",
+   "task_id": "tge__django__django-12747",
+   "verdict": "red",
+   "tail": "pendency_reverse - AssertionError: a...\n!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!\n1 failed, 17 passed in 0.35s\n",
+   "wall_s": 2.8
+  },
+  {
+   "arm": "plain_llm_df",
+   "task_id": "tge__django__django-15851",
+   "verdict": "env_error",
+   "tail": "editable: sys standard streams\nPython runtime state: core initialized\nOSError: [Errno 9] Bad file descriptor\n\nCurrent thread 0x00000001ef0cd300 (most recent call first):\n  <no Python frame>\n",
+   "wall_s": 0.9
+  },
+  {
+   "arm": "plain_llm_df",
+   "task_id": "tge__django__django-16873",
+   "verdict": "env_error",
+   "tail": "editable: sys standard streams\nPython runtime state: core initialized\nOSError: [Errno 9] Bad file descriptor\n\nCurrent thread 0x00000001ef0cd300 (most recent call first):\n  <no Python frame>\n",
+   "wall_s": 0.8
+  },
+  {
+   "arm": "plain_llm_df",
+   "task_id": "tge__scikit-learn__scikit-learn-25747",
+   "verdict": "red",
+   "tail": "config'\u001b[0m\n\u001b[31m!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!\u001b[0m\n\u001b[31m\u001b[31m\u001b[1m1 error\u001b[0m\u001b[31m in 0.08s\u001b[0m\u001b[0m\n",
+   "wall_s": 202.0
+  },
+  {
+   "arm": "plain_llm_df",
+   "task_id": "tge__pylint-dev__pylint-5859",
+   "verdict": "red",
+   "tail": "test_by_id_process_module_enable - Ke...\n!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!\n1 failed, 1 passed in 0.06s\n",
+   "wall_s": 1.8
+  },
+  {
+   "arm": "plain_llm_df",
+   "task_id": "tge__sympy__sympy-19487",
+   "verdict": "red",
+   "tail": ".py::TestSign::test_eval_Abs\n!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!\n1 failed, 30 passed, 1 warning in 0.25s\n",
+   "wall_s": 2.4
+  },
+  {
+   "arm": "plain_llm_df",
+   "task_id": "tge__django__django-13757",
+   "verdict": "red",
+   "tail": "opping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!\n!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!\n1 error in 0.41s\n",
+   "wall_s": 2.7
+  },
+  {
+   "arm": "plain_llm_df",
+   "task_id": "tge__django__django-14580",
+   "verdict": "env_error",
+   "tail": "editable: sys standard streams\nPython runtime state: core initialized\nOSError: [Errno 9] Bad file descriptor\n\nCurrent thread 0x00000001ef0cd300 (most recent call first):\n  <no Python frame>\n",
+   "wall_s": 1.0
+  },
+  {
+   "arm": "plain_llm_df",
+   "task_id": "tge__sympy__sympy-24152",
+   "verdict": "red",
+   "tail": "st_tensor_product_commutative_pulled_out\n!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!\n1 failed, 3 passed in 0.39s\n",
+   "wall_s": 3.2
+  },
+  {
+   "arm": "plain_llm_df",
+   "task_id": "tge__scikit-learn__scikit-learn-11040",
+   "verdict": "env_error",
+   "tail": "editable: riginates from a subprocess, and is likely not a problem with pip.\n\n[notice] A new release of pip is available: 23.0.1 -> 25.0.1\n[notice] To update, run: pip install --upgrade pip\n",
+   "wall_s": 1.1
+  },
+  {
+   "arm": "plain_llm_df",
+   "task_id": "tge__django__django-16139",
+   "verdict": "env_error",
+   "tail": "editable: sys standard streams\nPython runtime state: core initialized\nOSError: [Errno 9] Bad file descriptor\n\nCurrent thread 0x00000001ef0cd300 (most recent call first):\n  <no Python frame>\n",
+   "wall_s": 0.8
+  },
+  {
+   "arm": "plain_llm_df",
+   "task_id": "tge__astropy__astropy-7746",
+   "verdict": "env_error",
+   "tail": "editable: riginates from a subprocess, and is likely not a problem with pip.\n\n[notice] A new release of pip is available: 23.0.1 -> 25.0.1\n[notice] To update, run: pip install --upgrade pip\n",
+   "wall_s": 19.1
+  },
+  {
+   "arm": "plain_llm_df",
+   "task_id": "tge__django__django-13448",
+   "verdict": "red",
+   "tail": "py::test_create_test_db_success - dj...\n!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!\n1 failed, 10 passed in 0.29s\n",
+   "wall_s": 2.8
+  },
+  {
+   "arm": "plain_llm_df",
+   "task_id": "tge__sphinx-doc__sphinx-8627",
+   "verdict": "red",
+   "tail": "xtures\": cannot import name 'environmentfilter' from 'jinja2' (/tmp/tge_venv_sphinx_plain_llm_df_v3_5/lib/python3.8/site-packages/jinja2/__init__.py)\n",
+   "wall_s": 1.8
+  },
+  {
+   "arm": "plain_llm_df",
+   "task_id": "tge__pytest-dev__pytest-6116",
+   "verdict": "env_error",
+   "tail": "editable: sys standard streams\nPython runtime state: core initialized\nOSError: [Errno 9] Bad file descriptor\n\nCurrent thread 0x00000001ef0cd300 (most recent call first):\n  <no Python frame>\n",
+   "wall_s": 0.1
+  },
+  {
+   "arm": "plain_llm_df",
+   "task_id": "tge__pydata__xarray-5131",
+   "verdict": "red",
+   "tail": " empty: '/private/var/folders/pj/frxc6s715_x9x19hkk6pj2nh0000gn/T/pytest-of-wangchenyu/garbage-8b79136d-706d-44b8-8f47-b0bdf945fb11'\n  warnings.warn(\n",
+   "wall_s": 7.0
+  },
+  {
+   "arm": "plain_llm_df",
+   "task_id": "tge__matplotlib__matplotlib-23913",
+   "verdict": "env_error",
+   "tail": "editable: the package mentioned above, not pip.\nhint: See above for details.\n\n[notice] A new release of pip is available: 23.0.1 -> 25.0.1\n[notice] To update, run: pip install --upgrade pip\n",
+   "wall_s": 11.1
+  },
+  {
+   "arm": "plain_llm_df",
+   "task_id": "tge__django__django-12497",
+   "verdict": "red",
+   "tail": "d::test_get_reverse_related_filter_dict\n!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!\n1 failed, 26 passed in 0.34s\n",
+   "wall_s": 2.7
+  },
+  {
+   "arm": "plain_llm_df",
+   "task_id": "tge__scikit-learn__scikit-learn-25638",
+   "verdict": "env_error",
+   "tail": "editable:  hg+static-http, svn+ssh, svn+http, svn+https, svn+svn, svn+file).\n\n[notice] A new release of pip is available: 23.0.1 -> 25.0.1\n[notice] To update, run: pip install --upgrade pip\n",
+   "wall_s": 0.7
+  },
+  {
+   "arm": "plain_llm_df",
+   "task_id": "tge__sympy__sympy-19007",
+   "verdict": "env_error",
+   "tail": "worktree: Preparing worktree (detached HEAD f9e030b576)\nfatal: '/tmp/tge_acc_mat/sympy_plain_llm_df_tge__sympy__sympy-19007' already exists\n"
+  },
+  {
+   "arm": "plain_llm_df",
+   "task_id": "tge__pytest-dev__pytest-7220",
+   "verdict": "env_error",
+   "tail": "editable: sys standard streams\nPython runtime state: core initialized\nOSError: [Errno 9] Bad file descriptor\n\nCurrent thread 0x00000001ef0cd300 (most recent call first):\n  <no Python frame>\n",
+   "wall_s": 0.2
+  },
+  {
+   "arm": "plain_llm_df",
+   "task_id": "tge__django__django-15347",
+   "verdict": "env_error",
+   "tail": "editable: sys standard streams\nPython runtime state: core initialized\nOSError: [Errno 9] Bad file descriptor\n\nCurrent thread 0x00000001ef0cd300 (most recent call first):\n  <no Python frame>\n",
+   "wall_s": 0.9
+  },
+  {
+   "arm": "plain_llm_df",
+   "task_id": "tge__sympy__sympy-18532",
+   "verdict": "red",
+   "tail": "e_symbols - assert {x} ==...\n!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!\n1 failed, 18 passed, 1 warning in 0.20s\n",
+   "wall_s": 1.9
+  },
+  {
+   "arm": "plain_llm_df",
+   "task_id": "tge__django__django-14997",
+   "verdict": "env_error",
+   "tail": "editable: sys standard streams\nPython runtime state: core initialized\nOSError: [Errno 9] Bad file descriptor\n\nCurrent thread 0x00000001ef0cd300 (most recent call first):\n  <no Python frame>\n",
+   "wall_s": 0.7
+  },
+  {
+   "arm": "plain_llm_df",
+   "task_id": "tge__scikit-learn__scikit-learn-13497",
+   "verdict": "env_error",
+   "tail": "editable: riginates from a subprocess, and is likely not a problem with pip.\n\n[notice] A new release of pip is available: 23.0.1 -> 25.0.1\n[notice] To update, run: pip install --upgrade pip\n",
+   "wall_s": 0.9
+  },
+  {
+   "arm": "plain_llm_df",
+   "task_id": "tge__scikit-learn__scikit-learn-14894",
+   "verdict": "env_error",
+   "tail": "editable: riginates from a subprocess, and is likely not a problem with pip.\n\n[notice] A new release of pip is available: 23.0.1 -> 25.0.1\n[notice] To update, run: pip install --upgrade pip\n",
+   "wall_s": 0.9
+  }
+ ]
+}

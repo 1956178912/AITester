@@ -1,0 +1,291 @@
+{
+ "summary": {
+  "aitester": {
+   "env_error": 22,
+   "red": 18,
+   "accuracy": 0.0
+  }
+ },
+ "records": [
+  {
+   "arm": "aitester",
+   "task_id": "tge__scikit-learn__scikit-learn-10508",
+   "verdict": "env_error",
+   "tail": "editable: riginates from a subprocess, and is likely not a problem with pip.\n\n[notice] A new release of pip is available: 23.0.1 -> 25.0.1\n[notice] To update, run: pip install --upgrade pip\n",
+   "wall_s": 2.0
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__django__django-14915",
+   "verdict": "red",
+   "tail": "opping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!\n!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!\n1 error in 0.68s\n",
+   "wall_s": 50.0
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__django__django-15996",
+   "verdict": "red",
+   "tail": "ntime state: core initialized\nOSError: [Errno 9] Bad file descriptor\n\nCurrent thread 0x00000001ef0cd300 (most recent call first):\n  <no Python frame>\n",
+   "wall_s": 35.6
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__django__django-16046",
+   "verdict": "env_error",
+   "tail": "editable: sys standard streams\nPython runtime state: core initialized\nOSError: [Errno 9] Bad file descriptor\n\nCurrent thread 0x00000001ef0cd300 (most recent call first):\n  <no Python frame>\n",
+   "wall_s": 1.6
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__astropy__astropy-12907",
+   "verdict": "env_error",
+   "tail": "editable: sys standard streams\nPython runtime state: core initialized\nOSError: [Errno 9] Bad file descriptor\n\nCurrent thread 0x00000001ef0cd300 (most recent call first):\n  <no Python frame>\n",
+   "wall_s": 0.7
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__django__django-16041",
+   "verdict": "env_error",
+   "tail": "editable: sys standard streams\nPython runtime state: core initialized\nOSError: [Errno 9] Bad file descriptor\n\nCurrent thread 0x00000001ef0cd300 (most recent call first):\n  <no Python frame>\n",
+   "wall_s": 1.1
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__django__django-14411",
+   "verdict": "env_error",
+   "tail": "editable: sys standard streams\nPython runtime state: core initialized\nOSError: [Errno 9] Bad file descriptor\n\nCurrent thread 0x00000001ef0cd300 (most recent call first):\n  <no Python frame>\n",
+   "wall_s": 1.5
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__django__django-14787",
+   "verdict": "env_error",
+   "tail": "editable: sys standard streams\nPython runtime state: core initialized\nOSError: [Errno 9] Bad file descriptor\n\nCurrent thread 0x00000001ef0cd300 (most recent call first):\n  <no Python frame>\n",
+   "wall_s": 1.4
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__django__django-15388",
+   "verdict": "env_error",
+   "tail": "editable: sys standard streams\nPython runtime state: core initialized\nOSError: [Errno 9] Bad file descriptor\n\nCurrent thread 0x00000001ef0cd300 (most recent call first):\n  <no Python frame>\n",
+   "wall_s": 1.5
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__django__django-15781",
+   "verdict": "env_error",
+   "tail": "editable: sys standard streams\nPython runtime state: core initialized\nOSError: [Errno 9] Bad file descriptor\n\nCurrent thread 0x00000001ef0cd300 (most recent call first):\n  <no Python frame>\n",
+   "wall_s": 1.8
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__scikit-learn__scikit-learn-14092",
+   "verdict": "env_error",
+   "tail": "editable: riginates from a subprocess, and is likely not a problem with pip.\n\n[notice] A new release of pip is available: 23.0.1 -> 25.0.1\n[notice] To update, run: pip install --upgrade pip\n",
+   "wall_s": 41.0
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__sympy__sympy-15678",
+   "verdict": "red",
+   "tail": "oplanar_with_plane - Attr...\n!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!\n1 failed, 9 passed, 5 warnings in 0.70s\n",
+   "wall_s": 40.9
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__sympy__sympy-21055",
+   "verdict": "red",
+   "tail": "r 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!\n!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!\n1 warning, 1 error in 1.45s\n",
+   "wall_s": 12.1
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__mwaskom__seaborn-3010",
+   "verdict": "red",
+   "tail": ".py::TestPolyFit::test_call_single_group\n!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!\n1 failed, 7 passed in 0.91s\n",
+   "wall_s": 79.9
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__sympy__sympy-20639",
+   "verdict": "red",
+   "tail": "r 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!\n!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!\n1 warning, 1 error in 1.66s\n",
+   "wall_s": 12.4
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__django__django-14999",
+   "verdict": "env_error",
+   "tail": "editable: sys standard streams\nPython runtime state: core initialized\nOSError: [Errno 9] Bad file descriptor\n\nCurrent thread 0x00000001ef0cd300 (most recent call first):\n  <no Python frame>\n",
+   "wall_s": 4.2
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__scikit-learn__scikit-learn-25570",
+   "verdict": "env_error",
+   "tail": "editable:  hg+static-http, svn+ssh, svn+http, svn+https, svn+svn, svn+file).\n\n[notice] A new release of pip is available: 23.0.1 -> 25.0.1\n[notice] To update, run: pip install --upgrade pip\n",
+   "wall_s": 27.6
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__sympy__sympy-14396",
+   "verdict": "red",
+   "tail": "tions_clone - KeyError: ...\n!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!\n1 failed, 15 passed, 5 warnings in 0.77s\n",
+   "wall_s": 9.9
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__django__django-15789",
+   "verdict": "env_error",
+   "tail": "editable: sys standard streams\nPython runtime state: core initialized\nOSError: [Errno 9] Bad file descriptor\n\nCurrent thread 0x00000001ef0cd300 (most recent call first):\n  <no Python frame>\n",
+   "wall_s": 4.5
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__django__django-14752",
+   "verdict": "env_error",
+   "tail": "editable: sys standard streams\nPython runtime state: core initialized\nOSError: [Errno 9] Bad file descriptor\n\nCurrent thread 0x00000001ef0cd300 (most recent call first):\n  <no Python frame>\n",
+   "wall_s": 4.8
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__pydata__xarray-3364",
+   "verdict": "red",
+   "tail": "lic::test_concat_join_inner\n!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!\n1 failed, 11 passed, 2 warnings in 5.76s\n",
+   "wall_s": 41.5
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__django__django-15695",
+   "verdict": "env_error",
+   "tail": "editable: sys standard streams\nPython runtime state: core initialized\nOSError: [Errno 9] Bad file descriptor\n\nCurrent thread 0x00000001ef0cd300 (most recent call first):\n  <no Python frame>\n",
+   "wall_s": 4.6
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__sympy__sympy-14024",
+   "verdict": "red",
+   "tail": " 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!\n!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!\n4 warnings, 1 error in 1.25s\n",
+   "wall_s": 12.3
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__matplotlib__matplotlib-25433",
+   "verdict": "env_error",
+   "tail": "editable: riginates from a subprocess, and is likely not a problem with pip.\n\n[notice] A new release of pip is available: 23.0.1 -> 25.0.1\n[notice] To update, run: pip install --upgrade pip\n",
+   "wall_s": 31.6
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__django__django-12286",
+   "verdict": "red",
+   "tail": "CheckSettingLanguageCode::test_valid_language_code\n!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!\n1 failed in 2.32s\n",
+   "wall_s": 12.3
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__django__django-11133",
+   "verdict": "red",
+   "tail": ".py::TestHttpResponseBase::test_default_status_code\n!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!\n1 error in 1.73s\n",
+   "wall_s": 11.6
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__sympy__sympy-13895",
+   "verdict": "red",
+   "tail": "est_comp_zero - assert False\n!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!\n1 failed, 2 passed, 4 warnings in 1.54s\n",
+   "wall_s": 10.1
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__django__django-16379",
+   "verdict": "env_error",
+   "tail": "editable: sys standard streams\nPython runtime state: core initialized\nOSError: [Errno 9] Bad file descriptor\n\nCurrent thread 0x00000001ef0cd300 (most recent call first):\n  <no Python frame>\n",
+   "wall_s": 3.8
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__sympy__sympy-20154",
+   "verdict": "red",
+   "tail": "_set_partitions - assert ...\n!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!\n1 failed, 31 passed, 1 warning in 2.03s\n",
+   "wall_s": 13.5
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__scikit-learn__scikit-learn-15512",
+   "verdict": "env_error",
+   "tail": "editable: riginates from a subprocess, and is likely not a problem with pip.\n\n[notice] A new release of pip is available: 23.0.1 -> 25.0.1\n[notice] To update, run: pip install --upgrade pip\n",
+   "wall_s": 5.1
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__django__django-11099",
+   "verdict": "red",
+   "tail": "sernameValidator::test_message_attribute\n!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!\n1 failed, 3 passed in 1.75s\n",
+   "wall_s": 9.7
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__scikit-learn__scikit-learn-10297",
+   "verdict": "env_error",
+   "tail": "editable: riginates from a subprocess, and is likely not a problem with pip.\n\n[notice] A new release of pip is available: 23.0.1 -> 25.0.1\n[notice] To update, run: pip install --upgrade pip\n",
+   "wall_s": 3.5
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__matplotlib__matplotlib-24265",
+   "verdict": "env_error",
+   "tail": "editable: lotlib, which is required to install pyproject.toml-based projects\n\n[notice] A new release of pip is available: 23.0.1 -> 25.0.1\n[notice] To update, run: pip install --upgrade pip\n",
+   "wall_s": 190.4
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__sympy__sympy-14317",
+   "verdict": "red",
+   "tail": "Basic::test_float - Asser...\n!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!\n1 failed, 3 passed, 5 warnings in 1.22s\n",
+   "wall_s": 15.1
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__django__django-11019",
+   "verdict": "red",
+   "tail": "/test_autocomplete_widget.py::TestMedia::test_empty\n!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!\n1 error in 1.49s\n",
+   "wall_s": 15.2
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__matplotlib__matplotlib-26020",
+   "verdict": "env_error",
+   "tail": "editable: riginates from a subprocess, and is likely not a problem with pip.\n\n[notice] A new release of pip is available: 23.0.1 -> 25.0.1\n[notice] To update, run: pip install --upgrade pip\n",
+   "wall_s": 44.2
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__django__django-12308",
+   "verdict": "red",
+   "tail": "opping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!\n!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!\n1 error in 3.62s\n",
+   "wall_s": 21.0
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__pytest-dev__pytest-7490",
+   "verdict": "env_error",
+   "tail": "editable: sys standard streams\nPython runtime state: core initialized\nOSError: [Errno 9] Bad file descriptor\n\nCurrent thread 0x00000001ef0cd300 (most recent call first):\n  <no Python frame>\n",
+   "wall_s": 1.2
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__django__django-13220",
+   "verdict": "red",
+   "tail": "tUpdateErrorDict::test_update_with_dict\n!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!\n1 failed, 25 passed in 0.85s\n",
+   "wall_s": 14.8
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__scikit-learn__scikit-learn-13439",
+   "verdict": "env_error",
+   "tail": "editable: riginates from a subprocess, and is likely not a problem with pip.\n\n[notice] A new release of pip is available: 23.0.1 -> 25.0.1\n[notice] To update, run: pip install --upgrade pip\n",
+   "wall_s": 9.1
+  }
+ ]
+}

@@ -1,0 +1,37 @@
+{
+  "schema": "aitester_e8_cell_gate/1",
+  "seed": 42,
+  "exit_code": 0,
+  "wall_seconds": 6843,
+  "start_iso_utc": "2026-10-28T13:27:12Z",
+  "end_iso_utc": "2026-10-28T15:21:15Z",
+  "log": "/Users/wangchenyu/Workspace/AITester/experiments/results/e8_2x2_20261028/current-on/_preflight/log_seed42.log",
+  "issues": [],
+  "facts": {
+    "batch": "/Users/wangchenyu/Workspace/AITester/experiments/results/e8_2x2_20261028/current-on/seed42/benchmark_synthetic_20261028_232114.json",
+    "git_sha": "a93c1f60ee31b9582e0146f73e3038e6ce0f01a1",
+    "git_dirty": false,
+    "fingerprint_pinned": true,
+    "fingerprint": {
+      "requested_alias": "deepseek-flash",
+      "returned_model": "deepseek-flash",
+      "system_fingerprint": "bc19ba97cbe016479903222bb1578db6",
+      "probe_sha256": "fc3d915941b87e39064ba2075b6e2b29fc0de33bd9fd2b046f6857036edefda3",
+      "probe_at": "2026-10-28T15:21:13.801338+00:00",
+      "missing": [],
+      "pinned": true,
+      "error": null,
+      "alias_mismatch": false
+    },
+    "profile": "logic",
+    "cache_namespace": "e8_enabled_42",
+    "seed": 42,
+    "row_counts": {
+      "aitester": 87,
+      "plain_llm": 87,
+      "plain_llm_df": 87
+    },
+    "task_id_set_consistent": true
+  },
+  "hard_gate_pass": true
+}

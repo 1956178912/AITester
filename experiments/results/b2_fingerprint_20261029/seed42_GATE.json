@@ -1,0 +1,60 @@
+{
+  "schema": "aitester_t1_b2_seed_gate/1",
+  "seed": 42,
+  "exit_code": 0,
+  "wall_seconds": 4947,
+  "start_iso_utc": "2026-10-29T04:50:27Z",
+  "end_iso_utc": "2026-10-29T06:12:54Z",
+  "log": "/Users/wangchenyu/Workspace/AITester/experiments/results/b2_fingerprint_20261029/_preflight/log_seed42.log",
+  "criteria": "§1.1 硬门槛（git_dirty=false / pinned=true / 每臂 87 行 / task_id 与原批一致 / exit_code=0）",
+  "pass": true,
+  "issues": [],
+  "facts": {
+    "batch": "/Users/wangchenyu/Workspace/AITester/experiments/results/b2_fingerprint_20261029/seed42/benchmark_synthetic_20261029_141253.json",
+    "git_sha": "a93c1f60ee31b9582e0146f73e3038e6ce0f01a1",
+    "git_dirty": false,
+    "fingerprint_pinned": true,
+    "fingerprint": {
+      "requested_alias": "deepseek-flash",
+      "returned_model": "deepseek-flash",
+      "system_fingerprint": "bc19ba97cbe016479903222bb1578db6",
+      "probe_sha256": "fc3d915941b87e39064ba2075b6e2b29fc0de33bd9fd2b046f6857036edefda3",
+      "probe_at": "2026-10-29T06:12:52.876772+00:00",
+      "missing": [],
+      "pinned": true,
+      "error": null,
+      "alias_mismatch": false
+    },
+    "profile": "logic",
+    "cache_namespace": "t_b2_main_42",
+    "seed": 42,
+    "row_counts": {
+      "aitester": 87,
+      "plain_llm": 87,
+      "plain_llm_df": 87
+    },
+    "per_arm": {
+      "aitester": {
+        "measurable": 87,
+        "detected": 3,
+        "rate": 0.0345,
+        "tokens": 868721,
+        "calls": 320
+      },
+      "plain_llm": {
+        "measurable": 87,
+        "detected": 9,
+        "rate": 0.1034,
+        "tokens": 105731,
+        "calls": 91
+      },
+      "plain_llm_df": {
+        "measurable": 87,
+        "detected": 21,
+        "rate": 0.2414,
+        "tokens": 213585,
+        "calls": 169
+      }
+    }
+  }
+}

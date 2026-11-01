@@ -1,0 +1,75 @@
+{
+  "schema": "aitester_e8_cell_preflight/1",
+  "generated_at_utc": "20261028T152744Z",
+  "dry_run": false,
+  "root": "/Users/wangchenyu/Workspace/AITester-e8-legacy-b533cff",
+  "root_head": "b533cff1c316e8e80db635a1b2946610b211a5b6",
+  "root_dirty_lines": 0,
+  "prereg_path": "/Users/wangchenyu/Workspace/AITester/experiments/results/e8_2x2_20261028/legacy-on/PREREG.md",
+  "prereg_sha256": "5d465f9c57096e5ecc6797d6a52cfc663d7dcfcdff6c095c3e745d2250d0dd0f",
+  "cell_thinking": "legacy-default",
+  "cell_thinking_logic": "legacy-default（b533cff1 代码无开关、不注入变量，API 默认思考开启=R-P0-2 历史口径）",
+  "seeds": [
+    42
+  ],
+  "parallelism": 4,
+  "watchdog_seconds": 14400,
+  "budget_usd": 4.5,
+  "reference_total_tokens": 7000000,
+  "cost_estimate": {
+    "est_usd": 3.612,
+    "input_share": 0.76,
+    "price": {
+      "input_per_mtok": 0.3,
+      "output_per_mtok": 1.2,
+      "as_of": "2026-10-06"
+    }
+  },
+  "preflight_rc": 1,
+  "preflight_log": "/Users/wangchenyu/Workspace/AITester/experiments/results/e8_2x2_20261028/legacy-on/_preflight/preflight_run.log",
+  "quota_probe_rc": 0,
+  "quota_probe": {
+    "ok": true,
+    "probe": "minimal_chat_completion",
+    "model": "deepseek-flash",
+    "base_url_host": "api.deepseek.com",
+    "checked_at_utc": "2026-10-28T15:27:45Z",
+    "http_status": 200,
+    "usage": {
+      "prompt_tokens": 37,
+      "completion_tokens": 8,
+      "total_tokens": 45,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 8
+      },
+      "prompt_cache_hit_tokens": 0,
+      "prompt_cache_miss_tokens": 37
+    },
+    "response_model": "deepseek-flash"
+  },
+  "source_hashes": {
+    "config.py": "82c169d9dd6cbf3ce907d0369ddd515a0e14fcce3fe3cccf05832e70f826c16a",
+    "experiments/run_benchmark.py": "2c58c246776d6919f84b96bfc8df3a1a26fba8faba125f1095eb39d0a17b692a",
+    "experiments/run_main_batch.py": "e50163992473d9438fd330ad8666aa4582c68ee8e140fbe7b251d647954cd384",
+    "experiments/statistical_analysis.py": "29eba0dea937bb37360cc3b73dd51d02374527d2dda8653561036a045e7575fc",
+    "src/datasets/synthetic_dataset.py": "fa16b751dccb8ef4a3f11650133fa405465318f3af7688dc9741c622931e9c7f",
+    "src/graph/nodes.py": "e8547f35683631c1da98595ec201ba085d6c0b3cae488d96d5e20bbe939ec37c",
+    "src/graph/workflow.py": "ab54abba15ccb908eba46b023b8e0343ba5e16016edf7a55f893ea2003206519",
+    "src/budget/cost_budget.py": "e03a5cc72525044150daab5d03248775ba891a17a5a049964346e27153db4daf",
+    "src/utils/env_utils.py": null,
+    "src/agents/llm_client.py": "ea512ffd4a0589eb8f7d013291b7b8b7b7ecb63464c419ff284c321654ca88ff"
+  },
+  "protocol": {
+    "dataset": "synthetic",
+    "task_count": 87,
+    "baselines": [
+      "aitester",
+      "plain_llm",
+      "plain_llm_df"
+    ],
+    "cli": "python -m experiments.run_main_batch --dataset synthetic --task-count 87 --seed 42 --baselines aitester,plain_llm,plain_llm_df --skip-stats --output-dir <ROOT>/experiments/results/main_batch（legacy 切点无 --max-pattern-repeat/--staging-dir；current 切点追加两者）"
+  }
+}

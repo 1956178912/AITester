@@ -218,6 +218,41 @@ experiments/results/main_batch/**
 # 见上方 U1 注释的同一 gitignore 规范）。
 !experiments/results/r4_batches/
 !experiments/results/r4_batches/**
+# 2026-11-01：B1 五项付费实验小工件入库（E8 三格判定面 + B2 指纹批 + TGE 判定分片）。
+# 口径与 main_batch 同：只放行判定/预注册/门禁/统计报告级小文件；重 per-task
+# 批次 JSON（E8 每格 2-3MB details）与 traces/ 不入 git，随 Zenodo 归档走
+#（INVENTORY「heavy per-task records travel with the archive」纪律）。
+!experiments/results/e8_2x2_20261028/
+experiments/results/e8_2x2_20261028/**
+!experiments/results/e8_2x2_20261028/*.json
+!experiments/results/e8_2x2_20261028/*.md
+!experiments/results/e8_2x2_20261028/*/
+!experiments/results/e8_2x2_20261028/*/PREREG.md
+!experiments/results/e8_2x2_20261028/*/PREFLIGHT.json
+!experiments/results/e8_2x2_20261028/*/RUN_SUMMARY.log
+!experiments/results/e8_2x2_20261028/*/seed42_GATE.json
+!experiments/results/e8_2x2_20261028/*/seed43_GATE.json
+!experiments/results/e8_2x2_20261028/*/seed44_GATE.json
+!experiments/results/b2_fingerprint_20261029/
+experiments/results/b2_fingerprint_20261029/**
+!experiments/results/b2_fingerprint_20261029/PREREG.md
+!experiments/results/b2_fingerprint_20261029/PREFLIGHT.json
+!experiments/results/b2_fingerprint_20261029/GATES.json
+!experiments/results/b2_fingerprint_20261029/seed42_GATE.json
+!experiments/results/b2_fingerprint_20261029/RUN_SUMMARY.log
+!experiments/results/b2_fingerprint_20261029_r2/
+experiments/results/b2_fingerprint_20261029_r2/**
+!experiments/results/b2_fingerprint_20261029_r2/PREREG.md
+!experiments/results/b2_fingerprint_20261029_r2/PREFLIGHT.json
+!experiments/results/b2_fingerprint_20261029_r2/GATES.json
+!experiments/results/b2_fingerprint_20261029_r2/seed43_GATE.json
+!experiments/results/b2_fingerprint_20261029_r2/seed44_GATE.json
+!experiments/results/b2_fingerprint_20261029_r2/RUN_SUMMARY.log
+!experiments/results/b2_fingerprint_20261029_r2/FINGERPRINT_COMPARISON.md
+!experiments/results/minimal_gen/
+experiments/results/minimal_gen/**
+!experiments/results/minimal_gen/TGE_ACC_aitester*.json
+!experiments/results/minimal_gen/TGE_ACC_df*.json
 # 2026-10-09：E6 control + A1 消融两批实跑工件入库——e6_a1_batches/ 全量
 # 子树放行（2 批次 JSON + 351 逐任务 trace + SHA256SUMS + README，与
 # 主批次 / r4_batches 同口径）。同上方规范：须同时 negation 目录与其递归

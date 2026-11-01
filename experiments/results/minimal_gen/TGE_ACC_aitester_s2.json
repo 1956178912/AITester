@@ -1,0 +1,291 @@
+{
+ "summary": {
+  "aitester": {
+   "red": 27,
+   "env_error": 13,
+   "accuracy": 0.0
+  }
+ },
+ "records": [
+  {
+   "arm": "aitester",
+   "task_id": "tge__django__django-14017",
+   "verdict": "red",
+   "tail": "opping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!\n!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!\n1 error in 0.15s\n",
+   "wall_s": 17.6
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__sympy__sympy-22005",
+   "verdict": "red",
+   "tail": "st_solve_poly_system_polification_failed\n!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!\n1 failed, 3 passed in 0.30s\n",
+   "wall_s": 24.3
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__django__django-15252",
+   "verdict": "red",
+   "tail": "migration_plan_replaced_migration_reload\n!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!\n1 failed, 4 passed in 0.57s\n",
+   "wall_s": 8.9
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__django__django-11583",
+   "verdict": "red",
+   "tail": " empty: '/private/var/folders/pj/frxc6s715_x9x19hkk6pj2nh0000gn/T/pytest-of-wangchenyu/garbage-4ad99b8c-ba76-45e3-9ced-3afdcc405a52'\n  warnings.warn(\n",
+   "wall_s": 4.4
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__django__django-11620",
+   "verdict": "red",
+   "tail": "_filter_cleanse_special_types_exception\n!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!\n1 failed, 20 passed in 0.52s\n",
+   "wall_s": 4.0
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__sympy__sympy-13471",
+   "verdict": "red",
+   "tail": "est_comp_none - assert False\n!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!\n1 failed, 1 passed, 4 warnings in 0.38s\n",
+   "wall_s": 3.4
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__django__django-13447",
+   "verdict": "red",
+   "tail": "ntime state: core initialized\nOSError: [Errno 9] Bad file descriptor\n\nCurrent thread 0x00000001ef0cd300 (most recent call first):\n  <no Python frame>\n",
+   "wall_s": 8.3
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__django__django-11815",
+   "verdict": "red",
+   "tail": "constructableSerializer::test_serialize\n!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!\n1 failed, 12 passed in 0.46s\n",
+   "wall_s": 4.9
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__django__django-11179",
+   "verdict": "red",
+   "tail": "tor_add_with_dependency - AttributeE...\n!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!\n1 failed, 13 passed in 0.62s\n",
+   "wall_s": 4.1
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__pytest-dev__pytest-8906",
+   "verdict": "env_error",
+   "tail": "editable: sys standard streams\nPython runtime state: core initialized\nOSError: [Errno 9] Bad file descriptor\n\nCurrent thread 0x00000001ef0cd300 (most recent call first):\n  <no Python frame>\n",
+   "wall_s": 0.5
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__pytest-dev__pytest-7373",
+   "verdict": "env_error",
+   "tail": "editable: sys standard streams\nPython runtime state: core initialized\nOSError: [Errno 9] Bad file descriptor\n\nCurrent thread 0x00000001ef0cd300 (most recent call first):\n  <no Python frame>\n",
+   "wall_s": 0.6
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__django__django-13551",
+   "verdict": "red",
+   "tail": "/tmp/tge_venv_django_aitester_v3_2/bin/python: No module named pytest\n",
+   "wall_s": 5.5
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__django__django-13660",
+   "verdict": "red",
+   "tail": "/tmp/tge_venv_django_aitester_v3_2/bin/python: No module named pytest\n",
+   "wall_s": 3.4
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__django__django-12700",
+   "verdict": "red",
+   "tail": "onReporterFilter::test_get_safe_settings\n!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!\n1 failed, 8 passed in 0.61s\n",
+   "wall_s": 5.1
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__sympy__sympy-23262",
+   "verdict": "env_error",
+   "tail": "editable:  hg+static-http, svn+ssh, svn+http, svn+https, svn+svn, svn+file).\n\n[notice] A new release of pip is available: 23.0.1 -> 25.0.1\n[notice] To update, run: pip install --upgrade pip\n",
+   "wall_s": 50.8
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__sympy__sympy-13480",
+   "verdict": "red",
+   "tail": "ic.py::test_csch_eval - ...\n!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!\n1 failed, 40 passed, 4 warnings in 3.16s\n",
+   "wall_s": 13.3
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__sphinx-doc__sphinx-7975",
+   "verdict": "red",
+   "tail": "g.fixtures\": cannot import name 'environmentfilter' from 'jinja2' (/tmp/tge_venv_sphinx_aitester_v3_2/lib/python3.8/site-packages/jinja2/__init__.py)\n",
+   "wall_s": 48.0
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__matplotlib__matplotlib-25442",
+   "verdict": "env_error",
+   "tail": "editable: riginates from a subprocess, and is likely not a problem with pip.\n\n[notice] A new release of pip is available: 23.0.1 -> 25.0.1\n[notice] To update, run: pip install --upgrade pip\n",
+   "wall_s": 37.8
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__sympy__sympy-21627",
+   "verdict": "red",
+   "tail": "es.py::test_sign_abs - as...\n!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!\n1 failed, 36 passed, 1 warning in 2.16s\n",
+   "wall_s": 13.7
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__sympy__sympy-18835",
+   "verdict": "red",
+   "tail": "_set_partitions - assert ...\n!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!\n1 failed, 31 passed, 1 warning in 2.78s\n",
+   "wall_s": 37.8
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__mwaskom__seaborn-3190",
+   "verdict": "red",
+   "tail": "ontinuous_setup_basic - TypeError: u...\n!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!\n1 failed, 33 passed in 3.58s\n",
+   "wall_s": 16.3
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__matplotlib__matplotlib-22835",
+   "verdict": "env_error",
+   "tail": "editable: the package mentioned above, not pip.\nhint: See above for details.\n\n[notice] A new release of pip is available: 23.0.1 -> 25.0.1\n[notice] To update, run: pip install --upgrade pip\n",
+   "wall_s": 68.1
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__django__django-14608",
+   "verdict": "env_error",
+   "tail": "editable: sys standard streams\nPython runtime state: core initialized\nOSError: [Errno 9] Bad file descriptor\n\nCurrent thread 0x00000001ef0cd300 (most recent call first):\n  <no Python frame>\n",
+   "wall_s": 4.7
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__sympy__sympy-13031",
+   "verdict": "red",
+   "tail": "titem_raises - Failed: DID...\n!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!\n1 failed, 8 passed, 1 warning in 0.97s\n",
+   "wall_s": 12.8
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__django__django-11910",
+   "verdict": "red",
+   "tail": "_only_relation_agnostic_fields_relation\n!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!\n1 failed, 11 passed in 3.32s\n",
+   "wall_s": 14.1
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__astropy__astropy-14365",
+   "verdict": "env_error",
+   "tail": "editable: sys standard streams\nPython runtime state: core initialized\nOSError: [Errno 9] Bad file descriptor\n\nCurrent thread 0x00000001ef0cd300 (most recent call first):\n  <no Python frame>\n",
+   "wall_s": 2.2
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__sympy__sympy-15345",
+   "verdict": "red",
+   "tail": "r 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!\n!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!\n1 warning, 1 error in 0.93s\n",
+   "wall_s": 13.1
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__django__django-13768",
+   "verdict": "red",
+   "tail": "opping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!\n!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!\n1 error in 0.79s\n",
+   "wall_s": 10.7
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__sympy__sympy-12419",
+   "verdict": "red",
+   "tail": " 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!\n!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!\n3 warnings, 1 error in 1.47s\n",
+   "wall_s": 10.3
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__sympy__sympy-18621",
+   "verdict": "red",
+   "tail": "ix.py::test_blockmatrix_entry\n!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!\n1 failed, 9 passed, 1 warning in 1.52s\n",
+   "wall_s": 10.8
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__django__django-16816",
+   "verdict": "env_error",
+   "tail": "editable: sys standard streams\nPython runtime state: core initialized\nOSError: [Errno 9] Bad file descriptor\n\nCurrent thread 0x00000001ef0cd300 (most recent call first):\n  <no Python frame>\n",
+   "wall_s": 3.9
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__django__django-14016",
+   "verdict": "env_error",
+   "tail": "editable: sys standard streams\nPython runtime state: core initialized\nOSError: [Errno 9] Bad file descriptor\n\nCurrent thread 0x00000001ef0cd300 (most recent call first):\n  <no Python frame>\n",
+   "wall_s": 3.7
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__django__django-13448",
+   "verdict": "red",
+   "tail": "py::test_create_test_db_success - dj...\n!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!\n1 failed, 10 passed in 1.48s\n",
+   "wall_s": 11.0
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__pytest-dev__pytest-6116",
+   "verdict": "env_error",
+   "tail": "editable: sys standard streams\nPython runtime state: core initialized\nOSError: [Errno 9] Bad file descriptor\n\nCurrent thread 0x00000001ef0cd300 (most recent call first):\n  <no Python frame>\n",
+   "wall_s": 0.5
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__matplotlib__matplotlib-23913",
+   "verdict": "env_error",
+   "tail": "editable: the package mentioned above, not pip.\nhint: See above for details.\n\n[notice] A new release of pip is available: 23.0.1 -> 25.0.1\n[notice] To update, run: pip install --upgrade pip\n",
+   "wall_s": 50.7
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__scikit-learn__scikit-learn-25638",
+   "verdict": "red",
+   "tail": "!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!\u001b[0m\n\u001b[31m\u001b[31m\u001b[1m1 failed\u001b[0m, \u001b[32m25 passed\u001b[0m\u001b[31m in 0.46s\u001b[0m\u001b[0m\n",
+   "wall_s": 1561.9
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__pytest-dev__pytest-7220",
+   "verdict": "env_error",
+   "tail": "editable: sys standard streams\nPython runtime state: core initialized\nOSError: [Errno 9] Bad file descriptor\n\nCurrent thread 0x00000001ef0cd300 (most recent call first):\n  <no Python frame>\n",
+   "wall_s": 0.9
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__sympy__sympy-18532",
+   "verdict": "red",
+   "tail": "e_symbols - assert {x} ==...\n!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!\n1 failed, 18 passed, 1 warning in 1.52s\n",
+   "wall_s": 9.8
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__sympy__sympy-21614",
+   "verdict": "red",
+   "tail": "r 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!\n!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!\n1 warning, 1 error in 1.22s\n",
+   "wall_s": 9.6
+  },
+  {
+   "arm": "aitester",
+   "task_id": "tge__scikit-learn__scikit-learn-14894",
+   "verdict": "env_error",
+   "tail": "editable: riginates from a subprocess, and is likely not a problem with pip.\n\n[notice] A new release of pip is available: 23.0.1 -> 25.0.1\n[notice] To update, run: pip install --upgrade pip\n",
+   "wall_s": 5.7
+  }
+ ]
+}
