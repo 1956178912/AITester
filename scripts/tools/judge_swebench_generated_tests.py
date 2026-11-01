@@ -39,6 +39,33 @@ from bugsinpy_judge import sh
 
 SWE_REPOS = Path.home() / ".cache/aitester/swe_bench/repos"
 MAT = Path("/tmp/swebench_gen_mat")
+
+_SPEC_PATH = Path(
+    "/Users/wangchenyu/Workspace/AITester/experiments/results/swebench_repo_checkout_20261029/SPEC_EXTRACT.json"
+)
+_SPECS: dict[str, list[str]] = {}
+
+
+def _load_specs() -> dict[str, list[str]]:
+    """官方 spec（64 repo×version 线）→ requirements 列表（setup_env_script 解析）。"""
+    out: dict[str, list[str]] = {}
+    try:
+        d = json.loads(_SPEC_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return out
+    for ln in d.get("lines", []):
+        repo = ln["repo"].split("/")[-1]
+        m = re.search(
+            r"cat <<'EOF_\d+' > \$HOME/requirements.txt\n(.*?)\nEOF_\d+", ln.get("setup_env_script", ""), re.S
+        )
+        if m:
+            reqs = [x.strip() for x in m.group(1).splitlines() if x.strip() and not x.startswith("#")]
+            out[f"{repo}@{ln['version']}"] = reqs
+    return out
+
+
+_SPECS = _load_specs()
+
 _SLICE_ID = [0]  # judge_one 深处的 venv 隔离需要 slice 号（模块级单元素列表）
 _PYTEST_FAIL = re.compile(r"(\d+) failed")
 _PYTEST_ERROR = re.compile(r"(\d+) error")
@@ -80,6 +107,17 @@ def setup_and_pytest(repo_dir: str, commit: str, gen_code: str, py: str, tag: st
         env["PATH"] = f"{Path(py).parent}:{env.get('PATH', '')}"
         # editable 安装被测项目（django 等纯 Python 自含；C 扩展项目失败 ⇒
         # env_error 如实披露，不进检出分母）
+        # 官方 spec deps 预装（repo 维度并集 best-effort——env_error 主因=deps 全缺）
+        _reqs: list[str] = []
+        for _k, _req_list in _SPECS.items():
+            if _k.split("@")[0] == repo_dir.split("/")[-1]:
+                for _x in _req_list:
+                    if _x not in _reqs:
+                        _reqs.append(_x)
+        if _reqs:
+            subprocess.run(
+                [py, "-m", "pip", "install", "-q", *_reqs], capture_output=True, text=True, timeout=1800, env=env
+            )
         inst = subprocess.run(
             [py, "-m", "pip", "install", "-q", "-e", str(mat)], capture_output=True, text=True, timeout=1200, env=env
         )
@@ -150,6 +188,17 @@ def judge_one(
         env = dict(os.environ)
         env.pop("PYTHONPATH", None)
         env["PATH"] = f"{Path(py2).parent}:{env.get('PATH', '')}"
+        # 官方 spec deps 预装（repo 维度并集 best-effort——env_error 主因=deps 全缺）
+        _reqs: list[str] = []
+        for _k, _req_list in _SPECS.items():
+            if _k.split("@")[0] == repo_dir.split("/")[-1]:
+                for _x in _req_list:
+                    if _x not in _reqs:
+                        _reqs.append(_x)
+        if _reqs:
+            subprocess.run(
+                [py2, "-m", "pip", "install", "-q", *_reqs], capture_output=True, text=True, timeout=1800, env=env
+            )
         inst = subprocess.run(
             [py2, "-m", "pip", "install", "-q", "-e", str(mat)], capture_output=True, text=True, timeout=1200, env=env
         )
