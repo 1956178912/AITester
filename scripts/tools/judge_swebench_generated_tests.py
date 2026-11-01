@@ -183,6 +183,8 @@ def main() -> int:
     ap.add_argument("--instances", required=True, help="Lite instances JSONL")
     ap.add_argument("--py", required=True)
     ap.add_argument("--out", required=True)
+    ap.add_argument("--slice", type=int, default=0)
+    ap.add_argument("--nslices", type=int, default=1)
     args = ap.parse_args()
 
     inst_map: dict[str, dict] = {}
@@ -200,7 +202,9 @@ def main() -> int:
             print(f"[warn] {arm} 无 benchmark JSON", file=sys.stderr)
             continue
         d = json.loads(bjs[-1].read_text(encoding="utf-8"))
-        for r in d["results"][arm]["details"]:
+        _details = d["results"][arm]["details"][args.slice :: args.nslices]
+        print(f"[info] {arm} 切片 {args.slice}/{args.nslices} → {len(_details)} 任务本进程", file=sys.stderr)
+        for r in _details:
             gen = r.get("generated_test") or ""
             tid = r.get("task_id", "")
             iid = tid.replace("swe_bench__", "").replace("swe_", "", 1) if tid else ""
