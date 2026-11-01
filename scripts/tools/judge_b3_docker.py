@@ -133,7 +133,7 @@ def judge_one(inst: dict, gen: str, workdir: Path, slice_id: int) -> dict:
                     container,
                     "bash",
                     "-lc",
-                    f"set -o pipefail; pip install -q pytest {req_args_b} 2>&1 | tail -1",
+                    f"set -o pipefail; pip install -q -i https://pypi.tuna.tsinghua.edu.cn/simple pytest {req_args_b} 2>&1 | tail -1",
                 ],
                 timeout=1800,
             )
@@ -142,11 +142,7 @@ def judge_one(inst: dict, gen: str, workdir: Path, slice_id: int) -> dict:
         container = f"b3d_{iid.replace('/', '_')[-40:]}_{slice_id}"
         sh([DOCKER, "rm", "-f", container], timeout=60)
         _cur_proxy = (os.environ.get("HTTPS_PROXY") or os.environ.get("HTTP_PROXY") or "").strip()
-        proxy = (
-            _cur_proxy.replace("127.0.0.1", "host.docker.internal")
-            if _cur_proxy
-            else "http://host.docker.internal:51006"
-        )
+        proxy = ""  # 2026-11-01 全直连：daocloud 镜像 + 清华 pip 源，零代理依赖（沙箱端口漂移实证不可靠）
         envs = [
             "-e",
             f"HTTP_PROXY={proxy}",
@@ -186,13 +182,17 @@ def judge_one(inst: dict, gen: str, workdir: Path, slice_id: int) -> dict:
         # editable + pytest（deps 已在线级镜像内）
         setup = (
             "set -o pipefail; "
-            "pip install -q -e /testbed 2>&1 | tail -1; "
+            "pip install -q -i https://pypi.tuna.tsinghua.edu.cn/simple -e /testbed 2>&1 | tail -1; "
             "cd /testbed && python -m pytest _gen_test.py -q --no-header -W ignore::DeprecationWarning -x 2>&1 | tail -5"
         )
         r_run = sh([DOCKER, "exec", container, "bash", "-lc", setup], timeout=1800)
         out = (r_run.stdout or "") + (r_run.stderr or "")
         # editable 失败（C 扩展真编译失败）仍判 env_error
-        if "pip install -q -e /testbed" in out and "ERROR" in out and "Successfully installed" not in out:
+        if (
+            "pip install -q -i https://pypi.tuna.tsinghua.edu.cn/simple -e /testbed" in out
+            and "ERROR" in out
+            and "Successfully installed" not in out
+        ):
             rec["verdict"] = "env_error"
             rec["tail"] = out[-200:]
         else:
