@@ -122,7 +122,7 @@ def setup_and_pytest(
 
 def judge_one(arm: str, project: str, bug_id: str, gen_code: str, py: str) -> dict:
     bug_dir = FW / project / "bugs" / bug_id
-    info = dict(re.findall(r'(\w+)="([^"]*)"', (bug_dir / "bug.info").read_text(encoding="utf-8")))
+    info = dict(re.findall(r'(\w+)\s*=\s*"([^"]*)"', (bug_dir / "bug.info").read_text(encoding="utf-8")))
     setup_cmd = ""
     setup_sh = bug_dir / "setup.sh"
     if setup_sh.is_file():
@@ -137,7 +137,13 @@ def judge_one(arm: str, project: str, bug_id: str, gen_code: str, py: str) -> di
     rec: dict = {"arm": arm, "project": project, "bug": bug_id}
     t0 = time.time()
     red_kind, red_tail = setup_and_pytest(
-        project, info["buggy_commit_id"], tf, setup_cmd, py, bug_dir, f"c8_{project}_{bug_id}_{arm}_buggy"
+        project,
+        info["buggy_commit_id"],
+        tf,
+        setup_cmd,
+        py,
+        bug_dir,
+        f"c8_{project}_{bug_id}_{arm}_buggy_s{_SLICE_ID[0]}",
     )
     rec["buggy_kind"] = red_kind
     if red_kind != "red":
@@ -146,7 +152,13 @@ def judge_one(arm: str, project: str, bug_id: str, gen_code: str, py: str) -> di
         rec["wall_s"] = round(time.time() - t0, 1)
         return rec
     green_kind, green_tail = setup_and_pytest(
-        project, info["fixed_commit_id"], tf, setup_cmd, py, bug_dir, f"c8_{project}_{bug_id}_{arm}_fixed"
+        project,
+        info["fixed_commit_id"],
+        tf,
+        setup_cmd,
+        py,
+        bug_dir,
+        f"c8_{project}_{bug_id}_{arm}_fixed_s{_SLICE_ID[0]}",
     )
     rec["fixed_kind"] = green_kind
     rec["verdict"] = (
@@ -208,7 +220,7 @@ def main() -> int:
                 records.append({"arm": arm, "task": r.get("task_id"), "verdict": "no_generated_test"})
                 continue
             m = re.match(
-                r"bugsinpy__(.+?)_(\w+)_(\w+)", r.get("task_id", "")
+                r"bugsinpy__(.+?)_(\d+)_(\w+)", r.get("task_id", "")
             )  # 非贪婪 project（支持 youtube-dl 连字符）
             if not m:
                 records.append({"arm": arm, "task": r.get("task_id"), "verdict": "unparsable_task_id"})
