@@ -16,6 +16,7 @@
 - 队列脚本失控重启（2026-11-02 事故）：`scripts/b3_queue.sh` / `scripts/recovery_queue.sh` 被 launchd 以 `KeepAlive=true` 托管，退出即重拉（实测 6,425 / 772 次），判定步骤不幂等导致 983 个孤儿判定进程、load 747。已卸载并禁用两个 LaunchAgent、终止全部残留进程，脚本补**重入锁 + 完成标记 + 判定幂等**三重防护；空转批次写出的 `b3_lite_20261031/B3_JUDGE.json`（298 条全 `env_error`）重命名为 `.INVALID-20261102-env_error298` 隔离。处置与回滚见 `docs/checkpoints/incident-queue-runaway-20261102.md`。
 
 ### Changed
+- B3 Lite 判定口径更新（docker v2 终版）：原 78 条 `env_error` 复核为**冷启动资源竞争**——`judge_b3_docker_v2.py` 未校验 `docker run` 返回值，容器未运行被折叠成环境失败；分布上 78 条全部落在第一批 s1–s3（同批 s4–s6 为 0）。补跑 78/78 全部转 `red`（22m55s，零 LLM），有效分母 **222→300**、`env_error` 归零、**检出 0/300**。判定器已补返回值校验与一次重试（`58e0c41d`）。旧口径（py3.8/py3.14/conda 三版基线 env_error 246→281→286）为历史读数，**不可与 v2 混池**。
 - off 臂必卡任务处置口径：attempt29–33 五轮同点 stall、看护进度提取失效（`progress=?`）⇒ 两轮交叉 skip 失效，改 `AITESTER_SKIP_TASK_IDS` 显式跳过收官；两臂读数口径披露为 on 178/178 vs off 177/178+1skip，skip 任务的门禁读数由 per-instance 通道补位。
 - 逐轮条目归档：2026-11-02 批次之前的全部 `[Unreleased]` 条目（GK/GJ/GG/第十轮/GH/FF/FE/FD/FC/FB/DF 及更早 Fixed 各轮，128 行原文）移入 [docs/history/CHANGELOG_2026-11-02_batches.md](docs/history/CHANGELOG_2026-11-02_batches.md)（**原文逐字保留，未删改**；英文版同目录 `.en.md`）。
 
