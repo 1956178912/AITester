@@ -35,6 +35,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import shlex
 import subprocess
 import sys
 import time
@@ -175,7 +176,12 @@ def gate_one(inst: dict, workdir: Path, tag: str) -> dict:
             ],
             timeout=900,
         )
-        p2p_args = " ".join("'" + x.replace("'", "'''") + "'" for x in p2p)
+        # 2026-11-02 修复：原实现用 x.replace("'", "'''") 转义单引号，在 shell 单引号
+        # 语境下并不成立（应为 '\''），含引号的参数化测试名（如 test_format_args[['foo']]、
+        # test_validate_record[Can't ...]）会让整条命令提前闭合 → bash 报
+        # "unexpected EOF while looking for matching `''" 并被误判 p2p_broken
+        # （3 例实证）。改用 shlex.quote 生成合法转义。
+        p2p_args = " ".join(shlex.quote(x) for x in p2p)
         pytest_cmd = (
             "cd /testbed && python -m pytest " + p2p_args + " -q --no-header "
             "-W ignore::DeprecationWarning -p no:cacheprovider 2>&1 | tail -5"

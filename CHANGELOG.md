@@ -13,6 +13,7 @@
 - 扩样判定统计终版（`experiments/results/JUDGE_REPORT_20261101.md`）：C8 修复后 aitester 1/166=0.60%、df 2/109=1.83%（judge_exception 39+34 清零）；TGE 首判 1.1% vs 2.1%；rescue31 + luigi33 检出 0；全批 502 有效判定检出 6≈1.2%，fix_not_green 主导（54.5%）。
 
 ### Fixed
+- G8 p2p 判定器转义缺陷（2026-11-02）：`judge_g8_p2p.py` 用 `x.replace("'", "'''")` 转义测试名中的单引号，该写法在 shell 单引号语境下不成立，含引号的参数化测试名使命令提前闭合 → 3 例被误记为 `p2p_broken`（并非 gold patch 破坏 pass-to-pass）。改用 `shlex.quote` 后复验 **19/19 `p2p_ok`**（3 例原 broken + 16 例含引号任务的静默假绿筛查，均无假绿）。完整门禁 **141/178 = 79.2% → 144/178 = 80.9%**，真实 p2p 破坏 **0 例**；稿件 G8 段与 SRC 注释同步更正并重编译（73 页 / 0 错误 / style 9/9 / compliance 0 FAIL）。四开关对称零（0/177）结论不变。
 - 队列脚本失控重启（2026-11-02 事故）：`scripts/b3_queue.sh` / `scripts/recovery_queue.sh` 被 launchd 以 `KeepAlive=true` 托管，退出即重拉（实测 6,425 / 772 次），判定步骤不幂等导致 983 个孤儿判定进程、load 747。已卸载并禁用两个 LaunchAgent、终止全部残留进程，脚本补**重入锁 + 完成标记 + 判定幂等**三重防护；空转批次写出的 `b3_lite_20261031/B3_JUDGE.json`（298 条全 `env_error`）重命名为 `.INVALID-20261102-env_error298` 隔离。处置与回滚见 `docs/checkpoints/incident-queue-runaway-20261102.md`。
 
 ### Changed
