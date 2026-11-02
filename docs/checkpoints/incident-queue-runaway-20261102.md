@@ -31,8 +31,9 @@
 2. 空转批次在 15:40 写出 `b3_lite_20261031/B3_JUDGE.json`（298 条全
    `env_error`）——与 docker v2 的 222 red + 78 env_error 冲突，已重命名为
    `B3_JUDGE.json.INVALID-20261102-env_error298` 隔离，不得作读数来源。
-3. 11-02 14:04–14:07 的 G8 r2 复测全程在 load 700+ 下完成，其读数须在
-   独立复核后再引用（见下节遗留项）。
+3. 11-02 的 G8 r2 生成（off 13:42–14:15 / on 13:49–14:13）与生成判定（14:50 收官）
+   全程落在本次事故窗口内（load 700+）。双臂同受同一资源约束，**对称零的方向不受影响**，
+   但生成质量可能整体偏低；论文引用时宜披露该窗口，或待独立复核后定稿。
 
 ## 处置
 
@@ -70,11 +71,12 @@ launchctl bootstrap gui/501 ~/Library/LaunchAgents/com.aitester.queueB.plist
 
 ## 遗留项（本次未处理）
 
-1. **G8 r2 读数是否为「不可判定」**：两臂 177/177 全部
-   `stop_reason=skip_debugger_repair_invalid`、`error_category=patch_validation_failed`、
-   `patch_validated=False`，诊断集中在「被测文件是 Markdown 描述文本而非源码」
-   「`test_generated.py` 收集阶段 SyntaxError」。须先确认载荷构建（`g8_full178`
-   enrichment 的 code 字段）再决定是否引用。
+1. **G8 r2 的 `passed=0` 与「对称零」不矛盾，禁止混引**：`run_benchmark` 的
+   `passed=False`（`stop_reason=skip_debugger_repair_invalid`、
+   `error_category=patch_validation_failed`）是**修复补丁验证**未过，**不是**生成测试
+   判定。生成测试的判定走 `judge_g8_gen.py` 的 per-instance 通道，终版读数为
+   detected 0 / 0、green_buggy 346/354（`G8_GEN_SUMMARY.md`，14:50 收官）。
+   引用 r2 结论必须带「生成判定」标签，不得用 `passed` 字段反推检出率。
 2. B3 空转产物已隔离，聚合脚本若按 glob 匹配 `B3_JUDGE*.json` 需排除 `.INVALID`。
 3. `rmdir` 在本沙箱内被拒（锁目录测试残留已用 Python 清理）；脚本由 launchd
    在沙箱外运行不受影响。
