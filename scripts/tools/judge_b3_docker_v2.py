@@ -102,21 +102,31 @@ def judge_one(inst: dict, gen: str, workdir: Path, slice_id: int) -> dict:
         if r_img.returncode != 0:
             container = f"b3build_{repo}_{slice_id}"
             sh([DOCKER, "rm", "-f", container], timeout=60)
-            sh(
-                [
-                    DOCKER,
-                    "run",
-                    "--platform",
-                    "linux/amd64",
-                    "--name",
-                    container,
-                    "-d",
-                    base_img,
-                    "sleep",
-                    "infinity",
-                ],
-                timeout=180,
-            )
+            boot_args = [
+                DOCKER,
+                "run",
+                "--platform",
+                "linux/amd64",
+                "--name",
+                container,
+                "-d",
+                base_img,
+                "sleep",
+                "infinity",
+            ]
+            r_boot = sh(boot_args, timeout=180)
+            # 2026-11-02 修复：run 失败原先被静默丢弃，后续 exec 一律报 "container is not
+            # running"，把「冷启动资源竞争」折叠成 env_error（s1-s3 共 78 条实证，同批
+            # s4-s6 为 0）。失败重试一次，仍失败才带真实原因显式返回。
+            if r_boot.returncode != 0:
+                print(f"[boot-retry] {container}: {(r_boot.stderr or '')[-120:]}", flush=True)
+                sh([DOCKER, "rm", "-f", container], timeout=60)
+                time.sleep(3)
+                r_boot = sh(boot_args, timeout=180)
+            if r_boot.returncode != 0:
+                rec["verdict"] = "env_error"
+                rec["tail"] = f"docker run: {(r_boot.stderr or r_boot.stdout)[-200:]}"
+                return rec
             # v2 修复（2026-11-02）：reqs 含 environment markers（如 "pylibmc; sys.platform != 'win32'"），
             # shell 单引号包参导致嵌套引号断裂 → line build rc=1 → 全 env_error（s2 50/50 实证）。
             # 改为容器内文件 + pip install -r（pip 自行解析 markers）。
