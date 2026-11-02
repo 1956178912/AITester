@@ -12,6 +12,9 @@
 - H1 修订版（r2）三臂 + REF 重建完成：`env_snapshot` 三臂校验与 `SHA256SUMS` 通过；判据 ≤10pp 冻结（`payload_equivalence_prereg_amendment_20261101.md`），替代原口径的「强制不可判定」收口（REF 工件随 AITester-w-head 删除不可恢复）。
 - 扩样判定统计终版（`experiments/results/JUDGE_REPORT_20261101.md`）：C8 修复后 aitester 1/166=0.60%、df 2/109=1.83%（judge_exception 39+34 清零）；TGE 首判 1.1% vs 2.1%；rescue31 + luigi33 检出 0；全批 502 有效判定检出 6≈1.2%，fix_not_green 主导（54.5%）。
 
+### Fixed
+- 队列脚本失控重启（2026-11-02 事故）：`scripts/b3_queue.sh` / `scripts/recovery_queue.sh` 被 launchd 以 `KeepAlive=true` 托管，退出即重拉（实测 6,425 / 772 次），判定步骤不幂等导致 983 个孤儿判定进程、load 747。已卸载并禁用两个 LaunchAgent、终止全部残留进程，脚本补**重入锁 + 完成标记 + 判定幂等**三重防护；空转批次写出的 `b3_lite_20261031/B3_JUDGE.json`（298 条全 `env_error`）重命名为 `.INVALID-20261102-env_error298` 隔离。处置与回滚见 `docs/checkpoints/incident-queue-runaway-20261102.md`。
+
 ### Changed
 - off 臂必卡任务处置口径：attempt29–33 五轮同点 stall、看护进度提取失效（`progress=?`）⇒ 两轮交叉 skip 失效，改 `AITESTER_SKIP_TASK_IDS` 显式跳过收官；两臂读数口径披露为 on 178/178 vs off 177/178+1skip，skip 任务的门禁读数由 per-instance 通道补位。
 - 逐轮条目归档：2026-11-02 批次之前的全部 `[Unreleased]` 条目（GK/GJ/GG/第十轮/GH/FF/FE/FD/FC/FB/DF 及更早 Fixed 各轮，128 行原文）移入 [docs/history/CHANGELOG_2026-11-02_batches.md](docs/history/CHANGELOG_2026-11-02_batches.md)（**原文逐字保留，未删改**；英文版同目录 `.en.md`）。
