@@ -21,7 +21,10 @@
 # 所涉文档已于 2026-10-09 清理批次删除。2026-10-26（DU 收口提交批次）新增
 # 两项：`docs/history/CHANGELOG_2026-10-26_full*.md` 是冻结的历史归档，正文
 # 含 sha256 摘要（64 位 hex）与「曾误报的占位值」说明文字（如 AKIA+PLACEHOLDER），
-# 均为记录而非凭证；命中仅打印供人工复核，不阻断。命中文件非占位符时照常阻断。
+# 均为记录而非凭证；命中仅打印供人工复核，不阻断。命中文件非占位符时照常阻断。2026-11-02（G8/H1r2 轮）新增三项：`docs/emse/` 重建镜像中的三份登记文档
+# （EMSE_DOCSTRING_ANCHOR/AUGMENT_PREREG、B1_QUOTA_EXPERIMENTS_REGISTER）——正文含
+# sha256 摘要与 system_fingerprint（64/32 位 hex），与 docs/study 无前缀同源版一致，
+# 均为记录而非凭证。
 # 维护：新增误报文档时同步加入 _KNOWN_FP 正则，并在头部登记。
 
 set -e
@@ -72,7 +75,7 @@ _SENSITIVE_RE='sk-[A-Za-z0-9._-]{10,}|[A-Fa-f0-9]{32,}|[A-Z][A-Z_]*(PASSWORD|PAS
 #     （32 位 hex）均为模型快照记录而非凭证。
 # 十二处（含 n10_v4gate_20261030，N10 收口批次）均为记录而非凭证；命中仅打印供人工复核，不阻断。命中文件非占位符时照常阻断。
 # 维护：新增误报文档时同步加入 _KNOWN_FP 正则，并在头部登记。
-_KNOWN_FP='^docs/history/CHANGELOG_2026-10-26_full(\.en)?\.md$|^experiments/results/emse_ult_mutk_full_20261029/|^experiments/results/emse_ult_specir_probe_20261014/|^experiments/results/q05_interaction_attribution_20261030/|^experiments/results/swe_pro_judge_20261030/|^experiments/results/q04q07_ab_20261030/|^experiments/results/g8_fullstack_20261030/|^experiments/results/n10_v4gate_20261030/|^experiments/results/e8_2x2_20261028/|^experiments/results/b2_fingerprint_20261029/|^experiments/results/b2_fingerprint_20261029_r2/|^experiments/results/minimal_gen/'
+_KNOWN_FP='^docs/emse/(EMSE_DOCSTRING_ANCHOR_PREREG_2026-10-17|EMSE_DOCSTRING_AUGMENT_PREREG_2026-10-17|B1_QUOTA_EXPERIMENTS_REGISTER_2026-10-29)\.md$|^docs/history/CHANGELOG_2026-10-26_full(\.en)?\.md$|^experiments/results/emse_ult_mutk_full_20261029/|^experiments/results/emse_ult_specir_probe_20261014/|^experiments/results/q05_interaction_attribution_20261030/|^experiments/results/swe_pro_judge_20261030/|^experiments/results/q04q07_ab_20261030/|^experiments/results/g8_fullstack_20261030/|^experiments/results/n10_v4gate_20261030/|^experiments/results/e8_2x2_20261028/|^experiments/results/b2_fingerprint_20261029/|^experiments/results/b2_fingerprint_20261029_r2/|^experiments/results/minimal_gen/'
 
 LEAKED=""
 while IFS= read -r f; do

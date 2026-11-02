@@ -38,3 +38,4 @@
 | # | 原文 | 实际执行 | 影响 | 处置 |
 |---|---|---|---|---|
 | D1 | 主批规模 30（选样规则未冻结，恢复重跑复用 g8_ready10） | **全量 178**（enrichment_g8.jsonl 全池原序冻结清单 `~/.cache/aitester/swe_bench_pro/g8_full178/`，用户 2026-11-01 指令"跑全量吧，不抽去 30"） | 规模 30 → 178（ansible 24 / internetarchive 81 / qutebrowser 73），统计力增强；判据、四开关、预算闸口径不变（批次闸 $6 → $10，178 任务上界外推） | 清单跑前冻结；runner `experiments/run_g8_full178.sh`（--parallel 32，用户确认 DeepSeek 并发限额 2500）；10-31 resume 的 10 任务读数作为子集对照保留，不混池 |
+| D2 | 两臂各 178 任务完整判定 | off 臂 **177/178 + 1 任务显式 skip**（`instance_qutebrowser__qutebrowser-3e21c8214a998cb1058defd15aabb24617a76402-v5fc38aaf22415ab0b70567368332beee7955b367` 于执行层连续 5 轮同点 stall，attempt29–33 实证；经 `AITESTER_SKIP_TASK_IDS` 显式跳过后收官，2026-11-02 09:05） | 两臂读数口径不对称：on 178/178 vs off 177/178+1skip；增量 177 行零损失，跨轮对照不变 | skip 任务的 M3 门禁读数由 per-instance docker 验证通道（`scripts/tools/judge_g8_docker.py`，2026-11-02）补位；该任务在 per-instance 环境下有效与否独立披露，不与 on 臂混算 |
