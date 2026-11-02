@@ -135,6 +135,9 @@ paper.md
 *.bib
 # 论文初稿（Typst，2026-10-16）：paper/ 目录与全部 .typ 稿一律不入库
 paper/
+# 论文中间产物归档（2026-11-02）：paper/ 只留投稿包，语料/脚本/修订记录移入此处
+# 608 MB，含 263 篇第三方论文全文，仅本地研究用，不入库
+paper_work/
 *.typ
 # Sensitive local artifacts (academic/review/security) — kept out of GitHub
 .gitignore-sensitive
