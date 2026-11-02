@@ -174,7 +174,7 @@ def _get_or_create_chat_client(model_name: str, temperature: float, api_key: str
             openai_api_key=api_key,
             base_url=base_url,
             extra_body=_extra_body,
-            http_client=httpx.Client(verify=False, timeout=180.0),  # noqa: S501 — 网关 MITM 证书不可信，实验流量显式豁免（披露见上）
+            http_client=httpx.Client(verify=False, timeout=180.0),  # noqa: S501  # nosec B501 — 网关 MITM 证书不可信，实验流量显式豁免（披露见上）；bandit 行级豁免（R10 硬门禁 2026-11-02 登记，全局 skip 不收 B501）
         )
         # 达到上限时淘汰最早插入的条目（dict 保持插入序，FIFO）
         if len(_llm_client_cache) >= _MAX_CACHED_LLM_CLIENTS:

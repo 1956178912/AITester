@@ -79,3 +79,38 @@ def test_append_line_is_self_contained_jsonl(tmp_path: Path) -> None:
     assert len(lines) == 2
     assert json.loads(lines[0])["task_id"] == "task_a"
     assert json.loads(lines[1])["task_id"] == "task_b"
+
+
+def test_append_sanitizes_nonfinite_to_null(tmp_path: Path) -> None:
+    """非有限浮点（NaN/Inf）落盘前折 null（缺测语义）——append 不抛
+    ValueError（单任务级数据问题不得放大成整批跑批中断），恢复端
+    读回 None 不影响其余字段（2026-11-02 CI AF 门禁修复，B1 批
+    _sanitize_nonfinite 范式对齐）。"""
+    _append_incremental_result(
+        str(tmp_path),
+        "task_nan",
+        {"aitester": {"score": float("nan"), "elapsed_seconds": float("inf"), "neg": float("-inf"), "v": 1}},
+    )
+    lines = (tmp_path / "INCREMENTAL_RESULTS.jsonl").read_text(encoding="utf-8").strip().splitlines()
+    assert len(lines) == 1
+    rec = json.loads(lines[0])  # json.loads 默认接受 NaN/Infinity；行内若残留会原样解析
+    results = rec["results"]["aitester"]
+    assert results["score"] is None
+    assert results["elapsed_seconds"] is None
+    assert results["neg"] is None
+    assert results["v"] == 1
+    # 严格 JSON 判据（AF 门禁语义）：无裸 NaN/Infinity 字面量残留
+    for token in ("NaN", "Infinity"):
+        assert token not in lines[0]
+
+
+def test_append_uses_strict_json_writer(tmp_path: Path) -> None:
+    """写入点显式 allow_nan=False（AF 门禁 AST 级判据的运行时对称锁）：
+    传入含非有限浮点的 results 时行内不出现 NaN/Infinity 字面量，
+    且与 sanitize 语义（折 null）一致。"""
+    _append_incremental_result(str(tmp_path), "task_inf", {"probe": {"a": float("inf"), "b": [float("nan")]}})
+    line = (tmp_path / "INCREMENTAL_RESULTS.jsonl").read_text(encoding="utf-8").strip()
+    rec = json.loads(line)
+    assert rec["results"]["probe"]["a"] is None
+    assert rec["results"]["probe"]["b"] == [None]
+    assert "NaN" not in line and "Infinity" not in line

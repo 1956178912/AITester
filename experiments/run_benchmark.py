@@ -3380,7 +3380,12 @@ def _append_incremental_result(output_dir: str, task_id: str, task_results: dict
     path = Path(output_dir) / "INCREMENTAL_RESULTS.jsonl"
     record = {"task_id": task_id, "results": task_results}
     with open(path, "a", encoding="utf-8") as fh:
-        fh.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
+        # allow_nan=False（json_strict 门禁口径，AF）写显式参数；配
+        # _sanitize_nonfinite 先清洗——NaN/Inf 折 None（缺测语义），
+        # 增量行永不因非有限浮点抛 ValueError（append 抛异常会把
+        # 单任务级数据问题放大成整批跑批中断，重蹈 996 行 docstring
+        # 记录的 B1 批事故）。
+        fh.write(json.dumps(_sanitize_nonfinite(record), ensure_ascii=False, allow_nan=False, default=str) + "\n")
         fh.flush()
         os.fsync(fh.fileno())
 

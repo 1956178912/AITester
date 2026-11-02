@@ -214,7 +214,7 @@ class APIManager:
             api_key=llm_config.api_key,
             base_url=llm_config.base_url,
             timeout=self.config.timeout,
-            http_client=httpx.Client(verify=False, timeout=180.0),  # noqa: S501 — 网关 MITM 证书不可信，实验流量显式豁免（披露见上）
+            http_client=httpx.Client(verify=False, timeout=180.0),  # noqa: S501  # nosec B501 — 网关 MITM 证书不可信，实验流量显式豁免（披露见 llm_client 同款注释）；bandit 行级豁免（R10 硬门禁 2026-11-02 登记，全局 skip 不收 B501）
         )
         health = APIHealth(
             config=llm_config,
