@@ -364,3 +364,4 @@ sbom.cyclonedx.json
 # PDF 已足够排版，PNG 是同内容的高体积冗余（每张 ~200KB vs PDF ~35KB）。
 scripts/figures/figures/*.png
 .tmp_secret_leak_candidates.txt
+docs/emse/
