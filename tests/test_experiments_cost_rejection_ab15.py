@@ -43,6 +43,12 @@ from experiments import emse_stats_report as rep
 from experiments import oracle_examples_replay as oe
 from experiments import spec_examples_generator as seg
 from src.budget import pricing
+from src.budget.pricing import currency_symbol, table_currency_status
+
+# 币种符号由价目表基准币种单点推导（2026-11-04 起为人民币 ¥）：写死 `$` 的话，
+# `"$None" not in text` 这类负向守卫会随币种切换变成恒真——看着像锁，实际不判定。
+MONEY = currency_symbol(table_currency_status())
+
 
 _ROOT = Path(__file__).resolve().parents[1]
 _PRICE_TABLE = _ROOT / "experiments" / "price_table.json"
@@ -137,7 +143,7 @@ def real_b2_report() -> dict[str, Any]:
 
 @pytest.fixture(scope="module")
 def cny_b2_report() -> dict[str, Any]:
-    return t1.build_report(_OUT_DIR, _ORIG_DIR, {**copy.deepcopy(_REAL_PRICE), "currency": "CNY"})
+    return t1.build_report(_OUT_DIR, _ORIG_DIR, {**copy.deepcopy(_REAL_PRICE), "currency": "EUR"})
 
 
 @pytest.fixture(scope="module")
@@ -158,7 +164,7 @@ class TestCurrencyBlockReasonVocabulary:
             ("absent", "currency_absent"),
             ("null", "currency_absent"),
             ("blank", "currency_absent"),
-            ("other:CNY", "currency_not_usd:CNY"),
+            ("other:EUR", "currency_not_usd:EUR"),
             ("other:cny", "currency_not_usd:cny"),
             ("not_string:int", "currency_not_usd:not_string:int"),
             ("not_string:bool", "currency_not_usd:not_string:bool"),
@@ -173,7 +179,7 @@ class TestCurrencyBlockReasonVocabulary:
         entries = [
             _entry("USD"),
             _entry(" usd "),
-            _entry("CNY"),
+            _entry("EUR"),
             _entry(None),
             _entry("   "),
             _entry(123),
@@ -222,7 +228,7 @@ class TestSpecGeneratorAdmission:
             ({"models": {"m": []}}, "m", "entry_not_object:list"),
             ({"models": {"m": {}}}, "m", "entry_empty"),
             ({"models": {"m": _entry()}}, "m", "currency_absent"),
-            ({"models": {"m": _entry("CNY")}}, "m", "currency_not_usd:CNY"),
+            ({"models": {"m": _entry("EUR")}}, "m", "currency_not_usd:EUR"),
             ({"models": {"m": _entry(None)}}, "m", "currency_absent"),
             ({"models": {"m": _entry(123)}}, "m", "currency_not_usd:not_string:int"),
             ({"models": {"m": _entry("USD", output_per_mtok=None)}}, "m", "price_null"),
@@ -242,7 +248,7 @@ class TestSpecGeneratorAdmission:
             ({"models": {"m": 5}}, "m"),
             ({"models": {"m": {}}}, "m"),
             ({"models": {"m": _entry()}}, "m"),
-            ({"models": {"m": _entry("CNY")}}, "m"),
+            ({"models": {"m": _entry("EUR")}}, "m"),
             ({"models": {"m": _entry(123)}}, "m"),
             ({"models": {"m": _entry("USD", input_per_mtok=None)}}, "m"),
             ({"models": {"m": _entry("USD")}}, "m"),
@@ -291,10 +297,10 @@ class TestOracleCostRendering:
         assert summary["estimated_cost_usd"] == 3.0
         assert "cost_unpriced_reason" not in summary
 
-    def test_cny_generation_carries_the_mechanism(self) -> None:
-        summary = oe.generation_summary([_generation()], {"models": {"deepseek-flash": _entry("CNY")}})
+    def test_non_base_currency_generation_carries_the_mechanism(self) -> None:
+        summary = oe.generation_summary([_generation()], {"models": {"deepseek-flash": _entry("EUR")}})
         assert summary["estimated_cost_usd"] is None
-        assert summary["cost_unpriced_reason"] == "currency_not_usd:CNY"
+        assert summary["cost_unpriced_reason"] == "currency_not_usd:EUR"
 
     def test_unregistered_model_carries_the_mechanism(self) -> None:
         summary = oe.generation_summary([_generation("unknown-model")], {"models": {}})
@@ -302,9 +308,9 @@ class TestOracleCostRendering:
         assert summary["cost_unpriced_reason"] == "model_unregistered"
 
     def test_none_cost_never_renders_a_dollar_sign(self) -> None:
-        line = _cost_line(_report(None, "currency_not_usd:CNY"))
-        assert "无法估算（currency_not_usd:CNY）" in line
-        assert "$None" not in line
+        line = _cost_line(_report(None, "currency_not_usd:EUR"))
+        assert "无法估算（currency_not_usd:EUR）" in line
+        assert f"{MONEY}None" not in line
 
     def test_missing_reason_is_named_as_unrecorded_not_guessed(self) -> None:
         line = _cost_line(_report(None))
@@ -313,12 +319,12 @@ class TestOracleCostRendering:
     def test_zero_is_still_a_real_amount(self) -> None:
         """`0.0` 是"确实没花钱"的真实读数，与"无法估算"必须不同形。"""
         line = _cost_line(_report(0.0))
-        assert "$0.0" in line
+        assert f"{MONEY}0.0" in line
         assert "无法估算" not in line
 
     def test_priced_cost_keeps_the_historical_shape(self) -> None:
         line = _cost_line(_report(0.006195))
-        assert "$0.006195" in line
+        assert f"{MONEY}0.006195" in line
         assert "无法估算" not in line
 
 
@@ -353,7 +359,7 @@ class TestAnalyzeBatchCostGate:
             (_entry(), "currency_absent"),
             (_entry(None), "currency_absent"),
             (_entry("   "), "currency_absent"),
-            (_entry("CNY"), "currency_not_usd:CNY"),
+            (_entry("EUR"), "currency_not_usd:EUR"),
             (_entry(123), "currency_not_usd:not_string:int"),
             (_entry("USD", input_per_mtok=None), "price_null"),
             (_entry("USD", input_per_mtok=True), "price_not_a_number:bool"),
@@ -398,14 +404,14 @@ class TestReasonCountRendering:
         assert t1._usd_text(None, {"currency_absent": 3}) == "—（无法估算：currency_absent×3）"
 
     def test_none_cost_with_nested_reasons(self) -> None:
-        shown = t1._usd_text(None, {"aitester": {"currency_not_usd:CNY": 3}})
-        assert shown == "—（无法估算：aitester: currency_not_usd:CNY×3）"
+        shown = t1._usd_text(None, {"aitester": {"currency_not_usd:EUR": 3}})
+        assert shown == "—（无法估算：aitester: currency_not_usd:EUR×3）"
 
     def test_zero_amount_keeps_the_dollar_shape(self) -> None:
-        assert t1._usd_text(0.0) == "$0.0"
+        assert t1._usd_text(0.0) == f"{MONEY}0.0"
 
     def test_priced_amount_keeps_the_prefix_contract(self) -> None:
-        assert t1._usd_text(1.5) == "$1.5"
+        assert t1._usd_text(1.5) == f"{MONEY}1.5"
         assert t1._usd_text(1.5, prefix="") == "1.5"
 
 
@@ -443,7 +449,7 @@ class TestAnalyzeBatchEndToEnd:
     def test_cny_batch_refuses_to_render_a_total(self, cny_b2_report: dict[str, Any]) -> None:
         assert cny_b2_report["cost"]["actual_est_usd"] is None
         assert cny_b2_report["cost"]["unpriced_arms"] == {
-            arm: {"currency_not_usd:CNY": 3}
+            arm: {"currency_not_usd:EUR": 3}
             for arm in (
                 a
                 for a in ("aitester", "plain_llm", "plain_llm_df")
@@ -455,7 +461,7 @@ class TestAnalyzeBatchEndToEnd:
         for arm, blk in cny_b2_report["pooled"].items():
             assert blk["cost_usd"] is None, arm
             assert blk["n_seeds_unpriced"] == 3, arm
-            assert blk["unpriced_reasons"] == {"currency_not_usd:CNY": 3}, arm
+            assert blk["unpriced_reasons"] == {"currency_not_usd:EUR": 3}, arm
 
     def test_cny_batch_per_seed_cost_is_none(self, cny_b2_report: dict[str, Any]) -> None:
         for entry in cny_b2_report["per_seed"].values():
@@ -475,16 +481,16 @@ class TestAnalyzeBatchEndToEnd:
     def test_cny_render_has_no_python_dict_repr(self, cny_b2_report: dict[str, Any]) -> None:
         text = t1.render_readme(cny_b2_report)
         assert "×{" not in text
-        assert "aitester: currency_not_usd:CNY×3" in text
+        assert "aitester: currency_not_usd:EUR×3" in text
 
     def test_cny_render_never_prints_dollar_none(self, cny_b2_report: dict[str, Any]) -> None:
         text = t1.render_readme(cny_b2_report)
-        assert "$None" not in text
+        assert f"{MONEY}None" not in text
         assert "实测估算成本=**—（无法估算：" in text
 
     def test_cny_render_per_arm_cell_names_the_mechanism(self, cny_b2_report: dict[str, Any]) -> None:
         text = t1.render_readme(cny_b2_report)
-        assert "—（无法估算：currency_not_usd:CNY×3）" in text
+        assert "—（无法估算：currency_not_usd:EUR×3）" in text
 
     def test_real_render_keeps_the_dollar_total(self, real_b2_report: dict[str, Any]) -> None:
         text = t1.render_readme(real_b2_report)
@@ -512,10 +518,10 @@ class TestEmseExtensionsCostPerTask:
         # 重建 synthetic 批无 plain_llm_df 故 got 两臂）
 
     def test_cny_price_is_no_longer_summed_as_usd(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        _fake_price(monkeypatch, {"deepseek-flash": _entry("CNY", input_per_mtok=0.3, output_per_mtok=1.2)})
+        _fake_price(monkeypatch, {"deepseek-flash": _entry("EUR", input_per_mtok=0.3, output_per_mtok=1.2)})
         _, usd, note = ext._cost_per_task(ext.MAIN_BATCH_FILES, "aitester")
         assert usd is None
-        assert "currency_not_usd:CNY←deepseek-flash" in note
+        assert "currency_not_usd:EUR←deepseek-flash" in note
 
     def test_missing_currency_is_no_longer_summed_as_usd(self, monkeypatch: pytest.MonkeyPatch) -> None:
         _fake_price(monkeypatch, {"deepseek-flash": _entry(input_per_mtok=0.3, output_per_mtok=1.2)})
@@ -553,15 +559,15 @@ class TestEmseExtensionsCostPerTask:
                     "tokens_per_task": 100.0,
                     "tokens_per_task_bootstrap95": [90.0, 110.0],
                     "usd_per_task": None,
-                    "usd_note": "计价被拒：currency_not_usd:CNY←m",
+                    "usd_note": "计价被拒：currency_not_usd:EUR←m",
                 }
             },
             "comparisons": {},
         }
         text = ext.render_markdown(report)
         assert "—（无金额）" in text
-        assert "currency_not_usd:CNY←m" in text
-        assert "$None" not in text
+        assert "currency_not_usd:EUR←m" in text
+        assert f"{MONEY}None" not in text
 
     def test_render_zero_is_still_a_dollar_amount(self) -> None:
         report = {
@@ -577,7 +583,7 @@ class TestEmseExtensionsCostPerTask:
             },
             "comparisons": {},
         }
-        assert "$0.0000" in ext.render_markdown(report)
+        assert f"{MONEY}0.0000" in ext.render_markdown(report)
 
     def test_site_uses_the_shared_vocabulary(self) -> None:
         """AB-16：ext 的条目准入（币种+数字）整体收口到共享 `entry_block_reason`。"""
@@ -602,8 +608,8 @@ def _row(model: str) -> dict[str, Any]:
 
 class TestEmseReportReasonConsolidation:
     def test_cny_reason_is_the_shared_code(self) -> None:
-        out = rep.cost_effectiveness_block([_row("m")], price_table={"m": _entry("CNY")})
-        assert out["n_unpriceable_reasons"] == {"currency_not_usd:CNY": 1}
+        out = rep.cost_effectiveness_block([_row("m")], price_table={"m": _entry("EUR")})
+        assert out["n_unpriceable_reasons"] == {"currency_not_usd:EUR": 1}
         assert out["total_usd"] == 0.0
 
     @pytest.mark.parametrize("currency", [None, "   "])

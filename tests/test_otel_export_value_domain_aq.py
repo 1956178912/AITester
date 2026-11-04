@@ -37,8 +37,8 @@ from tests._corpus_guard import (
     ARCHIVED_SPANS,
     ARCHIVED_TOKEN_ATTRS,
     ARCHIVED_TOKEN_FIELD_CHECKS,
-    archived_trace_files,
     local_extra_trace_files,
+    require_archived_corpus,
     shape_problem,
 )
 
@@ -388,7 +388,7 @@ class TestExportEndToEnd:
         # EZ 轮（2026-10-27）：形状断言改吃**入库面**（`git ls-files`）——旧口径钉
         # 盘面 9,502 span / 4,368 token 属性，盘面一增长（9,658 / 实测 4,420）作者机
         # 必红、CI 又 skip；现在入库面 4,139 / 2,280，本地未入库语料只跑不变量。
-        archived = archived_trace_files()
+        archived = require_archived_corpus()
         assert archived, "入库 trace 语料缺失"
         spans = 0
         token_attrs = 0
@@ -409,7 +409,7 @@ class TestExportEndToEnd:
         # 2026-10-23 provider 清理后复测：checked 27135 → 26166，下界同步下调。
         # EZ 轮（2026-10-27）：口径同上一例——分母是入库面，锁的是精确值。
         checked = 0
-        for path in archived_trace_files():
+        for path in require_archived_corpus():
             checked += _token_field_checks(path)
         problem = shape_problem(checked, ARCHIVED_TOKEN_FIELD_CHECKS, "入库 trace 的 token 字段核对数")
         assert not problem, problem

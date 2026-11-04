@@ -58,14 +58,7 @@ def edit_intent_enabled() -> bool:
     return env_flag(_ENV)
 
 
-EDIT_INTENT_PROMPT_SECTION = (
-    "【结构化编辑意图（必须输出）】除常规字段外，在 JSON 中追加 edit_intents 字段："
-    '[{"old_str": "...", "new_str": "..."}]。old_str 必须是从被测代码逐字符复制的'
-    "连续代码行（含缩进与空行），且在全文中**恰好出现一次**；new_str 为替换后的"
-    "代码（删除代码时为空字符串）。多处修改按从上到下顺序各输出一条（多 Hunk "
-    "场景每处一条）。该字段将由确定性引擎最小化应用，请保证锚点精确、不要"
-    "重写无关代码。"
-)
+EDIT_INTENT_PROMPT_SECTION = '[Structured edit intents (required)] In addition to the usual fields, add an edit_intents field to the JSON: [{"old_str": "...", "new_str": "..."}]. old_str must be a contiguous run of lines copied character-for-character from the code under test (indentation and blank lines included) and must occur **exactly once** in the file; new_str is the replacement (the empty string when deleting code). Emit one intent per change, top to bottom (one per hunk in a multi-hunk change). A deterministic engine applies this field minimally, so keep the anchor exact and do not rewrite unrelated code.'
 
 
 def parse_edit_intents(value: Any) -> list[dict[str, str]]:

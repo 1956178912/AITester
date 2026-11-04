@@ -73,8 +73,16 @@ def test_prompt_section_contains_bnf_and_selfcheck() -> None:
         "<attr>",
     ):
         assert nonterminal in section, f"BNF 缺少产生式 {nonterminal}"
-    # 三个 *_expr 字段名与"正例 / 反例 / 自检"三节标题必须点名
-    for marker in ("preconditions_expr", "postconditions_expr", "invariants_expr", "正例", "反例", "输出前自检"):
+    # 三个 *_expr 字段名与"positive / negative / self-check"三节标题必须点名
+    # 2026-11-04：提示词全英化，标题标记同步改为英文锚点（语义不变）。
+    for marker in (
+        "preconditions_expr",
+        "postconditions_expr",
+        "invariants_expr",
+        "Positive examples",
+        "Negative examples",
+        "Pre-output self-check",
+    ):
         assert marker in section, f"文法段缺少 {marker}"
 
 
@@ -89,7 +97,7 @@ def test_prompt_section_renders_every_example() -> None:
         assert clause in section, f"正例未渲染进提示：{clause}"
     for clause, reason, _note in SPEC_EXPR_GRAMMAR_NEGATIVE_EXAMPLES:
         assert clause in section, f"反例未渲染进提示：{clause}"
-        assert f"拒绝原因：{reason}" in section, f"反例未标注拒绝原因 {reason}：{clause}"
+        assert f"rejected because: {reason}" in section, f"反例未标注拒绝原因 {reason}：{clause}"
 
 
 def test_prompt_section_names_operators_truthfully() -> None:
@@ -102,11 +110,12 @@ def test_prompt_section_names_operators_truthfully() -> None:
     assert "成功时返回 int 类型结果" in section
     # 单引号 / 花括号 / f-string 等字符白名单边界必须写明（实测被拒）；
     # v4：冒号放行后的边界（切片与字符串内合法、lambda/海象被拒）也要写明
-    assert "单引号" in section
-    assert "切片" in section
+    # 2026-11-04：提示词全英化，锚点同步改为英文措辞（语义不变）。
+    assert "no single quotes" in section
+    assert "slices" in section
     assert "lambda" in section
-    assert "海象" in section
-    assert "位运算符" in section
+    assert "walrus" in section
+    assert "bitwise operators" in section
     # v3：白名单内字符串方法（正例侧点名）与白名单外方法（反例侧点名）都要在
     assert "startswith" in section
     assert "title" in section  # v3 反例：刻意不收的方法

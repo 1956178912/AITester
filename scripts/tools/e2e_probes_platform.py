@@ -525,7 +525,7 @@ def probe_security_injection_guard() -> ProbeOutcome:
         return fail(f"注入特征漏检：{misses}")
     if clean:
         return fail(f"干净文本被误报：{clean}")
-    if "【安全警示】" not in warning or "directive_override" not in warning:
+    if "[Security warning]" not in warning or "directive_override" not in warning:
         return fail(f"警示文本未含特征标记：{warning[:120]}")
     if "dangerous_shell" not in dangerous:
         return fail(f"os.system 危险补丁未检出：{dangerous}")
@@ -534,7 +534,7 @@ def probe_security_injection_guard() -> ProbeOutcome:
     if safe_patch:
         return fail(f"安全补丁被误报：{safe_patch}")
     return ok(
-        "3 类注入全检出、干净文本零误报、警示文本含【安全警示】；危险补丁 os.system/eval 检出、安全补丁零误报",
+        "3 类注入全检出、干净文本零误报、警示文本含 [Security warning]；危险补丁 os.system/eval 检出、安全补丁零误报",
         warning_preview=warning[:100],
         dangerous=dangerous,
         eval_finding=eval_finding,

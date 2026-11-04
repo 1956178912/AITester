@@ -529,14 +529,15 @@ class ExpertPoolAgent:
             if len(patch_text) > 800:
                 patch_text = patch_text[:800] + "…[truncated]"
             debate_hints.append(
-                f"【候选 {c.get('dimension')}】（被 {c.get('verified_count')} 个专家同意）\n{patch_text}"
+                f"[Candidate {c.get('dimension')}] (agreed by {c.get('verified_count')} experts)\n{patch_text}"
             )
         debate_context = (
-            "\n\n【多 Agent 辩论收敛】以下是交叉验证后的 top "
-            f"{len(top_candidates)} 候选（每个候选由不同专家维度产出）。"
-            "请综合分析这些候选的共性修复点与各自弱点，产出一个**综合修订版**补丁："
-            "吸收各候选的正确修复逻辑，规避其错误假设与冗余改动，"
-            "仅输出修订后的完整补丁代码（markdown 代码块包裹）。"
+            "\n\n[Multi-agent debate convergence] The cross-validated top "
+            f"{len(top_candidates)} candidates follow, each produced by a different expert "
+            "dimension. Analyse the repair points they share and the weaknesses each carries, "
+            "then produce a **consolidated revision** patch: absorb the correct repair logic of "
+            "every candidate, avoid their wrong assumptions and redundant edits, and output only "
+            "the revised complete patch code (wrapped in a markdown code block)."
         )
         enriched_code = f"{target_code}\n\n{debate_context}\n\n" + "\n\n".join(debate_hints)
 
@@ -584,16 +585,19 @@ def _patches_agree(norm_a: str, norm_b: str) -> bool:
 # 专家维度 → prompt 提示（追加到 target_code 尾部，引导 LLM 按维度聚焦）
 _EXPERT_DIMENSION_PROMPT_HINTS: dict[str, str] = {
     "boundary_handling": (
-        "\n\n【专家维度：边界处理】请优先检查：空列表 / 空字符串 / 除零 / 负数 / 溢出 / None 输入，"
-        "针对这些边界场景生成更精确的断言与修复。"
+        "\n\n[Expert dimension: boundary handling] Prioritise: empty list / empty string / "
+        "division by zero / negative numbers / overflow / None inputs. Generate more precise "
+        "assertions and repairs for these boundary scenarios."
     ),
     "type_safety": (
-        "\n\n【专家维度：类型安全】请优先检查：类型重赋值 / 容器混用 / 返回类型不一致 / "
-        "鸭子类型误用，生成类型收紧的修复补丁。"
+        "\n\n[Expert dimension: type safety] Prioritise: type reassignment / mixed container "
+        "types / inconsistent return types / duck-typing misuse. Produce a repair patch that "
+        "tightens the types."
     ),
     "dead_code_and_logic": (
-        "\n\n【专家维度：死代码与逻辑错误】请优先检查：不可达分支 / 恒假条件 / 死代码 / "
-        "逻辑倒置，生成移除死代码 + 修正逻辑的修复补丁。"
+        "\n\n[Expert dimension: dead code and logic errors] Prioritise: unreachable branches / "
+        "always-false conditions / dead code / inverted logic. Produce a repair patch that "
+        "removes the dead code and corrects the logic."
     ),
 }
 

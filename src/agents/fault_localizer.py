@@ -115,24 +115,27 @@ def build_gold_injection_localization(target_code: str, gold_fixed_code: str) ->
 
 
 FAULT_LOCALIZER_SYSTEM_PROMPT = """\
-你是资深 Python 故障定位专家。给定：被测源码、失败的测试代码、\
-测试错误输出、以及谱系定位（Ochiai）的可疑行佐证。你的任务是\
-**只定位、不修复**——找出导致测试失败的缺陷位置。
+You are a senior Python fault-localization expert. You are given: the source \
+under test, the failing test code, the test error output, and spectral \
+(Ochiai) evidence for suspicious lines. Your task is to **localize only, never \
+repair**: identify the defect site that causes the test failure.
 
-要求（推理引导，先期望后对比）：
-1. 对每个候选位置，先在 expected_logic 写出"该处应有的正确行为"\
-（不超过 60 字），再在 reasoning 对比实际代码说明缺陷依据\
-（不超过 60 字）；
-2. 输出 1~3 个候选，按可能性从高到低排序（首候选用于注入修复\
-prompt，全部候选用于 Hit@3/MRR 排序评测）；
-3. 输出必须是单个 JSON 对象，不要任何额外文字或 markdown 围栏；
-4. function_name 填缺陷所在的函数名（模块级缺陷填 "<module>"）；
-5. line_start/line_end 填缺陷语句在源码中的行号（1-based，含端点）；
-6. confidence 取 0.0~1.0 的浮点数；
-7. 谱系佐证仅供参考——若你推断的可疑行与其冲突，以你的推理为准\
-并在 reasoning 中说明。
+Requirements (reasoning-guided: expectation first, then contrast):
+1. For each candidate site, state the correct behaviour it should have in \
+expected_logic (at most 60 characters), then compare that against the actual \
+code in reasoning and give the evidence for the defect (at most 60 characters);
+2. Output 1 to 3 candidates ordered from most to least likely (the first feeds \
+the repair prompt; all of them feed the Hit@3/MRR ranking evaluation);
+3. Output must be a single JSON object, with no extra text and no markdown fence;
+4. function_name is the name of the function containing the defect (use \
+"<module>" for a module-level defect);
+5. line_start/line_end are the 1-based line numbers of the defective statement \
+in the source, endpoints included;
+6. confidence is a float in the range 0.0-1.0;
+7. The spectral evidence is advisory only: if your inferred line conflicts with \
+it, follow your own reasoning and explain the conflict in reasoning.
 
-输出格式：
+Output format:
 {"candidates": [{"function_name": "...", "line_start": 1, "line_end": 1, "confidence": 0.0, "expected_logic": "...", "reasoning": "..."}]}"""
 
 
@@ -206,15 +209,15 @@ class FaultLocalizerAgent(BaseAgent):
         spectral_section = ""
         if spectral_top_k:
             rows = ", ".join(f"L{item.get('line')}({item.get('score')})" for item in spectral_top_k[:5])
-            spectral_section = f"\n【谱系定位佐证（Ochiai Top-k）】{rows}\n"
+            spectral_section = f"\n[Spectrum-based localization evidence (Ochiai top-k)] {rows}\n"
         failed_names = ", ".join(str(c.get("test") or c.get("nodeid") or "?") for c in (failed_cases or [])[:5])
         return (
-            f"【被测源码（带行号）】\n{numbered}\n"
-            f"\n【失败的测试】\n{test_code}\n"
-            f"\n【失败用例】{failed_names}\n"
-            f"\n【测试错误输出（截断）】\n{(test_output or '')[:2000]}\n"
+            f"[Source under test (with line numbers)]\n{numbered}\n"
+            f"\n[Failing test]\n{test_code}\n"
+            f"\n[Failed cases] {failed_names}\n"
+            f"\n[Test error output (truncated)]\n{(test_output or '')[:2000]}\n"
             f"{spectral_section}"
-            "\n请输出定位 JSON（只定位不修复，1~3 个候选按可能性降序）。"
+            "\nOutput the localization JSON (localize only, do not fix; 1-3 candidates, most likely first)."
         )
 
     def _parse_localization(self, raw: str) -> dict[str, Any] | None:
@@ -272,9 +275,9 @@ def build_localization_prompt_section(loc: dict[str, Any] | None) -> str:
     if not loc or not loc.get("function_name"):
         return ""
     return (
-        f"\n【推理定位（LLM，置信度 {loc.get('confidence', 0):.2f}）】"
-        f"缺陷位于函数 `{loc['function_name']}`"
-        f"（L{loc.get('line_start')}-L{loc.get('line_end')}）：{loc.get('reasoning', '')}\n"
+        f"\n[LLM-inferred localization (confidence {loc.get('confidence', 0):.2f})] "
+        f"the defect is in function `{loc['function_name']}` "
+        f"(L{loc.get('line_start')}-L{loc.get('line_end')}): {loc.get('reasoning', '')}\n"
     )
 
 

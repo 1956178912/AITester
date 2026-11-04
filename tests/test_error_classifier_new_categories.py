@@ -3,7 +3,7 @@
 
 覆盖：
 - refine_failure_category 的 EXECUTION_TRACE_MISSING（执行轨迹丢失）；
-- refine_failure_category 的 MULTI_CANDIDATE_ALL_REJECTED（多候选全拒绝）；
+- refine_failure_category 的 MULTI_CANDIDATE_ALL_REJECTED（multi-candidate全拒绝）；
 - 优先级判定（patch_rejected > rag_empty > trace_missing > multi_rejected）；
 - refine_final_error_category 从 final_state 接线；
 - get_fix_strategy 对两个新类别的策略描述。
@@ -56,10 +56,10 @@ class TestExecutionTraceMissing:
 
 
 class TestMultiCandidateAllRejected:
-    """多候选全拒绝（MULTI_CANDIDATE_ALL_REJECTED）。"""
+    """multi-candidate全拒绝（MULTI_CANDIDATE_ALL_REJECTED）。"""
 
     def test_all_candidates_rejected_returns_multi_rejected(self):
-        # 多候选 stats：3 个候选，0 个通过静态筛选
+        # multi-candidate stats：3 个candidate，0 个通过static screening
         result = refine_failure_category(
             "assertion",
             test_passed=False,
@@ -69,7 +69,7 @@ class TestMultiCandidateAllRejected:
         assert result == ErrorCategory.MULTI_CANDIDATE_ALL_REJECTED.value
 
     def test_some_candidates_passed_returns_original(self):
-        # 有候选通过静态筛选时不判定"全拒绝"
+        # 有candidate通过static screening时不判定"全拒绝"
         result = refine_failure_category(
             "assertion",
             test_passed=False,
@@ -79,7 +79,7 @@ class TestMultiCandidateAllRejected:
         assert result == "assertion"
 
     def test_no_multi_stats_returns_original(self):
-        # 未启用多候选（stats 为 None）时原样返回
+        # 未启用multi-candidate（stats 为 None）时原样返回
         result = refine_failure_category(
             "assertion",
             test_passed=False,
@@ -158,8 +158,8 @@ class TestNewCategoryFixStrategy:
 
     def test_multi_candidate_all_rejected_strategy(self):
         strategy = get_fix_strategy(ErrorCategory.MULTI_CANDIDATE_ALL_REJECTED)
-        assert "多候选" in strategy or "候选" in strategy
-        assert "静态筛选" in strategy or "回退" in strategy
+        assert "multi-candidate" in strategy or "candidate" in strategy
+        assert "static screening" in strategy or "回退" in strategy
 
     def test_strategy_for_other_categories_still_works(self):
         # 回归：原有类别策略不受新类别影响

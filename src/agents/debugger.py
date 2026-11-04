@@ -179,9 +179,11 @@ def _build_downgrade_context(
     missing = feedback.get("missing_symbols") or []
     if missing:
         ctx += (
-            f"\n\n【契约守卫负面反馈】上一轮补丁删除了以下必须保留的模块级符号：{', '.join(sorted(missing)[:10])}。"
-            "本轮修复必须原样保留这些符号（名称/定义均不得删除或重命名），"
-            "只允许修改函数/方法体内部逻辑。"
+            "\n\n[Naming-contract violation feedback] The patch from the previous round deleted "
+            f"the following module-level symbols: {', '.join(str(m) for m in missing)}. "
+            "This round's repair must preserve those symbols verbatim (their names and definitions "
+            "must not be deleted or renamed); only the internal logic of a function or method body "
+            "may change."
         )
     return ctx
 
@@ -394,10 +396,10 @@ class DebuggerAgent(BaseAgent):
             if defect_type == "test_defect":
                 # 分支修复：测试缺陷 → 不修代码，返回信号让上层重新生成测试
                 return {
-                    "root_cause": review_reason or "测试本身存在缺陷（Review Agent 判定）",
+                    "root_cause": review_reason or "The test itself is defective (Review Agent verdict)",
                     "error_category": error_category.value,
                     "error_confidence": error_confidence,
-                    "fix_strategy": "重新生成测试（测试缺陷，非实现缺陷）",
+                    "fix_strategy": "Regenerate the test (test defect, not an implementation defect)",
                     "patch": "",
                     "adversarial_check": {"scenarios_checked": 0, "all_passed": False, "critic_degraded": False},
                     "defect_type": defect_type,
@@ -408,19 +410,14 @@ class DebuggerAgent(BaseAgent):
         # P0 1.3 契约验证：在 prompt 中加入命名契约约束，防止 LLM 重写
         # 时删除/重命名模块级符号（sqlfluff 插件命名契约 / 注册装饰器 /
         # __all__ 导出 / 模块级常量）导致 import 链崩溃。
-        _CONTRACT_CONSTRAINT = (
-            "\n【命名契约约束】不得修改或删除以下符号（函数名、类名、模块级导出符号、"
-            "注册装饰器、插件入口点、__all__ 条目）。"
-            "修复时只能修改函数/方法体的内部逻辑，保持所有公共接口名称不变。"
-            "若必须删除某个符号，请在补丁注释中明确说明理由。"
-        )
+        _CONTRACT_CONSTRAINT = "\n[Naming-contract constraints] Do not modify or delete the symbols below (function names, class names, module-level exported symbols, registration decorators, plugin entry points, __all__ entries). Repairs may only change the internal logic of a function or method body; every public interface name must stay unchanged. If a symbol truly must be removed, state the reason explicitly in a patch comment."
         query = (
-            f"【错误类型】{error_category.value}\n"
-            f"【修复策略】{strategy_text}\n"
+            f"[Error category] {error_category.value}\n"
+            f"[Repair strategy] {strategy_text}\n"
             f"{_CONTRACT_CONSTRAINT}\n"
-            f"被测代码：\n```\n{target_code}\n```\n\n"
-            f"测试输出：\n```\n{test_output}\n```\n\n"
-            f"失败用例：\n{cases_summary}"
+            f"Code under test:\n```\n{target_code}\n```\n\n"
+            f"Test output:\n```\n{test_output}\n```\n\n"
+            f"Failing cases:\n{cases_summary}"
         )
 
         # P0 运行时探针注入层（RUNTIME_PROBE_ENABLE=true 时启用，默认关）：
@@ -466,11 +463,14 @@ class DebuggerAgent(BaseAgent):
                 if total_chars + len(snippet) > _CROSS_FILE_CONTEXT_MAX_CHARS:
                     break
                 total_chars += len(snippet)
-                module_sections.append(f"【依赖模块 {module_name}（调用链聚焦视图）】\n```python\n{snippet}\n```")
+                module_sections.append(
+                    f"[Dependent module {module_name} (call-chain focused view)]\n```python\n{snippet}\n```"
+                )
             if module_sections:
                 query += (
-                    "\n\n以下是被测代码依赖的其他模块的调用链聚焦视图（目标函数及其 1-2 层被调函数），"
-                    "修改跨文件缺陷时须保持这些模块的接口契约：\n" + "\n\n".join(module_sections)
+                    "\n\nThe call-chain focused view of the other modules the code under test depends on "
+                    "(the target function and its 1-2 levels of callees) follows. When repairing a cross-file "
+                    "defect you must keep these modules' interface contracts:\n" + "\n\n".join(module_sections)
                 )
                 logger.info("跨文件聚焦上下文注入 %d 个模块（P0 1.1）", len(module_sections))
 
@@ -488,14 +488,12 @@ class DebuggerAgent(BaseAgent):
                 patch = ref.get("patch", "")
                 if orig and patch:
                     refs_text.append(
-                        f"【参考修复案例 {i}】\n原始代码：\n```python\n{orig}\n```\n修复代码：\n```python\n{patch}\n```"
+                        f"[Reference repair case {i}]\nOriginal code:\n```python\n{orig}\n```\nRepaired code:\n```python\n{patch}\n```"
                     )
             if refs_text:
-                _rag_header = "\n\n以下历史修复案例可作为参考："
+                _rag_header = "\n\nThe historical repair cases below are available as references:"
                 if env_flag("RAG_JUDGE_INSTRUCTION_ENABLE"):
-                    _rag_header += (
-                        "【判断指令】以下案例仅供参考，若与当前错误类型或代码上下文不匹配请忽略，不要强行套用历史补丁。"
-                    )
+                    _rag_header += "[Instruction] The cases below are advisory only. Ignore any that do not match the current error type or code context; do not force-fit historical patches."
                 query += _rag_header + "\n" + "\n\n".join(refs_text)
                 logger.info("Debugger 使用了 %d 个 RAG 修复参考", len(refs_text))
 
@@ -638,8 +636,8 @@ class DebuggerAgent(BaseAgent):
                 _snippet[:80],
             )
             _strict_retry_query = (
-                query + "\n\n【格式要求】只输出一个 JSON 对象，不要输出任何其他文本、注释或 markdown 代码块。"
-                'JSON 结构：{"root_cause": str, "error_category": str, "fix_strategy": str, "patch": str}'
+                query
+                + '\n\n[Output format] Output exactly one JSON object, with no other text, comments or markdown code blocks. JSON shape: {"root_cause": str, "error_category": str, "fix_strategy": str, "patch": str}'
             )
             raw2_strict = self._call_llm_with_cache(_strict_retry_query, temperature=eff_temperature, json_mode=True)
             _strict_response_format = ErrorClassifier.classify_llm_response(raw2_strict)
@@ -924,10 +922,10 @@ class DebuggerAgent(BaseAgent):
         focus_name = focus.name
         col = getattr(context, "column", None)
         hint = (
-            f"位置感知修复指引（3.3）：异常定位在 `{focus_name}()`"
-            f"（第 {line} 行"
-            + (f"、第 {col} 列" if isinstance(col, int) and col and col > 0 else "")
-            + "）。请优先检查并修复该函数内的逻辑，避免改动无关代码。"
+            f"Position-aware repair guidance (3.3): the exception is localised in `{focus_name}()"
+            f" (line {line}"
+            + (f", column {col}" if isinstance(col, int) and col and col > 0 else "")
+            + "). Check and repair the logic inside this function first; avoid touching unrelated code."
         )
         return {"focused": True, "function_name": focus_name, "line": line, "hint": hint}
 
@@ -1018,10 +1016,14 @@ class DebuggerAgent(BaseAgent):
         focus_name = focus.name
         # 探针帧的函数名优先（co_name 即抛出点所在函数），AST 包围函数作交叉验证
         hint = (
-            f"位置感知修复指引（P1 探针快照）：运行时探针捕获到异常抛出点"
-            f" `{probe_func or focus_name}()` 第 {probe_line} 行"
-            + (f"（AST 包围函数为 `{focus_name}()`，与探针帧一致）" if focus_name == probe_func else "")
-            + "。请优先检查并修复该位置附近的逻辑，避免改动无关代码。"
+            f"Position-aware repair guidance (P1 probe snapshot): the runtime probe captured the exception raise point"
+            f" `{probe_func or focus_name}()` line {probe_line}"
+            + (
+                f" (the AST-enclosing function is `{focus_name}()`, consistent with the probe frame)"
+                if focus_name == probe_func
+                else ""
+            )
+            + ". Check and repair the logic near this location first; avoid touching unrelated code."
         )
         result.update({"focused": True, "function_name": focus_name, "line": probe_line, "hint": hint})
         return result
@@ -1049,12 +1051,13 @@ class DebuggerAgent(BaseAgent):
             LLM 调用失败或无输出时返回空列表。
         """
         query = (
-            f"你是对抗性测试专家。针对以下被测代码，从攻击者视角提出 "
-            f"{_ADVERSARIAL_INTENT_COUNT} 个“可能击穿该实现”的程序意图假设"
-            f"（缺陷场景）。每个假设用一句话描述：什么输入/调用序列会让代码"
-            f"产生错误结果或崩溃。当前错误类别：{error_category}。\n\n"
-            f"被测代码：\n```\n{target_code}\n```\n\n"
-            f"请输出 JSON 数组（字符串列表），每个元素是一个假设。"
+            "You are an adversarial testing expert. For the code under test below, propose, "
+            f"from an attacker's viewpoint, {_ADVERSARIAL_INTENT_COUNT} program-intent hypotheses "
+            "that could break this implementation (defect scenarios). Describe each hypothesis in "
+            "one sentence: which input / call sequence makes the code return a wrong result or "
+            f"crash. Current error category: {error_category}.\n\n"
+            f"Code under test:\n```\n{target_code}\n```\n\n"
+            "Output a JSON array (a list of strings), one hypothesis per element."
         )
         try:
             raw = self._call_llm_with_cache(query)
@@ -1082,11 +1085,14 @@ class DebuggerAgent(BaseAgent):
     def _build_adversarial_prompt_section(self, hypotheses: list[str]) -> str:
         """把对抗性意图假设 + 针对性测试用例要求注入 prompt。"""
         lines = [
-            "\n\n【对抗性推理（3.1）】以下是可能击穿当前实现的缺陷场景假设，请在生成补丁时确保这些场景被正确处理：",
+            "\n\n[Adversarial reasoning (3.1)] Below are hypothetical defect scenarios that could break the current implementation. Make sure the patch handles them correctly:"
         ]
         for i, h in enumerate(hypotheses, start=1):
-            lines.append(f"  假设 {i}：{h}")
-        lines.append("请为每个假设生成一个针对性测试用例（验证补丁覆盖该场景），并在 patch 的修复中处理这些对抗场景。")
+            lines.append(f"  Hypothesis {i}: {h}")
+        lines.append(
+            "For each hypothesis, produce one targeted test case that verifies the patch "
+            "covers the scenario, and handle these adversarial scenarios in the patch's repair."
+        )
         return "\n".join(lines)
 
     def _run_critic_eval(self, patch: str, target_code: str, hypotheses: list[str]) -> dict[str, Any]:
@@ -1104,13 +1110,13 @@ class DebuggerAgent(BaseAgent):
             False 表示构造出了击穿用例（break_cases 非空）。
         """
         query = (
-            "你是独立的代码批评者。以下补丁声称修复了若干缺陷，"
-            "请尝试构造 1-3 个能'击穿'该补丁的对抗性测试用例"
-            "（让修复后的代码仍产生错误结果或崩溃的输入/调用）。\n\n"
+            "You are an independent code critic. The patch below claims to fix "
+            "several defects. Try to construct 1-3 adversarial test cases that "
+            "'break' it (inputs or calls that still make the patched code return "
+            "wrong results or crash).\n\n"
             f"原始代码：\n```\n{target_code}\n```\n\n"
-            f"补丁：\n```\n{patch[:2000]}\n```\n\n"
-            f"已知对抗场景假设：\n" + "\n".join(f"- {h}" for h in hypotheses) + "\n\n"
-            '请输出 JSON：{"break_cases": [测试用例描述...], "all_passed": bool}'
+            f"Patch:\n```\n{patch[:2000]}\n```\n\n"
+            '\n\nOutput JSON: {"break_cases": [test-case descriptions...], "all_passed": bool}'
         )
         try:
             # 2026-10-14：json_mode=True（契约 = JSON 对象，见上查询文本）
@@ -1143,7 +1149,9 @@ class DebuggerAgent(BaseAgent):
 
     def _build_critic_feedback(self, critic_result: dict[str, Any]) -> str:
         """把批评者发现的击穿用例作为负面反馈注入重新生成 prompt。"""
-        lines = ["\n\n【批评者反馈（3.1）】以下对抗性测试用例会击穿当前补丁，请在重新生成时确保这些场景被正确处理："]
+        lines = [
+            "\n\n[Critic feedback (3.1)] The adversarial test cases below break the current patch. Make sure these scenarios are handled correctly when you regenerate:"
+        ]
         lines.extend(f"- {c[:_ADVERSARIAL_CASE_TRUNCATE_LEN]}" for c in critic_result.get("break_cases", []))
         return "\n".join(lines)
 
@@ -1180,16 +1188,17 @@ class DebuggerAgent(BaseAgent):
             for case in failed_cases[:_MAX_FAILED_CASES_SUMMARY]
         )
         query = (
-            "你是独立的代码审查智能体（Review Agent）。以下是测试失败信息，"
-            "请判断失败根因是【实现缺陷】还是【测试缺陷】：\n"
-            "- 实现缺陷：被测代码逻辑错误（返回值错误、边界处理缺失、异常未处理）；\n"
-            "- 测试缺陷：测试自身设计错误（预期值写错、断言了错误行为、复现测试覆盖了错误路径）。\n\n"
-            f"错误类别：{error_category}\n\n"
-            f"被测代码：\n```\n{target_code}\n```\n\n"
-            f"测试输出：\n```\n{test_output}\n```\n\n"
-            f"失败用例：\n{cases_summary}\n\n"
-            '请输出 JSON：{"defect_type": "implementation_defect" 或 "test_defect", '
-            '"reason": "一句话判断依据"}'
+            "You are an independent code-review agent. The test-failure information follows. "
+            "Decide whether the root cause is an [implementation defect] or a [test defect]:\n"
+            "- Implementation defect: the code under test is logically wrong (wrong return value, "
+            "missing boundary handling, unhandled exception);\n"
+            "- Test defect: the test itself is mis-designed (wrong expected value, asserts the "
+            "wrong behaviour, or the reproduction test covers the wrong path).\n\n"
+            f"Error category: {error_category}\n\n"
+            f"Code under test:\n```\n{target_code}\n```\n\n"
+            f"Test output:\n```\n{test_output}\n```\n\n"
+            f"Failing cases:\n{cases_summary}\n\n"
+            'Output JSON: {"defect_type": "implementation_defect" or "test_defect", "reason": "one-sentence justification"}'
         )
         try:
             # 2026-10-14：json_mode=True（契约 = JSON 对象，见上查询文本）

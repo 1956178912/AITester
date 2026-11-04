@@ -53,7 +53,7 @@ class TestAK2PriceTable:
         """已登记模型：数值非负、币种合法、source 为官方页、as_of 日期格式。"""
         models = _load_price_table()["models"]
         registered = {name for name, entry in models.items() if entry["input_per_mtok"] is not None}
-        assert registered == {"deepseek-flash"}
+        assert registered == {"deepseek-flash", "mimo-v2.6-pro"}
         date_re = re.compile(r"^\d{4}-\d{2}-\d{2}$")
         for name in registered:
             entry = models[name]
@@ -78,7 +78,7 @@ class TestAK2PriceTable:
         ]
         priced = cost_analysis({"aitester": rows}, _load_price_table())[0]
         assert priced["priced"] is True
-        assert priced["cost"] == pytest.approx(0.3 + 1.2)
+        assert priced["cost"] == pytest.approx(2.0 + 8.0)  # 2026-11-04 人民币高峰价
         unpriced = cost_analysis({"aitester": rows}, {"models": {}})[0]
         assert unpriced["priced"] is False and unpriced["cost"] is None
 

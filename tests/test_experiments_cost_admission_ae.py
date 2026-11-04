@@ -73,7 +73,7 @@ def _usd_entry(**overrides: Any) -> dict[str, Any]:
 # 条目变体矩阵：case → (`models` 层, 期望 `price.entry_reason`)
 _PRICE_CASES: dict[str, tuple[dict[str, Any], str]] = {
     "currency_absent": (_models({"input_per_mtok": 0.5, "output_per_mtok": 2.0}), "currency_absent"),
-    "currency_not_usd": (_models(_usd_entry(currency="CNY")), "currency_not_usd:CNY"),
+    "currency_not_usd": (_models(_usd_entry(currency="EUR")), "currency_not_usd:EUR"),
     "currency_null": (_models(_usd_entry(currency=None)), "currency_absent"),
     "currency_blank": (_models(_usd_entry(currency="   ")), "currency_absent"),
     "price_null": (_models(_usd_entry(input_per_mtok=None)), "price_null"),
@@ -286,12 +286,12 @@ class TestTableLevelFailureUnchanged:
 class TestReadmePriceDisclosure:
     def test_rejection_paths_disclose_mechanism_and_builtin_ceiling(self, tmp_path: Path) -> None:
         # ① 条目级拒绝（CNY 被当 USD 计价是改前错收 → 现拒绝并点名）
-        cny_path = _write_price_table(tmp_path / "entry", _models(_usd_entry(currency="CNY")))
+        cny_path = _write_price_table(tmp_path / "entry", _models(_usd_entry(currency="EUR")))
         entry_out, entry_report = _aggregate(tmp_path / "entry", str(cny_path))
         entry_readme = (entry_out / "README.md").read_text(encoding="utf-8")
-        assert entry_report["price"]["entry_reason"] == "currency_not_usd:CNY"
+        assert entry_report["price"]["entry_reason"] == "currency_not_usd:EUR"
         assert "价目不可用" in entry_readme
-        assert "`currency_not_usd:CNY`" in entry_readme
+        assert "`currency_not_usd:EUR`" in entry_readme
         assert "标准价上界" in entry_readme
         assert "不是该模型/价目表登记价" in entry_readme
         # 披露行在 §4 成本合计段之后、§5 之前

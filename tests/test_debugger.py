@@ -189,8 +189,8 @@ def factorial(n):
 
         # 验证 LLM 调用包含了 RAG 参考内容
         call_args = mock_call.call_args[0][0]
-        assert "参考修复案例" in call_args
-        assert "原始代码" in call_args
+        assert "Reference repair case" in call_args
+        assert "Original code" in call_args
 
     def test_debug_with_empty_rag_references(self):
         """测试空 RAG 参考的处理。"""
@@ -212,7 +212,7 @@ def factorial(n):
 
         # 验证 LLM 调用不包含 RAG 参考
         call_args = mock_call.call_args[0][0]
-        assert "参考修复案例" not in call_args
+        assert "[Reference repair case" not in call_args
 
     def test_debug_with_none_rag_references(self):
         """测试 None RAG 参考的处理。"""
@@ -234,7 +234,7 @@ def factorial(n):
 
         # 验证 LLM 调用不包含 RAG 参考
         call_args = mock_call.call_args[0][0]
-        assert "参考修复案例" not in call_args
+        assert "[Reference repair case" not in call_args
 
     def test_debug_truncates_long_code(self):
         """测试超长代码截断。"""
@@ -341,10 +341,10 @@ def factorial(n):
 
         # 验证只使用前 2 个参考
         call_args = mock_call.call_args[0][0]
-        assert "参考修复案例 1" in call_args
-        assert "参考修复案例 2" in call_args
+        assert "Reference repair case 1" in call_args
+        assert "Reference repair case 2" in call_args
         # 第 3 个及以后不应该出现
-        assert call_args.count("参考修复案例") <= 2
+        assert call_args.count("Reference repair case") <= 2
 
     def test_debug_truncates_rag_original_code(self):
         """测试 RAG 参考中 original_code 截断。"""
@@ -368,7 +368,7 @@ def factorial(n):
         # 与实现无关恒真（2026-10-02 审查修复）；现断言 prompt 内
         # "原始代码" 代码块的实际长度受限。
         call_args = mock_call.call_args[0][0]
-        marker = "原始代码：\n```python\n"
+        marker = "Original code:\n```python\n"
         assert marker in call_args, "RAG 参考修复案例未注入 prompt"
         block = call_args.split(marker, 1)[1].split("\n```", 1)[0]
         assert len(block) <= 500, f"RAG original_code 未截断（prompt 内 {len(block)} 字符）"
@@ -674,7 +674,7 @@ class TestPositionAwareRepair:
         res = self.agent._locate_repair_focus(_CODE_WITH_FN, ctx, "m")
         assert res["focused"] is True
         assert res["function_name"] == "inner"  # 第 3 行在 inner 内（最内层）
-        assert "位置感知修复指引" in res["hint"]
+        assert "Position-aware repair guidance" in res["hint"]
 
     def test_locate_line_in_module_level_no_function(self):
         """行号无包围函数（模块级语句）→ focused=False 降级。"""
@@ -759,5 +759,5 @@ class TestPositionAwareRepair:
         focus = result["position_aware_focus"]
         assert focus["focused"] is True
         assert focus["function_name"] == "add"
-        assert "位置感知修复指引" in captured["query"]
+        assert "Position-aware repair guidance" in captured["query"]
         assert "add()" in captured["query"]

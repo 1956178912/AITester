@@ -206,7 +206,7 @@ def test_build_probe_prompt_section_with_frames() -> None:
         ],
     }
     section = build_probe_prompt_section(snapshot)
-    assert "运行时探针快照" in section
+    assert "Runtime probe snapshot" in section
     assert "test_fails" in section
     assert "x = 42" in section
     assert "y = 'hello'" in section
@@ -345,6 +345,6 @@ def test_debugger_node_injects_probe_section_when_enabled() -> None:
         # probe_section 参数被透传（非空，因为快照有有效帧）
         assert "probe_section" in captured_kwargs
         assert captured_kwargs["probe_section"] is not None
-        assert "运行时探针" in captured_kwargs["probe_section"]
+        assert "Runtime probe" in captured_kwargs["probe_section"]
         # update 写入 probe_section_applied 观测标志
         assert update["probe_section_applied"] is True

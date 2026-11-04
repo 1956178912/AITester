@@ -116,9 +116,9 @@ class TestW3DetectionFirst(unittest.TestCase):
             section = nodes._detection_first_section({"test_passed": True, "iteration": 0})
             self.assertIsNotNone(section)
             assert section is not None
-            self.assertIn("先红后绿", section)
-            self.assertIn("禁止放松", section)
-            self.assertIn("禁止重新实现被测函数", section)
+            self.assertIn("red before green", section)
+            self.assertIn("Do not relax", section)
+            self.assertIn("do not reimplement the function under test", section)
         self.assertIsNone(nodes._detection_first_section({"test_passed": None, "iteration": 0}))
 
     def test_state_declares_new_keys(self):

@@ -114,12 +114,12 @@ class OracleEnhancerAgent(BaseAgent):
         )
         cases_input = json.dumps(limited_cases, ensure_ascii=False)
         query = (
-            f"以下是测试规划的规约输入（前置/后置条件 + 边界情况）：\n{spec_input}\n\n"
-            f"以下是测试用例列表（JSON）：\n{cases_input}\n\n"
-            "请为每个 test_case 产出强化断言预言。"
-            '输出 JSON 数组，每项含 {"case_name": str, "oracle": str, '
-            '"oracle_source": "postcondition"|"edge_case"|"invariant"|"unknown", '
-            '"oracle_confidence": float(0.0-1.0)}。'
+            "Here is the specification input from the test plan "
+            f"(preconditions/postconditions + edge cases):\n{spec_input}\n\n"
+            f"Here is the list of test cases (JSON):\n{cases_input}\n\n"
+            "Produce a reinforced assertion oracle for every test_case. Output a JSON array "
+            'whose items are {"case_name": str, "oracle": str, "oracle_source": '
+            '"postcondition"|"edge_case"|"invariant"|"unknown", "oracle_confidence": float(0.0-1.0)}.'
         )
         try:
             raw = self._call_llm_with_cache(query)

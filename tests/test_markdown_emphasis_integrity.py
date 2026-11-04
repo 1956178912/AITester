@@ -7,7 +7,7 @@ CHANGELOG 用 `***` 表示 p < 0.001 的显著性星号。Markdown 把 `***` 解
 粗斜体标记，而且它**会吞掉后面最近的 `**` 当作闭合标记** ⇒ 从该处起，直到下一个
 真正配对的 `**`，整段都被渲染成错乱的强调。本轮实测存量：`CHANGELOG.md` /
 `CHANGELOG.en.md` 各 2 处、`docs/MEASUREMENT_INTEGRITY.md` 2 处、
-`docs/study/RQ1_PAIRING_REPORT_2026-10-25.md` 2 处（表格里）与 1 处在行内代码中。
+`docs/history/RQ1_PAIRING_REPORT_2026-10-25.md` 2 处（表格里）与 1 处在行内代码中。
 
 ## 判据（精确、无误报）
 

@@ -84,7 +84,7 @@ def test_build_section_multi_candidate() -> None:
         },
     ]
     section = build_localized_edit_section(_loc("add", 2, 2, candidates=candidates))
-    assert "候选函数" in section
+    assert "Candidate functions" in section
     assert "`sub`" in section
 
 

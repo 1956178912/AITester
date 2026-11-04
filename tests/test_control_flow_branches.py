@@ -213,4 +213,4 @@ class TestControlFlowDeepBranches:
         from src.tools.control_flow import analyze_control_flow
 
         out = analyze_control_flow("def f(x):\n    pass\n")
-        assert "控制流简单" in out["path_hint"]
+        assert "Simple control flow" in out["path_hint"]

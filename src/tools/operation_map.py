@@ -143,20 +143,20 @@ def build_operation_map_section(opmap: dict[str, Any] | None) -> str:
     if not (funcs or classes or constants):
         return ""
 
-    lines: list[str] = ["\n【操作图（结构接地·已验证符号清单）】"]
+    lines: list[str] = ["\n[Operation graph (structure-grounded; verified symbol list)]"]
     lines.append(
-        "被测代码中**已验证存在**的可调用符号——测试代码只应调用下列符号，不得编造不存在的 API / helper / 参数签名："
+        "Callable symbols **verified to exist** in the code under test. The test code should call only the symbols below and must not invent APIs, helpers or parameter signatures that do not exist:"
     )
     if funcs:
-        lines.append("函数：")
+        lines.append("Functions:")
         lines.extend(f"- {f}" for f in funcs)
     if classes:
-        lines.append("类：")
+        lines.append("Classes:")
         lines.extend(f"- {c}" for c in classes)
     if constants:
-        lines.append("常量：")
+        lines.append("Constants:")
         lines.extend(f"- {c}" for c in constants)
     if imports:
-        lines.append("可用导入：")
+        lines.append("Available imports:")
         lines.extend(f"- {i}" for i in imports)
     return "\n".join(lines)

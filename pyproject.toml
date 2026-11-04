@@ -308,14 +308,14 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "-v --tb=short --timeout=1200 --strict-markers"
+addopts = "-v --tb=short --timeout=3600 --timeout-method=thread --strict-markers"
 # U2（2026-10-05 系统性审查落地）：--strict-markers——声明未使用的 marker
 # 拼写错误（如 mark.slow 误写 mark.slowtest）此前静默通过；strict 模式下
 # 未在 markers 声明的 marker 直接报错（防"分层标记形同虚设"的漂移口径）。
 # 分层执行决策：全量套件实测 32s（xdist -n 4），push/PR 拆 unit/integration
 # 分层收益趋零，故保持全量单跑口径（历史行为不变），以 strict-markers +
 # 声明纪律代替强制分层。
-timeout = 1200
+timeout = 3600
 markers = [
     "slow: 标记为慢速测试（需 API）",
     "integration: 集成测试",

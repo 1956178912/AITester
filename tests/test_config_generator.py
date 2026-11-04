@@ -20,9 +20,13 @@ class TestProviderTemplates:
         tmpl = PROVIDER_TEMPLATES["deepseek"]
         assert "deepseek.com" in tmpl["base_url"]
 
-    def test_only_deepseek_provider_registered(self):
-        """2026-10-23 配置要求：项目只保留 DeepSeek 官方 provider。"""
-        assert set(PROVIDER_TEMPLATES) == {"deepseek"}
+    def test_registered_providers_match_the_model_catalogue(self):
+        """2026-11-04：登记 DeepSeek 与 Xiaomi MiMo 两个 provider（多模型对照）。
+
+        断言保持**精确集合**：新增 provider 必须显式改这一行，防止
+        PROVIDER_TEMPLATES 静默漂移导致凭据脱敏名单与 schema 门禁不同步。
+        """
+        assert set(PROVIDER_TEMPLATES) == {"deepseek", "xiaomi"}
 
     def test_get_unknown_provider_returns_empty(self):
         result = PROVIDER_TEMPLATES.get("nonexistent_provider", {})
@@ -40,13 +44,15 @@ class TestCommonModels:
             assert "name" in model
             assert "provider" in model
 
-    def test_deepseek_v41_flash_is_the_only_model(self):
-        """2026-10-09 配置要求：仅保留用户配置的 DeepSeek V4.1 Flash（官方 API
-        现行 model 参数写法为 `deepseek-flash`）。"""
+    def test_model_catalogue_order_and_providers(self):
+        """2026-11-04：双模型目录，顺序即优先级（首位是首请求）。
+
+        `llm_client._get_llm_config()` 恒取 `LLM_CONFIGS[0]`，故列表首位
+        决定既有跑批的默认模型；此处锁定顺序，防止新增模型抢占首请求位。
+        """
         names = [m["name"] for m in COMMON_MODELS]
-        assert names == ["deepseek-flash"]
-        for model in COMMON_MODELS:
-            assert model["provider"] == "deepseek"
+        assert names == ["deepseek-flash", "mimo-v2.6-pro"]
+        assert [m["provider"] for m in COMMON_MODELS] == ["deepseek", "xiaomi"]
 
 
 class TestGenerateEnvTemplate:
@@ -59,15 +65,21 @@ class TestGenerateEnvTemplate:
 
     def test_template_contains_api_key_placeholders(self):
         """模板变量名与 generate_batch_config 的 {PROVIDER}_API_KEY 推导同源（全名）。
-        2026-10-23 起仅保留 DeepSeek 官方 provider，模板只有一条 API Key 占位符。"""
+
+        家数从 PROVIDER_TEMPLATES 推导，不写死：加 provider 时模板应自动多一条，
+        测试跟着变长，而不是变成一条需要手工改红的常数。
+        """
         result = generate_env_template()
         assert "DEEPSEEK_API_KEY=your-deepseek-api-key-here" in result
-        assert result.count("_API_KEY=your-") == 1
+        assert result.count("_API_KEY=your-") == len(PROVIDER_TEMPLATES)
 
     def test_template_contains_model_examples(self):
         result = generate_env_template()
         assert "deepseek-flash" in result
         assert result.count("LLM_1_MODEL_NAME=") == 1
+        # COMMON_MODELS 的每个条目都产一个编号示例（首位 = 默认首请求）
+        for index, model in enumerate(COMMON_MODELS, start=1):
+            assert f"LLM_{index}_MODEL_NAME={model['name']}" in result
 
     def test_generate_template_writes_to_file(self, tmp_path):
         output = str(tmp_path / "test_template.env")

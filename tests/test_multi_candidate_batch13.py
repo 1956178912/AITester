@@ -237,4 +237,4 @@ class TestCandidateVariantWrapBranches:
 
         v0 = candidate_variant_prompt(0, 8)
         v3 = candidate_variant_prompt(3, 8)  # 3 % 3 == 0
-        assert v0.split("】")[-1] == v3.split("】")[-1]
+        assert v0.split("]")[-1] == v3.split("]")[-1]

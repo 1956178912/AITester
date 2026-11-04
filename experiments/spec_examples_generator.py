@@ -476,7 +476,14 @@ def _price_admission(model: str, price_table: Any) -> tuple[dict[str, Any], str 
     # `-1.0` 编出负数金额、`[1.0]` 抛 TypeError、`nan`/`inf` 乘成非有限金额）。
     # AB-17：改前 `models.get(model)` 把"键缺席"与"值为 null"共读成 `model_unregistered`；
     # 现在值 null 交 `entry_block_reason` 读 `entry_not_object:NoneType`。
-    return raw, entry_block_reason(raw)
+    # 2026-11-04 币种切换（用户指令：价格按人民币）：**只放行项目基准币种 CNY**，
+    # 按登记值原样计价（不做汇率换算）。其他非美元币种仍按"无价目"拒绝——没有
+    # 汇率事实源就换不出金额，放行等于编造。这样既让 CNY 成本列可算，又不放宽
+    # 到"任何币种都能计价"。
+    reason = entry_block_reason(raw)
+    if reason is not None and isinstance(raw, dict) and str(raw.get("currency", "")).strip().upper() == "CNY":
+        reason = entry_block_reason(raw, allow_non_usd=True)
+    return raw, reason
 
 
 def price_block_reason_for(model: str, price_table: Any = _UNSET) -> str | None:

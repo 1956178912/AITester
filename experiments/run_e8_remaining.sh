@@ -61,7 +61,7 @@ log "步3：启动 ULT 200 定标（HEAD worktree，df 臂）"
 (
     cd "${WHEAD}" && env \
         AITESTER_ULT_DATA="${HOME}/.cache/aitester/ult_repo/datasets" \
-        AITESTER_PROFILE=logic TEMPERATURE=0.0 LLM_THINKING_MODE=disabled \
+        AITESTER_PROFILE=logic TEMPERATURE=0.0 \
         MAX_ITERATIONS=3 LLM_TIMEOUT=60 EXECUTION_TIMEOUT=30 \
         ENABLE_PLANNER=true ENABLE_DEBUGGER=true ENABLE_RAG=false \
         BENCHMARK_PARALLELISM=4 AITESTER_LLM_CACHE=0 \

@@ -135,3 +135,39 @@ class TestCacheTtlAndCleanup:
             lambda: (_ for _ in ()).throw(OSError("缓存目录不可读（模拟）")),
         )
         assert llm_client.cleanup_expired_cache_files(max_age_days=1) == 0
+
+
+class TestLlmMaxRetriesLazyResolution:
+    """`LLM_MAX_RETRIES` 惰性解析（2026-11-04 重试上限提高）。
+
+    `base_agent._call_llm` 的 max_retries 默认已是 `None`＝"调用时按环境解析"，
+    所以这个解析器是重试预算的唯一事实源：它坏了，"次数加多"就只写在文档里。
+    """
+
+    def test_unset_falls_back_to_module_default(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.delenv("LLM_MAX_RETRIES", raising=False)
+        assert llm_client._llm_max_retries_default() == llm_client._DEFAULT_LLM_MAX_RETRIES
+
+    def test_env_value_is_honored(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("LLM_MAX_RETRIES", "9")
+        assert llm_client._llm_max_retries_default() == 9
+
+    def test_non_integer_falls_back(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("LLM_MAX_RETRIES", "六")
+        assert llm_client._llm_max_retries_default() == llm_client._DEFAULT_LLM_MAX_RETRIES
+
+    @pytest.mark.parametrize("raw", ["0", "-3", "13", "999"])
+    def test_out_of_range_falls_back(self, monkeypatch: pytest.MonkeyPatch, raw: str):
+        """越界不夹紧也不照收：回退默认值，并留下 WARNING（重试次数直接乘算成本）。"""
+        monkeypatch.setenv("LLM_MAX_RETRIES", raw)
+        assert llm_client._llm_max_retries_default() == llm_client._DEFAULT_LLM_MAX_RETRIES
+
+    def test_blank_string_is_not_a_value(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("LLM_MAX_RETRIES", "   ")
+        assert llm_client._llm_max_retries_default() == llm_client._DEFAULT_LLM_MAX_RETRIES
+
+    def test_default_is_six_after_the_increase(self, monkeypatch: pytest.MonkeyPatch):
+        """锁定"次数加多"本身：默认 6（历史为 3），且不超过 1..12 上界。"""
+        monkeypatch.delenv("LLM_MAX_RETRIES", raising=False)
+        assert llm_client._DEFAULT_LLM_MAX_RETRIES == 6
+        assert 1 <= llm_client._DEFAULT_LLM_MAX_RETRIES <= 12

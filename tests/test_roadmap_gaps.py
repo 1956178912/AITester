@@ -81,8 +81,8 @@ class TestReproTestGeneration:
         assert "跨模块调用顺序错误" in prompt
         assert "from main import" in prompt
         assert "util" in prompt
-        assert "跨文件上下文" in prompt
-        assert "先失败" in prompt or "应失败" in prompt
+        assert "[Cross-file context]" in prompt
+        assert "must fail" in prompt or "fail while the defect is unfixed" in prompt
 
     def test_build_repro_prompt_no_cross_file(self):
         agent = GeneratorAgent()
@@ -93,7 +93,7 @@ class TestReproTestGeneration:
             cross_file_modules=None,
         )
         assert "除零" in prompt
-        assert "跨文件上下文" not in prompt
+        assert "[Cross-file context]" not in prompt
 
 
 # ─── 3.1 双向代码-测试诊断（BiVCoder 式）──────────────────────────────────
@@ -145,7 +145,7 @@ class TestBidirectionalDiagnosis:
             )
         assert result["defect_type"] == "test_defect"
         assert result["patch"] == ""
-        assert "重新生成测试" in result["fix_strategy"]
+        assert "Regenerate the test" in result["fix_strategy"]
 
     def test_debug_implementation_defect_proceeds(self):
         """Review Agent 判定为实现缺陷时，正常生成补丁。"""

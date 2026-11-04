@@ -15,7 +15,8 @@ cost_task = Σ_calls ( input_tokens × price_in + output_tokens × price_out ) /
 ```
 
 - Units: USD per million tokens; `price_in` / `price_out` come from the registered price table
-  (currently only DeepSeek official deepseek-flash peak rates; see [COST_MODEL.en.md](COST_MODEL.en.md)).
+  (currently `deepseek-flash` and `mimo-v2.6-pro`, both at list rates rather than discounted or
+  batch rates; see [COST_MODEL.en.md](COST_MODEL.en.md)).
 - The multi-agent path uses Planner + Generator + one Debugger call per iteration (possibly
   several) + optional FaultLocalizer / ExpertPool; baseline paths usually use a single generation
   call.

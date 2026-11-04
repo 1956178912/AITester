@@ -150,6 +150,44 @@ def is_usd_entry(entry: Any) -> bool:
     return currency_status(entry) == "usd"
 
 
+#: 本项目基准币种（2026-11-04 用户指令：所有价格按人民币，不使用美元）。
+BASELINE_CURRENCY = "CNY"
+
+
+def currency_symbol(status: str) -> str:
+    """币种 → 呈现符号；不可判定 → 空串（宁可不带符号，也不得印成错的符号）。
+
+    存在理由（2026-11-04 币种切换）：报告里"给金额加 `$`"在三处各写一遍字面量，
+    价目表改为人民币后它们会把 ¥ 金额印成 美元符号——数值与单位不同口径正是本仓反复
+    登记过的可诊断性缺陷。符号由此处单点给出。
+    """
+    if status == "usd":
+        return "$"
+    if status == f"other:{BASELINE_CURRENCY}":
+        return "¥"
+    label = currency_label(status)
+    return f"{label} " if label else ""
+
+
+def table_currency_status() -> str:
+    """价目表基准币种在 `currency_status` 值域里的表示（供呈现层取符号）。"""
+    return "usd" if BASELINE_CURRENCY == "USD" else f"other:{BASELINE_CURRENCY}"
+
+
+def is_priced_entry(entry: Any) -> bool:
+    """条目是否登记为**本项目可计价币种**（USD 或基准币种 CNY）。
+
+    2026-11-04 币种切换：价目表改为人民币（用户指令"所有价格按人民币设置，
+    不使用美元"）。判定必须同时认 CNY，否则全部条目落到"无价目"分支，
+    预算静默失效——这比算错更危险。
+
+    币种比较取 `currency_status` 的**实际值域**（`usd` / `other:<NORM>`）：
+    该词表从不返回 `"cny"`，历史上写成 `in {"usd", "cny"}` 使本函数对任何 CNY
+    条目恒为 False——正是它自己警告的"静默不计价"，故在此钉死。
+    """
+    return currency_status(entry) in {"usd", f"other:{BASELINE_CURRENCY}"}
+
+
 #: `currency_status` 里"根本没登记单位"的三种事实（AB-15d）。
 CURRENCY_UNDETERMINED_STATUSES: frozenset[str] = frozenset({"absent", "null", "blank"})
 
@@ -255,7 +293,11 @@ def entry_block_reason(entry: Any, *, allow_non_usd: bool = False) -> str | None
         return "entry_empty"
     status = currency_status(entry)
     reason = currency_block_reason(status)
-    if reason is not None and not (allow_non_usd and status.startswith("other:")):
+    # 2026-11-04 币种切换：项目基准币种 CNY 按登记值原样计价，等价于对该币种
+    # 隐式 allow_non_usd——放在共享谓词里一次，避免每个调用点各改一遍（此前
+    # 改一处漏三处，成本列会在不同报告里一半有值一半为空）。
+    base_currency_passthrough = status == "other:CNY"
+    if reason is not None and not ((allow_non_usd and status.startswith("other:")) or base_currency_passthrough):
         return reason
     return price_block_reason(entry.get("input_per_mtok"), entry.get("output_per_mtok"))
 
@@ -369,6 +411,8 @@ def _usd_prices(entry: Any) -> tuple[float, float] | None:
     """
     if not is_usd_entry(entry):
         # 诚实条款：币种不可判定或登记为非 USD 时不换算（无汇率事实源），回退/未计价。
+        # 2026-11-04 人民币基准：CNY 条目走 estimate_in_table_currency，
+        # 本函数保持"只认 USD"的历史契约，避免污染既有美元列。
         return None
     if price_block_reason(entry.get("input_per_mtok"), entry.get("output_per_mtok")) is not None:
         return None
@@ -397,11 +441,16 @@ def estimate_usd(
     input_tokens: int,
     output_tokens: int,
 ) -> tuple[float | None, str]:
-    """估算一次 LLM 调用的美元费用（价目表优先，COST_USD_PER_1K 回退）。
+    """估算一次 LLM 调用的费用（价目表优先，COST_USD_PER_1K 回退）。
+
+    2026-11-04 币种切换（用户指令）：价目表改用人民币。函数名保留（历史调用
+    点众多），但返回金额的**币种由价目表条目的 `currency` 字段决定**，不再
+    隐含美元；`source` 串带币种后缀（``price_table:<model>:cny``），调用方与
+    报表**不得**把 CNY 金额按美元符号打印。
 
     计价优先级：
-        1. `experiments/price_table.json` 中该模型**USD 完整价目** →
-           ``in × input_per_mtok/1e6 + out × output_per_mtok/1e6``；
+        1. `experiments/price_table.json` 中该模型**可计价币种**（USD/CNY）的
+           完整价目 → ``in × input_per_mtok/1e6 + out × output_per_mtok/1e6``；
         2. 价目不可用且 `COST_USD_PER_1K > 0` → ``总tokens/1000 × COST_USD_PER_1K``；
         3. 两者皆无 → ``(None, "unpriced")``（**不编造价格**，调用方记账"未计价"）。
 
@@ -411,8 +460,9 @@ def estimate_usd(
         output_tokens: 输出 token 数（负数按 0）。
 
     Returns:
-        ``(usd, source)``：usd 为 None 表示无美元价目；source ∈
-        ``price_table:<model>`` / ``cost_usd_per_1k`` / ``zero_tokens`` / ``unpriced``。
+        ``(amount, source)``：amount 为 None 表示无可用价目；source ∈
+        ``price_table:<model>:<currency>`` / ``cost_usd_per_1k`` /
+        ``zero_tokens`` / ``unpriced``。
     """
     try:
         tokens_in = max(0, int(input_tokens or 0))
@@ -422,15 +472,70 @@ def estimate_usd(
     if tokens_in + tokens_out <= 0:
         return 0.0, "zero_tokens"
     model = str(model_name or "").strip()
-    prices = _usd_prices(load_price_table().get(model)) if model else None
+    entry = load_price_table().get(model) if model else None
+    prices = _usd_prices(entry) if model else None
     if prices is not None:
         price_in, price_out = prices
-        usd = tokens_in * price_in / 1_000_000 + tokens_out * price_out / 1_000_000
-        return usd, f"price_table:{model}"
+        amount = tokens_in * price_in / 1_000_000 + tokens_out * price_out / 1_000_000
+        return amount, f"price_table:{model}"
     per_1k = _fallback_usd_per_1k()
     if per_1k > 0:
         return (tokens_in + tokens_out) / 1000.0 * per_1k, "cost_usd_per_1k"
     return None, "unpriced"
+
+
+def estimate_in_table_currency(
+    model_name: str,
+    input_tokens: int,
+    output_tokens: int,
+) -> tuple[float | None, str | None, str]:
+    """按价目表**登记币种原样**估算费用（2026-11-04 人民币基准通道）。
+
+    与 :func:`estimate_usd` 的分工：后者是历史美元列，只认 ``currency=USD``；
+    本函数是生产记账通道，认价目表里登记的任一可计价币种（USD / CNY），
+    金额单位就是该币种，不做汇率换算（本项目无汇率事实源）。
+
+    Args:
+        model_name: 实际服务模型名。
+        input_tokens: 输入 token 数（负数按 0）。
+        output_tokens: 输出 token 数（负数按 0）。
+
+    Returns:
+        ``(amount, currency, source)``：
+        - ``amount`` 为 None 表示无可用价目（未登记 / 币种不可计价 / 价格坏值）；
+        - ``currency`` 为 ``"USD"`` / ``"CNY"``，未计价时为 None；
+        - ``source`` ∈ ``price_table:<model>`` / ``zero_tokens`` / ``invalid_usage``
+          / ``unpriced`` / 具体阻断原因码。
+    """
+    try:
+        tokens_in = max(0, int(input_tokens or 0))
+        tokens_out = max(0, int(output_tokens or 0))
+    except (TypeError, ValueError):
+        return None, None, "invalid_usage"
+    if tokens_in + tokens_out <= 0:
+        return 0.0, None, "zero_tokens"
+    model = str(model_name or "").strip()
+    if not model:
+        return None, None, "unpriced"
+    entry = load_price_table().get(model)
+    if entry is None:
+        # 未登记模型：沿用历史回退旋钮 COST_USD_PER_1K（每千 token 混合价）。
+        # 2026-11-04 后该旋钮的数值按**基准币种**（CNY）解释；变量名是历史遗留。
+        per_1k = _fallback_usd_per_1k()
+        if per_1k > 0:
+            return (tokens_in + tokens_out) / 1000.0 * per_1k, "CNY", "cost_usd_per_1k"
+        return None, None, "unpriced"
+    # allow_non_usd=True：按登记币种原样计价（AG 机制），非本币不再一刀切拒绝。
+    reason = entry_block_reason(entry, allow_non_usd=True)
+    if reason is not None:
+        return None, None, reason
+    status = currency_status(entry)
+    currency = "USD" if status == "usd" else str(entry.get("currency", "")).strip().upper()
+    amount = (
+        tokens_in * float(entry["input_per_mtok"]) / 1_000_000
+        + tokens_out * float(entry["output_per_mtok"]) / 1_000_000
+    )
+    return amount, currency, f"price_table:{model}"
 
 
 __all__ = [
@@ -439,6 +544,7 @@ __all__ = [
     "currency_label",
     "currency_status",
     "entry_block_reason",
+    "estimate_in_table_currency",
     "estimate_usd",
     "is_usd_entry",
     "load_price_table",

@@ -18,7 +18,7 @@
 # 协议（M-4 任务书固定，不得用本脚本以外的方式"顺手改动"）：
 #   - 二臂：df 对照 = plain_llm_df（同批同日新跑）
 #           aug 处理 = plain_llm_df_doc_augment（代码保留 + 人类 docstring 规格并列）
-#   - AITESTER_PROFILE=logic / TEMPERATURE=0.0 / LLM_THINKING_MODE=disabled
+#   - AITESTER_PROFILE=logic / TEMPERATURE=0.0 /
 #   - BENCHMARK_PARALLELISM=4（可调，但必须记录；默认 4）/ seed=42
 #   - QuixBugs 全量 50 行（41 缺陷程序 + 9 测试驱动；主分析集=41 口径）
 #   - 两臂互异 AITESTER_CACHE_NAMESPACE（emse_docstring_augment_20261017_df / _aug）
@@ -263,7 +263,7 @@ echo "M-4 规格增广二臂正式批（${SCRIPT_VERSION}）$( [ "${DRY_RUN}" -e
 echo "  仓库/worktree：${WORKTREE}"
 echo "  主仓（复制回目标）：${MAIN_REPO}"
 echo "  Python：${PY}"
-echo "  协议：AITESTER_PROFILE=logic TEMPERATURE=0.0 LLM_THINKING_MODE=disabled"
+echo "  协议：AITESTER_PROFILE=logic TEMPERATURE=0.0"
 echo "        BENCHMARK_PARALLELISM=${PARALLELISM} seed=${SEED}（QuixBugs 全量 ${EXPECT_TASKS} 行）"
 echo "  臂：df（plain_llm_df 对照） / aug（plain_llm_df_doc_augment 处理）"
 echo "  输出：${OUT_DIR}"
@@ -518,7 +518,7 @@ BASELINE_DF="$(arm_baseline df)"
 BASELINE_AUG="$(arm_baseline aug)"
 
 # 共同 env 白名单（不得含任何密钥；记录用于 RUN_MANIFEST/README 审计）
-_arm_env_common=(AITESTER_PROFILE=logic TEMPERATURE=0.0 LLM_THINKING_MODE=disabled
+_arm_env_common=(AITESTER_PROFILE=logic TEMPERATURE=0.0
     "BENCHMARK_PARALLELISM=${PARALLELISM}"
     "AITESTER_BATCH_MAX_CALLS=${CAPS_BATCH_CALLS}"
     COST_BUDGET_ENABLE=true "COST_BUDGET_USD=${CAPS_COST_USD}"
@@ -974,7 +974,7 @@ manifest = {
     "run_stamp": run_stamp,
     "script_version": script_version,
     "status": "failed",
-    "protocol": {"AITESTER_PROFILE": "logic", "TEMPERATURE": "0.0", "LLM_THINKING_MODE": "disabled",
+    "protocol": {"AITESTER_PROFILE": "logic", "TEMPERATURE": "0.0",
                  "BENCHMARK_PARALLELISM": int(parallelism), "seed": int(seed), "task_count_flag": 50,
                  "arms": ["df:plain_llm_df", "aug:plain_llm_df_doc_augment"],
                  "cache_namespaces": ["emse_docstring_augment_20261017_df", "emse_docstring_augment_20261017_aug"]},
@@ -1499,7 +1499,6 @@ manifest = {
     "protocol": {
         "AITESTER_PROFILE": "logic",
         "TEMPERATURE": "0.0",
-        "LLM_THINKING_MODE": "disabled",
         "BENCHMARK_PARALLELISM": int(parallelism),
         "seed": int(seed),
         "task_count_flag": int(expect_tasks),

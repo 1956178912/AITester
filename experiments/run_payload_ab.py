@@ -101,7 +101,6 @@ ARMS: tuple[dict[str, Any], ...] = (
 COMMON_ENV: dict[str, str] = {
     "AITESTER_PROFILE": "logic",
     "TEMPERATURE": "0.0",
-    "LLM_THINKING_MODE": "disabled",
     "AITESTER_LLM_CACHE": "0",  # cold cache（硬性，预注册 §2.3）
     "AITESTER_CACHE_NAMESPACE": "e3_h1_seed42",
     "MAX_ITERATIONS": "3",

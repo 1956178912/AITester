@@ -1,6 +1,6 @@
 # AITester 复现说明
 
-最后更新：2026-10-27
+最后更新：2026-11-04
 
 本文件说明如何复现 AITester 的实验：零 LLM 可复算路径、含 LLM 的重新跑批路径，以及
 挂载与测试门的行为。**原始 LLM 响应不随仓库分发**，因此含 LLM 路径必须重新消耗 API
@@ -77,7 +77,7 @@ build-arg 时该值记为 `unknown`，不作提交 SHA 使用。
 | `REPRODUCE_ALLOW_TEST_FAILURES=1` | 测试失败仅告警并继续 |
 | `REPRODUCE_SKIP_TESTS=1` | 整个测试门跳过，打印醒目 WARN |
 
-跳过时结论**不含测试验证**——这是披露，不是通过。默认不设任何变量即保持 fail-closed。
+跳过时结论**不含测试验证**——这是披露，不是通过。默认不设任何变量即保持 fail-closed。 一次跑完全部测试面的入口是 `python scripts/run_all_tests.py`（两档：`smoke` 每个面跑一项验装配、`full` 每个面跑满出读数；默认 `both` 顺序执行且冒烟未全通即不开全量，详见 `INVENTORY.md` 的入口点表）；两条路径的深度思考默认关闭（`LLM_THINKING_MODE`，实测单调用输出 −92%/−94%），跨模型对比因此建立在同一设置上。
 
 ## 5. 证据索引
 
@@ -87,12 +87,11 @@ build-arg 时该值记为 `unknown`，不作提交 SHA 使用。
 | 数据来源与许可（合成模板 / SWE-bench / QuixBugs） | `docs/DATA_CARD.md` |
 | 预注册协议（E1–E7） | `docs/preregistration.md` |
 | 测量口径矩阵与修复读数 | `docs/design/repair_caliber_matrix.md` |
-| 2026-10-24 撤回工件映射 | `docs/study/WITHDRAWN_ARTIFACTS_2026-10-24.md` |
 | 工件校验和 | `experiments/results/**/SHA256SUMS` |
 | 许可证与引用 | `LICENSE`、`CITATION.cff` |
 
-历史主批次（n=261/臂）已随 2026-10-24 清除撤回；当前读数以 `BASELINE.yaml` 与重建批
-为准，单批不混池。缺口：原始 LLM 响应未归档，重跑受服务端漂移影响；历史批无模型指纹。
+当前读数以 `BASELINE.yaml` 与重建批为准。缺口：原始 LLM 响应未归档，重跑受服务端
+漂移影响。
 
 ## 6. 环境四元组（N08，2026-10-30 冻结）
 

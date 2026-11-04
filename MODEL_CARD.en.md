@@ -30,7 +30,8 @@ deployed product.
 - **Dual-channel localization**: spectral (Ochiai, non-LLM) plus reasoning
   (`FaultLocalizerAgent`, consumes LLM, `FAULT_LOCALIZER_ENABLE` on by default, degrades to
   `None` on failure).
-- **Invocation (ADR-0031)**: `LLM_THINKING_MODE` off by default (reasoning chains are billed
+- **Invocation (ADR-0031)**: `LLM_THINKING_MODE` off by default (cost-protection caliber: measured on one identical prompt, output falls by 92% (deepseek) / 94% (mimo); it matches the
+  provider-side default and pins cross-model comparisons to one reasoning tier; reasoning chains are billed
   as output); `LLM_JSON_MODE` on by default (seven JSON-contract sites bind
   `response_format=json_object`); `finish_reason ∈ {length, insufficient_system_resource}`
   retried as recoverable; numeric expressions in JSON values repaired by a bounded parse

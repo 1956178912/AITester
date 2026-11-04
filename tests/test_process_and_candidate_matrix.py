@@ -147,7 +147,7 @@ class TestMultiCandidateSwitches:
 
         text = candidate_variant_prompt(2, 5)
         assert "3/5" in text, text  # 提示词按 1 起序号渲染（index=2 → 第 3 个）
-        assert candidate_variant_prompt(0, 3).startswith("【多候选修复 1/3】")
+        assert candidate_variant_prompt(0, 3).startswith("[Multi-candidate repair 1/3] ")
 
     def test_coverage_trend_and_reward_helpers(self):
         from src.tools.multi_candidate import _coverage_trend, reward_predictor_enabled

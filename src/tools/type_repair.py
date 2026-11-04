@@ -576,7 +576,7 @@ def _static_type_findings(original_code: str, patched_code: str) -> list[dict[st
                         {
                             "file": side,
                             "line": hist[-1][0],
-                            "message": f"变量 {var!r} 在同函数内被赋值为冲突类型族 {sorted(types_in_hist)}",
+                            "message": f"variable {var!r} is assigned conflicting type families within the same function: {sorted(types_in_hist)}",
                             "kind": finding_kind,
                         }
                     )
@@ -592,7 +592,7 @@ def _static_type_findings(original_code: str, patched_code: str) -> list[dict[st
                     {
                         "file": side,
                         "line": returns[-1][0],
-                        "message": f"函数 {func.name} 的多个 return 字面类型不一致 {sorted(set(typed_returns))}",
+                        "message": f"function {func.name} returns inconsistent literal types: {sorted(set(typed_returns))}",
                         "kind": "return_inconsist",
                     }
                 )
@@ -707,7 +707,7 @@ def _static_type_findings(original_code: str, patched_code: str) -> list[dict[st
         {
             "file": "patched",
             "line": 0,
-            "message": f"补丁引用了原代码中不存在的顶层名称 {name!r}（可能未导入或拼写错误）",
+            "message": f"the patch references top-level name {name!r} that does not exist in the original code (possibly not imported or misspelled)",
             "kind": "undefined_attr",
         }
         for name in sorted(new_refs)
@@ -734,15 +734,17 @@ def _repair_with_llm(
     if repair_fn is None:
         return None
     lines = [
-        "你是 Python 类型修复专家（PAGENT 式静态分析 + LLM 类型推断）。",
-        "以下补丁被静态分析识别出若干类型/数据结构疑点，请做最小修改",
-        "消除这些疑点，保持原有公共接口与行为不变：",
+        "You are a Python type-repair expert (PAGENT-style static analysis plus LLM type inference).",
+        (
+            "Static analysis has flagged several type / data-structure issues in the patch below. Make the "
+            "minimal edits that remove them, keeping every public interface and behaviour unchanged:"
+        ),
     ]
     lines.extend(f"- [line {f.get('line', 0)}] {f.get('kind')}: {f.get('message')}" for f in findings)
     lines.append("")
-    lines.append(f"原始代码：\n```\n{original_code[:3000]}\n```\n")
-    lines.append(f"当前补丁：\n```\n{patched_code[:3000]}\n```\n")
-    lines.append("请只输出修订后的完整代码（用 ```python 包裹），不要输出其他文本。")
+    lines.append(f"Original code:\n```\n{original_code[:3000]}\n```\n")
+    lines.append(f"Current patch:\n```\n{patched_code[:3000]}\n```\n")
+    lines.append("Output only the revised complete code (wrapped in ```python), with no other text.")
     try:
         repaired = repair_fn("\n".join(lines), original_code, patched_code)
     except Exception as e:

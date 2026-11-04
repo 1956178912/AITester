@@ -108,10 +108,12 @@ def validate_logic_spec(logic_analysis: dict[str, Any] | None) -> list[dict[str,
     """
     findings: list[dict[str, Any]] = []
     if logic_analysis is None:
-        findings.append({"type": "missing", "field": "logic_analysis", "message": "logic_analysis 整体缺失"})
+        findings.append({"type": "missing", "field": "logic_analysis", "message": "logic_analysis is entirely missing"})
         return findings
     if not isinstance(logic_analysis, dict) or not logic_analysis:
-        findings.append({"type": "missing", "field": "logic_analysis", "message": "logic_analysis 为空或非 dict"})
+        findings.append(
+            {"type": "missing", "field": "logic_analysis", "message": "logic_analysis is empty or not a dict"}
+        )
         return findings
 
     # 必填字段及其期望类型
@@ -120,17 +122,19 @@ def validate_logic_spec(logic_analysis: dict[str, Any] | None) -> list[dict[str,
 
     for field in required_str_fields:
         if field not in logic_analysis:
-            findings.append({"type": "missing_field", "field": field, "message": f"必填字段 {field} 缺失"})
+            findings.append({"type": "missing_field", "field": field, "message": f"required field {field} is missing"})
         elif not isinstance(logic_analysis[field], str) or not logic_analysis[field].strip():
-            findings.append({"type": "empty_field", "field": field, "message": f"字段 {field} 为空串或非 str"})
+            findings.append(
+                {"type": "empty_field", "field": field, "message": f"field {field} is an empty string or not a str"}
+            )
 
     for field in required_list_fields:
         if field not in logic_analysis:
-            findings.append({"type": "missing_field", "field": field, "message": f"必填字段 {field} 缺失"})
+            findings.append({"type": "missing_field", "field": field, "message": f"required field {field} is missing"})
         elif not isinstance(logic_analysis[field], list):
-            findings.append({"type": "wrong_type", "field": field, "message": f"字段 {field} 非 list 类型"})
+            findings.append({"type": "wrong_type", "field": field, "message": f"field {field} is not a list"})
         elif len(logic_analysis[field]) == 0:
-            findings.append({"type": "empty_field", "field": field, "message": f"字段 {field} 为空列表"})
+            findings.append({"type": "empty_field", "field": field, "message": f"field {field} is an empty list"})
 
     return findings
 
@@ -139,11 +143,11 @@ def build_logic_spec_findings_section(findings: list[dict[str, Any]] | None) -> 
     """把 schema 校验 findings 渲染为 prompt 注入段落（空时返回空串）。"""
     if not findings:
         return ""
-    lines = [f"【规约缺陷清单（M10 schema 校验，共 {len(findings)} 条）】"]
+    lines = [f"[Specification defect list (M10 schema validation; {len(findings)} findings)]"]
     for i, f in enumerate(findings[:10], start=1):
         lines.append(f"{i}. [{f.get('type', '?')}] {f.get('field', '?')}: {f.get('message', '')}")
     lines.append(
-        "请在下一轮测试生成中补强逻辑分析（非空 input_domain / output_domain / preconditions / postconditions / edge_cases）。"
+        "Strengthen the logic analysis in the next test-generation round: input_domain, output_domain, preconditions, postconditions and edge_cases must all be non-empty."
     )
     return "\n".join(lines)
 
@@ -273,30 +277,30 @@ def _extract_compare_triplet(node: ast.Compare) -> dict[str, Any] | None:
     op_name = _op_name(op)
     if isinstance(op, ast.GtE):  # x >= N → 边界输入 N-1（不满足）/ N（满足）
         input_val: Any = const_val - 1
-        expected = f"< {const_val}（不满足）/ = {const_val}（满足）"
+        expected = f"< {const_val} (violated) / = {const_val} (satisfied)"
     elif isinstance(op, ast.LtE):  # x <= N → 边界输入 N+1（不满足）/ N（满足）
         input_val = const_val + 1
-        expected = f"> {const_val}（不满足）/ = {const_val}（满足）"
+        expected = f"> {const_val} (violated) / = {const_val} (satisfied)"
     elif isinstance(op, ast.Eq):  # x == N → 边界输入 N（满足）/ N±1（不满足）
         input_val = const_val
-        expected = f"= {const_val}（满足）/ ≠ {const_val}（不满足）"
+        expected = f"= {const_val} (satisfied) / != {const_val} (violated)"
     elif isinstance(op, ast.NotEq):  # x != N → 边界输入 N（不满足）/ N±1（满足）
         input_val = const_val
-        expected = f"= {const_val}（不满足）/ ≠ {const_val}（满足）"
+        expected = f"= {const_val} (violated) / != {const_val} (satisfied)"
     elif isinstance(op, ast.Gt):  # x > N → 边界输入 N（不满足）/ N+1（满足）
         input_val = const_val + 1
-        expected = f"= {const_val}（不满足）/ > {const_val}（满足）"
+        expected = f"= {const_val} (violated) / > {const_val} (satisfied)"
     elif isinstance(op, ast.Lt):  # x < N → 边界输入 N（不满足）/ N-1（满足）
         input_val = const_val - 1
-        expected = f"= {const_val}（不满足）/ < {const_val}（满足）"
+        expected = f"= {const_val} (violated) / < {const_val} (satisfied)"
     else:  # In / NotIn（容器成员）
         input_val = const_val
-        expected = "在容器内（满足）/ 不在容器内（不满足）"
+        expected = "contained (satisfied) / not contained (violated)"
 
     return {
         "input": input_val,
         "expected": expected,
-        "rationale": f"第 {node.lineno} 行：{op_name} 比较（常量 {const_val}）",
+        "rationale": f"line {node.lineno}: {op_name} comparison (constant {const_val})",
         "line": node.lineno,
     }
 
@@ -343,10 +347,12 @@ def build_boundary_triplets_section(
     """把 AST 边界三元组渲染为 Generator prompt 注入段落（空时返回空串）。"""
     if not triplets:
         return ""
-    lines = [f"【确定性边界锚点（M10 AST 推导，共 {len(triplets)} 条）】"]
+    lines = [f"[Deterministic boundary anchors (M10 AST-derived; {len(triplets)} entries)]"]
     for i, t in enumerate(triplets[:15], start=1):
-        lines.append(f"{i}. 输入 {t.get('input')} → 预期 {t.get('expected')}（{t.get('rationale', '')}）")
-    lines.append("请优先使用上述确定性边界值作为测试输入，提升 boundary_shift 变异 kill rate。")
+        lines.append(f"{i}. input {t.get('input')} -> expected {t.get('expected')} ({t.get('rationale', '')})")
+    lines.append(
+        "Use the deterministic boundary values above as test inputs first to raise the boundary_shift mutation kill rate."
+    )
     return "\n".join(lines)
 
 

@@ -54,10 +54,11 @@ from src.tools.spec_first import (
 # 本字面量来自 L 轮入库实现（git show ef90281:src/tools/spec_first.py）冻结；
 # 测试**不**动态 import 旧版——锁的是"历史工件可复现性"，不是实现细节。
 _GOLDEN_HEADER = [
-    "【规格优先模式（Spec-First）：本提示刻意不包含实现代码】",
-    "请仅依据以下规约文档与函数签名生成测试。实现细节未知且**不得臆测**——",
-    "照猜想中的实现行为写断言（oracle-from-implementation）会系统性抹掉缺陷检出，",
-    "是本模式要杜绝的首要失败形态。",
+    "[Spec-First mode: this prompt deliberately omits the implementation code]",
+    "Generate tests from the specification document and the function signature below only. "
+    "Implementation details are unknown and **must not be guessed**: writing assertions that "
+    "mirror the guessed implementation behaviour (oracle-from-implementation) systematically "
+    "erases defect detection, and that is the primary failure shape this mode exists to prevent.",
     "",
 ]
 _GOLDEN_CODE = (
@@ -77,31 +78,30 @@ _GOLDEN_PLANNER_MATERIAL: dict[str, Any] = {
 }
 _GOLDEN_DISCIPLINE = [
     "",
-    "【生成纪律】",
-    "1. 每个测试必须断言上述规约中可判定的性质（后置 / 不变量 / 边界）；",
-    "2. 期望值只能来自规约与 docstring 约定；规约未覆盖的行为禁止臆造具体值——",
-    "   改用记录实际行为的探索性断言并在 docstring 标注需人工确认；",
-    "3. 输入构造必须满足前置条件（不满足前件的输入应走 pytest.raises 路径或排除）；",
-    "4. 不得访问规约与签名之外的属性 / 符号。",
+    "[Generation discipline]",
+    "1. Every test must assert a decidable property from the specification above (postcondition / invariant / boundary);",
+    "2. Expected values may come only from the specification and the docstring contract; inventing concrete values for behaviour the specification does not cover is forbidden — use exploratory assertions that record the actual behaviour instead, and flag in the docstring that the expectation needs human confirmation;",
+    "3. Input construction must satisfy the preconditions (inputs violating a precondition belong on a pytest.raises path or must be excluded);",
+    "4. Do not access attributes or symbols beyond the specification and the signature.",
 ]
 _GOLDEN_REPLACE_SECTION = "\n".join(
     [
         *_GOLDEN_HEADER,
-        "函数签名：def add(a: int, b: int) -> int",
-        "被测模块名：mathops（import 必须 `from mathops import ...`）",
+        "Function signature: def add(a: int, b: int) -> int",
+        "Module under test: mathops (imports must use `from mathops import ...`)",
         "",
-        "【文档化契约（docstring）】",
+        "[Documented contract (docstring)]",
         "Return the sum of a and b.",
         "",
-        "【自然语言规约（期望值的唯一合法来源）】",
-        "- 前置条件：a、b 为整数",
-        "- 后置条件：返回值等于两数之和",
-        "- 不变量：结果与参数顺序无关",
-        "- 边界情况：任一参数为 0 时返回另一参数",
+        "[Natural-language specification (sole legitimate source of expected values)]",
+        "- Precondition: a、b 为整数",
+        "- Postcondition: 返回值等于两数之和",
+        "- Invariant: 结果与参数顺序无关",
+        "- Edge case: 任一参数为 0 时返回另一参数",
         "",
-        "【可执行规约（SpecExpr 形式化子句，可直接转写为断言）】",
-        "- 前置（可执行）：isinstance(a, int) and isinstance(b, int)",
-        "- 后置（可执行）：result == a + b",
+        "[Executable specification (formal SpecExpr clauses, directly transcribable into assertions)]",
+        "- Precondition (executable): isinstance(a, int) and isinstance(b, int)",
+        "- Postcondition (executable): result == a + b",
         *_GOLDEN_DISCIPLINE,
     ]
 )
@@ -113,14 +113,14 @@ _GOLDEN_SMALL_MATERIAL: dict[str, Any] = {
 _GOLDEN_SMALL_SECTION = "\n".join(
     [
         *_GOLDEN_HEADER,
-        "函数签名：def fn(x)",
-        "被测模块名：m（import 必须 `from m import ...`）",
+        "Function signature: def fn(x)",
+        "Module under test: m (imports must use `from m import ...`)",
         "",
-        "【自然语言规约（期望值的唯一合法来源）】",
-        "- 后置条件：返回 x",
+        "[Natural-language specification (sole legitimate source of expected values)]",
+        "- Postcondition: 返回 x",
         "",
-        "【可执行规约（SpecExpr 形式化子句，可直接转写为断言）】",
-        "- 后置（可执行）：result == x",
+        "[Executable specification (formal SpecExpr clauses, directly transcribable into assertions)]",
+        "- Postcondition (executable): result == x",
         *_GOLDEN_DISCIPLINE,
     ]
 )
@@ -131,21 +131,22 @@ _BUGGY_ADD = (
 )
 _HISTORIC_PLAN: dict[str, Any] = {"function_name": "add", "test_cases": []}
 _GOLDEN_HISTORIC_QUERY = (
-    "测试计划（JSON）：\n"
+    "Test plan (JSON):\n"
     "{\n"
     '  "function_name": "add",\n'
     '  "test_cases": []\n'
     "}\n\n"
-    "目标代码：\n"
+    "Target code:\n"
     "```\n"
     "def add(a: int, b: int) -> int:\n"
     '    """Return the sum of a and b."""\n'
     "    return a - b  # BUG: should be a + b\n"
     "\n"
     "```\n\n"
-    "被测模块名：mathops\n\n"
-    "请根据以上计划生成完整的 pytest 测试代码。\n\n"
-    "【重要约束】import 语句必须使用以下模块名：`mathops`，即 `from mathops import ...`"
+    "Module under test: mathops\n\n"
+    "Generate the complete pytest test code from the plan above.\n\n"
+    "[Hard constraint] import statements must use this exact module name: `mathops`, "
+    "i.e. `from mathops import ...`"
 )
 
 # 参与各测试的规格材料（含人类独立锚）
@@ -256,17 +257,20 @@ class TestBuildSpecAugmentSection:
         assert "from mathops import" in section  # 模块名约束
         assert "Input:" in section and "Output:" in section  # 人类独立锚
         assert "Return the sum of a and b." in section  # 文档化契约
-        assert "后置条件：返回值等于两数之和" in section  # NL 规约
+        assert "Postcondition: 返回值等于两数之和" in section  # NL 规约
         assert "result == a + b" in section  # SpecExpr 子句
 
     @pytest.mark.unit
     def test_framing_phrases_present(self) -> None:
         """预注册 §2.1 锁定的 framing（并列 / 结合两者 / 按规格构造期望值）。"""
         section = build_spec_augment_section(_AUGMENT_MATERIAL, _GOLDEN_CODE, "mathops", "add")
-        assert "规格锚与目标代码并列" in section
-        assert "请结合两者" in section
-        assert "当实现与规格不一致时，按规格构造期望值（这是检出缺陷的关键）。" in section
-        assert "上方已完整给出目标代码" in section
+        assert "[Spec-Augment mode: the specification anchor sits beside the target code]" in section
+        assert "Combine the two:" in section
+        assert (
+            "where the implementation and the specification disagree, build the expected value "
+            "from the specification (that is the key to detecting the defect)" in section
+        )
+        assert "The target code is given in full above" in section
 
     @pytest.mark.unit
     def test_no_replace_only_phrasing(self) -> None:
@@ -285,23 +289,25 @@ class TestBuildSpecAugmentSection:
 
     @pytest.mark.unit
     def test_shared_pipeline_with_replace_before_discipline(self) -> None:
-        """共享材料抽取 / 主体渲染：两模式在【生成纪律】之前逐字节相同。"""
+        """共享材料抽取 / 主体渲染：两模式在 [Generation discipline] 之前逐字节相同。"""
 
         def _body(section: str) -> str:
-            return section.split("\n【生成纪律", 1)[0].split("函数签名：", 1)[1]
+            return section.split("\n[Generation discipline", 1)[0].split("Function signature: ", 1)[1]
 
         aug = build_spec_augment_section(_AUGMENT_MATERIAL, _GOLDEN_CODE, "mathops", "add")
         rep = build_spec_replace_section(_AUGMENT_MATERIAL, _GOLDEN_CODE, "mathops", "add")
         assert _body(aug) == _body(rep)
         # 但分帧与纪律不同（不是同一字符串）
         assert aug != rep
-        assert "【规格增广模式（Spec-Augment）" in aug
-        assert "【规格优先模式（Spec-First）" in rep
+        assert "[Spec-Augment mode" in aug
+        assert "[Spec-First mode" in rep
 
     @pytest.mark.unit
     def test_human_spec_rendered_before_docstring(self) -> None:
         section = build_spec_augment_section(_AUGMENT_MATERIAL, _GOLDEN_CODE, "mathops", "add")
-        assert section.index("【独立于实现的规格锚（人类 docstring）】") < section.index("【文档化契约（docstring）】")
+        assert section.index("[Implementation-independent spec anchor (human docstring)]") < section.index(
+            "[Documented contract (docstring)]"
+        )
 
     @pytest.mark.unit
     def test_none_plan_returns_empty(self) -> None:
@@ -348,8 +354,8 @@ class TestBuildSpecAugmentSection:
     def test_signature_failure_degrades_without_raising(self) -> None:
         section = build_spec_augment_section(_AUGMENT_MATERIAL, "def add(: broken", "mathops", "add")
         assert section
-        assert "函数签名：" not in section
-        assert "后置条件：返回值等于两数之和" in section
+        assert "Function signature: " not in section
+        assert "Postcondition: 返回值等于两数之和" in section
 
     @pytest.mark.unit
     def test_target_function_fallback_to_plan(self) -> None:
@@ -380,9 +386,11 @@ class TestReplaceGoldenUnchanged:
     def test_replace_with_human_spec_key_still_renders_anchor(self) -> None:
         """带 human_spec 的 replace 渲染未变：锚段在 docstring 之前、帧头仍是 replace。"""
         section = build_spec_replace_section(_AUGMENT_MATERIAL, _GOLDEN_CODE, "mathops", "add")
-        assert section.startswith("【规格优先模式（Spec-First）：本提示刻意不包含实现代码】\n")
-        assert "【独立于实现的规格锚（人类 docstring）】" in section
-        assert section.index("【独立于实现的规格锚（人类 docstring）】") < section.index("【文档化契约（docstring）】")
+        assert section.startswith("[Spec-First mode: this prompt deliberately omits the implementation code]\n")
+        assert "[Implementation-independent spec anchor (human docstring)]" in section
+        assert section.index("[Implementation-independent spec anchor (human docstring)]") < section.index(
+            "[Documented contract (docstring)]"
+        )
 
 
 # ─── 4. _build_query：增广段位置 + 历史路径金标记 ──────────────────────────
@@ -392,20 +400,18 @@ class TestBuildQueryAugmentBranch:
         section = build_spec_augment_section(_AUGMENT_MATERIAL, _GOLDEN_CODE, "mathops", "add")
         out = _gen()._build_query(_HISTORIC_PLAN, _GOLDEN_CODE, "mathops", None, None, spec_augment_section=section)
         # 代码完整保留
-        assert "目标代码：" in out
+        assert "Target code:" in out
         assert "return a - b" in out
         assert "```" in out
         # 规格锚同时出现，且位于 code block 之后、"被测模块名"之前
-        assert "【规格增广模式（Spec-Augment）" in out
-        assert (
-            out.index("return a - b") < out.index("【规格增广模式（Spec-Augment）") < out.index("被测模块名：mathops")
-        )
+        assert "[Spec-Augment mode" in out
+        assert out.index("return a - b") < out.index("[Spec-Augment mode") < out.index("Module under test: mathops")
 
     @pytest.mark.unit
     def test_augment_query_not_replace_semantics(self) -> None:
         section = build_spec_augment_section(_AUGMENT_MATERIAL, _GOLDEN_CODE, "mathops", "add")
         out = _gen()._build_query(_HISTORIC_PLAN, _GOLDEN_CODE, "mathops", None, None, spec_augment_section=section)
-        assert "规格优先模式" not in out
+        assert "[Spec-First mode" not in out
         assert "本提示刻意不包含实现代码" not in out
 
     @pytest.mark.unit
@@ -429,7 +435,7 @@ class TestBuildQueryAugmentBranch:
         section = build_spec_replace_section(_GOLDEN_PLANNER_MATERIAL, _GOLDEN_CODE, "mathops", "add")
         out = _gen()._build_query(_HISTORIC_PLAN, _GOLDEN_CODE, "mathops", None, None, spec_replace_section=section)
         assert section in out
-        assert "目标代码：" not in out
+        assert "Target code:" not in out
         assert "return a - b" not in out
 
 
@@ -467,8 +473,8 @@ class TestGenerateAugmentPath:
         _gen().generate(_HISTORIC_PLAN, _GOLDEN_CODE, module_name="mathops", spec_augment_section=section)
         query = captured["queries"][0]
         assert "return a - b" in query  # 缺陷代码仍在
-        assert "【规格增广模式（Spec-Augment）" in query  # 规格锚并列追加
-        assert query.index("return a - b") < query.index("【规格增广模式（Spec-Augment）")
+        assert "[Spec-Augment mode" in query  # 规格锚并列追加
+        assert query.index("return a - b") < query.index("[Spec-Augment mode")
 
     @pytest.mark.unit
     def test_generate_returns_code_unchanged_by_augment(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -532,7 +538,7 @@ class TestGeneratorNodeAugmentWiring:
         update, captured = _run_generator(monkeypatch, state)
         assert update["spec_augment_applied"] == "attempted_augmented"
         section = captured.get("spec_augment_section")
-        assert section and "Input:" in section and "当实现与规格不一致时" in section
+        assert section and "Input:" in section and "where the implementation and the specification disagree" in section
         # 互斥：replace 段不得同时构建
         assert update["spec_replace_applied"] is None
         assert captured.get("spec_replace_section") is None

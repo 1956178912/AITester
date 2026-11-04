@@ -163,24 +163,26 @@ def analyze_control_flow(code: str, func_name: str | None = None) -> dict[str, A
     hint_parts: list[str] = []
     if branches_dedup:
         hint_parts.append(
-            f"分支 {len(branches_dedup)} 处（第 " + ", ".join(str(b["line"]) for b in branches_dedup[:8]) + " 行）"
+            f"{len(branches_dedup)} branches (lines " + ", ".join(str(b["line"]) for b in branches_dedup[:8]) + ")"
         )
     if loops:
-        hint_parts.append("循环 " + ", ".join(f"{x['kind']}@{x['line']}" for x in loops[:5]))
+        hint_parts.append("loops " + ", ".join(f"{x['kind']}@{x['line']}" for x in loops[:5]))
     if exceptions:
         hint_parts.append(
-            "异常路径 "
+            "exception paths "
             + ", ".join((f"{e['kind']}[{','.join(e['types'])}]" if e["types"] else e["kind"]) for e in exceptions[:5])
         )
     if returns:
-        hint_parts.append(f"出口 {len(returns)} 个")
+        hint_parts.append(f"{len(returns)} exit points")
     if hint_parts:
-        path_hint = "控制流摘要：" + "；".join(hint_parts) + f"（圈复杂度估计 {cyclomatic}）。"
-        path_hint += "请为每条分支/循环/异常路径生成对应测试用例，避免只测主路径。"
+        path_hint = (
+            "Control-flow summary: " + "; ".join(hint_parts) + f" (estimated cyclomatic complexity {cyclomatic})."
+        )
+        path_hint += "Generate a test case for each branch, loop and exception path; do not test only the main path."
         if len(path_hint) > _CFG_SUMMARY_MAX_CHARS:
             path_hint = path_hint[:_CFG_SUMMARY_MAX_CHARS]
     else:
-        path_hint = "控制流简单（单一路径，无分支/循环/异常）。"
+        path_hint = "Simple control flow (a single path; no branches, loops or exceptions)."
 
     return {
         "func_name": func_actual,
@@ -226,11 +228,11 @@ def build_cfg_prompt_section(cfg: dict[str, Any] | None) -> str:
     if not hint:
         return ""
     return (
-        "\n【控制流分析（CFG 静态层，2.2）】\n"
-        f"函数 {cfg.get('func_name') or 'unknown'} 的 {hint}\n"
-        f"分支明细：{[b['expr'] for b in cfg.get('branch_conditions', [])[:6]]}\n"
-        f"循环明细：{[x['kind'] + '(' + (x['iterator'] or 'cond') + ')' for x in cfg.get('loop_boundaries', [])[:4]]}\n"
-        f"异常明细：{[e['kind'] + (':' + ','.join(e['types']) if e['types'] else '') for e in cfg.get('exception_paths', [])[:4]]}\n"
+        "\n[Control-flow analysis (CFG static layer, 2.2)]\n"
+        f"Function {cfg.get('func_name') or 'unknown'}: {hint}\n"
+        f"Branch details: {[b['expr'] for b in cfg.get('branch_conditions', [])[:6]]}\n"
+        f"Loop details: {[x['kind'] + '(' + (x['iterator'] or 'cond') + ')' for x in cfg.get('loop_boundaries', [])[:4]]}\n"
+        f"Exception details: {[e['kind'] + (':' + ','.join(e['types']) if e['types'] else '') for e in cfg.get('exception_paths', [])[:4]]}\n"
     )
 
 
@@ -245,7 +247,7 @@ def build_cfg_prompt_section(cfg: dict[str, Any] | None) -> str:
 # （F 轮加固：同上，经 env_int 容错解析，坏值不再于 import 期崩溃）
 _PATH_MAX_DEFAULT = env_int("PATH_ENUM_MAX_PATHS", 32)
 # 循环边界三路径的语义标签（循环边界覆盖是系统化测试的经典三路径）
-_LOOP_BOUNDARY_LABELS: tuple[str, ...] = ("0次迭代", "1次迭代", "N次迭代")
+_LOOP_BOUNDARY_LABELS: tuple[str, ...] = ("0 iterations", "1 iteration", "N iterations")
 
 
 def _if_cond_text(node: ast.AST) -> str:
@@ -292,7 +294,7 @@ def _walk_block_paths(
         # then 分支：条件为真 → 走 body 再走 tail（控制流合并）
         _walk_block_paths(
             list(head.body) + tail,
-            [*conds, f"满足 {cond}"],
+            [*conds, f"satisfies {cond}"],
             [*lines, head.lineno],
             paths,
             max_paths,
@@ -300,7 +302,7 @@ def _walk_block_paths(
         # else 分支：条件为假 → 走 orelse（elif 链天然递归）再走 tail
         _walk_block_paths(
             list(head.orelse) + tail if head.orelse else tail,
-            [*conds, f"不满足 {cond}"],
+            [*conds, f"violates {cond}"],
             [*lines, head.lineno],
             paths,
             max_paths,
@@ -309,7 +311,7 @@ def _walk_block_paths(
     if isinstance(head, (ast.While, ast.For)):
         # 循环三边界路径（不展开循环体）
         for label in _LOOP_BOUNDARY_LABELS:
-            _walk_block_paths(tail, [*conds, f"循环 {label}"], [*lines, head.lineno], paths, max_paths)
+            _walk_block_paths(tail, [*conds, f"loop {label}"], [*lines, head.lineno], paths, max_paths)
         return
     # 普通语句：不改变路径
     _walk_block_paths(tail, conds, lines, paths, max_paths)
@@ -384,12 +386,13 @@ def build_paths_prompt_section(paths_result: dict[str, Any] | None) -> str:
         return ""
     lines: list[str] = []
     for i, p in enumerate(paths[:8], start=1):
-        cond = " 且 ".join(p["conditions"]) if p["conditions"] else "（无条件，主路径）"
-        lines.append(f"路径 {i}：{cond}")
+        cond = " AND ".join(p["conditions"]) if p["conditions"] else "(no condition, main path)"
+        lines.append(f"Path {i}: {cond}")
     if paths_result.get("truncated"):
-        lines.append(f"（…路径数超过 {len(paths)} 条，已截断，仅展示前 8 条）")
+        lines.append(f"(... more than {len(paths)} paths; truncated to the first 8)")
     return (
-        f"\n【独立执行路径（结构接地·路径定向，共 {len(paths)} 条）】\n"
+        f"\n[Distinct execution paths (structure-grounded, path-directed; {len(paths)} total)]\n"
         + "\n".join(lines)
-        + "\n请为上述每条路径生成对应测试用例，确保分支组合全覆盖（路径定向测试合成）。"
+        + "\nGenerate a test case for each path above so that branch combinations are fully covered"
+        " (path-directed test synthesis)."
     )

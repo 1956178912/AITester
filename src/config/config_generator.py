@@ -22,13 +22,24 @@ from typing import Any
 # 为唯一来源，见 validate_llm_configs / src/utils/credential_scrub.py。
 PROVIDER_TEMPLATES = {
     "deepseek": {"base_url": "https://api.deepseek.com/v1", "description": "DeepSeek"},
+    # 2026-11-04（多模型对照轮）：MiMo 开放平台登记为第二 provider。模型 ID 是
+    # 全小写 `mimo-v2.6-pro`（平台文档写法 MiMo-V2.6-Pro 不是 API 取值）；端点
+    # OpenAI 兼容，且原生接受 `{"thinking": {"type": ...}}`——与
+    # llm_client._openai_extra_body() 的请求体形状同形（该函数 2026-11-04 起默认
+    # disabled（成本保护口径，2026-11-04 用户更正；实测关思考单调用输出 −92%~−94%），
+    # 两家 provider 的服务端默认虽为 enabled，本客户端显式下发 disabled 统一口径）。
+    "xiaomi": {"base_url": "https://api.xiaomimimo.com/v1", "description": "Xiaomi MiMo"},
 }
-# 当前项目启用的模型目录（仅 DeepSeek 官方 deepseek-flash）。
+# 当前项目启用的模型目录。
 # generate_config_json / print_model_catalog 以本列表为唯一来源。
 # 注：model_name 使用 DeepSeek 官方 API 当前接受的写法 `deepseek-flash`
 # （历史别名 `deepseek-v4.1-flash` 已弃用，与 .env.local / llm_configs.json 对齐）。
+# 顺序即优先级：列表首位对应 LLM_1，是 llm_client._get_llm_config() 的默认首请求；
+# 后续条目只在显式线程局部分配（run_benchmark._set_thread_api）或首端点失败时
+# 参与故障转移。因此新增 mimo 不会改变既有 deepseek 跑批的默认模型。
 COMMON_MODELS = [
     {"name": "deepseek-flash", "provider": "deepseek"},
+    {"name": "mimo-v2.6-pro", "provider": "xiaomi"},
 ]
 
 
@@ -52,19 +63,30 @@ def generate_env_template(output_file: str = ".env.local.template") -> str:
         "# 每个 LLM Provider 需要独立的 API Key",
         "# 变量名约定：{PROVIDER}_API_KEY（provider 全名大写 + _API_KEY），",
         "# 与 generate_config_json / scripts/tools/generate_batch_config.py 的推导规则同源",
-        "# （当前目录仅保留 DeepSeek 官方 provider，与 COMMON_MODELS 对齐）",
-        "",
-        "# DeepSeek API Key",
-        "DEEPSEEK_API_KEY=your-deepseek-api-key-here",
-        "",
-        "# ─── 模型配置示例 ──────────────────────────────────────────────────────────",
-        "",
-        "# 示例：添加 DeepSeek 官方模型（当前项目唯一配置的 LLM 端点）",
-        "# LLM_1_API_KEY=${DEEPSEEK_API_KEY}",
-        "# LLM_1_BASE_URL=https://api.deepseek.com/v1",
-        "# LLM_1_MODEL_NAME=deepseek-flash",
+        (f"# 以下 {len(PROVIDER_TEMPLATES)} 家 provider 由 PROVIDER_TEMPLATES 逐项生成，新增 provider 不必再改本函数"),
         "",
     ]
+    for provider, tmpl in PROVIDER_TEMPLATES.items():
+        template_lines.append(f"# {tmpl['description']} API Key")
+        template_lines.append(f"{provider.upper()}_API_KEY=your-{provider}-api-key-here")
+        template_lines.append("")
+    template_lines += [
+        "# ─── 模型配置示例 ──────────────────────────────────────────────────────────",
+        "",
+    ]
+    # 顺序即优先级：COMMON_MODELS 首位 = LLM_1 = llm_client._get_llm_config 的默认首请求。
+    for index, model in enumerate(COMMON_MODELS, start=1):
+        provider = model["provider"]
+        base_url = PROVIDER_TEMPLATES.get(provider, {}).get("base_url", "")
+        template_lines.append(
+            f"# 示例 {index}：{model['name']}（provider={provider}"
+            + ("；LLM_1 是默认首请求" if index == 1 else "；仅在显式钉住或故障转移时生效")
+            + "）"
+        )
+        template_lines.append(f"# LLM_{index}_API_KEY=${{{provider.upper()}_API_KEY}}")
+        template_lines.append(f"# LLM_{index}_BASE_URL={base_url}")
+        template_lines.append(f"# LLM_{index}_MODEL_NAME={model['name']}")
+        template_lines.append("")
     content = "\n".join(template_lines)
     with open(output_file, "w", encoding="utf-8") as f:
         f.write(content)

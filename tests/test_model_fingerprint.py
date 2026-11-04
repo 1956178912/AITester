@@ -768,13 +768,20 @@ class TestComparabilityAndScannedSurface:
         )
         assert out.returncode == 0, out.stdout + out.stderr
         assert "[SKIP]" not in out.stdout, out.stdout
-        assert "运行时模型集 ['deepseek-flash']" in out.stdout, out.stdout
+        # 期望串从权威源推导，不写死模型数：加第二家 provider 时这里应随
+        # COMMON_MODELS 自动更新，而不是变成一条需要手工改红的常数。
+        from src.config.config_generator import COMMON_MODELS
+
+        expected_models = sorted({m["name"] for m in COMMON_MODELS})
+        assert f"运行时模型集 {expected_models}" in out.stdout, out.stdout
 
     def test_runtime_registry_authority_is_named(self, gate):
-        """对账权威源必须是运行面本身（CD 轮后 = COMMON_MODELS 单别名）。"""
+        """对账权威源必须是运行面本身（= COMMON_MODELS 的模型别名全集）。"""
+        from src.config.config_generator import COMMON_MODELS
+
         aliases, reason = gate.runtime_model_aliases()
         assert reason is None, reason
-        assert aliases == frozenset({"deepseek-flash"}), aliases
+        assert aliases == frozenset({m["name"] for m in COMMON_MODELS}), aliases
 
     # ── 分母 / 披露面：每一路读数都要在四条输出路径上都存在 ────────────────
 

@@ -60,9 +60,9 @@ def _mk() -> object:
 
 def _plan_from_query(query: str) -> dict:
     """从 prompt 里把 plan JSON 段解析回来（结构化断言，不用裸子串判真）。"""
-    marker = "测试计划（JSON）：\n"
+    marker = "Test plan (JSON):\n"
     assert query.startswith(marker), "full/structure 的 prompt 必须以 plan JSON 段开头"
-    body, _, _ = query[len(marker) :].partition("\n\n目标代码")
+    body, _, _ = query[len(marker) :].partition("\n\nTarget code")
     return json.loads(body)
 
 
@@ -96,10 +96,10 @@ class TestDfParity:
         monkeypatch.setenv("GENERATOR_PAYLOAD", "df_parity")
         query = _mk()._build_query(PLAN, CODE, "mod_initials", None)
         expected = (
-            f"目标代码：\n```\n{CODE}\n```"
-            "\n\n被测模块名：mod_initials"
-            "\n\n【重要约束】import 语句必须使用以下模块名：`mod_initials`，"
-            "即 `from mod_initials import ...`"
+            f"Target code:\n```\n{CODE}\n```"
+            "\n\nModule under test: mod_initials"
+            "\n\n[Hard constraint] import statements must use this exact module name: `mod_initials`, "
+            "i.e. `from mod_initials import ...`"
         )
         assert query == expected
 
@@ -115,14 +115,14 @@ class TestDfParity:
             mutation_feedback={"survived_mutants": ["return_void"], "mutation_score": 0.2},
         )
         assert "测试计划" not in query
-        assert "参考案例" not in query
-        assert "断言增强" not in query
-        assert "变异反馈" not in query
+        assert "[Reference case" not in query
+        assert "[Assertion reinforcement]" not in query
+        assert "[Mutation feedback" not in query
         assert "expected_output" not in query
 
     def test_empty_module_name_keeps_only_code(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("GENERATOR_PAYLOAD", "df_parity")
-        assert _mk()._build_query(PLAN, CODE, "", None) == f"目标代码：\n```\n{CODE}\n```"
+        assert _mk()._build_query(PLAN, CODE, "", None) == f"Target code:\n```\n{CODE}\n```"
 
 
 class TestStructure:

@@ -165,6 +165,93 @@ class TestFinishReasonGuard:
             agent._call_llm("hello", json_mode=True, max_retries=1)
         assert client.invoke.call_count == 2  # max_retries=1 → 首发 + 1 重试
 
+    def test_truncation_uses_the_full_ladder_when_max_retries_is_one(self, monkeypatch):
+        """max_retries=1 时新口径与旧口径同为两次尝试——差别只在不能更多。"""
+        client = self._setup(monkeypatch, [_fake_response(finish_reason="length")] * 5)
+        agent = _make_agent()
+        with pytest.raises(RuntimeError, match="LLM 调用失败"):
+            agent._call_llm("hello", max_retries=1)
+        assert client.invoke.call_count == 2
+
+    def test_truncation_is_not_retried_on_the_full_ladder(self, monkeypatch):
+        """**成本锁**：`LLM_MAX_RETRIES=6`（第 11 条上调后的默认档）下，
+        截断只允许一次重试 ⇒ 最坏 2 次付费，而不是 7 次买同一个残缺答案。"""
+        client = self._setup(monkeypatch, [_fake_response(finish_reason="length")] * 9)
+        agent = _make_agent()
+        with pytest.raises(RuntimeError, match="LLM 调用失败"):
+            agent._call_llm("hello", max_retries=6)
+        assert client.invoke.call_count == 2, f"截断被重试了 {client.invoke.call_count - 1} 次，成本随阶梯点火"
+
+    def test_transient_incomplete_keeps_the_full_ladder(self, monkeypatch):
+        """与截断分档：服务端资源不足属瞬态，仍走完整退避（不削既有韧性）。"""
+        client = self._setup(monkeypatch, [_fake_response(finish_reason="insufficient_system_resource")] * 9)
+        agent = _make_agent()
+        with pytest.raises(RuntimeError, match="LLM 调用失败"):
+            agent._call_llm("hello", max_retries=3)
+        assert client.invoke.call_count == 4  # 首发 + 3 次重试
+
+    def test_class_hierarchy_keeps_existing_catches_valid(self, monkeypatch):
+        """两个新异常都是 RuntimeError 子类——既有的 `except RuntimeError` 口径不变。"""
+        from src.agents.llm_client import LlmIncompleteResponseError, LlmTruncatedResponseError
+
+        assert issubclass(LlmTruncatedResponseError, RuntimeError)
+        assert issubclass(LlmIncompleteResponseError, RuntimeError)
+        # 分档只服务重试预算，对外仍统一抛"LLM 调用失败"（由 _call_llm 包装）
+        self._setup(monkeypatch, [_fake_response(finish_reason="length")] * 2)
+        agent = _make_agent()
+        with pytest.raises(RuntimeError, match="LLM 调用失败"):
+            agent._call_llm("hello", max_retries=0)
+
+    def test_single_shot_caps_the_helper_at_two_attempts(self):
+        """重试器直测：single_shot 类命中时最多首发 + 1 次。"""
+        from src.agents.llm_client import LlmTruncatedResponseError, _retry_with_exponential_backoff
+
+        calls: list[int] = []
+
+        def _boom() -> None:
+            calls.append(1)
+            raise LlmTruncatedResponseError("LLM 响应不完整（finish_reason=length）")
+
+        with pytest.raises(LlmTruncatedResponseError):
+            _retry_with_exponential_backoff(
+                _boom,
+                6,
+                base_wait=0,
+                retryable_exceptions=(Exception,),
+                single_shot_exceptions=(LlmTruncatedResponseError,),
+            )
+        assert len(calls) == 2, f"实际尝试 {len(calls)} 次，成本未封顶"
+
+    def test_same_class_without_single_shot_uses_the_full_ladder(self):
+        """负对照：不登记 single_shot 时同一异常仍走完整 7 次——封顶确实是新参数造成的。"""
+        from src.agents.llm_client import LlmTruncatedResponseError, _retry_with_exponential_backoff
+
+        calls: list[int] = []
+
+        def _boom() -> None:
+            calls.append(1)
+            raise LlmTruncatedResponseError("truncated")
+
+        with pytest.raises(RuntimeError, match=r"所有重试均失败|调用失败"):
+            _retry_with_exponential_backoff(_boom, 6, base_wait=0, retryable_exceptions=(Exception,))
+        assert len(calls) == 7
+
+    def test_budget_is_rechecked_before_the_single_retry(self, monkeypatch):
+        """那唯一一次重试也必须在预算复查之后——省下的次数不得绕过预算闸。"""
+        self._setup(monkeypatch, [_fake_response(finish_reason="length")] * 3)
+        checked: list[str] = []
+        real = base_agent._raise_if_budget_exceeded
+
+        def _spy(*args, **kwargs):
+            checked.append("check")
+            return real(*args, **kwargs)
+
+        monkeypatch.setattr(base_agent, "_raise_if_budget_exceeded", _spy, raising=True)
+        agent = _make_agent()
+        with pytest.raises(RuntimeError, match="LLM 调用失败"):
+            agent._call_llm("hello", max_retries=6)
+        assert checked, "重试前未复查任务级预算"
+
 
 class TestCacheKeyIsolation:
     """缓存键隔离：JSON 模式与非 JSON 历史口径不共享缓存条目。"""

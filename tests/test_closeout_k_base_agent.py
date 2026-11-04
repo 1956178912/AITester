@@ -481,7 +481,9 @@ class TestA09CacheIdentity:
         _enable_cache(monkeypatch, tmp_path)
         calls = _patch_llm(monkeypatch, _fake_response("thinking 身份响应"))
         agent = _agent()
-        monkeypatch.delenv("LLM_THINKING_MODE", raising=False)  # 默认 disabled
+        monkeypatch.setenv(
+            "LLM_THINKING_MODE", "disabled"
+        )  # 2026-11-04 起默认 enabled，此处显式设 disabled 以构造成对身份
         assert agent._call_llm_with_cache("thinking 问题") == "thinking 身份响应"
         assert calls["invoke"] == 1
 
@@ -567,8 +569,15 @@ class TestA09CacheIdentity:
         assert len(list(Path(tmp_path / "llm_cache").glob("*.json"))) == 2
 
     def test_legacy_cache_read_only_fallback_in_default_envelope(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
-        """历史默认包络下，旧格式（无 request_identity）缓存仍可只读命中。"""
+        """历史默认包络下，旧格式（无 request_identity）缓存仍可只读命中。
+
+        2026-11-04：默认思考档由 disabled 改为 enabled，故"历史默认包络"须
+        显式构造（``LLM_THINKING_MODE=disabled``）。不这么写，默认信封本身
+        就是 thinking-on，与旧缓存的 thinking-off 事实不符——旧文件本就不该
+        命中，测试会因口径漂移而假红。
+        """
         _enable_cache(monkeypatch, tmp_path)
+        monkeypatch.setenv("LLM_THINKING_MODE", "disabled")
         calls = _patch_llm(monkeypatch, _fake_response("不应真实调用"))
         agent = _agent()
         legacy_file = base_agent._legacy_cache_file("旧缓存问题", agent.system_prompt, None, False)
@@ -709,7 +718,23 @@ class TestA09LegacyCompatibilityPolicy:
     """
 
     def test_default_envelope_is_legacy_compatible(self, monkeypatch: pytest.MonkeyPatch):
+        """2026-11-04 口径更正后：默认思考档 = disabled ⇒ 默认信封重新等于历史（thinking-off）信封。
+
+        历史旧缓存全部产生于 thinking-off 口径。本轮曾把默认改为 enabled，那期间默认
+        信封跨档位命中旧缓存就是"串味"，故本例当时断言 False；默认回到 disabled 后
+        同一断言必须翻回 True——否则等于让旧缓存在同口径下白白作废。
+        """
         monkeypatch.delenv("LLM_THINKING_MODE", raising=False)
+        monkeypatch.delenv("LLM_REASONING_EFFORT", raising=False)
+        monkeypatch.delenv("LLM_MAX_OUTPUT_TOKENS", raising=False)
+        monkeypatch.delenv("AITESTER_CACHE_NAMESPACE", raising=False)
+        identity = base_agent._effective_request_identity(None, False)
+        assert identity["thinking"] == {"type": "disabled"}
+        assert base_agent._legacy_cache_identity_compatible(identity) is True
+
+    def test_explicit_thinking_disabled_envelope_is_legacy_compatible(self, monkeypatch: pytest.MonkeyPatch):
+        """显式 thinking-off 信封仍与历史缓存同口径（复现历史实验的合法通道）。"""
+        monkeypatch.setenv("LLM_THINKING_MODE", "disabled")
         monkeypatch.delenv("LLM_REASONING_EFFORT", raising=False)
         monkeypatch.delenv("LLM_MAX_OUTPUT_TOKENS", raising=False)
         monkeypatch.delenv("AITESTER_CACHE_NAMESPACE", raising=False)

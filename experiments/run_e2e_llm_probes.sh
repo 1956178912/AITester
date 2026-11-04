@@ -535,7 +535,7 @@ _UNSETS=(-u DOC_ANCHOR_TABLE -u AITESTER_QUIXBUGS_DATA -u ENABLE_RAG -u CROSS_FI
     -u COST_BUDGET_ENABLE -u COST_BUDGET_TOKENS -u COST_BUDGET_USD -u COST_USD_PER_1K
     -u EXECUTOR_USE_VENV -u AITESTER_PROFILE -u AITESTER_TRACE_DIR -u AITESTER_CACHE_NAMESPACE
     -u LLM_REASONING_EFFORT -u LLM_MAX_OUTPUT_TOKENS -u AITESTER_SMOKE_LLM -u AITESTER_E2E_LLM)
-_BASE_ENV=("AITESTER_PROFILE=logic" "TEMPERATURE=0.0" "LLM_THINKING_MODE=disabled" "BENCHMARK_PARALLELISM=1" "AITESTER_LLM_CACHE=0"
+_BASE_ENV=("AITESTER_PROFILE=logic" "TEMPERATURE=0.0" "BENCHMARK_PARALLELISM=1" "AITESTER_LLM_CACHE=0"
     # 探针成本裁剪（如实记录于每项 log/env）：只关非目标的后处理测量/迭代上限，
     # 不改 logic 主链路装配（planner/generator/executor/debugger/spec_ir/DSL/oracle/守卫全在）。
     # 动机：QuixBugs bitcount 等"缺陷实现不终止"家族在默认 MAX_ITERATIONS=3 +
@@ -601,7 +601,7 @@ mkdir -p "${OUT}/00_llm_smoke"
 SMOKE_START="$(date +%s)"
 set +e
 ( cd "${ROOT}" && env "${_UNSETS[@]}" "AITESTER_SMOKE_LLM=true" "AITESTER_LLM_CACHE=0" "AITESTER_PROFILE=logic" \
-    "TEMPERATURE=0.0" "LLM_THINKING_MODE=disabled" "AITESTER_CACHE_NAMESPACE=e2e_llm_probes_20261017_00_smoke" \
+    "TEMPERATURE=0.0" "AITESTER_CACHE_NAMESPACE=e2e_llm_probes_20261017_00_smoke" \
     "${PY}" "${ROOT}/experiments/run_smoke_llm.py" --require-json ) 2>&1 | tee "${OUT}/00_llm_smoke/run.log"
 SMOKE_RC=${PIPESTATUS[0]}
 set -e

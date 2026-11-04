@@ -52,6 +52,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
+from src.budget import pricing as _pricing  # noqa: E402  # 币种符号单点取用
 from src.budget.pricing import entry_block_reason, load_table_json, models_layer  # noqa: E402
 from src.budget.token_usage import sum_token_metric_values, token_metric_reading  # noqa: E402
 
@@ -284,19 +285,21 @@ def _format_reason_counts(reasons: dict[str, Any]) -> str:
     return "；".join(parts)
 
 
-def _usd_text(value: Any, reasons: dict[str, Any] | None = None, prefix: str = "$") -> str:
-    """美元读数的呈现（AB-15 判据）：**被拒绝的金额不得披着金额的形状出现在报告里**。
+def _usd_text(value: Any, reasons: dict[str, Any] | None = None, prefix: str | None = None) -> str:
+    """金额呈现（AB-15 判据）：**被拒绝的金额不得披着金额的形状出现在报告里**。
 
     改前实测两种落字：`oracle_examples_replay.render_readme` 把 `None` 印成 `$None`、
     本文件的成本行把聚合折出来的 `0.0` 印成 `$0.0`——"无法估算"与"确实没花钱"只差一个词，
-    却共用同一个美元前缀。现 `None` 落 `—（无法估算：<机制>）`，`0.0` 仍落 `$0.0`。
+    却共用同一个货币前缀。现 `None` 落 `—（无法估算：<机制>）`，`0.0` 仍带符号。
 
-    `prefix` 供已经写明单位的表头列复用（列头是 `成本(USD, 估算)`，单元格里改前不落 `$`；
-    金额分支保持原样 ⇒ 受保护工件的字节一字不变，只有拒绝分支新增文字）。
+    `prefix=None` 时取价目表基准币种的符号（2026-11-04 币种切换：人民币金额不得挂
+    美元符号）；显式传空串的调用点是"表头已写明单位"的列，行为不变。
     """
     if value is None:
         shown = _format_reason_counts(reasons or {})
         return f"—（无法估算：{shown or '机制未记录'}）"
+    if prefix is None:
+        prefix = _pricing.currency_symbol(_pricing.table_currency_status())
     return f"{prefix}{value}"
 
 
@@ -1092,7 +1095,7 @@ def render_readme(report: dict[str, Any]) -> str:
     lines.append("")
     lines.append("## 1. 合并口径（3 seed 池化，n=261/臂）")
     lines.append("")
-    lines.append("| 臂 | 检出/可测 | detection | repair | false_fix | tokens | 成本(USD, 估算) |")
+    lines.append("| 臂 | 检出/可测 | detection | repair | false_fix | tokens | 成本(人民币, 估算) |")
     lines.append("|---|---|---|---|---|---|---|")
     for arm in report["arms"]:
         p = report["pooled"].get(arm) or {}

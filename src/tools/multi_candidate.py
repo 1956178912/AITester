@@ -59,11 +59,10 @@ _MAX_CANDIDATE_COUNT = 8
 # 候选扰动提示词：N 个候选各自追加不同视角的引导，让 LLM 走不同修复路径
 # （比单纯调温度更可控——温度采样可能重复生成同一补丁，视角扰动保证差异）
 _CANDIDATE_PROMPT_VARIANTS = [
-    "请给出【方案 A（最小改动）】：只做让失败测试通过的最小修复，尽量保留原代码结构与命名，不重构无关函数。",
-    "请给出【方案 B（根因修复）】：定位根本原因，允许重写相关函数的完整实现，必要时调整内部结构（不改对外接口）。",
+    "Provide [Option A (minimal change)]: make only the minimal repair that lets the failing tests pass; keep the original code structure and naming wherever possible and do not refactor unrelated functions.",
+    "Provide [Option B (root-cause repair)]: locate the root cause; you may rewrite the complete implementation of the affected functions and adjust internal structure where needed (without changing the external interface).",
     (
-        "请给出【方案 C（防御式修复）】：除了修复主路径，补充边界与异常"
-        "输入的健壮性处理（类型检查、空值、越界），确保相邻用例不再误伤。"
+        "Provide [Option C (defensive repair)]: besides fixing the main path, add robustness handling for boundary and exceptional inputs (type checks, null values, out-of-range access) so that neighbouring cases are no longer broken."
     ),
 ]
 # ───────────────────────────────────────────────────────────────────────────
@@ -80,7 +79,7 @@ def candidate_variant_prompt(index: int, num_candidates: int) -> str:
         追加到 Debugger 基础 query 之后的扰动提示字符串。
     """
     variant = _CANDIDATE_PROMPT_VARIANTS[index % len(_CANDIDATE_PROMPT_VARIANTS)]
-    return f"【多候选修复 {index + 1}/{num_candidates}】{variant}"
+    return f"[Multi-candidate repair {index + 1}/{num_candidates}] {variant}"
 
 
 def static_validate_patch(

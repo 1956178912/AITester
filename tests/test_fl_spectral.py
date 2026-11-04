@@ -191,9 +191,9 @@ class TestPromptSection:
 
     def test_renders_lines_and_instruction(self):
         text = build_fl_spectral_prompt_section({"top_k": [{"line": 12, "score": 0.75}]})
-        assert "第 12 行" in text
+        assert "line 12" in text
         assert "Ochiai" in text
-        assert "可疑行" in text
+        assert "suspicious lines" in text
 
 
 class TestMeasureFlSpectralFocus:

@@ -5,5 +5,12 @@
     "provider_description": "DeepSeek",
     "base_url": "https://api.deepseek.com/v1",
     "required_api_key": "DEEPSEEK_API_KEY"
+  },
+  {
+    "model_name": "mimo-v2.6-pro",
+    "provider": "xiaomi",
+    "provider_description": "Xiaomi MiMo",
+    "base_url": "https://api.xiaomimimo.com/v1",
+    "required_api_key": "XIAOMI_API_KEY"
   }
 ]

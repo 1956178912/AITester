@@ -26,6 +26,7 @@
 from __future__ import annotations
 
 import re
+import subprocess
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -160,9 +161,43 @@ def _is_frozen(rel: str) -> bool:
     return rel.startswith(FROZEN_PREFIXES)
 
 
+def _tracked_markdown(root: Path) -> list[Path] | None:
+    """root 的**入库面** `.md`（`git ls-files` ∩ 盘面）；root 非 git 仓库 → None。
+
+    为什么要换成入库面（2026-11-04）：判定原先走 `root.rglob("*.md")`，于是
+    `.qoder/repowiki/**`、`paper_work/**`、`subprojects/**` 这些**按 .gitignore
+    不入库的本机件**进入扫描面——作者机必红、CI 干净检出必绿，同一把锁量两件
+    不同的东西。这与 EZ 轮修掉的「形状锁判作者机盘面」同型。入库面与 git 无关
+    的前缀豁免（`_is_scanned`）叠加使用：前者定范围，后者保 CI 语义（CI 上没有
+    `.private/` 也必须判"不扫"，而不是"目录不存在所以没内容"）。
+    """
+    proc = subprocess.run(
+        ["git", "-C", str(root), "ls-files", "-z"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        return None  # 不是 git 仓库（测试里的临时 repo）：交回调用方按 rglob 处置
+    paths: list[Path] = []
+    for rel in proc.stdout.split("\0"):
+        if not rel.endswith(".md"):
+            continue
+        candidate = root / rel
+        if candidate.is_file():
+            paths.append(candidate)
+    return sorted(paths)
+
+
+def _markdown_targets(root: Path) -> list[Path]:
+    """扫描面：入库面优先，git 不可用（临时 repo fixture）时退回盘面 rglob。"""
+    tracked = _tracked_markdown(root)
+    return tracked if tracked is not None else sorted(root.rglob("*.md"))
+
+
 def scan_root(root: Path) -> dict[str, list[tuple[int, int, int]]]:
     hits: dict[str, list[tuple[int, int, int]]] = {}
-    for path in sorted(root.rglob("*.md")):
+    for path in _markdown_targets(root):
         rel = _relpath(path, root)
         if not _is_scanned(rel):
             continue
@@ -175,7 +210,7 @@ def scan_root(root: Path) -> dict[str, list[tuple[int, int, int]]]:
 def live_markdown_paths() -> list[Path]:
     return [
         path
-        for path in sorted(REPO_ROOT.rglob("*.md"))
+        for path in _markdown_targets(REPO_ROOT)
         if _is_scanned(_relpath(path, REPO_ROOT)) and not _is_frozen(_relpath(path, REPO_ROOT))
     ]
 
@@ -228,6 +263,29 @@ class TestCurrentRepo:
         """fail-closed：扫描面塌缩不得被当成「全绿」。"""
         live = live_markdown_paths()
         assert len(live) > 80, f"活文档仅 {len(live)} 份，扫描面异常"
+
+    def test_scan_face_is_the_tracked_face_not_the_author_disk(self, tmp_path: Path):
+        """入库面守卫：gitignore 的本机件不得进扫描面（本轮红就是它们造成的）。
+
+        在临时 git 仓库里造一份「已破坏表格但被 .gitignore 排除」的 .md：按盘面
+        口径它会被扫到并红，按入库面口径它必须不可见。
+        """
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        subprocess.run(["git", "-C", str(repo), "init", "-q"], check=True, capture_output=True)
+        (repo / ".gitignore").write_text("local/\n", encoding="utf-8")
+        (repo / "local").mkdir()
+        broken = "| a | b | c |\n|---|---|---|\n| 1 | `x | y` | 3 | 4 |\n"
+        (repo / "local" / "wiki.md").write_text(broken, encoding="utf-8")
+        tracked = repo / "docs"
+        tracked.mkdir()
+        (tracked / "clean.md").write_text("| a | b |\n|---|---|\n| 1 | 2 |\n", encoding="utf-8")
+        subprocess.run(["git", "-C", str(repo), "add", ".gitignore", "docs/clean.md"], check=True, capture_output=True)
+        assert _tracked_markdown(repo) is not None, "临时 git 仓库应能取到入库面"
+        rels = {p.relative_to(repo).as_posix() for p in _tracked_markdown(repo)}
+        assert "local/wiki.md" not in rels, "gitignore 的本机件进了入库面"
+        assert "docs/clean.md" in rels
+        assert scan_root(repo) == {}, "本机 gitignore 件被扫描 ⇒ 作者机必红、CI 必绿"
 
     @pytest.mark.parametrize(("rel", "anchor", "cols"), FIXED_ROWS)
     def test_fixed_rows_author_exactly_the_header_width(self, rel: str, anchor: str, cols: int):

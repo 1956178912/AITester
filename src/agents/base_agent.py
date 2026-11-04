@@ -25,13 +25,16 @@ from typing import Any
 from config import LLM_CALL_BUDGET_SECONDS, LLM_TIMEOUT, TEMPERATURE
 from src.agents.llm_client import (
     _ABNORMAL_FINISH_REASONS,
-    _DEFAULT_LLM_MAX_RETRIES,
+    _TRUNCATED_FINISH_REASONS,
+    LlmIncompleteResponseError,
+    LlmTruncatedResponseError,
     _cache_creator_label,
     _get_all_api_configs,
     _get_llm_config,
     _get_or_create_chat_client,
     _llm_cache_dir,
     _llm_cache_enabled,
+    _llm_max_retries_default,
     _openai_extra_body,
     _raise_if_budget_exceeded,
     _record_actual_request_config,
@@ -582,7 +585,7 @@ class BaseAgent:
     def _call_llm_with_cache(
         self,
         user_message: str,
-        max_retries: int = _DEFAULT_LLM_MAX_RETRIES,
+        max_retries: int | None = None,
         temperature: float | None = None,
         complexity_class: str | None = None,
         json_mode: bool = False,
@@ -965,7 +968,7 @@ class BaseAgent:
     def _call_llm(
         self,
         user_message: str,
-        max_retries: int = _DEFAULT_LLM_MAX_RETRIES,
+        max_retries: int | None = None,
         temperature: float | None = None,
         complexity_class: str | None = None,
         json_mode: bool = False,
@@ -1003,6 +1006,11 @@ class BaseAgent:
         Raises:
             RuntimeError: 所有 API 和重试均失败时抛出。
         """
+        # 2026-11-04：重试次数延迟解析——max_retries=None 表示"用环境配置"。
+        # 必须在函数体内读，不能在默认参数里求值：默认参数在模块导入时绑定，
+        # 而 .env.local / monkeypatch 常在导入之后才设置环境变量。
+        if max_retries is None:
+            max_retries = _llm_max_retries_default()
         # P0 1.2：复杂度感知路由——complexity_class 非 None 时经下方
         # _reorder_api_groups_by_complexity 按档位重排 api_groups（simple → 低成本
         # 端点在前，complex → 高成本端点在前）；路由不依赖 APIManager kwargs
@@ -1137,12 +1145,19 @@ class BaseAgent:
                         # 按可恢复失败重试，不交给下游解析。
                         _finish = str((getattr(response, "response_metadata", None) or {}).get("finish_reason") or "")
                         if _finish in _ABNORMAL_FINISH_REASONS:
+                            # GM 轮分档：截断是请求形状的确定性后果 ⇒ 只重试一次；
+                            # 服务端资源不足是瞬态 ⇒ 完整退避阶梯。两者都不把残缺
+                            # 响应交给下游解析（A11 口径不变）。
+                            _truncated = _finish in _TRUNCATED_FINISH_REASONS
                             logger.warning(
-                                "LLM 响应不完整（finish_reason=%s, model=%s），按可恢复失败重试",
+                                "LLM 响应不完整（finish_reason=%s, model=%s），%s",
                                 _finish,
                                 model,
+                                "按确定性失败最多重试一次" if _truncated else "按瞬态失败重试",
                             )
-                            raise RuntimeError(f"LLM 响应不完整（finish_reason={_finish}）")
+                            if _truncated:
+                                raise LlmTruncatedResponseError(f"LLM 响应不完整（finish_reason={_finish}）")
+                            raise LlmIncompleteResponseError(f"LLM 响应不完整（finish_reason={_finish}）")
                         text_ = response.content.strip()
                         # 空响应视为失败，触发重试（而非直接跨模型切换）
                         if not text_:
@@ -1162,6 +1177,7 @@ class BaseAgent:
                         # EH 轮：时间预算耗尽同属确定性失败，一并列入。
                         non_retryable_exceptions=(BudgetExceededError, LlmCallBudgetExceeded),
                         pre_retry_check=_pre_retry_budget_check,
+                        single_shot_exceptions=(LlmTruncatedResponseError,),
                     )
 
                     # 打印成功日志

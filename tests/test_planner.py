@@ -126,7 +126,7 @@ class TestPlannerPlan:
             p.plan(_CODE, target_function="add")
         query = m.call_args.args[0]
         assert "add" in query
-        assert "只针对以下函数" in query
+        assert "produce the test plan for the function below only" in query
 
     def test_plan_invalid_json_raises(self):
         """LLM 返回非 JSON → _extract_json 抛 JSONDecodeError（非文档误标的 RuntimeError）"""

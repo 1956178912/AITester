@@ -121,8 +121,8 @@ STATUS_CASES: list[tuple[str, Any, str]] = [
     ("usd", "USD", "usd"),
     ("lower", "usd", "usd"),
     ("padded", " USD ", "usd"),
-    ("cny", "CNY", "other:CNY"),
-    ("lower_cny_padded", " cny", "other:CNY"),
+    ("eur", "EUR", "other:EUR"),
+    ("lower_eur_padded", " eur", "other:EUR"),
     ("int", 123, "not_string:int"),
     ("bool", True, "not_string:bool"),
     ("list", ["USD"], "not_string:list"),
@@ -150,7 +150,7 @@ class TestCurrencyStatusDomain:
             "null",
             "blank",
             "usd",
-            "other:CNY",
+            "other:EUR",
             "not_string:int",
             "not_string:bool",
             "not_string:list",
@@ -188,11 +188,11 @@ class TestFourSitesAgree:
     @pytest.mark.parametrize("tag,value,expected", STATUS_CASES[:12], ids=[c[0] for c in STATUS_CASES[:12]])
     def test_stats_site_follows_predicate(self, tag: str, value: Any, expected: str) -> None:
         row = _stat_row({"models": {"m": _entry(value)}})
-        assert row["priced"] == (expected in ("usd", "other:CNY"))
+        assert row["priced"] == (expected in ("usd", "other:EUR"))
         if expected == "usd":
             assert row["currency"] == "USD"
-        elif expected == "other:CNY":
-            assert row["currency"] == "CNY"
+        elif expected == "other:EUR":
+            assert row["currency"] == "EUR"
         else:
             assert row["currency"] is None
 
@@ -292,9 +292,9 @@ class TestStatisticalCurrencyMechanisms:
         assert row["unpriced_currency_models"] == {"m": "not_string:int"}
 
     def test_cny_entry_prices_with_normalized_label(self) -> None:
-        row = _stat_row({"models": {"m": _entry(" cny")}})
+        row = _stat_row({"models": {"m": _entry(" eur")}})
         assert row["priced"] is True
-        assert row["currency"] == "CNY"
+        assert row["currency"] == "EUR"
         assert row["cost"] == pytest.approx(3.0)
 
     def test_mixed_case_models_price_instead_of_collapsing(self) -> None:
@@ -344,7 +344,7 @@ class TestStatisticalCurrencyMechanisms:
         assert rows[0]["unpriced_currency_models"] == {"b": "absent"}
 
     def test_two_different_currencies_still_refuse_to_sum(self) -> None:
-        table = {"models": {"a": _entry("USD"), "b": _entry("CNY")}}
+        table = {"models": {"a": _entry("USD"), "b": _entry("EUR")}}
         rows = sa.cost_analysis(
             {
                 "aitester": [
@@ -465,10 +465,10 @@ class TestCostSectionRendering:
     """呈现层：单位提醒只在真出现非 USD 计价行时落字；0 机制时文本逐行不变。"""
 
     def test_non_usd_priced_row_triggers_unit_note(self) -> None:
-        table = {"models": {"m": _entry("CNY")}}
+        table = {"models": {"m": _entry("EUR")}}
         text = "\n".join(sa._cost_report_lines(sa.cost_analysis(_arm(), table), table))
         assert "单位提醒" in text
-        assert "CNY" in text
+        assert "EUR" in text
 
     def test_usd_only_render_has_no_unit_note(self) -> None:
         table = {"models": {"m": _entry("USD")}}
@@ -526,8 +526,8 @@ class TestReportSiteReasonCodes:
         ("absent", "__omit__", "currency_absent"),
         ("null", None, "currency_absent"),
         ("blank", "   ", "currency_absent"),
-        ("cny", "CNY", "currency_not_usd:CNY"),
-        ("padded_cny", " cny ", "currency_not_usd:CNY"),
+        ("eur", "EUR", "currency_not_usd:EUR"),
+        ("padded_eur", " eur ", "currency_not_usd:EUR"),
         ("int", 123, "currency_not_usd:not_string:int"),
         ("list", ["USD"], "currency_not_usd:not_string:list"),
     ]
@@ -552,8 +552,8 @@ class TestFifthSiteIsNotCurrencyBlind:
 
     @pytest.mark.parametrize(
         "tag,value",
-        [("absent", "__omit__"), ("cny", "CNY"), ("blank", ""), ("list", ["USD"])],
-        ids=["absent", "cny", "blank", "list"],
+        [("absent", "__omit__"), ("eur", "EUR"), ("blank", ""), ("list", ["USD"])],
+        ids=["absent", "eur", "blank", "list"],
     )
     def test_undecidable_or_non_usd_leaves_cost_none(self, tag: str, value: Any) -> None:
         stats = self._stats()
@@ -619,10 +619,13 @@ class TestRealBatchReadingsUnchanged:
 
     def test_real_price_table_currencies_unchanged(self) -> None:
         table = json.loads(_PRICE_TABLE.read_text(encoding="utf-8"))["models"]
-        assert set(table) == {"deepseek-flash"}
-        assert table["deepseek-flash"]["currency"] == "USD"
-        assert pricing.currency_status(table["deepseek-flash"]) == "usd"
-        assert pricing.currency_status({"currency": "CNY", "input_per_mtok": 1.0}) == "other:CNY"
+        # 2026-11-04：项目基准币种切为人民币（用户指令：所有价格按 CNY、不用美元、
+        # 取高峰时段价）。断言仍是**精确集合**：扩表必须显式改这一行，防静默漂移。
+        assert set(table) == {"deepseek-flash", "mimo-v2.6-pro"}
+        assert table["deepseek-flash"]["currency"] == "CNY"
+        assert table["mimo-v2.6-pro"]["currency"] == "CNY"
+        assert pricing.currency_status(table["deepseek-flash"]) == "other:CNY"
+        assert pricing.currency_status({"currency": "EUR", "input_per_mtok": 1.0}) == "other:EUR"
 
     def test_protected_reports_not_rewritten(self) -> None:
         """受保护报告逐字节未被本轮改写：以其在 SHA256SUMS 里登记的摘要为准。

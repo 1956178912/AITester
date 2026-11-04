@@ -666,12 +666,15 @@ def _detection_first_section(state: AITesterState) -> str | None:
     if not _detection_first_regenerate_entry(state):
         return None
     return (
-        "【检出优先·先红后绿】上一版测试在当前（未修复的）代码上全部通过——"
-        "这说明测试没有检出任何缺陷，属于无效的全绿测试。请重新生成更强的测试："
-        "针对代码中最可能隐藏缺陷的边界条件、异常路径与特殊输入构造断言，"
-        "使测试在当前含缺陷的代码上**至少一个用例失败（变红）**。"
-        "禁止放松、删减或条件化断言来换取通过；禁止重新实现被测函数；"
-        "断言的期望值必须来自问题语义（数学定律/规约），不得抄袭实现当前行为。"
+        "[Detection first: red before green] The previous test suite passed on the current "
+        "(unrepaired) code, which means it detected no defect and is an invalid all-green "
+        "suite. Regenerate stronger tests: assert against the boundary conditions, "
+        "exceptional paths and special inputs where a defect is most likely to hide, so "
+        "that **at least one case fails (turns red)** on the current defective code. "
+        "Do not relax, delete or condition an assertion to make it pass; do not "
+        "reimplement the function under test; every expected value must come from the "
+        "semantics of the problem (a mathematical law or the specification), not from what "
+        "the implementation currently returns."
     )
 
 
@@ -777,21 +780,27 @@ def _over_red_section(state: AITesterState) -> str | None:
     if not _specificity_over_red_regenerate_entry(state):
         return None
     return (
-        "【过红修复·重写为特异测试】上一版测试在**未修复**的代码上变红了，"
-        "但这个红**不可判定**或**不特异**——常见两种形态："
-        "① 测试**挂起/超时**（被测函数在当前缺陷实现下不终止），"
-        "此时它既不能算检出也不能算通过；"
-        "② 测试红了，但红了**非缺陷相关**的位置（如收集错误、与被测函数无关的断言）。"
-        "请重新生成测试，务必满足："
-        "**（a）输入规模受控**——所有用例都必须在有限时间内返回或快速抛错，"
-        "禁止使用会让当前实现陷入长循环的大输入（若要触发已知的非终止缺陷，"
-        "请用 `pytest.raises` / `pytest.mark.timeout` 或在断言前限制迭代规模的等价手段，"
-        "使测试**快速失败**而不是挂起）；"
-        "**（b）期望值必须来自契约**——由 docstring、类型注解与数学性质推出，"
-        "严禁照抄被测实现当前的返回值（当前实现含缺陷，照抄即等于把缺陷写成期望）；"
-        "**（c）保持特异性**——故障必须出在**被测函数的行为断言**上，"
-        "且该断言在正确实现下应当通过；"
-        "禁止放松、删减或条件化断言来换取通过。"
+        "[Over-red repair: rewrite as a specific test] The previous test turned red on the "
+        "**unrepaired** code, but that red is **undecidable** or **nonspecific** — two common "
+        "forms: "
+        "(1) the test **hangs or times out** (the function under test does not terminate on the "
+        "current defective implementation), in which case it counts as neither a detection nor a "
+        "pass; "
+        "(2) the test turns red, but at a location **unrelated to the defect** (e.g. a collection "
+        "error, or an assertion unrelated to the function under test). "
+        "Regenerate the test and make sure of the following: "
+        "**(a) bounded input size** — every case must return, or raise quickly, within a finite "
+        "time; never use a large input that sends the current implementation into a long loop "
+        "(to trigger a known non-terminating defect, use `pytest.raises` / `pytest.mark.timeout` "
+        "or an equivalent that bounds the iteration count before the assertion, so that the test "
+        "**fails fast** instead of hanging); "
+        "**(b) expected values must come from the contract** — derived from the docstring, type "
+        "annotations and mathematical properties; never copy the current return value of the "
+        "implementation under test (the current implementation is defective, so copying it writes "
+        "the defect into the expectation); "
+        "**(c) keep specificity** — the failure must land on a **behavioural assertion of the "
+        "function under test**, and that assertion must hold under a correct implementation; "
+        "do not relax, delete or condition an assertion in order to make it pass."
     )
 
 
@@ -2361,14 +2370,17 @@ def _run_patch_resample(
 
             _tier_name, _idx, _temp = _current_context_tier()
             strict_prompt = (
-                "【补丁语法校验失败反馈】上一轮补丁应用后 AST 解析失败或未能定位到目标函数，"
-                f"具体错误：\n{ast_error[:500]}\n\n"
-                "请基于同样的错误上下文，重新生成一个语法合法的补丁。"
-                "必须保留原文件中所有模块级符号（函数名/类名/__all__/注册装饰器/插件入口点），"
-                "只允许修改函数/方法体内部逻辑。用 ```python ... ``` 包裹输出。"
-                f"\n\n【当前档位：{_tier_name}（温度 {_temp}）】"
-                f"\n【被拒补丁片段】\n```\n{_rejected}\n```\n"
-                f"\n【原始代码片段】\n```\n{(original_code or '')[:2000]}\n```"
+                "[Patch syntax check failed] The previous patch either failed AST parsing after "
+                "application or could not be located in the target function. "
+                f"The specific error:\n{ast_error[:500]}\n\n"
+                "Using the same error context, regenerate a syntactically valid patch. "
+                "You must preserve every module-level symbol of the original file "
+                "(function names / class names / __all__ / registration decorators / plugin entry "
+                "points) and may modify only the body of the function or method. "
+                "Wrap the output in ```python ... ```."
+                f"\n\n[Current tier: {_tier_name} (temperature {_temp})]"
+                f"\n[Rejected patch fragment]\n```\n{_rejected}\n```\n"
+                f"\n[Original code fragment]\n```\n{(original_code or '')[:2000]}\n```"
             )
             try:
                 _result = resampler._call_llm_with_cache(strict_prompt, temperature=_patch_resample_temperature())

@@ -1018,7 +1018,7 @@ version caliber, adding no claims). (4) Readings: full suite **12,581 passed / 2
   existed, the numbers did not, and `paper-audit --strict` still reported "200+
   declarations, 100% traceable". Existence was standing in for content.
 - **Fix**: Appendix E is labelled historical and lands on
-  `docs/study/WITHDRAWN_ARTIFACTS_2026-10-24.md` **table W-1** (values frozen from
+  `docs/history/WITHDRAWN_ARTIFACTS_2026-10-24.md` **table W-1** (values frozen from
   commit `d5bda23e`: per-arm tokens/task, bootstrap CIs, $/task, in:out mixes, and the
   35/261 zero-usage note), which now carries `// SRC-CHECK: strict`.
 - **Tool**: `scripts/tools/audit_paper_numbers.py` gains a **block-level number
@@ -1075,7 +1075,7 @@ version caliber, adding no claims). (4) Readings: full suite **12,581 passed / 2
 > against the regenerated corpus and re-framed for PROMPT-SE 2026; (5) Mimosa deep scan
 > fully triaged (0 product-code fixes) + filelock 4.2.1 CVE upgrade. **Breaking**: anything
 > referencing withdrawn artifact paths or the old provider config must migrate (index:
-> docs/study/WITHDRAWN_ARTIFACTS_2026-10-24.md). The 180 rounds below are the per-round detail.
+> docs/history/WITHDRAWN_ARTIFACTS_2026-10-24.md). The 180 rounds below are the per-round detail.
 
 ### [Unreleased] — 2026-10-25 CL round: the remote CI red on all three versions attributed — a snapshot step that ran before pytest shifted the formatted-file count by one and knocked the registration gate over (zero LLM, $0)
 

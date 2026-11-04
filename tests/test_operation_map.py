@@ -54,6 +54,6 @@ class TestBuildOperationMapSection:
     def test_renders_symbols(self) -> None:
         omap = build_operation_map("def helper(x: int) -> int:\n    return x\n")
         section = build_operation_map_section(omap)
-        assert "操作图" in section
+        assert "Operation graph" in section
         assert "def helper(x: int) -> int" in section
-        assert "不得编造" in section
+        assert "must not invent" in section

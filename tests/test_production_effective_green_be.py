@@ -147,6 +147,91 @@ class TestWarningBodyPollution:
         assert pytest_summary_counts(output) == {"failed": 1}
 
 
+class TestLongSessionDurationSummary:
+    """GL（2026-11-04）：会话 ≥60s 的 timedelta 括注不得把真绿折叠成「无证据」。
+
+    现场：执行器内层 pytest 跑了 257s，终末摘要为
+    ``1 passed in 257.61s (0:04:17)``——R04 的行结构校验只剥计数 token 与
+    ``in <秒>s``，剩下的 ``(0:04:17)`` 使残留非空，整行被判"非权威摘要"，
+    于是 rc==0 的真实通过记成 ``no_effective_pass``。触发条件是执行时长跨过
+    60s：``EXECUTION_TIMEOUT`` 允许 [10, 300]（默认 30），而第 11 条把重试与
+    超时时长上调，因此该分支在重跑批次里是常态——判定结果不得取决于挂钟。
+    """
+
+    # pytest 侧的真实形状（``_pytest.terminal.format_session_duration``：
+    # 秒数 <60 时 f"{s:.2f}s"，否则 f"{s:.2f}s ({timedelta(int(s))})"）
+    _PYTEST_60S = "======================== 1 passed in 60.00s (0:01:00) ========================"
+    _PRODUCTION_GOLDEN = "======================== 1 passed, 1 warning in 257.61s (0:04:17) ========================"
+    _MIXED = "======= 3 passed, 1 skipped, 2 warnings in 121.50s (0:02:01) ======="
+    _ONE_DAY = "======================== 2 passed in 90061.00s (1 day, 1:01:01) ========================"
+
+    def test_boundary_60s_summary_parses(self):
+        from src.utils.pytest_output import pytest_summary_counts
+
+        assert pytest_summary_counts(self._PYTEST_60S) == {"passed": 1}
+        assert suite_has_effective_pass(self._PYTEST_60S) is True
+
+    def test_production_golden_parses_as_effective_pass(self):
+        from src.utils.pytest_output import pytest_summary_counts
+
+        assert pytest_summary_counts(self._PRODUCTION_GOLDEN) == {"passed": 1}
+        assert run_has_effective_pass(0, self._PRODUCTION_GOLDEN) is True
+
+    def test_mixed_counts_with_time_parenthetical_parse(self):
+        from src.utils.pytest_output import pytest_summary_counts
+
+        assert pytest_summary_counts(self._MIXED) == {"passed": 3, "skipped": 1}
+        assert suite_has_effective_pass(self._MIXED) is True
+
+    def test_day_rolling_timedelta_parses(self):
+        """timedelta 跨天写作 "N day(s), H:MM:SS"（含逗号与词），同样不得折叠。"""
+        from src.utils.pytest_output import pytest_summary_counts
+
+        assert pytest_summary_counts(self._ONE_DAY) == {"passed": 2}
+        assert suite_has_effective_pass(self._ONE_DAY) is True
+
+    def test_executor_reports_long_real_pass_as_passed(self, tmp_path: Any) -> None:
+        """端到端判据：执行器拿到上述输出必须 passed=True 且不写 error_info。"""
+        target = tmp_path / "calc.py"
+        target.write_text("def add(a, b):\n    return a + b\n", encoding="utf-8")
+        with patch("src.agents.executor_runtime.run_with_timeout") as mock_run:
+            mock_run.return_value = SimpleNamespace(returncode=0, stdout=self._PRODUCTION_GOLDEN, stderr="")
+            agent = ExecutorAgent(timeout=300, use_venv=True, auto_install_deps=False)
+            result = agent.execute("def test_add():\n    assert add(1, 2) == 3\n", str(target))
+        assert result["passed"] is True, result.get("error_info")
+        assert "error_info" not in result
+
+    @pytest.mark.parametrize(
+        "output",
+        [
+            # R04 负对照加时：warning 正文带时长括注也仍是正文
+            "UserWarning: 1 passed (0:04:17)",
+            # 摘要形状但含额外文字 → 非权威行
+            "1 passed in 257.61s (0:04:17) extra text",
+        ],
+    )
+    def test_non_summary_lines_stay_fail_closed(self, output: str):
+        from src.utils.pytest_output import pytest_summary_counts
+
+        assert pytest_summary_counts(output) == {}
+        assert suite_has_effective_pass(output) is False
+
+    def test_regex_tracks_pytest_own_formatter(self):
+        """形状锁：直接取 pytest 的 ``format_session_duration`` 构造摘要行。
+
+        pytest 若改掉这个私有格式化器，本例先红——不是给升级添堵，而是
+        "判定取决于运行时长"这一族缺陷只能靠 pytest 侧形状对账来发现。
+        """
+        from _pytest.terminal import format_session_duration
+
+        from src.utils.pytest_output import pytest_summary_counts
+
+        for seconds in (59.99, 60.0, 61.0, 3661.0, 90061.0, 172800.5):
+            line = f"============ 1 passed in {format_session_duration(seconds)} ============"
+            assert pytest_summary_counts(line) == {"passed": 1}, line
+            assert suite_has_effective_pass(line) is True, line
+
+
 class TestDetectionGateEffectivePass:
     """门①：gold fixed 上 rc==0 但无有效通过 → unavailable。"""
 

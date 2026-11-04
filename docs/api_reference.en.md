@@ -149,7 +149,7 @@ Sources: `.env.local` (LLM credentials, gitignored), `.env.example` (tracked tem
 | `ENABLE_RAG` | bool | false | Enable RAG case retrieval |
 | `ENABLE_MUTATION_SCORING` | bool | false | Enable mutation scoring |
 | `LLM_JSON_MODE` | str | "on" | JSON Output contract (`json_object`); `off` is the historical byte-identical caliber |
-| `LLM_THINKING_MODE` | str | "disabled" | DeepSeek reasoning chains off by default (cost protection) |
+| `LLM_THINKING_MODE` | str | "disabled" | Deep thinking off by default (cost-protection caliber; measured output per call falls 92%/94%); `enabled` is for cost stress runs only |
 | `FAULT_LOCALIZER_ENABLE` | bool | true | RGFL-style LLM reasoning localization; false falls back to spectral only |
 | `AITESTER_PROFILE` | str | unset | Preset: `safe` / `scientific` / `logic` / `fast` |
 | `AITESTER_TRACE_DIR` | str | unset | Structured JSONL tracing; when unset nothing is written (in-memory snapshot buffer only); an uncreatable directory warns and degrades to memory-only without blocking tasks |
@@ -203,8 +203,9 @@ Structured execution diagnostics: `error_info.type` may be `execution_dependency
   breaking tests / defect classification, FaultLocalizer localization) bind
   `response_format={"type": "json_object"}` when `LLM_JSON_MODE=on`; `off` replays historical
   batches byte for byte.
-- **Thinking mode**: `LLM_THINKING_MODE=disabled` by default (V4 reasoning chains are billed as
-  output); `LLM_REASONING_EFFORT` and `LLM_MAX_OUTPUT_TOKENS` are optional overrides.
+- **Thinking mode**: `LLM_THINKING_MODE` defaults to `disabled` (cost-protection caliber: on one identical prompt a single call measured 10,859→709 output tokens for deepseek and 9,640→342 for mimo). It does not match the provider-side
+  default, and cross-model comparisons share one reasoning tier; V4 reasoning chains are billed as
+  output); an explicit `disabled` is for cost stress runs only; `LLM_REASONING_EFFORT` and `LLM_MAX_OUTPUT_TOKENS` are optional overrides.
 - **Recoverable failures**: `finish_reason ∈ {length, insufficient_system_resource}` is retried;
   Python numeric expressions in JSON value positions are repaired by a bounded parse layer
   (no `eval`).

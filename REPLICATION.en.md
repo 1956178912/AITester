@@ -1,6 +1,6 @@
 # AITester Replication Guide
 
-Last updated: 2026-10-27
+Last updated: 2026-11-04
 
 How to reproduce AITester experiments: the zero-LLM recompute path, the LLM-dependent re-run
 path, and how mounting and the test gate behave. **Raw LLM responses are not distributed**, so
@@ -76,7 +76,7 @@ failures **fail hard** (non-zero exit). Two explicit escapes:
 | `REPRODUCE_ALLOW_TEST_FAILURES=1` | warn and continue on test failures |
 | `REPRODUCE_SKIP_TESTS=1` | skip the whole test gate with a prominent WARN |
 
-When skipped, conclusions **exclude test verification** — that is a disclosure, not a pass. Setting nothing keeps the default fail-closed behavior.
+When skipped, conclusions **exclude test verification** — that is a disclosure, not a pass. Setting nothing keeps the default fail-closed behavior. The one-command entry point for every test face is `python scripts/run_all_tests.py` (two profiles: `smoke` runs one item per face to prove assembly, `full` runs each face to completion for readings; the default `both` sequences them and refuses the full profile unless smoke passes end to end — see the entry-point table in `INVENTORY.md`). Both paths run with deep thinking off by default (`LLM_THINKING_MODE`; measured −92%/−94% output per call), so cross-model comparisons share one setting.
 
 ## 5. Evidence Index
 
@@ -86,7 +86,7 @@ When skipped, conclusions **exclude test verification** — that is a disclosure
 | Data provenance and licenses (synthetic templates / SWE-bench / QuixBugs) | `docs/DATA_CARD.md` |
 | Preregistered protocol (E1–E7) | `docs/preregistration.md` |
 | Measurement caliber matrix and repair readings | `docs/design/repair_caliber_matrix.md` |
-| Withdrawn-artifact mapping (2026-10-24) | `docs/study/WITHDRAWN_ARTIFACTS_2026-10-24.md` |
+| Withdrawn-artifact mapping (2026-10-24) | `docs/history/WITHDRAWN_ARTIFACTS_2026-10-24.md` |
 | Artifact checksums | `experiments/results/**/SHA256SUMS` |
 | License and citation | `LICENSE`, `CITATION.cff` |
 

@@ -25,7 +25,8 @@ plain_llm_df δ=−0.3673，结构性劣后）。本系统是科研代码，不�
   门禁均为非 LLM 组件；LLM 失败时系统保守降级。
 - **故障定位双通道**：谱系通道（Ochiai，非 LLM）+ 推理通道（`FaultLocalizerAgent`，
   消耗 LLM，`FAULT_LOCALIZER_ENABLE` 默认开，失败降级 `None`）。
-- **调用配置（ADR-0031）**：`LLM_THINKING_MODE` 默认 off（思考链计入输出计费）；
+- **调用配置（ADR-0031）**：`LLM_THINKING_MODE` 默认 off（成本保护口径：同 prompt 单条调用实测输出 −92%（deepseek）/ −94%（mimo）；
+  跨模型对比固定在同一推理档位；思考链计入输出计费）；
   `LLM_JSON_MODE` 默认 on（7 处 JSON 契约调用点绑定 `response_format=json_object`）；
   `finish_reason ∈ {length, insufficient_system_resource}` 按可恢复失败重试；JSON
   值位的 Python 数值表达式由限制求值解析层修复（无 `eval`）。

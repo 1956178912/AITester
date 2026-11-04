@@ -138,6 +138,11 @@ paper/
 # 论文中间产物归档（2026-11-02）：paper/ 只留投稿包，语料/脚本/修订记录移入此处
 # 608 MB，含 263 篇第三方论文全文，仅本地研究用，不入库
 paper_work/
+# 本地审计工作区（2026-11-04）：subprojects/emse_audit_* 是一次性评审脚本与
+# 中间产物（23 份 .py，0 份入库）。与 paper_work 同口径不入库；ruff 默认遵循
+# .gitignore，故这里忽略即同时把它移出 lint 扫描面——此前它未被忽略，`make gates`
+# 的 lint 步被 133 条草稿脚本报红（75 条 T201 print 等），把产品代码的真问题埋掉。
+subprojects/
 *.typ
 # Sensitive local artifacts (academic/review/security) — kept out of GitHub
 .gitignore-sensitive
@@ -368,3 +373,11 @@ sbom.cyclonedx.json
 scripts/figures/figures/*.png
 .tmp_secret_leak_candidates.txt
 docs/emse/
+
+# ── 智能体/工具运行态（2026-11-04）──────────────────────────────────────────
+# 两处都是本地会话工作目录，不是仓库内容：`.research-buddy/` 存研究助手运行态
+# （含 `requirements_sha256` 这类 64 位十六进制摘要——O17 密钥守卫按熵形匹配会把它
+# 当凭证，扫未跟踪文件时因此阻断提交），`project/` 存任务进度快照。二者都不是源码，
+# 忽略即可，不必为规避守卫去调低守卫灵敏度。
+.research-buddy/
+project/

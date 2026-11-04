@@ -182,9 +182,9 @@ def test_build_graphrag_prompt_section_with_data() -> None:
     )
     result = hybrid_retrieve(index, center_module="a", center_symbol="helper", query_text="helper", hops=1)
     section = build_graphrag_prompt_section(result)
-    assert "依赖子图" in section
-    assert "相关片段" in section
-    assert "符号锚点" in section
+    assert "Dependency subgraph" in section
+    assert "Relevant snippets" in section
+    assert "Symbol anchors" in section
     assert "a.helper" in section or "b.helper" in section
 
 

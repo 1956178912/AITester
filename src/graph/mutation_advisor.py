@@ -70,10 +70,12 @@ def build_mutation_prompt_section(mutation_feedback: dict[str, Any] | None) -> s
         return ""
     survived = mutation_feedback.get("survived_mutants", [])
     score = mutation_feedback.get("mutation_score")
-    lines = [f"【存活变异体清单（M7 图内变异反馈，共 {len(survived)} 条，变异得分 {score}）】"]
+    lines = [(f"[Surviving mutants (M7 in-graph mutation feedback; {len(survived)} total, mutation score {score})]")]
     for i, desc in enumerate(survived[:15], start=1):
         lines.append(f"{i}. {desc}")
-    lines.append("请优先为上述存活变异体设计能捕获的断言（边界值 / 异常路径 / 短路条件），提升变异测试得分。")
+    lines.append(
+        "Design assertions that catch the surviving mutants above first (boundary values / exception paths / short-circuit conditions) to raise the mutation score."
+    )
     return "\n".join(lines)
 
 

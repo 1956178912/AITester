@@ -83,10 +83,10 @@ class TestBuildSpecReplaceSection:
         # docstring（文档化契约）
         assert "Return the sum of a and b." in section
         # NL 规约三段 + 边界
-        assert "前置条件：a、b 为整数" in section
-        assert "后置条件：返回值等于两数之和" in section
-        assert "不变量：结果与参数顺序无关" in section
-        assert "边界情况：任一参数为 0 时返回另一参数" in section
+        assert "Precondition: a、b 为整数" in section
+        assert "Postcondition: 返回值等于两数之和" in section
+        assert "Invariant: 结果与参数顺序无关" in section
+        assert "Edge case: 任一参数为 0 时返回另一参数" in section
         # SpecExpr 形式化子句
         assert "isinstance(a, int) and isinstance(b, int)" in section
         assert "result == a + b" in section
@@ -126,8 +126,8 @@ class TestBuildSpecReplaceSection:
     def test_signature_extraction_failure_degrades_gracefully(self) -> None:
         """源码语法错误 → 无签名行，但 NL 规约照常渲染（保守降级不空转）。"""
         section = build_spec_replace_section(_FULL_PLAN, "def add(: broken", "m", "add")
-        assert "后置条件：返回值等于两数之和" in section
-        assert "函数签名：" not in section
+        assert "Postcondition: 返回值等于两数之和" in section
+        assert "Function signature: " not in section
 
     def test_function_name_fallback_to_plan(self) -> None:
         """target_function 缺省时从 test_plan.function_name 回退提取签名。"""
@@ -149,34 +149,34 @@ class TestBuildQueryReplaceBranch:
         section = build_spec_replace_section(_FULL_PLAN, _BUGGY_CODE, "m", "add")
         out = gen._build_query(_FULL_PLAN, _BUGGY_CODE, "m", None, None, spec_replace_section=section)
         # 规约文档进查询
-        assert "规格优先模式" in out
+        assert "[Spec-First mode" in out
         assert "result == a + b" in out
         # 目标代码块被替换（不是并列）
-        assert "目标代码：" not in out
+        assert "Target code:" not in out
         assert "return a - b" not in out
 
     def test_default_none_keeps_historical_query(self) -> None:
         """spec_replace_section=None（默认）→ 历史口径逐字节不变。"""
         gen = self._gen()
         out = gen._build_query(_FULL_PLAN, _BUGGY_CODE, "m", None, None)
-        assert "目标代码：" in out
+        assert "Target code:" in out
         assert "return a - b" in out
-        assert "规格优先模式" not in out
+        assert "[Spec-First mode" not in out
 
     def test_empty_string_section_keeps_historical_query(self) -> None:
         """空串 section（无规约材料）→ 历史口径（调用方不产空洞提示）。"""
         gen = self._gen()
         out = gen._build_query(_FULL_PLAN, _BUGGY_CODE, "m", None, None, spec_replace_section="")
-        assert "目标代码：" in out
-        assert "规格优先模式" not in out
+        assert "Target code:" in out
+        assert "[Spec-First mode" not in out
 
     def test_replace_still_injects_plan_json(self) -> None:
         """replace 模式保留测试计划 JSON（计划是规约的结构化载体）。"""
         gen = self._gen()
         section = build_spec_replace_section(_FULL_PLAN, _BUGGY_CODE, "m", "add")
         out = gen._build_query(_FULL_PLAN, _BUGGY_CODE, "m", None, None, spec_replace_section=section)
-        assert "测试计划（JSON）：" in out
-        assert json.loads(out.split("测试计划（JSON）：\n", 1)[1].split("\n\n", 1)[0])["function_name"] == "add"
+        assert "Test plan (JSON):" in out
+        assert json.loads(out.split("Test plan (JSON):\n", 1)[1].split("\n\n", 1)[0])["function_name"] == "add"
 
 
 # ─── 4. _generator_node 接线 ────────────────────────────────────────────────

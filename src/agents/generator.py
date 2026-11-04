@@ -106,12 +106,12 @@ def _build_df_parity_query(target_code: str, module_name: str) -> str:
     不含 plan JSON、RAG 参考、断言增强、变异反馈、分支覆盖/边界三元组等
     增强段；检出优先协议文本由 nodes 层注入，不在此处重复。
     """
-    query = f"目标代码：\n```\n{target_code}\n```"
+    query = f"Target code:\n```\n{target_code}\n```"
     if module_name:
         query += (
-            f"\n\n被测模块名：{module_name}"
-            f"\n\n【重要约束】import 语句必须使用以下模块名：`{module_name}`，"
-            f"即 `from {module_name} import ...`"
+            f"\n\nModule under test: {module_name}"
+            f"\n\n[Hard constraint] import statements must use this exact module name: "
+            f"`{module_name}`, i.e. `from {module_name} import ...`"
         )
     return query
 
@@ -435,10 +435,7 @@ class GeneratorAgent(BaseAgent):
             logger.warning("Generator 检测到 parametrize 格式错误，触发重试")
             # 重试时追加负面反馈提示，避免 LLM 用相同 query 生成相同错误
             retry_query = query + (
-                "\n\n【修正要求】上次生成的测试代码中，"
-                "pytest.mark.parametrize 的参数定义与用例元组长度不匹配。"
-                "请确保每个用例元组的元素数量与参数名列表完全一致，"
-                "不要混入 case_name 等额外字段。"
+                "\n\n[Correction required] In the previously generated test code, the pytest.mark.parametrize argument definitions do not match the case-tuple length. Make every case tuple's element count exactly match the parameter-name list, and do not mix in extra fields such as case_name."
             )
             raw = self._call_llm_with_cache(retry_query, temperature=temperature, complexity_class=complexity_class)
             code = self._extract_python_code(raw)
@@ -502,28 +499,25 @@ class GeneratorAgent(BaseAgent):
     ) -> str:
         """2.3 改进：构建复现测试生成的完整查询。"""
         query = (
-            "【复现测试生成（2.3）】以下是已知缺陷，请生成一个能稳定复现该缺陷的 pytest 测试：\n\n"
-            f"缺陷描述：\n{defect_description}\n\n"
-            f"被测代码：\n```\n{target_code}\n```"
+            "[Reproduction-test generation (2.3)] The known defect follows. Generate "
+            "a pytest test that reproduces it deterministically:\n\n"
+            f"Defect description:\n{defect_description}\n\n"
+            f"Code under test:\n```\n{target_code}\n```"
         )
         if module_name:
             query += (
-                f"\n\n被测模块名：{module_name}"
-                f"\n\n【重要约束】import 语句必须使用模块名 `{module_name}`，"
-                f"即 `from {module_name} import ...`"
+                f"\n\nModule under test: {module_name}"
+                f"\n\n[Hard constraint] import statements must use this exact module name: "
+                f"`{module_name}`, i.e. `from {module_name} import ...`"
             )
         if cross_file_modules:
             mods = ", ".join(cross_file_modules)
             query += (
-                f"\n\n【跨文件上下文】该缺陷可能涉及以下关联模块：{mods}。"
-                "复现测试应覆盖跨模块的缺陷触发路径（从入口调用到缺陷模块的完整调用链）。"
+                f"\n\n[Cross-file context] this defect may involve the related modules: {mods}. "
+                "The reproduction test must cover the cross-module defect-triggering path "
+                "(the full call chain from the entry point down to the defective module)."
             )
-        query += (
-            "\n\n要求："
-            "\n1. 测试在缺陷未修复时应失败（assert 触发缺陷的预期 vs 实际不一致）；"
-            "\n2. 测试在缺陷修复后应通过（assert 正确的行为）；"
-            "\n3. 精确覆盖缺陷触发路径（输入构造、跨模块调用顺序、边界条件）。"
-        )
+        query += "\n\nRequirements:\n1. The test must fail while the defect is unfixed (the assert's expected value mismatches the actual behaviour that triggers the defect);\n2. The test must pass once the defect is fixed (the assert holds for the correct behaviour);\n3. Cover the defect's trigger path precisely (input construction, cross-module call order, boundary conditions)."
         return query
 
     def _build_query(
@@ -570,23 +564,24 @@ class GeneratorAgent(BaseAgent):
 
         # 构建基础查询，包含测试计划和目标代码
         # P0-A-2：replace 模式用规约文档替代目标代码块（见方法 docstring）
-        code_block = spec_replace_section or f"目标代码：\n```\n{target_code}\n```"
+        code_block = spec_replace_section or f"Target code:\n```\n{target_code}\n```"
         # M-1：增广段作为独立段并列追加在 code block 之后（代码块之后、
-        # "被测模块名"之前；None/空串时不追加 → 历史查询逐字节不变）。
+        # "Module under test"之前；None/空串时不追加 → 历史查询逐字节不变）。
         augment_block = f"\n\n{spec_augment_section}" if spec_augment_section else ""
         query = (
-            f"测试计划（JSON）：\n{plan_json}\n\n"
+            f"Test plan (JSON):\n{plan_json}\n\n"
             f"{code_block}"
             f"{augment_block}"
-            f"\n\n被测模块名：{module_name}"
-            f"\n\n请根据以上计划生成完整的 pytest 测试代码。"
+            f"\n\nModule under test: {module_name}"
+            f"\n\nGenerate the complete pytest test code from the plan above."
         )
 
         # 强约束：必须使用给定的 module_name 作为 import 来源
         # 避免 LLM 随意猜测模块名导致 ModuleNotFoundError
         if module_name:
             query += (
-                f"\n\n【重要约束】import 语句必须使用以下模块名：`{module_name}`，即 `from {module_name} import ...`"
+                f"\n\n[Hard constraint] import statements must use this exact module name: "
+                f"`{module_name}`, i.e. `from {module_name} import ...`"
             )
 
         # RAG 增强：若检索到相似案例，注入参考代码
@@ -597,9 +592,11 @@ class GeneratorAgent(BaseAgent):
                 # 取 test_code 字段作为参考
                 test_code = ref.get("test_code", "")
                 if test_code:
-                    refs_text.append(f"【参考案例 {i}】\n```python\n{test_code}\n```")
+                    refs_text.append(f"[Reference case {i}]\n```python\n{test_code}\n```")
             if refs_text:
-                query += "\n\n以下历史测试用例可作为参考风格：\n" + "\n\n".join(refs_text)
+                query += "\n\nThe following historical test cases are provided as a style reference:\n" + "\n\n".join(
+                    refs_text
+                )
                 logger.info("Generator 使用了 %d 个 RAG 参考案例", len(refs_text))
 
         # 3.4 断言增强（默认关）：提取被测代码中已有 assert 作为"锚点断言"注入 prompt
@@ -607,9 +604,10 @@ class GeneratorAgent(BaseAgent):
             existing_assertions = _extract_existing_assertions(target_code)
             if existing_assertions:
                 query += (
-                    "\n\n【断言增强】被测代码中已存在以下断言，请在新测试中复用或扩展这些"
-                    "断言模式，避免生成恒真断言 / 魔数未命名 / 断言弱化等异味：\n"
-                    + "\n".join(f"- {a}" for a in existing_assertions)
+                    "\n\n[Assertion reinforcement] The code under test already contains the "
+                    "assertions below. Reuse or extend these assertion patterns in the new "
+                    "tests, and avoid smells such as vacuously-true assertions, unnamed "
+                    "magic numbers and weakened assertions:\n" + "\n".join(f"- {a}" for a in existing_assertions)
                 )
                 logger.info("Generator 断言增强注入了 %d 条现有断言", len(existing_assertions))
             else:
@@ -626,16 +624,17 @@ class GeneratorAgent(BaseAgent):
             if survived:
                 # 最多展示 5 个存活变异体（避免 prompt 过长）
                 feedback_lines.append(
-                    "【变异反馈（MutGen 式闭环）】上一轮变异测试发现以下变异体"
-                    "未被当前测试捕获（存活变异体），说明现有断言未能覆盖这些故障模式："
+                    "[Mutation feedback (MutGen-style loop)] The last mutation round found mutants that the current tests did not catch (surviving mutants), which means the existing assertions miss these failure modes:"
                 )
                 feedback_lines.extend(f"- {desc}" for desc in survived[:5])
                 feedback_lines.append(
-                    "请针对上述未捕获的故障模式补强测试：补充返回值断言、边界值比较"
-                    "（如 >=/<= 边界）、布尔语义校验，使新测试能杀死这些变异体。"
+                    "Strengthen the tests against the uncaptured failure modes above: add return-value assertions, boundary-value comparisons (e.g. >=/<= edges) and boolean-semantics checks so the new tests kill these mutants."
                 )
             if score is not None:
-                feedback_lines.append(f"当前变异得分 {score}（越高说明测试越强）；请在新测试中显著提升变异检测能力。")
+                feedback_lines.append(
+                    f"Current mutation score {score} (higher means stronger tests); substantially "
+                    "raise mutation detection in the new tests."
+                )
             if feedback_lines:
                 query += "\n\n" + "\n".join(feedback_lines)
                 logger.info(

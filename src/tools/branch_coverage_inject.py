@@ -238,16 +238,21 @@ def build_branch_coverage_prompt_section(branch_coverage: dict[str, Any] | None)
         return ""
     missing = branch_coverage.get("missing_branches", [])
     lines = [
-        f"【未覆盖分支清单（O3，共 {len(missing)} 条，分支覆盖率 {branch_coverage.get('branch_coverage', 0.0)}%）】"
+        (
+            f"[Uncovered-branch list (O3; {len(missing)} entries, branch coverage "
+            f"{branch_coverage.get('branch_coverage', 0.0)}%)]"
+        )
     ]
     # 按行号排序展示前 20 条（prompt token 预算保护）
     sorted_missing = sorted(missing, key=lambda m: m.get("line", 0))[:20]
     for m in sorted_missing:
         if m.get("to") is not None:
-            lines.append(f"- 第 {m['line']} 行 → 第 {m['to']} 行 分支未覆盖")
+            lines.append(f"- Line {m['line']} → line {m['to']} branch uncovered")
         else:
-            lines.append(f"- 第 {m.get('line', '?')} 行 部分分支未覆盖")
-    lines.append("请优先为上述未覆盖分支补充针对性用例（边界值 / 异常路径 / 短路条件），提升分支覆盖率。")
+            lines.append(f"- Line {m.get('line', '?')} partially uncovered")
+    lines.append(
+        "Add targeted cases for the uncovered branches above first (boundary values / exception paths / short-circuit conditions) to raise branch coverage."
+    )
     return "\n".join(lines)
 
 

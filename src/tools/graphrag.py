@@ -372,13 +372,13 @@ def build_graphrag_prompt_section(result: dict[str, Any]) -> str:
             f"  {e.get('source_module')}.{e.get('symbol')} → {e.get('target_module')} (line {e.get('call_line', 0)})"
             for e in subgraph[:20]  # 限 20 条防 prompt 爆炸
         ]
-        parts.append("【依赖子图】\n" + "\n".join(edge_lines))
+        parts.append("[Dependency subgraph]\n" + "\n".join(edge_lines))
     snippets: list[str] = result.get("text_snippets") or []
     if snippets:
-        parts.append("【相关片段】\n" + "\n".join(f"  {s}" for s in snippets[:10]))
+        parts.append("[Relevant snippets]\n" + "\n".join(f"  {s}" for s in snippets[:10]))
     anchors: list[tuple[str, str]] = result.get("anchor_symbols") or []
     if anchors:
-        parts.append("【符号锚点】\n" + "\n".join(f"  {mod}.{sym}" for mod, sym in anchors[:10]))
+        parts.append("[Symbol anchors]\n" + "\n".join(f"  {mod}.{sym}" for mod, sym in anchors[:10]))
     return "\n\n".join(parts)
 
 

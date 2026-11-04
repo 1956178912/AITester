@@ -38,6 +38,12 @@ from experiments import oracle_examples_replay as oe
 from experiments import spec_examples_generator as seg
 from experiments import statistical_analysis as sa
 from src.budget import pricing
+from src.budget.pricing import currency_symbol, table_currency_status
+
+# 币种符号由价目表基准币种单点推导（2026-11-04 起为人民币 ¥）：写死 `$` 的话，
+# `"$None" not in text` 这类负向守卫会随币种切换变成恒真——看着像锁，实际不判定。
+MONEY = currency_symbol(table_currency_status())
+
 
 _ROOT = Path(__file__).resolve().parents[1]
 _PRICE_TABLE = _ROOT / "experiments" / "price_table.json"
@@ -258,7 +264,8 @@ class TestEntryBlockReasonMatrix:
             ({"currency": "USD", "input_per_mtok": _NAN, "output_per_mtok": 2.0}, "price_not_finite:nan"),
             ({"currency": "USD", "input_per_mtok": _INF, "output_per_mtok": 2.0}, "price_not_finite:inf"),
             ({"currency": "USD", "input_per_mtok": -1.0, "output_per_mtok": 2.0}, "price_negative"),
-            (_entry("CNY"), "currency_not_usd:CNY"),
+            (_entry("CNY"), None),  # 2026-11-04 基准币种：CNY 按登记值原样计价
+            (_entry("EUR"), "currency_not_usd:EUR"),
             (_entry(), "currency_absent"),
             (_entry(None), "currency_absent"),
             (_entry("   "), "currency_absent"),
@@ -279,10 +286,18 @@ class TestEntryBlockReasonMatrix:
         assert pricing.entry_block_reason({}) == "entry_empty"
 
     def test_currency_beats_price_digits(self) -> None:
-        assert pricing.entry_block_reason({"currency": "CNY", "input_per_mtok": True, "output_per_mtok": 2.0}) == (
-            "currency_not_usd:CNY"
+        # 币种维必须先于价格数字维——用**非基准**币种 EUR 检验：CNY 自 2026-11-04
+        # 起是基准币种、会被放行，拿它检验会把"优先级"断言降级成恒不成立的路径。
+        assert pricing.entry_block_reason({"currency": "EUR", "input_per_mtok": True, "output_per_mtok": 2.0}) == (
+            "currency_not_usd:EUR"
         )
         assert pricing.entry_block_reason({"input_per_mtok": True, "output_per_mtok": 2.0}) == "currency_absent"
+
+    def test_baseline_currency_falls_through_to_price_digits(self) -> None:
+        """基准币种 CNY 被放行后，坏价格数字必须仍被价格维抓住（不是整条放行）。"""
+        assert pricing.entry_block_reason({"currency": "CNY", "input_per_mtok": True, "output_per_mtok": 2.0}) == (
+            "price_not_a_number:bool"
+        )
 
     def test_usd_and_zero_price_is_admissible(self) -> None:
         assert pricing.entry_block_reason(_entry("USD", input_per_mtok=0.0, output_per_mtok=0.0)) is None
@@ -335,9 +350,20 @@ class TestProductionPricingPath:
         assert usd == 3.0 and source == "price_table:m"
 
     def test_real_table_readings_unchanged(self) -> None:
-        """真表逐模型读数：deepseek-flash 1.5（唯一登记条目）。"""
-        assert pricing._usd_prices(_REAL_MODELS["deepseek-flash"]) == (0.3, 1.2)
+        """真表逐模型读数（2026-11-04 币种切换后为 CNY，非美元列）。
+
+        `estimate_usd`/`_usd_prices` 保持"只认 currency=USD"的历史契约，因此对
+        CNY 条目返回 None 是**正确**结果；CNY 金额走
+        `estimate_in_table_currency`，两侧都在此锁定，防止"美元列空了"被误读成
+        "整条计价链坏了"。
+        """
+        entry = _REAL_MODELS["deepseek-flash"]
+        assert str(entry["currency"]).upper() == "CNY"
+        assert pricing._usd_prices(entry) is None
         assert pricing._usd_prices(None) is None
+        # ¥2/M 入 + ¥8/M 出 ⇒ 1M 入 + 1M 出 = ¥10.0
+        amount, currency, source = pricing.estimate_in_table_currency("deepseek-flash", 1_000_000, 1_000_000)
+        assert amount == 10.0 and currency == "CNY" and str(source).startswith("price_table:")
 
     def test_deleted_private_helper_stays_deleted(self) -> None:
         """`_as_non_negative_float` 的域被共享谓词取代（约等于但 `inf < 0` 为假 ⇒ 收下）。"""
@@ -406,7 +432,8 @@ class TestSpecGeneratorAdmission:
             assert (cost is None) is (reason is not None)
 
     def test_real_table_readings_unchanged(self) -> None:
-        assert seg.estimate_cost_usd("deepseek-flash", _USAGE) == 1.5
+        # 函数名带 usd 是历史遗留；价目表切 CNY 后其金额为登记币种（¥10.0 = 2 + 8）
+        assert seg.estimate_cost_usd("deepseek-flash", _USAGE) == 10.0
         assert seg.price_block_reason_for("deepseek-flash") is None
         assert seg.price_block_reason_for("unknown-model") == "model_unregistered"
 
@@ -437,12 +464,21 @@ class TestEmseReportAdmission:
         assert out["total_usd"] == 0.0
 
     def test_reachable_reason_codes_unchanged(self) -> None:
-        assert rep.cost_effectiveness_block([_row("m")], price_table={"m": _entry("CNY")})["n_unpriceable_reasons"] == {
-            "currency_not_usd:CNY": 1
+        # 非基准币种仍是可达拒绝码；CNY 自 2026-11-04 起是基准币种，改由
+        # test_baseline_currency_is_priced 断言其计价路径。
+        assert rep.cost_effectiveness_block([_row("m")], price_table={"m": _entry("EUR")})["n_unpriceable_reasons"] == {
+            "currency_not_usd:EUR": 1
         }
         assert rep.cost_effectiveness_block([_row("m")], price_table={"m": _entry()})["n_unpriceable_reasons"] == {
             "currency_absent": 1
         }
+
+    def test_baseline_currency_is_priced(self) -> None:
+        """CNY 条目走计价路径：剔除归因键不写，金额进 `total_usd`（名称遗留，值为 CNY）。"""
+        block = rep.cost_effectiveness_block([_row("m")], price_table={"m": _entry("CNY")})
+        assert "n_unpriceable_reasons" not in block
+        assert block["n_priced_rows"] == 1
+        assert block["n_unpriceable_rows"] == 0
 
     def test_entry_shapes_are_named(self) -> None:
         assert rep.cost_effectiveness_block([_row("m")], price_table={"m": 5})["n_unpriceable_reasons"] == {
@@ -465,7 +501,8 @@ class TestEmseReportAdmission:
     def test_real_entry_reads_unchanged(self) -> None:
         out = rep.cost_effectiveness_block([_row("deepseek-flash")], price_table=_REAL_MODELS)
         assert out["n_priced_rows"] == 1
-        assert out["total_usd"] == 1.5
+        # CNY 基准：1M 入 + 1M 出 = ¥2 + ¥8 = 10.0（键名 total_usd 为历史遗留）
+        assert out["total_usd"] == 10.0
 
 
 # ─── 7. emse_stats_extensions：空条目/null 价改归拒绝，真读数逐位不变 ────────
@@ -556,7 +593,7 @@ class TestEmseExtensionsAdmission:
             },
             "comparisons": {},
         }
-        assert "$0.0000" in ext.render_markdown(report)
+        assert f"{MONEY}0.0000" in ext.render_markdown(report)
 
 
 # ─── 8. analyze_t1_b2_main_batch：拒绝不折 0.0，真批次逐字节不变 ─────────────
@@ -624,13 +661,13 @@ class TestAnalyzeBatchAdmission:
         text = t1.render_readme(real_b2_report)
         assert "实测估算成本=**$2.249652**" in text
         assert "无法估算" not in text
-        assert "$nan" not in text and "$inf" not in text
+        assert f"{MONEY}nan" not in text and f"{MONEY}inf" not in text
 
     def test_cny_batch_still_refuses_a_total(self) -> None:
         cny = t1.build_report(_OUT_DIR, _ORIG_DIR, {**_REAL_PRICE, "currency": "CNY"})
         assert cny["cost"]["actual_est_usd"] is None
         text = t1.render_readme(cny)
-        assert "$None" not in text and "$nan" not in text
+        assert f"{MONEY}None" not in text and f"{MONEY}nan" not in text
 
 
 # ─── 9. oracle：拒绝随工件带走机制名，渲染永不出现 `$nan` ───────────────────
@@ -771,6 +808,16 @@ class TestProtectedArtifactsUnchanged:
         assert len(text.splitlines()) > 200
 
     def test_repo_price_table_is_numerically_pristine(self) -> None:
-        """真表不得被本轮"修表"——仅登记 DeepSeek 官方 USD 价目，数值不变。"""
-        assert _REAL_MODELS["deepseek-flash"]["currency"].upper() == "USD"
+        """真表不得被本轮"修表"：币种为 2026-11-04 指令指定的 CNY，数值仍可有限核验。
+
+        本锁防的是"为了让成本列有值而改价目表"；登记币种本身由用户指令决定，
+        因此这里同时钉住币种、两家模型与价格有限性，改动任一项都会红。
+        """
+        assert _REAL_MODELS["deepseek-flash"]["currency"].upper() == "CNY"
         assert math.isfinite(float(_REAL_MODELS["deepseek-flash"]["input_per_mtok"]))
+        assert math.isfinite(float(_REAL_MODELS["deepseek-flash"]["output_per_mtok"]))
+        assert set(_REAL_MODELS) == {"deepseek-flash", "mimo-v2.6-pro"}
+        assert all(
+            str(entry["currency"]).upper() == "CNY" and entry.get("source") and entry.get("as_of")
+            for entry in _REAL_MODELS.values()
+        )

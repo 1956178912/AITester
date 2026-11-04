@@ -767,7 +767,9 @@ def _should_debug(state: AITesterState) -> str:
         and state.get("specificity_gate_verdict") == "over_red"
         and int(state.get("regeneration_count", 0)) < _MAX_REGENERATIONS
     ):
-        logger.info("AC2 特异性门：过红测试（gold fixed 上仍红），路由再生成缺陷特异测试")
+        logger.info(
+            "AC2 specificity gate: over-red test (still red on gold fixed); routing to defect-specific test regeneration"
+        )
         _trace_node(
             "_should_debug",
             decision="regenerate",

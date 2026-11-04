@@ -17,57 +17,70 @@ prints the outcome of every command instead of only the passing ones.
 
 | Criterion | Status | Evidence in the package |
 | --- | --- | --- |
-| Downloadable | yes | One archive. Every verdict is stored as JSON or Markdown and is readable without executing anything: per-task rows under `experiments/results/`, the withdrawal ledger `docs/study/WITHDRAWN_ARTIFACTS_2026-10-24.md`, the measurement-integrity notes `docs/MEASUREMENT_INTEGRITY.md`. |
+| Downloadable | yes | One archive. Every verdict is stored as JSON or Markdown and is readable without executing anything: per-task rows under `experiments/results/`, the measurement-integrity notes `docs/MEASUREMENT_INTEGRITY.md`. |
 | Archived | not yet | No DOI exists at the time of writing. The archival deposit is a submission action the authors take; until then the review mirror is the only copy, and it is anonymized. |
-| Documented | yes | This file, `REPLICATION.md` (three reproduction paths, prerequisites, calibers), Appendix A of the manuscript (artifact-to-claim map with markers for what is distributed as data versus as a command), and Appendix F (gate inventory and commands). |
-| Complete | with three disclosed gaps | See "What does not recompute" below. |
+| Documented | yes | This file, `REPLICATION.md` (three reproduction paths, prerequisites, calibers), Appendix A of the manuscript (artifact-to-claim map with markers for what is distributed as data versus as a command), and the gate inventory in the repository itself (`scripts/gates/` with the `Makefile` targets that invoke them). |
+| Complete | pending the rerun | The batch artifacts this checklist described were deleted on 2026-11-04 (see "Corpus state" below); the recomputation chain is intact but has nothing to read until the rerun lands. See "What does not recompute" below. |
 | Exercisable | yes for the tracked subset | `make install` then `make reproduce-zero-llm`. Only public modules and the shipped configuration are used. A fresh clone exercises the corpus that is tracked in git; the heavier per-task records travel with the archive rather than with the clone. |
 | Licensed | code yes, data stated here | Code: MIT, `LICENSE`. Our own artifacts: dedicated to CC0-1.0, which is recorded in this file rather than in a second license text, and belongs in the deposit. Third-party benchmarks (QuixBugs, ULT, SWE-bench) stay under their upstream licenses, and only derived outputs are redistributed. |
 
-## Two corpus counts, because they differ
+## Corpus state: measured, not inherited
 
-`git clone` and "the archive we hand to reviewers" are not the same corpus.
-Heavy per-task records are kept out of version control on purpose, so both
-counts are reported here rather than blended into one.
+`git clone` and "the archive we hand to reviewers" are not the same corpus, so
+both counts are reported rather than blended. The 2026-11-04 direction reset
+deleted every archived batch artifact, so the historical row below is kept only
+as the provenance of the numbers the paper no longer prints.
 
 | Caliber | Batch files | Trace directories | Trace records | Checksum manifests |
 | --- | --- | --- | --- | --- |
-| Working tree, which is what the review archive is built from | 34 | 21 | 1,456 | 9 |
-| Tracked in the repository, which is what a fresh clone yields | 16 | 14 | 760 | 4 |
+| Working tree, as measured 2026-11-04 after the purge | 0 | 0 | 0 | 1 (`prompt_artifacts_2026-10-15/SHA256SUMS`) |
+| Historical, before the purge (working tree / tracked) | 34 / 16 | 21 / 14 | 1,456 / 760 | 9 / 4 |
 
-Counts are `git ls-files experiments/results` for the tracked row and the glob in
-`tests/_corpus_guard.py` for the working-tree row. The guard pins the
-working-tree reading as a floor that only rises.
+The four files that remain under `experiments/results/` are the instruction
+artifact manifest (`PROMPT_ARTIFACTS.json/.md`, `PROMPT_CARD.md`, `SHA256SUMS`),
+which `prompt-artifacts-check --strict` reads; it is a documentation lock, not
+experiment data. All other readings are **[Pending rerun]**.
+
+Counts come from `git ls-files experiments/results` for the tracked row and the
+glob in `tests/_corpus_guard.py` for the working-tree row. The guard's
+`_FULL_CORPUS_*` constants (34/21/1456) are **skip floors for corpus presence**,
+not a composition count: with the corpus absent the guard reports
+`全归档语料不在场` and skips rather than failing, so a green suite here says
+nothing about corpus completeness.
 
 ## What the zero-LLM chain does as the package ships
 
-The chain runs six L0 commands and reports each of them separately. Three pass,
-and three report `skipped` because their source batch is the withdrawn main
-batch. A skip is printed as a skip; it is never folded into a pass. Checksums
-verify 8 directories covering 489 files with no failures, and list 5 directories
-as absent.
+Measured on 2026-11-04 after the corpus purge: `python scripts/reproduce_zero_llm.py`
+reports **2/6 commands passing with 4 explicit `[SKIP]`** and
+**SHA256SUMS 0 directories passing (0 files) / 0 failures / 13 absent**. The chain
+is intact; it simply has nothing to read until the rerun lands, and a command with
+nothing to read is reported as skipped, never folded into a pass.
 
-| Command | Recomputes | State in the shipped package |
+One branch was fixed to degrade like its siblings rather than crash:
+`experiments/emse_stats_extensions.py` had no precondition probe, so with the
+regenerated three-arm batches absent it exited `rc=1` on a `FileNotFoundError`
+instead of `[SKIP]`. The probe now keys on the files that script actually reads.
+
+| Command | Recomputes | State measured 2026-11-04 |
 | --- | --- | --- |
-| `experiments/emse_stats_extensions.py` | Wilson intervals, effect sizes, exact tests, bootstrap delta intervals | passes |
+| `experiments/emse_stats_extensions.py` | Wilson intervals, effect sizes, exact tests, bootstrap delta intervals | skipped (reconstructed three-arm batches absent) |
 | SWE-bench Lite infrastructure disclosure | the disclosure note that bounds the SWE-bench claim | passes |
 | citation traceability audit | that every numeric external citation carries a DOI or arXiv identifier | passes |
-| `experiments/emse_stats_report.py` | MDE and power report | skipped, source batch withdrawn |
-| `experiments/emse_optimization.py` | mutation by detection cross-check, over-red classification | skipped, source batch withdrawn |
-| `experiments/pass_matched_sensitivity.py` | declaration rate and false-fix calibers | skipped, source batch withdrawn |
+| `experiments/emse_stats_report.py` | MDE and power report | skipped (`main_batch` withdrawn) |
+| `experiments/emse_optimization.py` | mutation by detection cross-check, over-red classification | skipped (`main_batch` withdrawn) |
+| `experiments/pass_matched_sensitivity.py` | declaration rate and false-fix calibers | skipped (`main_batch` withdrawn) |
 
 ## What does not recompute
 
-1. The three historical tables above. Their per-task rows live in the withdrawn
-   archive, so they recompute only against a corpus that is no longer
-   distributed. The paper labels every such number historical, and the labels
-   are the reader's protection.
-2. The pooled pairing of the protocol-matched comparison. Its seven per-arm
-   batch files ship under `experiments/results/b1_lite_20261025/`, and the
-   pairing is recomputable from those rows, but the package carries no aggregator
-   script for them.
-3. The exclusion recompute behind the gold-material impact table. No stored
-   artifact of it survived the cleanup, and there is no standalone entry point.
+1. The pooled pairing of the protocol-matched comparison: the per-arm batch files
+   it reads are no longer in the package, and no aggregator script ships for them.
+   This is a standing gap, not a purge artifact.
+2. Aggregation behind `tab:protocol` ships its per-arm rows but no aggregator script
+   (rows regenerate, the table does not).
+
+Numbers that previously appeared here (a 3-pass reading, "489 files across 8
+directories verified", "5 absent") describe the pre-purge corpus and are withdrawn
+rather than restated.
 
 ## Entry points named by the manuscript
 
@@ -77,14 +90,44 @@ zero-LLM unless stated otherwise.
 | Entry point | Reads | Writes or reports |
 | --- | --- | --- |
 | `scripts/reproduce_zero_llm.py` | archived batch JSON | `REPRODUCTION_REPORT.md` and `.json` |
-| `experiments/statistical_analysis.py` | batch JSON, `--pool-seeds` for pooled rows | RQ1 pairing reports, including the frozen copy `docs/study/RQ1_PAIRING_REPORT_2026-10-25.md` |
+| `experiments/statistical_analysis.py` | batch JSON, `--pool-seeds` for pooled rows | RQ1 pairing reports; the frozen 2026-10-25 transcription now lives in `docs/history/` (batch-generation reading), and both copies are regenerable from the rerun |
 | `experiments/emse_stats_extensions.py` | three-arm regenerated batches | `experiments/results/emse_stats_extensions_20261025/STATS_EXTENSIONS.json` |
 | `experiments/emse_quixbugs_mutk_full.py`, `experiments/emse_ult_mutk_full.py`, `experiments/emse_test_sanity_audit.py` | archived suites, cosmic-ray mutants (L1) | `*\_mutk_full_20261015/`, `emse_test_sanity_20261015/` (absent from the mirror until run) |
 | `experiments/emse_dsl_extend_recheck.py` (`--from-corpus`) | the archived 607-clause corpus | compilability re-score without the author-side cache |
 | `experiments/emse_gold_conformance_audit.py`, `experiments/emse_ult_gold_diagnosis.py` | benchmark material, executed locally in a temporary directory | gold-side material claims |
 | `experiments/oracle_quality_replay.py`, `experiments/smt_witness_batch.py` | archived oracle responses | oracle quality and SMT witness readings |
-| `experiments/emse_docstring_anchor_analysis.py`, `experiments/emse_docstring_augment_analysis.py`, `experiments/emse_df_spec_analysis.py` | anchor and augment arms | the specification-anchor tables |
-| `experiments/analyze_t1_b2_main_batch.py` | main-batch rows | the regenerated-generation comparison |
+| `experiments/emse_docstring_anchor_analysis.py`, `experiments/emse_docstring_augment_analysis.py` | anchor and augment arms | the specification-anchor tables |
+| `scripts/run_all_tests.py` | the whole test surface (gates chain, pytest collection, LLM faces) | `REPORT.json`, `PROGRESS.json`, `SMOKE_GATE.json`, `DONE.json` in its run directory |
+
+### One command, two profiles (`scripts/run_all_tests.py`)
+
+Both profiles cover **the same set of faces**; they differ only in how much of each face
+runs. `smoke` takes one item per face — one node id per pytest file (collected with
+`--collect-only -qq`), one task per "model × arm × dataset face", plus every non-`test`
+gate target of the chain — and answers only "is the assembly intact". `full` runs the
+maximum: `make test-cov` (whole suite plus `coverage.xml`), `make gates` (the whole chain),
+and every dataset face to completion. The default profile `both` sequences them and will
+not start the full profile without a passing `SMOKE_GATE.json` whose fingerprint matches
+the matrix shape, protocol values, `HEAD` and the working-tree digest, so an edited file
+invalidates an earlier smoke run instead of letting it vouch for the change.
+
+Face names come from the dataset loader registry at run time, with three guards: an
+unregistered name is refused (the loader degrades unknown names to a three-item built-in
+face, which would fake "every face run"); faces that resolve to the same data are
+deduplicated by task count plus first/last task id, so one batch is never paid for twice;
+and a face with no data on disk is dropped with disclosure. Measured on this machine after
+dedupe: `bugsinpy` 8 + `quixbugs` 50 + `swebench` 225 + `testgeneval` 160 + `ult` 200 =
+643 tasks per model-arm cell.
+
+Unattended operation: `RUNNING.lock` refuses a concurrent run (and is taken over when the
+recorded pid is gone), `PROGRESS.json` is rewritten atomically on every tick with stage
+index, done-of-total, ETA, overall share and silent seconds, and `DONE.json` records the
+terminal state. A stage that goes silent past `--stall-after` or overruns its wall clock
+has its **whole process group** terminated and counts as one failed attempt; run-level
+caps `--max-wall-hours` and `--max-stalls` stop opening new stages and record a named
+failed stage, so a shortened run can never read as a complete one. Parallelism is capped
+at 75% of physical cores and each run gets its own empty temp root, because the inner
+pytest puts that directory on `sys.path`.
 
 ## Model-consuming paths, kept separate
 
@@ -115,6 +158,3 @@ archive.
    data-availability statement of the title page and the manuscript.
 2. Carry the CC0 dedication for the artifacts into the deposit as its own
    statement rather than as a line in this file.
-3. Decide whether the withdrawn generation stays out of the deposit. Keeping it
-   out is the current choice, and it is why the historical tables are labelled
-   rather than re-estimated.

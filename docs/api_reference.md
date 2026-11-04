@@ -130,7 +130,7 @@ false_fix 属于基准评估面，由 `experiments/_m1_metrics.py` 计算、
 | `ENABLE_RAG` | bool | false | 启用 RAG 案例检索 |
 | `ENABLE_MUTATION_SCORING` | bool | false | 启用变异评分 |
 | `LLM_JSON_MODE` | str | "on" | JSON Output 契约（`json_object`）；`off` 为历史逐字节口径 |
-| `LLM_THINKING_MODE` | str | "disabled" | DeepSeek 思考链默认关闭（成本保护） |
+| `LLM_THINKING_MODE` | str | "disabled" | 深度思考默认关闭（成本保护口径，实测单调用输出 −92%/−94%）；`disabled` 仅用于成本压测 |
 | `FAULT_LOCALIZER_ENABLE` | bool | true | RGFL 式 LLM 推理定位通道；false 退回纯谱系口径 |
 | `AITESTER_PROFILE` | str | 未设 | 预设档：`safe` / `scientific` / `logic` / `fast` |
 | `AITESTER_TRACE_DIR` | str | 未设 | 结构化 JSONL 追踪输出；未设时不写盘（仅进程内快照缓冲）；目录不可创建时告警并降级为仅内存快照，不阻断任务 |
@@ -181,7 +181,8 @@ except APIError as exc:
 - **JSON 契约**：七处调用点（Planner 计划、Debugger 补丁 / 严格重试 / 批评者 / 击穿用例 /
   缺陷分类、FaultLocalizer 定位）在 `LLM_JSON_MODE=on` 时绑定
   `response_format={"type": "json_object"}`；`off` 用于历史批次逐字节复现。
-- **思考模式**：`LLM_THINKING_MODE=disabled` 默认关闭（V4 系思考链计入输出计费）；
+- **思考模式**：`LLM_THINKING_MODE` 默认 `disabled`（成本保护口径；V4 系思考链计入输出计费，
+  实测同 prompt 单条调用输出 deepseek 10,859→709、mimo 9,640→342 token）；`enabled` 留给质量敏感批次；
   `LLM_REASONING_EFFORT` 与 `LLM_MAX_OUTPUT_TOKENS` 可选覆盖。
 - **可恢复失败**：`finish_reason ∈ {length, insufficient_system_resource}` 按可恢复失败
   重试；JSON 值位的 Python 数值表达式由限制求值解析层修复（无 `eval`）。

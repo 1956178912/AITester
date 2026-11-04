@@ -91,12 +91,12 @@ class TestExtractCompareTriplet:
         """In/NotIn → else 分支（容器成员口径；常量须在左侧否则提前 None）。"""
         t = _triplet("1 in x")
         assert t is not None
-        assert "容器" in t["expected"]
+        assert "contained" in t["expected"]
 
     def test_notin_operator_else_branch(self):
         t = _triplet("1 not in x")
         assert t is not None
-        assert "容器" in t["expected"]
+        assert "contained" in t["expected"]
 
 
 @pytest.mark.unit

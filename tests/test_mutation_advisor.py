@@ -50,15 +50,15 @@ class TestPromptSection:
         text = build_mutation_prompt_section(
             {"available": True, "survived_mutants": ["m1: 边界缺失"], "mutation_score": 0.5}
         )
-        assert "共 1 条" in text
+        assert "1 total" in text
         assert "0.5" in text
         assert "m1: 边界缺失" in text
-        assert "变异测试得分" in text
+        assert "mutation score" in text
 
     def test_capped_at_15_survivors(self):
         survived = [f"mutant-{i}" for i in range(30)]
         text = build_mutation_prompt_section({"survived_mutants": survived, "mutation_score": 0.1})
-        assert "共 30 条" in text  # 总数如实
+        assert "30 total" in text  # 总数如实
         assert "15. mutant-14" in text  # 第 15 条（索引 0..14）展示
         assert "mutant-15" not in text  # 第 16 条起截断
 

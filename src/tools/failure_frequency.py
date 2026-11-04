@@ -143,48 +143,35 @@ _ESCALATED_STRATEGY_MAP: list[dict[str, str]] = [
     {
         "category": "assertion",
         "hint": (
-            "【高频故障强化（ANNEAL-lite）】断言失败在近 N 轮中反复出现，"
-            "单纯 LLM 修复断言路径已收敛失效。请优先启用规约驱动预言增强"
-            "（oracle_enhancer）重新生成断言，而非直接修改代码逻辑。"
-            "若断言预期值本身错误，修正测试预期值而非修改被测代码。"
+            "[Recurring-failure reinforcement (ANNEAL-lite)] Assertion failures have recurred over the last N rounds, so repairing the assertion path alone has converged to nothing. Regenerate the assertions through specification-driven oracle enhancement (oracle_enhancer) instead of editing the code logic. If the expected value itself is wrong, correct the test's expectation rather than the code under test."
         ),
         "tool": "oracle_enhancer",
     },
     {
         "category": "runtime",
         "hint": (
-            "【高频故障强化（ANNEAL-lite）】运行时异常在近 N 轮中反复出现，"
-            "静态 traceback 分析已收敛失效。请优先捕获运行时变量快照"
-            "（runtime_probe）辅助定位根因，而非仅依赖异常栈文本推理。"
+            "[Recurring-failure reinforcement (ANNEAL-lite)] Runtime exceptions have recurred over the last N rounds, so static traceback analysis has converged to nothing. Capture a runtime variable snapshot (runtime_probe) to help localize the root cause instead of reasoning from the traceback text alone."
         ),
         "tool": "runtime_probe",
     },
     {
         "category": "index_error",
         "hint": (
-            "【高频故障强化（ANNEAL-lite）】索引越界在近 N 轮中反复出现，"
-            "说明边界检查修复未生效。请系统性地检查所有循环/切片/下标"
-            "访问的边界条件（空容器、负数索引、越界偏移），而非仅修复"
-            "触发异常的那一行。"
+            "[Recurring-failure reinforcement (ANNEAL-lite)] Index-out-of-range errors have recurred over the last N rounds, so the boundary-check repair did not take effect. Check the boundary conditions of every loop, slice and subscript access (empty container, negative index, out-of-range offset) instead of fixing only the line that raised."
         ),
         "tool": "boundary_audit",
     },
     {
         "category": "type_error",
         "hint": (
-            "【高频故障强化（ANNEAL-lite）】类型错误在近 N 轮中反复出现，"
-            "说明类型对齐修复未收敛。请核对所有函数调用的参数类型与"
-            "返回值类型（使用静态类型检查 mypy 层），而非仅修复触发"
-            "TypeError 的那一行。"
+            "[Recurring-failure reinforcement (ANNEAL-lite)] Type errors have recurred over the last N rounds, so the type-alignment repair has not converged. Check the argument and return types of every call (through the mypy static-check layer) instead of fixing only the line that raised the TypeError."
         ),
         "tool": "type_repair_layer",
     },
     {
         "category": "timeout",
         "hint": (
-            "【高频故障强化（ANNEAL-lite）】执行超时在近 N 轮中反复出现，"
-            "说明死循环/无限递归的终止条件修复未生效。请系统性地检查"
-            "所有循环的终止条件与递归的基准情形，添加明确的边界退出。"
+            "[Recurring-failure reinforcement (ANNEAL-lite)] Execution timeouts have recurred over the last N rounds, so the termination fix for the infinite loop or recursion did not take effect. Check the termination condition of every loop and the base case of every recursion, and add an explicit boundary exit."
         ),
         "tool": "termination_audit",
     },

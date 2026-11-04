@@ -4,7 +4,7 @@ error_classifier 组合路由补全测试（2026-09-29 批次，把 88% 分支�
 
 补齐缺口（对照 coverage.xml 实测 88.46% 的未命中分支）：
 - refine_failure_category 的边界组合：patch_syntax_invalid 标志与
-  error_category 同值/异值交叉、multi_candidate 候选数 0 / 静态通过 >0
+  error_category 同值/异值交叉、multi_candidate candidate数 0 / 静态通过 >0
   交叉、None test_passed 直通；
 - classify_llm_response 的正常/截断/空响应三分支边界；
 - get_recommended_fix_strategy 全类别查表（含带上下文的 IMPORT/SYNTAX
@@ -56,13 +56,13 @@ class TestRefineEdgeCombinations:
         assert result == "patch_syntax_invalid"
 
     def test_multi_candidate_zero_candidates_passthrough(self):
-        """candidates=0（多候选未启用）→ 不走全拒绝分支，原样返回。"""
+        """candidates=0（multi-candidate未启用）→ 不走全拒绝分支，原样返回。"""
         mcs = {"candidates": 0, "static_passed": 0}
         result = refine_failure_category("runtime", False, execution_trace=[{"iter": 1}], multi_candidate_stats=mcs)
         assert result == "runtime"
 
     def test_multi_candidate_partial_pass_keeps(self):
-        """static_passed>0 → 部分候选存活，不命中全拒绝。"""
+        """static_passed>0 → 部分candidate存活，不命中全拒绝。"""
         mcs = {"candidates": 4, "static_passed": 2}
         result = refine_failure_category("assertion", False, execution_trace=[{"iter": 1}], multi_candidate_stats=mcs)
         assert result == "assertion"
@@ -79,19 +79,19 @@ class TestRefineEdgeCombinations:
         assert result == "multi_candidate_all_rejected"
 
     def test_multi_candidate_adaptive_skip_not_misclassified(self):
-        """L3 逻辑修复（2026-09-29）：adaptive_skipped=True（单候选回退场景）
-        且候选应用失败时，不再误判为"多候选全拒绝"——原样返回传入类别。"""
+        """L3 逻辑修复（2026-09-29）：adaptive_skipped=True（单candidate回退场景）
+        且candidate应用失败时，不再误判为"multi-candidate全拒绝"——原样返回传入类别。"""
         mcs = {"candidates": 1, "static_passed": 0, "adaptive_skipped": True}
         result = refine_failure_category(
             "patch_validation_failed", False, execution_trace=[{"iter": 1}], multi_candidate_stats=mcs
         )
         # 注意：repair_history 缺 patch_applied=False 时 patch_rejected 不命中，
-        # 走到多候选判定时 adaptive_skipped 守卫跳过 → 原样返回
+        # 走到multi-candidate判定时 adaptive_skipped 守卫跳过 → 原样返回
         assert result == "patch_validation_failed"
 
     def test_multi_candidate_adaptive_skip_static_passed_still_not_misclassified(self):
-        """L3 逻辑修复：adaptive_skipped=True 且 static_passed==1（候选通过）
-        → 同样不误判（候选 1 应用失败的真实原因已归一为单候选应用失败）。"""
+        """L3 逻辑修复：adaptive_skipped=True 且 static_passed==1（candidate通过）
+        → 同样不误判（candidate 1 应用失败的真实原因已归一为单candidate应用失败）。"""
         mcs = {"candidates": 1, "static_passed": 1, "adaptive_skipped": True}
         result = refine_failure_category("logic", False, execution_trace=[{"iter": 1}], multi_candidate_stats=mcs)
         assert result == "logic"

@@ -134,16 +134,17 @@ def build_localized_edit_section(loc: dict[str, Any] | None) -> str:
     line_start = loc.get("line_start") if loc else None
     line_end = loc.get("line_end") if loc else None
     lines = [
-        "【局部编辑约束（定位锚定，LOCALIZED_EDIT_ENABLE）】",
-        f"缺陷定位在函数 `{top}`"
-        + (f"（缺陷语句 L{line_start}-L{line_end}）" if line_start is not None else "")
-        + "。",
-        "请在 edit_intents 中**只修改上述缺陷语句行附近的代码**：每条 old_str 锚点",
-        "必须落在缺陷语句行（含上下少量上下文）范围内，不得重写整个函数、不得改动",
-        "无关代码、不得整文件重写。修改点越少、越贴近缺陷行越好。",
+        "[Localized-edit constraint (position-anchored, LOCALIZED_EDIT_ENABLE)]",
+        f"The defect is localized to function `{top}`"
+        + (f" (defective statements L{line_start}-L{line_end})" if line_start is not None else "")
+        + ".",
+        "In edit_intents, **modify only the code near the defective statement lines above**: each old_str anchor",
+        "must fall inside that range (plus minimal surrounding context). Do not rewrite the whole function, do",
+        "not touch unrelated code and do not rewrite the file. The fewer the edit sites, and the closer they sit",
+        "to the defective lines, the better.",
     ]
     if len(names) > 1:
-        lines.append("候选函数（按可能性降序）：" + "、".join(f"`{n}`" for n in names) + "。")
+        lines.append("Candidate functions (most likely first): " + ", ".join(f"`{n}`" for n in names) + ".")
     return "\n".join(lines)
 
 

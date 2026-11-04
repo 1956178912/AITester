@@ -34,6 +34,7 @@ from tests._corpus_guard import (
     archived_trace_files,
     disk_trace_files,
     local_extra_trace_files,
+    require_archived_corpus,
     shape_problem,
 )
 
@@ -88,7 +89,7 @@ def test_archived_and_extra_partition_the_disk_surface():
 
 def test_shape_pins_are_reachable_on_the_archived_surface():
     """钉值必须在入库面成立——这正是旧口径做不到的事（作者机必红 / CI 必 skip）。"""
-    archived = archived_trace_files()
+    archived = require_archived_corpus()
     assert not shape_problem(len(archived), ARCHIVED_TRACE_FILES, "入库 trace 文件数")
     assert ARCHIVED_SPANS > 0 and ARCHIVED_TOKEN_ATTRS > 0 and ARCHIVED_TOKEN_FIELD_CHECKS > 0
 

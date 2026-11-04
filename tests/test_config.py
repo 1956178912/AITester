@@ -95,6 +95,49 @@ class TestRootConfigLlmLoading:
         monkeypatch.setattr(root_config.os, "getenv", self._fake_getenv({}))
         assert root_config._load_llm_configs() == []
 
+    def test_model_filter_pins_single_model(self, monkeypatch):
+        """AITESTER_LLM_MODEL_FILTER 命中时只留该模型（大小写不敏感）。
+
+        模型对比的单一变量前提：run_benchmark 按 task_index 轮询端点，不过滤时
+        "模型"随"任务"一起变；过滤落在配置层，使 worker 线程与主线程回退
+        （LLM_CONFIGS[0]）看到同一份清单。
+        """
+        env = {
+            "LLM_1_API_KEY": "k1",
+            "LLM_1_BASE_URL": "https://u1",
+            "LLM_1_MODEL_NAME": "deepseek-flash",
+            "LLM_2_API_KEY": "k2",
+            "LLM_2_BASE_URL": "https://u2",
+            "LLM_2_MODEL_NAME": "mimo-v2.6-pro",
+            "AITESTER_LLM_MODEL_FILTER": "MIMO-V2.6-PRO",
+        }
+        monkeypatch.setattr(root_config.os, "getenv", self._fake_getenv(env))
+        assert [c.model_name for c in root_config._load_llm_configs()] == ["mimo-v2.6-pro"]
+
+    def test_model_filter_unset_keeps_all(self, monkeypatch):
+        """未设过滤器 → 全量保留（历史行为零变化）。"""
+        env = {
+            "LLM_1_API_KEY": "k1",
+            "LLM_1_BASE_URL": "https://u1",
+            "LLM_1_MODEL_NAME": "m1",
+            "LLM_2_API_KEY": "k2",
+            "LLM_2_BASE_URL": "https://u2",
+            "LLM_2_MODEL_NAME": "m2",
+        }
+        monkeypatch.setattr(root_config.os, "getenv", self._fake_getenv(env))
+        assert [c.model_name for c in root_config._load_llm_configs()] == ["m1", "m2"]
+
+    def test_model_filter_miss_does_not_fall_back_to_all(self, monkeypatch):
+        """过滤器零命中 → 空列表而非回退全量（回退会让混模型静默发生）。"""
+        env = {
+            "LLM_1_API_KEY": "k1",
+            "LLM_1_BASE_URL": "https://u1",
+            "LLM_1_MODEL_NAME": "m1",
+            "AITESTER_LLM_MODEL_FILTER": "not-configured",
+        }
+        monkeypatch.setattr(root_config.os, "getenv", self._fake_getenv(env))
+        assert root_config._load_llm_configs() == []
+
 
 class TestSafeEnvParsing:
     """测试数值环境变量容错解析（坏值不再让 import 崩溃）。"""

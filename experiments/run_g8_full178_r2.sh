@@ -40,8 +40,7 @@ fi
 # ---- 公共口径（与 run_g8_resume_20261031.sh 同款）----
 export AITESTER_PROFILE=logic
 export TEMPERATURE=0.0
-export LLM_THINKING_MODE=disabled
-export MAX_ITERATIONS=3
+
 export EXECUTION_TIMEOUT=30
 export LLM_TIMEOUT=60
 export ENABLE_RAG=false

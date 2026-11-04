@@ -154,7 +154,7 @@ class TestPriceTableReturnDomain:
     def test_real_repo_table_loads_without_any_disclosure(self, capsys: pytest.CaptureFixture[str]) -> None:
         got = rep._load_price_table()
         cap = capsys.readouterr()
-        assert sorted(got) == ["deepseek-flash"], got
+        assert sorted(got) == ["deepseek-flash", "mimo-v2.6-pro"], got
         assert cap.err == "", f"真表可读时不得凭空制造读数：{cap.err}"
 
     def test_new_branches_are_not_pragma_hidden(self) -> None:
@@ -212,12 +212,16 @@ class TestPriceTableSentinel:
 
 # ─── 3. USD 闸门与不可计价机制分桶 ─────────────────────────────────────────────
 class TestCurrencyGateAndReasonBuckets:
-    def test_cny_entry_is_not_summed_into_total_usd(self) -> None:
-        table = {"cny-model": {"input_per_mtok": 0.5, "output_per_mtok": 2.0, "currency": "CNY"}}
-        out = rep.cost_effectiveness_block([_row("cny-model")], price_table=table)
-        assert out["total_usd"] == 0.0, "改前这里是 2.5：人民币被记成美元"
+    def test_non_base_currency_is_not_summed_into_total(self) -> None:
+        """2026-11-04：CNY 升为项目基准币种后不再适合当"被拒币种"样例，改用 EUR。
+
+        原意不变：登记了非基准币种的条目不得被静默折算进总额（无汇率事实源）。
+        """
+        table = {"eur-model": {"input_per_mtok": 0.5, "output_per_mtok": 2.0, "currency": "EUR"}}
+        out = rep.cost_effectiveness_block([_row("eur-model")], price_table=table)
+        assert out["total_usd"] == 0.0, "非基准币种被静默折算进总额"
         assert out["n_priced_rows"] == 0 and out["n_unpriceable_rows"] == 1
-        assert out["n_unpriceable_reasons"] == {"currency_not_usd:CNY": 1}
+        assert out["n_unpriceable_reasons"] == {"currency_not_usd:EUR": 1}
 
     def test_currency_check_is_case_insensitive(self) -> None:
         table = {"m": {"input_per_mtok": 1.0, "output_per_mtok": 1.0, "currency": "usd"}}
@@ -231,7 +235,7 @@ class TestCurrencyGateAndReasonBuckets:
         assert out["n_unpriceable_reasons"] == {"currency_absent": 1}
 
     def test_mixed_currency_rows_only_sum_usd(self) -> None:
-        table = {"us": _usd(1.0, 1.0), "cn": {"input_per_mtok": 2.0, "output_per_mtok": 2.0, "currency": "CNY"}}
+        table = {"us": _usd(1.0, 1.0), "cn": {"input_per_mtok": 2.0, "output_per_mtok": 2.0, "currency": "EUR"}}
         rows = [_row("us"), _row("cn")]
         out = rep.cost_effectiveness_block(rows, price_table=table)
         assert out["total_usd"] == 2.0 and out["n_priced_rows"] == 1 and out["n_unpriceable_rows"] == 1
@@ -414,8 +418,8 @@ class TestRealBatchReadingsUnchanged:
     def test_real_table_registers_only_usd_prices(self) -> None:
         """真表只有 USD 完整价目；非 USD / null 条目的闸门行为由合成表用例守护。"""
         table = rep._load_price_table()
-        assert set(table) == {"deepseek-flash"}
-        assert str(table["deepseek-flash"]["currency"]).upper() == "USD"
+        assert set(table) == {"deepseek-flash", "mimo-v2.6-pro"}
+        assert str(table["deepseek-flash"]["currency"]).upper() == "CNY"
 
     def test_archived_report_predates_the_cost_eff_block(self) -> None:
         """本轮不改写任何工件的前提：入库报告里没有 cost_eff 块（实测，非假设）。"""

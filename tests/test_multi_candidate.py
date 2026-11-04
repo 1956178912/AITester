@@ -41,8 +41,8 @@ class TestCandidateVariantPrompt:
 
     def test_modulo_reuse_when_more_than_variants(self):
         # 3 个变体，第 4 个候选（index=3）应复用第 1 个变体内容
-        assert "方案 A" in mc.candidate_variant_prompt(0, 4)
-        assert "方案 A" in mc.candidate_variant_prompt(3, 4)
+        assert "Option A" in mc.candidate_variant_prompt(0, 4)
+        assert "Option A" in mc.candidate_variant_prompt(3, 4)
 
 
 @pytest.mark.unit

@@ -73,33 +73,43 @@ def _build_refine_prompt(
     pre_f = findings.get("precondition") or {}
     post_f = findings.get("postcondition") or {}
     parts: list[str] = [
-        "你是一名软件测试专家，正在修正一段函数的逻辑规约。",
-        "被测函数代码如下：",
+        "You are a software-testing expert repairing the logical specification of one function.",
+        "The function under test is:",
         f"```\n{target_code}\n```",
         "",
-        "该函数当前的逻辑规约如下：",
-        f"- 前置条件 preconditions: {json.dumps(pre, ensure_ascii=False)}",
-        f"- 后置条件 postconditions: {json.dumps(post, ensure_ascii=False)}",
-        f"- 不变量 invariants: {json.dumps(inv, ensure_ascii=False)}",
+        "Its current logical specification is:",
+        f"- preconditions: {json.dumps(pre, ensure_ascii=False)}",
+        f"- postconditions: {json.dumps(post, ensure_ascii=False)}",
+        f"- invariants: {json.dumps(inv, ensure_ascii=False)}",
         "",
-        "经 SMT 求解器检验，上述规约存在逻辑矛盾（无法被任何取值同时满足）：",
+        (
+            "An SMT solver found a logical contradiction in the specification above "
+            "(no assignment satisfies all clauses at once):"
+        ),
     ]
     if pre_f.get("status") == "unsat":
-        parts.append("- 前置条件互相矛盾：不存在任何输入能同时满足全部前置条件。")
+        parts.append("- Preconditions contradict each other: no input satisfies all of them.")
     if post_f.get("status") == "unsat":
-        parts.append("- 后置条件互相矛盾：不存在任何返回值能同时满足全部后置条件。")
+        parts.append("- Postconditions contradict each other: no return value satisfies all of them.")
     parts.extend(
         [
             "",
-            "请**只修正互相矛盾的规约子句**，不要修改代码，也不要臆造代码没有的性质。要求：",
             (
-                "1. 每个前置/后置/不变量子句必须是**可机器执行的表达式**（只用 ASCII 运算符，"
-                "如 `x > 0`、`r == a + b`、`0 <= r < 100`，禁止中文描述或自然语言短语）；"
+                "Revise **only the specification clauses that contradict each other**; do not change "
+                "the code and do not invent properties the code does not have. Requirements:"
             ),
-            "2. 修正后所有前置条件必须可同时满足，所有后置条件必须可同时满足；",
-            "3. 保持与代码语义一致。",
+            (
+                "1. Every precondition, postcondition and invariant clause must be a "
+                "**machine-executable expression** (ASCII operators only, e.g. `x > 0`, "
+                "`r == a + b`, `0 <= r < 100`); natural-language descriptions are forbidden;"
+            ),
+            (
+                "2. After the revision all preconditions must be simultaneously satisfiable, and all "
+                "postconditions must be simultaneously satisfiable;"
+            ),
+            "3. Stay consistent with the semantics of the code.",
             "",
-            "只输出 JSON，不要输出任何其他文字，格式如下：",
+            "Output JSON only, with no other text, in this format:",
             '{"preconditions": ["..."], "postconditions": ["..."], "invariants": ["..."]}',
         ]
     )

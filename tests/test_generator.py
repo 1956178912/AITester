@@ -310,7 +310,7 @@ class TestAssertionAugmentation:
         code = "def foo(x):\n    assert x > 0\n    return x\n"
         agent.generate(test_plan={"function_name": "foo"}, target_code=code, module_name="test_module")
         prompt = mock_call_llm.call_args[0][0]
-        assert "断言增强" not in prompt
+        assert "[Assertion reinforcement]" not in prompt
 
     @patch("src.agents.generator._assertion_augment_enabled", return_value=True)
     @patch("src.agents.generator.BaseAgent._call_llm")
@@ -322,7 +322,7 @@ class TestAssertionAugmentation:
         code = "def foo(x):\n    assert x > 0\n    assert x != 0\n    return x\n"
         agent.generate(test_plan={"function_name": "foo"}, target_code=code, module_name="test_module")
         prompt = mock_call_llm.call_args[0][0]
-        assert "断言增强" in prompt
+        assert "[Assertion reinforcement]" in prompt
         assert "assert x > 0" in prompt
         assert "assert x != 0" in prompt
 
@@ -336,4 +336,4 @@ class TestAssertionAugmentation:
         code = "def foo():\n    return 42\n"
         agent.generate(test_plan={"function_name": "foo"}, target_code=code, module_name="test_module")
         prompt = mock_call_llm.call_args[0][0]
-        assert "断言增强" not in prompt
+        assert "[Assertion reinforcement]" not in prompt

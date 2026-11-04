@@ -163,6 +163,10 @@ class BudgetExceededError(RuntimeError):
         # 数当美元、把 token 上限当 USD 上限），可诊断性失效。
         if unit == "usd":
             message = f"LLM 预算耗尽：已消耗 ${float(consumed):.6f} >= 上限 ${float(limit):.6f}（美元口径）"
+        elif unit == "cny":
+            # 2026-11-04 币种切换：价目表与预算记账改为人民币，消息符号必须同步，
+            # 否则 ¥10 会被渲染成 $10——数值同口径、单位不同口径，是可诊断性缺陷。
+            message = f"LLM 预算耗尽：已消耗 ¥{float(consumed):.6f} >= 上限 ¥{float(limit):.6f}（人民币口径）"
         else:
             message = f"LLM 预算耗尽：已消耗 {consumed} {unit} >= 上限 {limit} {unit}"
         super().__init__(message)
@@ -227,7 +231,7 @@ class BudgetSnapshot:
             "enabled": self.enabled,
             "token_cap_override": self.token_cap_override,
             "unmeasurable_latched": self.unmeasurable_latched,
-            "unit": "tokens" if self.token_limit > 0 else ("usd" if self.usd_limit > 0 else "none"),
+            "unit": "tokens" if self.token_limit > 0 else ("cny" if self.usd_limit > 0 else "none"),
         }
 
 
@@ -333,7 +337,7 @@ def check_budget(consumed_delta_tokens: int = 0, consumed_delta_usd: float = 0.0
         )
     elif exceeded and not _was_exceeded:
         logger.warning(
-            "5.4 任务级预算超限：消耗 %d tokens / $%.4f >= 上限（tokens=%d, usd=%.4f），停止后续 LLM 调用",
+            "5.4 任务级预算超限：消耗 %d tokens / %.4f（记账单位） >= 上限（tokens=%d, cost=%.4f），停止后续 LLM 调用",
             budget.consumed_tokens,
             budget.consumed_usd,
             budget.token_limit,

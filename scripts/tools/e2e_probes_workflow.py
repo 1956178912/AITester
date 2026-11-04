@@ -56,7 +56,6 @@ from scripts.tools.e2e_probe import (
 _MAIN = str(PROJECT_ROOT / "main.py")
 _LLM_ENV_DEFAULTS: dict[str, str] = {
     "AITESTER_LLM_CACHE": "0",
-    "LLM_THINKING_MODE": "disabled",
     "TEMPERATURE": "0.0",
     "PYTHONUNBUFFERED": "1",
 }

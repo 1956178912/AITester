@@ -22,8 +22,8 @@ class TestEnumeratePaths:
         result = enumerate_paths("def f(x):\n    if x > 0:\n        return 1\n    return 0\n")
         assert len(result["paths"]) == 2
         conds = [tuple(p["conditions"]) for p in result["paths"]]
-        assert ("满足 x > 0",) in conds
-        assert ("不满足 x > 0",) in conds
+        assert ("satisfies x > 0",) in conds
+        assert ("violates x > 0",) in conds
 
     def test_if_else_two_paths(self) -> None:
         result = enumerate_paths("def f(x):\n    if x:\n        return 1\n    else:\n        return 2\n")
@@ -55,7 +55,7 @@ class TestEnumeratePaths:
         result = enumerate_paths("def f(xs):\n    for x in xs:\n        print(x)\n    return 0\n")
         assert len(result["paths"]) == 3
         labels = {p["conditions"][0] for p in result["paths"]}
-        assert labels == {"循环 0次迭代", "循环 1次迭代", "循环 N次迭代"}
+        assert labels == {"loop 0 iterations", "loop 1 iteration", "loop N iterations"}
 
     def test_truncation_at_limit(self) -> None:
         # 3 个连续 if → 8 条路径，max_paths=3 应截断
@@ -87,8 +87,8 @@ class TestBuildPathsPromptSection:
     def test_multi_path_renders(self) -> None:
         result = enumerate_paths("def f(x):\n    if x > 0:\n        return 1\n    return 0\n")
         section = build_paths_prompt_section(result)
-        assert "独立执行路径" in section
-        assert "路径 1" in section and "路径 2" in section
+        assert "Distinct execution paths" in section
+        assert "Path 1" in section and "Path 2" in section
 
     def test_none_returns_empty(self) -> None:
         assert build_paths_prompt_section(None) == ""

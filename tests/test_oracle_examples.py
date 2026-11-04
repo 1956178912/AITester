@@ -423,7 +423,8 @@ class TestGenerator:
     def test_estimate_cost_usd(self) -> None:
         usage = {"input_tokens": 1000, "output_tokens": 500}
         cost = gen.estimate_cost_usd("deepseek-flash", usage)
-        assert cost == pytest.approx(0.0003 + 0.0006, rel=1e-6)
+        # 2026-11-04 人民币高峰价：1000 in × ¥2/M + 500 out × ¥8/M
+        assert cost == pytest.approx(0.002 + 0.004, rel=1e-6)
         assert gen.estimate_cost_usd("unknown-model", usage) is None
 
 
@@ -525,7 +526,9 @@ class TestReplayHelpers:
         summary = p1.generation_summary(generations, gen.load_price_table())
         assert summary["status_counts"] == {"ok": 1}
         assert summary["llm_calls"] == 1
-        assert summary["estimated_cost_usd"] == pytest.approx(0.0009, rel=1e-6)
+        assert summary["estimated_cost_usd"] == pytest.approx(
+            0.006, rel=1e-6
+        )  # 2026-11-04 人民币高峰价（1000 in × ¥2 + 500 out × ¥8 / 1e6）
 
     def test_recover_artifact_arms_unknown_arm_fail_closed(self, tmp_path: Path) -> None:
         payload = {"results": [], "metadata": {"arms": ["plain_llm_df"]}}

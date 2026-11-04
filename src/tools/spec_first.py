@@ -159,8 +159,8 @@ def _docstring_of(source_code: str, function_name: str) -> str:
 
 
 def _bullet_list(items: list[str], label: str) -> list[str]:
-    """把一组规约子句渲染为 "- label：item" 行（空组不产行）。"""
-    return [f"- {label}：{item}" for item in items if item and item.strip()]
+    """把一组规约子句渲染为 "- label: item" 行（空组不产行）。"""
+    return [f"- {label}: {item}" for item in items if item and item.strip()]
 
 
 def module_spec_text(source_code: str) -> str:
@@ -253,33 +253,40 @@ def sole_top_level_function_name(source_code: str) -> str:
 #   - augment：目标代码**保留**，规格锚并列追加，要求"实现与规格不一致时
 #     按规格构造期望值（这是检出缺陷的关键）"——不得出现"不包含实现代码"。
 _REPLACE_HEADER: tuple[str, ...] = (
-    "【规格优先模式（Spec-First）：本提示刻意不包含实现代码】",
-    "请仅依据以下规约文档与函数签名生成测试。实现细节未知且**不得臆测**——",
-    "照猜想中的实现行为写断言（oracle-from-implementation）会系统性抹掉缺陷检出，",
-    "是本模式要杜绝的首要失败形态。",
+    "[Spec-First mode: this prompt deliberately omits the implementation code]",
+    (
+        "Generate tests from the specification document and the function signature below only. "
+        "Implementation details are unknown and **must not be guessed**: writing assertions that "
+        "mirror the guessed implementation behaviour (oracle-from-implementation) systematically "
+        "erases defect detection, and that is the primary failure shape this mode exists to prevent."
+    ),
     "",
 )
 _AUGMENT_HEADER: tuple[str, ...] = (
-    "【规格增广模式（Spec-Augment）：规格锚与目标代码并列】",
-    "上方已完整给出目标代码；以下并列追加同一函数的人类独立规格锚（独立于缺陷实现书写）。",
-    "请结合两者：当实现与规格不一致时，按规格构造期望值（这是检出缺陷的关键）。",
-    ("不得仅凭当前实现的实际行为推断期望值——那会把缺陷固化成预期（oracle-from-implementation），系统性抹掉检出。"),
+    "[Spec-Augment mode: the specification anchor sits beside the target code]",
+    (
+        "The target code is given in full above; appended below is an independently written human "
+        "specification anchor for the same function (written independently of the defective "
+        "implementation). Combine the two: where the implementation and the specification disagree, "
+        "build the expected value from the specification (that is the key to detecting the defect). "
+        "Do not infer expected values from the current implementation's behaviour alone: that freezes "
+        "the defect into the expectation (oracle-from-implementation) and systematically erases detection."
+    ),
     "",
 )
 _REPLACE_DISCIPLINE: tuple[str, ...] = (
-    "【生成纪律】",
-    "1. 每个测试必须断言上述规约中可判定的性质（后置 / 不变量 / 边界）；",
-    "2. 期望值只能来自规约与 docstring 约定；规约未覆盖的行为禁止臆造具体值——",
-    "   改用记录实际行为的探索性断言并在 docstring 标注需人工确认；",
-    "3. 输入构造必须满足前置条件（不满足前件的输入应走 pytest.raises 路径或排除）；",
-    "4. 不得访问规约与签名之外的属性 / 符号。",
+    "[Generation discipline]",
+    "1. Every test must assert a decidable property from the specification above (postcondition / invariant / boundary);",
+    "2. Expected values may come only from the specification and the docstring contract; inventing concrete values for behaviour the specification does not cover is forbidden — use exploratory assertions that record the actual behaviour instead, and flag in the docstring that the expectation needs human confirmation;",
+    "3. Input construction must satisfy the preconditions (inputs violating a precondition belong on a pytest.raises path or must be excluded);",
+    "4. Do not access attributes or symbols beyond the specification and the signature.",
 )
 _AUGMENT_DISCIPLINE: tuple[str, ...] = (
-    "【生成纪律（增广模式）】",
-    "1. 人类规格 / docstring 明确覆盖的行为，必须按规格断言——不得以当前实现的实际行为作为期望值；",
-    "2. 规格与实现不一致处即为嫌疑缺陷：按规格推导正确结果并断言（这是检出缺陷的关键）；",
-    "3. 输入构造必须满足前置条件（不满足前件的输入应走 pytest.raises 路径或排除）；",
-    "4. 可以阅读上方目标代码理解调用方式，但不得访问规约与签名之外的属性 / 符号。",
+    "[Generation discipline (augment mode)]",
+    "1. Behaviour explicitly covered by the human specification / docstring must be asserted per the specification — never use the current implementation's actual behaviour as the expected value;",
+    "2. Where the specification and the implementation disagree lies the suspected defect: derive the correct result from the specification and assert it (that is the key to detecting the defect);",
+    "3. Input construction must satisfy the preconditions (inputs violating a precondition belong on a pytest.raises path or must be excluded);",
+    "4. You may read the target code above to understand how to call it, but do not access attributes or symbols beyond the specification and the signature.",
 )
 
 
@@ -364,36 +371,36 @@ def _render_spec_section(material: dict[str, Any], module_name: str, *, augmente
     lines: list[str] = list(_AUGMENT_HEADER if augmented else _REPLACE_HEADER)
     sig = material["signature"]
     if sig:
-        lines.append(f"函数签名：{sig}")
+        lines.append(f"Function signature: {sig}")
     if module_name:
-        lines.append(f"被测模块名：{module_name}（import 必须 `from {module_name} import ...`）")
+        lines.append(f"Module under test: {module_name} (imports must use `from {module_name} import ...`)")
     if material["human_spec"]:
         # 顺序纪律：人类独立锚优先于函数 docstring（后者可能缺失/被实现污染）
         lines.append("")
-        lines.append("【独立于实现的规格锚（人类 docstring）】")
+        lines.append("[Implementation-independent spec anchor (human docstring)]")
         lines.append(material["human_spec"])
     if material["docstring"]:
         lines.append("")
-        lines.append("【文档化契约（docstring）】")
+        lines.append("[Documented contract (docstring)]")
         lines.append(material["docstring"])
 
     nl_lines: list[str] = []
-    nl_lines.extend(_bullet_list(material["pre_nl"], "前置条件"))
-    nl_lines.extend(_bullet_list(material["post_nl"], "后置条件"))
-    nl_lines.extend(_bullet_list(material["inv_nl"], "不变量"))
-    nl_lines.extend(_bullet_list(material["edge"], "边界情况"))
+    nl_lines.extend(_bullet_list(material["pre_nl"], "Precondition"))
+    nl_lines.extend(_bullet_list(material["post_nl"], "Postcondition"))
+    nl_lines.extend(_bullet_list(material["inv_nl"], "Invariant"))
+    nl_lines.extend(_bullet_list(material["edge"], "Edge case"))
     if nl_lines:
         lines.append("")
-        lines.append("【自然语言规约（期望值的唯一合法来源）】")
+        lines.append("[Natural-language specification (sole legitimate source of expected values)]")
         lines.extend(nl_lines)
 
     expr_lines: list[str] = []
-    expr_lines.extend(_bullet_list(material["pre_expr"], "前置（可执行）"))
-    expr_lines.extend(_bullet_list(material["post_expr"], "后置（可执行）"))
-    expr_lines.extend(_bullet_list(material["inv_expr"], "不变量（可执行）"))
+    expr_lines.extend(_bullet_list(material["pre_expr"], "Precondition (executable)"))
+    expr_lines.extend(_bullet_list(material["post_expr"], "Postcondition (executable)"))
+    expr_lines.extend(_bullet_list(material["inv_expr"], "Invariant (executable)"))
     if expr_lines:
         lines.append("")
-        lines.append("【可执行规约（SpecExpr 形式化子句，可直接转写为断言）】")
+        lines.append("[Executable specification (formal SpecExpr clauses, directly transcribable into assertions)]")
         lines.extend(expr_lines)
 
     lines.append("")

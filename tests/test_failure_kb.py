@@ -322,7 +322,7 @@ class TestOnlineKnowledgeBaseConsumption:
         monkeypatch.setenv("FAILURE_KB_ENABLE", "true")
         snippet = kb_debugger_snippet("syntax")
         assert snippet is not None
-        assert "失败知识库提示" in snippet
+        assert "Failure knowledge-base hint" in snippet
         assert "约束 JSON 输出" in snippet
         assert "t3" not in snippet  # 非匹配类别不注入
 

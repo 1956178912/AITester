@@ -29,8 +29,20 @@ LLM_1_API_KEY=<YOUR_DEEPSEEK_API_KEY_HERE>
 LLM_1_BASE_URL=https://api.deepseek.com/v1
 LLM_1_MODEL_NAME=deepseek-flash
 
-# 其他 LLM 厂商配置已按 2026-10-09 与 2026-10-23 要求删除；如需多端点，
-# 复制上方三行改为 LLM_2_* / LLM_3_* 递增编号（端点仍须为 DeepSeek 官方）。
+# ── 第 2 个 LLM（可选，多模型对照用）─────────────────────────────────────────
+# Xiaomi MiMo 开放平台，OpenAI 兼容端点。2026-11-04 多模型对照轮新增。
+# 注意 model id 是全小写 `mimo-v2.6-pro`（平台文档标题里的 MiMo-V2.6-Pro
+# 不是 API 取值）；同系列另有 mimo-v2.6-flash（更便宜）。
+# 优先级：LLM_1 恒为首请求（llm_client._get_llm_config 取 LLM_CONFIGS[0]），
+# 本组只在显式指定模型或首端点故障转移时生效，不会改变既有跑批默认模型。
+LLM_2_API_KEY=<YOUR_MIMO_API_KEY_HERE>
+LLM_2_BASE_URL=https://api.xiaomimimo.com/v1
+LLM_2_MODEL_NAME=mimo-v2.6-pro
+
+# 其他 LLM 厂商配置已按 2026-10-09 与 2026-10-23 要求删除；2026-11-04 起
+# 仅新增 Xiaomi MiMo（provider 登记见 src/config/config_generator.py 的
+# PROVIDER_TEMPLATES）。如需第三个端点，复制上方三行改为 LLM_3_* 递增编号，
+# 并在 PROVIDER_TEMPLATES 登记对应 provider（否则 schema 门禁会拒绝）。
 
 
 # ─── 全局温度参数（可选，未配置则默认 0.2）────────────────────────────────────

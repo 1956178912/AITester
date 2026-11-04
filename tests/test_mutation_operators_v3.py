@@ -80,7 +80,7 @@ class TestUnaryMinusRemove:
         assert m.code != _SOURCE
         ast.parse(m.code)  # 语法有效
         assert "return 1" in m.code  # -1 → 1
-        assert "一元负号移除" in m.description
+        assert "unary minus removed" in m.description
 
     def test_no_unary_minus_no_mutant(self) -> None:
         gen = MutationGenerator()

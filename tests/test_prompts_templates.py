@@ -25,7 +25,7 @@ class TestPlannerPrompt:
         assert "function_name" in PLANNER_SYSTEM_PROMPT
 
     def test_requires_json_only_output(self):
-        assert "只输出 JSON" in PLANNER_SYSTEM_PROMPT
+        assert "Output JSON only" in PLANNER_SYSTEM_PROMPT
 
 
 class TestGeneratorPrompt:
@@ -71,7 +71,7 @@ class TestOracleEnhancerPrompt:
         assert "pytest.raises" in ORACLE_ENHANCER_SYSTEM_PROMPT
 
     def test_json_array_output(self):
-        assert "JSON 数组" in ORACLE_ENHANCER_SYSTEM_PROMPT
+        assert "JSON array" in ORACLE_ENHANCER_SYSTEM_PROMPT
 
 
 class TestPromptModuleContract:

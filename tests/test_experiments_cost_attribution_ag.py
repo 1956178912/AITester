@@ -101,11 +101,11 @@ class TestSharedModelEntryReason:
 
     def test_default_stays_usd_only(self) -> None:
         """默认口径不得因新增参数而放宽——其余六个消费点仍只收明确 USD。"""
-        assert pricing.entry_block_reason(_entry("CNY")) == "currency_not_usd:CNY"
+        assert pricing.entry_block_reason(_entry("EUR")) == "currency_not_usd:EUR"
         assert pricing.entry_block_reason(_entry("USD")) is None
 
     def test_allow_non_usd_prices_in_its_own_unit(self) -> None:
-        assert pricing.entry_block_reason(_entry("CNY"), allow_non_usd=True) is None
+        assert pricing.entry_block_reason(_entry("EUR"), allow_non_usd=True) is None
         assert pricing.entry_block_reason(_entry(" cny "), allow_non_usd=True) is None
 
     def test_allow_non_usd_still_blocks_undecidable_currency(self) -> None:
@@ -114,17 +114,17 @@ class TestSharedModelEntryReason:
             assert pricing.entry_block_reason(entry, allow_non_usd=True) is not None
 
     def test_allow_non_usd_does_not_swallow_price_domain(self) -> None:
-        assert pricing.entry_block_reason(_entry("CNY", inp=-1.0), allow_non_usd=True) == "price_negative"
-        assert pricing.entry_block_reason(_entry("CNY", inp=_INF), allow_non_usd=True) == "price_not_finite:inf"
+        assert pricing.entry_block_reason(_entry("EUR", inp=-1.0), allow_non_usd=True) == "price_negative"
+        assert pricing.entry_block_reason(_entry("EUR", inp=_INF), allow_non_usd=True) == "price_not_finite:inf"
         # 默认口径下币种维优先：先回答"这不是美元金额"
-        assert pricing.entry_block_reason(_entry("CNY", inp=-1.0)) == "currency_not_usd:CNY"
+        assert pricing.entry_block_reason(_entry("EUR", inp=-1.0)) == "currency_not_usd:EUR"
 
     def test_run_b8_delegates_to_shared_predicate(self) -> None:
         cases: list[tuple[dict[str, Any], str]] = [
             ({}, "m"),
             ({"m": None}, "m"),
             ({"m": {}}, "m"),
-            ({"m": _entry("CNY")}, "m"),
+            ({"m": _entry("EUR")}, "m"),
             ({"m": _entry("__omit__")}, "m"),
             ({"m": _entry("USD", inp=_NAN)}, "m"),
             ({"m": _entry("USD")}, "m"),
@@ -210,14 +210,14 @@ class TestCostAnalysisMechanismIndex:
         assert row["missing_models"] == []
 
     def test_registered_non_usd_entry_still_prices(self) -> None:
-        row = _row({"m": _entry("CNY")})
+        row = _row({"m": _entry("EUR")})
         assert row["priced"] is True
-        assert row["currency"] == "CNY"
+        assert row["currency"] == "EUR"
         assert "unpriced_model_reasons" not in row
         assert "unpriced_currency_models" not in row
 
     def test_registered_non_usd_with_bad_price_reports_price_domain(self) -> None:
-        row = _row({"m": _entry("CNY", inp=-1.0)})
+        row = _row({"m": _entry("EUR", inp=-1.0)})
         assert row["priced"] is False
         assert row["unpriced_model_reasons"] == {"m": "price_negative"}
         assert "unpriced_currency_models" not in row
@@ -263,10 +263,10 @@ class TestRowLevelReasons:
     """条目都可用却算不出成本：成因在行级，不得只剩 `（缺: ）`。"""
 
     def test_mixed_currencies_named(self) -> None:
-        table = {"a": _entry("USD"), "b": _entry("CNY")}
+        table = {"a": _entry("USD"), "b": _entry("EUR")}
         row = _row(table, used=("a", "b"))
         assert row["priced"] is False
-        assert row["unpriced_row_reason"] == "mixed_currencies:CNY/USD"
+        assert row["unpriced_row_reason"] == "mixed_currencies:EUR/USD"
         assert "unpriced_model_reasons" not in row
 
     def test_mixed_price_pairs_named(self) -> None:
@@ -276,9 +276,11 @@ class TestRowLevelReasons:
         assert row["unpriced_row_reason"] == "mixed_price_pairs"
 
     def test_mixed_currencies_labels_sorted_and_joined(self) -> None:
-        table = {"a": _entry("USD"), "b": _entry("CNY"), "c": _entry("EUR")}
+        # 2026-11-04：CNY 升为项目基准币种后不再适合当"第三币种"样例，
+        # 改用 EUR/JPY 两个非基准币种，保持"三币种混合、标签排序后连接"的原意。
+        table = {"a": _entry("USD"), "b": _entry("EUR"), "c": _entry("JPY")}
         row = _row(table, used=("a", "b", "c"))
-        assert row["unpriced_row_reason"] == "mixed_currencies:CNY/EUR/USD"
+        assert row["unpriced_row_reason"] == "mixed_currencies:EUR/JPY/USD"
 
     def test_equal_prices_same_currency_still_prices(self) -> None:
         table = {"a": _entry("usd"), "b": _entry("USD")}
@@ -334,9 +336,9 @@ class TestRenderingByMechanism:
         assert "**价目未登记**" not in text
 
     def test_mixed_row_early_return_names_row_level(self) -> None:
-        table = {"a": _entry("USD"), "b": _entry("CNY")}
+        table = {"a": _entry("USD"), "b": _entry("EUR")}
         text = _report(sa.cost_analysis(_arm("a", "b"), {"models": table}), table)
-        assert "（行级）：mixed_currencies:CNY/USD" in text
+        assert "（行级）：mixed_currencies:EUR/USD" in text
         assert "行级混算" in text
         assert "价格域：" not in text and "条目形状：" not in text
 
@@ -347,10 +349,10 @@ class TestRenderingByMechanism:
         assert "注：1 个基线未计价——bad（缺: ；未计价机制: b（price_null））。" in text
 
     def test_partial_note_renders_row_level(self) -> None:
-        table = {"a": _entry("USD"), "b": _entry("CNY")}
+        table = {"a": _entry("USD"), "b": _entry("EUR")}
         data = {"good": _arm("a")["aitester"], "mix": _arm("a", "b")["aitester"]}
         text = _report(sa.cost_analysis(data, {"models": table}), table)
-        assert "注：1 个基线未计价——mix（缺: ；行级: mixed_currencies:CNY/USD）。" in text
+        assert "注：1 个基线未计价——mix（缺: ；行级: mixed_currencies:EUR/USD）。" in text
 
     def test_partial_note_currency_only_text_is_unchanged(self) -> None:
         table = {"a": _entry("USD"), "b": _entry(None)}

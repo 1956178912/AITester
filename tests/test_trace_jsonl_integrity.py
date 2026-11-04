@@ -2,7 +2,9 @@
 
 评审证据：`experiments/results/emse_ult_specir_probe_20261014/traces/
 ult__string_contrast_aitester_1791954227.trace.jsonl` 第 10 行为非法 JSON
-（未闭合字符串，第 201 列起，行尾停在 `min(s, key=<REDACTED>`）。
+（未闭合字符串，第 201 列起，行尾停在 `min(s, key=<REDACTED>`）。该工件已随
+2026-11-04 第 5 条数据清除撤出盘面（其在 `check_json_strict.py` 的逐路径豁免同批
+退役），此处按评审记录保留出处；本文件锁的是机制，不依赖该文件在盘。
 
 根因（两处叠加）：
 1. `TraceSession._append` 先把记录 `json.dumps` 成单行 JSON，再对**整行**

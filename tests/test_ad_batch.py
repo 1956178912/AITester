@@ -36,7 +36,14 @@ def _clear_env_and_cache(monkeypatch: pytest.MonkeyPatch) -> None:
 
 class TestOpenAIExtraBody:
     def test_default_disables_thinking(self) -> None:
-        """默认（无任何 env）= thinking disabled，其余字段不发送。"""
+        """默认（无任何 env）= thinking disabled，其余字段不发送。
+
+        2026-11-04 用户更正口径（"我记错了，默认应该关闭思考模式"）：默认回到
+        disabled。实测同一 prompt 的单条 Generator 调用，关思考后输出 token
+        deepseek 10,859→709、mimo 9,640→342（成本 −92%/−94%）；两家的
+        `thinking={"type":"disabled"}` 都被接受，所以它是**唯一**能在两家产生
+        同一设置的旋钮——`reasoning_effort` 不行（实测 mimo 的 max 档比默认更短）。
+        """
         assert _openai_extra_body() == {"thinking": {"type": "disabled"}}
 
     def test_enabled_with_effort_and_cap(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -69,10 +76,14 @@ class TestOpenAIExtraBody:
         assert _openai_extra_body() == {}
 
     def test_effort_none_is_valid(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """reasoning_effort=none 是官方关闭思考的合法口径（非非法值）。"""
+        """reasoning_effort=none 是官方关闭思考的合法口径（非非法值）。
+
+        2026-11-04 更正：默认档为 disabled，故此处期望默认模式为 disabled；
+        effort=none 作为**显式**关闭通道仍合法，两者并存由 provider 决定优先级。
+        """
         monkeypatch.setenv("LLM_REASONING_EFFORT", "none")
         assert _openai_extra_body() == {
-            "thinking": {"type": "disabled"},  # 默认模式仍在
+            "thinking": {"type": "disabled"},  # 默认模式
             "reasoning_effort": "none",
         }
 

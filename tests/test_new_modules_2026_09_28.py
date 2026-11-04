@@ -121,8 +121,8 @@ def second():
 
     def test_path_hint_populated(self):
         cfg = analyze_control_flow(_sample_code(), "process")
-        assert "控制流摘要" in cfg["path_hint"]
-        assert "分支" in cfg["path_hint"]
+        assert "Control-flow summary" in cfg["path_hint"]
+        assert "branches" in cfg["path_hint"]
 
     def test_path_hint_simple_func(self):
         code = """
@@ -130,8 +130,8 @@ def simple():
     return 42
 """
         cfg = analyze_control_flow(code, "simple")
-        # 有 1 个出口 → 摘要含 "出口 1 个"
-        assert "出口" in cfg["path_hint"]
+        # 有 1 个出口 → 摘要含 "1 exit points"
+        assert "exit points" in cfg["path_hint"]
 
 
 class TestBuildCfgPromptSection:
@@ -139,7 +139,7 @@ class TestBuildCfgPromptSection:
         cfg = analyze_control_flow(_sample_code(), "process")
         with patch("src.tools.control_flow.cfg_analysis_enabled", return_value=True):
             section = build_cfg_prompt_section(cfg)
-        assert "控制流分析" in section
+        assert "Control-flow analysis" in section
         assert "process" in section
 
     def test_disabled_returns_empty(self):

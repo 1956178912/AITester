@@ -446,10 +446,17 @@ def build_probe_prompt_section(snapshot: dict[str, Any] | None) -> str:
     """
     if not snapshot or not snapshot.get("frames"):
         return ""
-    lines = ["\n\n【运行时探针快照（RUNTIME_PROBE）】以下是测试失败时刻的局部变量实际值（从最内层帧向外）："]
+    lines = [
+        (
+            "\n\n[Runtime probe snapshot (RUNTIME_PROBE)] Actual local-variable values at the moment the "
+            "test failed (innermost frame outward):"
+        )
+    ]
     for i, frame in enumerate(snapshot["frames"], start=1):
-        lines.append(f"  帧 {i}: `{frame.get('function')}` @ {frame.get('file')}:{frame.get('line')}")
+        lines.append(f"  Frame {i}: `{frame.get('function')}` @ {frame.get('file')}:{frame.get('line')}")
         for var_name, var_value in (frame.get("locals") or {}).items():
             lines.append(f"    {var_name} = {var_value}")
-    lines.append("请基于上述运行时证据（而非静态猜测）定位根因并生成修复补丁。")
+    lines.append(
+        "Localize the root cause and produce the fix patch from the runtime evidence above, not from static guessing."
+    )
     return "\n".join(lines)

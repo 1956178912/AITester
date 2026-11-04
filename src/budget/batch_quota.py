@@ -20,7 +20,7 @@
 | 变量 | 默认 | 含义 |
 |---|---|---|
 | `AITESTER_BATCH_MAX_CALLS` | 未设 | 批次级 LLM 调用次数上限（估算上界超过它即判为阻断） |
-| `AITESTER_BATCH_MAX_USD` | 未设 | 批次级费用上限（美元；与价目表口径配合） |
+| `AITESTER_BATCH_MAX_USD` | 未设 | 批次级费用上限（变量名是历史遗留；2026-11-04 起数值按价目表**基准币种**（当前 CNY）解释，与 `COST_BUDGET_USD` 同口径） |
 | `AITESTER_RUN_PREFLIGHT` | 未设 | 跑批脚本是否强制先跑前置闸（`true` 时未过闸即中止） |
 
 零网络、零 LLM：本模块只做配置解析与算术估算，不做任何外部调用。

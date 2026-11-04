@@ -61,24 +61,24 @@ class TestPromptSection:
         text = build_branch_coverage_prompt_section(
             {"branch_coverage": 66.5, "missing_branches": [{"line": 10, "to": 14}]}
         )
-        assert "共 1 条" in text
+        assert "1 entries" in text
         assert "66.5" in text
-        assert "第 10 行 → 第 14 行" in text
+        assert "Line 10 → line 14" in text
 
     def test_missing_to_renders_partial(self):
         text = build_branch_coverage_prompt_section({"missing_branches": [{"line": 7}]})
-        assert "部分分支未覆盖" in text
+        assert "partially uncovered" in text
 
     def test_sorted_by_line_and_capped_at_20(self):
         missing = [{"line": n, "to": n + 1} for n in range(100, 130)]  # 30 条
         text = build_branch_coverage_prompt_section({"missing_branches": missing})
-        assert "共 30 条" in text  # 总数如实
-        # 20 条截断：行首 100..119 展示（`- 第 N 行`），120..129 不作为条目行首
-        assert "- 第 100 行" in text
-        assert "- 第 119 行" in text
-        assert "- 第 120 行" not in text
-        assert "- 第 129 行" not in text
-        assert text.count("\n- 第 ") == 20, "应恰好展示 20 条（Top-20 截断）"
+        assert "30 entries" in text  # 总数如实
+        # 20 条截断：行首 100..119 展示（`- Line N`），120..129 不作为条目行首
+        assert "- Line 100" in text
+        assert "- Line 119" in text
+        assert "- Line 120" not in text
+        assert "- Line 129" not in text
+        assert text.count("\n- Line ") == 20, "应恰好展示 20 条（Top-20 截断）"
 
 
 class TestMeasureBranchCoverage:

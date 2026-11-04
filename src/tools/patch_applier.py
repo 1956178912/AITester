@@ -1481,16 +1481,18 @@ def apply_patch_with_resample(
         try:
             ast.parse(new_code)
         except (SyntaxError, ValueError) as e:
-            ast_err = f"补丁应用后的代码语法错误：{getattr(e, 'msg', e)}（行 {getattr(e, 'lineno', 0)}）"
+            ast_err = f"the patched code has a syntax error: {getattr(e, 'msg', e)} (line {getattr(e, 'lineno', 0)})"
     else:
-        ast_err = "补丁未能成功应用到原始代码（无法定位目标函数或函数名不匹配）"
+        ast_err = (
+            "the patch failed to apply to the original code (target function not located, or function name mismatch)"
+        )
 
     for i in range(max_resamples):
         try:
             new_patch = resample_fn(
-                f"【补丁重采样（第 {i + 1} 次）】以下补丁存在 {ast_err}，"
-                f"请重新生成一个语法合法且能成功应用的修复补丁。"
-                f"只输出代码块，不要其他文本。\n当前补丁：\n```\n{patch[:1500]}\n```",
+                f"[Patch resample (attempt {i + 1})] The patch below has this problem: {ast_err}. "
+                f"Regenerate a syntactically valid repair patch that applies cleanly. "
+                f"Output only the code block, with no other text.\nCurrent patch:\n```\n{patch[:1500]}\n```",
                 original_code,
                 patch,
                 ast_err,
@@ -1514,9 +1516,11 @@ def apply_patch_with_resample(
         try:
             ast.parse(new_code)
         except (SyntaxError, ValueError) as e:
-            ast_err = f"重采样后的补丁仍有语法错误：{getattr(e, 'msg', e)}（行 {getattr(e, 'lineno', 0)}）"
+            ast_err = (
+                f"the resampled patch still has a syntax error: {getattr(e, 'msg', e)} (line {getattr(e, 'lineno', 0)})"
+            )
         else:
-            ast_err = "重采样后的补丁仍未能成功应用"
+            ast_err = "the resampled patch still failed to apply"
 
     # 所有重采样都失败：保守返回原代码（不引入半应用状态）
     logger.warning("2.2 重采样 %d 次后仍失败，保留原代码", stats["resample_count"])

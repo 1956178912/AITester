@@ -154,7 +154,6 @@ def _run_arm(
         **os.environ,
         "AITESTER_PROFILE": "logic",
         "TEMPERATURE": "0",
-        "LLM_THINKING_MODE": "disabled",
         "AITESTER_LLM_CACHE": "0",  # 冷缓存：臂间零复用
         "BENCHMARK_PARALLELISM": "4",
         "MAX_ITERATIONS": "3",

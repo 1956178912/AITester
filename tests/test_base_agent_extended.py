@@ -17,7 +17,6 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.agents.base_agent import (
-    _DEFAULT_LLM_MAX_RETRIES,
     BaseAgent,
     _get_all_api_configs,
     _get_llm_config,
@@ -188,7 +187,10 @@ class TestCallLlmWithCache:
         agent._call_llm = MagicMock(return_value="llm response")
         result = agent._call_llm_with_cache("hello")
         assert result == "llm response"
-        agent._call_llm.assert_called_once_with("hello", _DEFAULT_LLM_MAX_RETRIES)
+        # 转发**未解析哨兵**：重试次数由 _call_llm 在调用时按 LLM_MAX_RETRIES 惰性
+        # 解析。若这里断言导入期常量，就把"默认参数在 import 时绑定"的旧病灶锁成了
+        # 契约（.env.local / monkeypatch 常在导入之后才设值）。
+        agent._call_llm.assert_called_once_with("hello", None)
         # 缓存文件已写入且内容完整
         cache_file = _cache_file_for("hello", "sys prompt", cache_env)
         assert cache_file.exists()

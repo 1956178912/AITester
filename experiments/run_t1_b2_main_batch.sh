@@ -298,7 +298,7 @@ payload = {
                "--skip-stats --output-dir <ROOT>/experiments/results/main_batch --staging-dir <OUT>/_staging_seed<seed>",
     },
     "env": {
-        "AITESTER_PROFILE": "logic", "TEMPERATURE": "0.0", "LLM_THINKING_MODE": "disabled",
+        "AITESTER_PROFILE": "logic", "TEMPERATURE": "0.0",
         "MAX_ITERATIONS": "3", "LLM_TIMEOUT": "60", "EXECUTION_TIMEOUT": "30",
         "ENABLE_PLANNER": "true", "ENABLE_DEBUGGER": "true", "ENABLE_RAG": "false",
         "BENCHMARK_PARALLELISM": str(parallelism), "AITESTER_LLM_CACHE": "0",
@@ -347,13 +347,13 @@ for SEED in ${SEEDS}; do
         echo "START_ISO_UTC=${SEED_START_ISO}"
         echo "ROOT=${ROOT} HEAD=${ROOT_HEAD}"
         echo "CMD=${PY} -m experiments.run_main_batch --dataset synthetic --task-count 87 --max-pattern-repeat 2 --seed ${SEED} --baselines aitester,plain_llm,plain_llm_df --skip-stats --output-dir ${ROOT}/experiments/results/main_batch --staging-dir ${SEED_STAGING}"
-        echo "ENV=AITESTER_PROFILE=logic TEMPERATURE=0.0 LLM_THINKING_MODE=disabled MAX_ITERATIONS=3 LLM_TIMEOUT=60 EXECUTION_TIMEOUT=30 ENABLE_PLANNER=true ENABLE_DEBUGGER=true ENABLE_RAG=false BENCHMARK_PARALLELISM=${PARALLELISM} AITESTER_LLM_CACHE=0 AITESTER_CACHE_NAMESPACE=${NS} AITESTER_TRACE_DIR=${SEED_TRACE} COST_BUDGET_ENABLE=true COST_BUDGET_TOKENS=200000 COST_BUDGET_USD=1.0 AITESTER_BATCH_MAX_CALLS=6000 AITESTER_BATCH_MAX_USD=6.0 AITESTER_RUN_PREFLIGHT=true"
+        echo "ENV=AITESTER_PROFILE=logic TEMPERATURE=0.0 MAX_ITERATIONS=3 LLM_TIMEOUT=60 EXECUTION_TIMEOUT=30 ENABLE_PLANNER=true ENABLE_DEBUGGER=true ENABLE_RAG=false BENCHMARK_PARALLELISM=${PARALLELISM} AITESTER_LLM_CACHE=0 AITESTER_CACHE_NAMESPACE=${NS} AITESTER_TRACE_DIR=${SEED_TRACE} COST_BUDGET_ENABLE=true COST_BUDGET_TOKENS=200000 COST_BUDGET_USD=1.0 AITESTER_BATCH_MAX_CALLS=6000 AITESTER_BATCH_MAX_USD=6.0 AITESTER_RUN_PREFLIGHT=true"
     } > "${SEED_LOG}"
     toctou_check >> "${SEED_LOG}" 2>&1 || { echo "✗ TOCTOU 守卫失败（跑批期间源码变化）——中止" >&2; exit 3; }
     set +e
     (
         cd "${ROOT}" && env \
-            AITESTER_PROFILE=logic TEMPERATURE=0.0 LLM_THINKING_MODE=disabled \
+            AITESTER_PROFILE=logic TEMPERATURE=0.0 \
             MAX_ITERATIONS=3 LLM_TIMEOUT=60 EXECUTION_TIMEOUT=30 \
             ENABLE_PLANNER=true ENABLE_DEBUGGER=true ENABLE_RAG=false \
             "BENCHMARK_PARALLELISM=${PARALLELISM}" AITESTER_LLM_CACHE=0 \

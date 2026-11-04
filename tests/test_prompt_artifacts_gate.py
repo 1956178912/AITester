@@ -67,8 +67,8 @@ class TestCollector:
         """内联段落用 AST 字面量抽取，不依赖运行期 state（无需构造工作流状态）。"""
         detection = _load_inline_literal("src.graph.nodes", "_detection_first_section")
         over_red = _load_inline_literal("src.graph.nodes", "_over_red_section")
-        assert "检出优先" in detection and "先红后绿" in detection
-        assert "过红" in over_red and "特异" in over_red
+        assert "Detection first: red before green" in detection
+        assert "Over-red repair" in over_red and "specific" in over_red
 
     def test_injection_calibers_are_recorded(self):
         """每个 artifact 必须记录注入口径（env + 默认值 + 关闭时行为）。"""

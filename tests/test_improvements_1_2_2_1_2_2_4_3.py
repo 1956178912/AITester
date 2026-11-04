@@ -365,7 +365,7 @@ def foo(
         def fake_resample(query, orig, patch, ast_error):
             calls["n"] += 1
             # 确认 ast_error 信息被注入
-            assert "语法" in ast_error or "无法" in ast_error
+            assert "syntax error" in ast_error or "not located" in ast_error
             return "def foo():\n    return 2\n"
 
         code, _applied, stats = apply_patch_with_resample(

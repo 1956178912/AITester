@@ -94,21 +94,21 @@ class TestSectionContent:
 
     def test_instructs_bounded_inputs(self, text: str) -> None:
         """（a）输入规模受控：针对"缺陷实现不终止"这一实测主因。"""
-        assert "输入规模受控" in text
-        assert "挂起" in text or "超时" in text
+        assert "bounded input size" in text
+        assert "hangs" in text or "times out" in text
 
     def test_instructs_contract_based_expectations(self, text: str) -> None:
         """（b）期望值来自契约，禁止照抄实现当前行为。"""
-        assert "契约" in text
-        assert "照抄" in text
+        assert "contract" in text
+        assert "copy" in text
 
     def test_instructs_preserving_specificity(self, text: str) -> None:
         """（c）保持特异性，禁止放松断言换通过。"""
-        assert "特异" in text
-        assert "放松" in text
+        assert "specificity" in text
+        assert "relax" in text
 
     def test_forbids_copying_buggy_behavior(self, text: str) -> None:
-        assert "缺陷" in text
+        assert "defect" in text
 
 
 class TestSnapshotKeyRegistered:

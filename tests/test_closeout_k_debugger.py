@@ -119,8 +119,8 @@ class TestCrossFileContexts:
         }
         _, calls = _run_debug(monkeypatch, [_reply()], cross_file_contexts=contexts)
         query = calls[0]["query"]
-        assert "【依赖模块 mod_a（调用链聚焦视图）】" in query
-        assert "【依赖模块 mod_b（调用链聚焦视图）】" in query
+        assert "[Dependent module mod_a (call-chain focused view)]" in query
+        assert "[Dependent module mod_b (call-chain focused view)]" in query
         assert "mod_c" not in query
 
     def test_single_module_slice_and_injection(self, monkeypatch: pytest.MonkeyPatch):
@@ -132,10 +132,10 @@ class TestCrossFileContexts:
         contexts = {"mod_a": "A" * 2500, "mod_empty": ""}
         _, calls = _run_debug(monkeypatch, [_reply()], cross_file_contexts=contexts)
         query = calls[0]["query"]
-        assert "【依赖模块 mod_a（调用链聚焦视图）】" in query
+        assert "[Dependent module mod_a (call-chain focused view)]" in query
         assert "A" * 2000 in query
         assert "A" * 2001 not in query
-        assert "【依赖模块 mod_empty（调用链聚焦视图）】\n```python\n\n```" in query
+        assert "[Dependent module mod_empty (call-chain focused view)]\n```python\n\n```" in query
 
 
 @pytest.mark.unit
@@ -151,7 +151,7 @@ class TestContractDowngradeChain:
         result, calls = _run_debug(monkeypatch, [_reply()], contract_reject_feedback=feedback)
         query = calls[0]["query"]
         assert "【极简档上下文】signature:add(a,b)" in query
-        assert "【契约守卫负面反馈】" in query
+        assert "[Naming-contract violation feedback]" in query
         assert "HELPER_CONST" in query
         # minimal 档位温度映射为 0.0（降级层更低温度，减少创造性改写）
         assert calls[0]["temperature"] == 0.0
@@ -201,8 +201,8 @@ class TestResponseFormatRetry:
     def test_strict_retry_success_replaces_raw_response(self, monkeypatch: pytest.MonkeyPatch):
         _, calls = _run_debug(monkeypatch, ["这不是 JSON，只是一段自然语言回答", _reply()])
         assert len(calls) == 2
-        assert "【格式要求】只输出一个 JSON 对象" in calls[0]["query"] + calls[1]["query"]
-        assert "【格式要求】" not in calls[0]["query"]  # 首次 prompt 不含严格指令
+        assert "[Output format] Output exactly one JSON object" in calls[0]["query"] + calls[1]["query"]
+        assert "[Output format]" not in calls[0]["query"]  # 首次 prompt 不含严格指令
         assert calls[1]["json_mode"] is True
         # 严格重试成功的响应被采用：第二次调用文本是原 query + 格式要求
         assert calls[1]["query"].startswith(calls[0]["query"])
@@ -227,8 +227,8 @@ class TestFailureKbAndRagInjection:
         refs = [{"original_code": "def add(a, b): return a - b", "patch": "def add(a, b): return a + b"}]
         _, calls = _run_debug(monkeypatch, [_reply()], rag_references=refs)
         query = calls[0]["query"]
-        assert "以下历史修复案例可作为参考" in query
-        assert "【判断指令】" in query
+        assert "historical repair cases below are available as references" in query
+        assert "[Instruction]" in query
         assert "def add(a, b): return a + b" in query
 
 
@@ -251,7 +251,7 @@ class TestAdversarialCriticRegeneration:
         new_patch = "```python\ndef add(a, b):\n    return a + b  # v2\n```"
         result, calls = _run_debug(monkeypatch, self._responses(new_patch))
         assert len(calls) == 4
-        assert "【批评者反馈（3.1）】" in calls[3]["query"]
+        assert "[Critic feedback (3.1)]" in calls[3]["query"]
         assert "算 add([], []) 期望抛错却返回 0" in calls[3]["query"]
         assert "v2" in result["patch"]
         assert result["adversarial_check"]["all_passed"] is False
@@ -303,7 +303,7 @@ class TestProbeSnapshotLocate:
         assert focus["probe_sourced"] is True
         assert focus["function_name"] == "add"
         assert focus["line"] == 2
-        assert "P1 探针快照" in calls[0]["query"]
+        assert "P1 probe snapshot" in calls[0]["query"]
         assert "`add()`" in calls[0]["query"]
 
     def test_probe_frame_at_module_level_returns_unfocused(self):
@@ -332,8 +332,8 @@ class TestEditIntentLocalized:
         )
         result, calls = _run_debug(monkeypatch, [response], localization=localization)
         query = calls[0]["query"]
-        assert "【结构化编辑意图（必须输出）】" in query
-        assert "【局部编辑约束（定位锚定，LOCALIZED_EDIT_ENABLE）】" in query
+        assert "[Structured edit intents (required)]" in query
+        assert "[Localized-edit constraint (position-anchored, LOCALIZED_EDIT_ENABLE)]" in query
         # 确定性引擎把整文件 patch 替换为最小编辑结果
         assert result["edit_intent_status"]["ok"] is True
         assert result["edit_intent_status"]["applied"] == 1

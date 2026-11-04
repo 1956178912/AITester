@@ -285,7 +285,7 @@ class TestBuildQueryBranches:
         gen = GeneratorAgent()
         out = gen._build_query({"name": "t"}, "def f():\n    pass\n", "", None, None)
         # 无 module_name 时不注入 import 约束段
-        assert "【重要约束】import 语句必须使用" not in out
+        assert "[Hard constraint] import statements must use" not in out
 
     def test_rag_references_injected(self, monkeypatch):
         from src.agents.generator import GeneratorAgent
@@ -296,8 +296,8 @@ class TestBuildQueryBranches:
             {"test_code": "def test_b():\n    assert 2\n"},
         ]
         out = gen._build_query({"name": "t"}, "code", "m", refs, None)
-        assert "参考案例 1" in out
-        assert "参考案例 2" in out
+        assert "Reference case 1" in out
+        assert "Reference case 2" in out
 
     def test_rag_empty_test_code_skipped(self, monkeypatch):
         from src.agents.generator import GeneratorAgent
@@ -305,7 +305,7 @@ class TestBuildQueryBranches:
         gen = GeneratorAgent()
         refs = [{"test_code": ""}]  # 空 test_code → 不注入
         out = gen._build_query({"name": "t"}, "code", "m", refs, None)
-        assert "参考案例" not in out
+        assert "[Reference case" not in out
 
     def test_rag_capped_at_max_references(self, monkeypatch):
         """超过 3 条参考时截断保留前 3 条。"""
@@ -314,8 +314,8 @@ class TestBuildQueryBranches:
         gen = GeneratorAgent()
         refs = [{"test_code": f"def test_{i}():\n    pass\n"} for i in range(5)]
         out = gen._build_query({"name": "t"}, "code", "m", refs, None)
-        assert "参考案例 1" in out and "参考案例 3" in out
-        assert "参考案例 4" not in out and "参考案例 5" not in out
+        assert "Reference case 1" in out and "Reference case 3" in out
+        assert "Reference case 4" not in out and "Reference case 5" not in out
 
     def test_assertion_augment_injection(self, monkeypatch):
         """ASSERTION_AUGMENT_ENABLE=true 且被测代码含 assert → 注入锚点断言。"""
@@ -324,7 +324,7 @@ class TestBuildQueryBranches:
         monkeypatch.setenv("ASSERTION_AUGMENT_ENABLE", "true")
         gen = GeneratorAgent()
         out = gen._build_query({"name": "t"}, "def f():\n    assert 1\n", "m", None, None)
-        assert "断言增强" in out
+        assert "[Assertion reinforcement]" in out
 
     def test_assertion_augment_no_assertions_skipped(self, monkeypatch):
         """ASSERTION_AUGMENT_ENABLE=true 但被测代码无 assert → 不注入。"""
@@ -333,7 +333,7 @@ class TestBuildQueryBranches:
         monkeypatch.setenv("ASSERTION_AUGMENT_ENABLE", "true")
         gen = GeneratorAgent()
         out = gen._build_query({"name": "t"}, "def f():\n    return 1\n", "m", None, None)
-        assert "断言增强" not in out
+        assert "[Assertion reinforcement]" not in out
 
     def test_assertion_augment_disabled_no_injection(self, monkeypatch):
         """ASSERTION_AUGMENT_ENABLE 默认关 → 不注入（历史口径）。"""
@@ -342,7 +342,7 @@ class TestBuildQueryBranches:
         monkeypatch.delenv("ASSERTION_AUGMENT_ENABLE", raising=False)
         gen = GeneratorAgent()
         out = gen._build_query({"name": "t"}, "def f():\n    assert 1\n", "m", None, None)
-        assert "断言增强" not in out
+        assert "[Assertion reinforcement]" not in out
 
     def test_mutation_feedback_survived_injected(self, monkeypatch):
         from src.agents.generator import GeneratorAgent
@@ -351,7 +351,7 @@ class TestBuildQueryBranches:
         gen = GeneratorAgent()
         fb = {"survived_mutants": [f"m{i}" for i in range(7)], "mutation_score": 0.4}
         out = gen._build_query({"name": "t"}, "code", "m", None, fb)
-        assert "变异反馈" in out
+        assert "[Mutation feedback (MutGen-style loop)]" in out
         assert "m0" in out and "m4" in out  # 前 5 条
         assert "m5" not in out and "m6" not in out  # 截断
         assert "0.4" in out  # score 注入
@@ -364,21 +364,21 @@ class TestBuildQueryBranches:
         fb = {"survived_mutants": [], "mutation_score": 0.9}
         out = gen._build_query({"name": "t"}, "code", "m", None, fb)
         assert "0.9" in out
-        assert "存活变异体" not in out
+        assert "[Mutation feedback" not in out
 
     def test_mutation_feedback_none_no_injection(self, monkeypatch):
         from src.agents.generator import GeneratorAgent
 
         gen = GeneratorAgent()
         out = gen._build_query({"name": "t"}, "code", "m", None, None)
-        assert "变异反馈" not in out
+        assert "[Mutation feedback" not in out
 
     def test_mutation_feedback_empty_dict_no_injection(self, monkeypatch):
         from src.agents.generator import GeneratorAgent
 
         gen = GeneratorAgent()
         out = gen._build_query({"name": "t"}, "code", "m", None, {})
-        assert "变异反馈" not in out
+        assert "[Mutation feedback" not in out
 
 
 # ─── _build_repro_prompt 分支 ──────────────────────────────────────────────
@@ -392,7 +392,7 @@ class TestBuildReproPromptBranches:
 
     def test_basic_prompt(self):
         out = self._build(defect_description="缺陷描述", target_code="code", module_name="", cross_file_modules=None)
-        assert "复现测试" in out
+        assert "Reproduction-test generation" in out
         assert "缺陷描述" in out
 
     def test_module_name_injected(self):
@@ -402,14 +402,14 @@ class TestBuildReproPromptBranches:
 
     def test_cross_file_modules_injected(self):
         out = self._build(defect_description="d", target_code="c", module_name="m", cross_file_modules=["modA", "modB"])
-        assert "跨文件上下文" in out
+        assert "[Cross-file context]" in out
         assert "modA" in out and "modB" in out
 
     def test_no_cross_file_no_section(self):
         out = self._build(defect_description="d", target_code="c", module_name="m", cross_file_modules=None)
-        assert "跨文件上下文" not in out
+        assert "[Cross-file context]" not in out
         out2 = self._build(defect_description="d", target_code="c", module_name="m", cross_file_modules=[])
-        assert "跨文件上下文" not in out2
+        assert "[Cross-file context]" not in out2
 
 
 # ─── generate() 的 branch_coverage / boundary_triplets 注入分支（mock LLM）──

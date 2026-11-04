@@ -844,7 +844,7 @@ OpenReview 无记录**不等于未录用**——arXiv 元数据 Comments 字段�
   路径存在、数字不在，`paper-audit --strict` 仍报「200+ 条声明、可追溯率 100%」。这是
   「存在性冒充内容」，与历轮收口的沉默分叉同形。
 - **修复**：附录 E 改 historical 标注 + 落点
-  `docs/study/WITHDRAWN_ARTIFACTS_2026-10-24.md` **表 W-1**（从 commit `d5bda23e` 冻结原值：
+  `docs/history/WITHDRAWN_ARTIFACTS_2026-10-24.md` **表 W-1**（从 commit `d5bda23e` 冻结原值：
   三臂 tokens/task、bootstrap CI、$/task、in:out 混合比、35/261 零记账行说明），并给该表加
   `// SRC-CHECK: strict`。
 - **工具**：`scripts/tools/audit_paper_numbers.py` 新增**块级数字存在性**判据——高精度数字
@@ -891,7 +891,7 @@ OpenReview 无记录**不等于未录用**——arXiv 元数据 Comments 字段�
 > （约 300 例语料前提具名 skip）；④ 论文 v0.5/v0.6 按新语料重写并迁移到 PROMPT-SE 2026
 > 叙事（instruction artifact 为第一研究问题）；⑤ Mimosa 深扫 160 项全分诊（0 项需改产品代码）
 > + filelock 4.2.1 漏洞升级。**破坏性**：引用旧工件路径或旧 provider 配置的下游全部失效
-> （撤回族索引见 docs/study/WITHDRAWN_ARTIFACTS_2026-10-24.md）。以下 180 轮为逐轮明细。
+> （撤回族索引见 docs/history/WITHDRAWN_ARTIFACTS_2026-10-24.md）。以下 180 轮为逐轮明细。
 
 ### [Unreleased] — 2026-10-25 CL 轮：远端 CI 三档全红归因——写在 pytest 前的快照步骤把格式化计数 +1，登记门禁当场漂移（零 LLM，$0）
 

@@ -12,7 +12,7 @@
 #
 # 协议（固定，验证性；口径见 README）：
 #   --dataset quixbugs --task-limit 20 --seed 42
-#   AITESTER_PROFILE=logic TEMPERATURE=0.0 LLM_THINKING_MODE=disabled
+#   AITESTER_PROFILE=logic TEMPERATURE=0.0
 #   BENCHMARK_PARALLELISM=4 AITESTER_BATCH_MAX_CALLS=100
 #   COST_BUDGET_ENABLE=true COST_BUDGET_USD=1 AITESTER_LLM_CACHE=0
 #   两臂独立 AITESTER_CACHE_NAMESPACE；均不设 DETECTION_SPEC_MODE。
@@ -148,7 +148,7 @@ echo "  HEAD=${ROOT_GIT_HEAD}（dirty 行数=$(printf '%s\n' "${ROOT_DIRTY}" | g
 echo "  脚本仓/解释器：${SCRIPT_REPO}"
 echo "  输出：${OUT}"
 echo "  协议：arm_baseline=${ARM_BASELINE} | task_limit=${TASK_LIMIT} seed=42 | "
-echo "        AITESTER_PROFILE=logic TEMPERATURE=0.0 LLM_THINKING_MODE=disabled P=${PARALLELISM}"
+echo "        AITESTER_PROFILE=logic TEMPERATURE=0.0 P=${PARALLELISM}"
 echo "        AITESTER_BATCH_MAX_CALLS=100 COST_BUDGET_ENABLE=true COST_BUDGET_USD=1 AITESTER_LLM_CACHE=0"
 echo "  两臂：A=control（oracle off） / B=oracle（SPEC_ORACLE_EXEC_ENABLE=true），同 baseline、独立 namespace"
 echo "  预算：≤\$0.2；墙钟：≤60min（各臂看门狗 ${WATCHDOG_SECONDS}s）"
@@ -517,7 +517,7 @@ lines = [
     "",
     f"- 切点 worktree：`{pre.get('code_root')}`，HEAD=`{head}`，跑前/跑后 `git status --porcelain` 0 行。",
     f"- 臂 A（control）：`--baselines {arm}`（oracle 关闭）；臂 B（oracle）：同一 baseline + `SPEC_ORACLE_EXEC_ENABLE=true`；两臂不设 `DETECTION_SPEC_MODE`。",
-    f"- `--dataset quixbugs --task-limit {limit} --seed 42`；`AITESTER_PROFILE=logic TEMPERATURE=0.0 LLM_THINKING_MODE=disabled BENCHMARK_PARALLELISM=4`。",
+    f"- `--dataset quixbugs --task-limit {limit} --seed 42`；`AITESTER_PROFILE=logic TEMPERATURE=0.0 BENCHMARK_PARALLELISM=4`。",
     "- `AITESTER_BATCH_MAX_CALLS=100 COST_BUDGET_ENABLE=true COST_BUDGET_USD=1 AITESTER_LLM_CACHE=0`；两臂独立 `AITESTER_CACHE_NAMESPACE`（`..._control` / `..._oracle`）。",
     f"- 零 LLM 材料可行性探测：arm_can_inject_oracle=**{pre.get('material_probe', {}).get('arm_can_inject_oracle')}**。",
     "",
@@ -737,7 +737,7 @@ _launch_arm() { # label oracle_enabled namespace staging logfile
     mkdir -p "${staging}" "${OUT}/traces_${label}"
     local -a _env_args
     _env_args=(-u DOC_ANCHOR_TABLE -u DF_SPEC_ANCHOR_TABLE -u AITESTER_QUIXBUGS_DATA -u DETECTION_SPEC_MODE -u SPEC_ORACLE_EXEC_ENABLE
-        "AITESTER_PROFILE=logic" "TEMPERATURE=0.0" "LLM_THINKING_MODE=disabled"
+        "AITESTER_PROFILE=logic" "TEMPERATURE=0.0" "LLM_THINKING_MODE 继承默认（disabled）"
         "BENCHMARK_PARALLELISM=${PARALLELISM}" "AITESTER_BATCH_MAX_CALLS=100"
         "COST_BUDGET_ENABLE=true" "COST_BUDGET_USD=1" "AITESTER_LLM_CACHE=0"
         "AITESTER_CACHE_NAMESPACE=${ns}" "AITESTER_TRACE_DIR=${OUT}/traces_${label}")
@@ -1050,7 +1050,7 @@ add("")
 add("## 1. 协议（固定，验证性非 confirmatory）")
 add("")
 add(f"- 臂 A（control）：`--baselines {arm_baseline}`，oracle 关闭；臂 B（oracle）：同一 baseline + `SPEC_ORACLE_EXEC_ENABLE=true`；均不设 `DETECTION_SPEC_MODE`。")
-add(f"- `--dataset quixbugs --task-limit {task_limit} --seed 42`；`AITESTER_PROFILE=logic TEMPERATURE=0.0 LLM_THINKING_MODE=disabled BENCHMARK_PARALLELISM={parallelism}`。")
+add(f"- `--dataset quixbugs --task-limit {task_limit} --seed 42`；`AITESTER_PROFILE=logic TEMPERATURE=0.0 BENCHMARK_PARALLELISM={parallelism}`。")
 add("- `AITESTER_BATCH_MAX_CALLS=100 COST_BUDGET_ENABLE=true COST_BUDGET_USD=1 AITESTER_LLM_CACHE=0`；两臂独立 `AITESTER_CACHE_NAMESPACE`。")
 add(f"- 零 LLM 材料可行性探测：arm_can_inject_oracle=`{pre.get('material_probe', {}).get('arm_can_inject_oracle')}`；"
     f"no_anchor_verdict=`{pre.get('material_probe', {}).get('no_anchor_state', {}).get('verdict')}`；"

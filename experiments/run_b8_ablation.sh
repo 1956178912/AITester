@@ -16,7 +16,7 @@
 #
 # 协议：两臂并发；A=--enable-stagnation（COVERAGE_STALL_DETECT_ENABLE=true），
 #       B=--no-stagnation（=false 显式）；AITESTER_PROFILE=fast、TEMPERATURE=0.0、
-#       LLM_THINKING_MODE=disabled、BENCHMARK_PARALLELISM=4、AITESTER_LLM_CACHE=0、
+#      、BENCHMARK_PARALLELISM=4、AITESTER_LLM_CACHE=0、
 #       COST_BUDGET_ENABLE=true COST_BUDGET_USD=1、AITESTER_BATCH_MAX_CALLS=100；
 #       --dataset synthetic --task-count N --seed 42 --baselines aitester。
 # 预算门禁：预检估算 > --budget-usd 时自动降为 8 任务/臂并写 PREREG_DOWNGRADE.md。
@@ -519,7 +519,7 @@ lines.append("")
 lines.append("- 两臂**并发**：A=`--enable-stagnation`（`COVERAGE_STALL_DETECT_ENABLE=true`）/ B=`--no-stagnation`（=false 显式）；"
              "`--dataset synthetic --task-count %d --seed 42 --baselines aitester`。" % A["rows"])
 lines.append("- `AITESTER_PROFILE=fast`（理由：隔离 workflow 迭代/停止路由单变量，避免 logic/scientific 档 oracle/mutation/branch-coverage/detection-first 噪声；"
-             "与 logic 档差异见 PREREG §2）；`TEMPERATURE=0.0 LLM_THINKING_MODE=disabled BENCHMARK_PARALLELISM=%s`；"
+             "与 logic 档差异见 PREREG §2）；`TEMPERATURE=0.0 BENCHMARK_PARALLELISM=%s`；"
              "`AITESTER_LLM_CACHE=0`；`COST_BUDGET_ENABLE=true COST_BUDGET_USD=1`；`AITESTER_BATCH_MAX_CALLS=100`；两臂独立 namespace。"
              % (report["protocol"].get("parallelism") or "4"))
 lines.append("- 预算 ≤ $%s；墙钟 ≤ 60min；每臂 watchdog %ss；单臂失败/超时如实报告不重跑。"
@@ -841,7 +841,7 @@ LOG_B="${OUT}/log_no_stagnation.log"
 TRACE_A="${OUT}/traces_stagnation"
 TRACE_B="${OUT}/traces_no_stagnation"
 mkdir -p "${STAGE_A}" "${STAGE_B}" "${TRACE_A}" "${TRACE_B}"
-COMMON_ENV=(AITESTER_PROFILE=fast TEMPERATURE=0.0 LLM_THINKING_MODE=disabled "BENCHMARK_PARALLELISM=${PARALLELISM}" AITESTER_LLM_CACHE=0 COST_BUDGET_ENABLE=true COST_BUDGET_USD=1 AITESTER_BATCH_MAX_CALLS=100)
+COMMON_ENV=(AITESTER_PROFILE=fast TEMPERATURE=0.0 "BENCHMARK_PARALLELISM=${PARALLELISM}" AITESTER_LLM_CACHE=0 COST_BUDGET_ENABLE=true COST_BUDGET_USD=1 AITESTER_BATCH_MAX_CALLS=100)
 
 _launch_arm() { # label env_flag namespace staging log trace
     local label="$1" flag="$2" ns="$3" staging="$4" log="$5" trace="$6"
@@ -854,7 +854,7 @@ _launch_arm() { # label env_flag namespace staging log trace
         echo "ROOT=${ROOT}"
         echo "HEAD=${ROOT_HEAD}"
         echo "CMD=${PY} -m experiments.run_benchmark --dataset synthetic --task-count ${TASK_COUNT} --seed 42 --baselines aitester --output-dir ${staging} ${flag}"
-        echo "ENV=AITESTER_PROFILE=fast TEMPERATURE=0.0 LLM_THINKING_MODE=disabled BENCHMARK_PARALLELISM=${PARALLELISM} AITESTER_LLM_CACHE=0 COST_BUDGET_ENABLE=true COST_BUDGET_USD=1 AITESTER_BATCH_MAX_CALLS=100"
+        echo "ENV=AITESTER_PROFILE=fast TEMPERATURE=0.0 BENCHMARK_PARALLELISM=${PARALLELISM} AITESTER_LLM_CACHE=0 COST_BUDGET_ENABLE=true COST_BUDGET_USD=1 AITESTER_BATCH_MAX_CALLS=100"
         echo "ENV_ARM=${label} ${flag} COVERAGE_STALL_DETECT_ENABLE=$([ "${label}" = "stagnation" ] && echo true || echo false) AITESTER_CACHE_NAMESPACE=${ns} AITESTER_TRACE_DIR=${trace}"
     } >> "${log}"
     (

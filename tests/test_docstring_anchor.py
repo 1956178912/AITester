@@ -11,7 +11,7 @@
      （期望值以固化的完整字面量锁定，不动态 import 旧实现——护住 df_spec
      历史工件的可复现性）；
    - `human_spec` 键在场即材料（空串也进入判定）→ 渲染空/省略但触发 replace；
-   - 段落位置在【文档化契约（docstring）】之前，实现代码永不进产物。
+   - 段落位置在[Documented contract (docstring)]之前，实现代码永不进产物。
 3. 锚表构建（`experiments/build_docstring_anchor_table.py`）：
    - 内容寻址键 = sha256(源码.strip())；覆盖统计（41/40 口径）；
    - 确定性（两次运行输出逐字节一致）；缺数据目录/程序数不符 fail-fast；
@@ -51,10 +51,11 @@ _REAL_DATA_AVAILABLE = (_QUIXBUGS_DATA / "python_programs").is_dir() and _PLANNE
 # 本字面量由改动前实现（git show HEAD:src/tools/spec_first.py）生成后固化；
 # 测试**不**动态 import 旧版——它锁的是"历史工件可复现性"，不是实现细节。
 _GOLDEN_HEADER = [
-    "【规格优先模式（Spec-First）：本提示刻意不包含实现代码】",
-    "请仅依据以下规约文档与函数签名生成测试。实现细节未知且**不得臆测**——",
-    "照猜想中的实现行为写断言（oracle-from-implementation）会系统性抹掉缺陷检出，",
-    "是本模式要杜绝的首要失败形态。",
+    "[Spec-First mode: this prompt deliberately omits the implementation code]",
+    "Generate tests from the specification document and the function signature below only. "
+    "Implementation details are unknown and **must not be guessed**: writing assertions that "
+    "mirror the guessed implementation behaviour (oracle-from-implementation) systematically "
+    "erases defect detection, and that is the primary failure shape this mode exists to prevent.",
     "",
 ]
 _GOLDEN_CODE = (
@@ -75,38 +76,36 @@ _GOLDEN_PLANNER_MATERIAL: dict[str, Any] = {
 _GOLDEN_SECTION = "\n".join(
     [
         *_GOLDEN_HEADER,
-        "函数签名：def add(a: int, b: int) -> int",
-        "被测模块名：mathops（import 必须 `from mathops import ...`）",
+        "Function signature: def add(a: int, b: int) -> int",
+        "Module under test: mathops (imports must use `from mathops import ...`)",
         "",
-        "【文档化契约（docstring）】",
+        "[Documented contract (docstring)]",
         "Return the sum of a and b.",
         "",
-        "【自然语言规约（期望值的唯一合法来源）】",
-        "- 前置条件：a、b 为整数",
-        "- 后置条件：返回值等于两数之和",
-        "- 不变量：结果与参数顺序无关",
-        "- 边界情况：任一参数为 0 时返回另一参数",
+        "[Natural-language specification (sole legitimate source of expected values)]",
+        "- Precondition: a、b 为整数",
+        "- Postcondition: 返回值等于两数之和",
+        "- Invariant: 结果与参数顺序无关",
+        "- Edge case: 任一参数为 0 时返回另一参数",
         "",
-        "【可执行规约（SpecExpr 形式化子句，可直接转写为断言）】",
-        "- 前置（可执行）：isinstance(a, int) and isinstance(b, int)",
-        "- 后置（可执行）：result == a + b",
+        "[Executable specification (formal SpecExpr clauses, directly transcribable into assertions)]",
+        "- Precondition (executable): isinstance(a, int) and isinstance(b, int)",
+        "- Postcondition (executable): result == a + b",
         "",
-        "【生成纪律】",
-        "1. 每个测试必须断言上述规约中可判定的性质（后置 / 不变量 / 边界）；",
-        "2. 期望值只能来自规约与 docstring 约定；规约未覆盖的行为禁止臆造具体值——",
-        "   改用记录实际行为的探索性断言并在 docstring 标注需人工确认；",
-        "3. 输入构造必须满足前置条件（不满足前件的输入应走 pytest.raises 路径或排除）；",
-        "4. 不得访问规约与签名之外的属性 / 符号。",
+        "[Generation discipline]",
+        "1. Every test must assert a decidable property from the specification above (postcondition / invariant / boundary);",
+        "2. Expected values may come only from the specification and the docstring contract; inventing concrete values for behaviour the specification does not cover is forbidden — use exploratory assertions that record the actual behaviour instead, and flag in the docstring that the expectation needs human confirmation;",
+        "3. Input construction must satisfy the preconditions (inputs violating a precondition belong on a pytest.raises path or must be excluded);",
+        "4. Do not access attributes or symbols beyond the specification and the signature.",
     ]
 )
 _GOLDEN_DISCIPLINE = [
     "",
-    "【生成纪律】",
-    "1. 每个测试必须断言上述规约中可判定的性质（后置 / 不变量 / 边界）；",
-    "2. 期望值只能来自规约与 docstring 约定；规约未覆盖的行为禁止臆造具体值——",
-    "   改用记录实际行为的探索性断言并在 docstring 标注需人工确认；",
-    "3. 输入构造必须满足前置条件（不满足前件的输入应走 pytest.raises 路径或排除）；",
-    "4. 不得访问规约与签名之外的属性 / 符号。",
+    "[Generation discipline]",
+    "1. Every test must assert a decidable property from the specification above (postcondition / invariant / boundary);",
+    "2. Expected values may come only from the specification and the docstring contract; inventing concrete values for behaviour the specification does not cover is forbidden — use exploratory assertions that record the actual behaviour instead, and flag in the docstring that the expectation needs human confirmation;",
+    "3. Input construction must satisfy the preconditions (inputs violating a precondition belong on a pytest.raises path or must be excluded);",
+    "4. Do not access attributes or symbols beyond the specification and the signature.",
 ]
 # 第二个金标记（无 docstring 的 Planner 材料；同样逐字节锁定）
 _GOLDEN_SMALL_CODE = "def fn(x):\n    return x - 1\n"
@@ -117,14 +116,14 @@ _GOLDEN_SMALL_MATERIAL: dict[str, Any] = {
 _GOLDEN_SMALL_SECTION = "\n".join(
     [
         *_GOLDEN_HEADER,
-        "函数签名：def fn(x)",
-        "被测模块名：m（import 必须 `from m import ...`）",
+        "Function signature: def fn(x)",
+        "Module under test: m (imports must use `from m import ...`)",
         "",
-        "【自然语言规约（期望值的唯一合法来源）】",
-        "- 后置条件：返回 x",
+        "[Natural-language specification (sole legitimate source of expected values)]",
+        "- Postcondition: 返回 x",
         "",
-        "【可执行规约（SpecExpr 形式化子句，可直接转写为断言）】",
-        "- 后置（可执行）：result == x",
+        "[Executable specification (formal SpecExpr clauses, directly transcribable into assertions)]",
+        "- Postcondition (executable): result == x",
         *_GOLDEN_DISCIPLINE,
     ]
 )
@@ -273,7 +272,7 @@ class TestHumanSpecRendering:
             _GOLDEN_PLANNER_MATERIAL, _GOLDEN_CODE, module_name="mathops", target_function="add"
         )
         assert section == _GOLDEN_SECTION
-        assert "独立于实现的规格锚（人类 docstring）" not in section
+        assert "Implementation-independent spec anchor (human docstring)" not in section
 
     @pytest.mark.unit
     def test_golden_planner_material_second_fixture(self) -> None:
@@ -282,13 +281,13 @@ class TestHumanSpecRendering:
 
     @pytest.mark.unit
     def test_human_spec_rendered_before_docstring(self) -> None:
-        """人类规格锚段落位置：函数签名之后、【文档化契约（docstring）】之前。"""
+        """人类规格锚段落位置：函数签名之后、[Documented contract (docstring)]之前。"""
         material = dict(_GOLDEN_PLANNER_MATERIAL)
         material["human_spec"] = "HUMAN_SPEC_MARKER: returns a + b"
         section = build_spec_replace_section(material, _GOLDEN_CODE, "mathops", "add")
-        anchor_idx = section.index("【独立于实现的规格锚（人类 docstring）】")
-        docstring_idx = section.index("【文档化契约（docstring）】")
-        sig_idx = section.index("函数签名：")
+        anchor_idx = section.index("[Implementation-independent spec anchor (human docstring)]")
+        docstring_idx = section.index("[Documented contract (docstring)]")
+        sig_idx = section.index("Function signature: ")
         assert sig_idx < anchor_idx < docstring_idx
         assert "HUMAN_SPEC_MARKER: returns a + b" in section
         # 实现代码仍不进产物
@@ -300,7 +299,7 @@ class TestHumanSpecRendering:
         material = {"function_name": "fn", "human_spec": "SPEC_ONLY_MARKER"}
         section = build_spec_replace_section(material, "def fn(x):\n    return x\n", "m", "fn")
         assert "SPEC_ONLY_MARKER" in section
-        assert "【独立于实现的规格锚（人类 docstring）】" in section
+        assert "[Implementation-independent spec anchor (human docstring)]" in section
 
     @pytest.mark.unit
     def test_empty_human_spec_key_enters_material_decision(self) -> None:
@@ -308,8 +307,8 @@ class TestHumanSpecRendering:
         material = {"function_name": "node", "human_spec": ""}
         section = build_spec_replace_section(material, _PROGRAM_CLASS_ONLY, "node", "")
         assert section != ""
-        assert "【独立于实现的规格锚（人类 docstring）】" not in section
-        assert "【规格优先模式" in section
+        assert "[Implementation-independent spec anchor (human docstring)]" not in section
+        assert "[Spec-First mode" in section
         # 对比：同材料去掉 human_spec 键 → 无材料 → 空串
         bare = {"function_name": "node"}
         assert build_spec_replace_section(bare, _PROGRAM_CLASS_ONLY, "node", "") == ""
@@ -319,13 +318,13 @@ class TestHumanSpecRendering:
         material = {"function_name": "fn", "human_spec": None}
         section = build_spec_replace_section(material, "def fn():\n    return 1\n", "m", "fn")
         assert section != ""
-        assert "【独立于实现的规格锚（人类 docstring）】" not in section
+        assert "[Implementation-independent spec anchor (human docstring)]" not in section
 
     @pytest.mark.unit
     def test_human_spec_whitespace_stripped(self) -> None:
         material = {"function_name": "fn", "human_spec": "   \n  SPEC_TEXT  \n  "}
         section = build_spec_replace_section(material, "def fn():\n    return 1\n", "m", "fn")
-        assert "【独立于实现的规格锚（人类 docstring）】\nSPEC_TEXT\n" in section
+        assert "[Implementation-independent spec anchor (human docstring)]\nSPEC_TEXT\n" in section
 
     @pytest.mark.unit
     def test_human_spec_key_added_does_not_alter_other_sections(self) -> None:
@@ -334,7 +333,7 @@ class TestHumanSpecRendering:
         augmented = build_spec_replace_section(
             {**_GOLDEN_PLANNER_MATERIAL, "human_spec": "ANCHOR"}, _GOLDEN_CODE, "mathops", "add"
         )
-        removed = augmented.replace("\n\n【独立于实现的规格锚（人类 docstring）】\nANCHOR", "")
+        removed = augmented.replace("\n\n[Implementation-independent spec anchor (human docstring)]\nANCHOR", "")
         assert removed == base
 
     @pytest.mark.unit

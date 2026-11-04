@@ -16,6 +16,13 @@ R04（2026-10-23 全量集中复审 P1）：计数只从 **权威摘要行** 解
 被判失败（假红）。权威摘要行的判据：一行内除计数 token 外只含
 分隔符（等号 / 逗号 / 空白）与 ``in <时长>s``——多条命中取最后一条
 （pytest 终末摘要），一条都没有时返回空 dict（fail-closed 契约不变）。
+
+GL（2026-11-04）：``in <时长>s`` 在会话跨过 60s 后带 timedelta 括注
+（``1 passed in 257.61s (0:04:17)``，跨天 ``… (1 day, 1:01:01)``），原判据
+不剥该括注 ⇒ 残留非空 ⇒ 真实通过被判"无权威摘要行"、执行器记
+``no_effective_pass``。括注同属时长片段，一并剥除；否则"跑得快才认绿"，
+判定取决于挂钟而非测试结果——``EXECUTION_TIMEOUT`` 允许 [10, 300]，第 11 条
+上调时长后该分支在重跑批次里是常态。
 """
 
 from __future__ import annotations
@@ -29,14 +36,19 @@ _SUMMARY_LINE_TOKEN_RE = re.compile(r"(\d+) (passed|failed|skipped|errors?|desel
 _ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*m")
 # 摘要行尾的会话时长（"in 0.01s" / "in 1:03.45s"）；剥离后便于统一做残留校验
 _SUMMARY_DURATION_RE = re.compile(r"\bin\s+[\d:.]+s\b")
+# 会话时长 ≥60s 时 pytest 在秒数后追加 timedelta 括注（`_pytest.terminal.
+# format_session_duration`：f"{seconds:.2f}s ({datetime.timedelta(int(seconds))})"），
+# 形如 "in 257.61s (0:04:17)"，跨天为 "in 90061.00s (1 day, 0:01:01)"。
+# 不剥这层括注则残留非空、真实通过被折叠成「无权威摘要行」（GL，2026-11-04）。
+_SESSION_TIMEDELTA_RE = re.compile(r"\((?:\d+ days?, )?\d+:\d{2}:\d{2}\)")
 
 
 def _authoritative_summary_lines(output: str) -> list[str]:
     """从输出中筛出权威摘要行（结构校验通过、按出现顺序）。
 
-    判据：一行（剥 ANSI 后）剥掉所有计数 token 与会话时长片段后，只剩
-    分隔符（等号 / 逗号 / 空白）且至少含一个计数 token——warning 正文行
-    （如 "UserWarning: 1 passed"）、会话头、coverage 行（"TOTAL 100%"）
+    判据：一行（剥 ANSI 后）剥掉所有计数 token、会话时长片段与其 timedelta
+    括注后，只剩分隔符（等号 / 逗号 / 空白）且至少含一个计数 token——warning
+    正文行（如 "UserWarning: 1 passed"）、会话头、coverage 行（"TOTAL 100%"）
     都有其他文字，不满足；默认模式等号包围 / -q 裸摘要 / 无时长后缀的
     拼接输出（pytest 摘要 + coverage）均可通过。
     """
@@ -47,7 +59,9 @@ def _authoritative_summary_lines(output: str) -> list[str]:
             continue
         if not _SUMMARY_LINE_TOKEN_RE.search(line):
             continue
-        residue = _SUMMARY_LINE_TOKEN_RE.sub("", _SUMMARY_DURATION_RE.sub("", line)).strip(" =,")
+        stripped = _SUMMARY_DURATION_RE.sub("", line)
+        stripped = _SESSION_TIMEDELTA_RE.sub("", stripped)
+        residue = _SUMMARY_LINE_TOKEN_RE.sub("", stripped).strip(" =,")
         if residue:
             continue
         lines.append(line)

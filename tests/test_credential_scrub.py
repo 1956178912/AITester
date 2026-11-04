@@ -171,14 +171,18 @@ class TestProviderScrubNames:
     """provider_scrub_names 动态/回退双分支（P2 动态推导口径，2026-10-08 补齐）。"""
 
     def test_dynamic_names_from_templates(self):
+        from src.config.config_generator import PROVIDER_TEMPLATES
         from src.utils.credential_scrub import provider_scrub_names
 
         names = provider_scrub_names()
         # 动态推导：PROVIDER_TEMPLATES 每个 provider 产生 {UPPER}_API_KEY / _BASE_URL
         assert "DEEPSEEK_API_KEY" in names
         assert "DEEPSEEK_BASE_URL" in names
-        # 每个 provider 恰好两条（API_KEY + BASE_URL）
-        assert len(names) == 2
+        # 新增 provider 时清单随模板增长，不在测试里写死模型数（CD 轮后为
+        # deepseek + xiaomi 两家）——写死会让加模型变成"测试坏了"而非"登记表要更新"。
+        assert "XIAOMI_API_KEY" in names
+        assert "XIAOMI_BASE_URL" in names
+        assert len(names) == 2 * len(PROVIDER_TEMPLATES)
 
     def test_fallback_names_when_templates_unavailable(self):
         from unittest.mock import patch

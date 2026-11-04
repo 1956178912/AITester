@@ -366,14 +366,14 @@ class TestBuildSection:
             )
         )
         section = build_feedback_compression_section(compressed)
-        assert "错误类型：runtime" in section
+        assert "Error category: runtime" in section
         assert "test_divide_by_zero" in section
-        assert "第 3 行" in section
+        assert "Line 3" in section
         assert "raise ValueError('zero')" in section
-        assert "涉及源代码行" in section
-        assert "存活变异体摘要" in section
+        assert "Source lines involved" in section
+        assert "Surviving-mutant summary" in section
         assert "return a / b 改写为 return a（return_void）" in section
-        assert "当前变异得分 0.4" in section
+        assert "Current mutation score 0.4" in section
         # section_chars 回填 = 实际渲染字符数（观测字段，实验层量上界用）
         assert compressed["section_chars"] == len(section)
 
@@ -410,9 +410,9 @@ class TestBuildSection:
         """无行无变异（仅失败测试）时仍渲染头部与失败测试（信息不丢）。"""
         compressed = build_compressed_feedback(_base_state(test_output=_CROSS_FILE_OUTPUT))
         section = build_feedback_compression_section(compressed)
-        assert "【压缩反馈（观测级行粒度压缩）】" in section
-        assert "涉及源代码行" not in section
-        assert "存活变异体摘要" not in section
+        assert "[Compressed feedback (observation-level line-granularity compression)]" in section
+        assert "Source lines involved" not in section
+        assert "Surviving-mutant summary" not in section
 
 
 # ─── D. _generator_node 接线门控 ───────────────────────────────────────────
@@ -465,9 +465,9 @@ class TestGeneratorNodeWiring:
         captured, update = _run_generator_node(monkeypatch, _node_state())
         section = captured.get("feedback_compression_section")
         assert section
-        assert "【压缩反馈（观测级行粒度压缩）】" in section
-        assert "错误类型：runtime" in section
-        assert "第 3 行" in section
+        assert "[Compressed feedback (observation-level line-granularity compression)]" in section
+        assert "Error category: runtime" in section
+        assert "Line 3" in section
         persisted = update.get("compressed_feedback")
         assert persisted is not None
         assert persisted["section_chars"] == len(section)
@@ -515,13 +515,13 @@ class TestGenerateInjection:
         gen = _real_gen_with_mocked_llm()
         gen.generate({"name": "t"}, "code", "m", None, feedback_compression_section=None)
         called_query = gen._call_llm_with_cache.call_args[0][0]
-        assert "压缩反馈" not in called_query
+        assert "Compressed feedback" not in called_query
 
     def test_empty_string_section_not_injected(self):
         gen = _real_gen_with_mocked_llm()
         gen.generate({"name": "t"}, "code", "m", None, feedback_compression_section="")
         called_query = gen._call_llm_with_cache.call_args[0][0]
-        assert "压缩反馈" not in called_query
+        assert "Compressed feedback" not in called_query
 
     def test_section_appended_to_query(self):
         gen = _real_gen_with_mocked_llm()

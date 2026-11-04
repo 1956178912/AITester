@@ -442,24 +442,47 @@ class TestDoctorCli:
 
 
 class TestNoSecretLeak:
+    """`_doctor_check_llm_endpoints(environ=...)` 显式注入环境，不读 os.environ。
+
+    原写法只 setenv LLM_1_*，但 `config` 在 import 期已把作者机 `.env.local` 的
+    LLM_2_* 注入 os.environ（本机登记了两个 provider）⇒ `configured` 读成 2，
+    作者机必红、干净检出必绿——同一把锁量两件东西。函数本身备有 environ 注入口，
+    用它的既有缝隙即可，不需要新增测试专用机制。
+    """
+
+    def _fake_environ(self, fake_key: str) -> dict[str, str]:
+        return {
+            "LLM_1_API_KEY": fake_key,
+            "LLM_1_BASE_URL": "https://api.example.invalid/v1",
+            "LLM_1_MODEL_NAME": "fake-model",
+        }
+
     def test_json_output_never_contains_fake_llm_key(self, monkeypatch: pytest.MonkeyPatch) -> None:
         fake_key = "sk-doctor-fake-key-0123456789abcdef"
-        monkeypatch.setenv("LLM_1_API_KEY", fake_key)
-        monkeypatch.setenv("LLM_1_BASE_URL", "https://api.example.invalid/v1")
-        monkeypatch.setenv("LLM_1_MODEL_NAME", "fake-model")
-        monkeypatch.setattr(cli_app, "_doctor_collect_checks", lambda: [cli_app._doctor_check_llm_endpoints()])
+        environ = self._fake_environ(fake_key)
+        monkeypatch.setattr(cli_app, "_doctor_collect_checks", lambda: [cli_app._doctor_check_llm_endpoints(environ)])
         result = CliRunner().invoke(cli_app.cli, ["doctor", "--json"])
         assert result.exit_code == 0
         assert fake_key not in result.output
         report = json.loads(result.output)
         assert report["checks"][0]["evidence"]["configured"] == 1
 
+    def test_incomplete_numbering_is_counted_apart(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """编号不完整要单独点名，不能被"已配置 N 个"吞掉（注入面，与作者机无关）。"""
+        environ = self._fake_environ("sk-doctor-fake-key-incomplete")
+        environ["LLM_2_BASE_URL"] = "https://api.example.invalid/v1"  # 缺 KEY/MODEL → 不完整
+        monkeypatch.setattr(cli_app, "_doctor_collect_checks", lambda: [cli_app._doctor_check_llm_endpoints(environ)])
+        result = CliRunner().invoke(cli_app.cli, ["doctor", "--json"])
+        assert result.exit_code == 0
+        report = json.loads(result.output)
+        evidence = report["checks"][0]["evidence"]
+        assert evidence["configured"] == 1
+        assert evidence["incomplete_indices"] == [2], evidence
+
     def test_human_output_never_contains_fake_llm_key(self, monkeypatch: pytest.MonkeyPatch) -> None:
         fake_key = "sk-doctor-fake-key-human-9876543210"
-        monkeypatch.setenv("LLM_1_API_KEY", fake_key)
-        monkeypatch.setenv("LLM_1_BASE_URL", "https://api.example.invalid/v1")
-        monkeypatch.setenv("LLM_1_MODEL_NAME", "fake-model")
-        monkeypatch.setattr(cli_app, "_doctor_collect_checks", lambda: [cli_app._doctor_check_llm_endpoints()])
+        environ = self._fake_environ(fake_key)
+        monkeypatch.setattr(cli_app, "_doctor_collect_checks", lambda: [cli_app._doctor_check_llm_endpoints(environ)])
         result = CliRunner().invoke(cli_app.cli, ["doctor"])
         assert result.exit_code == 0
         assert fake_key not in result.output

@@ -660,7 +660,7 @@ class MutationGenerator:
                         Mutant(
                             code=new_code,
                             mutant_type="boundary_shift",
-                            description=f"line {cmp_node.lineno}: {op_name} → {target}（边界变异）",
+                            description=f"line {cmp_node.lineno}: {op_name} → {target} (boundary shift)",
                             line_no=cmp_node.lineno,
                         )
                     )
@@ -727,7 +727,7 @@ class MutationGenerator:
                         Mutant(
                             code=new_code,
                             mutant_type="exception_remove",
-                            description=f"line {raise_node.lineno}: 移除 raise {ast.unparse(raise_node.exc)}（异常路径变异）",
+                            description=f"line {raise_node.lineno}: remove raise {ast.unparse(raise_node.exc)} (exception-path mutation)",
                             line_no=raise_node.lineno,
                         )
                     )
@@ -767,7 +767,7 @@ class MutationGenerator:
                         Mutant(
                             code=new_code,
                             mutant_type="exception_type_swap",
-                            description=f"line {raise_node.lineno}: raise {exc_name} → raise {new_exc_name}（异常类型变异）",
+                            description=f"line {raise_node.lineno}: raise {exc_name} → raise {new_exc_name} (exception-type mutation)",
                             line_no=raise_node.lineno,
                         )
                     )
@@ -810,7 +810,7 @@ class MutationGenerator:
                 Mutant(
                     code=new_code,
                     mutant_type="unary_minus_remove",
-                    description=f"line {target.lineno}: -X → X（一元负号移除）",
+                    description=f"line {target.lineno}: -X → X (unary minus removed)",
                     line_no=target.lineno,
                 )
             )
@@ -841,7 +841,7 @@ class MutationGenerator:
                 Mutant(
                     code=new_code,
                     mutant_type="unary_not_insert",
-                    description=f"line {target.lineno}: X → not X（比较前插 not）",
+                    description=f"line {target.lineno}: X → not X (not inserted before comparison)",
                     line_no=target.lineno,
                 )
             )
@@ -878,7 +878,7 @@ class MutationGenerator:
                 Mutant(
                     code=new_code,
                     mutant_type="string_const_swap",
-                    description=f"line {const.lineno}: 字符串常量 {original!r} → {replacement!r}",
+                    description=f"line {const.lineno}: string constant {original!r} → {replacement!r}",
                     line_no=const.lineno,
                 )
             )
@@ -909,7 +909,7 @@ class MutationGenerator:
                 Mutant(
                     code=new_code,
                     mutant_type="stmt_delete",
-                    description=f"line {stmt.lineno}: 删除语句（语句删除变异）",
+                    description=f"line {stmt.lineno}: statement deleted (statement-removal mutation)",
                     line_no=stmt.lineno,
                 )
             )
@@ -942,7 +942,7 @@ class MutationGenerator:
                 Mutant(
                     code=new_code,
                     mutant_type="break_continue_swap",
-                    description=f"line {target.lineno}: {label}（循环控制变异）",
+                    description=f"line {target.lineno}: {label} (loop-control mutation)",
                     line_no=target.lineno,
                 )
             )
@@ -1006,7 +1006,7 @@ class MutationGenerator:
                         Mutant(
                             code=new_code,
                             mutant_type="return_empty",
-                            description=f"line {ret.lineno}: return {orig_repr} → return 空容器（P0 3.3 返回类型变异）",
+                            description=f"line {ret.lineno}: return {orig_repr} → return empty container (P0 3.3 return-type mutation)",
                             line_no=ret.lineno,
                         )
                     )
@@ -1425,7 +1425,7 @@ class ExtendedMutationGenerator(MutationGenerator):
                 node,
                 lambda n, _t=tgt: setattr(n, "op", _t()),
                 "aug_assign_swap",
-                f"line {node.lineno}: {type(node.op).__name__}= → {tgt.__name__}=（增广赋值互换）",
+                f"line {node.lineno}: {type(node.op).__name__}= → {tgt.__name__}= (augmented-assignment swap)",
                 source_code,
                 out,
             )
@@ -1444,7 +1444,7 @@ class ExtendedMutationGenerator(MutationGenerator):
                 node,
                 lambda n, _o=new_op: setattr(n, "op", _o()),
                 "bool_op_swap",
-                f"line {node.lineno}: {label}（布尔互换）",
+                f"line {node.lineno}: {label} (boolean-operator swap)",
                 source_code,
                 out,
             )
@@ -1467,7 +1467,7 @@ class ExtendedMutationGenerator(MutationGenerator):
                     node,
                     _negate,
                     "cond_negate",
-                    f"line {node.lineno}: 条件取反（not）",
+                    f"line {node.lineno}: condition negated (not)",
                     source_code,
                     out,
                 )
@@ -1485,7 +1485,7 @@ class ExtendedMutationGenerator(MutationGenerator):
                 node,
                 lambda n, _v=new_val: setattr(n, "value", _v),
                 "const_swap",
-                f"line {node.lineno}: {node.value} → {new_val}（常量置换）",
+                f"line {node.lineno}: {node.value} → {new_val} (constant replacement)",
                 source_code,
                 out,
             )
@@ -1515,7 +1515,7 @@ class ExtendedMutationGenerator(MutationGenerator):
                 node,
                 _negate,
                 "subscript_negate",
-                f"line {node.lineno}: 下标取反（序列边界）",
+                f"line {node.lineno}: index negated (sequence boundary)",
                 source_code,
                 out,
             )

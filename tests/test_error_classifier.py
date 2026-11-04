@@ -430,7 +430,7 @@ class TestGetFixStrategy:
         """导入错误的修复策略（无模块名）。"""
         context = ErrorContext(subtype=SyntaxSubtype.IMPORT_ERROR)
         strategy = get_fix_strategy(ErrorCategory.SYNTAX, context)
-        assert "导入错误" in strategy
+        assert "import error" in strategy
 
     def test_syntax_error_with_location(self):
         """语法错误的修复策略（含位置）。"""
@@ -443,27 +443,27 @@ class TestGetFixStrategy:
     def test_runtime_error_strategy(self):
         """运行时错误的修复策略。"""
         strategy = get_fix_strategy(ErrorCategory.RUNTIME)
-        assert "运行时异常" in strategy
+        assert "runtime exception" in strategy
 
     def test_assertion_error_strategy(self):
         """断言错误的修复策略。"""
         strategy = get_fix_strategy(ErrorCategory.ASSERTION)
-        assert "断言失败" in strategy
+        assert "assertion failure" in strategy
 
     def test_timeout_error_strategy(self):
         """超时错误的修复策略。"""
         strategy = get_fix_strategy(ErrorCategory.TIMEOUT)
-        assert "死循环" in strategy or "超时" in strategy
+        assert "infinite loop" in strategy or "timeout" in strategy
 
     def test_unknown_error_strategy(self):
         """未知错误的修复策略。"""
         strategy = get_fix_strategy(ErrorCategory.UNKNOWN)
-        assert "未能自动识别" in strategy
+        assert "could not be recognised automatically" in strategy
 
     def test_syntax_without_context(self):
         """无上下文的语法错误策略。"""
         strategy = get_fix_strategy(ErrorCategory.SYNTAX)
-        assert "语法/编译错误" in strategy
+        assert "syntax or compilation error" in strategy
 
     # ── P2 细化新增类别的修复策略 ──
 
@@ -472,52 +472,52 @@ class TestGetFixStrategy:
         context = ErrorContext(module_name="pandas")
         strategy = get_fix_strategy(ErrorCategory.IMPORT_ERROR, context)
         assert "pandas" in strategy
-        assert "安装" in strategy or "pip" in strategy
+        assert "install" in strategy or "pip" in strategy
 
     def test_import_error_strategy_without_module(self):
         """IMPORT_ERROR 独立策略（无模块名）。"""
         strategy = get_fix_strategy(ErrorCategory.IMPORT_ERROR)
-        assert "导入错误" in strategy
+        assert "import error" in strategy
 
     def test_type_error_strategy(self):
         """TYPE_ERROR 独立策略（类型核对，禁止吞异常）。"""
         strategy = get_fix_strategy(ErrorCategory.TYPE_ERROR)
         assert "TypeError" in strategy
-        assert "类型" in strategy
+        assert "type" in strategy
 
     def test_logic_error_strategy(self):
         """LOGIC_ERROR 独立策略（优先修测试预期值）。"""
         strategy = get_fix_strategy(ErrorCategory.LOGIC_ERROR)
-        assert "测试" in strategy
-        assert "预期值" in strategy
+        assert "test" in strategy
+        assert "expected value" in strategy
 
     # ── 1.2 残余细化新增类别的修复策略 ──
 
     def test_llm_format_error_strategy(self):
         """LLM_FORMAT_ERROR 独立策略（重生成/放宽 JSON 提取）。"""
         strategy = get_fix_strategy(ErrorCategory.LLM_FORMAT_ERROR)
-        assert "重新请求" in strategy or "重新生成" in strategy
+        assert "Request a conforming response" in strategy or "regenerate" in strategy
         assert "JSON" in strategy
 
     def test_index_error_strategy(self):
         """INDEX_ERROR 独立策略（补边界判断，禁止吞异常）。"""
         strategy = get_fix_strategy(ErrorCategory.INDEX_ERROR)
-        assert "越界" in strategy
-        assert "边界" in strategy
+        assert "index out of range" in strategy
+        assert "boundary" in strategy
 
     # ── 1.1 状态细化新增类别的修复策略 ──
 
     def test_patch_validation_failed_strategy(self):
         """PATCH_VALIDATION_FAILED 独立策略（重新生成完整补丁）。"""
         strategy = get_fix_strategy(ErrorCategory.PATCH_VALIDATION_FAILED)
-        assert "安全守卫" in strategy
-        assert "完整" in strategy
+        assert "safety guard" in strategy
+        assert "whole file" in strategy
 
     def test_rag_retrieval_empty_strategy(self):
         """RAG_RETRIEVAL_EMPTY 独立策略（按常规策略处理，扩充检索库）。"""
         strategy = get_fix_strategy(ErrorCategory.RAG_RETRIEVAL_EMPTY)
-        assert "检索" in strategy
-        assert "常规" in strategy
+        assert "retrieval" in strategy
+        assert "standard repair strategy" in strategy
 
 
 @pytest.mark.unit

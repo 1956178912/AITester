@@ -11,9 +11,11 @@
        coverage.line_total_pct / branch_total_pct 在 [0, 100] 区间、
        static_checks.ruff_warnings / mypy_errors 为 0。
     2. 实测一致性校验（可选，`--verify` 本地全量模式）：跑全量 pytest 收集
-       计数与 BASELINE.yaml `tests.total_passed` 对比，偏差超阈值（默认 ±2%
-       容差，精简环境 skipif 漂移）即 fail；供批次落地后人工/CI 夜间任务
-       运行（CI 主链只跑结构校验，避免每 PR 重跑全量测试）。
+       计数与 BASELINE.yaml `tests.collected` **逐位**对账，并要求声明面自洽
+       （passed + failed + skipped + xfailed == collected）；供批次落地后人工/
+       CI 夜间任务运行（CI 主链只跑结构校验，避免每 PR 重跑全量测试）。
+       GL（2026-11-04）前该支路比的是 collected vs `total_passed` 并给 ±2% 容差，
+       即拿两个不同的量比对、用容差吸收口径差——skip 一过 2% 就会把如实登记判红。
 
 用法：
     python scripts/gates/check_baseline.py            # 结构校验（CI 门禁，快）
@@ -39,8 +41,9 @@ except ImportError:  # pyyaml 缺失时降级为最小解析（仅覆盖 BASELIN
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 BASELINE_PATH = PROJECT_ROOT / "BASELINE.yaml"
 
-# 全量 pytest 实测与 BASELINE total_passed 的容差比例（精简环境 skipif 漂移）
-_MEASURE_TOLERANCE = 0.02
+# 一致性对账读的四个结果计数 + collected（GL 起改为同量逐位对账，无容差）
+_RESULT_KEYS = ("total_passed", "total_failed", "total_skipped", "total_xfailed")
+_DECLARED_COUNT_KEYS = (*_RESULT_KEYS, "collected")
 
 # 冷缓存收集全量测试约 20s；300s 仍不返回即视为死锁（返回 None 由调用方判红）。
 _COLLECT_TIMEOUT_S = 300.0
@@ -118,10 +121,64 @@ def _parse_scalar(val: str):
     return val.strip().strip('"').strip("'")
 
 
+_DK_KEY_RE = re.compile(r"^(?P<indent> *)(?P<key>[A-Za-z_][\w-]*):(?:\s|$)")
+_DK_ITEM_RE = re.compile(r"^(?P<indent> *)-(?:\s|$)")
+
+
+def _duplicate_keys(text: str) -> list[str]:
+    """同一层重复键（YAML 静默取最后一次，被覆盖的键在读侧根本不存在）。
+
+    本轮自己踩过：一次编辑把 `suite_seconds` 写成两行，解析与既有结构校验都不报错，
+    实际生效的是后写的值——登记数字看着改了、读出来还是老数。
+
+    用**行扫描**而不是 PyYAML：本门在缺 PyYAML 时按最小解析降级（EZ 轮口径），
+    再加一条 yaml-only 的检查会让两个解析器分叉、并在降级档里直接抛 NameError。
+    范围限制（保守优先，避免误红）：序列元素内部的键不判——那里同名键是正常形状，
+    本守卫针对的是映射层的静默覆盖。
+    """
+    found: list[str] = []
+    # 栈元素：(缩进, 类型, 名称)；类型 ∈ {"key", "item"}
+    stack: list[tuple[int, str, str]] = []
+    seen: dict[str, set[str]] = {}
+    for raw in text.splitlines():
+        line = raw.rstrip()
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        item = _DK_ITEM_RE.match(line)
+        if item:
+            ind = len(item.group("indent"))
+            while stack and stack[-1][0] >= ind:
+                stack.pop()
+            stack.append((ind, "item", ""))
+            continue
+        key = _DK_KEY_RE.match(line)
+        if not key:
+            continue
+        ind = len(key.group("indent"))
+        name = key.group("key")
+        while stack and stack[-1][0] >= ind:
+            stack.pop()
+        in_list = any(kind == "item" for _i, kind, _n in stack)
+        parent = ".".join(n for _i, kind, n in stack if kind == "key")
+        path = f"{parent}.{name}" if parent else name
+        if not in_list:
+            bucket = seen.setdefault(parent, set())
+            if name in bucket:
+                found.append(path)
+            bucket.add(name)
+        stack.append((ind, "key", name))
+    return found
+
+
 def check_structure() -> list[str]:
     """结构校验：必填字段、取值区间、基线全绿约定。"""
     failures: list[str] = []
     data = _load_baseline()
+    # 重复键先判：YAML 静默取最后一次，被覆盖的那个值会一路"看着改了"骗过所有读侧
+    failures += [
+        f"BASELINE.yaml 存在同一层重复键 `{dup}`——YAML 取最后一次，前面的写入静默作废"
+        for dup in _duplicate_keys(BASELINE_PATH.read_text(encoding="utf-8"))
+    ]
 
     tests = data.get("tests", {})
     if not isinstance(tests, dict) or not tests:
@@ -190,23 +247,43 @@ def measure_full_suite() -> int | None:
 
 
 def check_consistency() -> list[str]:
-    """实测一致性校验：全量收集计数 vs BASELINE.yaml tests.total_passed（±2% 容差）。"""
+    """实测一致性校验：全量收集计数 vs BASELINE.yaml `tests.collected`（逐位相等）。
+
+    GL（2026-11-04）改口径。原实现把 **collected** 与 **total_passed** 两个不同的量
+    放在一起，再用 ±2% 容差把口径差吸收掉——后果是"如实登记就被自己的守卫判红"：
+    语料撤回使 skip 升到 collected 的 2.2%，把 total_passed 写成实测值反而超容差，
+    要绿只能虚报 passed。现改为同一量逐位对账，外加声明面自洽
+    （passed + failed + skipped + xfailed == collected，虚增 skip 或漏记都会露），
+    skip 占比只披露、不设卡。
+    """
     failures: list[str] = []
-    data = _load_baseline()
-    baseline_passed = data.get("tests", {}).get("total_passed")
-    if not isinstance(baseline_passed, int):
-        return ["tests.total_passed 非法，无法做一致性校验"]
+    tests = _load_baseline().get("tests", {})
+    declared = {key: tests.get(key) for key in _DECLARED_COUNT_KEYS}
+    invalid = [key for key, value in declared.items() if not isinstance(value, int) or value < 0]
+    if invalid:
+        return [f"tests.{key} 非非负整数，无法做一致性校验（实为 {declared[key]!r}）" for key in invalid]
 
     measured = measure_full_suite()
     if measured is None:
         return [f"全量 pytest 收集失败，无法校验（请检查 {sys.executable} 环境）"]
 
-    drift = abs(measured - baseline_passed) / max(baseline_passed, 1)
-    if drift > _MEASURE_TOLERANCE:
+    if measured != declared["collected"]:
         failures.append(
-            f"实测收集 {measured} 用例 vs BASELINE.yaml total_passed {baseline_passed}"
-            f"（漂移 {drift:.1%} 超容差 {_MEASURE_TOLERANCE:.0%}）——批次落地后请刷新 BASELINE.yaml"
+            f"实测收集 {measured} 用例 vs BASELINE.yaml tests.collected {declared['collected']}"
+            f"（差 {measured - declared['collected']:+d}，要求逐位相等）——批次落地后请刷新 BASELINE.yaml"
         )
+    parts = sum(declared[key] for key in _RESULT_KEYS)
+    if parts != declared["collected"]:
+        failures.append(
+            f"声明面不自洽：passed+failed+skipped+xfailed = {parts}"
+            f" ≠ collected {declared['collected']}（+{declared['collected'] - parts:+d} 无归属）"
+        )
+    skip_share = declared["total_skipped"] / max(declared["collected"], 1)
+    print(
+        f"一致性对账：实测 collected {measured}；声明 collected {declared['collected']} / "
+        f"passed {declared['total_passed']} / skipped {declared['total_skipped']} / "
+        f"xfailed {declared['total_xfailed']}（skip 占比 {skip_share:.2%}，仅披露）"
+    )
     return failures
 
 

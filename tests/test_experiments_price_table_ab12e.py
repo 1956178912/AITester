@@ -196,12 +196,35 @@ class TestRealPriceTableUnchanged:
         assert by_default == by_explicit is not None, (by_default, by_explicit)
         assert caplog.records == [], _messages(caplog)
 
+    def test_is_priced_entry_follows_the_status_vocabulary(self) -> None:
+        """`is_priced_entry` 必须按 `currency_status` 的**实际值域**判定。
+
+        历史缺陷：实现写 `in {"usd", "cny"}`，而 `currency_status` 对非 USD 一律
+        返回 `other:<NORM>`、从不返回 `"cny"` ⇒ 该函数对任何人民币条目恒 False，
+        正是它自己 docstring 警告的"全部落到无价目分支、预算静默失效"。
+        """
+        from src.budget import pricing
+
+        priced = {"input_per_mtok": 2.0, "output_per_mtok": 8.0}
+        assert pricing.is_priced_entry({**priced, "currency": "CNY"}) is True
+        assert pricing.is_priced_entry({**priced, "currency": " cny "}) is True
+        assert pricing.is_priced_entry({**priced, "currency": "USD"}) is True
+        assert pricing.is_priced_entry({**priced, "currency": "EUR"}) is False
+        assert pricing.is_priced_entry(priced) is False  # 币种未登记 → 不计价
+
     def test_all_priced_models_survive_the_round(self) -> None:
-        """每个登记模型都按既有诚实条款计价或明确不计价，不因本轮改造改变归属。"""
+        """每个登记模型都按既有诚实条款计价或明确不计价，不因本轮改造改变归属。
+
+        判据取 `pricing.is_priced_entry`（"哪些币种可计价"的单一事实源），不再在
+        测试里另列币种清单：2026-11-04 起价目表基准币种为 CNY，写死 `== "USD"`
+        会把"可计价"误判成"应不计价"，那是测试自己造出第二套口径。
+        """
+        from src.budget import pricing
+
         table = gen.load_price_table(_PRICE_TABLE)
         for model, entry in table["models"].items():
             cost = gen.estimate_cost_usd(model, _USAGE, table)
-            if str(entry.get("currency") or "").upper() == "USD" and None not in (
+            if pricing.is_priced_entry(entry) and None not in (
                 entry.get("input_per_mtok"),
                 entry.get("output_per_mtok"),
             ):

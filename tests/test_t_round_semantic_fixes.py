@@ -417,7 +417,7 @@ _OFF_GOLDEN_TABLE: list[dict[str, Any]] = [
             {
                 "logger": "src.graph.workflow",
                 "level": "INFO",
-                "message": "AC2 特异性门：过红测试（gold fixed 上仍红），路由再生成缺陷特异测试",
+                "message": "AC2 specificity gate: over-red test (still red on gold fixed); routing to defect-specific test regeneration",
             }
         ],
     },

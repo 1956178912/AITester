@@ -26,6 +26,12 @@ import pytest
 from experiments import oracle_examples_replay as oer
 from experiments import run_b8_injection as rb8
 from experiments import spec_examples_generator as seg
+from src.budget.pricing import currency_symbol, table_currency_status
+
+# 币种符号由价目表基准币种单点推导（2026-11-04 起为人民币 ¥）：写死 `$` 的话，
+# `"$None" not in text` 这类负向守卫会随币种切换变成恒真——看着像锁，实际不判定。
+MONEY = currency_symbol(table_currency_status())
+
 
 _ROOT = Path(__file__).resolve().parents[1]
 _NAN = float("nan")
@@ -444,7 +450,7 @@ class TestRunB8CostReading:
         assert rb8._cost_text(None, {"token_metric_unreadable:total_input_tokens": 1}) == (
             "—（无法估算：token_metric_unreadable:total_input_tokens×1）"
         )
-        assert rb8._cost_text(1.5, {}) == "$1.5"
+        assert rb8._cost_text(1.5, {}) == f"{MONEY}1.5"
 
 
 # ─── 6. 源码锁：宽松折叠不得回潮 ─────────────────────────────────────────────

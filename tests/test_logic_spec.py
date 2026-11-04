@@ -196,7 +196,7 @@ class TestBuildBoundaryTripletsSection:
         triplets = [{"input": "9", "expected": "< 10", "rationale": "line 3", "line": 3}]
         section = build_boundary_triplets_section(triplets)
         assert "9" in section
-        assert "确定性边界锚点" in section
+        assert "Deterministic boundary anchors" in section
 
 
 class TestLogicSpecStrictEnabled:

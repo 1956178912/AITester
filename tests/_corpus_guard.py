@@ -131,6 +131,25 @@ def local_extra_trace_files(root: Path | None = None) -> list[Path]:
     return [path for path in disk_trace_files(root) if path not in archived]
 
 
+def require_archived_corpus() -> list[Path]:
+    """入库面归档语料在场守卫：为空 ⇒ 显式 skip（带读数），不为空 ⇒ 返回语料。
+
+    2026-11-04 用户指令清空 `experiments/results/` 待重跑，形状锁的判定对象因此
+    不存在。把钉值（`ARCHIVED_TRACE_FILES` 等）改成 0 会得到一把空锁——连
+    `assert ARCHIVED_* > 0` 这条"钉值本身有意义"的自检也一起失效，比 skip 更糟。
+    处置口径与仓内既有先例一致（`require_full_corpus` 与复现链的 `[SKIP]`：
+    前提不成立要显式披露，既不算通过也不硬红），重跑数据入库后自动恢复执行。
+    """
+    archived = archived_trace_files()
+    if not archived:
+        pytest.skip(
+            f"入库面归档语料为空（trace 文件 0/{ARCHIVED_TRACE_FILES}）——"
+            "experiments/results/ 已按 2026-11-04 指令清除待重跑；"
+            "形状锁在数据重新入库后自动恢复执行"
+        )
+    return archived
+
+
 def shape_problem(observed: int, pinned: int, label: str) -> str:
     """形状断言的问题描述（空串 = 一致）。判定面必须已由调用方定为入库面。"""
     if observed == pinned:

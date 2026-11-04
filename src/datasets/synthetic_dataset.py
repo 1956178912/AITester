@@ -32,12 +32,12 @@ logger = logging.getLogger(__name__)
 BUG_PATTERNS: list[dict[str, Any]] = [
     {
         "name": "divide_by_zero_missing",
-        "description": "除零时未检查除数",
+        "description": "missing zero-divisor check before division",
         "template": """def divide(a: float, b: float) -> float:
     return a / b""",
         "fixed": """def divide(a: float, b: float) -> float:
     if b == 0:
-        raise ValueError("除数不能为零")
+        raise ValueError("divisor must not be zero")
     return a / b""",
         "test_cases": """from divide_by_zero_missing import divide
 
@@ -54,7 +54,7 @@ def test_divide_by_zero():
     },
     {
         "name": "off_by_one_right",
-        "description": "二分查找右边界初始值错误",
+        "description": "wrong initial right boundary in binary search",
         "template": """def binary_search(arr: list, target: int) -> int:
     left, right = 0, len(arr)
     while left <= right:
@@ -93,7 +93,7 @@ def test_binary_search_empty():
     },
     {
         "name": "palindrome_case_sensitive",
-        "description": "回文判断未处理大小写和非字母字符",
+        "description": "palindrome check ignores case and non-letter characters",
         "template": """def is_palindrome(s: str) -> bool:
     return s == s[::-1]""",
         "fixed": """def is_palindrome(s: str) -> bool:
@@ -115,14 +115,14 @@ def test_is_palindrome_with_punctuation():
     },
     {
         "name": "factorial_negative_input",
-        "description": "阶乘函数未处理负数输入",
+        "description": "factorial does not reject negative input",
         "template": """def factorial(n: int) -> int:
     if n == 0:
         return 1
     return n * factorial(n - 1)""",
         "fixed": """def factorial(n: int) -> int:
     if n < 0:
-        raise ValueError("阶乘不支持负数")
+        raise ValueError("factorial is undefined for negative input")
     if n == 0:
         return 1
     return n * factorial(n - 1)""",
@@ -144,14 +144,14 @@ def test_factorial_negative():
     },
     {
         "name": "sqrt_negative_input",
-        "description": "平方根函数未处理负数输入",
+        "description": "square root does not reject negative input",
         "template": """def sqrt(x: float) -> float:
     if x == 0:
         return 0
     return x ** 0.5""",
         "fixed": """def sqrt(x: float) -> float:
     if x < 0:
-        raise ValueError("不能对负数开平方")
+        raise ValueError("square root of a negative number")
     if x == 0:
         return 0
     return x ** 0.5""",
@@ -174,7 +174,7 @@ def test_sqrt_negative():
     },
     {
         "name": "clamp_range_error",
-        "description": "数值截断函数未处理 min > max 情况",
+        "description": "clamp does not handle min > max",
         "template": """def clamp(value: float, min_val: float, max_val: float) -> float:
     if value < min_val:
         return min_val
@@ -183,7 +183,7 @@ def test_sqrt_negative():
     return value""",
         "fixed": """def clamp(value: float, min_val: float, max_val: float) -> float:
     if min_val > max_val:
-        raise ValueError("min_val 不能大于 max_val")
+        raise ValueError("min_val must not exceed max_val")
     if value < min_val:
         return min_val
     if value > max_val:
@@ -210,7 +210,7 @@ def test_clamp_invalid_range():
     },
     {
         "name": "fibonacci_inefficient",
-        "description": "斐波那契零值边界返回错误（P0-5 修正：原纯性能缺陷 gold 测试测不到——buggy 与 fixed 数值等价，任务在 detection_rate 分母里恒不可检出；改为确定性边界缺陷）",
+        "description": "wrong Fibonacci result at the zero boundary (P0-5 note: the original pure-performance defect was invisible to the gold test because buggy and fixed were numerically equivalent, making the task permanently undetectable under the detection_rate denominator; replaced with a deterministic boundary defect)",
         "template": """def fibonacci(n: int) -> int:
     if n <= 0:
         return 1
@@ -242,7 +242,7 @@ def test_fibonacci_ten():
     },
     {
         "name": "list_index_out_of_range",
-        "description": "列表越界被静默吞掉返回 None（P0-5 修正：原 buggy 直接 lst[1] 自然抛 IndexError，与 fixed 行为对测试等价——不可检出；改为吞异常违反抛错契约）",
+        "description": "out-of-range list access is silently swallowed and returns None (P0-5 note: the original buggy variant raised IndexError naturally on lst[1], test-equivalent to fixed and therefore undetectable; replaced with exception swallowing that violates the raise contract)",
         "template": """def get_second(lst: list) -> any:
     return lst[1] if len(lst) > 1 else None""",
         "fixed": """def get_second(lst: list) -> any:
@@ -262,7 +262,7 @@ def test_get_second_empty():
     },
     {
         "name": "string_split_empty",
-        "description": "字符串分割用显式单空格分隔符而非空白聚合口径（P0-5 修正：原 buggy 的默认 split 对空串/纯空白自然返回空列表，与 fixed 等价不可检出；显式单空格口径在空输入产出单空串元素）",
+        "description": "string splitting uses an explicit single-space separator instead of whitespace-aggregating semantics (P0-5 note: the original buggy default split already returned an empty list on empty/whitespace-only input, test-equivalent to fixed and therefore undetectable; the explicit single-space separator produces a single empty element on empty input)",
         "template": """def split_words(text: str) -> list:
     return text.split(" ")""",
         "fixed": """def split_words(text: str) -> list:
@@ -285,7 +285,7 @@ def test_split_words_whitespace():
     },
     {
         "name": "integer_division_floor",
-        "description": "整数除法未处理除数为零",
+        "description": "integer division does not handle a zero divisor",
         "template": """def safe_div(a: int, b: int) -> float:
     return a / b""",
         "fixed": """def safe_div(a: int, b: int) -> float:
@@ -303,8 +303,9 @@ def test_safe_div_zero():
 
 def test_safe_div_zero_neg():
     import math
-    # CPython 无 math.isneginf（仅有 isinf/isfinite/isnan/isclose/isqrt）；
-    # 原断言恒 AttributeError，使该用例连 fixed 版都无法通过，改为直接判负无穷
+    # CPython has no math.isneginf (only isinf/isfinite/isnan/isclose/isqrt);
+    # the original assert always raised AttributeError, failing even on the fixed
+    # variant, so the case asserts negative infinity directly
     assert math.isinf(safe_div(-1, 0)) and safe_div(-1, 0) < 0""",
         "bug_type": "runtime",
         "expected_pass": 2,
@@ -312,7 +313,7 @@ def test_safe_div_zero_neg():
     },
     {
         "name": "clamp_boundary_inverted",
-        "description": "区间钳制函数把上下界写反，越界值被放大而非收敛",
+        "description": "clamp swaps the bounds, so out-of-range values are pushed away instead of converging",
         "template": """def clamp(value: int, low: int, high: int) -> int:
     if value < high:
         return high
@@ -345,7 +346,7 @@ def test_clamp_boundary_equals():
     },
     {
         "name": "string_slice_off_by_one",
-        "description": "取前 n 个字符的切片少取一位（range/切片边界差一）",
+        "description": "off-by-one when taking the first n characters (range/slice boundary error)",
         "template": """def first_n_chars(s: str, n: int) -> str:
     if n <= 0:
         return ""
@@ -376,7 +377,7 @@ def test_first_n_one():
     },
     {
         "name": "distance_abs_missing",
-        "description": "数轴距离计算漏掉绝对值，反向距离返回负数",
+        "description": "distance on the number line omits abs(), so reversed distances come back negative",
         "template": """def distance(a: int, b: int) -> int:
     return a - b""",
         "fixed": """def distance(a: int, b: int) -> int:
@@ -397,7 +398,7 @@ def test_distance_zero():
     },
     {
         "name": "cumulative_sum_wrong_init",
-        "description": "累计器初始值非零，所有结果整体偏移",
+        "description": "accumulator starts non-zero, shifting every result",
         "template": """def cumulative(values: list) -> list:
     out = []
     total = -1
@@ -431,7 +432,7 @@ def test_cumulative_single():
     },
     {
         "name": "boolean_inverted_flag",
-        "description": "布尔校验函数把返回值取反，调用方判定全反",
+        "description": "boolean validator inverts its return value, flipping every caller decision",
         "template": """def is_valid_username(name: str) -> bool:
     ok = bool(name) and name.isalnum() and len(name) <= 20
     return not ok""",
@@ -457,7 +458,7 @@ def test_too_long():
     },
     {
         "name": "sign_check_wrong_operator",
-        "description": "温度符号判断用错比较运算符（<= 写成 >=），极值判定全反",
+        "description": "temperature sign check uses the wrong comparison operator (<= written as >=), inverting every extreme-value decision",
         "template": """def is_freezing(celsius: int) -> bool:
     return celsius >= 0
 
@@ -499,7 +500,7 @@ def test_normalize_warm():
 BUG_PATTERNS_LEVEL2: list[dict[str, Any]] = [
     {
         "name": "multi_func_off_by_one",
-        "description": "排序函数调用比较函数，比较函数有 off-by-one 缺陷导致排序不稳定",
+        "description": "sort delegates to a comparator with an off-by-one defect, making the sort unstable",
         "template": """def compare(a: int, b: int) -> int:
     if a > b:
         return 1
@@ -567,7 +568,7 @@ def test_top_k_edge():
     },
     {
         "name": "multi_func_chain_error",
-        "description": "管道式数据转换：normalize → aggregate → report，normalize 未处理空列表",
+        "description": "pipeline data conversion (normalize -> aggregate -> report) where normalize does not handle an empty list",
         "template": """def normalize(data: list) -> list:
     return [x * 2 for x in data]
 
@@ -617,7 +618,7 @@ def test_report_none():
     },
     {
         "name": "helper_missing_return_none",
-        "description": "辅助函数部分分支漏写 return 隐式返回 None，主函数链上取值崩溃",
+        "description": "helper branches miss return and implicitly return None, crashing the caller chain on attribute access",
         "template": """def pick_label(score: int) -> str:
     if score >= 90:
         return "excellent"
@@ -654,7 +655,7 @@ def test_report_fail_path():
     },
     {
         "name": "max_min_swapped_helpers",
-        "description": "统计函数中 min/max 比较方向写反，极值结果互换",
+        "description": "min/max comparisons in the statistics function are reversed, swapping the extremes",
         "template": """def _better(current: int, candidate: int) -> bool:
     return candidate < current
 
@@ -707,7 +708,7 @@ def test_consistency():
     },
     {
         "name": "round_floor_precision",
-        "description": "统计口径四舍五入被写成向下取整，系统性偏低",
+        "description": "reported rounding is implemented as floor, biasing results systematically low",
         "template": """def rounded_ratio(hit: int, total: int) -> float:
     if total == 0:
         return 0.0
@@ -720,7 +721,7 @@ def test_consistency():
         "test_cases": """from round_floor_precision import rounded_ratio
 
 def test_round_up_case():
-    # 2/3 = 66.67%：round → 67，floor → 66（无 .5 临界，规避 banker's rounding）
+    # 2/3 = 66.67%: round -> 67, floor -> 66 (no .5 edge, avoiding banker's rounding)
     assert rounded_ratio(2, 3) == 0.67
 
 def test_zero_total():
@@ -737,7 +738,7 @@ def test_all_hits():
     },
     {
         "name": "range_skip_last_element",
-        "description": "处理循环 range 少覆盖最后一个元素（应 range(len) 而非 len-1）",
+        "description": "processing loop skips the last element (should be range(len) instead of len-1)",
         "template": """def mark_positions(text: str, ch: str) -> list:
     marks = []
     for i in range(len(text) - 1):
@@ -773,7 +774,7 @@ def test_empty():
 CROSS_FILE_PATTERNS: list[dict[str, Any]] = [
     {
         "name": "cross_file_api_contract",
-        "description": "module_a 依赖 module_b.process() 的输出长度契约（长度=输入），module_b 返回尾部多一个哨兵元素（P0-5 修正：原 buggy 对空列表行为与 fixed 等价，不可检出）",
+        "description": "module_a depends on the output-length contract of module_b.process() (length = input length), but module_b appends one extra sentinel element at the tail (P0-5 note: the original buggy empty-list behaviour was equivalent to fixed, making it undetectable)",
         "module_a_code": """from module_b import process
 
 def run_pipeline(items: list) -> list:
@@ -807,12 +808,12 @@ def test_run_pipeline_empty():
     },
     {
         "name": "cross_file_type_mismatch",
-        "description": "module_a 假设 module_b.lookup() 返回 str，module_b 实际返回 int，类型不匹配",
+        "description": "module_a assumes module_b.lookup() returns str, but module_b actually returns int (a type-mismatched cross-file contract)",
         "module_a_code": """from module_b import lookup
 
 def display(name: str) -> str:
     value = lookup(name)
-    return f"value: {value.strip().upper()}"  # strip/upper 是 str 方法，int 没有""",
+    return f"value: {value.strip().upper()}"  # strip/upper are str methods; int has neither""",
         "module_b_code": """_TABLE = {"alpha": 1, "beta": 2, "gamma": 3}
 
 def lookup(key: str) -> int:
@@ -860,7 +861,7 @@ def test_display_normal():
 BUG_PATTERNS_LEVEL25: list[dict[str, Any]] = [
     {
         "name": "runtime_index_error_boundary",
-        "description": "列表边界访问未检查长度，索引越界抛 IndexError",
+        "description": "list access does not check length, raising IndexError on out-of-range indices",
         "template": """def get_last_two(items: list) -> list:
     return items[-2:]
 
@@ -917,7 +918,7 @@ def test_middle_empty():
     },
     {
         "name": "runtime_key_error_missing",
-        "description": "字典按键取值未处理键缺失，抛 KeyError",
+        "description": "dict lookup does not handle a missing key, raising KeyError",
         "template": """def lookup_user(users: dict, user_id: str) -> str:
     return users[user_id]["name"]
 
@@ -977,7 +978,7 @@ def test_summary_empty_dict():
     },
     {
         "name": "runtime_attribute_error_none",
-        "description": "对 None 返回结果做属性访问，抛 AttributeError",
+        "description": "attribute access on a None return, raising AttributeError",
         "template": """class Config:
     def __init__(self):
         self.settings = None
@@ -1057,7 +1058,7 @@ def test_config_partial_none_values():
     },
     {
         "name": "runtime_type_error_mismatch",
-        "description": "类型不匹配调用：int 列表混入 str，对不可加元素求和/比较抛 TypeError",
+        "description": "type-mismatched call: a str sneaks into an int list, and summing/comparing the inoperable element raises TypeError",
         "template": """def total(values: list) -> int:
     return sum(values)
 
@@ -1130,12 +1131,12 @@ def test_is_increasing_with_float():
     },
     {
         "name": "runtime_zero_division_average",
-        "description": "空集合求均值未守卫除零，ZeroDivisionError",
+        "description": "average over an empty collection lacks a zero-division guard, raising ZeroDivisionError",
         "template": """def average(grades: list) -> float:
     return sum(grades) / len(grades)""",
         "fixed": """def average(grades: list) -> float:
     if not grades:
-        raise ValueError("grades 不能为空")
+        raise ValueError("grades must not be empty")
     return sum(grades) / len(grades)""",
         "test_cases": """import pytest
 
@@ -1159,37 +1160,37 @@ def test_average_empty_raises():
     },
     {
         "name": "runtime_type_error_str_num",
-        "description": "数量拼接把 str 与 int 直接相加，TypeError",
+        "description": "summary concatenation adds str and int directly, raising TypeError",
         "template": """def build_summary(count: int, label: str) -> str:
-    return "共 " + count + " 个 " + label""",
+    return "items " + count + " of " + label""",
         "fixed": """def build_summary(count: int, label: str) -> str:
-    return f"共 {count} 个 {label}\"""",
+    return f"items {count} of {label}\"""",
         "test_cases": """from runtime_type_error_str_num import build_summary
 
 def test_summary_normal():
-    assert build_summary(3, "苹果") == "共 3 个 苹果"
+    assert build_summary(3, "apples") == "items 3 of apples"
 
 def test_summary_zero():
-    assert build_summary(0, "错误") == "共 0 个 错误"
+    assert build_summary(0, "errors") == "items 0 of errors"
 
 def test_summary_large():
-    assert build_summary(12345, "条目") == "共 12345 个 条目\"""",
+    assert build_summary(12345, "entries") == "items 12345 of entries\"""",
         "bug_type": "runtime",
         "expected_pass": 0,
         "total_tests": 3,
     },
     {
         "name": "runtime_value_error_int_cast",
-        "description": "字符串转整数未守卫非数字输入，ValueError 未收敛为域错误",
+        "description": "string-to-int conversion does not guard non-numeric input; the ValueError is not narrowed into a domain error",
         "template": """def parse_port(raw: str) -> int:
     return int(raw)""",
         "fixed": """def parse_port(raw: str) -> int:
     try:
         port = int(raw.strip())
     except ValueError:
-        raise ValueError(f"无效端口: {raw!r}") from None
+        raise ValueError(f"invalid port: {raw!r}") from None
     if not (0 <= port <= 65535):
-        raise ValueError(f"端口越界: {port}")
+        raise ValueError(f"port out of range: {port}")
     return port""",
         "test_cases": """import pytest
 
@@ -1214,24 +1215,24 @@ def test_parse_out_of_range_raises():
     },
     {
         "name": "runtime_key_error_dict_get",
-        "description": "字典取默认值用下标访问，缺键抛 KeyError 而非回退默认",
+        "description": "dict default lookup uses subscript access, raising KeyError on a missing key instead of falling back",
         "template": """def describe_level(level: int) -> str:
-    _NAMES = {1: "入门", 2: "进阶", 3: "专家"}
+    _NAMES = {1: "beginner", 2: "intermediate", 3: "expert"}
     return _NAMES[level]""",
         "fixed": """def describe_level(level: int) -> str:
-    _NAMES = {1: "入门", 2: "进阶", 3: "专家"}
-    return _NAMES.get(level, "未知")""",
+    _NAMES = {1: "beginner", 2: "intermediate", 3: "expert"}
+    return _NAMES.get(level, "unknown")""",
         "test_cases": """from runtime_key_error_dict_get import describe_level
 
 def test_known_levels():
-    assert describe_level(1) == "入门"
-    assert describe_level(3) == "专家"
+    assert describe_level(1) == "beginner"
+    assert describe_level(3) == "expert"
 
 def test_unknown_level_defaults():
-    assert describe_level(9) == "未知"
+    assert describe_level(9) == "unknown"
 
 def test_zero_defaults():
-    assert describe_level(0) == "未知\"""",
+    assert describe_level(0) == "unknown\"""",
         "bug_type": "runtime",
         "expected_pass": 1,
         "total_tests": 3,
@@ -1253,7 +1254,7 @@ def test_zero_defaults():
 BUG_PATTERNS_LEVEL25HARD: list[dict[str, Any]] = [
     {
         "name": "hard_depth_blind_nested",
-        "description": "扁平统计器：stats_of 委托 count_items，对嵌套 list 不递归展开，返回 0",
+        "description": "flat statistics: stats_of delegates to count_items, which does not recurse into nested lists and returns 0",
         "template": "def stats_of(data):\n    return count_items(data)\n\ndef count_items(data):\n    if isinstance(data, list):\n        total = 0\n        for x in data:\n            if isinstance(x, int):\n                total += 1\n        return total\n    return 0\n\ndef describe(data):\n    n = count_items(data)\n    return f'items={n}'\n",
         "fixed": "def stats_of(data):\n    return count_items(data)\n\ndef _flatten(data):\n    out = []\n    for x in data:\n        if isinstance(x, (list, tuple)):\n            out.extend(_flatten(x))\n        else:\n            out.append(x)\n    return out\n\ndef count_items(data):\n    if isinstance(data, list):\n        return sum(1 for x in _flatten(data) if isinstance(x, int))\n    return 0\n\ndef describe(data):\n    n = count_items(data)\n    return f'items={n}'\n",
         "test_cases": "from hard_depth_blind_nested import stats_of, count_items, describe\n\ndef test_flat_list():\n    assert count_items([1, 2, 3]) == 3\n\ndef test_nested_list():\n    assert count_items([[1, 2], [3, [4, 5]]]) == 5\n\ndef test_mixed_types():\n    assert count_items([1, \"a\", 2, None, 3]) == 3\n\ndef test_deep_nesting():\n    assert count_items([[[[1]]], [2, [3]]]) == 3\n\ndef test_empty_and_scalars():\n    assert count_items([]) == 0\n    assert count_items(5) == 0\n    assert stats_of([1, [2, 3]]) == 3\n    assert describe([[1, 2]]) == 'items=2'\n",
@@ -1266,7 +1267,7 @@ BUG_PATTERNS_LEVEL25HARD: list[dict[str, Any]] = [
     },
     {
         "name": "hard_chained_dict_lookup",
-        "description": "嵌套映射取链路：metric 在 layers 缺失或某层缺 key 时抛 KeyError",
+        "description": "nested-map lookup chain: metric raises KeyError when layers is missing or a layer lacks the key",
         "template": """def lookup_metric(metrics: dict, layer_name: str, key: str):
     layers = metrics[layer_name]
     return layers[key]
@@ -1323,7 +1324,7 @@ def test_rank_order():
     },
     {
         "name": "hard_polluted_entry_guard",
-        "description": "记录池遍历：pool_status 对混入 dict 条目的池抛 TypeError",
+        "description": "record-pool iteration: pool_status raises TypeError on a pool polluted with dict entries",
         "template": """def pool_status(entries: list) -> dict:
     total = 0
     for e in entries:
@@ -1388,7 +1389,7 @@ def test_largest_mixed():
     },
     {
         "name": "hard_iter_over_none",
-        "description": "迭代器展开：expand_regions 对 None 输入抛 TypeError（None 不可迭代）",
+        "description": "iterator expansion: expand_regions raises TypeError on None input (None is not iterable)",
         "template": """def expand_regions(regions):
     flat = []
     for region in regions:
@@ -1441,7 +1442,7 @@ def test_contains_empty():
     },
     {
         "name": "hard_nested_iter_mixed",
-        "description": "深度收集器：collect 不递归展开嵌套列表，且对 dict 元素抛异常",
+        "description": "deep collector: collect does not recurse into nested lists and raises on dict elements",
         "template": """def collect(items):
     out = []
     for item in items:
@@ -1509,7 +1510,7 @@ def test_first_leaf():
     },
     {
         "name": "hard_mixed_numeric_agg",
-        "description": "数值聚合：total/max_value/percent_share 对 int-str 混列表抛 TypeError",
+        "description": "numeric aggregation: total/max_value/percent_share raise TypeError on a list mixing ints and strs",
         "template": """def total(values: list) -> float:
     return sum(values)
 
@@ -1565,7 +1566,7 @@ def test_share_zero_total():
     },
     {
         "name": "hard_attribute_chain_guard",
-        "description": "配置链：resolve_option 对未初始化 settings / 部分 None 值抛 AttributeError",
+        "description": "config chain: resolve_option raises AttributeError on uninitialized settings or partially None values",
         "template": """class Config:
     def __init__(self):
         self.settings = None
@@ -1641,7 +1642,7 @@ def test_dump_merges():
     },
     {
         "name": "hard_slice_contract",
-        "description": "切片契约：entries 长度不定（2/3/4 字段混合），split_entry 对短条目抛 IndexError",
+        "description": "slice contract: entries vary in length (2/3/4 fields mixed) and split_entry raises IndexError on short entries",
         "template": """def split_entry(entry):
     return {"head": entry[0], "body": entry[1], "tail": entry[2], "flag": entry[3]}
 
@@ -1695,7 +1696,7 @@ def test_names_skip_empty():
     },
     {
         "name": "hard_mutable_default_arg",
-        "description": "可变默认参数跨调用累积（Python 经典陷阱），多次调用结果互染",
+        "description": "mutable default argument accumulates across calls (the classic Python trap), cross-contaminating results",
         "template": """def append_tag(item: str, tags: list = []) -> list:
     tags.append(item)
     return tags
@@ -1734,7 +1735,7 @@ def test_repeated_calls_isolated():
     },
     {
         "name": "hard_is_vs_equality",
-        "description": "身份比较 is 用于值比较，大整数/新对象场景恒 False",
+        "description": "identity comparison is used where value comparison is meant, always False for big ints / fresh objects",
         "template": """def find_index(values: list, target: int) -> int:
     for i, v in enumerate(values):
         if v is target:
@@ -1772,7 +1773,7 @@ def test_lookup_missing():
     },
     {
         "name": "hard_except_swallows_nameerror",
-        "description": "过宽 except 捕获并吞掉 NameError，后续分支引用未定义变量",
+        "description": "an over-broad except swallows NameError while a later branch references an undefined variable",
         "template": """def parse_config(raw: dict) -> int:
     try:
         timeout = raw["timeout"]
@@ -1807,7 +1808,7 @@ def test_load_default():
     assert load_default() == 30
 
 def test_no_unbound_error():
-    # 缺键路径必须返回默认值而非抛 NameError/UnboundLocalError
+    # The missing-key path must return the default instead of raising NameError/UnboundLocalError
     with pytest.raises((ValueError, TypeError)):
         parse_config(None)""",
         "bug_type": "runtime",
@@ -1825,9 +1826,10 @@ CROSS_FILE_DEEP_PATTERNS: list[dict[str, Any]] = [
     {
         "name": "cross_file_three_module_chain",
         "description": (
-            "module_a → module_b → module_c 三级调用链，缺陷在 module_c 的聚合函数"
-            "（空列表未处理导致 IndexError + 类型混用导致求和精度丢失），"
-            "修复需理解双向依赖（谁调用 module_c）并修改 module_c 接口实现"
+            "three-level call chain module_a -> module_b -> module_c with the defect in "
+            "module_c's aggregation function (an unhandled empty list causes IndexError, and "
+            "mixed int/float types lose summation precision); the repair requires understanding "
+            "the bidirectional dependency (who calls module_c) and changing module_c's interface"
         ),
         "module_a_code": """from module_b import transform_batch
 from module_c import doubled
@@ -1844,13 +1846,13 @@ def transform_batch(records: list) -> list:
     mean = aggregate(normalized) if normalized else 0.0
     return [float(v) for v in normalized]""",
         "module_c_code": """def normalize_values(values: list) -> list:
-    return [v * 2 for v in values] + [0]  # 历史 bug：空列表返回 [0] 而非 []
+    return [v * 2 for v in values] + [0]  # historical bug: empty list returns [0] instead of []
 
 def aggregate(values: list) -> float:
-    return sum(values) / len(values)  # 历史 bug：空列表除零
+    return sum(values) / len(values)  # historical bug: division by zero on an empty list
 
 def doubled(values: list) -> float:
-    return 2 * sum(values, 0)  # 历史 bug：int 混用未归一化 float""",
+    return 2 * sum(values, 0)  # historical bug: int mixing without float normalisation""",
         "fixed_module_c_code": """def normalize_values(values: list) -> list:
     if not values:
         return []
@@ -1873,9 +1875,10 @@ from module_a import analyze_dataset
 from module_b import transform_batch
 
 def test_aggregate_empty():
-    # 置于首位：空列表除零（ZeroDivisionError）展开被测模块帧
-    # module_c.py:N: in aggregate，使位置感知定位阶段可被激活
-    # （--tb=short 下纯 assertion 失败不展开被测帧，运行时异常才展开）
+    # Placed first: the empty-list division by zero (ZeroDivisionError) unfolds the
+    # module-under-test frame (module_c.py:N: in aggregate) so the position-aware
+    # localization stage can activate (with --tb=short a pure assertion failure does
+    # not unfold the module-under-test frame; only a runtime exception does)
     assert aggregate([]) == 0.0
 
 def test_normalize_normal():
@@ -1888,7 +1891,7 @@ def test_aggregate_normal():
     assert abs(aggregate([1.0, 2.0, 3.0]) - 2.0) < 1e-9
 
 def test_transform_batch_mixed_types():
-    # int/float 混用历史缺陷：sum([1, 2.5]) 旧口径 int*2 丢精度
+    # historical int/float mixing defect: sum([1, 2.5]) under the old semantics loses precision via int*2
     assert transform_batch([1, 2.5]) == [2.0, 5.0]
 
 def test_analyze_dataset_normal():
@@ -1922,7 +1925,7 @@ def test_analyze_dataset_with_none():
 BUG_PATTERNS_LEVEL4: list[dict[str, Any]] = [
     {
         "name": "boundary_and_exception",
-        "description": "日期解析吞掉无效输入返回哨兵值（P0-5 修正：原 buggy 的 strptime 本就抛 ValueError 与 fixed 等价不可检出；fixed 侧 tz replace 混算 naive/aware 是真 bug，一并修复）",
+        "description": "date parsing swallows invalid input and returns a sentinel (P0-5 note: the original buggy strptime already raised ValueError, test-equivalent to fixed and therefore undetectable; the fixed side mixed naive/aware datetimes via tz replace, which is a real bug fixed here as well)",
         "template": """import datetime
 
 def parse_date(s: str) -> datetime.datetime:
@@ -1942,22 +1945,22 @@ def is_expired(target: str) -> bool:
 
 def parse_date(s: str) -> datetime.datetime:
     if not s or not s.strip():
-        raise ValueError("日期字符串不能为空")
+        raise ValueError("date string must not be empty")
     try:
         return datetime.datetime.strptime(s.strip(), "%Y-%m-%d")
     except ValueError:
-        raise ValueError(f"无法解析日期: {s!r}（期望格式 YYYY-MM-DD）") from None
+        raise ValueError(f"cannot parse date: {s!r} (expected format YYYY-MM-DD)") from None
 
 def days_until(target: str) -> int:
     if target is None:
-        raise ValueError("target 不能为 None")
+        raise ValueError("target must not be None")
     dt = parse_date(target)
     delta = dt - datetime.datetime.now()
     return delta.days
 
 def is_expired(target: str) -> bool:
     if target is None or not target.strip():
-        raise ValueError("target 不能为 None 或空字符串")
+        raise ValueError("target must not be None or an empty string")
     return days_until(target) < 0""",
         "test_cases": """from boundary_and_exception import parse_date, days_until, is_expired
 import datetime
@@ -1990,10 +1993,11 @@ def test_is_expired_past():
     {
         "name": "type_mismatch_contract",
         "description": (
-            "PAGENT 风格类型缺陷：compute_scores 契约上返回 dict[str, float]，"
-            "但 normalize 路径漏了 float() 转换，int 输入混入后 dict 值类型不稳定；"
-            "average 对空 dict 除零 + 对 int 值求平均丢精度。修复需补类型转换"
-            "（触发 2.1 PAGENT 类型修复层：type_repair_layer 静态识别类型疑点）"
+            "PAGENT-style type defect: compute_scores is contracted to return dict[str, float], "
+            "but the normalize path skips the float() conversion so int inputs leave the dict "
+            "values type-unstable; average divides by zero on an empty dict and loses precision "
+            "averaging int values. The repair adds the missing type conversion (exercises the 2.1 "
+            "PAGENT type-repair layer: type_repair_layer statically flags the type issues)"
         ),
         "template": """def compute_scores(records: list) -> dict:
     scores = {}
@@ -2067,7 +2071,7 @@ def test_rank_top_normal():
     },
     {
         "name": "type_none_branch_missing",
-        "description": "可空输入未处理 None 分支，静默返回错误类型（None 传播）",
+        "description": "nullable input lacks a None branch, silently returning the wrong type (None propagation)",
         "template": """def initials(full_name: str | None) -> str:
     parts = full_name.split()
     return ".".join(p[0].upper() for p in parts)""",
@@ -2098,7 +2102,7 @@ def test_single_word():
     },
     {
         "name": "type_int_str_key_contract",
-        "description": "键类型契约不一致：写入 int 键、查询 str 键，静默走 miss 分支",
+        "description": "key-type contract mismatch: writes use int keys while queries use str keys, silently taking the miss branch",
         "template": """_STOCK = {}
 
 def add_item(sku: int, qty: int) -> None:
@@ -2139,10 +2143,10 @@ BUG_PATTERNS_LEVEL45: list[dict[str, Any]] = [
     {
         "name": "import_chain_type_contract",
         "description": (
-            "导入链破坏缺陷：lookup 契约上返回 str（_TABLE 值应为字符串），"
-            "实际 _TABLE 值被写成 int，lookup 返回 int；调用方 module_a 的 "
-            "display 假设 str 调 .strip()/.upper()，TypeError。修复需同时"
-            "修正 _TABLE 值类型与 lookup 签名（module 级符号契约 + 函数体）"
+            "broken import-chain contract: lookup is contracted to return str (_TABLE values "
+            "should be strings) but _TABLE values are written as ints, so lookup returns int; "
+            "the caller's display in module_a assumes str and calls .strip()/.upper(), raising "
+            "TypeError. The repair must fix both the _TABLE value types and the lookup signature"
         ),
         "template": """_TABLE = {"alpha": 1, "beta": 2, "gamma": 3}
 
@@ -2188,7 +2192,7 @@ def test_display_missing():
     assert display("delta") == "name=delta UNKNOWN"
 
 def test_display_keeps_contract():
-    # 契约守卫：修复后 _TABLE 键集合不变（命名契约不破坏）
+    # contract guard: the _TABLE key set is unchanged after the repair (naming contract preserved)
     assert set(_TABLE.keys()) == {"alpha", "beta", "gamma"}""",
         "bug_type": "assertion",
         "expected_pass": 7,
@@ -2198,8 +2202,9 @@ def test_display_keeps_contract():
     {
         "name": "import45_shadow_builtin",
         "description": (
-            "模块级符号覆盖内建名（list 被复用为变量名），下游函数把内建类型"
-            "当值调用，TypeError。修复需重命名 shadowing 符号并同步引用"
+            "a module-level symbol shadows a builtin name (list reused as a variable), so "
+            "downstream functions call the builtin type as if it were a value, raising TypeError. "
+            "The repair renames the shadowing symbol and updates every reference"
         ),
         "template": """list = ["a", "b", "c"]
 
@@ -2350,11 +2355,14 @@ class SyntheticDataset(BaseDatasetLoader):
         self._task_count = task_count
         self._seed = seed
         if max_pattern_repeat is not None and max_pattern_repeat < 1:
-            logger.warning("max_pattern_repeat=%r 无效（须 >=1 或 None），回退 None（历史口径）", max_pattern_repeat)
+            logger.warning(
+                "max_pattern_repeat=%r invalid (must be >=1 or None); falling back to None (historical behaviour)",
+                max_pattern_repeat,
+            )
             max_pattern_repeat = None
         self._max_pattern_repeat = max_pattern_repeat
         if difficulty not in self._VALID_DIFFICULTIES:
-            logger.warning("未知 difficulty=%r，回退 'mixed'（历史口径）", difficulty)
+            logger.warning("unknown difficulty=%r; falling back to 'mixed' (historical behaviour)", difficulty)
             difficulty = "mixed"
         self._difficulty = difficulty
         super().__init__(subset=subset)
@@ -2538,7 +2546,7 @@ class SyntheticDataset(BaseDatasetLoader):
             d = t.metadata.get("difficulty", 1)
             dist[d] = dist.get(d, 0) + 1
         logger.info(
-            "合成数据集生成完成：%d 个任务（difficulty=%s，分布=%s）",
+            "Synthetic dataset generation finished: %d tasks (difficulty=%s, distribution=%s)",
             len(tasks),
             self._difficulty,
             dist,
@@ -2547,6 +2555,6 @@ class SyntheticDataset(BaseDatasetLoader):
 
 if __name__ == "__main__":
     ds = SyntheticDataset(task_count=60, seed=42)
-    logger.info("合成数据集规模: %d 个任务", ds.size)
+    logger.info("Synthetic dataset size: %d tasks", ds.size)
     for task in ds.tasks[:5]:
         logger.info("  - %s: %s", task.task_id, task.problem_statement[:50])

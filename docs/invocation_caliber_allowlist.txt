@@ -24,7 +24,6 @@ dynamic-flag perf.yml::Check-regression-vs-docs/performance_baseline.json-(non-b
 manual-only check_artifact_doc_consistency --skip-t10  # 调试档：传它这道门就跳过 T-10（通过率混淆）对账。链上与 CI 都跑全量档，本档无调用面也无代码锁——「关掉判据」的开关必须留名，且不得被挂上任何面。声明现场 @scripts/gates/check_artifact_doc_consistency.py
 manual-only check_artifacts_tracked --list  # 自检档：只打印清单后退出，不给退出码。链上与 CI 都跑判据档；本档仅维护者核对扫描面时手动传。声明现场 @scripts/gates/check_artifacts_tracked.py
 manual-only check_ast_parse_guards --list  # 自检档：「只列违规，不判退出码」（help 原文）。它让这道门不红，与 continue-on-error 同族，故必须登记谁在手动跑。声明现场 @scripts/gates/check_ast_parse_guards.py
-manual-only check_baseline --verify  # 加强档：额外跑全量 pytest 收集做一致性校验（help 原文标「慢」），链上与 CI 都不跑它——慢，且它的结论由 `make test-cov` 一侧给出。声明现场 @scripts/gates/check_baseline.py
 manual-only check_citations --allow-empty  # 放松档：扫描面为空时视为通过。默认是「为空即 FAIL」（防门禁因文件被删而静默失效），本档把那道防线关掉，所以任何面传它都必须先在表里留名。声明现场 @scripts/gates/check_citations.py
 manual-only check_perf_regression --update-baseline  # 改写判据档：跑它这道门把自己的判据文件（docs/performance_baseline.json）刷写掉后退出，只能手动——任何面自动传它，等于门禁自己改写自己。手动流程现场写在 perf.yml 的基线漂移处置注释里 @.github/workflows/perf.yml
 manual-only check_state_contract --list  # 自检档：仅打印声明键集与扫描范围，不判定。链上与 CI 都跑判据档。声明现场 @scripts/gates/check_state_contract.py

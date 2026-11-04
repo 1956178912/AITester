@@ -36,8 +36,49 @@ logger = logging.getLogger(__name__)
 _thread_local = threading.local()
 
 # ─── 魔数常量（统一管理，便于后续调整和注释来源）──────────────────────────
-# 通用 LLM 调用单次最大重试次数（指数退避：1s, 2s, 4s）
-_DEFAULT_LLM_MAX_RETRIES = 3
+# 通用 LLM 调用单次最大重试次数（指数退避：1s, 2s, 4s, 8s, 16s, 32s）。
+# 2026-11-04（用户指令"重试次数加多"）：默认 3 → 6。动机：深度思考默认开启后，
+# 单次调用时长显著上升，网关 5xx / 限流 / 长响应截断的瞬态失败概率随之上升；
+# 3 次退避（合计 7s 等待）在长响应场景下过早放弃，会把瞬态失败记成任务失败。
+# 6 次退避合计约 63s 等待，仍远小于单任务预算。可用 LLM_MAX_RETRIES 覆盖。
+_DEFAULT_LLM_MAX_RETRIES = 6
+
+
+def _llm_max_retries_default() -> int:
+    """读 ``LLM_MAX_RETRIES``（1..12），坏值/缺省回退到模块默认值。"""
+    raw = (os.getenv("LLM_MAX_RETRIES", "") or "").strip()
+    if not raw:
+        return _DEFAULT_LLM_MAX_RETRIES
+    try:
+        val = int(raw)
+    except ValueError:
+        logger.warning("LLM_MAX_RETRIES=%s 非整数，回退 %d", raw, _DEFAULT_LLM_MAX_RETRIES)
+        return _DEFAULT_LLM_MAX_RETRIES
+    if 1 <= val <= 12:
+        return val
+    logger.warning("LLM_MAX_RETRIES=%s 越界（1..12），回退 %d", raw, _DEFAULT_LLM_MAX_RETRIES)
+    return _DEFAULT_LLM_MAX_RETRIES
+
+
+def _llm_http_timeout() -> float:
+    """HTTP 读超时秒数（``LLM_HTTP_TIMEOUT``，默认 600）。
+
+    2026-11-04（用户指令"时长增加"）：默认 180 → 600。深度思考默认开启后，
+    单次响应（尤其带 reasoning 的长测试文件生成）常超过 180s；180s 会把它
+    们在传输层截断成可重试失败，白烧 token 且污染任务失败率。
+    """
+    raw = (os.getenv("LLM_HTTP_TIMEOUT", "") or "").strip()
+    if not raw:
+        return 600.0
+    try:
+        val = float(raw)
+    except ValueError:
+        logger.warning("LLM_HTTP_TIMEOUT=%s 非数字，回退 600", raw)
+        return 600.0
+    if 30.0 <= val <= 3600.0:
+        return val
+    logger.warning("LLM_HTTP_TIMEOUT=%s 越界（30..3600），回退 600", raw)
+    return 600.0
 
 
 # ─── LLM 客户端复用缓存（性能优化）────────────────────────────────────────────
@@ -83,10 +124,28 @@ def json_output_mode_enabled() -> bool:
     return raw not in ("off", "0", "false", "disabled")
 
 
-# finish_reason 异常值（DeepSeek 官方文档 Chat Completions）：length =
-# 达到 max_tokens 截断；insufficient_system_resource = 推理资源不足中断。
-# 两者均为"响应不完整"→ 按可恢复失败重试（而非把残缺内容交给下游解析）。
+# finish_reason 异常值（DeepSeek 官方文档 Chat Completions）：length = 达到
+# max_tokens 截断；insufficient_system_resource = 推理资源不足中断。两者都不把
+# 残缺响应交给下游解析，但**重试预算不同**（GM 轮，2026-11-04）：
+# - `length` 是请求形状的**确定性**后果（同一 prompt 重发大概率再截断一次），
+#   按 `LLM_MAX_RETRIES`（现为 6）重试点火就是最坏 7 次付费买同一个残缺答案；
+#   因此只给一次重试——一次足够覆盖"服务端实例间输出上限偶发不同"这一真实情形，
+#   又不至于把确定性失败烧成成本长尾。
+# - `insufficient_system_resource` 是服务端瞬态，保留完整退避阶梯。
 _ABNORMAL_FINISH_REASONS: frozenset[str] = frozenset({"length", "insufficient_system_resource"})
+_TRUNCATED_FINISH_REASONS: frozenset[str] = frozenset({"length"})
+_TRANSIENT_INCOMPLETE_FINISH_REASONS: frozenset[str] = frozenset({"insufficient_system_resource"})
+
+
+class LlmTruncatedResponseError(RuntimeError):
+    """响应被 `max_tokens` 截断（finish_reason=length）：只重试一次。
+
+    仍是 `RuntimeError` 的子类，既有捕获（含"不把残缺内容交给下游"的断言）不变。
+    """
+
+
+class LlmIncompleteResponseError(RuntimeError):
+    """服务端瞬态导致响应不完整：按完整退避阶梯重试。"""
 
 
 def _openai_extra_body() -> dict[str, Any]:
@@ -96,16 +155,40 @@ def _openai_extra_body() -> dict[str, Any]:
     单任务最高 84k 输出，而实际工件（测试 + 补丁）仅 ~1-2k token——
     90%+ 输出为 deepseek V4 系（V4.1 Flash）**默认开启的思维链**
     （官方文档：thinking 默认 enabled；未设 max_tokens 时思考模式默认
-    上限 64K；reasoning_tokens 计入 completion 输出计费）。本函数把
-    思考关闭口径带到请求体。
+    上限 64K；reasoning_tokens 计入 completion 输出计费）。本函数负责
+    把思考口径显式带到请求体。
+
+    2026-11-04 口径更正（用户："我记错了，默认应该关闭思考模式"）：默认值回到
+    **disabled**。跨模型对比的前提是"同一设置不同模型"，而实测显示唯一能在两家
+    都成立的输出旋钮就是 thinking 开关本身——同一 prompt（QuixBugs `bitcount`
+    单条 Generator 调用，`TEMPERATURE=0.0`，2026-11-04 实测）：
+
+    | 模型 | 请求档位 | completion | 其中思维链 | 单调用成本（峰时价） |
+    |---|---|---|---|---|
+    | deepseek-flash | 默认（thinking on，服务端 effort=high） | 10,859 | 9,664 | ¥0.0878 |
+    | deepseek-flash | `reasoning_effort=low` | 2,564 | 1,706 | ¥0.0205 |
+    | deepseek-flash | `reasoning_effort=max` | 18,237 | 17,351 | ¥0.1467 |
+    | deepseek-flash | **`thinking=disabled`** | 709 | 0 | ¥0.0066（−92.4%） |
+    | mimo-v2.6-pro | 默认（thinking on） | 9,640 | 8,407 | ¥0.0593 |
+    | mimo-v2.6-pro | `reasoning_effort=low` | 6,150 | 4,881 | ¥0.0381 |
+    | mimo-v2.6-pro | `reasoning_effort=max` | 3,862 | 2,784 | ¥0.0250（**比默认更省**） |
+    | mimo-v2.6-pro | **`thinking=disabled`** | 342 | 0 | ¥0.0035（−94.1%） |
+
+    两家的 `thinking={"type":"disabled"}` 都被接受（deepseek 返回的
+    `reasoning_tokens` 为 null、mimo 为 0）。但 `reasoning_effort` 的档位**不是**
+    跨模型等价的旋钮：deepseek 单调（low<high<max），mimo 在本测点非单调（max 反而
+    低于默认）——把同一个 effort 值钉给两家并不产生同一设置，因此不用它做统一口径。
 
     环境变量（三者均登记 docs/env_budget.yaml）：
-    - LLM_THINKING_MODE："disabled"（**默认**，成本保护）
-      / "enabled"（质量敏感实验显式开启；R-P0-2 历史口径即默认开启）；
-    - LLM_REASONING_EFFORT："none" / "low" / "high" / "max"（默认不发；
-      none 亦关闭思考，low 为质量/成本折中）；
-    - LLM_MAX_OUTPUT_TOKENS：输出硬上限 1..393216（默认不发——思考
-      关闭后 V4 非思考默认 8K 已够；设小值可进一步截断长响应）。
+    - LLM_THINKING_MODE："disabled"（**默认**，成本保护口径）/ "enabled"（质量敏感
+      批次显式开启，例如 `run_e8_cell.sh` 的 on 格）；
+    - LLM_REASONING_EFFORT："none" / "low" / "high" / "max"（默认不发；跨模型不等价，
+      见上表，单模型内部实验才用它）；
+    - LLM_MAX_OUTPUT_TOKENS：输出硬上限 1..393216（默认不发——V4 非思考默认 8K、
+      思考模式默认上限 64K。注意：设小值把响应截断会被
+      `finish_reason="length"` 判为可恢复失败而**重试付费**，见
+      `_is_recoverable_failure`，所以它不是安全的省钱旋钮，只有 `budget_exceeded`
+      停止通道是硬闸）。
 
     Returns:
         传给 ChatOpenAI extra_body 的字典（空字典 = 不附加任何额外字段）。
@@ -174,7 +257,7 @@ def _get_or_create_chat_client(model_name: str, temperature: float, api_key: str
             openai_api_key=api_key,
             base_url=base_url,
             extra_body=_extra_body,
-            http_client=httpx.Client(verify=False, timeout=180.0),  # noqa: S501  # nosec B501 — 网关 MITM 证书不可信，实验流量显式豁免（披露见上）；bandit 行级豁免（R10 硬门禁 2026-11-02 登记，全局 skip 不收 B501）
+            http_client=httpx.Client(verify=False, timeout=_llm_http_timeout()),  # noqa: S501  # nosec B501 — 网关 MITM 证书不可信，实验流量显式豁免（披露见上）；bandit 行级豁免（R10 硬门禁 2026-11-02 登记，全局 skip 不收 B501）
         )
         # 达到上限时淘汰最早插入的条目（dict 保持插入序，FIFO）
         if len(_llm_client_cache) >= _MAX_CACHED_LLM_CLIENTS:
@@ -193,6 +276,7 @@ def _retry_with_exponential_backoff(
     retryable_exceptions: tuple[type[Exception], ...] = (),
     non_retryable_exceptions: tuple[type[Exception], ...] = (),
     pre_retry_check: Callable[[], None] | None = None,
+    single_shot_exceptions: tuple[type[Exception], ...] = (),
 ) -> Any:
     """带指数退避的重试通用工具函数。
 
@@ -209,6 +293,11 @@ def _retry_with_exponential_backoff(
             "确定性失败"（如客户端参数错误）与"瞬态失败"
             （限流 / 网络抖动 / 服务端 5xx）区分开，避免对必然失败的操作
             做无意义的指数退避。
+        single_shot_exceptions: GM 轮（2026-11-04）新增——命中即**只允许一次重试**
+            （首发 + 1 次）。用于"确定性后果型"失败：响应被 `max_tokens` 截断
+            （finish_reason=length）重发大概率得到同一个残缺答案，按完整阶梯
+            点火就是把一次付费买七次同样的截断。瞬态型（资源不足、限流、5xx）
+            不走这里，仍享完整退避。
         pre_retry_check: A11（2026-10-18 第三方审查 P1）新增的可选回调——
             每次**实际重试前**调用（已判定可重试、退避等待之前）。调用方
             用它复查任务级预算（`is_budget_exceeded`）：上一响应即使被判
@@ -222,7 +311,8 @@ def _retry_with_exponential_backoff(
 
     Raises:
         RuntimeError: 所有重试均失败时抛出，携带最后一次异常信息。
-        原始异常: 命中 non_retryable_exceptions 时立即抛出，不重试。
+        原始异常: 命中 non_retryable_exceptions 时立即抛出，不重试；命中
+            single_shot_exceptions 时最多重试一次。
     """
     last_error: Exception | None = None
     for attempt in range(max_retries + 1):  # attempt 0 是首次尝试
@@ -235,6 +325,9 @@ def _retry_with_exponential_backoff(
             # 不可重试的确定性失败立即抛出（优先级高于 retryable 兜底，
             # 否则 (Exception,) 兜底会把 non_retryable 也误判为可重试）
             if non_retryable_exceptions and isinstance(e, non_retryable_exceptions):
+                raise
+            if single_shot_exceptions and isinstance(e, single_shot_exceptions) and attempt >= 1:
+                # 截断类失败第二次仍发生 ⇒ 不再点第三把火（成本与结果都不变）
                 raise
             last_error = e
             if attempt < max_retries:
@@ -351,19 +444,24 @@ def _record_response_usage(usage: Any, model_name: str) -> bool:
 
         usd_cost = 0.0
         if _budget_enabled():
-            from src.budget.pricing import estimate_usd
+            # 2026-11-04 币种切换：改走"按价目表登记币种原样计价"通道。
+            # 旧 estimate_usd 只认 USD，价目表切 CNY 后会恒返回 None ⇒ 成本
+            # 记账整体失效（纸面开关）。金额单位由价目表决定，当前为人民币；
+            # 下游字段名 consumed_usd 是历史遗留，语义为"登记的记账单位"。
+            from src.budget.pricing import estimate_in_table_currency
 
-            estimated_usd, pricing_source = estimate_usd(model_name, input_tokens, output_tokens)
-            if estimated_usd is None:
+            amount, currency, pricing_source = estimate_in_table_currency(model_name, input_tokens, output_tokens)
+            if amount is None:
                 note_usd_pricing_unavailable(model_name)
             else:
-                usd_cost = float(estimated_usd)
+                usd_cost = float(amount)
                 logger.debug(
-                    "D1 USD 记账：model=%s tokens=%d/%d usd=%.8f source=%s",
+                    "费用记账：model=%s tokens=%d/%d amount=%.8f %s source=%s",
                     model_name,
                     input_tokens,
                     output_tokens,
                     usd_cost,
+                    currency or "?",
                     pricing_source,
                 )
         return record_usage_and_check(input_tokens, output_tokens, usd_cost=usd_cost)
@@ -403,11 +501,14 @@ def _budget_exceeded_error() -> Exception:
 
     stats = get_budget_stats()
     unit = str(stats.get("unit", "none"))
-    if unit == "usd":
+    # 2026-11-04：金额通道不止 USD 一种（当前基准币种为 CNY）。条件必须按
+    # "是否金额通道"判定，不能只写 unit == "usd"，否则 CNY 会落到 token 分支，
+    # 把 3000 tokens 当金额塞进异常的 consumed 字段——单位与数值不同口径。
+    if unit in ("usd", "cny"):
         return BudgetExceededError(
             consumed=float(stats.get("consumed_usd", 0.0)),
             limit=float(stats.get("usd_limit", 0.0)),
-            unit="usd",
+            unit=unit,
         )
     return BudgetExceededError(
         consumed=int(stats.get("consumed_tokens", 0)),

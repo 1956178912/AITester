@@ -9,7 +9,7 @@
 #       control 臂 = false（不注入规约 oracle）
 #       treat   臂 = true （注入；与 logic 档历史口径一致）
 #   - 其余全部固定：AITESTER_PROFILE=logic、TEMPERATURE=0、seed=42、
-#     LLM_THINKING_MODE=disabled、冷缓存（AITESTER_LLM_CACHE=0）。
+#    、冷缓存（AITESTER_LLM_CACHE=0）。
 #     config.py 用 os.environ.setdefault 注入档位预设，故显式 env 不被覆盖。
 #   - 基准：QuixBugs（50 任务 = 41 缺陷程序 + 9 测试驱动脚本；M1 口径）
 #   - 主终点：detection_rate（M1 三段判定 F2P，gold 独立裁决）
@@ -46,7 +46,6 @@ fi
 # 无需额外开关；此处只固定协议变量。
 export AITESTER_PROFILE=logic
 export TEMPERATURE=0
-export LLM_THINKING_MODE=disabled
 export AITESTER_LLM_CACHE=0          # 冷缓存：臂间零复用，杜绝 A1/RT1 式污染
 export BENCHMARK_PARALLELISM=4
 export MAX_ITERATIONS=3              # 与 logic 档主批次同口径

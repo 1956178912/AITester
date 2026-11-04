@@ -41,35 +41,72 @@ logger = logging.getLogger(__name__)
 # 正 / 反例以模块级常量给出（不散落在提示文本里），tests/test_spec_contract_grammar.py
 # 可直接遍历验证"提示里的每条例子都真的能编译 / 真的被拒"。
 SPEC_EXPR_GRAMMAR_POSITIVE_EXAMPLES: tuple[tuple[str, str, str], ...] = (
-    ("b != 0", "precondition", "前置：除数非零"),
-    ("len(text) > 0 and isinstance(text, str)", "precondition", "前置：非空 + 类型判定（isinstance 在白名单内）"),
-    ("result == a + b", "postcondition", "后置：result 表示返回值，编译器自动对齐到内部绑定名"),
-    ("isinstance(result, int) and result >= 0", "postcondition", "后置：类型 + 范围"),
-    ("0 <= result <= 100", "invariant", "不变量：链式比较一次写完"),
+    ("b != 0", "precondition", "precondition: the divisor is non-zero"),
+    (
+        "len(text) > 0 and isinstance(text, str)",
+        "precondition",
+        "precondition: non-empty + type check (isinstance is whitelisted)",
+    ),
+    (
+        "result == a + b",
+        "postcondition",
+        "postcondition: result denotes the return value; the compiler aligns it to the internal bound name",
+    ),
+    ("isinstance(result, int) and result >= 0", "postcondition", "postcondition: type + range"),
+    ("0 <= result <= 100", "invariant", "invariant: chained comparison written in one shot"),
     # v3（2026-10-12 P0-A-1 文法升阶）：有限域量化 + 字符串纯方法正例
-    ("all(ch.isdigit() for ch in text)", "invariant", "全称量化：所有字符为数字（循环变量 ch 仅在推导式内绑定）"),
-    ('text.startswith("a")', "precondition", "字符串纯方法：前缀判定（startswith 在白名单属性内）"),
+    (
+        "all(ch.isdigit() for ch in text)",
+        "invariant",
+        "universal quantification: every character is a digit (loop variable ch is bound only inside the comprehension)",
+    ),
+    (
+        'text.startswith("a")',
+        "precondition",
+        "pure string method: prefix check (startswith is a whitelisted attribute)",
+    ),
     # v4（2026-10-15 EMSE 批次六，emse_dsl_diag3 实测形态）：切片 + 字典读 API + set 去重
-    ("result == text[::-1]", "postcondition", "切片：逆序断言（冒号只允许出现在切片与双引号字符串内）"),
-    ("all(v > 0 for v in counts.values())", "invariant", "字典读 API：values() 只读遍历（keys/items/get 同族）"),
-    ("len(set(result)) == len(result)", "postcondition", "集合去重：元素互异判定（set 在白名单调用内）"),
+    (
+        "result == text[::-1]",
+        "postcondition",
+        "slice: reversed-order assertion (colons are allowed only in slices and double-quoted strings)",
+    ),
+    (
+        "all(v > 0 for v in counts.values())",
+        "invariant",
+        "dict read API: values() read-only iteration (keys/items/get are the same family)",
+    ),
+    (
+        "len(set(result)) == len(result)",
+        "postcondition",
+        "set dedup: all-distinct elements check (set is a whitelisted call)",
+    ),
 )
 SPEC_EXPR_GRAMMAR_NEGATIVE_EXAMPLES: tuple[tuple[str, str, str], ...] = (
-    ("text 为 str 类型", "natural_language", "中文类型描述句——评审实测的真实失败形态"),
-    ("成功时返回 int 类型结果", "natural_language", "同上：自然语言，非 ASCII 字符被字符白名单拒绝"),
-    ("result = a + b", "parse_error", "赋值语句不是表达式（判等请写 ==）"),
-    ("r == total", "unknown_name", "total 未绑定；结果变量统一写 result，不要写 r"),
+    # 前两条的中文子句是刻意保留的教学素材：示范自然语言/中文输入被字符白名单拒绝。
+    (
+        "text 为 str 类型",
+        "natural_language",
+        "a CJK natural-language type sentence - a real failure shape observed in review",
+    ),
+    (
+        "成功时返回 int 类型结果",
+        "natural_language",
+        "same shape: natural language, rejected by the character whitelist for non-ASCII characters",
+    ),
+    ("result = a + b", "parse_error", "an assignment statement is not an expression (write == for equality)"),
+    ("r == total", "unknown_name", "total is unbound; always write the result variable as result, never r"),
     # v3：strip 已入白名单（字符串纯方法），反例换用刻意不收的 title
     (
         'result.title() == "Abc"',
         "unsupported_operator",
-        "title 不在白名单属性内（字符串纯方法只放行 startswith/split/lower 等）",
+        "title is not a whitelisted attribute (pure string methods only allow startswith/split/lower and the like)",
     ),
     # v4（2026-10-15）：冒号放行后的护栏反例——lambda 子句无断言语义
     (
         "lambda r: r > 0",
         "unsupported_syntax",
-        "lambda 子句编译产物是恒真断言（BNF 无关键字参数产生式，lambda 只能裸出现）",
+        "a lambda clause compiles into a vacuously-true assertion (the BNF has no keyword-argument production; a lambda may only appear bare)",
     ),
 )
 # 示例所属字段标签（渲染进提示，避免 LLM 把后置示例写进前置）
@@ -87,15 +124,15 @@ def _build_spec_expr_grammar_section() -> str:
     attrs = " | ".join(terminals["attrs"])
     quants = " | ".join(terminals["quantifiers"])
     positives = "\n".join(
-        f"{i}. {clause}    （{_SPEC_EXPR_KIND_FIELD[kind]}：{note}）"
+        f"{i}. {clause}    ({_SPEC_EXPR_KIND_FIELD[kind]}: {note})"
         for i, (clause, kind, note) in enumerate(SPEC_EXPR_GRAMMAR_POSITIVE_EXAMPLES, 1)
     )
     negatives = "\n".join(
-        f"{i}. {clause}    → 拒绝原因：{reason}（{note}）"
+        f"{i}. {clause}    -> rejected because: {reason} ({note})"
         for i, (clause, reason, note) in enumerate(SPEC_EXPR_GRAMMAR_NEGATIVE_EXAMPLES, 1)
     )
     return f"""
-【SpecExpr 文法（*_expr 字段的唯一合法形态；与编译器白名单逐字对应）】
+[SpecExpr grammar (the only legal shape for *_expr fields; matches the compiler whitelist verbatim)]
 <clause>  ::= <or>
 <or>      ::= <and> ("or" <and>)*
 <and>     ::= <not> ("and" <not>)*
@@ -104,8 +141,8 @@ def _build_spec_expr_grammar_section() -> str:
 <arith>   ::= <term> (("+" | "-") <term>)*
 <term>    ::= <unary> (("*" | "/" | "//" | "%") <unary>)*
 <unary>   ::= ("-" | "+") <unary> | <atom>
-<atom>    ::= 数字 | 双引号字符串 | True | False | None
-            | 参数名 | result（仅后置 / 不变量，表示返回值）
+<atom>    ::= integer | double-quoted string | True | False | None
+            | parameter name | result (postconditions / invariants only, the return value)
             | <call> | <quant> | <atom>[<slice>] | <atom>.<attr>
             | "(" <clause> ("," <clause>)* ")" | "[" <clause> ("," <clause>)* "]"
 <slice>   ::= <arith> | [<arith>] ":" [<arith>] [":" [<arith>]]
@@ -113,36 +150,23 @@ def _build_spec_expr_grammar_section() -> str:
 <quant>   ::= ("{quants}") "(" <clause> "for" <name> "in" <clause> ")"
 <func>    ::= {funcs}
 <attr>    ::= {attrs}
-注 1：位运算符（& | ^ ~ << >>）编译器虽放行，但布尔语义一律写 and / or / not。
-注 2：<quant> 是有限域量化——全称（对所有元素成立）写 all(...)，存在（至少一个成立）
-      写 any(...)；<name> 是循环变量，只在推导式内部绑定，不得在子句其他地方引用。
-注 3：<attr> 含字符串纯方法（startswith/split/join/lower 等，无副作用）；title()/
-      center()/encode() 等不在白名单内，不得出现。
-注 4：<slice> 是 v4（2026-10-15）放行的切片形态——冒号只允许出现在切片与双引号
-      字符串内（如 text[1:] / text[::-1] / "result: "）；lambda 与海象赋值
-      （(x := 5)）会被整条拒绝（无断言语义）。
+Note 1: the bitwise operators (& | ^ ~ << >>) pass the compiler, but boolean semantics must always be written with and / or / not.
+Note 2: <quant> is finite-domain quantification - universal (holds for every element) is written all(...), existential (holds for at least one element) is written any(...); <name> is the loop variable, bound only inside the comprehension and never referenced elsewhere in the clause.
+Note 3: <attr> covers pure string methods (startswith/split/join/lower, etc., side-effect free); title()/center()/encode() and the like are not in the whitelist and must not appear.
+Note 4: <slice> is the slice shape allowed by v4 (2026-10-15) - colons are permitted only inside slices and double-quoted strings (e.g. text[1:] / text[::-1] / "result: "); lambdas and walrus assignments ((x := 5)) are rejected outright (no assertion semantics).
 
-【正例（10 条，逐条都能通过全部校验门，可直接照抄）】
+[Positive examples (10 items, each passing every validation gate; copy them as-is)]
 {positives}
 
-【反例（6 条，逐条都会被整条丢弃；这些只写进 NL 字段，不要放进 *_expr）】
+[Negative examples (6 items, each rejected outright; these belong only in the NL field, never in *_expr)]
 {negatives}
 
-【输出前自检（逐条核对；任一条不满足，就把该条只写在 NL 字段）】
-① 字符：只含 ASCII 表达式字符——无中文、无单引号（字符串一律双引号）、
-   无花括号、无 f-string、无 # 号；冒号只允许出现在切片（text[1:] /
-   text[::-1]）与双引号字符串内；单条 ≤ 200 字符。
-② 调用：只允许 <func> 白名单内的调用、<attr> 白名单内的属性 / 字符串纯方法；
-   title()/center()/encode()/open()/eval() 等一律不得出现。
-③ 名字：只用被测函数的真实参数名；后置 / 不变量可另用 result 表示返回值
-   （不要写 r）；未绑定的名字（如 total、left、scores 等函数内部变量）
-   一律不得出现；量化循环变量（如 all(x > 0 for x in items) 的 x）只在
-   推导式内有效。
-④ 形态：每条必须整条能作为 assert 的条件——"result = a + b"（赋值）、
-   "如果 a 为负数"（自然语言）、lambda 子句、海象赋值 "(x := 5)" 都不行；
-   判等写 ==，判类型写 isinstance(x, int)，判非空写 len(x) > 0 或 x != ""。
-⑤ 每条自检通过才写进 *_expr；拿不准就只写 NL 字段——编译器按条丢弃编不过的
-   子句，不会替你修正，塞进去只会拉低可编译率。
+[Pre-output self-check (verify item by item; if any check fails, write that clause only in the NL field)]
+(i) Characters: ASCII expression characters only - no CJK, no single quotes (strings are always double-quoted), no braces, no f-strings, no #; colons appear only in slices (text[1:] / text[::-1]) and double-quoted strings; each clause is at most 200 characters.
+(ii) Calls: only calls within the <func> whitelist, attributes within the <attr> whitelist and pure string methods; title()/center()/encode()/open()/eval() and the like must never appear.
+(iii) Names: only the real parameter names of the function under test; postconditions / invariants may additionally use result for the return value (do not write r); unbound names (internal variables such as total, left, scores) must never appear; a quantifier loop variable (the x in all(x > 0 for x in items)) is valid only inside its comprehension.
+(iv) Shape: every clause must work verbatim as an assert condition - "result = a + b" (assignment), "if a is negative" (natural language), a lambda clause and the walrus assignment "(x := 5)" are all rejected; write equality as ==, type checks as isinstance(x, int), non-emptiness as len(x) > 0 or x != "".
+(v) Write a clause into *_expr only after it passes the self-check; when unsure, keep it in the NL field only - the compiler drops uncompilable clauses one by one, will not fix them for you, and stuffing them in only lowers the compilable rate.
 """
 
 
@@ -169,18 +193,16 @@ def spec_oracle_examples_enabled() -> bool:
 
 
 SPEC_EXPR_EXAMPLES_SECTION = """
-【规格可执行示例（SPEC_ORACLE_EXAMPLES_ENABLE=true，严格执行）】
-在 logic_analysis 中追加可选字段 "examples"（与 pre/post/*_expr 字段并行，不替代）：
+[Executable specification examples (SPEC_ORACLE_EXAMPLES_ENABLE=true, strictly enforced)]
+Append the optional field "examples" in logic_analysis (parallel to pre/post/*_expr, not a replacement):
 "examples": [{"input": [...], "expected": ...}]
-规则：
-1. 最多 3 条；每条必须是 {"input": <JSON 字面量列表>, "expected": <JSON 字面量>}，必须是合法 JSON。
-2. input 是**按函数参数顺序展开的实参列表**（单参函数也写成 [x]）；input 中每个值
-   必须是 int/float/str/True/False/None/列表/字典等 JSON 字面量。
-3. expected 必须是 JSON 字面量，且**由规格（docstring / 类型注解 / 前置后置条件 /
-   边界情况）推导**，不得根据实现代码猜测；规格未定义该输入的行为时不要输出。
-4. 输入尽量小（避免大整数 / 长序列 / 深递归），保证能快速执行。
-5. 只输出能由规格明确判定的示例；无法确定 expected 就宁可不输出该条。
-6. 输出前自检：examples 是否为合法 JSON、条数 ≤3、input 为实参列表、expected 为 JSON 字面量。
+Rules:
+1. At most 3 items; each item must be {"input": <JSON literal list>, "expected": <JSON literal>} and must be valid JSON.
+2. input is **the argument list expanded in the function's parameter order** (a single-parameter function is written [x]); every value in input must be a JSON literal such as int/float/str/True/False/None/list/dict.
+3. expected must be a JSON literal and must be **derived from the specification (docstring / type annotations / pre- and postconditions / boundary cases)**; never guess it from the implementation code; if the specification does not define the behaviour for that input, do not emit the item.
+4. Keep inputs small (avoid big integers / long sequences / deep recursion) so they execute quickly.
+5. Emit only examples the specification can clearly decide; when expected is uncertain, omit the item.
+6. Self-check before emitting: examples is valid JSON, at most 3 items, input is an argument list, expected is a JSON literal.
 """
 
 
@@ -362,11 +384,11 @@ class PlannerAgent(BaseAgent):
         # 保留 import 与直接依赖，避免 LLM 看不到目标函数）
         target_code = BaseAgent.truncate_code(target_code, focus_function=target_function)
         # 构建查询：包含代码和可选的函数限定
-        query = f"请分析以下代码并制定测试计划：\n\n```\n{target_code}\n```"
+        query = f"Analyse the following code and produce a test plan:\n\n```\n{target_code}\n```"
         if target_function:
             # 明确指定要测试的函数，要求输出中包含该函数名
-            query += f"\n\n**重要：请只针对以下函数生成测试计划，不要分析其他函数：**\n`{target_function}`"
-            query += f"\n\n输出的 function_name 字段必须是 `{target_function}`。"
+            query += f"\n\n**Important: produce the test plan for the function below only; do not analyse any other function:**\n`{target_function}`"
+            query += f"\n\nThe output's function_name field must be `{target_function}`."
 
         # 2.2 控制流图（CFG）静态层：纯 AST 分析（零 LLM 成本），把分支/
         # 循环/异常路径摘要注入 prompt，使测试用例覆盖系统化（按路径

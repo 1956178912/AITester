@@ -151,7 +151,7 @@ class TestGenEvalDataset(BaseDatasetLoader):
                     task_id=f"tge__{instance_id}",
                     repo_name=str(row.get("repo") or ""),
                     problem_statement=(
-                        f"为 {row.get('code_file')} 生成完整 pytest 测试文件（full-file generation，官方任务形态）。"
+                        f"Generate a complete pytest test file for {row.get('code_file')} (full-file generation, the official task shape)."
                     ),
                     instance_code=code_src,
                     test_code=test_src,

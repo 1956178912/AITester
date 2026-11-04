@@ -40,6 +40,7 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 # AB-15a（2026-10-20）：币种判定与机制名的唯一事实源在 `src.budget.pricing`。
+from src.budget import pricing as _pricing  # noqa: E402  # 币种符号单点取用；不动下行导入以免破坏源码文本锁
 from src.budget.pricing import entry_block_reason, models_layer, table_read_reason  # noqa: E402
 
 # AJ（2026-10-21）：token 计数值域谓词与缓存口径读取的唯一事实源在生产者模块
@@ -759,9 +760,9 @@ def render_markdown(rep: dict[str, Any]) -> str:
         )
     lines += [
         "",
-        "## 3. 成本（token/task + $/task 点估计 + bootstrap CI）",
+        "## 3. 成本（token/task + 每任务成本点估计 + bootstrap CI）",
         "",
-        "| 臂 | tokens/task | tokens/task 95% CI | $/task | 换算假设 |",
+        "| 臂 | tokens/task | tokens/task 95% CI | 成本/task（价目表币种） | 换算假设 |",
         "|---|---|---|---|---|",
     ]
     for name, blk in rep["arms"].items():
@@ -771,9 +772,12 @@ def render_markdown(rep: dict[str, Any]) -> str:
             ci = blk["tokens_per_task_bootstrap95"]
             tpt_cell = f"{tpt:.0f}" if tpt is not None else "—（无 token 读数）"
             ci_cell = f"[{ci[0]:.0f}, {ci[1]:.0f}]" if ci is not None else "—"
-            # AB-15a：被拒的金额不得挂 `$`（改前这里对 None 直接 `:.4f` 崩，而只要聚合出
+            # AB-15a：被拒的金额不得挂币种符号（改前这里对 None 直接 `:.4f` 崩，而只要聚合出
             # 数字就照原样印成全额）。机制名在同行"换算假设"列里点名。
-            usd_cell = f"${blk['usd_per_task']:.4f}" if blk["usd_per_task"] is not None else "—（无金额）"
+            # 2026-11-04 币种切换：符号由价目表基准币种单点给出，不再硬写 `$`
+            # （人民币金额挂美元符号＝数值与单位不同口径）。
+            sym = _pricing.currency_symbol(_pricing.table_currency_status())
+            usd_cell = f"{sym}{blk['usd_per_task']:.4f}" if blk["usd_per_task"] is not None else "—（无金额）"
             lines.append(f"| {name} | {tpt_cell} | {ci_cell} | {usd_cell} | {blk['usd_note']} |")
     lines += [
         "",
@@ -790,9 +794,9 @@ def render_markdown(rep: dict[str, Any]) -> str:
         "  （零不一致对 = 点估计无穷方向的保守截断），不得解读为「效应不显著」；",
         "- tokens/task 仅在每行 token_usage 为对象、三个计数字段均为非负整数时给出读数；",
         "  形状/缺席/类型/负数/非有限、无任务分母一律记「—（无 token 读数）」并点名机制；",
-        "- $/task 另要求行级 in+out = total_tokens 且 by_model 合计 = total_tokens；",
+        "- 成本/task 另要求行级 in+out = total_tokens 且 by_model 合计 = total_tokens；",
         "  未登记、无归因、归因不闭合、token 读数问题一律记「—（无金额）」并在 note 点名机制；",
-        "- $/task 换算假设见各行 note（价目表官方登记口径，峰时全价保守上界）；",
+        "- 成本/task 的币种 = 价目表登记币种（当前人民币），换算假设见各行 note（峰时全价保守上界）；",
         "- 本工件所有数字可由 `python -m experiments.emse_stats_extensions` 零 LLM 逐位复算。",
         "",
     ]

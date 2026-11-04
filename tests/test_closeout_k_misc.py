@@ -81,8 +81,8 @@ class TestFailureKbDegradation:
         monkeypatch.setattr(failure_kb, "rank_knowledge_entries", lambda entries, category, now=None: [entry])
         snippet = kb_debugger_snippet("assertion")
         assert snippet is not None
-        assert "案例1" in snippet
-        assert "最近修复于" not in snippet, "时间戳损坏时不得渲染半截日期文本"
+        assert "Case 1" in snippet
+        assert "last fixed" not in snippet, "时间戳损坏时不得渲染半截日期文本"
 
     def test_applied_state_key_when_enabled(self, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setattr(failure_kb, "_kb_enabled", lambda: True)
@@ -137,7 +137,7 @@ class TestFaultLocalizerDegradation:
             failed_cases=[{"test": "test_f"}],
             spectral_top_k=[{"line": 3, "score": 0.9}, {"line": 5, "score": 0.4}],
         )
-        assert "【谱系定位佐证（Ochiai Top-k）】" in prompt
+        assert "[Spectrum-based localization evidence (Ochiai top-k)]" in prompt
         assert "L3(0.9)" in prompt
 
     def test_parse_localization_non_dict_returns_none(self, monkeypatch: pytest.MonkeyPatch):

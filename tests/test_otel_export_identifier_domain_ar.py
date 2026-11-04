@@ -47,9 +47,9 @@ from src.observability.otel_export import (
 from tests._corpus_guard import (
     ARCHIVED_SPANS,
     ARCHIVED_TRACE_FILES,
-    archived_trace_files,
     disk_trace_files,
     local_extra_trace_files,
+    require_archived_corpus,
     shape_problem,
 )
 
@@ -413,7 +413,7 @@ class TestRealCorpus:
         # 旧口径钉盘面 1,456 份 / 9,502 span，而盘面随本地重跑增长（实测 1,495 /
         # 9,658）、入库面只有 760 份 ⇒ 作者机必红、CI 被 skip，两边都不判定。
         # 现在：形状 = 入库面（760 / 4,139），本地未入库语料只跑不变量、不进分母。
-        archived = archived_trace_files()
+        archived = require_archived_corpus()
         problem = shape_problem(len(archived), ARCHIVED_TRACE_FILES, "入库 trace 文件数")
         assert not problem, (
             f"{problem}（盘面 {len(disk_trace_files())} 份 / 未入库 {len(local_extra_trace_files())} 份）"

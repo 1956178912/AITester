@@ -12,7 +12,7 @@
 #
 # 协议（冻结，见 PREREG_REPRO.md）；seed=43：
 #   两臂并发、同秒启动、独立 AITESTER_CACHE_NAMESPACE、AITESTER_LLM_CACHE=0；
-#   AITESTER_PROFILE=logic、TEMPERATURE=0.0、LLM_THINKING_MODE=disabled、
+#   AITESTER_PROFILE=logic、TEMPERATURE=0.0、LLM_THINKING_MODE 继承默认（disabled）、
 #   BENCHMARK_PARALLELISM=4、COST_BUDGET_ENABLE=true COST_BUDGET_USD=1、
 #   AITESTER_BATCH_MAX_CALLS=200、watchdog 3600s/臂；
 #   A(control)：SPEC_ORACLE_EXEC_ENABLE=true + SPEC_ORACLE_EXAMPLES_ENABLE=false；
@@ -510,7 +510,7 @@ L.append("## 1. 协议与切点")
 L.append("")
 L.append(f"- 切点：`{(pf.get('git') or {}).get('root_head', '')}`（Q-1 q-examples；跑前/跑后 worktree dirty=0）")
 L.append(f"- 两臂并发、同秒启动、独立 namespace、`AITESTER_LLM_CACHE=0`；`AITESTER_PROFILE=logic`、TEMPERATURE=0.0、"
-         "LLM_THINKING_MODE=disabled、`BENCHMARK_PARALLELISM={p}`、`COST_BUDGET_ENABLE=true COST_BUDGET_USD=1`、"
+         "LLM_THINKING_MODE 继承默认（disabled）、`BENCHMARK_PARALLELISM={p}`、`COST_BUDGET_ENABLE=true COST_BUDGET_USD=1`、"
          "`AITESTER_BATCH_MAX_CALLS=200`、watchdog 3600s/臂。".format(p=(report["protocol"] or {}).get("parallelism")))
 L.append("- A（control）：`SPEC_ORACLE_EXEC_ENABLE=true` + `SPEC_ORACLE_EXAMPLES_ENABLE=false`；"
          "B（examples）：两者均 `true`；`--dataset quixbugs --task-limit {n} --seed 43 --baselines aitester`。".format(
@@ -858,7 +858,7 @@ STAGE_A="${OUT}/.staging_control"; STAGE_B="${OUT}/.staging_examples"
 LOG_A="${OUT}/log_control.log"; LOG_B="${OUT}/log_examples.log"
 TRACE_A="${OUT}/traces_control"; TRACE_B="${OUT}/traces_examples"
 mkdir -p "${STAGE_A}" "${STAGE_B}" "${TRACE_A}" "${TRACE_B}"
-COMMON_ENV=(AITESTER_PROFILE=logic TEMPERATURE=0.0 LLM_THINKING_MODE=disabled "BENCHMARK_PARALLELISM=${PARALLELISM}" AITESTER_LLM_CACHE=0 COST_BUDGET_ENABLE=true COST_BUDGET_USD=1 AITESTER_BATCH_MAX_CALLS=200)
+COMMON_ENV=(AITESTER_PROFILE=logic TEMPERATURE=0.0 "BENCHMARK_PARALLELISM=${PARALLELISM}" AITESTER_LLM_CACHE=0 COST_BUDGET_ENABLE=true COST_BUDGET_USD=1 AITESTER_BATCH_MAX_CALLS=200)
 
 _launch_arm() { # label exec examples namespace staging log trace cli
     local label="$1" execv="$2" examples="$3" ns="$4" staging="$5" log="$6" trace="$7" cli="$8"
@@ -870,7 +870,7 @@ _launch_arm() { # label exec examples namespace staging log trace cli
         echo "START_ISO_UTC=${start_iso}"
         echo "ROOT=${ROOT} HEAD=${ROOT_HEAD}"
         echo "CMD=${PY} -m experiments.run_benchmark --dataset quixbugs --task-limit ${TASK_LIMIT} --seed 43 --baselines aitester --output-dir ${staging}"
-        echo "ENV_COMMON=AITESTER_PROFILE=logic TEMPERATURE=0.0 LLM_THINKING_MODE=disabled BENCHMARK_PARALLELISM=${PARALLELISM} AITESTER_LLM_CACHE=0 COST_BUDGET_ENABLE=true COST_BUDGET_USD=1 AITESTER_BATCH_MAX_CALLS=200"
+        echo "ENV_COMMON=AITESTER_PROFILE=logic TEMPERATURE=0.0 BENCHMARK_PARALLELISM=${PARALLELISM} AITESTER_LLM_CACHE=0 COST_BUDGET_ENABLE=true COST_BUDGET_USD=1 AITESTER_BATCH_MAX_CALLS=200"
         echo "ENV_ARM=${label} SPEC_ORACLE_EXEC_ENABLE=${execv} SPEC_ORACLE_EXAMPLES_ENABLE=${examples} AITESTER_CACHE_NAMESPACE=${ns} AITESTER_TRACE_DIR=${trace}"
     } >> "${log}"
     (

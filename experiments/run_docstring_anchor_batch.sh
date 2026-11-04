@@ -8,7 +8,7 @@
 #       本脚本**不自己执行正式批**：由操作者在 Lead 批准后运行（T5）。
 #
 # 协议（T5 / 预注册 docs/study/DOCSTRING_ANCHOR_PREREG_2026-10-17.md）：
-#   AITESTER_PROFILE=logic / TEMPERATURE=0.0 / LLM_THINKING_MODE=disabled /
+#   AITESTER_PROFILE=logic / TEMPERATURE=0.0 / /
 #   BENCHMARK_PARALLELISM=4（可调但记录）/ seed=42 / QuixBugs 50 任务 /
 #   三臂互异 cache namespace / provenance 必须 git_dirty=false。
 #
@@ -250,7 +250,7 @@ echo "==========================================================================
 echo "P1 docstring 锚三臂正式批（${SCRIPT_VERSION}）$( [ "${DRY_RUN}" -eq 1 ] && echo '【DRY-RUN】' )"
 echo "  仓库：${ROOT}"
 echo "  分支/git：$(git -C "${ROOT}" rev-parse --abbrev-ref HEAD 2>/dev/null || echo '?') @ $(git -C "${ROOT}" rev-parse HEAD 2>/dev/null || echo '?')"
-echo "  协议：AITESTER_PROFILE=logic TEMPERATURE=0.0 LLM_THINKING_MODE=disabled"
+echo "  协议：AITESTER_PROFILE=logic TEMPERATURE=0.0"
 echo "        BENCHMARK_PARALLELISM=${PARALLELISM} seed=${SEED} 计划任务数=${TASK_COUNT}"
 echo "  臂：${ARMS_LIST}"
 echo "  输出：${OUT_DIR}"
@@ -419,7 +419,7 @@ for _a in "${ARM_LABELS[@]}"; do
     if [ "${ALLOW_DIRTY}" -eq 1 ]; then
         _dirty_args=(--allow-dirty --dirty-reason "${DIRTY_REASON}")
     fi
-    _cmd=(env "AITESTER_PROFILE=logic" "TEMPERATURE=0.0" "LLM_THINKING_MODE=disabled"
+    _cmd=(env "AITESTER_PROFILE=logic" "TEMPERATURE=0.0" "LLM_THINKING_MODE 继承默认（disabled）"
         "BENCHMARK_PARALLELISM=${PARALLELISM}" "AITESTER_CACHE_NAMESPACE=${_ns}"
         "${PY}" "${ROOT}/experiments/run_main_batch.py"
         --dataset quixbugs --task-count "${TASK_COUNT}" --seed "${SEED}"
@@ -794,7 +794,6 @@ manifest = {
     "protocol": {
         "AITESTER_PROFILE": "logic",
         "TEMPERATURE": "0.0",
-        "LLM_THINKING_MODE": "disabled",
         "BENCHMARK_PARALLELISM": int(parallelism),
         "seed": int(seed),
         "task_count_flag": int(task_count_flag),

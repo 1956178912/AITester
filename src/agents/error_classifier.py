@@ -961,16 +961,12 @@ def _import_error_strategy(context: ErrorContext | None) -> str:
     """IMPORT_ERROR 的修复策略，按是否携带缺失模块名细化。"""
     if context and context.module_name:
         return (
-            f"检测到导入错误：缺少模块 '{context.module_name}'。"
-            f"请优先为该依赖配置安装方案（如在 requirements.txt 或 venv 中安装），"
-            f"其次检查 import 语句的模块名/路径是否正确。"
-            f"若模块应由被测项目提供，请修正导入路径，而不是删除 import。"
+            f"Detected: the missing module is '{context.module_name}'. First provide an "
+            "installation plan for the dependency (e.g. in requirements.txt or the venv), then "
+            "check the module name and path in the import statement. If the module should come "
+            "from the project under test, correct the import path instead of deleting the import."
         )
-    return (
-        "检测到导入错误（ImportError/ModuleNotFoundError）。"
-        "请判断缺失模块是第三方依赖还是项目内模块：第三方依赖需安装，"
-        "项目内模块需修正导入路径。不要通过删除 import 语句来'修复'。"
-    )
+    return "Detected: import error (ImportError/ModuleNotFoundError). Decide whether the missing module is a third-party dependency or a module of this project: a third-party dependency must be installed, a project module must be imported by the right path. Never 'fix' this by deleting the import statement."
 
 
 def _syntax_strategy(context: ErrorContext | None) -> str:
@@ -978,37 +974,26 @@ def _syntax_strategy(context: ErrorContext | None) -> str:
     if context and context.subtype == SyntaxSubtype.IMPORT_ERROR:
         if context.module_name:
             return (
-                f"检测到导入错误：缺少模块 '{context.module_name}'。"
-                f"请检查是否需要在 requirements.txt 中添加该依赖，"
-                f"或确认模块名称是否正确。如果模块已安装，"
-                f"请检查 Python 环境路径是否包含该模块。"
+                f"Detected: the missing module is '{context.module_name}'. Check whether the "
+                "dependency must be added to requirements.txt, or whether the module name is "
+                "correct. If the module is installed, check that the Python environment path "
+                "includes it."
             )
-        return (
-            "检测到导入错误（ImportError/ModuleNotFoundError）。"
-            "请检查是否需要安装缺失的依赖包，"
-            "或确认模块名称是否正确。"
-        )
+        return "Detected: import error (ImportError/ModuleNotFoundError). Check whether a missing dependency must be installed, or whether the module name is correct."
     if context and context.subtype == SyntaxSubtype.SYNTAX_ERROR:
         location = ""
         if context.filename:
-            location = f" 文件 '{context.filename}'"
+            location = f" file '{context.filename}'"
         if context.line:
-            location += f" 第 {context.line} 行"
+            location += f" line {context.line}"
         if context.column:
-            location += f" 第 {context.column} 列"
+            location += f" column {context.column}"
         return (
-            f"检测到语法错误{location}。"
-            f"请检查该位置的语法是否正确，"
-            f"特别关注括号匹配、缩进、逗号和冒号的使用。"
-            f"重新生成完整的修复后代码文件，"
-            f"确保语法符合 Python 规范。"
+            f"Detected: syntax/compilation error{location}. Check the syntax at that location, "
+            "paying particular attention to bracket matching, indentation, commas and colons. "
+            "Regenerate the complete repaired file with syntax that conforms to Python."
         )
-    return (
-        "检测到语法/编译错误（如 ImportError、SyntaxError）。"
-        "请重新生成完整的修复后代码文件，确保所有 import 语句正确、"
-        "缩进和语法符合 Python 规范。不要只修改单个函数，"
-        "而是输出包含所有函数和 import 的完整文件代码。"
-    )
+    return "Detected: syntax or compilation error (ImportError, SyntaxError). Regenerate the complete repaired file, with every import correct and indentation and syntax valid Python. Do not patch a single function: output the whole file including all functions and imports."
 
 
 # 固定修复策略映射表：无需上下文细化的错误类别直接查表返回。
@@ -1016,106 +1001,66 @@ def _syntax_strategy(context: ErrorContext | None) -> str:
 _FIX_STRATEGIES: dict[ErrorCategory, str] = {
     # LLM_FORMAT_ERROR：LLM 响应格式异常（1.2 残余细化），策略针对"重生成/放宽提取"
     ErrorCategory.LLM_FORMAT_ERROR: (
-        "检测到 LLM 响应格式异常（JSON 解析失败、响应被截断或空响应）。"
-        "请重新请求 LLM 生成合规响应；若响应内含 JSON 但被 markdown 代码块"
-        "包裹，先剥离代码块标记再解析；若响应被截断，降低单次输出长度或"
-        "分段请求。不要将格式异常误判为代码逻辑 bug。"
+        "Detected: malformed LLM response (JSON parse failure, truncated response, or empty response). Request a conforming response again; if the JSON is wrapped in a markdown code fence, strip the fence before parsing; if the response is truncated, shorten the single-call output or split the request. Do not misclassify a format failure as a logic bug in the code."
     ),
     # P0 4.1 子类：LLM 空响应（占 UNKNOWN 75% 的根因之一）
     ErrorCategory.LLM_EMPTY_RESPONSE: (
-        "检测到 LLM 空响应（返回内容为空字符串或纯空白）。"
-        "可能原因：API 端点故障、prompt 超长被截断为空白、或模型拒绝响应。"
-        "修复策略：用更严格的 prompt 重新请求（明确 JSON 输出格式约束），"
-        "降低上下文长度，或在响应为空时自动重试一次。"
-        "不要将空响应误判为代码逻辑 bug。"
+        "Detected: empty LLM response (empty or whitespace-only content). Likely causes: endpoint failure, an over-long prompt truncated to nothing, or a refusal. Fix by re-requesting with a stricter prompt that pins the JSON output format, by shortening the context, or by retrying once on an empty response. Do not misclassify an empty response as a logic bug in the code."
     ),
     # P0 4.1 子类：LLM JSON 解析失败（占 UNKNOWN 75% 的根因之一）
     ErrorCategory.LLM_JSON_PARSE_FAILED: (
-        "检测到 LLM 响应非空但 JSON 解析失败（markdown 包裹 / 截断 / 格式错乱）。"
-        "修复策略：记录原始响应片段到 failure_knowledge_base.json，"
-        "用更严格的 JSON 输出约束重新请求（'只输出 JSON，不要输出任何其他文本'），"
-        "放宽 JSON 提取容忍度（剥离 markdown 代码块、截取首个 { 到最后一个 }）。"
-        "不要将格式异常误判为代码逻辑 bug。"
+        "Detected: non-empty LLM response that fails JSON parsing (markdown fence, truncation, or malformed structure). Fix by logging the raw fragment to failure_knowledge_base.json, re-requesting under a stricter JSON-only constraint, and loosening extraction tolerance (strip markdown fences, keep the span from the first { to the last }). Do not misclassify a format failure as a logic bug in the code."
     ),
     # INDEX_ERROR：索引越界的专属策略（1.2 残余细化：从 RUNTIME 拆出）
     ErrorCategory.INDEX_ERROR: (
-        "检测到索引越界（IndexError / index out of range）。"
-        "请检查引发异常的列表/字符串/数组访问位置，"
-        "在循环边界、切片与默认值处理上补充分支判断；"
-        "对空容器先判空再访问。不要用 try/except 静默吞掉越界。"
+        "Detected: index out of range (IndexError). Inspect the list, string or array access that raised it and add boundary guards at loop bounds, slices and default handling; check for an empty container before indexing. Never swallow the out-of-range access with a silent try/except."
     ),
     # TYPE_ERROR：类型不匹配的专属策略（P2 细化）
     ErrorCategory.TYPE_ERROR: (
-        "检测到类型错误（TypeError）。请核对引发异常的参数类型、函数签名与实际传入值："
-        "常见根因是传入了 None/字符串/列表等不符预期的类型，或把对象当容器使用。"
-        "修复时对齐参数与返回类型（必要时做输入校验与类型转换），"
-        "不要用 try/except 吞掉异常来掩盖类型问题。"
+        "Detected: type error (TypeError). Check the argument types, the signature and the values actually passed: the usual root cause is a None, string or list where another type was expected, or an object used as a container. Align parameters and return types, with input validation and conversion where needed; never mask a type problem with a swallowing try/except."
     ),
     # LOGIC_ERROR：测试侧逻辑错误（P2 细化）
     ErrorCategory.LOGIC_ERROR: (
-        "检测到疑似测试逻辑错误：断言失败且失败栈未触及被测模块，"
-        "更可能是测试用例的预期值写错（如断言方向反了、期望值与文档不符）。"
-        "请先根据函数签名/文档字符串核对测试预期值并修正测试用例；"
-        "只有当被测代码行为确实与问题描述矛盾时才修改被测代码。"
+        "Detected: probable test-logic error. The assertion failed and the traceback never enters the module under test, so the expected value in the test is more likely wrong (inverted assertion, expectation inconsistent with the docstring). Verify the expected value against the signature and docstring and correct the test; modify the code under test only when its behaviour genuinely contradicts the problem statement."
     ),
     # 运行时异常：分析异常栈，定位到具体哪行代码引发问题
     ErrorCategory.RUNTIME: (
-        "检测到运行时异常（如 ZeroDivisionError、TypeError 等）。"
-        "请分析异常发生的具体位置和原因，修复有 bug 的代码函数，"
-        "而不是修改测试用例来绕过问题。重点关注边界条件和异常处理。"
+        "Detected: runtime exception (ZeroDivisionError, TypeError, and similar). Locate the exact position and cause, then fix the faulty function in the code under test rather than editing the test to bypass the problem. Focus on boundary conditions and exception handling."
     ),
     # 断言失败：期望值计算错误或测试用例设计有问题
     ErrorCategory.ASSERTION: (
-        "检测到断言失败（期望值与实际返回值不一致）。"
-        "请先判断是代码逻辑错误还是测试用例的预期值错误。"
-        "如果代码实现与函数签名/文档字符串描述不符，修复代码；"
-        "如果测试用例的预期值不符合函数实际行为，修正测试用例的预期值。"
+        "Detected: assertion failure (expected value differs from the returned value). First decide whether the code logic or the test's expected value is wrong. If the implementation contradicts the signature and docstring, fix the code; if the expected value contradicts the actual behaviour, correct the expectation."
     ),
     # 超时：死循环或无限递归
     ErrorCategory.TIMEOUT: (
-        "检测到执行超时，通常意味着存在死循环或无限递归。"
-        "请检查函数中的循环条件和递归终止条件，添加适当的边界检查和退出条件。"
+        "Detected: execution timeout, which usually means an infinite loop or unbounded recursion. Check the function's loop conditions and recursion termination conditions, and add proper boundary checks and exit conditions."
     ),
     # 未知类型：让 LLM 自行分析
     ErrorCategory.UNKNOWN: (
-        "错误类型未能自动识别。请仔细分析测试输出，"
-        "判断是代码逻辑错误、测试用例问题还是环境问题，"
-        "然后给出相应的修复方案。"
+        "The error type could not be recognised automatically. Analyse the test output carefully, decide whether this is a code-logic error, a test-case problem or an environment problem, and propose the corresponding repair."
     ),
     # 补丁被安全守卫拒绝（1.1 状态细化）：本轮补丁未生效，
     # 修复方向是重新生成更安全/完整的补丁而非调整测试
     ErrorCategory.PATCH_VALIDATION_FAILED: (
-        "检测到上一轮补丁被安全守卫拒绝（补丁为空/过短/丢失函数定义"
-        "或文件路径不合法），本轮修复未真正写入。"
-        "请重新生成完整补丁：保留原代码全部函数与 import，"
-        "输出完整文件而非片段，避免被安全守卫再次拒绝。"
+        "Detected: the previous patch was rejected by the safety guard (empty, too short, lost a function definition, or carried an invalid path), so no repair reached disk. Regenerate a complete patch: keep every function and import of the original file and output the whole file rather than a fragment, so the guard accepts it."
     ),
     # RAG 检索全空（1.1 状态细化）：检索未提供参考案例，
     # 生成质量不受检索增强，按常规策略修复并考虑扩充检索库
     ErrorCategory.RAG_RETRIEVAL_EMPTY: (
-        "检测到 RAG 检索未命中任何历史案例（检索库冷启动或"
-        "当前任务与已入库案例差异过大）。本轮生成未获得检索增强，"
-        "请按常规修复策略处理；若同类任务反复出现，"
-        "考虑扩充检索库案例或降低相似度阈值。"
+        "Detected: retrieval returned no historical case (cold index, or the current task is too different from the stored cases). This round has no retrieval augmentation; fall back to the standard repair strategy. If similar tasks recur, expand the case store or lower the similarity threshold."
     ),
     # 执行轨迹丢失（5.2 持续细化）：任务失败但 execution_trace 为空，
     # 说明执行器异常路径（executor 节点未正常写入轨迹，或被上游崩溃截断）。
     # 修复方向是排查执行器/沙箱基础设施而非代码本身——轨迹缺失意味着
     # 无法定位"哪一轮执行失败"，需先恢复执行链路
     ErrorCategory.EXECUTION_TRACE_MISSING: (
-        "检测到执行轨迹丢失：任务失败但 execution_trace 为空，"
-        "执行器未正常记录执行结果（沙箱崩溃/超时/基础设施异常）。"
-        "本轮修复无法基于逐轮执行反馈定位根因，请检查执行链路"
-        "（venv/沙箱/超时配置）后重试；代码层面按常规策略谨慎修复。"
+        "Detected: lost execution trace. The task failed but execution_trace is empty, so the executor never recorded a result (sandbox crash, timeout, or infrastructure failure). This round cannot localize the root cause from per-iteration feedback; inspect the execution path (venv, sandbox, timeout settings) and retry, and repair the code conservatively in the meantime."
     ),
     # 多候选全拒绝（5.2 持续细化）：多候选补丁全部被静态筛选拒绝，
     # 说明 LLM 生成的 N 个候选均未通过语法/完整性/函数数检查。
     # 修复方向是回退到单补丁路径（更宽松的生成约束），而非继续扰动多候选
     ErrorCategory.MULTI_CANDIDATE_ALL_REJECTED: (
-        "检测到多候选补丁策略失效：本轮生成的 N 个候选补丁全部被"
-        "静态筛选拒绝（语法错误/函数定义丢失/代码过短），多候选策略"
-        "未产出可用补丁。请回退到单补丁流程，并降低对 LLM 输出的"
-        "扰动幅度（候选视角差异过大时 LLM 易输出残缺代码）。"
+        "Detected: the multi-candidate strategy produced nothing usable. All N candidate patches were rejected by static screening (syntax error, lost function definition, or too short). Fall back to the single-patch path and reduce the perturbation applied to the model output: when candidate viewpoints diverge too far, the model tends to emit incomplete code."
     ),
     # M5（2026-09-29 审查 P0）：测试重生成后通过但源码未被修复
     # （regenerate 路由不经过 debugger/patch_applier，源码一字未改而
@@ -1123,10 +1068,7 @@ _FIX_STRATEGIES: dict[ErrorCategory, str] = {
     # 这不是代码/测试 bug，而是实验口径问题——需人工/评估层介入，
     # 把该类任务归入"未验证假通过"而非"修复成功"。
     ErrorCategory.TEST_REGENERATED_PASS_UNVERIFIED: (
-        "检测到测试重生成后通过但源码未被修复（oracle-from-implementation 假成功通道）。"
-        "regenerate 路由不经过 debugger/patch_applier，源码一字未改而测试通过，"
-        "说明测试断言被重写为恒真或与实现一致而非与规格一致。"
-        "此任务应归入未验证假通过而非修复成功，需人工或评估层介入确认。"
+        "Detected: the regenerated test passes while the source is untouched (the oracle-from-implementation false-success channel). The regenerate route bypasses debugger and patch_applier, so a passing test against unchanged source means the assertion was rewritten to be vacuously true or to agree with the implementation rather than the specification. Classify this task as an unverified false pass, not a successful repair, and require human or evaluation-layer confirmation."
     ),
 }
 

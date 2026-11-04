@@ -56,23 +56,29 @@ def _clean_budget_state(monkeypatch: pytest.MonkeyPatch) -> None:
 
 class TestPricingEstimate:
     def test_price_table_known_model(self) -> None:
-        """deepseek-flash：in $0.3/M、out $1.2/M（price_table.json 登记口径）。"""
-        usd, source = pricing.estimate_usd("deepseek-flash", 1_000_000, 1_000_000)
-        assert usd == pytest.approx(1.5, rel=1e-9)
+        """deepseek-flash：in ¥2/M、out ¥8/M（2026-11-04 人民币高峰价）。
+
+        2026-11-04 币种切换：金额单位由价目表的 currency 决定，当前为 CNY。
+        断言走 estimate_in_table_currency（生产记账通道），不再断言 USD。
+        """
+        amount, currency, source = pricing.estimate_in_table_currency("deepseek-flash", 1_000_000, 1_000_000)
+        assert amount == pytest.approx(10.0, rel=1e-9)
+        assert currency == "CNY"
         assert source == "price_table:deepseek-flash"
 
     def test_known_model_small_usage(self) -> None:
-        usd, source = pricing.estimate_usd("deepseek-flash", 1000, 500)
-        assert usd == pytest.approx(1000 * 0.3 / 1e6 + 500 * 1.2 / 1e6)
+        amount, currency, source = pricing.estimate_in_table_currency("deepseek-flash", 1000, 500)
+        assert amount == pytest.approx(1000 * 2.0 / 1e6 + 500 * 8.0 / 1e6)
+        assert currency == "CNY"
         assert source.startswith("price_table:")
 
     def test_zero_tokens_zero_usd(self) -> None:
         assert pricing.estimate_usd("deepseek-flash", 0, 0) == (0.0, "zero_tokens")
 
     def test_negative_tokens_clamped(self) -> None:
-        usd, _ = pricing.estimate_usd("deepseek-flash", -100, 10)
-        assert usd is not None and usd >= 0
-        assert usd == pytest.approx(10 * 1.2 / 1e6)
+        amount, _, _ = pricing.estimate_in_table_currency("deepseek-flash", -100, 10)
+        assert amount is not None and amount >= 0
+        assert amount == pytest.approx(10 * 8.0 / 1e6)
 
     def test_unpriced_model_returns_none(self) -> None:
         """未登记模型：不编造价格（None），由调用方记审计事件。"""
@@ -83,9 +89,9 @@ class TestPricingEstimate:
         monkeypatch.setattr(
             pricing,
             "load_price_table",
-            lambda: {"models": {"cny-model": {"input_per_mtok": 1.0, "output_per_mtok": 2.0, "currency": "CNY"}}},
+            lambda: {"models": {"eur-model": {"input_per_mtok": 1.0, "output_per_mtok": 2.0, "currency": "EUR"}}},
         )
-        usd, source = pricing.estimate_usd("cny-model", 1_000_000, 0)
+        usd, source = pricing.estimate_usd("eur-model", 1_000_000, 0)
         assert usd is None and source == "unpriced"
 
     def test_cost_usd_per_1k_fallback(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -145,7 +151,7 @@ class TestUsdBudgetAccumulation:
         assert is_budget_exceeded() is True
         stats = get_budget_stats()
         assert stats["consumed_usd"] == pytest.approx(0.0011)
-        assert stats["unit"] == "usd"
+        assert stats["unit"] == "cny"
         assert stats["exceeded"] is True
 
     def test_explicit_usd_when_per_1k_configured(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -192,18 +198,18 @@ class TestLlmClientUsdWiring:
         reset_budget()
         allowed = _record_response_usage(self._usage(), "deepseek-flash")
         stats = get_budget_stats()
-        expected = 2000 * 0.3 / 1e6 + 1000 * 1.2 / 1e6
+        expected = 2000 * 2.0 / 1e6 + 1000 * 8.0 / 1e6  # 2026-11-04 人民币高峰价
         assert stats["consumed_usd"] == pytest.approx(expected), "consumed_usd 仍为 0（D1 复发）"
         assert allowed is False and stats["exceeded"] is True
         assert get_process_budget_stats()["budget_exceeded_events"] >= 1
         err = __import__("src.agents.base_agent", fromlist=["_budget_exceeded_error"])._budget_exceeded_error()
         assert isinstance(err, BudgetExceededError)
-        assert err.unit == "usd"
+        assert err.unit == "cny"
         # 可诊断性：USD 口径下异常消息的数值/单位必须同口径（不得把 token 数
         # 当美元展示，也不得显示 token_limit=0 作为 USD 上限）。
-        assert "$" in str(err), f"USD 异常消息缺美元符号：{err}"
-        assert "$0.000" in str(err) or "$0.00" in str(err)
-        assert err.consumed == pytest.approx(2000 * 0.3 / 1e6 + 1000 * 1.2 / 1e6)
+        assert "¥" in str(err), f"人民币异常消息缺人民币符号：{err}"
+        assert "¥0.000" in str(err) or "¥0.00" in str(err)
+        assert err.consumed == pytest.approx(2000 * 2.0 / 1e6 + 1000 * 8.0 / 1e6)
         assert err.limit == pytest.approx(0.0005)
         assert "tokens" not in str(err)
 
@@ -266,7 +272,7 @@ class TestLlmClientUsdWiring:
         monkeypatch.setenv("COST_BUDGET_ENABLE", "true")
         monkeypatch.setenv("COST_BUDGET_USD", "1.0")
         monkeypatch.setattr(
-            "src.budget.pricing.estimate_usd",
+            "src.budget.pricing.estimate_in_table_currency",
             lambda *a, **k: (_ for _ in ()).throw(RuntimeError("pricing boom")),
         )
         reset_budget()

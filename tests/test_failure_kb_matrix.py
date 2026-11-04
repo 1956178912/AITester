@@ -161,15 +161,15 @@ class TestSnippetRendering:
         snippet = kb_debugger_snippet("assertion")
         assert snippet is None or isinstance(snippet, str)
         if snippet:
-            assert "断言期望值写错" in snippet or "案例" in snippet
+            assert "断言期望值写错" in snippet or "Case" in snippet
 
     def test_entry_without_problem_text_is_rendered_safely(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-        """problem 缺失 → 渲染为"未记录"，不得抛 KeyError。"""
+        """problem 缺失 → 渲染为 "not recorded"，不得抛 KeyError。"""
         path = tmp_path / "kb2.json"
         path.write_text(json.dumps([{"error_category": "assertion", "occurrences": 1}]), encoding="utf-8")
         monkeypatch.setenv("FAILURE_KB_PATH", str(path))
         snippet = kb_debugger_snippet("assertion")
-        assert snippet is None or "未记录" in snippet or isinstance(snippet, str)
+        assert snippet is None or "not recorded" in snippet
 
     def test_unparsable_last_seen_renders_without_date(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         path = tmp_path / "kb3.json"

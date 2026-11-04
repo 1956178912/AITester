@@ -93,7 +93,7 @@ class TestOptionalPromptSections:
             BRANCH_COVERAGE_INJECT_ENABLE="true",
         )
         section = _generate_kwargs(agent)["branch_coverage_section"]
-        assert "未覆盖分支清单" in section
+        assert "Uncovered-branch list" in section
 
     def test_branch_coverage_absent_by_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """对照腿：同 state、开关缺省 → None（O3 默认零变化承诺）。"""
@@ -106,7 +106,7 @@ class TestOptionalPromptSections:
     def test_boundary_triplets_section_injected_when_on(self, monkeypatch: pytest.MonkeyPatch) -> None:
         _u, agent = _run_generator(monkeypatch, _state(), BOUNDARY_TRIPLETS_ENABLE="true")
         section = _generate_kwargs(agent)["boundary_triplets_section"]
-        assert "确定性边界锚点" in section and "输入 3" in section  # len(items) > 2 的 AST 推导结果
+        assert "Deterministic boundary anchors" in section and "input 3" in section  # len(items) > 2 的 AST 推导结果
 
     def test_boundary_triplets_absent_by_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
         _u, agent = _run_generator(monkeypatch, _state())
@@ -149,7 +149,7 @@ class TestOptionalPromptSections:
             mutation_feedback={"survived_mutants": ["boundary: >2 -> >=2"], "mutation_score": 0.4},
         )
         update, agent = _run_generator(monkeypatch, state, FEEDBACK_COMPRESSION_ENABLE="true")
-        assert "压缩反馈" in _generate_kwargs(agent)["feedback_compression_section"]
+        assert "Compressed feedback" in _generate_kwargs(agent)["feedback_compression_section"]
         assert update["compressed_feedback"]["target_lines"][0]["lineno"] == 2
 
     def test_compressed_feedback_absent_by_default(self, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -122,7 +122,7 @@ class TestLocateRepairFocusBranches:
         code = "def f():\n    return 1\n"
         ctx = _mk_ctx(2, column=5)
         out = dbg._locate_repair_focus(code, ctx, None)
-        assert "第 5 列" in out["hint"]
+        assert "column 5" in out["hint"]
         assert out["focused"] is True
 
     def test_hint_omits_column_when_zero_or_missing(self):
@@ -289,16 +289,16 @@ class TestBuildAdversarialPromptSectionBranches:
     def test_multiple_hypotheses(self):
         dbg = _mk_debugger()
         out = dbg._build_adversarial_prompt_section(["h1", "h2"])
-        assert "假设 1：h1" in out
-        assert "假设 2：h2" in out
-        assert "针对性测试用例" in out
+        assert "Hypothesis 1: h1" in out
+        assert "Hypothesis 2: h2" in out
+        assert "targeted test case" in out
 
     def test_empty_hypotheses(self):
         dbg = _mk_debugger()
         out = dbg._build_adversarial_prompt_section([])
         # 空假设时只有标题行 + 测试用例要求行（无"假设 N：..."编号行）
-        assert "对抗性推理" in out
-        assert "假设 1" not in out  # 无编号假设行
+        assert "Adversarial reasoning" in out
+        assert "Hypothesis 1" not in out  # 无编号假设行
 
 
 # ─── _run_critic_eval 分支 ────────────────────────────────────────────────────
@@ -350,18 +350,18 @@ class TestBuildCriticFeedbackBranches:
         out = dbg._build_critic_feedback({"break_cases": ["case A", "case B"]})
         assert "case A" in out
         assert "case B" in out
-        assert "批评者反馈" in out
+        assert "Critic feedback" in out
 
     def test_empty_break_cases(self):
         dbg = _mk_debugger()
         out = dbg._build_critic_feedback({"break_cases": []})
-        assert "批评者反馈" in out
-        assert "case" not in out
+        assert "Critic feedback" in out
+        assert "case A" not in out  # 无具体击穿用例行
 
     def test_missing_break_cases_key(self):
         dbg = _mk_debugger()
         out = dbg._build_critic_feedback({})  # 无 break_cases 键
-        assert "批评者反馈" in out
+        assert "Critic feedback" in out
 
 
 # ─── _run_review_diagnosis 分支 ───────────────────────────────────────────────

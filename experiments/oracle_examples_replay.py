@@ -75,7 +75,10 @@ from experiments.misguided_metrics import (  # noqa: E402
     sha256_file,
     sha256_text,
 )
+from src.budget import pricing as _pricing  # noqa: E402  # 币种符号单点取用
 from src.budget.token_usage import aggregate_row_token_usage, token_metric_reading  # noqa: E402
+
+_MONEY = _pricing.currency_symbol(_pricing.table_currency_status())
 from src.specs import extract_signature_params, parse_logic_analysis  # noqa: E402
 from src.specs.spec_ir_v2 import self_validate_examples  # noqa: E402
 
@@ -623,7 +626,7 @@ def render_readme(report: dict[str, Any]) -> str:
         # 只差一个词，却共用同一个美元形状，且没有一行说清是哪条机制。
         cost_txt = f"**无法估算（{generation.get('cost_unpriced_reason') or '机制未记录'}）**"
     else:
-        cost_txt = f"**${est_cost}**"
+        cost_txt = f"**{_MONEY}{est_cost}**"
     add(
         f"- LLM 调用 {_reading_text(generation.get('llm_calls'))}"
         f"（缓存命中 {_reading_text(generation.get('cache_hits'))}）；"

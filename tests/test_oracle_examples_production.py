@@ -130,7 +130,7 @@ class TestPlannerPrompt:
         _plan(_make_planner(), _BASE_RESPONSE, q1)
         _plan(_make_planner(), _BASE_RESPONSE, q2)
         assert q1 == q2
-        assert "【规格可执行示例" not in q1[0]
+        assert "[Executable specification examples" not in q1[0]
 
     def test_on_prompt_appends_contract_exactly(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """开启：query = 关闭 query + examples 契约段（逐字节追加，不改原段）。"""
@@ -147,11 +147,11 @@ class TestPlannerPrompt:
         q: list[str] = []
         _plan(_make_planner(), _BASE_RESPONSE, q)
         prompt = q[0]
-        assert "【规格可执行示例" in prompt
-        assert "最多 3 条" in prompt
+        assert "[Executable specification examples" in prompt
+        assert "At most 3 items" in prompt
         assert '"examples": [{"input": [...], "expected": ...}]' in prompt
-        assert "由规格" in prompt and "推导" in prompt
-        assert "输入尽量小" in prompt
+        assert "specification" in prompt and "derived" in prompt
+        assert "Keep inputs small" in prompt
 
     def test_negative_control_deleted_contract(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """删契约负控：常量清空后即使开关开，prompt 与关闭时逐字节一致。"""
@@ -168,7 +168,7 @@ class TestPlannerPrompt:
         _enable(monkeypatch, exec_on=False, examples_on=True)
         q: list[str] = []
         _plan(_make_planner(), _BASE_RESPONSE, q)
-        assert "【规格可执行示例" not in q[0]
+        assert "[Executable specification examples" not in q[0]
 
 
 # ═══ 3. Planner 输出净化 ═══════════════════════════════════════════════════

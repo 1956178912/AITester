@@ -425,10 +425,13 @@ def build_fl_spectral_prompt_section(fl_spectral_focus: dict[str, Any] | None) -
         return ""
     top_k = fl_spectral_focus.get("top_k", [])
     lines = [
-        f"【O2 谱系定位先验（FL_spectral，Top-{len(top_k)} 可疑行，Ochiai = 失败命中数 / sqrt(失败测试总数 × 总命中数)）】"
+        f"[O2 spectral-localization prior (FL_spectral, Top-{len(top_k)} suspicious lines, Ochiai = failed-hits / sqrt(total-failing-tests * total-hits))]"
     ]
-    lines.extend(f"- 第 {item.get('line', '?')} 行（score={item.get('score', 0.0):.4f}）" for item in top_k)
-    lines.append("请优先在以上可疑行附近定位缺陷根因（而非全文件随机猜测），结合失败用例与 traceback 上下文验证。")
+    lines.extend(f"- line {item.get('line', '?')} (score={item.get('score', 0.0):.4f})" for item in top_k)
+    lines.append(
+        "Localise the root cause near the suspicious lines above first (rather than guessing "
+        "across the whole file), and validate against the failing cases and the traceback context."
+    )
     return "\n".join(lines)
 
 

@@ -308,7 +308,7 @@ def _check_assert_node(
                 "type": "tautological",
                 "line": line,
                 "message": f"第 {line} 行：恒真断言（永远通过，无法检测缺陷）",
-                "suggestion": "替换为基于函数行为的具体断言（如 assert result == expected）",
+                "suggestion": "replace with a concrete behaviour-based assertion (e.g. assert result == expected)",
             }
         )
         return  # 恒真断言无需后续检查

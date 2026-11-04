@@ -74,6 +74,9 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
+from src.budget import pricing as _pricing  # noqa: E402  # 币种符号单点取用
+
+_MONEY = _pricing.currency_symbol(_pricing.table_currency_status())
 from src.budget.pricing import load_table_models, model_entry_reason  # noqa: E402
 from src.budget.token_usage import sum_token_metric_values, token_metric_reading  # noqa: E402
 from src.utils.json_strict import strict_json_dumps  # noqa: E402
@@ -540,7 +543,6 @@ def _arm_env(arm: str, args: argparse.Namespace) -> dict[str, str]:
     return {
         "AITESTER_PROFILE": str(args.profile),
         "TEMPERATURE": "0.0",
-        "LLM_THINKING_MODE": "disabled",
         "BENCHMARK_PARALLELISM": str(args.parallel),
         "AITESTER_LLM_CACHE": "0",
         "AITESTER_CACHE_NAMESPACE": f"s2_b8_injection_{arm}",
@@ -997,7 +999,7 @@ def _cost_text(value: Any, reasons: dict[str, Any] | None = None) -> str:
     if value is None:
         shown = "、".join(f"{code}×{count}" for code, count in sorted((reasons or {}).items()))
         return f"—（无法估算：{shown or '机制未记录'}）"
-    return f"${value}"
+    return f"{_pricing.currency_symbol(_pricing.table_currency_status())}{value}"
 
 
 def _write_readme(out_root: Path, report: dict[str, Any]) -> None:
@@ -1109,7 +1111,7 @@ def _write_readme(out_root: Path, report: dict[str, Any]) -> None:
 |---|---|
 | 切点 | 干净 worktree（HEAD `{p.get("root_head")}`，dirty=0；两臂 provenance 见下） |
 | 数据集 | synthetic（`--dataset synthetic --task-count {p["tasks"]} --seed {p["seed"]}`） |
-| 档位 | `AITESTER_PROFILE={p["profile"]}`（与 P-2 同：隔离 workflow 停止路由单变量）；`TEMPERATURE=0.0` / `LLM_THINKING_MODE=disabled` |
+| 档位 | `AITESTER_PROFILE={p["profile"]}`（与 P-2 同：隔离 workflow 停止路由单变量）；`TEMPERATURE=0.0` / `LLM_THINKING_MODE 继承默认（disabled）` |
 | 并行 | `BENCHMARK_PARALLELISM={p["parallel"]}`；两臂**并发**（两个进程、独立 cache namespace `s2_b8_injection_on/off`） |
 | 真实 LLM | 是（planner/generator/debugger 真实调用；`AITESTER_LLM_CACHE=0`）；cap `AITESTER_BATCH_MAX_CALLS`、任务级 `COST_BUDGET_ENABLE/USD`、watchdog `{p["watchdog_seconds"]}s/臂` |
 | 注入轮 | `--inject-rounds {p["inject_rounds"]}`（两臂相同） |
@@ -1147,7 +1149,7 @@ def _write_readme(out_root: Path, report: dict[str, Any]) -> None:
 | provenance git_sha/dirty | {on["provenance"]["git_sha"]}/{on["provenance"]["git_dirty"]} | {off["provenance"]["git_sha"]}/{off["provenance"]["git_dirty"]} |
 | env_snapshot.COVERAGE_STALL_DETECT_ENABLE | {on["provenance"]["coverage_stall_env"]} | {off["provenance"]["coverage_stall_env"]} |
 
-成本合计 ≈ **{_cost_text(v["cost_total_usd"], v.get("cost_total_reasons"))}**（预算 ≤$0.3）；两臂并发墙钟合计 {v["wall_total_seconds"]}s。{price_note}
+成本合计 ≈ **{_cost_text(v["cost_total_usd"], v.get("cost_total_reasons"))}**（预算 ≤{_MONEY}0.3）；两臂并发墙钟合计 {v["wall_total_seconds"]}s。{price_note}
 
 ## 5. 配对（共同任务；Δ iterations = off − on）
 
@@ -1183,7 +1185,7 @@ n_pairs = {report["paired"]["n_pairs"]}；Δ均值 = **{report["paired"]["delta_
 两轮冒烟用于在冻结预注册前验证注入 harness 与停滞判据可达性（工件在
 `_harness_smoke/`、`_harness_smoke_gateoff/`，不参与主判定）。冒烟合计
 **{smoke_tokens_text} tokens ≈ {_cost_text(smoke_cost, smoke_cost_reasons)}**（标准价）；主批 {main_tokens_text} tokens ≈ {_cost_text(v["cost_total_usd"], v.get("cost_total_reasons"))}；
-**含冒烟总成本 ≈ {_cost_text(grand_cost, grand_cost_reasons)}**（预算 ≤$0.3）。{token_note}
+**含冒烟总成本 ≈ {_cost_text(grand_cost, grand_cost_reasons)}**（预算 ≤{_MONEY}0.3）。{token_note}
 
 | 冒烟目录 | 臂 | PATCH_EVIDENCE_GATE_ENABLE | iterations | iterations 均值 | stop_reason 分布 |
 |---|---|---|---|---|---|
@@ -1240,7 +1242,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--budget-usd",
         type=float,
         default=1.0,
-        help="任务级 COST_BUDGET_USD（默认 1.0；总预算 ≤$0.3 由任务数/调用数约束）",
+        help="任务级 COST_BUDGET_USD（默认 1.0；总预算 ≤¥0.3 由任务数/调用数约束（金额按价目表基准币种））",
     )
     p.add_argument("--max-calls", type=int, default=150, help="AITESTER_BATCH_MAX_CALLS（默认 150/臂）")
     p.add_argument("--watchdog-seconds", type=float, default=1500.0, help="单臂看门狗秒数（默认 1500）")
@@ -1307,7 +1309,7 @@ def main(argv: list[str] | None = None) -> int:
                 "rb.run_benchmark(synthetic, aitester, tasks, seed, parallel, deterministic=True)",
                 "卸载 patch；写 arm meta（git 前后快照/注入记录/批次 sha256）",
             ],
-            "estimated_llm_calls": f"≤ {args.max_calls}/臂（任务级 budget ${args.budget_usd}）",
+            "estimated_llm_calls": f"≤ {args.max_calls}/臂（任务级 budget {_MONEY}{args.budget_usd}）",
             "note": "dry-run 不导入 worktree 模块、不产生 LLM 调用",
         }
         print(json.dumps(plan, ensure_ascii=False, indent=2))

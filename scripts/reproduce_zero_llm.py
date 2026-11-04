@@ -55,12 +55,31 @@ def _skip_main_batch() -> str | None:
     return None
 
 
+def _skip_repro_batches() -> str | None:
+    """统计扩展支路的前提探针（2026-11-04 补）。
+
+    此前本条探针为 `None`，与三个兄弟支路口径不一致：源批次缺席时它直接
+    `FileNotFoundError` 硬红，而规矩是"没东西可读报 [SKIP]，既不硬红也不
+    谎报 ok"。判据取 `emse_stats_extensions` 实际读取的重建三臂文件。
+    """
+    from pathlib import Path as _P
+
+    required = (
+        "experiments/results/benchmark_quixbugs_20261024_170238.json",
+        "experiments/results/benchmark_synthetic_20261024_161048.json",
+    )
+    missing = [p for p in required if not _P(p).is_file()]
+    if missing:
+        return "重建三臂批次缺席（" + "、".join(missing) + "）——2026-11-04 数据清除后待重跑生成"
+    return None
+
+
 _L0_COMMANDS: list[tuple[str, list[str], int, object]] = [
     (
         "统计扩展（Wilson CI / Cohen's g / OR / bootstrap Δ CI）",
         ["-m", "experiments.emse_stats_extensions"],
         12,
-        None,
+        _skip_repro_batches,
     ),
     (
         "统计报告补口（MDE / 功效 / 比例型 bootstrap CI）",

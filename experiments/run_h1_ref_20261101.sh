@@ -15,8 +15,7 @@ fi
 
 export AITESTER_PROFILE=logic
 export TEMPERATURE=0.0
-export LLM_THINKING_MODE=disabled
-export ENABLE_RAG=false
+
 export AITESTER_LLM_CACHE=0
 export ENABLE_MUTATION_SCORING=false
 export MUTATION_ADVISOR_ENABLE=false

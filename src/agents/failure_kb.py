@@ -235,8 +235,8 @@ def kb_debugger_snippet(error_category: str, now: float | None = None) -> str | 
         return None
 
     lines: list[str] = [
-        "【失败知识库提示（4. 闭环落点 B，默认关；四段式：问题→根因→修复→验证）】",
-        f"以下历史案例与当前错误类别（{error_category}）同类，已按频次×时间衰减排序：",
+        "[Failure knowledge-base hint (closed loop, landing point B; disabled by default; four fields: problem -> root cause -> fix -> verification)]",
+        f"The historical cases below share the current error category ({error_category}), ranked by frequency with time decay:",
     ]
     for i, entry in enumerate(ranked, 1):
         seg = normalize_entry_segments(entry)
@@ -248,15 +248,18 @@ def kb_debugger_snippet(error_category: str, now: float | None = None) -> str | 
             except (TypeError, ValueError):
                 last_seen_txt = ""
         lines.append(
-            f"  案例{i}（类别={error_category}，历史出现 {stat['occurrences']} 次"
-            + (f"，最近修复于 {last_seen_txt}" if last_seen_txt else "")
-            + "）"
-            + f"｜问题：{seg['problem'] or '未记录'}"
-            + f"｜根因：{seg['root_cause'] or '未定位'}"
-            + f"｜修复：{seg['fix'] or '未给出建议'}"
-            + f"｜验证：{seg['verification'] or '未验证'}"
+            f"  Case {i} (category={error_category}, {stat['occurrences']} historical occurrences"
+            + (f", last fixed {last_seen_txt}" if last_seen_txt else "")
+            + ")"
+            + f" | problem: {seg['problem'] or 'not recorded'}"
+            + f" | root cause: {seg['root_cause'] or 'not identified'}"
+            + f" | fix: {seg['fix'] or 'no suggestion'}"
+            + f" | verification: {seg['verification'] or 'not verified'}"
         )
-    lines.append("请优先参考上述同类案例的修复方向；若与当前代码上下文冲突，以当前代码为准。")
+    lines.append(
+        "Prefer the repair direction of the matching cases above; where it conflicts with the current code "
+        "context, the current code wins."
+    )
     return "\n".join(lines)
 
 

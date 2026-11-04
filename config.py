@@ -267,6 +267,22 @@ class LLMConfig:
     cost_weight: float = 0.0
 
 
+def _llm_model_filter() -> frozenset[str]:
+    """`AITESTER_LLM_MODEL_FILTER` 解析（逗号分隔模型名，大小写不敏感；未设 = 空集不过滤）。
+
+    为什么需要它：`experiments/run_benchmark._get_api_for_task` 按
+    `task_index % len(_VALID_APIS)` 轮询端点，配置两个 provider 时同一批次里
+    "模型"与"任务"同时变化——模型对比不满足单一变量。过滤收口在配置层而非
+    跑批层，是因为 `_get_llm_config` 在非 worker 线程回退 `LLM_CONFIGS[0]`：
+    只过滤跑批侧 `_VALID_APIS` 会让主线程路径（APIManager、模型指纹探针、
+    缓存 namespace）仍落到首配置，造成"名义单模型、实际混模型"。
+    """
+    raw = (os.getenv("AITESTER_LLM_MODEL_FILTER", "") or "").strip()
+    if not raw:
+        return frozenset()
+    return frozenset(part.strip().lower() for part in raw.split(",") if part.strip())
+
+
 def _load_llm_configs() -> list[LLMConfig]:
     """从环境变量中读取所有 LLM_N_* 配置，返回完整配置列表。
 
@@ -278,6 +294,10 @@ def _load_llm_configs() -> list[LLMConfig]:
     只有 api_key、base_url、model_name 三项均非空时，该配置才会被加入列表。
     扫描至 _LLM_MAX_SCAN_INDEX 上限，容忍编号空洞（如删除 LLM_2 后 LLM_3 仍会被加载），
     不再在第一个不完整编号处中断。
+
+    `AITESTER_LLM_MODEL_FILTER` 置为模型名清单时只保留命中的配置（同型号跨
+    provider 去重）；置了却零命中 → 返回空列表并告警，由调用方按"未配置 LLM"
+    显式失败——静默回退成全量会让混模型悄悄发生。
     """
     configs: list[LLMConfig] = []
     for idx in range(1, _LLM_MAX_SCAN_INDEX + 1):
@@ -290,7 +310,18 @@ def _load_llm_configs() -> list[LLMConfig]:
         # 未设置时 0.0 表示"无成本信息"（APIManager 回退 1.0 基准）
         cost_weight = _parse_float_env(f"LLM_{idx}_COST_WEIGHT", 0.0, 0.1, 1000.0)
         configs.append(LLMConfig(api_key=api_key, base_url=base_url, model_name=model_name, cost_weight=cost_weight))
-    return configs
+
+    wanted = _llm_model_filter()
+    if not wanted:
+        return configs
+    kept = [cfg for cfg in configs if cfg.model_name.strip().lower() in wanted]
+    if not kept:
+        logger.warning(
+            "AITESTER_LLM_MODEL_FILTER=%r 未命中任何已配置模型（可用：%s）——按「未配置 LLM」处理，不回退全量",
+            (os.getenv("AITESTER_LLM_MODEL_FILTER", "") or "").strip(),
+            ", ".join(sorted(cfg.model_name for cfg in configs)) or "（无）",
+        )
+    return kept
 
 
 # 所有已配置的 LLM Provider 列表（按 LLM_1, LLM_2, ... 顺序）

@@ -1109,7 +1109,7 @@ def _wrap_oracle_body(body_lines: list[str]) -> list[str]:
     try_block.extend(
         [
             "    except AssertionError:",
-            "        # 断言失败 = oracle 的语义判定信号，必须保留为 fail（不得 skip）",
+            "        # an assertion failure is the oracle's semantic verdict and must stay a fail (never a skip)",
             "        raise",
             "    except Exception as exc:",
             '        pytest.skip(f"oracle-unavailable: {type(exc).__name__}: {exc}")',

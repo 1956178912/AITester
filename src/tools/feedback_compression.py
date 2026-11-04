@@ -316,22 +316,25 @@ def build_feedback_compression_section(compressed: dict[str, Any] | None) -> str
     survived = compressed.get("survived_mutants") or []
     score = compressed.get("mutation_score")
 
-    lines: list[str] = ["【压缩反馈（观测级行粒度压缩）】", f"错误类型：{error_category}"]
+    lines: list[str] = [
+        "[Compressed feedback (observation-level line-granularity compression)]",
+        f"Error category: {error_category}",
+    ]
     if failed_tests:
-        lines.append("失败测试：" + ", ".join(failed_tests))
+        lines.append("Failing tests: " + ", ".join(failed_tests))
     if target_lines:
-        lines.append("涉及源代码行（按行号，标注定位来源）：")
+        lines.append("Source lines involved (by line number, with localization origin):")
         lines.extend(
-            f"- 第 {item.get('lineno', '?')} 行（{item.get('origin', '?')}）: {item.get('source', '')}"
+            f"- Line {item.get('lineno', '?')} ({item.get('origin', '?')}): {item.get('source', '')}"
             for item in target_lines
         )
     if survived:
-        lines.append(f"存活变异体摘要（上一轮变异测试未捕获，共 {len(survived)} 条）：")
+        lines.append(f"Surviving-mutant summary (not captured by the last mutation round; {len(survived)} total):")
         lines.extend(f"- {desc}" for desc in survived)
     if score is not None:
-        lines.append(f"当前变异得分 {score}")
+        lines.append(f"Current mutation score {score}")
     lines.append(
-        "请针对上述失败位置与未捕获故障模式补强断言；期望值必须来自问题语义（数学定律/规约），不得照抄实现当前行为。"
+        "Strengthen the assertions against the failing locations and uncaptured failure modes above; expected values must come from the problem semantics (mathematical laws / the specification) and must never copy the implementation's current behaviour."
     )
 
     section = "\n".join(lines)
