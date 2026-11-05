@@ -4510,6 +4510,9 @@ def run_benchmark(
     # （F4/S2/K6 的根因之一就是"静默兜底 + 静默计数"）。
     # getattr 防御：非 SWE-bench 加载器（InMemory / 合成集）无本属性。
     _strict_skipped: list[str] = list(getattr(dataset, "strict_skipped_task_ids", []) or [])
+    # B8（2026-11-05）：测试材料不可判定的剔除是**另一个原因**，清单分开记，但计入
+    # 同一个分母缺口总数（少跑多少必须看得见，原因也要能分辨）。
+    _strict_skipped_test: list[str] = list(getattr(dataset, "strict_skipped_test_task_ids", []) or [])
     if _strict_skipped:
         logger.warning(
             "S2 strict 模式：%d 个任务因 instance_code 兜底为 issue 文本被剔除（不参与跑批）",
@@ -5007,9 +5010,10 @@ def run_benchmark(
         # 任务数 + 任务 ID 列表（上限 200 条，防 provenance 体积失控；被截断
         # 时以 strict_skipped_truncated 标明，全量清单以日志为准）。
         "strict_instance_code": _strict_instance_code_enabled(),
-        "strict_skipped_count": len(_strict_skipped),
+        "strict_skipped_count": len(_strict_skipped) + len(_strict_skipped_test),
         "strict_skipped_task_ids": _strict_skipped[:200],
-        "strict_skipped_truncated": len(_strict_skipped) > 200,
+        "strict_skipped_test_task_ids": _strict_skipped_test[:200],
+        "strict_skipped_truncated": len(_strict_skipped) + len(_strict_skipped_test) > 200,
         "temperature": _temperature_val,
         "max_iterations": MAX_ITERATIONS,
         "seed": seed,

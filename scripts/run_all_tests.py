@@ -909,7 +909,9 @@ def stage_base_env(out_dir: Path) -> dict[str, str]:
     return base_env
 
 
-def build_full_stages(args: argparse.Namespace, jobs: int, out_dir: Path, tasks_per_cell: int | None) -> list[dict]:
+def build_full_stages(
+    args: argparse.Namespace, jobs: int, out_dir: Path, tasks_per_cell: int | None, gate=None
+) -> list[dict]:
     """全量档（最大规格）：`make test-cov` 全量+覆盖率 → `make gates` 全链 → LLM 跑满每面。
 
     两段 0 LLM 面都会跑一遍全量套件（`make gates` 的 test 步骤即全量 pytest），
@@ -953,7 +955,7 @@ def build_full_stages(args: argparse.Namespace, jobs: int, out_dir: Path, tasks_
                 "retries": 1,
             }
         )
-        stages.extend(_build_llm_sweep_stages(args, jobs, out_dir, base_env, tasks_per_cell))
+        stages.extend(_build_llm_sweep_stages(args, jobs, out_dir, base_env, tasks_per_cell, gate=gate))
     return stages
 
 
@@ -1153,7 +1155,7 @@ def acquire_run_lock(out_dir: Path, fingerprint: str, force: bool) -> Path:
 
 
 def build_smoke_stages(
-    args: argparse.Namespace, jobs: int, out_dir: Path, smoke_batches: list[list[str]]
+    args: argparse.Namespace, jobs: int, out_dir: Path, smoke_batches: list[list[str]], gate=None
 ) -> list[dict]:
     """冒烟档：每个面只跑一项，用来确认"跑得起来"，不产出任何判定读数。"""
     base_env = stage_base_env(out_dir)
@@ -1238,7 +1240,7 @@ def build_smoke_stages(
                 "retries": 1,
             }
         )
-        stages.extend(_build_llm_sweep_stages(args, jobs, out_dir, base_env, SMOKE_TASKS_PER_CELL))
+        stages.extend(_build_llm_sweep_stages(args, jobs, out_dir, base_env, SMOKE_TASKS_PER_CELL, gate=gate))
     return stages
 
 
@@ -1262,7 +1264,7 @@ def _completed_task_ids(stage_dir: Path) -> list[str]:
     return done
 
 
-def llm_scale_plan(args: argparse.Namespace, tasks_per_cell: int | None) -> dict:
+def llm_scale_plan(args: argparse.Namespace, tasks_per_cell: int | None, gate=None) -> dict:
     """规模与预算的**唯一算式**：投影与实跑阶段共用它，避免两处各算一遍再漂移。
 
     `tasks_per_cell=None` ⇒ 每个数据集面跑满（上限现取加载器）；给数字 ⇒ 每面固定
@@ -1300,6 +1302,20 @@ def llm_scale_plan(args: argparse.Namespace, tasks_per_cell: int | None) -> dict
             print(f"  ⚠ 面 {dup} 与 {keeper} 指向同一批数据（{sig[0]} 条，{sig[1]} … {sig[2]}）——已剔除，不重复付费")
         faces[keeper] = counts[keeper]
     datasets = list(faces)
+    # B8（2026-11-05）：数据集闸的结果进入选面（此前只铺阶段、无人消费 ⇒ 红面照样
+    # 付费、整轮 rc 被毒化）。红面剔除并点名，不进分母、不付费、不改变 rc。
+    gate_dropped: dict[str, str] = {}
+    if gate is not None:
+        kept = []
+        for ds in datasets:
+            code = int(gate(ds))
+            if code == 0:
+                kept.append(ds)
+            else:
+                gate_dropped[ds] = f"数据集闸 exit={code}"
+                print(f"  ⛔ 面 {ds} 数据集闸未通过（exit={code}）⇒ 不进批、不付费（逐任务原因见 check-dataset {ds}）")
+        datasets = kept
+        faces = {ds: count for ds, count in faces.items() if ds in datasets}
     scale = "{} 模型 × {} 臂 × {} 个面（{}）".format(
         len(models), len(arms), len(datasets), " + ".join(f"{ds}×{c}" for ds, c in faces.items()) or "无可用面"
     )
@@ -1315,13 +1331,26 @@ def llm_scale_plan(args: argparse.Namespace, tasks_per_cell: int | None) -> dict
     )
     plan["scale"] = scale
     if not datasets:
+        _why = "数据集闸判其不可判定" if gate_dropped else "不可读/无任务"
         plan = {
             **plan,
             "provable": False,
             "fits_budget": False,
-            "reason": f"请求的面全部不可读（{requested}）——没有数据面可跑，拒跑而非跑空",
+            "reason": f"请求的面全部{_why}（{requested}，闸剔除 {sorted(gate_dropped) or '无'}）——没有数据面可跑，拒跑而非跑空",
         }
-    return {"models": models, "arms": arms, "datasets": datasets, "face_counts": faces, "plan": plan}
+    return {
+        "models": models,
+        "arms": arms,
+        "datasets": datasets,
+        "face_counts": faces,
+        "plan": plan,
+        "gate_dropped": gate_dropped,
+    }
+
+
+def _gate_selector(args: argparse.Namespace):
+    """闸选择器：`--skip-dataset-gate` ⇒ None（不消费任何闸结果，保持纯选面）。"""
+    return None if args.skip_dataset_gate else dataset_gate_verdict
 
 
 def print_llm_projection(args: argparse.Namespace, tasks_per_cell: int | None) -> int:
@@ -1330,6 +1359,8 @@ def print_llm_projection(args: argparse.Namespace, tasks_per_cell: int | None) -
     独立于阶段编排：`--estimate-llm` 必须在建阶段之前短路，否则它会连着把
     0LLM 全量套件跑一遍——那已经不是"只投影"了。
     """
+    # 投影保持纯算式（`--estimate-llm` 承诺零执行）：闸只在实跑选面时跑 ⇒ 投影是
+    # **上界**，实跑可能因闸剔除某个面而更便宜，不会更贵。
     scale = llm_scale_plan(args, tasks_per_cell)
     if not scale["models"]:
         print("LLM 段投影：未配置任何 LLM 端点，无花费")
@@ -1446,6 +1477,48 @@ _STRICT_INSTANCE_CODE_KEY = "AITESTER_DATASET_STRICT_INSTANCE_CODE"
 #: `src/tools/patch_evidence._ENV_OFFICIAL_TESTS` 做同源对账——两处名字对不上
 #: 就是"跑批以为开了、库内其实没接"的静默失效面。
 _OFFICIAL_TESTS_GOLD_KEY = "PATCH_EVIDENCE_OFFICIAL_TESTS_ENABLE"
+#: B8（2026-11-05）测试材料严格口径（与 `dataset_loader._ENV_STRICT_TEST_CODE` 同源，
+#: 由 `test_b8_task_level_dataset_drop` 对账）：`test_code` 里没有 Python 用例、或
+#: `total_test_count=0` 的任务跑了也只能产出不可判的行 ⇒ 不进分母、不付费。
+_STRICT_TEST_CODE_KEY = "AITESTER_DATASET_STRICT_TEST_CODE"
+
+
+def protocol_caliber_env() -> dict[str, str]:
+    """跑批与"数面/闸"共用的口径变量（单一来源，B8）。
+
+    闸必须和实跑用同一口径：不同源时"闸判绿的面"与"实跑付费的面"会是两套数据，
+    数到的分母就跑不到（本仓既有教训）。
+    """
+    return {
+        _STRICT_INSTANCE_CODE_KEY: "true",
+        _STRICT_TEST_CODE_KEY: "true",
+        _OFFICIAL_TESTS_GOLD_KEY: "true",
+    }
+
+
+def dataset_gate_verdict(face: str) -> int:
+    """免费数据集闸的单面判定（0=可判定面可进批；非 0/异常=不进批）。
+
+    B8：闸的结果现在**被消费**——此前它只作为阶段铺在 LLM 段之前，没有任何代码读
+    退出码，于是"被判不可判定的面照样付费"，而整轮 rc 只因它变红（冒烟证据因此
+    不可用、full 档开不了跑）。超时/崩溃一律按不进批处理（未校验 = 不付费）。
+    """
+    import subprocess
+
+    try:
+        proc = subprocess.run(
+            [PYTHON, str(PROJECT_ROOT / "main.py"), "check-dataset", face],
+            cwd=str(PROJECT_ROOT),
+            env={**os.environ, **protocol_caliber_env()},
+            capture_output=True,
+            text=True,
+            timeout=900,
+            check=False,
+        )
+    except Exception as exc:  # 跑不起来 = 没校验过，不得当作通过
+        print(f"  ⚠ 面 {face} 数据集闸无法执行：{type(exc).__name__}: {str(exc)[:80]}——按不进批处理")
+        return 1
+    return int(proc.returncode)
 
 
 @contextlib.contextmanager
@@ -1494,6 +1567,7 @@ def _build_llm_sweep_stages(
     out_dir: Path,
     base_env: dict[str, str],
     tasks_per_cell: int | None,
+    gate=None,
 ) -> list[dict]:
     """按「模型 × 基线臂 × 数据集面」铺阶段；`tasks_per_cell=None` ⇒ 每面跑满。
 
@@ -1509,7 +1583,7 @@ def _build_llm_sweep_stages(
     ② 免费闸先筛掉永不产生数据的任务，并把重跑/重试引到身份键缓存上命中；
     ③ 可选移到官方空闲半价窗（参数不变 ⇒ 测量等价）。
     """
-    scale = llm_scale_plan(args, tasks_per_cell)
+    scale = llm_scale_plan(args, tasks_per_cell, gate=gate)
     models, arms, datasets, face_counts, plan = (
         scale["models"],
         scale["arms"],
@@ -1524,19 +1598,10 @@ def _build_llm_sweep_stages(
     args._llm_budget_plan = plan  # 供 main() 打印与报告落盘
 
     stages: list[dict] = []
-    # 付费前的免费闸：数据集加载质量（零 LLM，零成本）。加载不出的面
-    # 不可能产生判定，先花 0 元确认，再决定是否花钱。
-    if not args.skip_dataset_gate:
-        stages += [
-            {
-                "name": f"dataset_gate_{ds}"[:60],
-                "command": [PYTHON, str(PROJECT_ROOT / "main.py"), "check-dataset", ds],
-                "env": {**base_env, "AITESTER_SMOKE_LLM": "false"},
-                "timeout": 900,
-                "retries": 0,
-            }
-            for ds in datasets
-        ]
+    # B8（2026-11-05）：付费前的免费闸不再作为阶段铺在这里——它此前只铺不读：
+    # 红面照样进入 LLM 段付费，而整轮 rc 只因它变红（冒烟证据因此不可用、full 档
+    # 开不了跑）。现在闸结果由 `llm_scale_plan(gate=...)` 在选面阶段消费：红面剔除、
+    # 具名披露、不进分母、不付费，也不再毒化 rc。
 
     if not plan["provable"] or not plan["fits_budget"]:
         print(f"  ❌ LLM 段不开跑：{plan['reason']}")
@@ -1588,13 +1653,9 @@ def _build_llm_sweep_stages(
                     # ③ 身份键缓存复用（重跑/重试零增量成本），namespace 阶段隔离
                     "AITESTER_LLM_CACHE": "1",
                     "AITESTER_CACHE_NAMESPACE": ns,
-                    # ④ 无源码任务不付费（与 `dataset_signature` 数分母同一条规则）
-                    _STRICT_INSTANCE_CODE_KEY: "true",
-                    # ⑤ B1（2026-11-05）：把 gold 证据接进图内——官方测试跑在
-                    # 打补丁源码上、全绿即放行。默认关的库内开关在此显式开启：
-                    # 不开则证据门只能拿 sbfl（被 B5 覆盖率链卡死）或 keyword，
-                    # 正确补丁按"无证据"回滚 = 白付这一轮的 LLM 调用。
-                    _OFFICIAL_TESTS_GOLD_KEY: "true",
+                    # ④⑤⑥ 口径变量（与"数面 / 数据集闸"同源，见 protocol_caliber_env）：
+                    #   无源码任务不付费、测试材料不可判定任务不付费、图内 gold 裁决开启
+                    **protocol_caliber_env(),
                     # 逐阶段同值的协议变量（单一变量的"同值"部分）
                     "AITESTER_PROFILE": args.llm_profile,
                     "TEMPERATURE": "0.0",
@@ -1885,7 +1946,9 @@ def main(argv: list[str] | None = None) -> int:
         smoke_stages: list[dict] = []
         full_stages: list[dict] = []
         if args.spec in (SPEC_SMOKE, SPEC_BOTH):
-            smoke_stages = build_smoke_stages(args, jobs, out_dir, collect_smoke_batches(args, out_dir))
+            smoke_stages = build_smoke_stages(
+                args, jobs, out_dir, collect_smoke_batches(args, out_dir), gate=_gate_selector(args)
+            )
         run_full = args.spec in (SPEC_FULL, SPEC_BOTH)
         if run_full:
             if args.spec == SPEC_FULL and not args.allow_stale_smoke:
@@ -1898,7 +1961,7 @@ def main(argv: list[str] | None = None) -> int:
                     )
                     return 1
                 print(f"✅ 冒烟前置满足：{found['at']} 指纹 {found['fingerprint']}")
-            full_stages = build_full_stages(args, jobs, out_dir, args.llm_tasks or None)
+            full_stages = build_full_stages(args, jobs, out_dir, args.llm_tasks or None, gate=_gate_selector(args))
 
         writer = ProgressWriter(out_dir / PROGRESS_FILE, len(smoke_stages) + len(full_stages))
         stalls = 0

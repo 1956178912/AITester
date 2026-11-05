@@ -3,7 +3,7 @@
 # 规则：本地运行 check_env_budget.py（无 --check）发现新名自动登记写回，
 # 由贡献者随改动提交——'登记'即'修改本文件'，PR diff 强制可见（P0-5 冻结决策）。
 # CI 以 --check 模式阻断未登记新增；删名允许（表随之收缩）。
-env_total: 257
+env_total: 258
 names:
   - ADVERSARIAL_DEBUGGING_ENABLE
   - AGENT_TELEMETRY_ENABLE
@@ -15,6 +15,7 @@ names:
   - AITESTER_CACHE_ISOLATE_MODEL
   - AITESTER_CACHE_NAMESPACE
   - AITESTER_DATASET_STRICT_INSTANCE_CODE
+  - AITESTER_DATASET_STRICT_TEST_CODE
   - AITESTER_EXECUTOR_AGENT_CACHE
   - AITESTER_LLM_CACHE
   - AITESTER_LLM_CACHE_DIR

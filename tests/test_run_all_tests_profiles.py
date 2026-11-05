@@ -576,7 +576,9 @@ class TestFullRequiresSmoke:
         monkeypatch.setattr(
             runner,
             "build_smoke_stages",
-            lambda args, jobs, out_dir, batches: [
+            # B8：装配器多了一个 `gate` 形参（数据集闸结果进入选面）——桩须跟着收，
+            # 本例判据是"冒烟未全通时全量一条都不执行"，与形参表无关。
+            lambda args, jobs, out_dir, batches, gate=None: [
                 {
                     "name": "will_fail",
                     "command": [sys.executable, "-c", "raise SystemExit(3)"],

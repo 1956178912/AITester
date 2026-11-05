@@ -51,6 +51,19 @@ logger = logging.getLogger(__name__)
 _ENV_STRICT_INSTANCE_CODE = "AITESTER_DATASET_STRICT_INSTANCE_CODE"
 
 
+#: 测试材料严格口径（B8，2026-11-05）：`validate_task` 判为"测试侧不可判定"的任务
+#: 不进分母、不付费——`test_code` 里没有 Python 用例（实测 swebench 6/225：sqlfluff
+#: 的 test_patch 只动夹具文件）或 `total_test_count=0`（通过率没有分母）的任务，
+#: 跑了也只能产出不可判的行。与 instance_code 口径同族、同一实现方式（剔除 + 具名
+#: 清单 + 告警），但**两条清单分开**：剔除原因不同，provenance 必须可分辨。
+_ENV_STRICT_TEST_CODE = "AITESTER_DATASET_STRICT_TEST_CODE"
+
+
+def _strict_test_code_enabled() -> bool:
+    """读取测试材料严格口径（AITESTER_DATASET_STRICT_TEST_CODE，默认 false）。"""
+    return env_flag(_ENV_STRICT_TEST_CODE, extra_true=("yes",))
+
+
 def _strict_instance_code_enabled() -> bool:
     """读取 instance_code fail-fast 开关（AITESTER_DATASET_STRICT_INSTANCE_CODE）。
 
@@ -364,6 +377,8 @@ class SWEBenchDataset(BaseDatasetLoader):
         # 把剔除数写入 provenance（"有多少任务被剔除"必须可审计，不能只在
         # 日志里一闪而过）。
         self.strict_skipped_task_ids: list[str] = []
+        # B8：测试材料不可判定的剔除清单（与源码清单分开，原因不同）
+        self.strict_skipped_test_task_ids: list[str] = []
 
     def _resolve_jsonl_paths(self) -> list[str]:
         """解析本加载器实例应读取的 JSONL 文件路径列表。
@@ -591,6 +606,7 @@ class SWEBenchDataset(BaseDatasetLoader):
         self._tasks.clear()
         # S2：strict 剔除面同步重置（重载后旧剔除记录不得残留）
         self.strict_skipped_task_ids.clear()
+        self.strict_skipped_test_task_ids.clear()
         # 跨文件去重集合：加载多子集 JSONL 时按 instance_id 去重（加载开始时重置，避免重复加载残留）
         self._seen_task_ids: set[str] = set()
 
@@ -659,6 +675,15 @@ class SWEBenchDataset(BaseDatasetLoader):
                 len(self.strict_skipped_task_ids),
                 _ENV_STRICT_INSTANCE_CODE,
                 os.getenv(_ENV_STRICT_INSTANCE_CODE),
+            )
+        if self.strict_skipped_test_task_ids:
+            # B8：同样必须点名——"少跑了 N 个任务"不得被读成"跑通了全部任务"
+            logger.warning(
+                "S8 strict 测试材料模式：%d 个任务因测试侧不可判定（无 Python 用例 / 用例数未知）被剔除"
+                "（%s=%s，跑了也只能产出不可判的行）",
+                len(self.strict_skipped_test_task_ids),
+                _ENV_STRICT_TEST_CODE,
+                os.getenv(_ENV_STRICT_TEST_CODE),
             )
 
     @staticmethod
@@ -819,7 +844,7 @@ class SWEBenchDataset(BaseDatasetLoader):
             total_tests = len(fail_to_pass_list) + len(pass_to_pass_list)
             total_pass = total_pass if total_pass > 0 else len(fail_to_pass_list) + len(pass_to_pass_list)
 
-        return BenchmarkTask(
+        _task = BenchmarkTask(
             task_id=task_id,
             repo_name=repo_name,
             problem_statement=problem_statement,
@@ -863,6 +888,15 @@ class SWEBenchDataset(BaseDatasetLoader):
                 "test_patch": data.get("test_patch", "") or "",
             },
         )
+        # B8（2026-11-05）：测试侧不可判定的任务在严格口径下剔除。判据**不重写一遍**，
+        # 直接取 `validate_task`（诊断与剔除同一谓词，避免两套口径漂移）。
+        if _strict_test_code_enabled():
+            _test_side = [i for i in self.validate_task(_task) if i.startswith(("test_code", "total_test_count"))]
+            if _test_side:
+                self.strict_skipped_test_task_ids.append(task_id)
+                logger.warning("S8 strict 模式剔除任务（测试材料不可判定：%s）: %s", "; ".join(_test_side), task_id)
+                return None
+        return _task
 
     @classmethod
     def download_from_huggingface(
