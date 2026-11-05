@@ -6,12 +6,18 @@
 
 import json
 import logging
+import os
 import sys
 from pathlib import Path
 
 import click
 
 logger = logging.getLogger(__name__)
+
+
+def _discard(path: Path) -> None:
+    """删除半成品文件（失败现场不得留下 0 字节文件遮蔽真数据）。"""
+    Path(path).unlink(missing_ok=True)
 
 
 def download_swe_bench(subset: str = "lite", output_dir: str | None = None) -> Path:
@@ -27,19 +33,32 @@ def download_swe_bench(subset: str = "lite", output_dir: str | None = None) -> P
         logger.info("数据集已存在: %s", output_file)
         return output_file
     logger.info("正在从 HuggingFace 下载 SWE-bench-%s 数据集...", subset)
+    tmp_file = output_file.with_suffix(output_file.suffix + ".part")
+    written = 0
     try:
         from datasets import load_dataset
 
         ds = load_dataset("princeton-nlp/SWE-bench", name=f"swe_bench_{subset}", split="test")
-        with open(output_file, "w", encoding="utf-8") as f:
+        # 先写 .part，成功且非空才改名落位：直接把 output_file 打开来写，中途任何失败
+        # 都会留下 0 字节/半截文件，而下游一律按 `exists()` 判定"数据已就绪"——空文件
+        # 遮蔽已下载的通用 JSONL（2026-11-05 现场，跑批期写下 4 个 0 字节子集文件）。
+        with open(tmp_file, "w", encoding="utf-8") as f:
             for item in ds:
                 f.write(json.dumps(item, ensure_ascii=False, allow_nan=False) + "\n")
-        logger.info("下载完成，共 %d 条记录", len(ds))
+                written += 1
+            f.flush()
+            os.fsync(f.fileno())
+        if written == 0:
+            raise RuntimeError("下载结果为 0 条记录，拒绝落位空文件")
+        os.replace(tmp_file, output_file)
+        logger.info("下载完成，共 %d 条记录", written)
     except ImportError:
         logger.error("请先安装 datasets 库: pip install datasets")
+        _discard(tmp_file)
         sys.exit(1)
     except Exception as e:
         logger.error("下载失败: %s", e)
+        _discard(tmp_file)
         sys.exit(1)
     return output_file
 

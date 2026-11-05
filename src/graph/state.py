@@ -305,6 +305,18 @@ class AITesterState(TypedDict, total=False):
     # 2026-09-26 全面审查：此前由 benchmark 在 invoke 后 set 到 final_state 但
     # 未声明于 TypedDict（守护测试 test_state_schema_guard 会漏报），现显式声明
     repo_verification: dict[str, Any] | None
+    # B1（2026-11-05）官方测试材料（run_benchmark 在 invoke **前**注入）：
+    # {"code": 官方测试全文, "module_name": gold 派生模块名, "material":
+    #  跨文件物化所需子集, "expected_pass_count"/"total_test_count": 数据集声明
+    #  分母}。与 M1 事后 repair 指标同一提取器（_extract_gold_material），
+    # **评估专用材料，任何 agent prompt 不得引用**（同 gold_fixed_code 卫生口径，
+    # gold 答案键 fixed/fixed_module_code 已在注入侧白名单剔除）。
+    official_tests: dict[str, Any] | None
+    # B1 图内 gold 裁决出参（PATCH_EVIDENCE_OFFICIAL_TESTS_ENABLE=true 且本轮
+    # 等级不足时由 _patch_applier_node 写入）：{"verdict", "reason", "rc",
+    # "passed", "failed", "error", "skipped"}——记录"门为什么放行/仍拒绝"的计数，
+    # 使 gold 结论带着分母落盘而不是只留一个等级字符串
+    official_test_evidence: dict[str, Any] | None
     # 三、双向诊断节点（DIAGNOSIS_NODE_ENABLE=true 时由 _diagnosis_node 写入）：
     # 标记 defect_type 的判定来源（"diagnosis_node" = 工作流级 DiagnosisNode；
     # 缺省/None = 历史口径，由 _debugger_node 内联 BIDIRECTIONAL_DIAGNOSIS_ENABLE
@@ -858,6 +870,10 @@ def create_initial_state(
         # P0 仓库级验证结果（默认 None，REPO_LEVEL_EXECUTION=true 时由
         # run_benchmark 在 invoke 后写入；2026-09-26 全面审查补声明）
         repo_verification=None,
+        # B1 官方测试材料（默认 None；run_benchmark 在 invoke 前按任务注入，
+        # 无 gold 材料的任务保持 None ⇒ 证据门维持历史拒绝口径）
+        official_tests=None,
+        official_test_evidence=None,
         # 三、双向诊断节点来源标记（默认 None，DIAGNOSIS_NODE_ENABLE=true 时
         # 由 _diagnosis_node 写入 "diagnosis_node"）
         diagnosis_source=None,

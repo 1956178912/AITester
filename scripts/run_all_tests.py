@@ -1441,6 +1441,12 @@ def dataset_task_count(name: str) -> int | None:
 #: 数面与跑批共用的"无源码任务不付费"口径开关（加载器侧 S2 严格模式）。
 _STRICT_INSTANCE_CODE_KEY = "AITESTER_DATASET_STRICT_INSTANCE_CODE"
 
+#: B1（2026-11-05）图内 gold 裁决开关。运行器不 import src（保持启动面干净），
+#: 故此处写字面量，由 tests/test_run_all_tests_profiles.py 与
+#: `src/tools/patch_evidence._ENV_OFFICIAL_TESTS` 做同源对账——两处名字对不上
+#: 就是"跑批以为开了、库内其实没接"的静默失效面。
+_OFFICIAL_TESTS_GOLD_KEY = "PATCH_EVIDENCE_OFFICIAL_TESTS_ENABLE"
+
 
 @contextlib.contextmanager
 def _strict_source_caliber() -> Iterator[None]:
@@ -1584,6 +1590,11 @@ def _build_llm_sweep_stages(
                     "AITESTER_CACHE_NAMESPACE": ns,
                     # ④ 无源码任务不付费（与 `dataset_signature` 数分母同一条规则）
                     _STRICT_INSTANCE_CODE_KEY: "true",
+                    # ⑤ B1（2026-11-05）：把 gold 证据接进图内——官方测试跑在
+                    # 打补丁源码上、全绿即放行。默认关的库内开关在此显式开启：
+                    # 不开则证据门只能拿 sbfl（被 B5 覆盖率链卡死）或 keyword，
+                    # 正确补丁按"无证据"回滚 = 白付这一轮的 LLM 调用。
+                    _OFFICIAL_TESTS_GOLD_KEY: "true",
                     # 逐阶段同值的协议变量（单一变量的"同值"部分）
                     "AITESTER_PROFILE": args.llm_profile,
                     "TEMPERATURE": "0.0",

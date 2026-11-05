@@ -938,6 +938,10 @@ def _dump_state_artifacts(output_dir: str, task: BenchmarkTask, baseline: str, f
         "position_aware_focus": final_state.get("position_aware_focus"),
         # P0 仓库级验证诊断（仅 REPO_LEVEL_EXECUTION=true 且 SWE-bench 任务有）
         "repo_verification": final_state.get("repo_verification"),
+        # B1（2026-11-05）图内 gold 裁决：gold 的两条来源必须在工件里可分辨
+        # ——repo_verification 是事后仓库级验证，official_test_evidence 是
+        # 门内官方测试全绿裁决（含 rc 与 passed/failed 计数）。
+        "official_test_evidence": final_state.get("official_test_evidence"),
         # 2026-10 P3（A/B 阴性结果驱动）：跨文件依赖图 + 任务元数据
         # （cross_file_root_cause.py 的 DEP_GRAPH_INCOMPLETE 判定依赖
         # cross_file_deps 边数 vs num_files；难度过滤依赖 task_metadata.difficulty。
@@ -2158,6 +2162,8 @@ def _build_task_result(
             # 或有证据背书（False）；None = 本轮无补丁 / 证据门未触发。
             "source_patched_unverified": final_state.get("source_patched_unverified"),
             "patch_evidence_level": final_state.get("patch_evidence_level"),
+            # B1：等级升到 gold 的**理由与计数**逐行透出（纯观测，不参与路由）
+            "official_test_evidence": final_state.get("official_test_evidence"),
             # T 轮 2026-10-18（O 轮登记项落地）：A-03 快照/P2P 回归/自动回滚
             # 观测字段逐行透出（纯观测，不参与路由——写点位
             # src/graph/nodes.py::_patch_applier_node，本行只做 state 投影）：
@@ -2431,6 +2437,9 @@ def _build_task_result(
         # 证据门观测键以 None 占位保持键集合同构
         "source_patched_unverified": None,
         "patch_evidence_level": None,
+        # B1：失败分支无 final_state ⇒ 无 gold 裁决（None = 未执行，不得写
+        # "unavailable"——那是执行过的结论，会把"没跑"折叠成"跑了且没结论"）
+        "official_test_evidence": None,
         # T 轮 2026-10-18：回滚 verdict schema 失败分支占位（键集合同构）。
         # 无 final_state ⇒ 无回滚语义：verdict=None（不可判定/未执行）、
         # rolled_back=False（明确未发生回滚，不得写成 True）
@@ -2700,6 +2709,78 @@ def _write_cross_file_state(initial_state: dict[str, Any], task_metadata: dict[s
     initial_state["cross_file_deps"] = dep_edges
 
 
+#: B1（2026-11-05）官方测试物化所需的 metadata 子集——**白名单而非黑名单**：
+#: gold 答案材料（`fixed` / `fixed_module_code`）不得随 state 进入 prompt 面
+#: （同 `gold_fixed_code` 的 test_visible_to_system 卫生口径），而跨文件官方
+#: 测试又需要伴生模块的**缺陷原版**才能收到用例（缺它则 rc>=2，白付一次子进程）。
+_OFFICIAL_MATERIAL_KEYS: tuple[str, ...] = (
+    "source",
+    "is_cross_file",
+    "target_module",
+    "module_a_name",
+    "module_a_code",
+    "module_b_name",
+    "module_b_code",
+    "module_c_name",
+    "module_c_code",
+)
+
+
+def _gold_fixed_material(task: Any) -> str:
+    """门①的 gold 修复文本；**同码占位按"无材料"处理**（B7，2026-11-05）。
+
+    ULT 语料只有 `source_code` + `test_cases`（manifest 实测无修复文本），加载器
+    按文档把 `fixed` 填成"被测函数全文"当占位（`src/datasets/dataset_ult.py:284,
+    354-357`）。把这种同码文本当 gold fixed 注入 state 后，`logic` 档
+    （`DETECTION_SPECIFICITY_GATE_ENABLE=true`）的特异性门会在**缺陷原码**上跑新生成
+    测试：一条真正缺陷特异的测试必然红 ⇒ 判 over_red ⇒ 路由换成"再生成"而非修复
+    ⇒ ult 面（200 任务、最大单文件面）的付费迭代永远修不到源码。
+    同码占位不是独立裁决 ⇒ 返回空串，让门如实降级为 unavailable（走历史路由）。
+    """
+    try:
+        from experiments._m1_metrics import _gold_fixed_code
+
+        gold_fixed = _gold_fixed_code(task)
+    except Exception:
+        logger.debug("B7 gold 材料提取失败（任务 %s）", getattr(task, "task_id", "?"), exc_info=True)
+        return ""
+    if not gold_fixed or not gold_fixed.strip():
+        return ""
+    if gold_fixed.strip() == str(getattr(task, "instance_code", "") or "").strip():
+        return ""
+    return gold_fixed
+
+
+def _official_tests_material(task: Any) -> dict[str, Any] | None:
+    """B1：提取"官方测试跑在打补丁源码上"的裁决材料；无材料 → None。
+
+    提取器与 M1 事后 repair 指标**同一个**（`_m1_metrics._extract_gold_material`）：
+    同一份 test_cases、同一条模块名派生规则（task_id 末段）、SWE-bench 同样
+    返回 None（其 test_code 是 unified diff，不是可执行测试文件）。因此
+    "图内证据门以 gold 放行"与"事后 repair=1.0"是同一口径，不会各说一套话。
+    """
+    try:
+        from experiments._m1_metrics import _extract_gold_material
+
+        extracted = _extract_gold_material(task)
+    except Exception:
+        logger.debug("B1 官方测试材料提取失败（任务 %s）", getattr(task, "task_id", "?"), exc_info=True)
+        return None
+    if extracted is None:
+        return None
+    module_name, test_cases, _gold_fixed = extracted
+    if not str(test_cases or "").strip():
+        return None
+    md = getattr(task, "metadata", None) or {}
+    return {
+        "code": str(test_cases),
+        "module_name": str(module_name),
+        "material": {k: md[k] for k in _OFFICIAL_MATERIAL_KEYS if k in md},
+        "expected_pass_count": int(getattr(task, "expected_pass_count", 0) or 0),
+        "total_test_count": int(getattr(task, "total_test_count", 0) or 0),
+    }
+
+
 def _current_budget_exceeded() -> bool:
     """AM1：当前线程预算快照是否已超限（结果行 token_budget_capped 取值）。"""
     try:
@@ -2874,19 +2955,26 @@ def run_single_task(
         # 解析被调方真实模块名；单文件任务 no-op）
         _write_cross_file_state(initial_state, task.metadata)
 
-        # AC2（2026-10-06 第十轮审查 T-P0-4）：门①材料管道——gold 修复
-        # 代码注入 state["gold_fixed_code"]（特异性门在 gold fixed 上对照
-        # 执行）。**评估/门禁专用材料，任何 agent prompt 不得引用**
-        # （test_visible_to_system 卫生口径）；无 gold 材料（真实仓库任务）
-        # 保持缺省 None，门①自动降级 unavailable（后续批次以变异体裁决）。
-        try:
-            from experiments._m1_metrics import _gold_fixed_code as _extract_gold_fixed
+        # AC2（2026-10-06 第十轮审查 T-P0-4）：门①材料管道——gold 修复代码注入
+        # state["gold_fixed_code"]（特异性门在 gold fixed 上对照执行）。
+        # **评估/门禁专用材料，任何 agent prompt 不得引用**（test_visible_to_system
+        # 卫生口径）；无 gold 材料（真实仓库任务）保持缺省 None，门①自动降级为
+        # unavailable（后续批次以变异体裁决）。
+        # B7（2026-11-05）：同码占位（ULT 的 `fixed` == `instance_code`）也算"无
+        # 材料"——缺陷原码不能给自己的补丁当独立裁决，否则特异性门会把
+        # 缺陷特异的测试判成 over_red，把 ult 面的修复路由整条换成再生成。
+        _gold_fixed = _gold_fixed_material(task)
+        if _gold_fixed:
+            initial_state["gold_fixed_code"] = _gold_fixed
 
-            _gold_fixed = _extract_gold_fixed(task)
-            if _gold_fixed and _gold_fixed.strip():
-                initial_state["gold_fixed_code"] = _gold_fixed
-        except Exception:
-            pass
+        # B1（2026-11-05）官方测试材料管道：把任务自带的官方测试注入
+        # state["official_tests"]，使源码补丁证据门能在**写盘判定前**把它跑在
+        # 打补丁的源码上取 gold 裁决（PATCH_EVIDENCE_OFFICIAL_TESTS_ENABLE=true
+        # 才执行；默认关 ⇒ 只多一个 dict，判定与历史逐位一致）。
+        # **评估专用材料，任何 agent prompt 不得引用**（gold 答案键已在白名单剔除）。
+        _official_material = _official_tests_material(task)
+        if _official_material:
+            initial_state["official_tests"] = _official_material
 
         # P0 1.2 复杂度感知路由：评分由 create_initial_state 统一计算
         # （CLI / 搜索 / benchmark 共用 complexity_router.score_task_complexity）；
@@ -3483,9 +3571,13 @@ def _compute_mutation_scores_for_baseline(
 ) -> None:
     """1.2 变异得分：对每个任务的"生成测试 vs 被测源码"计算 mutation_score。
 
-    就地写回 bl_results[].mutation_score（float 0.0-1.0）；任务无
-    generated_test / 无变异体可生成时写 None（保持键集合同构，
-    汇总层 mutation_score_metrics 会跳过 None）。
+    就地写回 bl_results[].mutation_score（float 0.0-1.0）**及其分母**
+    `mutation_score_mutants_killed` / `mutation_score_mutants_total` /
+    `mutation_score_available`（B5(a)，2026-11-05：得分此前只落一个比率，
+    它的 killed/total 只进日志，行里那对计数属于检出段 ⇒ 分母不可审计）；
+    任务无 generated_test / 无任务映射 / 无被测源码时四个键一律 None
+    （"没评估"，保持键集合同构，汇总层 mutation_score_metrics 会跳过 None），
+    而"跑了但生成不出变异体"是 available=False + 计数 0/0（真值，不是缺省）。
 
     实现口径：复用 experiments/mutation_testing.compute_mutation_score
     （内置 AST 级轻量变异生成器，每任务 ≤ max_mutants 个变异体，
@@ -3499,18 +3591,30 @@ def _compute_mutation_scores_for_baseline(
     """
     from experiments.mutation_testing import compute_mutation_score
 
+    def _absent(row: dict[str, Any]) -> None:
+        """B5(a)：这一段**没跑** ⇒ 得分与分母一律 None。
+
+        None≠0：0/0 会被汇总层当成"实测分母为零"参与求和与池化，把"没评估"
+        伪装成一个可加的答案（`tests/test_b5_mutation_score_denominators.py`
+        的跳过腿锁的就是这条界线）。
+        """
+        row["mutation_score"] = None
+        row["mutation_score_mutants_killed"] = None
+        row["mutation_score_mutants_total"] = None
+        row["mutation_score_available"] = False
+
     for r in bl_results:
         task_id = r.get("task_id")
         task = dataset_tasks.get(task_id)
         if task is None or not task.instance_code:
-            r["mutation_score"] = None
+            _absent(r)
             continue
         # 1.2 接线：generated_test 已写进 results 行（_build_task_result 成功分支）；
         # 旧 JSON（无该键）或失败分支（None）时跳过——变异得分依赖
         # "生成测试 + 被测源码"两者，缺一即 None 兜底
         test_code = r.get("generated_test")
         if not test_code:
-            r["mutation_score"] = None
+            _absent(r)
             continue
         # 被测模块文件路径：占位即可——2026-09-26 round9（P1 模块名对齐
         # 修复）后 _run_mutant_tests 的沙箱模块名由
@@ -3526,6 +3630,13 @@ def _compute_mutation_scores_for_baseline(
             max_mutants=max_mutants,
         )
         r["mutation_score"] = result.get("mutation_score")
+        # B5(a)：得分段把它**自己的**分母落盘。键名带 mutation_score_ 前缀是
+        # 刻意的——`mutants_killed`/`mutants_total` 归检出段所有（对 gold fixed
+        # 变异、缺材料时写 0/0 占位）；两段此前挤同一对键，导致实测出现
+        # `mutation_score=1.0` 配 `mutants_killed=0` 这种"分母来自另一段"的行。
+        r["mutation_score_mutants_killed"] = int(result.get("mutants_killed") or 0)
+        r["mutation_score_mutants_total"] = int(result.get("mutants_total") or 0)
+        r["mutation_score_available"] = bool(result.get("available"))
         logger.info(
             "    [%s] %s 变异得分: %s（%d/%d 杀死，耗时 %.1fs）",
             task_id,
@@ -4755,6 +4866,10 @@ def run_benchmark(
         "LOCALIZED_EDIT_ENABLE",
         "ORACLE_ENHANCE_ENABLE",
         "ORACLE_VALIDATE_ENABLE",
+        # B1（2026-11-05）：图内 gold 裁决开关必须入 provenance——它改变的是
+        # 证据门放行/回滚的判定（同一补丁在开/关两档下结果不同），不落快照
+        # 则"这批的 gold 是从哪来的"无法从工件证明。
+        "PATCH_EVIDENCE_OFFICIAL_TESTS_ENABLE",
         "PATCH_SNAPSHOT_ROLLBACK_ENABLE",
         "PROBE_SNAPSHOT_LOCATE_ENABLE",
         "RAG_CONDITIONAL_ENABLE",

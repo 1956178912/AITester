@@ -389,6 +389,7 @@ class TestDumpStateArtifactsObservationKeys:
             "rag_stats",
             "position_aware_focus",
             "repo_verification",
+            "official_test_evidence",
             "cross_file_deps",
             "testless_validation",
             "deterministic_guard_report",

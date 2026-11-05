@@ -286,14 +286,41 @@ def _python_interpreter() -> str:
 
 
 def _quixbugs_support_root() -> str | None:
-    """QuixBugs 数据根目录（AITESTER_QUIXBUGS_DATA），未配置/不存在 → None。
+    """QuixBugs 数据根目录——与 `QuixBugsDataset` **同一解析口径**（env > 默认缓存目录）。
 
-    真实基准（QuixBugs）的 gold 测试依赖辅助模块（node / load_testdata）
-    与 json 测试数据，需从克隆目录复制进 tmp 环境；未配置时保守返回
-    None（包结构测试将在缺辅助模块时自然失败，与历史口径同，不误报）。
+    R16 fail-closed 的前提是"材料真的不在盘上"。此前本函数只认
+    `AITESTER_QUIXBUGS_DATA`，而加载器还有第三条兜底（默认缓存目录
+    `~/.cache/aitester/quixbugs`）⇒ 官方测试材料已在盘上、加载器能读出
+    `test_cases`，判分层却报"未配置"并把整面 fail-closed 记 None（B1 实测
+    2026-11-05：quixbugs 41 个有材料的任务 gold 可达数 = 0）。两侧口径必须
+    同源，否则"数据在盘上"与"判定认为不在"同时为真。
+
+    候选还包含 `<root>/repo`：预备目录常把上游克隆原样放在 `repo/` 下，
+    而 `python_testcases` 只拷了 `.py` 辅助件、漏拷 `json_testcases`（缺
+    json 时官方测试在收集期就报错，仍是 fail-closed，只是本可避免）。
     """
-    root = os.getenv("AITESTER_QUIXBUGS_DATA", "").strip()
-    return root if root and os.path.isdir(root) else None
+    from pathlib import Path
+
+    def _ready(base: str) -> bool:
+        tc = Path(base) / "python_testcases"
+        return (tc / "node.py").is_file() and (tc / "load_testdata.py").is_file()
+
+    candidates: list[str] = []
+    explicit = os.getenv("AITESTER_QUIXBUGS_DATA", "").strip()
+    try:
+        from src.datasets.dataset_realbugs import QuixBugsDataset
+
+        default_root = os.path.join(QuixBugsDataset.DEFAULT_CACHE_DIR, QuixBugsDataset.DATASET_NAME)
+    except Exception:
+        default_root = os.path.join(os.path.expanduser("~"), ".cache", "aitester", "quixbugs")
+    for base in (explicit, default_root):
+        for cand in (base, os.path.join(base, "repo")) if base else ():
+            if cand not in candidates:
+                candidates.append(cand)
+    for cand in candidates:
+        if _ready(cand):
+            return cand
+    return None
 
 
 def _prepare_packaged_test_tree(tmpdir: str, target_code: str, test_code: str, module_name: str) -> tuple[str, str]:
@@ -363,8 +390,18 @@ def _prepare_packaged_test_tree(tmpdir: str, target_code: str, test_code: str, m
             src = src_testcases / aux
             if src.is_file():
                 shutil.copy(str(src), str(testcases_dir / aux))
-        src_json = Path(support_root) / "json_testcases"
-        if src_json.is_dir():
+        # json 测试数据是 load_testdata 的相对路径依赖：预备目录常只拷 .py 辅助件
+        # 而把上游克隆整体放在 repo/ 下 ⇒ 两个位置都探（B1，2026-11-05；缺 json
+        # 时官方测试在收集期报错，fail-closed 记不可判定而非"没修好"）
+        src_json = next(
+            (
+                c
+                for c in (Path(support_root) / "json_testcases", Path(support_root) / "repo" / "json_testcases")
+                if c.is_dir()
+            ),
+            None,
+        )
+        if src_json is not None:
             shutil.copytree(str(src_json), str(root / "json_testcases"))
     test_path = testcases_dir / f"test_{module_name}.py"
     # 前置注入 pytest.use_correct / run_slow（QuixBugs 测试的 `if pytest.use_correct:`
@@ -399,7 +436,11 @@ def _packaged_support_ready() -> tuple[bool, str]:
     """
     root = _quixbugs_support_root()
     if root is None:
-        return False, "AITESTER_QUIXBUGS_DATA 未配置或其目录不存在"
+        return (
+            False,
+            "QuixBugs 辅助件（python_testcases/node.py + load_testdata.py）不在盘："
+            "AITESTER_QUIXBUGS_DATA 未指向含辅助件的目录，默认缓存目录也没有",
+        )
     src_testcases = os.path.join(root, "python_testcases")
     missing = [aux for aux in ("node.py", "load_testdata.py") if not os.path.isfile(os.path.join(src_testcases, aux))]
     if missing:

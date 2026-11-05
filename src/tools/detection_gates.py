@@ -32,7 +32,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from src.utils.env_utils import env_flag
-from src.utils.pytest_output import suite_has_effective_pass
+from src.utils.pytest_output import pytest_summary_counts, suite_has_effective_pass
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +68,31 @@ def red_regression_gate_enabled() -> bool:
     return env_flag(_ENV_RED_REGRESSION_GATE)
 
 
+def _pytest_in_tmp_raw(
+    test_code: str,
+    target_code: str,
+    module_name: str | None,
+    timeout: int,
+    task_metadata: dict[str, Any] | None,
+) -> tuple[int, str, str] | None:
+    """单次委托 M1 执行原语；不可执行（module_name 非法 / 委托异常）→ None。
+
+    `_run_test_against_code`（AC2 双门）与 `run_official_tests`（B1 gold 裁决）
+    共用同一份"执行物理"：module_name 同时进入委托原语的临时目录文件名与
+    测试的 import 目标，**必须在委托前**于本层校验；委托异常一律吞掉记
+    None（调用方按不可判定降级，不阻断主流程）。
+    """
+    if not module_name or not _SAFE_MODULE_RE.match(module_name):
+        return None
+    try:
+        from experiments._m1_metrics import _run_pytest_in_tmp as _runner
+
+        return _runner(test_code, target_code, module_name, timeout=timeout, task_metadata=task_metadata)
+    except Exception:
+        logger.warning("AC2 门执行原语不可用（experiments._m1_metrics 委托失败），保守放行", exc_info=True)
+        return None
+
+
 def _run_test_against_code(
     test_code: str,
     target_code: str,
@@ -80,21 +105,14 @@ def _run_test_against_code(
     experiments._m1_metrics._run_pytest_in_tmp 与 M1 detection 裁决共用，
     语义：rc==0 = 全过（绿）；非 0 = 红；None = 超时 / IO 异常 / 材料
     缺失 / module_name 非法（不可判定）。任何导入/执行异常均吞掉并
-    返回 None（门降级为 unavailable，不阻断主流程）。
+    返回 None（门降级为 unavailable，不阻断主流程）。需要逐类理由与
+    摘要计数的三值裁决（gold）走 `run_official_tests`。
 
     task_metadata：与 M1 事后裁决同口径透传（P0-1，2026-10-11 全面优化
     批次：跨文件任务必传——否则委托层走单文件物化，伴生模块缺失
     导致 rc>=2 被误判 over_red；未传时行为与历史逐位一致，零回归）。
     """
-    if not module_name or not _SAFE_MODULE_RE.match(module_name):
-        return None
-    try:
-        from experiments._m1_metrics import _run_pytest_in_tmp as _runner
-
-        res = _runner(test_code, target_code, module_name, timeout=timeout, task_metadata=task_metadata)
-    except Exception:
-        logger.warning("AC2 门执行原语不可用（experiments._m1_metrics 委托失败），保守放行", exc_info=True)
-        return None
+    res = _pytest_in_tmp_raw(test_code, target_code, module_name, timeout, task_metadata)
     if res is None:
         return None
     # P0-1（2026-10-11 全面优化批次）：复用 M1 既有的执行错误判据——
@@ -114,6 +132,92 @@ def _run_test_against_code(
     if res[0] == 0 and not suite_has_effective_pass(res[1] + "\n" + res[2]):
         return {"green": False, "rc": res[0], "unavailable": True}
     return {"green": res[0] == 0, "rc": res[0], "unavailable": False}
+
+
+#: 随裁决返回的摘要计数键（缺省一律 0，保证形状恒定）
+_OFFICIAL_COUNT_KEYS: tuple[str, ...] = ("passed", "failed", "error", "skipped")
+
+
+def _official_facts(
+    reason: str,
+    verdict: str = "unavailable",
+    rc: int | None = None,
+    counts: dict[str, int] | None = None,
+) -> dict[str, Any]:
+    """gold 裁决的统一出参形状：结论 + 理由 + 退出码 + 摘要计数（缺省全 0）。
+
+    计数一律随裁决返回，调用方（与事后审计）能看到"为什么是这个结论"，
+    而不是只有一个布尔——`patch_evidence_level=gold` 的放行理由要能落地。
+    """
+    got = counts or {}
+    payload: dict[str, Any] = {"verdict": verdict, "reason": reason, "rc": rc}
+    for key in _OFFICIAL_COUNT_KEYS:
+        payload[key] = int(got.get(key, 0))
+    return payload
+
+
+def _looks_like_execution_error(rc: int, output: str) -> bool:
+    """执行错误判据：与 M1 事后裁决同一函数；委托不可用时回退 rc 结构性判据。
+
+    回退口径与 `_run_test_against_code` 的历史兜底一致（保守：把 rc>=2 /
+    负 rc 视为"根本没跑起来"），不因导入失败把执行错误读成断言失败。
+    """
+    try:
+        from experiments._m1_metrics import _looks_like_test_execution_error as _exec_err
+
+        return bool(_exec_err(rc, output))
+    except Exception:
+        logger.warning("B1 执行错误判据不可用（experiments._m1_metrics 委托失败），回退 rc 结构判据", exc_info=True)
+        return rc >= 2 or rc < 0
+
+
+def run_official_tests(
+    test_code: str,
+    patched_code: str,
+    module_name: str | None,
+    task_metadata: dict[str, Any] | None = None,
+    timeout: int = _GATE_TIMEOUT_SECONDS,
+) -> dict[str, Any]:
+    """B1（2026-11-05）：把官方测试跑在**打补丁的源码**上，返回三值 gold 裁决。
+
+    执行原语与判绿口径与 M1 事后 repair 指标完全同源（同一个
+    `_run_pytest_in_tmp` + 同一个执行错误判据 + 同一个"有效通过"谓词），
+    使"图内证据门放行"与"事后记 repair=1.0"不会各说一套话。
+
+    Returns:
+        `{"verdict", "reason", "rc", "passed", "failed", "error", "skipped"}`：
+        - **gold**：rc==0 且摘要有真实 passed——官方测试在补丁上全绿，
+          这是"补丁经独立裁决"的最强证据；
+        - **red**（reason="failed"）：rc==1，存在断言失败——补丁没让官方
+          测试通过，是"改错了"的确定性证据；
+        - **unavailable**：无官方测试材料 / 非法 module_name / 委托原语不可用 /
+          收集期错误（rc>=2、负 rc、rc==5 零用例）/ rc==0 但零有效通过
+          （全 skip / xfail）。**"没跑起来"一律不得读作"跑过了"**（F03/R16）。
+    """
+    if not (test_code or "").strip():
+        return _official_facts("no_official_tests")
+    if not module_name or not _SAFE_MODULE_RE.match(module_name):
+        # 非法名不进委托层（名字即临时目录文件名与 import 目标）——与
+        # `_run_test_against_code` 同口径，且在委托前拦下，零子进程成本
+        return _official_facts("invalid_module")
+    res = _pytest_in_tmp_raw(test_code, patched_code, module_name, timeout, task_metadata)
+    if res is None:
+        return _official_facts("runner_unavailable")
+    rc, out, err = res
+    counts = pytest_summary_counts(f"{out}\n{err}")
+    summary = {
+        "passed": counts.get("passed", 0),
+        "failed": counts.get("failed", 0),
+        "error": counts.get("error", 0),
+        "skipped": counts.get("skipped", 0),
+    }
+    if _looks_like_execution_error(rc, f"{out}\n{err}"):
+        return _official_facts("exec_error", rc=rc, counts=summary)
+    if rc != 0:
+        return _official_facts("failed", verdict="red", rc=rc, counts=summary)
+    if not suite_has_effective_pass(f"{out}\n{err}"):
+        return _official_facts("no_effective_pass", rc=rc, counts=summary)
+    return _official_facts("gold", verdict="gold", rc=rc, counts=summary)
 
 
 def specificity_verdict(

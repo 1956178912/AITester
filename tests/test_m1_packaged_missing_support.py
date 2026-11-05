@@ -17,7 +17,10 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Any
+
+import pytest
 
 from experiments._m1_metrics import _run_pytest_in_tmp
 
@@ -34,6 +37,22 @@ _QUIXBUGS_STYLE_TEST = (
 
 # 自足包结构测试（不依赖 node / load_testdata）
 _SELF_CONTAINED_PACKAGE_TEST = "from python_programs.add import add\n\n\ndef test_add():\n    assert add(1, 2) == 3\n"
+
+
+@pytest.fixture(autouse=True)
+def _no_host_quixbugs_cache(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """把「默认缓存目录」兜底指向空 tmp——模块级前提隔离。
+
+    `_quixbugs_support_root()`（B1，2026-11-05）与 `QuixBugsDataset` 同源后多了一条
+    默认缓存兜底；本文件所有"材料缺失"腿只 `delenv`，在作者机上会被
+    `~/.cache/aitester/quixbugs` 里的真实数据满足 ⇒ 前提不成立、判定由机器历史
+    决定（实测红 5 例）。兜底目录由夹具钉成空目录，`delenv` 才真的等于"没材料"。
+    """
+    import src.datasets.dataset_realbugs as realbugs
+
+    empty = tmp_path / "empty_aitester_cache"
+    empty.mkdir(exist_ok=True)
+    monkeypatch.setattr(realbugs.QuixBugsDataset, "DEFAULT_CACHE_DIR", str(empty))
 
 
 def _quixbugs_md() -> dict[str, Any]:

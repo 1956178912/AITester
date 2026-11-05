@@ -13,7 +13,10 @@ P0（2026-09-30 独立审查 N9/R33，P0）：源码补丁证据门（确定性�
     判定，供 _patch_applier_node 在写盘前做证据门：
 
     证据等级（从高到低）：
-    - "gold"：state["repo_verification"] 表明 gold 测试裁决通过（最强）；
+    - "gold"：gold 测试独立裁决通过（最强）——两条来源：事后仓库级验证
+      `state["repo_verification"]`，以及图内官方测试裁决（B1，
+      `official_tests_evidence`，由 `_apply_patch_evidence_gate` 在等级不足
+      时升级，本函数自身保持纯数据不起子进程）；
     - "sbfl"：FL_SPECTRAL_ENABLE=true 且 fl_spectral_focus 非空，且补丁
       改动的行与 Top-k 可疑行有重叠（谱系定位证据）；
     - "keyword"：LLM 诊断文本命中 _TEST_GEN_DIAGNOSIS_KEYWORDS（历史
@@ -50,13 +53,60 @@ import logging
 import os
 from typing import Any
 
-from src.utils.env_utils import env_flag_opt_out
+from src.utils.env_utils import env_flag, env_flag_opt_out
 
 logger = logging.getLogger(__name__)
 
 _ENV = "PATCH_EVIDENCE_GATE_ENABLE"
 #: 分档门限（2026-10-10 I-29）：默认 "sbfl" = 历史口径
 _ENV_MIN_LEVEL = "PATCH_EVIDENCE_GATE_MIN_LEVEL"
+#: 图内 gold 裁决（B1，2026-11-05）：默认关——执行官方测试要付子进程成本，
+#: 且它改变的是"证据从哪来"，按 ADR-0003 逐档显式开启（跑批由运行器置真）。
+_ENV_OFFICIAL_TESTS = "PATCH_EVIDENCE_OFFICIAL_TESTS_ENABLE"
+
+
+def official_tests_gold_enabled() -> bool:
+    """图内 gold 裁决开关（`PATCH_EVIDENCE_OFFICIAL_TESTS_ENABLE`，默认 false）。
+
+    开：证据门判到等级不足时，把数据集**官方测试**跑在打补丁的源码上，
+    全绿即把等级升为 "gold" 并放行（确定性证据，非关键词）。
+    关（默认）：完全保持历史口径——不执行任何子进程，等级仍是 none/keyword，
+    门照旧回滚。读 env 在调用时（与 AC2 双门同口径），便于 monkeypatch。
+    """
+    return env_flag(_ENV_OFFICIAL_TESTS)
+
+
+def official_tests_evidence(state: dict[str, Any], patched_code: str) -> dict[str, Any]:
+    """B1：把 `state["official_tests"]` 跑在**打补丁的源码**上，取 gold 裁决。
+
+    材料由 `experiments/run_benchmark.py::_official_tests_material` 注入
+    （`{"code", "module_name", "material", "expected_pass_count", "total_test_count"}`，
+    与 M1 事后 repair 指标同一个提取器）；模块名取**材料侧**——官方测试
+    import 的是 gold 派生名，不是 state 里被截断的 `module_name`。
+
+    Returns:
+        `run_official_tests` 的裁决 dict；材料缺失时直接记
+        `{"verdict": "unavailable", "reason": "no_official_tests", ...}`
+        ——无官方测试（如 SWE-bench 面 test_code 是 diff）**不放行也不判红**，
+        门保持原样拒绝。
+    """
+    official = state.get("official_tests")
+    if not isinstance(official, dict) or not str(official.get("code") or "").strip():
+        return {
+            "verdict": "unavailable",
+            "reason": "no_official_tests",
+            "rc": None,
+            "passed": 0,
+            "failed": 0,
+            "error": 0,
+            "skipped": 0,
+        }
+    from src.tools import detection_gates as _detection_gates
+
+    module_name = str(official.get("module_name") or state.get("module_name") or "")
+    return _detection_gates.run_official_tests(
+        str(official["code"]), patched_code, module_name, task_metadata=official.get("material") or None
+    )
 
 
 def patch_evidence_gate_enabled() -> bool:

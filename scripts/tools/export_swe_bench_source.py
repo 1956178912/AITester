@@ -310,11 +310,21 @@ def write_enrichment_jsonl(results: list[InstanceSource], output_path: str | Pat
 def load_jsonl_for_subset(subset: str, data_dir: str | Path) -> Path:
     """按子集名定位已下载 JSONL 文件路径（与下载脚本的写盘约定一致）。"""
     root = Path(data_dir).expanduser()
+
+    def _usable(candidate: Path) -> bool:
+        """ "可用"= 存在且非空。
+
+        空文件按"存在"参与判定会遮蔽真数据：下载中断/失败留下的 0 字节
+        `swe_bench_<subset>_instances.jsonl` 让本脚本读到 0 条 instance，而通用
+        JSONL 里的 225 条永远取不到（2026-11-05 现场）。
+        """
+        return candidate.is_file() and candidate.stat().st_size > 0
+
     path = root / f"swe_bench_{subset}_instances.jsonl"
-    if not path.exists():
+    if not _usable(path):
         path = root / "swe_bench_instances.jsonl"
-    if not path.exists():
-        raise FileNotFoundError(f"SWE-bench JSONL 未找到: {path}（请先运行 scripts/tools/download_swe_bench.py）")
+    if not _usable(path):
+        raise FileNotFoundError(f"SWE-bench JSONL 未找到或为空: {path}（请先运行 scripts/tools/download_swe_bench.py）")
     return path
 
 
@@ -367,8 +377,12 @@ def cli(
             print(f"[{status}] {r.instance_id}  {r.repository} @ {r.base_commit[:12]}  {r.target_file}")
         return
 
-    # 默认输出路径：与 data_dir 同级的 enrichment_<subset>.jsonl
-    out_path = output or str(Path(jsonl_path).parent / f"swe_bench_{subset}_enrichment.jsonl")
+    # 默认输出路径 = 消费端读的那个名字（`config.SWE_BENCH_ENRICHMENT` 的规范路径，
+    # 见 .env.example 的 `SWE_BENCH_ENRICHMENT=./swe_bench_enrichment.jsonl`）。
+    # 原先按子集命名 `swe_bench_<subset>_enrichment.jsonl`：按默认参数跑完导出的产物
+    # 没有任何读取方，"跑了但没接上"要靠人记得再设一次变量。跨子集重复跑请显式
+    # --output 分开（同一默认路径会被后一次覆盖前一次）。
+    out_path = output or str(Path(jsonl_path).parent / "swe_bench_enrichment.jsonl")
     written = write_enrichment_jsonl(results, out_path)
     failed = len(results) - written
     logger.info("导出完成: 成功 %d, 失败 %d → %s", written, failed, out_path)

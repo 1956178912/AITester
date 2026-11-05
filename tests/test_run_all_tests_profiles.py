@@ -373,6 +373,31 @@ class TestNoPaidRunsWithoutSource:
         for stage in sweep:
             assert stage["env"]["AITESTER_DATASET_STRICT_INSTANCE_CODE"] == "true", stage["name"]
 
+    def test_official_tests_gold_key_matches_the_library_switch(self) -> None:
+        """运行器写的是字面量（不 import src）⇒ 必须与库内开关名同源，否则"以为开了"。"""
+        import src.tools.patch_evidence as patch_evidence
+
+        assert runner._OFFICIAL_TESTS_GOLD_KEY == patch_evidence._ENV_OFFICIAL_TESTS
+        # 库内默认关（ADR-0003），运行器显式开：两档不同 ⇒ 消融仍可复现
+        import os
+
+        os.environ.pop(patch_evidence._ENV_OFFICIAL_TESTS, None)
+        assert patch_evidence.official_tests_gold_enabled() is False
+
+    def test_llm_stage_env_runs_the_gold_evidence_on(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """付费阶段必须带 B1 开关：不开则正确补丁按"无证据"回滚，这轮 LLM 钱白花。"""
+        monkeypatch.delenv("LLM_THINKING_MODE", raising=False)
+        monkeypatch.setattr(runner, "load_price_and_models", lambda: (["m1"], {"m1": 8.0}, "CNY"))
+        monkeypatch.setattr(runner, "resolve_dataset_faces", lambda _r: ["quixbugs"])
+        monkeypatch.setattr(runner, "dataset_task_count", lambda _n: 50)
+        monkeypatch.setattr(runner, "dataset_signature", lambda _n: (50, "quixbugs__bitcount", "quixbugs__wrap"))
+        args = _args(tmp_path, ["--skip-dataset-gate", "--llm-arms", runner.DEFAULT_LLM_ARMS])
+        stages = runner.build_full_stages(args, 1, Path(args.out), tasks_per_cell=1)
+        sweep = [s for s in stages if "__" in s["name"]]
+        assert sweep, "阶段清单为空 ⇒ 本锁在判空气"
+        for stage in sweep:
+            assert stage["env"][runner._OFFICIAL_TESTS_GOLD_KEY] == "true", stage["name"]
+
 
 class TestFacesRunToTheirMaximum:
     """两档都覆盖全部面，差别只在每面 1 项 vs 跑满——面清单与上限都必须现取，不写死。"""

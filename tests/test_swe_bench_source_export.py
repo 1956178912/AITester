@@ -14,7 +14,10 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import importlib.machinery
 import importlib.util
+
+import pytest
 
 # scripts 非包（无 __init__.py），按文件路径加载模块
 _SCRIPT_PATH = os.path.join(
@@ -234,3 +237,107 @@ class TestExportMultiPathFallback:
         assert results[0].ok, "应通过多路径回退导出成功"
         assert results[0].target_file == "impl.py"
         assert "return 1" in results[0].source_code
+
+
+class TestSubsetFileMustBeNonEmpty:
+    """0 字节子集文件不得遮蔽真数据（2026-11-05 现场：跑批期写下 4 个空文件）。
+
+    `load_jsonl_for_subset` 原判定是 `path.exists()`，而空文件也是"存在"——于是导出
+    脚本读到 0 条 instance，明明 `swe_bench_instances.jsonl` 里有 225 条也永远导不出
+    源码。判定必须是"存在且非空"。
+    """
+
+    def test_empty_subset_file_falls_back_to_legacy(self, tmp_path):
+        (tmp_path / "swe_bench_lite_instances.jsonl").write_text("", encoding="utf-8")
+        legacy = tmp_path / "swe_bench_instances.jsonl"
+        legacy.write_text('{"instance_id": "a"}\n', encoding="utf-8")
+        assert mod.load_jsonl_for_subset("lite", tmp_path) == legacy
+
+    def test_nonempty_subset_file_still_wins(self, tmp_path):
+        subset = tmp_path / "swe_bench_mini_instances.jsonl"
+        subset.write_text('{"instance_id": "b"}\n', encoding="utf-8")
+        (tmp_path / "swe_bench_instances.jsonl").write_text('{"instance_id": "a"}\n', encoding="utf-8")
+        assert mod.load_jsonl_for_subset("mini", tmp_path) == subset
+
+    def test_all_empty_raises_instead_of_returning_empty_plan(self, tmp_path):
+        (tmp_path / "swe_bench_lite_instances.jsonl").write_text("", encoding="utf-8")
+        assert mod.load_jsonl_for_subset.__doc__ is not None
+        with pytest.raises(FileNotFoundError):
+            mod.load_jsonl_for_subset("lite", tmp_path)
+
+
+class TestDownloaderLeavesNoEmptyFile:
+    """下载失败不得留下 0 字节文件——那是遮蔽真数据的写法（同上一条判据的源头）。"""
+
+    def _load_module(self):
+        path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "scripts",
+            "tools",
+            "download_swe_bench.py",
+        )
+        spec = importlib.util.spec_from_file_location("download_swe_bench_under_test", path)
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+        return m
+
+    def test_mid_stream_failure_leaves_no_trace(self, tmp_path, monkeypatch):
+        m = self._load_module()
+
+        class _Boom:
+            def __iter__(self):
+                yield {"instance_id": "a"}
+                raise RuntimeError("流中途断掉")
+
+            def __len__(self):
+                return 1
+
+        fake = importlib.util.module_from_spec(importlib.machinery.ModuleSpec("datasets", None))
+        fake.load_dataset = lambda *a, **k: _Boom()  # type: ignore[attr-defined]
+        monkeypatch.setitem(sys.modules, "datasets", fake)
+        with pytest.raises(SystemExit):
+            m.download_swe_bench(subset="lite", output_dir=str(tmp_path))
+        left = sorted(p.name for p in tmp_path.iterdir())
+        assert left == [], f"下载失败后留下了 {left}——空文件会遮蔽已下载的通用 JSONL"
+
+    def test_success_writes_named_file(self, tmp_path, monkeypatch):
+        m = self._load_module()
+
+        class _Rows(list):
+            pass
+
+        rows = _Rows([{"instance_id": "a"}, {"instance_id": "b"}])
+        fake = importlib.util.module_from_spec(importlib.machinery.ModuleSpec("datasets", None))
+        fake.load_dataset = lambda *a, **k: rows  # type: ignore[attr-defined]
+        monkeypatch.setitem(sys.modules, "datasets", fake)
+        out = m.download_swe_bench(subset="lite", output_dir=str(tmp_path))
+        assert Path(out).name == "swe_bench_lite_instances.jsonl"
+        assert len(Path(out).read_text(encoding="utf-8").strip().splitlines()) == 2
+
+
+class TestDefaultOutputIsTheConsumedName:
+    """导出脚本的默认落位名必须就是消费端读的那个名（否则默认跑完没人读）。
+
+    原默认写 `swe_bench_<subset>_enrichment.jsonl`，而加载器只读
+    `config.SWE_BENCH_ENRICHMENT`（`.env.example:221` 的规范名是
+    `swe_bench_enrichment.jsonl`）。按默认参数跑完导出、再去设变量，中间隔着一个
+    无人阅读的文件名——"跑了但没接上"的温床。
+    """
+
+    def _default_out(self, tmp_path: Path) -> Path:
+        jsonl = tmp_path / "swe_bench_instances.jsonl"
+        jsonl.write_text('{"instance_id": "a"}\n', encoding="utf-8")
+        # cli() 的默认输出算式（与源码保持同源：jsonl 同级的规范名）
+        return Path(jsonl).parent / "swe_bench_enrichment.jsonl"
+
+    def test_default_output_name_matches_config_convention(self, tmp_path: Path) -> None:
+        expected = self._default_out(tmp_path)
+        assert expected.name == "swe_bench_enrichment.jsonl"
+        src = Path(_SCRIPT_PATH).read_text(encoding="utf-8")
+        assert 'Path(jsonl_path).parent / "swe_bench_enrichment.jsonl"' in src, (
+            "默认输出名与消费端不一致 ⇒ 按默认跑完的 enrichment 没人读得到"
+        )
+
+    def test_explicit_output_still_wins(self, tmp_path: Path) -> None:
+        src = Path(_SCRIPT_PATH).read_text(encoding="utf-8")
+        assert "output or" in src, "显式 --output 仍是第一优先"

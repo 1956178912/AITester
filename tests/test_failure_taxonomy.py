@@ -36,6 +36,8 @@ class TestStopReasonMapping:
             ("skip_debugger_repair_invalid", FailureBucket.GENERATION_CAPABILITY_FAILURE),
             ("coverage_stall", FailureBucket.GENERATION_CAPABILITY_FAILURE),
             ("recursion_limit", FailureBucket.GENERATION_CAPABILITY_FAILURE),
+            # B6（2026-11-05）：未发起任何修复迭代即终止（见 TestNoRepairAttemptedTerminal）
+            ("no_repair_attempted", FailureBucket.GENERATION_CAPABILITY_FAILURE),
             ("budget_exceeded", FailureBucket.VERIFICATION_FAILURE),
             ("regression_detected", FailureBucket.VERIFICATION_FAILURE),
             ("unknown", FailureBucket.UNCATEGORIZED),
@@ -219,3 +221,107 @@ class TestIdempotency:
         snapshot = dict(state)
         annotate_final_state(state)
         assert state == snapshot
+
+
+class TestNoRepairAttemptedTerminal:
+    """B6（2026-11-05）：最小批 28/40 行落 `stop_reason=unknown` + `uncategorized`。
+
+    实测形态（`experiments/results/test_run_20261105T045212Z`）：这些行的
+    `iterations` 恒为 0、`patch` 为空、`repair_history` 为空、
+    `fl_constraint_reason="no_patch"`、`test_hacking_status="empty_patch"`——
+    即"从未发起修复迭代"。这不是"迭代耗尽"（max_iterations）、也不是
+    "补丁无效"（skip_debugger_repair_invalid），而 `determine_stop_reason`
+    的九级判据没有它的位置，于是折进 UNKNOWN ⇒ 兜底桶。
+    """
+
+    def _zero_iteration_state(self, **extra: object) -> dict[str, object]:
+        state: dict[str, object] = {
+            "test_passed": False,
+            "iteration": 0,
+            "max_iterations": 5,
+            "patch": "",
+            "repair_history": [],
+            "diagnosis": "",
+        }
+        state.update(extra)
+        return state
+
+    def test_zero_iteration_without_patch_is_named(self) -> None:
+        from src.graph.workflow import StopReason, determine_stop_reason
+
+        assert determine_stop_reason(self._zero_iteration_state()) is StopReason.NO_REPAIR_ATTEMPTED
+
+    def test_a_patch_present_is_not_no_repair(self) -> None:
+        """反例腿：有补丁就不是"未发起修复"——不得把 REPAIR_INVALID 那类行改标签。"""
+        from src.graph.workflow import StopReason, determine_stop_reason
+
+        got = determine_stop_reason(self._zero_iteration_state(patch="def f():\n    return 2\n"))
+        assert got is not StopReason.NO_REPAIR_ATTEMPTED
+
+    def test_repair_history_present_is_not_no_repair(self) -> None:
+        from src.graph.workflow import StopReason, determine_stop_reason
+
+        got = determine_stop_reason(self._zero_iteration_state(repair_history=[{"patch_applied": False}]))
+        assert got is not StopReason.NO_REPAIR_ATTEMPTED
+
+    def test_iterations_ran_fall_through_to_previous_labels(self) -> None:
+        """迭代跑过（iteration>0 且未达上限）⇒ 仍是历史口径（UNKNOWN），不改标签面。"""
+        from src.graph.workflow import StopReason, determine_stop_reason
+
+        assert determine_stop_reason(self._zero_iteration_state(iteration=2)) is StopReason.UNKNOWN
+
+    def test_hard_gates_outrank_no_repair(self) -> None:
+        """优先级：预算/回归/测试通过等硬信号不得被新标签抢走。"""
+        from src.graph.workflow import StopReason, determine_stop_reason
+
+        assert determine_stop_reason(self._zero_iteration_state(budget_exceeded=True)) is StopReason.BUDGET_EXCEEDED
+        assert (
+            determine_stop_reason(self._zero_iteration_state(regression_detected=True))
+            is StopReason.REGRESSION_DETECTED
+        )
+        assert determine_stop_reason(self._zero_iteration_state(test_passed=True)) is StopReason.TEST_PASSED
+
+    def test_partial_state_without_the_channels_stays_unknown(self) -> None:
+        """局部 dict（缺 `patch`/`repair_history` 键）= 状态信息不足 ⇒ 仍是 UNKNOWN。
+
+        真 final_state 由 LangGraph 物化全部声明通道（值可为空/None），所以
+        "键不在场"只可能来自非工作流入参——本判据不得把它读成一条归因结论。
+        """
+        from src.graph.workflow import StopReason, determine_stop_reason
+
+        assert determine_stop_reason({}) is StopReason.UNKNOWN
+        assert determine_stop_reason({"test_passed": False, "iteration": 0}) is StopReason.UNKNOWN
+
+    def test_batch_row_shape_null_patch_is_named(self) -> None:
+        """批内真实形态：`patch=None`（32/40 行如此）+ 空历史 + iteration=0 ⇒ 具名。"""
+        from src.graph.workflow import StopReason, determine_stop_reason
+
+        assert determine_stop_reason(self._zero_iteration_state(patch=None)) is StopReason.NO_REPAIR_ATTEMPTED
+
+    def test_logic_degraded_keeps_the_weak_signal_path(self) -> None:
+        """I3 口径延续：规约降级时"没补丁"只是症状，不得被症状标签抢占。
+
+        降级行的原因由读侧弱信号分支归为 SPECIFICATION_FAILURE；若本判据抢成
+        NO_REPAIR_ATTEMPTED，G3/I3 修好的那条分支在生产路径上又会不可达。
+        """
+        from src.graph.workflow import StopReason, determine_stop_reason
+
+        state = self._zero_iteration_state(logic_degraded=True)
+        assert determine_stop_reason(state) is StopReason.UNKNOWN
+        assert (
+            annotate_final_state({"test_passed": False, "logic_degraded": True, **state})["bucket"]
+            is FailureBucket.SPECIFICATION_FAILURE
+        )
+
+    def test_bucket_and_interaction_are_registered(self) -> None:
+        """两张贴表都必须登记新值（闭包测试只保证"有映射"，这里锁"映射到哪"）。"""
+        from src.observability.failure_taxonomy import _STOP_REASON_TO_BUCKET, _STOP_REASON_TO_INTERACTION
+
+        assert _STOP_REASON_TO_BUCKET["no_repair_attempted"] is FailureBucket.GENERATION_CAPABILITY_FAILURE
+        assert _STOP_REASON_TO_INTERACTION["no_repair_attempted"] == ("planner_to_generator", "model_side")
+
+    def test_batch_row_no_longer_lands_in_uncategorized(self) -> None:
+        """终局归因链：批次行的 failure_bucket 不再是兜底桶。"""
+        marked = annotate_final_state({"test_passed": False, "stop_reason": "no_repair_attempted"})
+        assert marked["bucket"] is FailureBucket.GENERATION_CAPABILITY_FAILURE
+        assert marked["detail"] != "状态信息不足，未命中任何映射（兜底桶）"

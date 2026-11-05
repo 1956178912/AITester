@@ -124,6 +124,13 @@ class StopReason(Enum):
     # 修复 2026-10-18）。
     COVERAGE_STALL = "coverage_stall"
     RECURSION_LIMIT = "recursion_limit"
+    # B6（2026-11-05）：未发起任何修复迭代即终止（iteration==0 且补丁为空且
+    # repair_history 为空）。最小批实测 28/40 行是这个形态却折进 UNKNOWN ⇒
+    # failure_bucket=uncategorized，兜底桶占满七成——它既不是"迭代耗尽"
+    # （max_iterations）也不是"补丁无效"（skip_debugger_repair_invalid），
+    # 而是"产物从未出现"（plain_llm 直答臂按设计走这条；修复臂出现则说明
+    # 生成环节没落地）。给它一个具名标签，兜底桶只留真正的未知。
+    NO_REPAIR_ATTEMPTED = "no_repair_attempted"
     UNKNOWN = "unknown"
 
 
@@ -146,7 +153,10 @@ def determine_stop_reason(state: AITesterState) -> StopReason:
     6. iteration >= max_iterations → MAX_ITERATIONS / MAX_ITERATIONS_REACHED
     7. 最近 2 次修复均无效 → REPAIR_INVALID
     8. 诊断关键词命中（早期/晚期）→ TEST_GEN_KEYWORD_EARLY / LATE
-    9. 未知 → UNKNOWN
+    9. B6（2026-11-05）：未发起任何修复迭代（iteration=0 且补丁为空且修复历史
+       为空）→ NO_REPAIR_ATTEMPTED（plain_llm 直答臂按设计走这条；它不是
+       "迭代耗尽"也不是"补丁无效"，而是"产物从未出现"）
+    10. 未知 → UNKNOWN（兜底桶只留真正的未知）
 
     Args:
         state: 当前工作流状态。
@@ -188,7 +198,11 @@ def determine_stop_reason(state: AITesterState) -> StopReason:
         if int(state.get("iteration", 0)) < int(state.get("max_iterations", MAX_ITERATIONS)):
             return StopReason.TEST_GEN_KEYWORD_EARLY
         return StopReason.TEST_GEN_KEYWORD_LATE
-    # 9. 未知（保守兜底）
+    # 9. B6（2026-11-05）：从未发起修复迭代（iteration=0 + 无补丁 + 无修复历史）
+    #    ——最小批 28/40 行是这个形态，此前一律折进 UNKNOWN，使兜底桶占满七成
+    if _no_repair_attempted(state):
+        return StopReason.NO_REPAIR_ATTEMPTED
+    # 10. 未知（保守兜底）
     return StopReason.UNKNOWN
 
 
@@ -622,6 +636,35 @@ def _recent_repairs_invalid(state: AITesterState) -> bool:
         return False
     recent = repair_history[-2:]
     return all(not h.get("patch_applied", False) for h in recent)
+
+
+def _no_repair_attempted(state: AITesterState) -> bool:
+    """判断本轮任务是否**从未发起修复迭代**（纯数据，零副作用；B6，2026-11-05）。
+
+    四条同时成立才算：迭代计数为 0、补丁为空、修复历史为空、且**没有
+    logic_degraded 弱信号**。任一不成立就说明修复动作发生过（哪怕失败），
+    应由此前更高优先级的标签（max_iterations / skip_debugger_repair_invalid /
+    关键词）归因，本判据不得抢占。
+
+    `logic_degraded` 那条是 I3（2026-10-16）口径的延续：规约通道降级时
+    "没产出补丁"只是**症状**，降级才是**原因**；若本判据抢占，读侧的
+    logic_degraded 弱信号分支（→ SPECIFICATION_FAILURE）就又被一个无信息
+    标签挡掉了——正是 I3 当年修掉的那类缺陷。
+
+    键必须**在场**（值可为空/None）才算工作流终态：LangGraph 会把声明通道
+    全部物化进 final_state，因此缺键只可能是调用方给的**局部 dict**
+    （如 `{}` 或手工夹具），那属于"状态信息不足"，留给 UNKNOWN 兜底，
+    不得由本判据冒充一条有信息的归因结论。
+    """
+    if "patch" not in state or "repair_history" not in state:
+        return False
+    if state.get("logic_degraded"):
+        return False
+    if int(state.get("iteration", 0) or 0) != 0:
+        return False
+    if str(state.get("patch") or "").strip():
+        return False
+    return not (state.get("repair_history") or [])
 
 
 # ── P2-4（2026-10 停滞检测最小版）：覆盖率停滞 → 提前停止 ──────────────────

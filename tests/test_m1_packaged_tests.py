@@ -13,11 +13,30 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+import pytest
+
 from experiments._m1_metrics import (
     _prepare_packaged_test_tree,
     _quixbugs_support_root,
     _run_pytest_in_tmp,
 )
+
+
+@pytest.fixture(autouse=True)
+def _no_host_quixbugs_cache(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """把「默认缓存目录」兜底指向空 tmp——模块级前提隔离。
+
+    `_quixbugs_support_root()`（B1，2026-11-05）与 `QuixBugsDataset` 同源后多了一条
+    默认缓存兜底；本文件所有"材料缺失"腿只 `delenv`，在作者机上会被
+    `~/.cache/aitester/quixbugs` 里的真实数据满足 ⇒ 前提不成立、判定由机器历史
+    决定（实测红 5 例）。兜底目录由夹具钉成空目录，`delenv` 才真的等于"没材料"。
+    """
+    import src.datasets.dataset_realbugs as realbugs
+
+    empty = tmp_path / "empty_aitester_cache"
+    empty.mkdir(exist_ok=True)
+    monkeypatch.setattr(realbugs.QuixBugsDataset, "DEFAULT_CACHE_DIR", str(empty))
+
 
 # ─── _quixbugs_support_root ─────────────────────────────────────────────────
 
@@ -33,8 +52,28 @@ def test_support_root_none_when_dir_missing(monkeypatch, tmp_path) -> None:
 
 
 def test_support_root_valid(monkeypatch, tmp_path) -> None:
+    """有效支持根 = **辅助件齐备**的目录（B1 收紧）：只有空目录不构成支持根，
+    否则它会在候选扫描里遮蔽真正带材料的兄弟目录（如 `<root>/repo`）。"""
+    tc = tmp_path / "python_testcases"
+    tc.mkdir()
+    (tc / "node.py").write_text("", encoding="utf-8")
+    (tc / "load_testdata.py").write_text("", encoding="utf-8")
     monkeypatch.setenv("AITESTER_QUIXBUGS_DATA", str(tmp_path))
     assert _quixbugs_support_root() == str(tmp_path)
+
+
+def test_support_root_falls_back_to_default_cache_dir(monkeypatch, tmp_path) -> None:
+    """AITESTER_QUIXBUGS_DATA 未设但默认缓存目录里有材料 ⇒ 仍须认出（同源兜底）。"""
+    import src.datasets.dataset_realbugs as realbugs
+
+    cache = tmp_path / "aitester_cache"
+    tc = cache / "quixbugs" / "python_testcases"
+    tc.mkdir(parents=True)
+    (tc / "node.py").write_text("", encoding="utf-8")
+    (tc / "load_testdata.py").write_text("", encoding="utf-8")
+    monkeypatch.delenv("AITESTER_QUIXBUGS_DATA", raising=False)
+    monkeypatch.setattr(realbugs.QuixBugsDataset, "DEFAULT_CACHE_DIR", str(cache))
+    assert _quixbugs_support_root() == str(cache / "quixbugs")
 
 
 # ─── _prepare_packaged_test_tree ────────────────────────────────────────────

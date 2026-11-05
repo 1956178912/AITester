@@ -162,14 +162,22 @@ class TestChannelCoverage:
         → 3 键 / 12 站点，`test_passed` 同时进入两条写路径 ⇒ 未审计 46 → 45。
         """
         cov = channel_coverage()
-        assert len(cov.declared) == 118
+        assert len(cov.declared) == 120
         # 353 → 354（B1 批 2026-10-30 复算）：4a9512e3 在
         # `src/graph/workflow.py::_should_debug` 加 `state.get("task_uuid")`
         # 读点（tge__ 前缀豁免，TestGenEval 口径修复）⇒ 读站点 +1、键集不变。
-        assert (len(cov.read_keys), cov.read_sites) == (57, 354)
+        # 118 → 120 / 57 → 58 / 354 → 357（图内 gold 裁决，2026-11-05，最小批
+        # 暴露的 B1 阻塞）：新增 `official_tests`（材料入参，patch_evidence.py
+        # 与 nodes.py 各读一次）与 `official_test_evidence`（裁决出参，只经
+        # update dict 落盘 ⇒ 计入"未触及"而非读侧）；`official_tests_evidence`
+        # 另读一次 `module_name` ⇒ 读站点 +3。就地写 / update dict 两面不变。
+        # 357 → 361（B6 未发起修复迭代标签，2026-11-05）：
+        # `workflow._no_repair_attempted` 读 logic_degraded / iteration / patch /
+        # repair_history 四键（均已在读侧键集内）⇒ 站点 +4、键集不变。
+        assert (len(cov.read_keys), cov.read_sites) == (58, 361)
         assert (len(cov.inplace_write_keys), cov.inplace_write_sites) == (3, 12)
         assert (len(cov.update_write_keys), cov.update_write_sites) == (47, 99)
-        assert (len(cov.untouched), len(cov.untouched_elsewhere), len(cov.untouched_nowhere)) == (34, 33, 1)
+        assert (len(cov.untouched), len(cov.untouched_elsewhere), len(cov.untouched_nowhere)) == (35, 34, 1)
         assert (cov.temp_keys, cov.temp_sites, cov.dynamic_sites, cov.undeclared_sites) == (2, 2, 1, 0)
 
     def test_written_keys_union_and_unaudited_gap(self):
@@ -302,7 +310,7 @@ class TestChannelCoverage:
         assert result.returncode == 0, result.stderr
         assert "状态通道逐键覆盖" in result.stdout
         assert "failure_frequency_applied: 0 / 0 / 0" in result.stdout
-        assert "审计面披露：声明 118 键" in result.stdout
+        assert "审计面披露：声明 120 键" in result.stdout
 
     def test_success_message_carries_disclosure(self):
         import subprocess
@@ -338,4 +346,4 @@ class TestChannelCoverage:
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         cov = module.channel_coverage()
-        assert len(cov.declared) == 118
+        assert len(cov.declared) == 120

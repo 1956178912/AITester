@@ -84,6 +84,9 @@ _STOP_REASON_TO_BUCKET: dict[str, FailureBucket] = {
     "skip_debugger_repair_invalid": FailureBucket.GENERATION_CAPABILITY_FAILURE,
     "coverage_stall": FailureBucket.GENERATION_CAPABILITY_FAILURE,
     "recursion_limit": FailureBucket.GENERATION_CAPABILITY_FAILURE,
+    # B6（2026-11-05）：从未发起修复迭代——"系统正常运转但生成不出有效产物"
+    # 正是本桶定义，与"迭代耗尽/补丁无效"同源不同形（最小批 28/40 行）
+    "no_repair_attempted": FailureBucket.GENERATION_CAPABILITY_FAILURE,
     # 验证侧拦截
     "budget_exceeded": FailureBucket.VERIFICATION_FAILURE,
     "regression_detected": FailureBucket.VERIFICATION_FAILURE,
@@ -124,6 +127,9 @@ _STOP_REASON_TO_INTERACTION: dict[str, tuple[str, str]] = {
     "max_iterations_reached": ("debugger_to_executor", "model_side"),
     "skip_debugger_repair_invalid": ("debugger_to_executor", "model_side"),
     "coverage_stall": ("generator_to_executor", "model_side"),
+    # B6：产物从未出现 ⇒ 归因落在生成环节之前（planner↔generator，model 侧），
+    # 不是 debugger↔executor 的"补丁不达标"
+    "no_repair_attempted": ("planner_to_generator", "model_side"),
     # 编排上界/预算：scaffolding 侧
     "recursion_limit": ("harness", "harness_side"),
     "budget_exceeded": ("harness", "harness_side"),

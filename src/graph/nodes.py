@@ -2572,6 +2572,12 @@ def _apply_patch_evidence_gate(
     恢复失败时如实降级为"写盘后标记"口径（C6：磁盘与状态必须一致声明）。
     证据等级本身始终记录（消融对照不受影响）。
 
+    B1（2026-11-05）：等级不足、门正要拒绝时，若
+    ``official_tests_gold_enabled()`` 且本轮带官方测试材料，则把官方测试跑在
+    打补丁的源码上——全绿把等级升到 "gold"（确定性独立裁决）并放行；红 /
+    不可判定 / 无材料一律维持拒绝，**不降级成 keyword 放行**。默认关时这条
+    路径一次子进程都不发，行为与历史逐位一致。
+
     Args:
         state: 当前状态。
         original_code: 应用前原文。
@@ -2587,12 +2593,28 @@ def _apply_patch_evidence_gate(
         from src.tools.patch_evidence import (
             assess_patch_evidence,
             evidence_allows_write,
+            official_tests_evidence,
+            official_tests_gold_enabled,
             patch_evidence_gate_enabled,
         )
 
-        _ev_level = assess_patch_evidence(cast("dict[str, Any]", state), original_code, new_code)
+        _state_dict = cast("dict[str, Any]", state)
+        _ev_level = assess_patch_evidence(_state_dict, original_code, new_code)
+        _blocks = patch_evidence_gate_enabled() and not evidence_allows_write(_ev_level)
+        if _blocks and official_tests_gold_enabled() and isinstance(state.get("official_tests"), dict):
+            _ov = official_tests_evidence(_state_dict, new_code)
+            _evidence_update["official_test_evidence"] = _ov
+            if _ov.get("verdict") == "gold":
+                logger.info(
+                    "B1 图内 gold 裁决：官方测试在补丁上全绿（passed=%s，rc=%s），证据等级 %s→gold",
+                    _ov.get("passed"),
+                    _ov.get("rc"),
+                    _ev_level,
+                )
+                _ev_level = "gold"
+                _blocks = False
         _evidence_update["patch_evidence_level"] = _ev_level
-        if patch_evidence_gate_enabled() and not evidence_allows_write(_ev_level):
+        if _blocks:
             _evidence_update["source_patched_unverified"] = True
             _disk_restored_ev = False
             try:
