@@ -15,6 +15,7 @@
 """
 
 import os
+import tempfile
 from collections.abc import Iterator
 
 import pytest
@@ -29,6 +30,45 @@ from src.graph import nodes as _nodes
 _PRESET_ENV_KEYS: frozenset[str] = frozenset(
     {"AITESTER_PROFILE", *(k for presets in _config._PROFILE_PRESETS.values() for k in presets)}
 )
+
+#: 临时根的三个入口：macOS/Linux 读 TMPDIR，Windows 读 TEMP/TMP，库内还有一条
+#: `tempfile.tempdir` 进程内缓存——四者不同指一处就会"一半隔离一半照旧"。
+_TEMP_ENV_KEYS: tuple[str, ...] = ("TMPDIR", "TEMP", "TMP")
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _isolate_session_temp_root(tmp_path_factory: pytest.TempPathFactory) -> Iterator[None]:
+    """整个测试会话独占一个临时根：判定不得取决于机器上历史堆积的条目数。
+
+    实测（HN 轮，2026-11-04，作者机）：默认临时区 `/var/folders/…/T` 有 **1,969,816**
+    条目（1,790,158 个 `b3gen_*` + 169,378 个 `c8gen_*`，来自两个 judge 脚本每判定一次
+    `mkdtemp` 且从不回收）。执行器把生成的测试文件直接写在临时根**下**，内层 pytest 就
+    把这个 196 万条目的目录挂进 `sys.path`，每次 import 查找都要扫它——
+    `tests/test_n_round_platform_executor_sandbox.py` 的 3 个沙箱用例因此撞 120s
+    `EXECUTION_TIMEOUT` 必红，全量套件墙钟 421.61s；把临时根换成空目录后同一份用例
+    29 例 2.7s 全绿、套件 150.94s。红的是机器历史，不是被测代码。
+
+    口径：环境变量与 `tempfile.tempdir` **一起**改。只改 env，本进程里已缓存过
+    `tempfile._tempdir` 的调用仍走旧根；只改 `tempfile.tempdir`，子进程（真正的受害
+    者——内层 pytest）继承不到。会话根取自 `tmp_path_factory`，落在 pytest 自己的
+    basetemp 子目录下，会话结束由 pytest 回收；xdist 各 worker 各自得到一个根，互不
+    干扰。存量目录不在本 fixture 职责内（删除需用户授权，另批处理）。
+    """
+    root = tmp_path_factory.mktemp("session_tmp_root")
+    saved_env = {key: os.environ.get(key) for key in _TEMP_ENV_KEYS}
+    saved_tempdir = tempfile.tempdir
+    for key in _TEMP_ENV_KEYS:
+        os.environ[key] = str(root)
+    tempfile.tempdir = str(root)
+    try:
+        yield
+    finally:
+        tempfile.tempdir = saved_tempdir
+        for key, value in saved_env.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
 
 
 @pytest.fixture(autouse=True)

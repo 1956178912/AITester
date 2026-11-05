@@ -37,8 +37,8 @@ LLM 段的完成数取 `INCREMENTAL_RESULTS.jsonl` 行数（输出行会被日�
 | LLM 重试 | 6 次 | `LLM_MAX_RETRIES`；退避 1+2+4+8+16+32 s |
 | LLM 传输超时 | 600 s | `LLM_HTTP_TIMEOUT`；深度思考默认开启后 180 s 不够 |
 | 覆盖率 | 行 + 分支 | 走 `make test-cov`（CI 同口径，`coverage.xml` 供登记册对账） |
-| 失败重跑 | 3 轮 | 每轮只跑上一轮失败用例（`--lf`） |
-| 临时根 | 每次运行独占 `<报告目录>/tmp` | 见 `stage_base_env`：临时根堆积会拖慢内层 pytest |
+| 失败重跑 | 3 轮 | 每轮只跑上一轮失败的用例（nodeid 取自日志短摘要，见 `run_stage`） |
+| 临时根 | 每次运行独占、**在仓库之外** | 见 `run_tmp_root`：既防条目堆积拖慢内层 pytest，也防仓库内嵌套仓库骗过夹具类用例 |
 
 ## 用法
 
@@ -74,8 +74,10 @@ import shutil
 import signal
 import subprocess
 import sys
+import tempfile
 import threading
 import time
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -114,7 +116,33 @@ DEFAULT_BUDGET_CNY = 300.0
 #:   ≈ 3.0k token，取 20k ≈ 6.6 倍余量。
 #:   沿用 120k 会把保护性上界抬高 6 倍，让满量档在没有依据的情况下被预算挡下。
 NEED_BASED_TOKEN_CAP = 120_000
+#: 思考关闭档的**不分臂**兜底口径。实际跑批按臂分档（见下面两个 ARM_TOKEN_CAP_*），
+#: 因为 20k 会掐断核心臂；此值仍用于 `default_task_token_cap()` 的单值投影口径与
+#: `--llm-token-cap` 显式覆盖时的回归语义。
 NEED_BASED_TOKEN_CAP_THINKING_OFF = 20_000
+#: 每任务上限**按臂分档**（2026-11-05 最小批实测，证据 `experiments/results/
+#: test_run_20261104T150046Z`）：aitester 在 ult 被 20k 截于 22,880 token、在
+#: testgeneval 累计 26,418 仍不够，single_agent 在 testgeneval 累计 26,477；三条 plain
+#: 臂单任务最多 10,665。一刀切 20k 把核心干预臂判成 `budget_exceeded`（该格没有判定），
+#: 同时给便宜臂一个它用不到的上界（投影虚高）。两档都取"实测峰值 × 1.5"，不凭空加余量。
+ARM_TOKEN_CAP_HEAVY_THINKING_OFF = 40_000
+ARM_TOKEN_CAP_LIGHT_THINKING_OFF = 16_000
+#: 多轮修复/重生成臂——每任务调用数远多于单次补全的 plain 臂。
+HEAVY_ARMS: frozenset[str] = frozenset({"aitester", "single_agent"})
+#: 单轮补全家族：`plain_llm` 与全部 `plain_llm_df*` 锚点臂都走
+#: `_run_plain_llm_df_anchor_baseline`/单次补全形状，实测峰值 10,665 token/任务
+#: （mimo-v2.6-pro × testgeneval）。名字取自 `run_benchmark.BASELINE_REGISTRY`，
+#: 注册表加臂而此处漏登记 ⇒ `tests/test_run_all_tests_profiles.py` 的覆盖锁先红。
+LIGHT_ARMS: frozenset[str] = frozenset(
+    {
+        "plain_llm",
+        "plain_llm_df",
+        "plain_llm_df_spec",
+        "plain_llm_df_doc",
+        "plain_llm_df_doc_union",
+        "plain_llm_df_doc_augment",
+    }
+)
 #: 实测单条调用形状（thinking off，QuixBugs `bitcount`，`TEMPERATURE=0.0`，两家取
 #: 各自较大的读数）：(prompt_tokens, completion_tokens)，供投影给出"实测参考值"。
 MEASURED_OFF_CALL_TOKENS = (489, 709)
@@ -134,6 +162,31 @@ def thinking_default_on() -> bool:
 def default_task_token_cap() -> int:
     """按思考档取默认每任务上限（关思考后的真实需要量小一个数量级）。"""
     return NEED_BASED_TOKEN_CAP if thinking_default_on() else NEED_BASED_TOKEN_CAP_THINKING_OFF
+
+
+def arm_token_cap(arm: str) -> int:
+    """某一臂的每任务 token 上限。
+
+    思考开启档没有按臂实测基数，故沿用单一 120k；思考关闭档（当前默认）按
+    `HEAVY_ARMS` / `LIGHT_ARMS` 分两档，依据见那两个常量旁的实测注。
+
+    未登记的臂名**报错而不猜**：猜小会静默截断核心臂（就是 B3 这个缺陷本身），猜大会
+    把投影上界抬高——两种猜都让"判定取决于名字是否在表里"这种隐性规则进生产路径。
+    """
+    if thinking_default_on():
+        return NEED_BASED_TOKEN_CAP
+    if arm in HEAVY_ARMS:
+        return ARM_TOKEN_CAP_HEAVY_THINKING_OFF
+    if arm in LIGHT_ARMS:
+        return ARM_TOKEN_CAP_LIGHT_THINKING_OFF
+    raise ValueError(
+        f"臂 {arm!r} 未登记每任务上限档位：请把它加入 HEAVY_ARMS 或 LIGHT_ARMS（并附实测峰值），不要靠默认值兜住"
+    )
+
+
+def arm_caps_for(arms: list[str]) -> dict[str, int]:
+    """臂清单 → 各臂上限（未知臂在此处即抛，不留到阶段 env 拼装）。"""
+    return {arm: arm_token_cap(arm) for arm in arms}
 
 
 #: LLM 并发上限：网络受限而非 CPU 受限，超过它只会触发 429 重试（重试是付费的）。
@@ -181,15 +234,21 @@ def plan_llm_budget(
     out_prices: dict[str, float],
     currency: str | None,
     token_cap: int | None,
+    arm_caps: dict[str, int] | None = None,
 ) -> dict:
     """投影 LLM 段费用上界，并检查它是否落在需要之内。
 
     上界口径（保守）：把每任务的全部 token 都按**输出单价**计（价目表里的最高
     档），故 `上界 = 任务数 × 每任务上限 × max(输出单价) / 1e6`。
 
+    `arm_caps` 给出按臂分档的上限时，上界改成**各臂自己的上限求和**：
+    `上界 = (任务数 / 臂数) × Σ(各臂上限) × 最高输出单价 / 1e6`。拿最重的那档乘所有臂
+    会虚报（plain 臂实测只用 1–10k），拿最轻的档乘所有臂又会低估核心臂——两者都不是
+    "尽可能把费用降到最低但把事做完"。此时不再发布单一 `per_task_token_cap`。
+
     目标是"用最少的钱做完"，所以：
-    - 上限默认取 `NEED_BASED_TOKEN_CAP`（按实测需要），**不是** `预算 / 任务数`
-      反推——反推会让每个任务都获准烧掉自己那份预算，总账正好等于预算；
+    - 上限默认按实测需要取（`arm_token_cap` / `default_task_token_cap`），**不是**
+      `预算 / 任务数` 反推——反推会让每个任务都获准烧掉自己那份预算，总账正好等于预算；
     - 超预算时的正确动作是**减小规模**（任务数/臂数/数据集面）或缩短无效螺旋，
       而不是放大上限把预算吃满；
     - 不用 `LLM_MAX_OUTPUT_TOKENS` 压输出：`base_agent` 把 `finish_reason=length`
@@ -199,7 +258,8 @@ def plan_llm_budget(
         "tasks_total": tasks_total,
         "budget": budget_cny,
         "currency": currency or "未知",
-        "per_task_token_cap": token_cap or default_task_token_cap(),
+        "per_task_token_cap": None if arm_caps else (token_cap or default_task_token_cap()),
+        "caps_by_arm": dict(arm_caps) if arm_caps else None,
         "worst_price_per_mtok": None,
         "upper_bound": None,
         "provable": False,
@@ -216,12 +276,20 @@ def plan_llm_budget(
     worst = max(out_prices.values())
     cap = token_cap or default_task_token_cap()
     note["worst_price_per_mtok"] = worst
-    note["per_task_token_cap"] = cap
-    if cap <= 0:
-        note["reason"] = f"每任务 token 上限非法（{cap}），LLM 段拒绝开跑"
-        return note
-    bound = tasks_total * cap * worst / 1_000_000
-    note["upper_bound"] = round(bound, 2)
+    if arm_caps:
+        # 显式 `--llm-token-cap` 覆盖分档（回归历史单一上限口径）；否则用调用方按臂算好的档
+        caps = {arm: (token_cap or value) for arm, value in arm_caps.items()}
+        note["caps_by_arm"] = caps
+        if any(c <= 0 for c in caps.values()):
+            note["reason"] = f"臂上限非法（{caps}），LLM 段拒绝开跑"
+            return note
+        note["upper_bound"] = round(tasks_total / len(caps) * sum(caps.values()) * worst / 1_000_000, 2)
+    else:
+        if cap <= 0:
+            note["reason"] = f"每任务 token 上限非法（{cap}），LLM 段拒绝开跑"
+            return note
+        note["per_task_token_cap"] = cap
+        note["upper_bound"] = round(tasks_total * cap * worst / 1_000_000, 2)
     # 实测参考：保护性上界把每任务都按上限计价（最坏档），thinking-off 档另有实测
     # 基数，故再给一个可对照的期望值。只计**输出侧**——输入侧按同批实测约 2.1k
     # token/任务，在同一量级，但不混进这个数里以免假装精确。
@@ -232,7 +300,7 @@ def plan_llm_budget(
     else:
         note["measured_reference"] = None
     note["provable"] = True
-    note["fits_budget"] = bound <= budget_cny
+    note["fits_budget"] = note["upper_bound"] <= budget_cny
     if note["fits_budget"]:
         # 预算有余量 → 说明规模已经很小，直接给"再省"的建议而不是加量
         cheapest = min(out_prices, key=lambda m: out_prices[m])
@@ -242,16 +310,26 @@ def plan_llm_budget(
             f"③ 保持身份键缓存开启（重跑零增量成本）；④ 探索性批次可用输出单价更低的 {cheapest}"
         )
         note["reason"] = (
-            f"上界 {bound:.2f} {note['currency']} ≤ 预算 {budget_cny:.2f}（上界按最坏档计价，实际远低于此）"
+            f"上界 {note['upper_bound']:.2f} {note['currency']} ≤ 预算 {budget_cny:.2f}（上界按最坏档计价，实际远低于此）"
         )
     else:
-        # 超预算：给可达规模，不放大上限
-        max_tasks = int(budget_cny * 1_000_000 / (cap * worst))
+        # 超预算：给可达规模，不放大上限。分档时"规模"要按各臂价钱求和反推——拿单一
+        # cap 反推会把 plain 臂的便宜算到核心臂头上。
+        caps_used = note["caps_by_arm"]
+        if caps_used:
+            cost_per_unit = sum(caps_used.values()) * worst / 1_000_000
+            max_tasks = int(budget_cny / cost_per_unit * len(caps_used)) if cost_per_unit else 0
+            unit_note = f"（每臂各 {max_tasks // len(caps_used)} 任务）"
+        else:
+            max_tasks = int(budget_cny * 1_000_000 / (cap * worst))
+            unit_note = ""
         note["advice"] = (
-            f"按当前规模上界 {bound:.2f} {note['currency']} 超预算 {budget_cny:.2f}："
-            f"把任务总数降到 ≤{max_tasks}（减数据集面或减 --llm-tasks），或分批跑并先跑判定面"
+            f"按当前规模上界 {note['upper_bound']:.2f} {note['currency']} 超预算 {budget_cny:.2f}："
+            f"把任务总数降到 ≤{max_tasks}{unit_note}（减数据集面或减 --llm-tasks），或分批跑并先跑判定面"
         )
-        note["reason"] = f"上界 {bound:.2f} {note['currency']} > 预算 {budget_cny:.2f} → 缩小规模，不放大上限"
+        note["reason"] = (
+            f"上界 {note['upper_bound']:.2f} {note['currency']} > 预算 {budget_cny:.2f} → 缩小规模，不放大上限"
+        )
     return note
 
 
@@ -461,6 +539,52 @@ def _sample_resources() -> tuple[float, float]:
     return load_per_core, mem_used
 
 
+#: pytest 短摘要里的失败/错误行：`FAILED <nodeid> - <原因>`（nodeid 含空格时 pytest 会加引号）。
+_FAILED_SUMMARY_RE = re.compile(r"^(?:FAILED|ERROR)\s+(?:'([^']+)'|(\S+))")
+
+
+def failed_node_ids(log_path: Path) -> list[str]:
+    """从一次 pytest 日志里取失败用例的 nodeid（去重、保序）。
+
+    为什么不用 pytest 自带的 `--lf`：`lastfailed` 存在**仓库根共享的** `.pytest_cache`
+    里，任何穿插的 pytest 运行（另一批、另一个终端、甚至本运行器另一阶段）都会改写它。
+    现场（2026-11-04）第 1 轮红 2 条，第 2 轮 `--lf` 打出 `7 workers [0 items]`、
+    exit=5——一个"什么都没跑"的重跑既没验证失败用例，也没复现通过，把 4 轮全耗光后
+    给出一个与套件无关的红。日志短摘要是这次运行自己写的，跟着它走才是单变量。
+    """
+    if not log_path.is_file():
+        return []
+    ids: list[str] = []
+    for raw in log_path.read_text(encoding="utf-8", errors="replace").splitlines():
+        m = _FAILED_SUMMARY_RE.match(raw.strip())
+        if not m:
+            continue
+        node_id = m.group(1) or m.group(2)
+        if ".py" in node_id and node_id not in ids:
+            ids.append(node_id)
+    return ids
+
+
+def _is_node_id_arg(part: str) -> bool:
+    return not part.startswith("-") and ("::" in part or part.endswith(".py"))
+
+
+def narrow_command_to(command: list[str], node_ids: list[str]) -> list[str] | None:
+    """把命令里的 nodeid 参数换成给定清单，其余参数与顺序原样保留；无 nodeid 可换则返回 None。"""
+    if not any(_is_node_id_arg(part) for part in command):
+        return None
+    out: list[str] = []
+    inserted = False
+    for part in command:
+        if _is_node_id_arg(part):
+            if not inserted:
+                out += node_ids
+                inserted = True
+            continue
+        out.append(part)
+    return out
+
+
 def run_stage(
     name: str,
     command: list[str],
@@ -483,6 +607,9 @@ def run_stage(
     墙钟超过 `stage_timeout_s` 都终止**整个进程组**（只杀直接子进程会留下
     pytest-xdist worker 与容器），记一次失败并按 `retries` 重跑。
 
+    重跑范围：pytest 阶段只重跑**本轮日志短摘要里失败的 nodeid**（`failed_node_ids`），
+    其余阶段与无失败行可解析时整条重跑。不用 `--lf` 的原因见该函数 docstring。
+
     Args:
         name: 阶段名（写日志与报告）。
         command: 命令列表。
@@ -501,6 +628,7 @@ def run_stage(
         `StageResult`（含 `progress` 读数、`stalled` / `timed_out` 标记）。
     """
     result = StageResult(name=name, command=list(command))
+    base_command = list(command)
     started = time.time()
     attempt = 0
     while True:
@@ -597,12 +725,16 @@ def run_stage(
         print(f"  结果: exit={exit_code} 用时 {elapsed:.0f}s 进度 {state.render()}")
         if exit_code == 0 or attempt > retries:
             break
-        # 只重跑失败用例（pytest 支持 --lf；其他命令整条重跑）
-        if "--lf" not in command and any("pytest" in part for part in command):
-            result.notes.append(f"第 {attempt + 1} 次改为 --lf 只跑失败用例")
-            command = [*command, "--lf"]
+        # 重跑口径：pytest 阶段只重跑上一轮失败的用例（nodeid 取自本轮日志），其余阶段
+        # 整条重跑。日志里没有可解析的失败行（崩溃/超时/收集错误）也退回整条重跑。
+        failed = failed_node_ids(log_path) if "pytest" in command else []
+        narrowed = narrow_command_to(base_command, failed) if failed else None
+        if narrowed is not None:
+            result.notes.append(f"第 {attempt + 1} 次只跑上一轮失败的 {len(failed)} 个用例")
+            command = narrowed
         else:
             result.notes.append(f"第 {attempt + 1} 次整条重跑")
+            command = list(base_command)
         print(f"  ↻ 失败，准备第 {attempt + 1} 次尝试（剩余 {retries - attempt} 轮）")
     result.duration_s = time.time() - started
     return result
@@ -648,7 +780,11 @@ def config_fingerprint(args: argparse.Namespace, models: list[str]) -> str:
     )
     payload = {key: getattr(args, key, None) for key in keys}
     payload["models"] = sorted(models)
-    payload["token_cap_default"] = NEED_BASED_TOKEN_CAP
+    payload["token_cap_tiers"] = {
+        "thinking_on": NEED_BASED_TOKEN_CAP,
+        "heavy_thinking_off": ARM_TOKEN_CAP_HEAVY_THINKING_OFF,
+        "light_thinking_off": ARM_TOKEN_CAP_LIGHT_THINKING_OFF,
+    }
     payload["revision"] = _git_revision()
     payload["worktree"] = hashlib.sha256(_git_porcelain().encode("utf-8")).hexdigest()[:12]
     return hashlib.sha256(json.dumps(payload, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()[:16]
@@ -710,14 +846,52 @@ def find_smoke_evidence(out_dir: Path, fingerprint: str) -> dict | None:
 # ─── 阶段编排 ────────────────────────────────────────────────────────────────
 
 
-def stage_base_env(out_dir: Path) -> dict[str, str]:
-    """所有阶段共用的子进程环境（每次运行独占一个空临时根）。
+def _inside_repo(path: Path) -> bool:
+    """路径是否落在仓库工作树内（判定用 resolved，符号链接不算逃出）。"""
+    try:
+        return path.resolve().is_relative_to(PROJECT_ROOT.resolve())
+    except OSError:
+        return False
 
-    临时根不是可有可无的整洁问题：执行器把测试文件写在临时根**下**，内层 pytest
-    于是把临时根挂到 ``sys.path``，其条目数直接进入每次内层运行的耗时。作者机实测
-    （GL，2026-11-04）TMPDIR 根堆积 196 万条目时，一个单行用例的内层运行从 0.6s
-    变成 257s —— 超过 ``EXECUTION_TIMEOUT`` 就被判超时，判定因此取决于机器历史而非
-    测试结果。临时根由本运行器创建、运行结束时删除。
+
+def run_tmp_root(out_dir: Path) -> Path:
+    """本次运行的独占临时根——**必须在仓库之外**。
+
+    两个独立的失效模式都指向这里：
+
+    1. **条目堆积拖慢判定**（GL，2026-11-04）：执行器把测试文件写在临时根**下**，
+       内层 pytest 于是把临时根挂到 ``sys.path``，其条目数直接进入每次内层运行的
+       耗时。作者机实测 TMPDIR 根堆积 196 万条目时，一个单行用例的内层运行从 0.6s
+       变成 257s——超过 ``EXECUTION_TIMEOUT`` 就被判超时，判定因此取决于机器历史。
+       本运行器每次运行自建空根、跑完即删，就把这条彻底切断。
+    2. **仓库内嵌套仓库骗过夹具**（现场，2026-11-04）：根若建在报告目录
+       （``experiments/results/test_run_*/tmp``，位于工作树内），凡在临时根里
+       ``git init`` 一份小仓库再据其为"当前仓库"的用例（文档命令引用、config
+       读取器普查）就会把 ``PROJECT_ROOT`` 当真仓库，实测两条必红。红的是夹具
+       对仓库的解析，不是被测代码——冒烟档因此给出假阴性并拦住全量档。
+
+    因此根取自系统临时目录，名字带报告目录名与路径摘要（同机多运行互不撞车）。
+    若系统临时目录本身被指到仓库内（``TMPDIR`` 可被外部设成任何位置），退到
+    POSIX 的 ``/tmp``；仍躲不开就抛错——静默地在仓库内跑完整批会产出一堆无法
+    解释的红，比拒跑更贵。
+    """
+    base = Path(tempfile.gettempdir())
+    if _inside_repo(base):
+        fallback = Path("/tmp") if os.name == "posix" else None
+        if fallback is None or _inside_repo(fallback):
+            raise RuntimeError(
+                f"临时根无处可放：系统临时目录 {base} 在仓库 {PROJECT_ROOT} 内，"
+                "请把 TMPDIR 指到仓库外再跑（仓库内建根会让夹具把报告目录当成仓库）"
+            )
+        base = fallback
+    digest = hashlib.sha256(str(out_dir.resolve()).encode("utf-8")).hexdigest()[:8]
+    return base / f"aitester-run-{out_dir.name or 'run'}-{digest}"
+
+
+def stage_base_env(out_dir: Path) -> dict[str, str]:
+    """所有阶段共用的子进程环境（每次运行独占一个仓库外的空临时根）。
+
+    临时根口径与"为什么不能在仓库内"见 `run_tmp_root`。
     """
     base_env = dict(os.environ)
     # 工作记忆口径：沙箱 broker 会让全量 pytest 随机 SIGTERM，运行器里显式摘掉。
@@ -726,7 +900,7 @@ def stage_base_env(out_dir: Path) -> dict[str, str]:
     base_env.setdefault("LLM_MAX_RETRIES", "6")
     base_env.setdefault("LLM_HTTP_TIMEOUT", "600")
     base_env.setdefault("PYTHONUNBUFFERED", "1")
-    tmp_root = out_dir / "tmp"
+    tmp_root = run_tmp_root(out_dir)
     tmp_root.mkdir(parents=True, exist_ok=True)
     # macOS/Linux 读 TMPDIR，Windows 读 TEMP/TMP——三者同指一处，子进程无论走哪个
     # 变量都落在本运行的临时根。
@@ -1105,7 +1279,10 @@ def llm_scale_plan(args: argparse.Namespace, tasks_per_cell: int | None) -> dict
     unavailable = sorted(ds for ds, count in counts.items() if not count)
     datasets = [ds for ds in requested if ds not in unavailable]
     if unavailable:
-        print(f"  ⚠ 本轮剔除不可读的数据面（数据未下载/为空）：{unavailable}；其余面仍跑满")
+        print(
+            f"  ⚠ 本轮剔除无能跑任务的数据面（数据未下载/为空，或在严格源码口径下"
+            f"`instance_code` 全部兜底成 issue 文本）：{unavailable}；其余面仍跑满"
+        )
     # 注册表里有别名与"同加载器不同数据目录"的兄弟名；数据目录未配置时它们解析到
     # 同一批任务。按数据身份（任务数 + 首末 task_id）去重，否则同一批数据被铺两遍：
     # 双倍付费，且读数看着像两个独立面。同组内保留最短名（`quixbugs` 而非 `quix_bugs`，
@@ -1127,7 +1304,15 @@ def llm_scale_plan(args: argparse.Namespace, tasks_per_cell: int | None) -> dict
         len(models), len(arms), len(datasets), " + ".join(f"{ds}×{c}" for ds, c in faces.items()) or "无可用面"
     )
     tasks_total = len(models) * len(arms) * (sum(faces.values()) if faces else 0)
-    plan = plan_llm_budget(tasks_total, args.budget_cny, out_prices, currency, args.llm_token_cap)
+    # 上限按臂分档：核心臂的实测需要量远大于 plain 臂，一刀切会掐断前者、虚报后者。
+    plan = plan_llm_budget(
+        tasks_total,
+        args.budget_cny,
+        out_prices,
+        currency,
+        args.llm_token_cap,
+        arm_caps=arm_caps_for(arms),
+    )
     plan["scale"] = scale
     if not datasets:
         plan = {
@@ -1158,7 +1343,11 @@ def _print_plan(plan: dict, scale: str) -> None:
     print("-" * 78)
     print("LLM 段费用投影（口径：全部 token 按价目表最贵的输出单价计，故为保守上界）")
     print(f"  规模            : {scale} = {plan['tasks_total']} 任务")
-    print(f"  每任务 token 上限: {plan['per_task_token_cap']}（按实测需要定，超限走 budget_exceeded 停止）")
+    if plan.get("caps_by_arm"):
+        tiers = "、".join(f"{arm}×{c}" for arm, c in plan["caps_by_arm"].items())
+        print(f"  每任务 token 上限: 按臂分档 {tiers}（按实测需要定，超限走 budget_exceeded 停止）")
+    else:
+        print(f"  每任务 token 上限: {plan['per_task_token_cap']}（按实测需要定，超限走 budget_exceeded 停止）")
     print(f"  最坏输出单价    : {plan['worst_price_per_mtok']} / 百万 {plan['currency']}")
     print(
         f"  费用上界        : {plan['upper_bound']} {plan['currency']}（预算上限 {plan['budget']}；按每任务上限的最坏档计价）"
@@ -1249,8 +1438,31 @@ def dataset_task_count(name: str) -> int | None:
     return sig[0] if sig else None
 
 
+#: 数面与跑批共用的"无源码任务不付费"口径开关（加载器侧 S2 严格模式）。
+_STRICT_INSTANCE_CODE_KEY = "AITESTER_DATASET_STRICT_INSTANCE_CODE"
+
+
+@contextlib.contextmanager
+def _strict_source_caliber() -> Iterator[None]:
+    """在严格源码口径下数任务：`instance_code` 兜底成 issue 文本的任务**不可跑**。
+
+    跑批与数分母必须是同一条规则，否则投影按 225 个不可判定任务铺阶段、算钱，而阶段
+    实际一条都判不出来（2026-11-05 最小批的 swebench 面正是这样：10 格全
+    `harness_invalid`）。用完还原宿主环境，不改别的调用方的口径。
+    """
+    saved = os.environ.get(_STRICT_INSTANCE_CODE_KEY)
+    os.environ[_STRICT_INSTANCE_CODE_KEY] = "true"
+    try:
+        yield
+    finally:
+        if saved is None:
+            os.environ.pop(_STRICT_INSTANCE_CODE_KEY, None)
+        else:
+            os.environ[_STRICT_INSTANCE_CODE_KEY] = saved
+
+
 def dataset_signature(name: str) -> tuple[int, str, str] | None:
-    """(任务数, 首个 task_id, 末个 task_id)；数据缺失或加载失败返回 None。
+    """(任务数, 首个 task_id, 末个 task_id)；数据缺失/加载失败/**无可跑任务**返回 None。
 
     带上首末 id 是为了识别"两个面其实指向同一批数据"——同一批数据被铺两遍就是双倍
     付费，光看任务数相同看不出这件事。
@@ -1260,7 +1472,8 @@ def dataset_signature(name: str) -> tuple[int, str, str] | None:
     try:
         from src.datasets.dataset_loader import load_dataset
 
-        tasks = list(load_dataset(name))
+        with _strict_source_caliber():
+            tasks = list(load_dataset(name))
         if not tasks:
             return None
         return len(tasks), str(getattr(tasks[0], "task_id", "") or ""), str(getattr(tasks[-1], "task_id", "") or "")
@@ -1344,11 +1557,14 @@ def _build_llm_sweep_stages(
 
     llm_jobs = max(1, min(jobs, LLM_PARALLELISM_CAP))
     worst = plan["worst_price_per_mtok"] or 0.0
-    # 单任务金额闸按**需要**定（上限 × 最坏输出单价），不是预算 ÷ 任务数
-    per_task_money = round(plan["per_task_token_cap"] * worst / 1_000_000, 6)
     batch_max_calls = estimate_calls(tasks_total)
     for model in models:
         for arm in arms:
+            # 单任务两个闸（token 与金额）按**该臂自己的需要上限**定，同源投影：
+            # 只抬 token 闸而金额闸按别的档算，会先被金额闸掐断（实测截断信息里两个量
+            # 是并列出现的）。
+            cap = (plan.get("caps_by_arm") or {}).get(arm) or plan["per_task_token_cap"]
+            per_task_money = round(cap * worst / 1_000_000, 6)
             for ds in datasets:
                 slug = f"{model}__{arm}__{ds}".replace(".", "-")
                 ns = f"allrun_{slug}"[:80]
@@ -1359,13 +1575,15 @@ def _build_llm_sweep_stages(
                     "AITESTER_LLM_MODEL_FILTER": model,
                     # ② 需要口径的硬闸（金额按价目表基准币种解释）
                     "COST_BUDGET_ENABLE": "true",
-                    "COST_BUDGET_TOKENS": str(plan["per_task_token_cap"]),
+                    "COST_BUDGET_TOKENS": str(cap),
                     "COST_BUDGET_USD": str(per_task_money),
                     "AITESTER_BATCH_MAX_CALLS": str(batch_max_calls),
                     "AITESTER_BATCH_MAX_USD": str(plan["upper_bound"]),
                     # ③ 身份键缓存复用（重跑/重试零增量成本），namespace 阶段隔离
                     "AITESTER_LLM_CACHE": "1",
                     "AITESTER_CACHE_NAMESPACE": ns,
+                    # ④ 无源码任务不付费（与 `dataset_signature` 数分母同一条规则）
+                    _STRICT_INSTANCE_CODE_KEY: "true",
                     # 逐阶段同值的协议变量（单一变量的"同值"部分）
                     "AITESTER_PROFILE": args.llm_profile,
                     "TEMPERATURE": "0.0",
@@ -1475,7 +1693,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--llm-token-cap",
         type=int,
         default=None,
-        help=f"每任务 token 上限（默认按需要取 {NEED_BASED_TOKEN_CAP}，不按预算反推）",
+        help=(
+            f"每任务 token 上限（默认按臂分档：核心臂 {ARM_TOKEN_CAP_HEAVY_THINKING_OFF} / "
+            f"plain 臂 {ARM_TOKEN_CAP_LIGHT_THINKING_OFF}，关思考档；不设本参数时不按预算反推）"
+        ),
     )
     parser.add_argument("--estimate-llm", action="store_true", help="只打印 LLM 段费用投影，不跑也不花钱")
     parser.add_argument("--skip-dataset-gate", action="store_true", help="跳过付费前的零成本数据集闸")
@@ -1556,7 +1777,20 @@ def _execute_stages(
     return results, stalls
 
 
+def _enable_line_buffered_output() -> None:
+    """让控制台进度在重定向到日志文件时逐行可见。
+
+    跑批的常规做法是把运行器输出重定向成日志再 `tail -f`；stdout 指向文件时是**块
+    缓冲**，心跳行要攒几 KB 才吐一次——于是"监测卡死"最需要知道最后一条输出是什么的
+    时候恰好看不到。pytest 的 capture 会把 `sys.stdout` 换成没有 `reconfigure` 的
+    `EncodedFile`（实测），所以只在支持时设置；那三个直接调 `main()` 的用例因此不会炸。
+    """
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(line_buffering=True)
+
+
 def main(argv: list[str] | None = None) -> int:
+    _enable_line_buffered_output()
     parser = build_parser()
     args = parser.parse_args(argv)
 
@@ -1600,6 +1834,13 @@ def main(argv: list[str] | None = None) -> int:
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     out_dir = Path(args.out) if args.out else PROJECT_ROOT / "experiments" / "results" / f"test_run_{stamp}"
     out_dir.mkdir(parents=True, exist_ok=True)
+    # 临时根位置在任何执行之前定下来：位置不合规（落在仓库内且无处可退）就早退，
+    # 别等到 finally 回收时才炸——那时已经跑完（或跑废）一批判定。
+    try:
+        tmp_root = run_tmp_root(out_dir)
+    except RuntimeError as exc:
+        print(f"❌ 开跑前检查未过：{exc}")
+        return 1
     fingerprint = config_fingerprint(args, load_price_and_models()[0])
 
     print("=" * 78)
@@ -1611,6 +1852,7 @@ def main(argv: list[str] | None = None) -> int:
         f"累计卡死上限 {args.max_stalls} 次 | 整轮墙钟 {args.max_wall_hours or '不限'}h"
     )
     print(f"LLM 阶段: {'跳过' if args.no_llm else '包含'} | 配置指纹 {fingerprint}（冒烟证据按它判定适用性）")
+    print(f"临时根: {tmp_root}（仓库外、本次独占、跑完回收）")
     print(f"报告目录: {out_dir}（进度实时写 {PROGRESS_FILE}，活锁 {LOCK_FILE}，终态 {DONE_FILE}）")
     print("=" * 78)
 
@@ -1676,7 +1918,7 @@ def main(argv: list[str] | None = None) -> int:
         total = time.time() - t_start
         # 临时根按运行独占（目录含时间戳），异常中断也不会污染下一次运行；跑完即回收，
         # 否则"每次运行留下判定临时目录"会累积成下一轮的速度与判定问题（GL 现场）。
-        shutil.rmtree(out_dir / "tmp", ignore_errors=True)
+        shutil.rmtree(tmp_root, ignore_errors=True)
         lock_path.unlink(missing_ok=True)
     report = {
         "generated_at": stamp,
@@ -1689,6 +1931,7 @@ def main(argv: list[str] | None = None) -> int:
             "memory_gb": round(mem_gb, 1),
             "jobs": jobs,
             "jobs_reason": jobs_reason,
+            "tmp_root": str(tmp_root),
         },
         "config": {
             "pytest_timeout_s": PYTEST_TIMEOUT_SECONDS,

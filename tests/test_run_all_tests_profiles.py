@@ -16,11 +16,13 @@
 
 from __future__ import annotations
 
+import io
 import json
 import os
 import subprocess
 import sys
 import time
+from collections.abc import Iterator
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -32,8 +34,46 @@ from scripts import run_all_tests as runner
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
+@pytest.fixture(autouse=True)
+def _run_roots_land_in_pytemp(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """本文件的运行临时根一律落到 pytest 自己的 tmp_path（跑完由 pytest 回收）。
+
+    `run_tmp_root` 取系统临时目录；测试若不打桩，每个用例都会在那里留一个
+    `aitester-run-*` 目录。本仓刚被"每判定一个临时目录、从不回收"堆到 196 万条目
+    拖慢判定，不能自己再造一个同款泄漏。tmp_path 在系统临时区，仓库外的边界照样成立。
+    """
+    monkeypatch.setattr(runner.tempfile, "gettempdir", lambda: str(tmp_path))
+    yield
+
+
 def _args(tmp_path: Path, extra: list[str]):
     return runner.build_parser().parse_args(["--out", str(tmp_path / "out"), *extra])
+
+
+class TestLineBufferedProgress:
+    def test_helper_sets_line_buffering_on_real_streams(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        sink = io.TextIOWrapper(io.BytesIO(), encoding="utf-8", write_through=True)
+        monkeypatch.setattr(sys, "stdout", sink)
+        assert sink.line_buffering is False, "前提：TextIOWrapper 默认非行缓冲"
+        runner._enable_line_buffered_output()
+        assert sink.line_buffering is True
+
+    def test_streams_without_reconfigure_do_not_break_main(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """pytest capture 形状的流（无 `reconfigure`）下 `main` 仍正常返回，不抛。"""
+
+        class _PlainStream:
+            def __init__(self) -> None:
+                self.chunks: list[str] = []
+
+            def write(self, text: str) -> int:
+                self.chunks.append(text)
+                return len(text)
+
+        stream = _PlainStream()
+        monkeypatch.setattr(sys, "stdout", stream)
+        assert not hasattr(stream, "reconfigure"), "前提：capture 面没有 reconfigure"
+        assert runner.main(["--selftest"]) == 0
+        assert any("档位" in chunk for chunk in stream.chunks), "进度面应写到传入的流上"
 
 
 class TestSmokeSampling:
@@ -152,6 +192,97 @@ class TestFingerprintAndEvidence:
         assert runner.find_smoke_evidence(newest, fp)["at"] == "2026-11-05T00:00:00Z"
 
 
+class TestArmTieredTokenCap:
+    """每任务上限必须**按臂**分档：一刀切 20k 掐断的是核心干预臂，不是便宜臂。
+
+    依据是 2026-11-05 最小批（50 格、每格 1 任务）的实测读数，不是推演：
+    `experiments/results/test_run_20261104T150046Z` 里 aitester 臂在 ult 被截于
+    22,880 token（`budget_exceeded`，Debugger 因此跳过修复），在 testgeneval 累计
+    26,418 仍不够；single_agent 在 testgeneval 累计 26,477；而三条 plain 臂单任务最多
+    只用到 10,665。20k 一刀切把核心臂判成 `budget_exceeded`（判定无效），同时给便宜臂
+    一个它用不到的上界（投影虚高）。
+    """
+
+    #: 实测峰值（token/任务，含被截断格）——上限不得低于它，否则等于继续截断核心臂。
+    MEASURED_HEAVY_NEED = 26_477
+    MEASURED_LIGHT_NEED = 10_665
+
+    def test_heavy_arms_get_a_cap_that_fits_the_measured_need(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("LLM_THINKING_MODE", raising=False)
+        for arm in ("aitester", "single_agent"):
+            assert runner.arm_token_cap(arm) >= self.MEASURED_HEAVY_NEED, arm
+
+    def test_light_arms_do_not_inherit_the_heavy_cap(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("LLM_THINKING_MODE", raising=False)
+        caps = {runner.arm_token_cap(arm) for arm in ("plain_llm", "plain_llm_df", "plain_llm_df_spec")}
+        assert len(caps) == 1, f"三条 plain 臂口径应一致，实得 {caps}"
+        assert caps.pop() >= self.MEASURED_LIGHT_NEED
+        assert runner.arm_token_cap("plain_llm") < runner.arm_token_cap("aitester")
+
+    def test_thinking_on_keeps_one_cap_for_every_arm(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """开思考档没有按臂实测依据 ⇒ 不编造分档，全部沿用 120k。"""
+        monkeypatch.setenv("LLM_THINKING_MODE", "enabled")
+        for arm in ("aitester", "single_agent", "plain_llm", "plain_llm_df", "plain_llm_df_spec"):
+            assert runner.arm_token_cap(arm) == runner.NEED_BASED_TOKEN_CAP, arm
+
+    def test_unknown_arm_is_refused_not_guessed(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """新臂没登记档位就报错：猜小 = 静默截断（B3 本尊），猜大 = 投影虚高。"""
+        monkeypatch.delenv("LLM_THINKING_MODE", raising=False)
+        with pytest.raises(ValueError, match="未登记"):
+            runner.arm_token_cap("brand_new_arm")
+
+    def test_tiers_cover_every_registered_arm(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """档位表必须覆盖跑批侧注册的全部臂（写侧加臂、读侧漏登记 ⇒ 本例先红）。"""
+        monkeypatch.delenv("LLM_THINKING_MODE", raising=False)
+        from experiments.run_benchmark import BASELINE_REGISTRY
+
+        assert BASELINE_REGISTRY, "臂注册表为空 ⇒ 本例在判空气"
+        for arm in BASELINE_REGISTRY:
+            assert runner.arm_token_cap(arm) > 0, f"{arm} 无档位"
+
+    def test_every_llm_stage_carries_its_own_arm_cap(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """阶段 env 的两个闸（token 与金额）必须同源于该臂上限。
+
+        只抬 `COST_BUDGET_TOKENS` 而 `COST_BUDGET_USD` 仍按旧一刀切算，会先被金额闸
+        掐断——实测截断信息正是"22880 tokens / 0.0794 >= 上限(tokens=20000, cost=0.1600)"
+        两个量并列。
+        """
+        monkeypatch.delenv("LLM_THINKING_MODE", raising=False)
+        monkeypatch.setattr(
+            runner, "load_price_and_models", lambda: (["synthetic-model"], {"synthetic-model": 8.0}, "CNY")
+        )
+        monkeypatch.setattr(runner, "resolve_dataset_faces", lambda _requested: ["synthface"])
+        monkeypatch.setattr(runner, "dataset_task_count", lambda _name: 1)
+        monkeypatch.setattr(runner, "dataset_signature", lambda _name: (1, "t0", "t0"))
+        args = _args(tmp_path, ["--skip-dataset-gate", "--llm-arms", runner.DEFAULT_LLM_ARMS])
+        stages = runner.build_full_stages(args, 1, Path(args.out), tasks_per_cell=1)
+        sweep = [s for s in stages if "__" in s["name"]]
+        assert len(sweep) == 5, f"应铺出 5 个臂的贯通阶段，实得 {[s['name'] for s in sweep]}"
+        worst = 8.0
+        for stage in sweep:
+            arm = stage["name"].split("__")[1]
+            cap = runner.arm_token_cap(arm)
+            assert stage["env"]["COST_BUDGET_TOKENS"] == str(cap), stage["name"]
+            assert float(stage["env"]["COST_BUDGET_USD"]) == round(cap * worst / 1_000_000, 6), stage["name"]
+
+    def test_projection_bound_sums_the_arm_tiers(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """上界按各臂自己的上限求和，而不是拿最重的档乘所有臂。"""
+        monkeypatch.delenv("LLM_THINKING_MODE", raising=False)
+        caps = {"aitester": 40_000, "single_agent": 40_000, "plain_llm": 16_000}
+        # 3 臂 × 1 模型 × 每面 100 任务 = 300 任务
+        plan = runner.plan_llm_budget(300, 300.0, {"synthetic-model": 8.0}, "CNY", None, arm_caps=caps)
+        assert plan["caps_by_arm"] == caps
+        assert plan["per_task_token_cap"] is None, "分档口径下不得再发布单一上限"
+        assert plan["upper_bound"] == round(100 * sum(caps.values()) * 8 / 1_000_000, 2)
+
+    def test_uniform_projection_is_unchanged_without_arm_caps(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """不传臂档时保持原口径（单一上限），避免顺带改掉历史投影语义。"""
+        monkeypatch.delenv("LLM_THINKING_MODE", raising=False)
+        plan = runner.plan_llm_budget(500, 300.0, {"synthetic-model": 8.0}, "CNY", None)
+        assert plan["per_task_token_cap"] == runner.NEED_BASED_TOKEN_CAP_THINKING_OFF
+        assert plan["upper_bound"] == 80.0
+
+
 class TestCaliberAwareTokenCap:
     """每任务上限按**思考档**取——沿用开思考的 120k 会把满量档无据地挡在预算外。"""
 
@@ -187,6 +318,60 @@ class TestCaliberAwareTokenCap:
         runner_text = Path(runner.__file__).read_text(encoding="utf-8")
         assert 'os.getenv("LLM_THINKING_MODE", "disabled")' in client_text
         assert 'os.getenv("LLM_THINKING_MODE", "disabled")' in runner_text
+
+
+class TestNoPaidRunsWithoutSource:
+    """没源码的任务既不该数进分母，也不该拿到付费调用（B4，2026-11-05）。
+
+    最小批实测：swebench 面 225 个任务在本地盘上**全部**缺 `instance_code`（官方
+    JSONL 不含源码字段），加载器兜底成 issue 文本，跑出来的 10 格全是
+    `harness_invalid`。加载器侧早有 S2 严格口径（`AITESTER_DATASET_STRICT_INSTANCE_CODE`）
+    会把这类任务剔除，但运行器既没在数任务时用它、也没在阶段 env 里传下去，
+    于是"跑满 225 个不可判定任务"照常进投影与阶段清单。
+    """
+
+    def test_counting_a_face_applies_the_strict_source_caliber(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import src.datasets.dataset_loader as dl
+
+        monkeypatch.delenv("AITESTER_DATASET_STRICT_INSTANCE_CODE", raising=False)
+        seen: dict[str, str | None] = {}
+
+        def fake_load(_name: str) -> list:
+            seen["caliber"] = os.environ.get("AITESTER_DATASET_STRICT_INSTANCE_CODE")
+            return []
+
+        monkeypatch.setattr(dl, "load_dataset", fake_load)
+        assert runner.dataset_signature("quixbugs") is None
+        assert seen["caliber"] == "true", "数任务时没开严格口径 ⇒ 投影按 225 个不可判定任务算钱"
+        assert os.environ.get("AITESTER_DATASET_STRICT_INSTANCE_CODE") is None, "用完必须还原宿主口径"
+
+    def test_smoke_profile_drops_a_face_with_no_admissible_tasks(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """每格 1 任务的冒烟档也不能留这种面：1 次付费调用换一个 `harness_invalid`。"""
+        monkeypatch.delenv("LLM_THINKING_MODE", raising=False)
+        monkeypatch.setattr(runner, "load_price_and_models", lambda: (["m1"], {"m1": 8.0}, "CNY"))
+        monkeypatch.setattr(runner, "resolve_dataset_faces", lambda _r: ["quixbugs", "swebench"])
+        monkeypatch.setattr(runner, "dataset_signature", lambda name: (50, "a", "b") if name == "quixbugs" else None)
+        monkeypatch.setattr(runner, "dataset_task_count", lambda name: 50 if name == "quixbugs" else None)
+        args = _args(tmp_path, ["--llm-datasets", "quixbugs,swebench", "--llm-arms", "aitester"])
+        scale = runner.llm_scale_plan(args, runner.SMOKE_TASKS_PER_CELL)
+        assert scale["datasets"] == ["quixbugs"], "无可跑任务的面必须被剔除并披露，而不是铺一格付费阶段"
+        assert scale["face_counts"] == {"quixbugs": 1}
+
+    def test_llm_stage_env_forbids_source_less_tasks(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """阶段 env 必须带严格口径：计数与执行同一规则，否则数到的分母跑不到。"""
+        monkeypatch.delenv("LLM_THINKING_MODE", raising=False)
+        monkeypatch.setattr(runner, "load_price_and_models", lambda: (["m1"], {"m1": 8.0}, "CNY"))
+        monkeypatch.setattr(runner, "resolve_dataset_faces", lambda _r: ["quixbugs"])
+        monkeypatch.setattr(runner, "dataset_task_count", lambda _n: 50)
+        monkeypatch.setattr(runner, "dataset_signature", lambda _n: (50, "quixbugs__bitcount", "quixbugs__wrap"))
+        args = _args(tmp_path, ["--skip-dataset-gate", "--llm-arms", runner.DEFAULT_LLM_ARMS])
+        stages = runner.build_full_stages(args, 1, Path(args.out), tasks_per_cell=1)
+        sweep = [s for s in stages if "__" in s["name"]]
+        assert sweep, "阶段清单为空 ⇒ 本锁在判空气"
+        for stage in sweep:
+            assert stage["env"]["AITESTER_DATASET_STRICT_INSTANCE_CODE"] == "true", stage["name"]
 
 
 class TestFacesRunToTheirMaximum:
@@ -565,3 +750,131 @@ class TestProgressReading:
     def test_render_shapes(self) -> None:
         assert "50.0%" in runner.ProgressState(total=4, done=2).render()
         assert "行输出" in runner.ProgressState(output_lines=7).render()
+
+
+class TestRetryNarrowsToFailingNodeIds:
+    """重跑必须真的重跑失败用例——`--lf` 做不到，因为它读仓库根的共享缓存。
+
+    现场（2026-11-04 最小批）：第 1 轮红 2 条，第 2 轮 `--lf` 打出
+    `7 workers [0 items]`、exit=5。`lastfailed` 存在仓库根 `.pytest_cache` 里，任何
+    穿插的 pytest 运行都会改写它，于是"重跑"变成"什么都没跑"——四轮耗光后给出一个与
+    套件无关的红。改判据为"跟着本轮日志的短摘要走"。
+    """
+
+    def test_failed_node_ids_reads_bare_quoted_and_error_lines(self, tmp_path: Path) -> None:
+        log = tmp_path / "attempt1.log"
+        log.write_text(
+            "collected 3 items\n"
+            "FAILED tests/test_a.py::test_one - assert 0 >= 2\n"
+            "FAILED 'tests/test_b.py::TestC::test_two[x y-z]' - Failed: ...\n"
+            "ERROR tests/test_d.py - FileNotFoundError: no such file\n"
+            "FAILED tests/test_a.py::test_one - duplicate line\n",
+            encoding="utf-8",
+        )
+        assert runner.failed_node_ids(log) == [
+            "tests/test_a.py::test_one",
+            "tests/test_b.py::TestC::test_two[x y-z]",
+            "tests/test_d.py",
+        ]
+
+    def test_failed_node_ids_ignores_prose_and_missing_log(self, tmp_path: Path) -> None:
+        """散文里的 FAILED/ERROR 不算用例；日志不存在不得抛。"""
+        log = tmp_path / "noise.log"
+        log.write_text(
+            "FAILED to initialize plugin\n"
+            "ERROR: not found: /tmp/x/test_y.py::test_z\n"
+            "Some body line mentioning FAILED tests/test_real.py\n",
+            encoding="utf-8",
+        )
+        assert runner.failed_node_ids(log) == []
+        assert runner.failed_node_ids(tmp_path / "absent.log") == []
+
+    def test_narrow_command_to_replaces_only_the_node_ids(self) -> None:
+        command = [
+            "/venv/bin/python",
+            "-m",
+            "pytest",
+            "tests/test_a.py::test_one",
+            "tests/test_b.py::test_two",
+            "-n",
+            "7",
+            "--timeout=3600",
+        ]
+        assert runner.narrow_command_to(command, ["tests/test_b.py::test_two"]) == [
+            "/venv/bin/python",
+            "-m",
+            "pytest",
+            "tests/test_b.py::test_two",
+            "-n",
+            "7",
+            "--timeout=3600",
+        ]
+
+    def test_narrow_command_to_returns_none_for_non_pytest_stages(self) -> None:
+        assert runner.narrow_command_to(["make", "gates"], ["tests/test_a.py::test_one"]) is None
+
+    def test_second_attempt_runs_only_the_failing_case(self, tmp_path: Path) -> None:
+        out = tmp_path / "logs"
+        out.mkdir()
+        (tmp_path / "test_narrow_probe.py").write_text(
+            "def test_alpha():\n    assert True\n\n\ndef test_beta():\n    assert False\n", encoding="utf-8"
+        )
+        env = {k: v for k, v in os.environ.items() if k != "PYTEST_ADDOPTS"}
+        result = runner.run_stage(
+            name="narrow",
+            command=[
+                sys.executable,
+                "-m",
+                "pytest",
+                "test_narrow_probe.py::test_alpha",
+                "test_narrow_probe.py::test_beta",
+                "-p",
+                "no:cacheprovider",
+                "--tb=no",
+                "-rf",
+            ],
+            env=env,
+            cwd=tmp_path,
+            log_dir=out,
+            retries=1,
+            heartbeat_s=3600,
+            tick_s=0.2,
+        )
+        first = (out / "narrow.attempt1.log").read_text(encoding="utf-8")
+        second = (out / "narrow.attempt2.log").read_text(encoding="utf-8")
+        assert "collected 2 items" in first, first
+        assert "1 failed" in first and "1 passed" in first, first
+        assert "1 item" in second and "2 items" not in second, second
+        assert "test_alpha" not in second, "第 2 轮把已通过的用例又跑了一遍 ⇒ 没收窄"
+        assert "test_beta" in second, "第 2 轮没跑失败用例 ⇒ 收窄后清单为空"
+        assert result.attempts == 2
+        assert any("只跑上一轮失败的 1 个用例" in note for note in result.notes), result.notes
+
+    def test_unparsable_failure_falls_back_to_full_rerun(self, tmp_path: Path) -> None:
+        """崩溃/用法错误没有 FAILED 行 ⇒ 只能整条重跑，不能收窄成空清单。"""
+        out = tmp_path / "logs"
+        out.mkdir()
+        (tmp_path / "test_probe.py").write_text("def test_alpha():\n    assert True\n", encoding="utf-8")
+        env = {k: v for k, v in os.environ.items() if k != "PYTEST_ADDOPTS"}
+        result = runner.run_stage(
+            name="bogus",
+            command=[sys.executable, "-m", "pytest", "test_probe.py::test_absent", "-p", "no:cacheprovider", "--tb=no"],
+            env=env,
+            cwd=tmp_path,
+            log_dir=out,
+            retries=1,
+            heartbeat_s=3600,
+            tick_s=0.2,
+        )
+        assert result.exit_code != 0
+        assert result.attempts == 2
+        assert any("整条重跑" in note for note in result.notes), result.notes
+
+    def test_runner_source_no_longer_appends_lf(self) -> None:
+        """防止有人把 `--lf` 加回来：源码里不得再出现该旗标形式（说明性提及除外）。"""
+        # 仓库根取自本文件位置，不用 `sys.path[0]`：xdist 各 worker 的首个 sys.path
+        # 条目随导入顺序漂移（实测 2026-11-04 认证跑读到 scripts/gates 下），
+        # 拿它当仓库根会让本锁按运行顺序时红时绿。
+        text = (REPO_ROOT / "scripts" / "run_all_tests.py").read_text(encoding="utf-8")
+        assert '"--lf"' not in text
+        assert "narrow_command_to" in text
