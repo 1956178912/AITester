@@ -99,7 +99,10 @@ jobs:
           LLM_1_MODEL_NAME: ${{ secrets.LLM_1_MODEL_NAME }}
         run: |
           if [ "$AITESTER_SMOKE_LLM" = "true" ]; then
-            python run_smoke_llm.py
+            # fresh-clone 修复轮（2026-11-06）：脚本实际路径在 experiments/ 下——
+            # 原引用 `python run_smoke_llm.py`（仓库根）在 push 路径恒走跳过分支
+            # 而从未暴露；周日 schedule 自动开真冒烟时将因 can't open file 秒红。
+            python experiments/run_smoke_llm.py
           else
             echo "AITESTER_SMOKE_LLM != true，跳过 LLM 冒烟（历史口径零 LLM 成本）"
             python -c "print('smoke-llm skipped (AITESTER_SMOKE_LLM disabled)')"
