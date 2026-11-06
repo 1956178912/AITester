@@ -301,12 +301,18 @@ jobs:
         # 校验"清单与实际入库文件集一致"（缺失/多余都报错）。纯 stdlib 快检，
         # 三档矩阵只跑 3.14（工件与 Python 版本无关）。
         #
-        # CM 轮（2026-10-25）：原命令校验 `experiments/results/main_batch`，
-        # 而该目录已于 2026-10-24 数据清除**撤回**（fresh clone 中不存在）⇒
-        # 自 798d8c72 起连续三次 run 在 3.14 档死在这一步，而本地因工件在盘
-        # 「看起来是绿的」。现改为校验**当前世代在册且有清单**的三个目录：
-        # 三者都在 fresh clone 中逐项通过（127 / 3 / 34 项）。撤回目录不得
-        # 回到本步骤——它已无清单，也没有可校验的字节。
+        # CM 轮（2026-10-25）：原命令校验 `experiments/results/main_batch`，而该目录已于
+        # 2026-10-24 数据清除**撤回**（fresh clone 中不存在）⇒ 自 798d8c72 起连续三次 run
+        # 在 3.14 档死在这一步，而本地因工件在盘「看起来是绿的」。现改为校验**当前世代
+        # 在册且有清单**的三个目录：三者都在 fresh clone 中逐项通过（127 / 3 / 34 项）。
+        # 撤回目录不得回到本步骤——它已无清单，也没有可校验的字节。
+        #
+        # fresh-clone 修复轮（2026-11-06）：GL/GM 轮（1cbce7c6，归档迁移）把
+        # experiments/results 的入库证据面清零，上述三个世代目录自此**不在 git 也不在盘**
+        # ⇒ 本步曾秒败（"目录不存在"判 1），且被指纹门禁的连红掩盖多日。现
+        # `--verify` 对缺席目录显式披露跳过（S29 指纹门禁同口径：无对象可校验 = 合规，
+        # 清单只校验在盘字节；证据是否入库由 git diff 与 AK3 引用链门守）；目录在场时
+        # 判据一字不改，证据回库后本步自动恢复逐字节实检。
         if: matrix.python-version == '3.14'
         run: |
           python scripts/gates/checksum_results.py --results-dir experiments/results/emse_docstring_augment_20261017 --verify

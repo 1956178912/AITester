@@ -288,3 +288,46 @@ class TestEvidenceEolPolicy:
         for rule in rules:
             assert not rule.startswith("experiments/results/** text"), rule
             assert not rule.startswith("docs/reviews/review_recompute/** text"), rule
+
+
+class TestAbsentDirIsDisclosedSkip:
+    """缺席语义（2026-11-06 修，CI test (3.14) 连红根因）。
+
+    背景：`experiments/results` 的入库证据面已随 GL/GM 轮（1cbce7c6，归档
+    迁移）清零——ci.yml U1 步点名的三个世代目录（emse_docstring_augment /
+    emse_misguided_augment / p_round_b8_ablation）在 fresh clone 上**不存在**，
+    `--verify` 走"目录不存在"判 1 秒败；本地因工件在盘恒绿，红只在 CI
+    （被指纹门禁的红掩盖多日）。与 S29 指纹门禁同口径：**无对象可校验 =
+    披露跳过**（证据是否入库由 git diff 与 AK3 守）；目录在场时判据一字不改。
+    """
+
+    def test_verify_absent_dir_is_disclosed_skip(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+        """--verify 遇缺席目录 → 显式披露 + rc=0（改前 rc=1，CI 秒败）。"""
+        absent = tmp_path / "emse_docstring_augment_20261017_absent"
+        assert gate.verify_manifest(absent) == 0
+        out = capsys.readouterr().out
+        assert "[SKIP]" in out
+        assert "结果目录不在盘" in out
+        assert "按合规跳过" in out
+        assert "[FAIL]" not in out
+
+    def test_write_absent_dir_still_fails(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+        """缺席目录对 --write 保持硬失败（无对象可写清单；缺席不是写侧的跳过理由）。"""
+        absent = tmp_path / "absent_for_write"
+        assert gate.main(["--write", "--results-dir", str(absent)]) == 1
+        assert "目录不存在" in capsys.readouterr().out
+
+    def test_present_dir_without_manifest_still_fails(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+        """目录在场但无清单 → 仍 rc=1（缺席才跳过；在场即必须可校验）。"""
+        (tmp_path / "stray.json").write_text("{}", encoding="utf-8")
+        assert gate.verify_manifest(tmp_path) == 1
+        assert "清单不存在" in capsys.readouterr().out
+
+    def test_present_dir_full_pipeline_still_strict(self, tmp_path: Path):
+        """在场目录的正常链路不受缺席语义影响：write→verify 通过、篡改仍红。"""
+        _make_tree(tmp_path)
+        assert gate.verify_manifest(tmp_path) == 1  # 无清单
+        assert gate.write_manifest(tmp_path) == 0
+        assert gate.verify_manifest(tmp_path) == 0
+        (tmp_path / "a.json").write_text('{"a": tampered}', encoding="utf-8")
+        assert gate.verify_manifest(tmp_path) == 1

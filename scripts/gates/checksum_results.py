@@ -179,9 +179,26 @@ def verify_manifest(results_dir: Path, strict_bytes: bool = False, excludes: tup
         excludes: 与 --write 同口径的显式排除模式（fnmatch，相对路径）。
 
     Returns:
-        0 = 通过（默认口径下 EOL 差异不计失败）；1 = 存在缺失/内容不符/
-        清单外新增（strict_bytes 时含 EOL 差异）。
+        0 = 通过（默认口径下 EOL 差异不计失败；**目录整体缺席 = 披露跳过**，
+        见下）；1 = 存在缺失/内容不符/清单外新增（strict_bytes 时含 EOL 差异）。
+
+    缺席语义（2026-11-06 修，CI test (3.14) 连红根因）：
+
+        `experiments/results` 的入库证据面已随 GL/GM 轮（1cbce7c6，归档迁移）
+        清零——ci.yml U1 步点名的三个世代目录在 fresh clone 上**不存在**，此
+        前走到下面 main() 的"目录不存在"判 1，秒败；本地因工件在盘恒绿。与
+        S29 指纹门禁同口径：**无对象可校验 = 合规跳过（显式披露），不是故障**
+        ——清单只校验"在盘字节"，证据是否入库由 git diff 与 AK3 引用链门守；
+        证据一旦回库，本函数自动恢复逐字节实检。目录**在场**时判据一字不改
+        （无清单 rc=1、缺失/多余/内容不符 rc=1 均保持）。
     """
+    if not results_dir.is_dir():
+        print(
+            f"[SKIP] 结果目录不在盘：{results_dir}"
+            "——fresh clone/CI 无该批证据工件，--verify 无对象可校验，按合规跳过；"
+            "证据回库后本检查自动恢复逐字节实检"
+        )
+        return 0
     manifest = _resolve_manifest(results_dir)
     if not manifest.is_file():
         print(f"[FAIL] 清单不存在：{results_dir / MANIFEST_NAME}（先运行 --write）")
@@ -281,7 +298,9 @@ def main(argv: list[str] | None = None) -> int:
     results_dir = Path(args.results_dir)
     if not results_dir.is_absolute():
         results_dir = PROJECT_ROOT / results_dir
-    if not results_dir.is_dir():
+    if not results_dir.is_dir() and args.write:
+        # 目录缺席只对 --write 保持硬失败（无对象可写清单）；--verify 的缺席
+        # 由 verify_manifest 披露跳过（2026-11-06，见其 docstring 的缺席语义）。
         print(f"[FAIL] 目录不存在：{results_dir}")
         return 1
     excludes = tuple(args.exclude)

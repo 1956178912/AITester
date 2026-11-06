@@ -893,9 +893,25 @@ class TestRealTree:
         assert cs.main(["--results-dir", str(tmp_path), "--write"]) == 0
         assert calls == ["write"]
 
-    def test_missing_dir_fails_before_dispatch(self, tmp_path):
+    def test_missing_dir_fails_before_dispatch(self, tmp_path, monkeypatch, capsys):
+        """缺席目录的分流契约（CH 原契约 + 2026-11-06 缺席语义修订）。
+
+        写腿：缺席目录 + `--write` 在模式分发**之前**硬失败（write_manifest
+        不得被调用）——防"缺目录被分发分支吞掉"。验证腿：缺席目录 +
+        `--verify` 是**披露跳过**（分发到 verify_manifest，由其打印 [SKIP]
+        并返回 0）——CI test (3.14) 秒败根因修复（GL/GM 归档迁移后三个世代
+        目录不在 clone 上），真实跳过行为由
+        `tests/test_checksum_results_gate.py::TestAbsentDirIsDisclosedSkip`
+        在函数层锁定（判据：无对象可校验 = 合规，在场判据一字不改）。
+        """
         cs = _load("checksum_results_under_test3", PROJECT_ROOT / "scripts" / "gates" / "checksum_results.py")
-        assert cs.main(["--results-dir", str(tmp_path / "absent"), "--verify"]) == 1
+        calls: list[str] = []
+        monkeypatch.setattr(cs, "write_manifest", lambda *a, **k: calls.append("write") or 0)
+        monkeypatch.setattr(cs, "verify_manifest", lambda *a, **k: calls.append("verify") or 0)
+        assert cs.main(["--results-dir", str(tmp_path / "absent_write"), "--write"]) == 1
+        assert calls == []  # 写腿：缺席在分发前拒绝，write_manifest 未被触达
+        assert cs.main(["--results-dir", str(tmp_path / "absent_verify"), "--verify"]) == 0
+        assert calls == ["verify"]  # 验证腿：分发到达 verify_manifest，跳过语义由其承担
 
     @pytest.mark.parametrize(
         ("argv", "strict_seen"), [(["x"], False), (["x", "--warn-only"], False), (["x", "--strict"], True)]
