@@ -1,6 +1,6 @@
 # 更新日志
 
-> 最后更新：2026-11-05
+> 最后更新：2026-11-06
 
 本文件只记录对外可见的变化；逐轮历史见下方归档。
 
@@ -52,6 +52,7 @@
 - 生成文本的货币符号改由价目表派生（第 7 条的显示层收尾）：`experiments/oracle_examples_replay.py`、`experiments/run_b8_injection.py`（两处 `≤$0.3` + help 文本 + 任务级 budget 标签）、`experiments/emse_stats_extensions.py` 成本单元格、`experiments/analyze_t1_b2_main_batch.py`（`_usd_text` 默认值、表头改为 `成本(人民币, 估算)`、`成本/task` 标签）共 5 处硬写 `$` 统一取 `pricing.currency_symbol(table_currency_status())`；三处锁 `$` 字面量的测试同步改为派生 `MONEY`，并补 `"$None" not in` 负对照——符号常量化后这些负断言否则会恒真失效。
 
 ### Fixed
+- 依赖安全升级 oauthlib 4.0.0 → 4.0.1（2026-11-06）：`check_dependency_audit` 联网真实审计（不带 `--ignore-vuln`）抓到新 advisory CVE-2026-49272（GHSA-3jp2-3mrg-2vxc，2026-11-05 披露）：OAuthLib 的 RFC 8628 设备码工作流不校验 `device_code`，知道有效 client_id 即可换取 bearer token（CVSS 8.5；受影响区间 3.3.0 起、4.0.1 之前，修复版 4.0.1）。本仓 oauthlib 是传递依赖（kubernetes → requests-oauthlib → oauthlib），`requirements.txt` 无直接声明、`src/` 零 import、也不运行任何 OAuth 令牌端点 ⇒ 漏洞面不可达；但登记表规则是「advisory 已有修复版 ⇒ 不留豁免、直接升级」，故按规则升级 lock（ci.yml `--ignore-vuln` 清单与豁免登记表零改动）。
 - `no_repair_attempted` 的边界更正（B6 追加，2026-11-05）：判据原要求 `iteration==0`，那是按最小批抽样形态写死的边界。冒烟实测 4/50 行为 `iterations=1` 且补丁与修复历史皆空（`single_agent × {tge, ult} × 两模型`），仍折进 `unknown + uncategorized`。产物是否出现过看补丁与修复历史，不看迭代计数 ⇒ 删除该条件，兜底桶只留真正无信息的行。
 - 数据集闸从"只铺不读"变成选面输入，并新增测试材料严格口径（B8，2026-11-05）：冒烟重跑抓到两条同源缺陷。
 其一，`check-dataset swebench` 因 225 个任务里 8 个不可判整面判红（2 个无被测源码、6 个 `test_code` 里没有 Python 用例——sqlfluff 那批的 test_patch 只动夹具文件），而那 6 个仍留在严格源码口径的分母里 ⇒ 会为跑不出判定的任务付费。现新增 `AITESTER_DATASET_STRICT_TEST_CODE`（默认关，判据直接取 `validate_task`，不另写第二套谓词）：这类任务具名剔除、不进分母、不付费；剔除清单 `strict_skipped_test_task_ids` 与源码清单分开（原因可分辨），`strict_skipped_count` 合并计数（缺口可见）。其二，`dataset_gate_*` 只作为阶段铺在 LLM 段之前、没有任何代码读它的退出码 ⇒ 红面照样进入付费段，而整轮 rc 只因它变红 ⇒ 冒烟证据不可用、full 档开不了跑。现在闸结果进入 `llm_scale_plan(gate=...)` 的选面：红面剔除并 `⛔` 点名，`gate_dropped` 进投影，闸不再是阶段也就不再毒化 rc。口径变量收拢为 `protocol_caliber_env()` 单一来源，使"数面 / 闸 / 实跑"三者同口径。实测（真数据）：默认口径下 `check-dataset swebench` 仍 rc=1（DU 轮"0=无问题"契约不动），跑批口径 rc=0 且加载 217/225、10 条剔除逐个点名；`--estimate-llm` 保持纯算式不跑闸 ⇒ 投影是上界，实跑只会更便宜不会更贵。
