@@ -2,10 +2,9 @@
 
 > Last updated: 2026-11-04 · 中文: [COST_MODEL.md](COST_MODEL.md)
 
-This file defines cost **calculation calibers, units and limits** only. The single
-sources of truth for prices and batch readings are
-[`experiments/price_table.json`](../experiments/price_table.json) and
-[`BASELINE.yaml`](../BASELINE.yaml); this file does not copy batch cost numbers.
+This file defines cost **calculation calibers, units and limits** only. The single sources of
+truth for prices and batch readings are [`experiments/price_table.json`](../experiments/price_table.json)
+and [`BASELINE.yaml`](../BASELINE.yaml); this file does not copy batch cost numbers.
 
 ## 1. Pricing Sources
 
@@ -30,11 +29,10 @@ they must not be counted as 0 in averages, nor extrapolated.
 cost_task = Σ_calls ( input_tokens × price_in + output_tokens × price_out ) / 1_000_000
 ```
 
-- Units: tokens as counts; `price_in` / `price_out` in the **registered currency** of
-  the price table (currently CNY) per million tokens; the amount is in that currency.
-  Production accounting uses `pricing.estimate_in_table_currency()`, which returns
-  `(amount, currency, source)` and performs **no foreign-exchange conversion** (this
-  project has no FX source of truth).
+- Units: tokens as counts; `price_in` / `price_out` in the **registered currency** of the price
+  table (currently CNY) per million tokens; the amount is in that currency. Production accounting
+  uses `pricing.estimate_in_table_currency()`, which returns `(amount, currency, source)` and
+  performs **no foreign-exchange conversion** (this project has no FX source of truth).
 - `pricing.estimate_usd()` keeps its historical "USD only" contract as the dollar
   column entry point; with the table in CNY it returns `unpriced` for those models.
   Callers and reports must **not** print a CNY amount with a dollar sign.
@@ -42,17 +40,20 @@ cost_task = Σ_calls ( input_tokens × price_in + output_tokens × price_out ) /
 - Calls are counted per real LLM call: the multi-agent path is Planner + Generator +
   one Debugger per iteration + optional FaultLocalizer / ExpertPool; baseline paths
   are usually a single generation call.
-- `LLM_THINKING_MODE` defaults to **`disabled`** (caliber corrected by the user on
-  2026-11-04). Chain-of-thought bills as output and is the dominant cost term: on one
-  identical Generator call, thinking-on emitted 10,859 tokens (9,664 of them reasoning)
-  for deepseek and 9,640 (8,407 reasoning) for mimo, versus 709 and 342 with thinking
-  off — i.e. −92.4% / −94.1%. `reasoning_effort` is **not** a cross-model equivalent
-  dial (measured: mimo's `max` tier came out shorter than its default), so batch
-  comparisons fix the thinking key only.
+- `LLM_THINKING_MODE` defaults to **`disabled`** (caliber corrected by the user on 2026-11-04).
+  Chain-of-thought bills as output and is the dominant cost term: on one identical Generator
+  call, thinking-on emitted 10,859 tokens (9,664 of them reasoning) for deepseek and 9,640
+  (8,407 reasoning) for mimo, versus 709 and 342 with thinking off — i.e. −92.4% / −94.1%.
+  `reasoning_effort` is **not** a cross-model equivalent dial (measured: mimo's `max` tier came
+  out shorter than its default), so batch comparisons fix the thinking key only.
 - Cost is a **standard-price estimate**, not a provider invoice; reports must state
   both `source` and `as_of`.
 - Batch cost = sum of task costs; task mean = batch cost / number of tasks. Failed or
   timed-out tasks keep their incurred calls and are not reallocated to successes.
+  "Number of tasks" is the count **actually loaded and dispatched in this run**: tasks dropped
+  at load time by the strict calibers (`AITESTER_DATASET_STRICT_INSTANCE_CODE` /
+  `AITESTER_DATASET_STRICT_TEST_CODE`) never incur a call, so they belong to neither numerator nor
+  denominator — dividing by the *face size* (e.g. swebench's 225) would spread an unspent gap into cost.
 
 ## 3. Caching and Batch Discounts
 
@@ -95,6 +96,5 @@ left alone: the second paid call on bad JSON / mismatched parametrize (one retry
 | Forced regeneration when all-green | `DETECTION_FIRST_ENABLE` / `MAX_REGENERATIONS` | One fewer paid sample per task | RT1 confound: off only if the net effect is ~0 |
 | Localizer call | `FAULT_LOCALIZER_ENABLE` (on by default) | One fewer call per task | Its contribution to detection |
 
-If a reading here conflicts with `BASELINE.yaml`, the latter is the registration
-authority: recheck the price-table `as_of` and the batch `usage`, then update the
-document and the register.
+If a reading here conflicts with `BASELINE.yaml`, the latter is the registration authority:
+recheck the price-table `as_of` and the batch `usage`, then update the document and the register.

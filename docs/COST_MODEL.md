@@ -45,6 +45,9 @@ cost_task = Σ_calls ( input_tokens × price_in + output_tokens × price_out ) /
 - 成本是**标准价估算**，不是供应商账单；报告须同时给出 `source` 与 `as_of`。
 - 批次成本 = 各任务成本之和；任务均值 = 批次成本 / 任务数。失败或超时任务
   按已发生调用计入，不重摊到成功任务。
+  `任务数` 是**本轮实际加载并发起调用的任务数**：严格口径（`AITESTER_DATASET_STRICT_INSTANCE_CODE` /
+  `AITESTER_DATASET_STRICT_TEST_CODE`）在加载期剔除的任务从不付费，因此既不在分子也不在分母——
+  均值不得改用「面规模」（如 swebench 的 225）当分母，那会把未付费的缺口摊成成本。
 
 ## 3. 缓存与批量折扣
 

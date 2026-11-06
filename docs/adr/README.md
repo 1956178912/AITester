@@ -36,6 +36,9 @@
 | [0033](0033-packaged-test-tree-flat-import-artifact.md) | 测量伪影第四起——判分树包结构 vs 平铺 import（detection 构造性恒 0） | 已采纳（2026-10-10 修复，2026-10-15 补登记） | 判分树只提供 `python_programs/{module}.py` 包结构、生产沙箱平铺写 `{module}.py` ⇒ 扁平 import 在判分树 `ModuleNotFoundError`/rc=2 ⇒ detection **构造性恒 0**；9/9 双侧 rc=2 → 修双布局后 F2P 0/7→6/7；E4 重结算 aitester 0.0%→45.9% vs df 83.8%（p=0.0005，方向不变）；三段判定逐字未改且有回归锁定 | `experiments/_m1_metrics.py`、`src/datasets/synthetic_dataset.py`、`docs/preregistration.md` |
 | [0034](0034-orchestration-search-freeze-and-unblock.md) | 编排自动搜索（16 臂 bandit）冻结登记——工程骨架就绪、未经实跑验证 | 已采纳（冻结；解锁条件在案） | 评审 A-11 审计歧义关闭：实现+测试矩阵在场但**从未实跑**（无工件）；冻结期间禁止"自动搜索增益"类表述；解锁五条件=预注册先落盘 / 等预算对照（E6 教训）/ 前置闸全绿 / 终点跑批前后一致 / 多重比较校正；优先级低于 B1/T-1/P1；下一投稿周期前不跑则删除或降格 experimental | `src/graph/orchestration_search.py`、`experiments/run_orchestration_search.py`、`tests/test_orchestration_search_matrix.py` |
 | [0035](0035-self-recursive-clause-binding.md) | SpecExpr 被测函数自递归子句——目标函数名入绑定上下文 | 已采纳 | 把 `target_function` 作为受限自调用注入 SpecExpr DSL 的绑定上下文与调用白名单（`_WhitelistVisitor.extra_call_names`），使 `fibonacci(5) == 5` 一类自递归规约（语料 6 实例：fibonacci×4/gcd×1/factorial×1）从「被 unsupported_operator 拒绝」变为「可编译为确定性 oracle 断言」；注入面只扩到被测函数自身（其余任意名字照旧危险调用门拒）；自指真值性与既有 `x == x` 恒真子句同一风险类、递归不终止由执行器 30s 超时兜底；与 df_spec 负结果的关系已限定（值取决于 Planner 是否从缺陷代码推导出正确属性，属规格优先路线通用风险） | `src/specs/spec_ir_v2.py`、`tests/test_spec_ir_v2.py` |
+| [0036](0036-v1-release-criteria.md) | 1.0.0 发布判据——「前沿领先」在测量廉洁纪律内的操作化定义 | 已接受 | 1.0.0 = 判据 A（测量面前沿）与判据 C（发布机械）全部关闭且干净树全链复跑绿；判据 B（研究面前沿）中需外部授权/人工决策的项目不阻塞 1.0.0，以 ADR + 论文占位 + README 已知限制诚实披露；领先性不靠夸大主张，落在测量装置本身与声明可追溯性 | `docs/adr/0036-v1-release-criteria.md`、`README.md` 已知限制 |
+| [0037](0037-in-graph-gold-verdict-and-material-memo.md) | 图内 gold 证据裁决与官方测试材料的复用边界 | 已采纳（2026-11-06，代码落地 2026-11-05） | 证据门 gold 支此前**永不命中**（`repo_verification` 只在图外写）⇒ 正确补丁按无证据回滚、该轮调用白付；现选"把 gold 前移"：等级不足时把数据集官方测试跑在打补丁源码上，全绿升 gold 放行，红/不可判定/无材料一律仍拒；开关 `PATCH_EVIDENCE_OFFICIAL_TESTS_ENABLE` 默认关（ADR-0003），gold 答案键白名单剔除不进 state；只有材料级阻断（exec_error/runner_unavailable/no_effective_pass/invalid_module）可按任务 memo，red 与 gold 不得复用 | `src/tools/patch_evidence.py`、`src/tools/detection_gates.py`、`src/graph/nodes.py`、`src/graph/state.py` |
+| [0038](0038-smoke-fingerprint-binds-concurrency-and-face-selection.md) | 冒烟证据的适用边界——并发决议、选面与协议取值同属一次配置 | 已采纳（2026-11-06，代码落地 2026-11-05） | 183 s/任务外推满量档 74.6 小时 ≫ 12 小时封顶，而并发钉死常数 4；4 并发跑出的冒烟不得为 40 并发的付费档担保 ⇒ 每格并发（厂商额度 80% ∩ 机器闸 ∩ `--llm-parallel`）逐模型决议并写进指纹；数据集闸由"阶段"改为"选面输入"（红面剔除并点名，不再毒化整轮 rc）；面计数/闸/实跑三处口径同源于 `protocol_caliber_env()`；`--out`/`--jobs` 仍不进指纹 | `scripts/run_all_tests.py`、`src/config/config_generator.py`、`config.py` |
 
 ## 状态约定
 
@@ -46,8 +49,8 @@
 
 ## 维护惯例
 
-1. 新增 ADR 用下一个可用编号（当前 0001–0005、0011–0035 已用 → 下一个
-   0036；0006–0010 为历史保留段——AL 批次经 git 历史核实**从未被使用**
+1. 新增 ADR 用下一个可用编号（当前 0001–0005、0011–0038 已用 → 下一个
+   0039；0006–0010 为历史保留段——AL 批次经 git 历史核实**从未被使用**
    （`git log --diff-filter=A` 零命中），为避免与外部引用错位不再回收，
    新 ADR 勿占用该段）；
 2. 文件命名 `NNNN-<kebab-slug>.md`；

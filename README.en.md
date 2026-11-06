@@ -24,7 +24,7 @@ The research question is not "are multiple agents better", but "can detection-fi
 - The repair metric is **39.31%** (v2, 57/145 replayable rows; independent gold adjudication) after two rounds of measurement-caliber corrections (ADR-0021/0027/0029). The earlier **repair=0** reading was a **measurement artifact** caused by patch-fence residue and unmaterialized cross-file tasks, not a capability reading. Caliber splits and recomputation are documented in the [repair caliber matrix](docs/design/repair_caliber_matrix.md).
 - **The E7 human adjudication has not been executed**: the protocol and preregistration are frozen ([preregistration](docs/preregistration.md)); its results appear in no released reading.
 - **SWE-bench Lite covers pipeline capability only; there is no citable pass rate.** Quoting its pass_rate is misuse.
-- The main batches use a **single model family** (user-configured OpenAI-compatible endpoints; only the official DeepSeek endpoint is built in). Cross-model extrapolation is out of scope.
+- The main batches use a **single model family** (user-configured OpenAI-compatible endpoints; only the official DeepSeek endpoint is built in). Cross-model extrapolation is out of scope. The two-model end-to-end profile of `scripts/run_all_tests.py` (`deepseek-flash` × `mimo-v2.6-pro`, 5 arms × 5 faces) only answers "does the assembly hold": one task per cell, with per-cell concurrency resolved per model from provider allowance ∩ machine cap ∩ `--llm-parallel` and hashed into the smoke fingerprint. It is not a cross-model capability reading, so the limitation above still stands.
 
 ## Quick Start
 

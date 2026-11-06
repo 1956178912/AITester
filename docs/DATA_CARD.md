@@ -27,7 +27,8 @@ BugsInPy 无 SPDX 许可证〔L2 决策门槛新登记〕；AA2：§2 重复采�
 | QuixBugs（Python 子集，完整 50 程序） | `quixbugs` | ✅ 多批次在用（D1 A/B / spec_ir pilot / 新门校准 n=50；定位仍为 L1——近饱和+记忆污染声明见 §4） | 真实缺陷阶梯 L1 |
 | ULT（UnLeakedTestBench，本地克隆） | `ult` | ✅ 子集在用（ult_lite46 / specir 探针 / 新门校准 / Mut@k 子集，n=25–46；**detection 口径适配性另议**——生成测试零检出 0/45、0/24，gold 断言实测可在缺陷码上变红，属"LLM 测试不产红"） | 真实基准（mutation 主指标 Mut@k / 周期复杂度过滤 cyclomatic ≥10） |
 | BugsInPy | `bugsinpy` | 加载器就绪，**零实跑** | 真实缺陷阶梯 L2 |
-| SWE-bench Lite | `swe_bench` | 历史 0/20 冒烟（**2026-10-13 勘误：系 API 429 限流基础设施故障，无有效能力结论**） | 仓库级（靶点错位，见下） |
+| Defects4J-Python | `d4j_py` / `defects4j_python` | 加载器就绪，**本机 0 条**（数据未下载；加载器提示的下载源为 `https://github.com/rustcodex/defects4jpython`，其可达性、许可与泄漏控制**均未核实**——本卡 §5 的登记要求因此尚未满足） | 真实缺陷阶梯 L2 候选（未实跑，不承载任何读数） |
+| SWE-bench Lite | `swe_bench` | 历史 0/20 冒烟（**2026-10-13 勘误：系 API 429 限流基础设施故障，无有效能力结论**）；2026-11-05 两模型贯通冒烟 10 个 swebench 格**全部 `harness_invalid`**（基线 P2P 不达标 ⇒ 0 调用 / 0 判定 / 0 花费）；跑批严格口径下 217/225 可判（8 个剔除项逐个点名进 provenance，`check-dataset swebench` rc 由 1 转 0） | 仓库级（靶点错位，见下） |
 
 ## 2. 合成模板库（历史主批与当前确认性主批基准）
 

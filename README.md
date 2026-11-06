@@ -31,6 +31,9 @@ AITester 是一个研究用系统，用 LangGraph 编排 Planner → Generator �
 - **SWE-bench Lite 只有链路能力，没有可引用通过率**；引用其 pass_rate 属误用。
 - 主批次使用**单一模型家族**（用户配置的 OpenAI 兼容端点；内置仅 DeepSeek 官方端点），
   跨模型外推不在已测范围内。
+  `scripts/run_all_tests.py` 的两模型贯通档（`deepseek-flash` × `mimo-v2.6-pro`，5 臂 × 5 面）
+  只回答"装配是否贯通"：每格 1 个任务、每格并发由厂商额度 80% ∩ 机器闸 ∩ `--llm-parallel`
+  逐模型决议并写进冒烟指纹。它不构成跨模型能力读数，上面这条限制因此仍然成立。
 
 ## 快速开始
 
