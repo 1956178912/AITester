@@ -484,6 +484,59 @@ class TestModelFingerprintGate:
         """点名路径不存在 → 退出码 2（用法错误，与"未锁定"区分）。"""
         assert gate.main([str(tmp_path / "nope.json")]) == 2
 
+    # ── 默认结果目录缺席 = 合规态（2026-11-06 修，CI test 三版本全红根因）──
+    # 背景：experiments/results 完全不入库（GL/GM 轮起入库面清零）⇒ fresh
+    # clone / CI 上默认扫描面目录**不存在**，collect_result_files 把它当
+    # missing → main() 在空扫描面判定之前就 rc=2。CI 步骤注释声称的"空扫描
+    # 面放行由脚本默认逻辑承担"被这条路径证伪：本地绿（作者机目录在盘）、
+    # CI 红（clone 无目录）整整四个提交无人归因。修复：无参调用且默认目录
+    # 缺席 ⇒ 与空扫描面同合规路径（先披露成因）；rc=2 只留给显式点名。
+
+    def test_gate_default_dir_absent_is_compliance_not_usage_error(self, gate, tmp_path, monkeypatch, capsys):
+        """无参调用 + 默认目录缺席 → 披露成因 + rc=0（改前 rc=2，CI 永久红）。"""
+        monkeypatch.setattr(gate, "DEFAULT_RESULTS_DIR", tmp_path / "results_absent")
+        monkeypatch.setattr(gate, "_CORPUS_SURFACE_CACHE", None)
+        assert gate.main([]) == 0
+        out = capsys.readouterr().out
+        assert "默认结果目录不在盘" in out
+        assert "按空扫描面处理" in out
+        # 合规态仍要走完整披露：无批次不得读成"语料已审"
+        assert "语料面" in out
+        assert "近期无新批次可验" in out
+        assert "[FAIL]" not in out and "[ERROR]" not in out
+
+    def test_gate_default_dir_absent_does_not_hijack_explicit_targets(self, gate, tmp_path, monkeypatch, capsys):
+        """默认目录缺席但显式点名了文件 → 照常实检（缺席只影响无参调用）。"""
+        monkeypatch.setattr(gate, "DEFAULT_RESULTS_DIR", tmp_path / "results_absent")
+        monkeypatch.setattr(gate, "_CORPUS_SURFACE_CACHE", None)
+        path = _write_result_json(
+            tmp_path,
+            _payload_with_fingerprint(
+                {"requested_alias": "deepseek-flash", "returned_model": "m", "system_fingerprint": "fp", "pinned": True}
+            ),
+        )
+        assert gate.main([str(path)]) == 0
+        out = capsys.readouterr().out
+        assert "[PASS]" in out
+        assert "默认结果目录不在盘" not in out
+
+    def test_gate_default_dir_absent_still_surfaces_exemption_drift(self, gate, tmp_path, monkeypatch, capsys):
+        """默认目录缺席不掩盖豁免漂移：缺席合规态下漂移仍判 rc=1（先漂移后空面）。"""
+        absent = tmp_path / "results_absent"
+        monkeypatch.setattr(gate, "DEFAULT_RESULTS_DIR", absent)
+        monkeypatch.setattr(
+            gate,
+            "_PRE_FINGERPRINT_EXEMPT",
+            {str(tmp_path / "benchmark_gone.json"): "测试豁免理由"},
+        )
+        assert gate.main([]) == 1
+        err = capsys.readouterr().err
+        assert "豁免漂移" in err
+
+    def test_gate_results_dir_flag_missing_is_still_usage_error(self, gate, tmp_path):
+        """--results-dir 点名的目录不存在 → rc=2（显式点名的缺失保持用法错误）。"""
+        assert gate.main(["--results-dir", str(tmp_path / "nope_dir")]) == 2
+
     def test_gate_empty_scan_surface_passes(self, gate, tmp_path):
         """扫描面为空（近期无新批次）→ 通过。
 

@@ -24,6 +24,11 @@
       mtime 窗口在 fresh clone 上失效（checkout 刷新全部 mtime），为测试
       契约入库的跑批早于指纹功能的历史工件不得按"新批次"要求；豁免带
       漂移检查（文件消失 / 已 pinned 都失败）。
+    - **默认结果目录缺席 = 合规态而非用法错误**（2026-11-06 修，CI 红根因）：
+      `experiments/results` 完全不入库 ⇒ fresh clone / CI 上该目录不存在。
+      无参调用时按**空扫描面**处理（"无批次在盘"与"近期无新批次"同为
+      合规状态，先披露成因）；rc=2（路径不存在）只留给**显式点名**的
+      缺失路径。豁免漂移检查在空扫描面之前照常执行，缺席不掩盖漂移。
     - **CE 轮（2026-10-23）新增两条可比性围栏**（只对已 `pinned=true` 的工件
       追加判定，**pinned 的判定值与方向一处不动**）：`alias_mismatch is True`
       （跑批侧已自报"请求别名 ≠ 返回模型"）与 `requested_alias ∉ 运行时模型集`
@@ -460,12 +465,28 @@ def main(argv: list[str] | None = None) -> int:
     targets: list[Path] = list(args.paths)
     if args.results_dir is not None:
         targets.append(args.results_dir)
-    if not targets:
+    using_default_face = not targets
+    if using_default_face:
         targets = [DEFAULT_RESULTS_DIR]
 
-    files, missing_paths = collect_result_files(
-        targets, pattern=args.pattern, max_age_days=None if args.all_history else 2.0
-    )
+    if using_default_face and not DEFAULT_RESULTS_DIR.is_dir():
+        # 默认扫描面整体缺席（fresh clone / CI：experiments/results 完全不入库，
+        # checkout 上不存在该目录）与"近期无新批次"是**同一合规状态**——S29 只
+        # 要求新批次在合并统计前已锁定，无批次在盘时无对象可验。目录缺席不是
+        # CLI 用法错误：rc=2 只留给**显式点名**的缺失路径（此前这里直接走
+        # missing → rc=2，等于给 CI 装了一个永久红的门禁——实测 2026-11-06，
+        # 1cbce7c6 起入库面清零后 test 三版本在 fingerprint 步全红）。先披露
+        # 成因再走空扫描面路径；豁免漂移检查照常执行（见下，先于空面判定）。
+        print(
+            f"[model-fingerprint] 默认结果目录不在盘（{DEFAULT_RESULTS_DIR}）——"
+            "fresh clone/CI 无本地批次，按空扫描面处理；要强制检查请显式点名已存在的路径"
+        )
+        files: list[Path] = []
+        missing_paths: list[Path] = []
+    else:
+        files, missing_paths = collect_result_files(
+            targets, pattern=args.pattern, max_age_days=None if args.all_history else 2.0
+        )
     for path in missing_paths:
         print(f"[ERROR] 路径不存在: {path}", file=sys.stderr)
     if missing_paths:
