@@ -65,6 +65,13 @@ _ENV_MIN_LEVEL = "PATCH_EVIDENCE_GATE_MIN_LEVEL"
 _ENV_OFFICIAL_TESTS = "PATCH_EVIDENCE_OFFICIAL_TESTS_ENABLE"
 
 
+#: 材料级不可判定的理由集合（B10）：与补丁内容无关 ⇒ 同一任务后续轮次复用裁决。
+#: 不含 `failed`（red，逐补丁而变）与 `no_official_tests`（本就不付执行成本）。
+_MATERIAL_BLOCKED_REASONS: frozenset[str] = frozenset(
+    {"exec_error", "runner_unavailable", "no_effective_pass", "invalid_module"}
+)
+
+
 def official_tests_gold_enabled() -> bool:
     """图内 gold 裁决开关（`PATCH_EVIDENCE_OFFICIAL_TESTS_ENABLE`，默认 false）。
 
@@ -101,6 +108,16 @@ def official_tests_evidence(state: dict[str, Any], patched_code: str) -> dict[st
             "error": 0,
             "skipped": 0,
         }
+    # B10（2026-11-05）：材料级"跑不起来"复用上一轮裁决，不再付第二次执行成本。
+    # 这些理由只取决于测试材料与本机环境（与这一版补丁写了什么无关），重跑既
+    # 不改结论也不改放行决定；而 `failed`（red）与补丁有关，绝不可复用。
+    memo = state.get("official_test_evidence")
+    if (
+        isinstance(memo, dict)
+        and memo.get("verdict") == "unavailable"
+        and str(memo.get("reason")) in _MATERIAL_BLOCKED_REASONS
+    ):
+        return {**memo, "memoized": True}
     from src.tools import detection_gates as _detection_gates
 
     module_name = str(official.get("module_name") or state.get("module_name") or "")

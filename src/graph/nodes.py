@@ -2831,9 +2831,14 @@ def _apply_snapshot_rollback(
             )
         resample_update["patch_rollback_verdict"] = _verdict
         resample_update["patch_rolled_back"] = _rolled_back
+        # B9（2026-11-05）：裁决理由随 verdict 落 state（协议未给 = None，不写结论）。
+        # verdict 只说"回滚没回滚"，reason 才说"为什么"——超时/被信号杀死的回滚
+        # 是墙钟读数，断言失败的回滚才是能力读数，行里必须分得开。
+        resample_update["patch_rollback_reason"] = _pr_result.get("p2p_reason")
     else:
         resample_update["patch_rollback_verdict"] = "not_enabled"
         resample_update["patch_rolled_back"] = False
+        resample_update["patch_rollback_reason"] = None
     return effective_code, written
 
 

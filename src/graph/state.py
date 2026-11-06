@@ -397,8 +397,13 @@ class AITesterState(TypedDict, total=False):
     # patch_rollback_verdict: verified / regression_failed / no_oracle /
     #   regression_error / apply_failed / not_enabled
     # patch_rolled_back: bool（True = 本轮补丁已被 P2P 回归失败自动回滚）
+    # patch_rollback_reason（B9，2026-11-05）：裁决理由——verdict 只区分
+    #   "回滚没回滚"，reason 才区分"断言跑坏（assertion_failure）"与
+    #   "没跑起来（timeout / killed_by_signal / collect_error /
+    #   no_effective_pass / io_error）"；协议未执行 = None（不写结论）
     patch_rollback_verdict: str | None
     patch_rolled_back: bool | None
+    patch_rollback_reason: str | None
     # 1.3 分层压缩降级链（_patch_applier_node → _debugger_node 跨轮透传）：
     # 上一轮补丁被命名契约符号守卫拒绝后写入的档位反馈
     # {"tier": 档位名, "missing_symbols": 缺失符号列表}；_debugger_node 读取后
@@ -921,6 +926,7 @@ def create_initial_state(
         # （默认关时 _patch_applier_node 写 not_enabled 值，零默认行为变化）
         patch_rollback_verdict=None,
         patch_rolled_back=None,
+        patch_rollback_reason=None,
         # 1.3 分层压缩降级链档位反馈（默认 None，_patch_applier_node 契约拒绝
         # 且 CONTEXT_TIER_DOWNGRADE_ENABLE=true 时写入，透传给 _debugger_node）
         contract_reject_feedback=None,

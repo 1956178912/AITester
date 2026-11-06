@@ -19,7 +19,7 @@ none，证据门把**本来正确**的源码补丁按"无证据"回滚——gold
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, ClassVar
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -497,3 +497,63 @@ class TestDegenerateGoldMaterialIsNotMaterial:
         window = src[max(0, at - 800) : at]
         assert "_gold_fixed_material(task)" in window, "注入点绕开了同码守卫"
         assert "_extract_gold_fixed(" not in window, "注入点不得再直取未加守卫的原始提取器"
+
+
+@pytest.mark.unit
+class TestMaterialBlockersAreNotPaidTwice:
+    """B10（2026-11-05）：与补丁无关的"跑不起来"，重复跑只会再付一次超时。
+
+    冒烟 `test_run_20261105T115002Z`（B11 之前，60s 档超时统一落在 `m1_metrics` 标签下）共 8 条
+    `m1_metrics：执行超时（>60s）`，分布在 7 个 quixbugs 格，其中 `deepseek-flash__aitester__quixbugs`
+    单格 2 条——冒烟每格只有 1 个任务，所以"同一任务重复执行"确凿；标签不分辨是 AC2 对照门
+    还是 B1 官方测试门（那正是 B11 收口的归因缺口）。同一任务每一轮被拒都会重跑官方测试，而
+    `exec_error`/`runner_unavailable`/`no_effective_pass`/`invalid_module` 这类结论**只取决于测试材料与
+    本机环境**，与这一版补丁写了什么无关；重复执行既不改结论也不改放行决定，纯烧墙钟（B12
+    把并发放开后这份浪费会被放大）。反之 `red`（断言失败）与补丁有关，**不得**记忆——否则会把
+    "这版没修好"错扣到下一版头上。
+    """
+
+    def _spy(self, monkeypatch: pytest.MonkeyPatch, ret: dict[str, Any]) -> MagicMock:
+        spy = MagicMock(return_value=dict(ret))
+        monkeypatch.setattr(dg_mod, "run_official_tests", spy)
+        return spy
+
+    _STATE: ClassVar[dict[str, Any]] = {
+        "official_tests": {"code": _GREEN_TEST, "module_name": _MOD},
+        "module_name": _MOD,
+    }
+
+    @pytest.mark.parametrize("reason", ["exec_error", "runner_unavailable", "no_effective_pass", "invalid_module"])
+    def test_material_blocker_is_memoized(self, monkeypatch: pytest.MonkeyPatch, reason: str) -> None:
+        spy = self._spy(monkeypatch, {"verdict": "unavailable", "reason": reason, "rc": 2})
+        state = dict(self._STATE)
+        first = pe_mod.official_tests_evidence(state, _PATCH)
+        assert first["reason"] == reason and spy.call_count == 1
+        state["official_test_evidence"] = first
+        second = pe_mod.official_tests_evidence(state, _PATCH + "# 下一轮的补丁不同\n")
+        assert spy.call_count == 1, f"{reason} 属材料级不可判定，第二轮不得再付一次执行"
+        assert second["memoized"] is True and second["verdict"] == "unavailable"
+
+    @pytest.mark.parametrize("reason", ["failed", "gold", "no_official_tests"])
+    def test_patch_dependent_and_zero_cost_reasons_are_not_memoized(
+        self, monkeypatch: pytest.MonkeyPatch, reason: str
+    ) -> None:
+        """red 与补丁有关必须重跑；gold 不记忆（门已放行，不会再问）；无材料本就零成本。"""
+        verdict = "unavailable" if reason == "no_official_tests" else ("red" if reason == "failed" else "gold")
+        spy = self._spy(monkeypatch, {"verdict": verdict, "reason": reason, "rc": 1})
+        state = dict(self._STATE)
+        state["official_test_evidence"] = pe_mod.official_tests_evidence(state, _PATCH)
+        assert spy.call_count == 1
+        pe_mod.official_tests_evidence(state, _PATCH + "# 新补丁\n")
+        assert spy.call_count == 2, f"{reason} 的结论与补丁有关（或本就免费），必须重新执行"
+
+    def test_gate_reuses_the_memo_and_still_refuses(self, tmp_path: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+        """端到端：带 memo(unavailable) 的第二轮——零子进程、判定不变（仍拒并回滚）。"""
+        spy = self._spy(monkeypatch, {"verdict": "unavailable", "reason": "exec_error", "rc": 2})
+        memo = {"verdict": "unavailable", "reason": "exec_error", "rc": 2, "passed": 0, "failed": 0}
+        state = _state(tmp_path, official_tests={"code": _GREEN_TEST, "module_name": _MOD}, official_test_evidence=memo)
+        update = _run(monkeypatch, state, PATCH_EVIDENCE_OFFICIAL_TESTS_ENABLE="true")
+        assert spy.call_count == 0
+        assert update["patch_evidence_level"] == "none"
+        assert _disk(tmp_path) == _ORIG, "memo 不得把拒绝变成放行"
+        assert update["official_test_evidence"]["reason"] == "exec_error"

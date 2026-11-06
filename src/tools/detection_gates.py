@@ -49,6 +49,12 @@ _SAFE_MODULE_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _ENV_SPECIFICITY_GATE = "DETECTION_SPECIFICITY_GATE_ENABLE"
 _ENV_RED_REGRESSION_GATE = "RED_REGRESSION_GATE_ENABLE"
 
+#: 调用方标签（B11，2026-11-05）：超时日志必须点名"是哪个门烧的时间"。
+#: 冒烟归因时踩过：60s 档被 AC2 特异性门与 B1 官方测试门共用，日志只写
+#: `m1_metrics` ⇒ 只能给出范围、无法断言谁付了这次超时（而两者的超时预算
+#: 与"该不该收"是不同决策）。
+_CALLER_AC2_GATE = "AC2 对照门"
+_CALLER_B1_OFFICIAL = "B1 官方测试门"
 # 门①对照执行超时（秒）：与 M1 判定同量级；超时/不可用一律按
 # "unavailable" 保守放行（fail-open 到历史路由，门是增强不是阻断点）。
 _GATE_TIMEOUT_SECONDS = 60
@@ -74,6 +80,7 @@ def _pytest_in_tmp_raw(
     module_name: str | None,
     timeout: int,
     task_metadata: dict[str, Any] | None,
+    logger_name: str = "m1_metrics",
 ) -> tuple[int, str, str] | None:
     """单次委托 M1 执行原语；不可执行（module_name 非法 / 委托异常）→ None。
 
@@ -87,7 +94,14 @@ def _pytest_in_tmp_raw(
     try:
         from experiments._m1_metrics import _run_pytest_in_tmp as _runner
 
-        return _runner(test_code, target_code, module_name, timeout=timeout, task_metadata=task_metadata)
+        return _runner(
+            test_code,
+            target_code,
+            module_name,
+            timeout=timeout,
+            task_metadata=task_metadata,
+            logger_name=logger_name,
+        )
     except Exception:
         logger.warning("AC2 门执行原语不可用（experiments._m1_metrics 委托失败），保守放行", exc_info=True)
         return None
@@ -99,6 +113,7 @@ def _run_test_against_code(
     module_name: str | None,
     timeout: int = _GATE_TIMEOUT_SECONDS,
     task_metadata: dict[str, Any] | None = None,
+    logger_name: str = _CALLER_AC2_GATE,
 ) -> dict[str, Any] | None:
     """委托 M1 既有原语执行（test 对 target_code），失败返回 None。
 
@@ -112,7 +127,7 @@ def _run_test_against_code(
     批次：跨文件任务必传——否则委托层走单文件物化，伴生模块缺失
     导致 rc>=2 被误判 over_red；未传时行为与历史逐位一致，零回归）。
     """
-    res = _pytest_in_tmp_raw(test_code, target_code, module_name, timeout, task_metadata)
+    res = _pytest_in_tmp_raw(test_code, target_code, module_name, timeout, task_metadata, logger_name)
     if res is None:
         return None
     # P0-1（2026-10-11 全面优化批次）：复用 M1 既有的执行错误判据——
@@ -200,7 +215,7 @@ def run_official_tests(
         # 非法名不进委托层（名字即临时目录文件名与 import 目标）——与
         # `_run_test_against_code` 同口径，且在委托前拦下，零子进程成本
         return _official_facts("invalid_module")
-    res = _pytest_in_tmp_raw(test_code, patched_code, module_name, timeout, task_metadata)
+    res = _pytest_in_tmp_raw(test_code, patched_code, module_name, timeout, task_metadata, _CALLER_B1_OFFICIAL)
     if res is None:
         return _official_facts("runner_unavailable")
     rc, out, err = res

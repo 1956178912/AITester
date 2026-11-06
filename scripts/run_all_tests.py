@@ -189,7 +189,130 @@ def arm_caps_for(arms: list[str]) -> dict[str, int]:
     return {arm: arm_token_cap(arm) for arm in arms}
 
 
-#: LLM 并发上限：网络受限而非 CPU 受限，超过它只会触发 429 重试（重试是付费的）。
+def _provider_limits(model: str | None) -> dict[str, object] | None:
+    """取该模型登记的厂商额度（额度的真值在 `src/config/config_generator.py`）。"""
+    if not model:
+        return None
+    try:
+        from src.config.config_generator import MODEL_RATE_LIMITS
+    except Exception:  # 登记面缺失 ⇒ 按"未知额度"处理，只受机器闸约束
+        return None
+    limits = MODEL_RATE_LIMITS.get(str(model))
+    return dict(limits) if isinstance(limits, dict) else None
+
+
+def provider_concurrency_allowance(model: str | None) -> int | None:
+    """在途档模型的 80% 并发运行点；RPM 档与未登记模型返回 None。
+
+    **RPM 不是并发数**："每分钟 80 次"是发起速率，"同时 80 条在途"是占用宽度；
+    把 RPM 当并发用会在长响应模型上超发（每次响应 >1 分钟时，80 在途 = 远超 80 RPM），
+    反之在快响应模型上白白浪费额度。两种量纲各走各的通道（见
+    `provider_rate_per_minute_allowance`）。
+    """
+    limits = _provider_limits(model)
+    if not limits or limits.get("kind") != "in_flight":
+        return None
+    return max(1, int(int(limits.get("limit", 0) or 0) * _operating_fraction()))
+
+
+def provider_rate_per_minute_allowance(model: str | None) -> int | None:
+    """RPM 档模型的 80% 发起速率（每分钟）；在途档与未登记模型返回 None。"""
+    limits = _provider_limits(model)
+    if not limits or limits.get("kind") != "rpm":
+        return None
+    return max(1, int(int(limits.get("limit", 0) or 0) * _operating_fraction()))
+
+
+def _operating_fraction() -> float:
+    try:
+        from src.config.config_generator import OPERATING_FRACTION
+
+        return float(OPERATING_FRACTION)
+    except Exception:
+        return 0.8
+
+
+#: 机器侧硬顶：再高的厂商额度也不放开箱跑（每任务都要起本地 pytest 子进程）
+MACHINE_PARALLELISM_CEILING = 40
+#: 每核可承载的**等待型**并发任务数（实测 load/core 0.27 @ 并发 4 ⇒ CPU 远未饱和，
+#: 时间花在子进程等待上）；无实测依据的更大值会先把内存打爆，故取保守 2.4 并留硬顶。
+MACHINE_TASKS_PER_CORE = 2.4
+
+
+def machine_parallelism_cap(cpu: int, mem_gb: float, available_gb: float | None = None) -> int:
+    """机器侧闸：核数项与内存项取小，再套硬顶，下限 2。
+
+    内存项：未知可用量时按"每并发任务 1 GB"估（冒烟实测并发 4 时整机占用 14.6 GB
+    含基线开销，取 1 GB/任务是保守值）；给出 `available_gb` 时按"每任务 0.5 GB"算
+    ——**用可用内存而不是总内存**，否则并发一开就把机器推到 swap/OMP，判定反而变差。
+    采样失败（cpu<=0 或 mem<=0）时返回下限，不放开。
+    """
+    core_term = int(max(0, cpu) * MACHINE_TASKS_PER_CORE)
+    mem_term = int(max(0.0, available_gb) * 2) if available_gb is not None else int(max(0.0, mem_gb))
+    cap = min(core_term, mem_term, MACHINE_PARALLELISM_CEILING)
+    return max(2, cap)
+
+
+def resolve_llm_parallel(
+    model: str | None,
+    cpu: int,
+    mem_gb: float,
+    override: int | None = None,
+    available_gb: float | None = None,
+    provider_limit_override: int | None = None,
+) -> dict[str, object]:
+    """合并"厂商额度 80% 运行点"与"机器侧闸"，返回可审计的并发决议。
+
+    `provider_limit_override` 是运维显式给出的**运行点**（例如账号级更小配额），按字面
+    尊重、不再乘 80%；`override` 是 `--llm-parallel`，越额度时封顶到额度并在 `note` 点名。
+    """
+    machine = machine_parallelism_cap(cpu, mem_gb, available_gb)
+    limits = _provider_limits(model)
+    kind = str(limits.get("kind")) if limits else "unknown"
+    provider_cap = (
+        provider_limit_override if provider_limit_override is not None else provider_concurrency_allowance(model)
+    )
+    rate_per_minute = provider_rate_per_minute_allowance(model)
+    note = ""
+    cap = min(machine, provider_cap) if provider_cap else machine
+    binding = "provider" if provider_cap and provider_cap <= machine else "machine"
+    if override is not None:
+        wanted = max(1, int(override))
+        if provider_cap and wanted > provider_cap:
+            note = f"--llm-parallel={wanted} 已按额度封顶为 {min(provider_cap, machine)}（越线只会换来 429）"
+            cap = min(provider_cap, machine)
+            binding = "provider" if provider_cap <= machine else "machine"
+        else:
+            cap, binding = wanted, "override"
+    return {
+        "model": model,
+        "parallelism": int(cap),
+        "machine_cap": int(machine),
+        "provider_cap": int(provider_cap) if provider_cap else None,
+        "provider_kind": kind,
+        "rate_per_minute": rate_per_minute,
+        "binding": binding,
+        "note": note,
+    }
+
+
+def apply_concurrency_fingerprint(payload: dict, resolutions: dict[str, dict]) -> None:
+    """把并发决议写进配置指纹：换了并发跑出的冒烟证据不得被 full 档同配置复用。"""
+    payload["llm_parallelism"] = {
+        model: {
+            "parallelism": int(r["parallelism"]),
+            "machine_cap": int(r["machine_cap"]),
+            "provider_cap": r["provider_cap"],
+            "provider_kind": r["provider_kind"],
+            "rate_per_minute": r["rate_per_minute"],
+        }
+        for model, r in sorted(resolutions.items())
+    }
+
+
+#: 历史遗留常量（B12 起只作为"额度/机器都未知"时的兜底，不再是实际并发上限）
+LLM_PARALLELISM_CAP = 4
+#: 峰时口径下两家的输出单价（¥/百万 token）；空闲时段官方为半价，故同付费的）。
 LLM_PARALLELISM_CAP = 4
 #: 峰时口径下两家的输出单价（¥/百万 token）；空闲时段官方为半价，故同一参数
 #: 挪到空闲窗执行是**测量等价、账单减半**（不改任何协议变量，读数仍按峰时登记
@@ -773,6 +896,7 @@ def config_fingerprint(args: argparse.Namespace, models: list[str]) -> str:
         "llm_seed",
         "llm_token_cap",
         "budget_cny",
+        "llm_parallel",
         "no_llm",
         "skip_gates",
         "skip_dataset_gate",
@@ -785,6 +909,9 @@ def config_fingerprint(args: argparse.Namespace, models: list[str]) -> str:
         "heavy_thinking_off": ARM_TOKEN_CAP_HEAVY_THINKING_OFF,
         "light_thinking_off": ARM_TOKEN_CAP_LIGHT_THINKING_OFF,
     }
+    # B12：并发也是"同一次配置"的一部分——4 并发跑出的冒烟证据不得支撑 40 并发的
+    # 满量档（超发会改 429/超时分布，进而改判定覆盖率），故逐模型决议进指纹。
+    apply_concurrency_fingerprint(payload, resolve_parallelisms(sorted(models), getattr(args, "llm_parallel", None)))
     payload["revision"] = _git_revision()
     payload["worktree"] = hashlib.sha256(_git_porcelain().encode("utf-8")).hexdigest()[:12]
     return hashlib.sha256(json.dumps(payload, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()[:16]
@@ -1626,7 +1753,9 @@ def _build_llm_sweep_stages(
     if wait:
         stages.append(wait)
 
-    llm_jobs = max(1, min(jobs, LLM_PARALLELISM_CAP))
+    # B12（2026-11-05）：并发不再钉死在 `LLM_PARALLELISM_CAP`，而是"厂商额度 80%
+    # ∩ 机器闸 ∩ 显式 --llm-parallel"的逐模型决议（额度语义见 config_generator）。
+    parallelisms = resolve_parallelisms(models, getattr(args, "llm_parallel", None))
     worst = plan["worst_price_per_mtok"] or 0.0
     batch_max_calls = estimate_calls(tasks_total)
     for model in models:
@@ -1674,7 +1803,7 @@ def _build_llm_sweep_stages(
                     "-b",
                     arm,
                     "-p",
-                    str(llm_jobs),
+                    str(parallelisms[model]["parallelism"]),
                     "--seed",
                     str(args.llm_seed),
                     "-o",
@@ -1691,6 +1820,9 @@ def _build_llm_sweep_stages(
                         "timeout": args.llm_stage_timeout,
                         "retries": args.llm_retries,
                         "incremental": str(stage_dir / "INCREMENTAL_RESULTS.jsonl"),
+                        # B12：把该格的并发决议随阶段落档（报告里能回答"这轮是
+                        # 按多少并发跑的、被哪一道闸定的"）
+                        "llm_parallel": dict(parallelisms[model]),
                     }
                 )
     return stages
@@ -1760,6 +1892,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--llm-stage-timeout", type=int, default=5400, help="单阶段墙钟上限秒")
     parser.add_argument(
         "--budget-cny", type=float, default=DEFAULT_BUDGET_CNY, help="本轮 LLM 段费用上界（登记币种，默认 ¥300）"
+    )
+    parser.add_argument(
+        "--llm-parallel",
+        type=int,
+        default=None,
+        help=(
+            "LLM 每格并发（默认按厂商额度的八成与机器闸取小，逐模型自动定，"
+            "并写进冒烟指纹；显式给值超过厂商额度时按额度封顶并点名）"
+        ),
     )
     parser.add_argument(
         "--llm-token-cap",
@@ -1847,6 +1988,40 @@ def _execute_stages(
             writer.stalls = stalls
             writer.dump()
     return results, stalls
+
+
+def available_memory_gb() -> float | None:
+    """采样当前可用内存（GB）；采不到返回 None（此时机器闸按总内存保守估）。"""
+    try:
+        import psutil
+
+        return float(psutil.virtual_memory().available) / (1024**3)
+    except Exception:
+        return None
+
+
+def resolve_parallelisms(models: list[str], override: int | None = None) -> dict[str, dict]:
+    """逐模型解析并发（额度 80% ∩ 机器闸 ∩ 显式覆盖），一次采样、多处复用。"""
+    cpu = detect_cpu_count()
+    mem = detect_memory_gb()
+    available = available_memory_gb()
+    resolutions: dict[str, dict] = {}
+    for model in models:
+        got = resolve_llm_parallel(model, cpu, mem, override=override, available_gb=available)
+        resolutions[model] = got
+        note = f"（{got['note']}）" if got.get("note") else ""
+        extra = (
+            f"，发起速率上限 {got['rate_per_minute']}/min"
+            if got.get("rate_per_minute")
+            else f"，额度上限 {got.get('provider_cap')}"
+            if got.get("provider_cap")
+            else "，额度未登记"
+        )
+        print(
+            f"  · LLM 并发 {model}: {got['parallelism']}"
+            f"（机器闸 {got['machine_cap']}{extra}，binding={got['binding']}）{note}"
+        )
+    return resolutions
 
 
 def _enable_line_buffered_output() -> None:

@@ -42,6 +42,23 @@ COMMON_MODELS = [
     {"name": "mimo-v2.6-pro", "provider": "xiaomi"},
 ]
 
+# ─── 厂商限流额度（B12，2026-11-05）─────────────────────────────────────────
+# **两家给的量纲不同，不可互换**（值按官方文档逐字登记，改数须重核文档）：
+#   - DeepSeek https://api-docs.deepseek.com/zh-cn/quick_start/rate_limit
+#     给的是**在途并发**："一个请求从发出后，到模型响应完成之前记为一个并发"；
+#     `deepseek-flash` 2500、`deepseek-v4-pro` 500；该页**没有** RPM/TPM 条目。
+#   - MiMo https://mimo.mi.com/docs/zh-CN/quick-start/summary/model
+#     给的是**每分钟请求数**（RPM 100）与 **TPM 10M**；没有并发数条目。
+# ⇒ "每分钟 80 次"不等于"同时 80 条在途"：前者是发起速率，后者是并发占用。
+#   在途档 ⇒ 直接当并发上限；RPM 档 ⇒ 只做发起速率闸，并发由机器能力定。
+MODEL_RATE_LIMITS: dict[str, dict[str, object]] = {
+    "deepseek-flash": {"kind": "in_flight", "limit": 2500},
+    "deepseek-v4-pro": {"kind": "in_flight", "limit": 500},
+    "mimo-v2.6-pro": {"kind": "rpm", "limit": 100, "tpm": 10_000_000},
+}
+#: 满跑运行点：额度的 80%（用户 2026-11-05 指定），留 20% 给重试与网络抖动。
+OPERATING_FRACTION = 0.8
+
 
 def generate_env_template(output_file: str = ".env.local.template") -> str:
     """

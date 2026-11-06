@@ -143,7 +143,13 @@ class TestPatchHelpers:
         update: dict[str, Any] = {}
         effective, written = nodes._apply_snapshot_rollback(_state(), code, False, code, update)
         assert (effective, written) == (code, False)
-        assert update == {"patch_rollback_verdict": "not_enabled", "patch_rolled_back": False}
+        # B9（2026-11-05）：协议未执行时 reason 也**在场且为 None**（键集合同构，
+        # 下游不必 hasattr 式防御；None = 没裁决，不是"裁决了但没理由"）
+        assert update == {
+            "patch_rollback_verdict": "not_enabled",
+            "patch_rolled_back": False,
+            "patch_rollback_reason": None,
+        }
 
     def test_single_patch_path_delegates_to_applier(self, monkeypatch: pytest.MonkeyPatch) -> None:
         original = "def f(x):\n    return x\n"

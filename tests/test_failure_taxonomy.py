@@ -264,11 +264,26 @@ class TestNoRepairAttemptedTerminal:
         got = determine_stop_reason(self._zero_iteration_state(repair_history=[{"patch_applied": False}]))
         assert got is not StopReason.NO_REPAIR_ATTEMPTED
 
-    def test_iterations_ran_fall_through_to_previous_labels(self) -> None:
-        """迭代跑过（iteration>0 且未达上限）⇒ 仍是历史口径（UNKNOWN），不改标签面。"""
+    def test_patch_present_falls_through_to_previous_labels(self) -> None:
+        """有补丁 ⇒ 不是"未发起修复"（该由 max_iterations / repair_invalid 等归因）。"""
         from src.graph.workflow import StopReason, determine_stop_reason
 
-        assert determine_stop_reason(self._zero_iteration_state(iteration=2)) is StopReason.UNKNOWN
+        got = determine_stop_reason(self._zero_iteration_state(iteration=2, patch="def f():\n    return 2\n"))
+        assert got is not StopReason.NO_REPAIR_ATTEMPTED
+
+    @pytest.mark.parametrize("iteration", [0, 1, 3])
+    def test_empty_product_is_named_regardless_of_iteration(self, iteration: int) -> None:
+        """B6 追加（2026-11-05 冒烟实测）：`iteration` 不是"是否发起过修复"的证据。
+
+        批里 4/50 行落 `unknown + uncategorized`，形态是 `iterations=1`、补丁空、
+        修复历史空（`single_agent × {tge, ult} × 两模型`，如 `tge__django__django-17087`）
+        ——循环跑过一轮但**产物从未出现**，与 `iterations=0` 的那一类语义相同。
+        原判据把 `iteration==0` 当必要条件，是按当时的抽样形态写死的，不是机制边界。
+        """
+        from src.graph.workflow import StopReason, determine_stop_reason
+
+        state = self._zero_iteration_state(iteration=iteration)
+        assert determine_stop_reason(state) is StopReason.NO_REPAIR_ATTEMPTED
 
     def test_hard_gates_outrank_no_repair(self) -> None:
         """优先级：预算/回归/测试通过等硬信号不得被新标签抢走。"""

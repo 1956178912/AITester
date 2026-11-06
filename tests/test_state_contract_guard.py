@@ -162,7 +162,7 @@ class TestChannelCoverage:
         → 3 键 / 12 站点，`test_passed` 同时进入两条写路径 ⇒ 未审计 46 → 45。
         """
         cov = channel_coverage()
-        assert len(cov.declared) == 120
+        assert len(cov.declared) == 121
         # 353 → 354（B1 批 2026-10-30 复算）：4a9512e3 在
         # `src/graph/workflow.py::_should_debug` 加 `state.get("task_uuid")`
         # 读点（tge__ 前缀豁免，TestGenEval 口径修复）⇒ 读站点 +1、键集不变。
@@ -174,7 +174,15 @@ class TestChannelCoverage:
         # 357 → 361（B6 未发起修复迭代标签，2026-11-05）：
         # `workflow._no_repair_attempted` 读 logic_degraded / iteration / patch /
         # repair_history 四键（均已在读侧键集内）⇒ 站点 +4、键集不变。
-        assert (len(cov.read_keys), cov.read_sites) == (58, 361)
+        # 361 → 360（B6 追加，2026-11-05）：`workflow._no_repair_attempted` 不再读
+        # `iteration`（判据只看补丁与修复历史）⇒ 站点 −1、键集与写侧两面不变。
+        # 360 → 361 / 58 → 59 键（B10，2026-11-05）：`patch_evidence.official_tests_evidence`
+        # 先读 `official_test_evidence` 复用材料级裁决 ⇒ 该键从「未触及」转入读侧（未触及 35→34），
+        # 并再读一次 `official_tests` 之外的键；站点净 +1。
+        # 120 → 121 键 / 未触及 34 → 35（B9，2026-11-05）：新增 `patch_rollback_reason`
+        # （P2P 回滚裁决的理由；nodes.py 只经 update dict 写出、run_benchmark 读 state）
+        # ⇒ 声明 +1，读侧与两条写路径的站点不变。
+        assert (len(cov.read_keys), cov.read_sites) == (59, 361)
         assert (len(cov.inplace_write_keys), cov.inplace_write_sites) == (3, 12)
         assert (len(cov.update_write_keys), cov.update_write_sites) == (47, 99)
         assert (len(cov.untouched), len(cov.untouched_elsewhere), len(cov.untouched_nowhere)) == (35, 34, 1)
@@ -310,7 +318,7 @@ class TestChannelCoverage:
         assert result.returncode == 0, result.stderr
         assert "状态通道逐键覆盖" in result.stdout
         assert "failure_frequency_applied: 0 / 0 / 0" in result.stdout
-        assert "审计面披露：声明 120 键" in result.stdout
+        assert "审计面披露：声明 121 键" in result.stdout
 
     def test_success_message_carries_disclosure(self):
         import subprocess
@@ -346,4 +354,4 @@ class TestChannelCoverage:
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         cov = module.channel_coverage()
-        assert len(cov.declared) == 120
+        assert len(cov.declared) == 121

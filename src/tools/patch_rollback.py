@@ -155,30 +155,39 @@ def run_p2p_regression(
 ) -> dict[str, Any]:
     """对"应用补丁后的代码"跑独立测试套件（pass-to-pass 全量回归）。
 
-    口径（保守）：
+    口径（保守；B9 起每条裁决自带 `reason`，理由与裁决两值正交）：
     - test_code 为空 → verdict="no_oracle"（无测试材料不臆测，补丁是否
       保留由调用方 M1 repair_rate 的 None 口径兜底，本层不裁决）；
-    - 子进程 pytest 全过 → verdict="verified"（回归证据：rc=0）；
-    - 子进程 pytest 有失败 → verdict="regression_failed"（自动回滚触发）；
+    - 子进程 pytest 全过 → verdict="verified"（回归证据：rc=0 且有效通过）；
+    - 子进程 pytest 断言级失败（rc==1）→ verdict="regression_failed"
+      （自动回滚触发）——**只有这一条**说明"补丁把测试跑坏了"；
     - 子进程收集/语法错误（rc>=2 / "no tests were run"）→
       verdict="regression_error"（测试本身坏，不计入"修复破坏"，
       调用方按 no_oracle 处理——与 _m1_metrics 的 test_error_rate 同源
-      保守口径，防坏测试误触发回滚）。
+      保守口径，防坏测试误触发回滚）；
+    - B9（2026-11-05）：非超时的 **rc<0 / rc=None**（被信号杀死：OOM、rlimit、
+      段错误）与 rc>=2 同属"根本没跑起来"（与 `_looks_like_test_execution_error`
+      的 rc>=2 / 负 rc 判据同口径），此前落到兜底腿被读成断言级回归，
+      fail-open 档因此**误杀**好补丁；现归 regression_error（fail-closed 仍回滚）。
     - R4b（2026-10-05）：fail_closed=True（或 env PATCH_ROLLBACK_FAIL_CLOSED=true）
-      时，上一条的"收集错误 / 超时 / IO 异常"口径一律改判
+      时，上一条的"收集错误 / 被信号杀死 / 超时 / IO 异常 / 无有效通过"口径一律改判
       regression_failed（触发回滚）——"回归无法裁决 = 不能证明补丁安全
       = 回滚"。fail_closed=None 时读环境开关（默认 false 历史口径）。
-    - A08（2026-10-18 第三方评审 P0）：子进程 env 经
+      `logic`/`safe` 两档都开 fail-closed，所以超时回滚是**策略**、不是缺陷；
+      缺陷是行里读不出它是超时——`reason` 就是补这一格。
+    - A08（2026-10-18 第三方评审 P0，凭证边界）：子进程 env 经
       ``process_utils.untrusted_exec_env``（最小白名单 + ``PYTHONPATH=tmpdir``）
       构造，不继承宿主凭证（历史实现不传 env → 继承完整宿主环境）。
 
     Returns:
-        {"verdict": str, "returncode": int | None, "output_tail": str}
+        {"verdict": str, "reason": str, "returncode": int | None, "output_tail": str}
+        reason 值域：no_oracle / verified / assertion_failure / collect_error /
+        killed_by_signal / no_effective_pass / timeout / io_error。
     """
     if fail_closed is None:
         fail_closed = rollback_fail_closed_enabled()
     if not test_code or not test_code.strip():
-        return {"verdict": "no_oracle", "returncode": None, "output_tail": ""}
+        return {"verdict": "no_oracle", "reason": "no_oracle", "returncode": None, "output_tail": ""}
 
     out_timeout = timeout if timeout is not None else _p2p_timeout()
     tmpdir = tempfile.mkdtemp(prefix="aitester_p2p_")
@@ -209,6 +218,7 @@ def run_p2p_regression(
             timeout=out_timeout,
             cwd=tmpdir,
             text=True,
+            logger_name="patch_rollback_p2p",
             env=untrusted_exec_env(
                 PYTHONDONTWRITEBYTECODE="1",
                 PYTHONPATH=tmpdir,
@@ -219,41 +229,66 @@ def run_p2p_regression(
             verdict = "regression_failed" if fail_closed else "regression_error"
             return {
                 "verdict": verdict,
+                "reason": "timeout",
                 "returncode": None,
                 "output_tail": f"p2p timeout after {out_timeout}s",
             }
         rc = proc.returncode
         output = (proc.stdout or "") + "\n" + (proc.stderr or "")
+        # B9（2026-11-05）：被信号杀死（OOM / rlimit / 段错误 ⇒ rc<0，且不是我们的
+        # 超时）与 rc 缺席都属"根本没跑起来"，与 _m1_metrics 的 rc>=2 / 负 rc 判据
+        # 同口径——历史实现把它们留给兜底腿，读成"断言级回归失败"并在 fail-open
+        # 档回滚好补丁。放在收集错误腿**之前**，否则负 rc 会先被"无用例"文案吞掉。
+        if rc is None or rc < 0:
+            verdict = "regression_failed" if fail_closed else "regression_error"
+            return {"verdict": verdict, "reason": "killed_by_signal", "returncode": rc, "output_tail": output[-500:]}
         # rc>=2 = 收集/编译阶段中断（import 失败 / 语法错误 / 无测试）→
         # 与 _m1_metrics._looks_like_test_execution_error 同口径归
         # regression_error（坏测试不触发回滚，防"测试自身坏 → 误杀好补丁"）；
         # R4b fail-closed 时改判 regression_failed（回滚）
         low = output.lower()
-        if (rc is not None and rc >= 2) or "no tests were run" in low:
+        if rc >= 2 or "no tests were run" in low:
             verdict = "regression_failed" if fail_closed else "regression_error"
-            return {"verdict": verdict, "returncode": rc, "output_tail": output[-500:]}
+            return {
+                "verdict": verdict,
+                "reason": "collect_error",
+                "returncode": rc,
+                "output_tail": output[-500:],
+            }
         if rc == 0:
             # BE（2026-10-21）：rc==0 + 有效通过才 verified。回归测试全 skip /
             # xfail / deselect 时没有任何断言执行——"没跑起来"不能证明补丁
             # 安全（与 rc>=2 同口径：默认 regression_error 不误杀好补丁，
             # fail-closed 时 regression_failed 触发回滚）。
             if run_has_effective_pass(rc, output):
-                return {"verdict": "verified", "returncode": 0, "output_tail": output[-500:]}
+                return {
+                    "verdict": "verified",
+                    "reason": "verified",
+                    "returncode": 0,
+                    "output_tail": output[-500:],
+                }
             verdict = "regression_failed" if fail_closed else "regression_error"
             return {
                 "verdict": verdict,
+                "reason": "no_effective_pass",
                 "returncode": 0,
                 "output_tail": output[-500:],
                 "no_effective_pass": True,
             }
-        # rc == 1 = 存在测试失败（断言级）→ 回归未过 → 触发自动回滚
-        return {"verdict": "regression_failed", "returncode": rc, "output_tail": output[-500:]}
+        # 到这里只剩 rc==1（None/负值/rc>=2/rc==0 已在上面各自裁决）：有用例执行
+        # 且失败 = 断言级回归未过 → 触发自动回滚。这是唯一说明"补丁跑坏了测试"的腿。
+        return {
+            "verdict": "regression_failed",
+            "reason": "assertion_failure",
+            "returncode": rc,
+            "output_tail": output[-500:],
+        }
     except OSError as e:
         # IO 异常（磁盘满 / 权限）→ 保守 no_oracle（不静默放行，也不误杀）；
         # R4b fail-closed 时改判 regression_failed（回滚）
         logger.warning("A-03 P2P 回归 IO 异常（fail_closed=%s）：%s", fail_closed, e)
         verdict = "regression_failed" if fail_closed else "regression_error"
-        return {"verdict": verdict, "returncode": None, "output_tail": str(e)[:500]}
+        return {"verdict": verdict, "reason": "io_error", "returncode": None, "output_tail": str(e)[:500]}
     finally:
         _cleanup_tmpdir(tmpdir)
 
@@ -312,6 +347,11 @@ class PatchRollbackProtocol:
               "rolled_back": bool,      # 是否触发了自动回滚
               "snapshot_id": str,       # 快照引用（日志/工件关联）
               "p2p_returncode": int | None,
+              "p2p_reason": str | None,  # B9（2026-11-05）：裁决理由——verdict 只说
+                                        #   "回滚没回滚"，reason 才说"为什么"
+                                        #   （timeout / killed_by_signal / collect_error /
+                                        #   no_effective_pass / assertion_failure /
+                                        #   verified / no_oracle；apply_failed = None）
             }
         """
         if apply_fn is None:
@@ -331,6 +371,7 @@ class PatchRollbackProtocol:
                 "rolled_back": True,
                 "snapshot_id": snap["snapshot_id"],
                 "p2p_returncode": None,
+                "p2p_reason": None,
             }
 
         # 应用成功 → P2P 全量回归裁决（fail_closed 透传，R4b）
@@ -340,8 +381,9 @@ class PatchRollbackProtocol:
             # 回归未过 → 自动回滚到快照（内容级 restore）
             restored_code, _ = restore(snap)
             logger.warning(
-                "A-03 P2P 回归失败（rc=%s），自动回滚补丁（snapshot=%s）",
+                "A-03 P2P 回归失败（rc=%s, reason=%s），自动回滚补丁（snapshot=%s）",
                 p2p.get("returncode"),
+                p2p.get("reason"),
                 snap["snapshot_id"],
             )
             return {
@@ -351,6 +393,7 @@ class PatchRollbackProtocol:
                 "rolled_back": True,
                 "snapshot_id": snap["snapshot_id"],
                 "p2p_returncode": p2p.get("returncode"),
+                "p2p_reason": p2p.get("reason"),
             }
         # verified / no_oracle / regression_error → 保留补丁（regression_error
         # 保守保留：坏测试不误杀好补丁，由 M1 的 None 口径兜底裁决）
@@ -361,6 +404,7 @@ class PatchRollbackProtocol:
             "rolled_back": False,
             "snapshot_id": snap["snapshot_id"],
             "p2p_returncode": p2p.get("returncode"),
+            "p2p_reason": p2p.get("reason"),
         }
 
 

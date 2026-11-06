@@ -2175,6 +2175,11 @@ def _build_task_result(
             #     （磁盘恢复成功）；False = 执行过但未回滚；None = 未执行
             "patch_rollback_verdict": final_state.get("patch_rollback_verdict"),
             "patch_rolled_back": final_state.get("patch_rolled_back"),
+            # B9（2026-11-05）：回滚的**理由**逐行透出——`regression_failed` 里
+            # "断言跑坏"（assertion_failure）是能力读数，"没跑起来"（timeout /
+            # killed_by_signal / collect_error / no_effective_pass / io_error）是
+            # 墙钟读数；fail-closed 档（logic/safe）把两者都写成回滚，无此列则不可分。
+            "patch_rollback_reason": final_state.get("patch_rollback_reason"),
             # M1 三指标（并行产出，不改变 passed 的历史口径）：
             #   detection_rate（生成测试能否让带缺陷代码变红）/
             #   repair_rate（gold 材料独立裁决（自动化 oracle，无人工参与）修复是否正确）/
@@ -2445,6 +2450,8 @@ def _build_task_result(
         # rolled_back=False（明确未发生回滚，不得写成 True）
         "patch_rollback_verdict": None,
         "patch_rolled_back": False,
+        # B9：失败分支无 final_state ⇒ 无裁决理由（None = 未执行，不是"执行了且没理由"）
+        "patch_rollback_reason": None,
         "detection_rate": None,
         # N-3：失败分支无 final_state → LLM-suite 不可判（None）/ oracle 未运行
         # （unavailable）；键集合同构（成功/失败两分支键集合完全一致）。

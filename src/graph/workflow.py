@@ -124,10 +124,10 @@ class StopReason(Enum):
     # 修复 2026-10-18）。
     COVERAGE_STALL = "coverage_stall"
     RECURSION_LIMIT = "recursion_limit"
-    # B6（2026-11-05）：未发起任何修复迭代即终止（iteration==0 且补丁为空且
-    # repair_history 为空）。最小批实测 28/40 行是这个形态却折进 UNKNOWN ⇒
-    # failure_bucket=uncategorized，兜底桶占满七成——它既不是"迭代耗尽"
-    # （max_iterations）也不是"补丁无效"（skip_debugger_repair_invalid），
+    # B6（2026-11-05）：从未产出过任何修复动作（补丁为空且 repair_history 为空，
+    # 与迭代计数无关——见 `_no_repair_attempted` 的边界更正）。最小批实测 28/40 行
+    # 是这个形态却折进 UNKNOWN ⇒ failure_bucket=uncategorized，兜底桶占满七成——
+    # 它既不是"迭代耗尽"（max_iterations）也不是"补丁无效"（skip_debugger_repair_invalid），
     # 而是"产物从未出现"（plain_llm 直答臂按设计走这条；修复臂出现则说明
     # 生成环节没落地）。给它一个具名标签，兜底桶只留真正的未知。
     NO_REPAIR_ATTEMPTED = "no_repair_attempted"
@@ -153,9 +153,9 @@ def determine_stop_reason(state: AITesterState) -> StopReason:
     6. iteration >= max_iterations → MAX_ITERATIONS / MAX_ITERATIONS_REACHED
     7. 最近 2 次修复均无效 → REPAIR_INVALID
     8. 诊断关键词命中（早期/晚期）→ TEST_GEN_KEYWORD_EARLY / LATE
-    9. B6（2026-11-05）：未发起任何修复迭代（iteration=0 且补丁为空且修复历史
-       为空）→ NO_REPAIR_ATTEMPTED（plain_llm 直答臂按设计走这条；它不是
-       "迭代耗尽"也不是"补丁无效"，而是"产物从未出现"）
+    9. B6（2026-11-05）：产物从未出现（补丁为空 + 修复历史为空 + 无降级弱信号，
+       **不看迭代计数**）→ NO_REPAIR_ATTEMPTED（plain_llm 直答臂按设计走这条；它不是
+       "迭代耗尽"也不是"补丁无效"，而是"从未产出可评估的修复"）
     10. 未知 → UNKNOWN（兜底桶只留真正的未知）
 
     Args:
@@ -198,8 +198,8 @@ def determine_stop_reason(state: AITesterState) -> StopReason:
         if int(state.get("iteration", 0)) < int(state.get("max_iterations", MAX_ITERATIONS)):
             return StopReason.TEST_GEN_KEYWORD_EARLY
         return StopReason.TEST_GEN_KEYWORD_LATE
-    # 9. B6（2026-11-05）：从未发起修复迭代（iteration=0 + 无补丁 + 无修复历史）
-    #    ——最小批 28/40 行是这个形态，此前一律折进 UNKNOWN，使兜底桶占满七成
+    # 9. B6（2026-11-05）：产物从未出现（无补丁 + 无修复历史；不看迭代计数）
+    #    ——最小批 28/40 行 + 冒烟再补 4/50 行是这个形态，此前折进 UNKNOWN
     if _no_repair_attempted(state):
         return StopReason.NO_REPAIR_ATTEMPTED
     # 10. 未知（保守兜底）
@@ -641,10 +641,15 @@ def _recent_repairs_invalid(state: AITesterState) -> bool:
 def _no_repair_attempted(state: AITesterState) -> bool:
     """判断本轮任务是否**从未发起修复迭代**（纯数据，零副作用；B6，2026-11-05）。
 
-    四条同时成立才算：迭代计数为 0、补丁为空、修复历史为空、且**没有
-    logic_degraded 弱信号**。任一不成立就说明修复动作发生过（哪怕失败），
-    应由此前更高优先级的标签（max_iterations / skip_debugger_repair_invalid /
-    关键词）归因，本判据不得抢占。
+    三条同时成立才算：**补丁为空** + **修复历史为空** + **无 logic_degraded
+    弱信号**。任一不成立就说明修复动作发生过（哪怕失败），应由此前更高优先级的
+    标签（max_iterations / skip_debugger_repair_invalid / 关键词）归因，本判据
+    不得抢占。
+
+    曾经还要求 `iteration == 0`——那是按最小批抽样形态写死的边界，不是机制边界：
+    冒烟实测 4/50 行为 `iterations=1` 且补丁与修复历史皆空（`single_agent ×
+    {testgeneval, ult} × 两模型`，如 `tge__django__django-17087`），仍折进
+    UNKNOWN。迭代计数只说明"循环进过几次"，**产物是否出现过**看补丁与修复历史。
 
     `logic_degraded` 那条是 I3（2026-10-16）口径的延续：规约通道降级时
     "没产出补丁"只是**症状**，降级才是**原因**；若本判据抢占，读侧的
@@ -659,8 +664,6 @@ def _no_repair_attempted(state: AITesterState) -> bool:
     if "patch" not in state or "repair_history" not in state:
         return False
     if state.get("logic_degraded"):
-        return False
-    if int(state.get("iteration", 0) or 0) != 0:
         return False
     if str(state.get("patch") or "").strip():
         return False

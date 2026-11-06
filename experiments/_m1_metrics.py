@@ -518,6 +518,7 @@ def _run_pytest_in_tmp(
     task_metadata: dict[str, Any] | None = None,
     per_test_timeout: int | None = None,
     keyword_filter: str | None = None,
+    logger_name: str = "m1_metrics",
 ) -> tuple[int, str, str] | None:
     """在临时目录里写 target + test 文件并跑 pytest。
 
@@ -631,7 +632,7 @@ def _run_pytest_in_tmp(
                 timeout=timeout,
                 cwd=tmpdir,
                 text=True,
-                logger_name="m1_metrics",
+                logger_name=logger_name,
                 orphan_guard=True,
                 # H 轮（2026-10-16）：剔除宿主 PYTEST_PLUGINS/PYTEST_ADDOPTS——
                 # 否则宿主插件在 PYTHONPATH=tmpdir 的嵌套运行里不可导入 → rc=1
