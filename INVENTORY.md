@@ -108,16 +108,29 @@ gate target of the chain — and answers only "is the assembly intact". `full` r
 maximum: `make test-cov` (whole suite plus `coverage.xml`), `make gates` (the whole chain),
 and every dataset face to completion. The default profile `both` sequences them and will
 not start the full profile without a passing `SMOKE_GATE.json` whose fingerprint matches
-the matrix shape, protocol values, `HEAD` and the working-tree digest, so an edited file
+the matrix shape, protocol values, `HEAD`, the working-tree digest and the **per-model
+concurrency resolution** used by that run, so an edited file — or a different `-p` —
 invalidates an earlier smoke run instead of letting it vouch for the change.
 
-Face names come from the dataset loader registry at run time, with three guards: an
+Face names come from the dataset loader registry at run time, with four guards: an
 unregistered name is refused (the loader degrades unknown names to a three-item built-in
 face, which would fake "every face run"); faces that resolve to the same data are
 deduplicated by task count plus first/last task id, so one batch is never paid for twice;
-and a face with no data on disk is dropped with disclosure. Measured on this machine after
+a face with no data on disk is dropped with disclosure; and the zero-cost pre-spend
+dataset gate now feeds face selection — a face the gate judges unable to produce a verdict
+is dropped by name instead of being paid for anyway. Measured on this machine after
 dedupe: `bugsinpy` 8 + `quixbugs` 50 + `swebench` 225 + `testgeneval` 160 + `ult` 200 =
-643 tasks per model-arm cell.
+643 tasks per model-arm cell (under the batch strict calibers, `swebench` keeps 217 of its
+225 — see below).
+
+`AITESTER_DATASET_STRICT_INSTANCE_CODE` and `AITESTER_DATASET_STRICT_TEST_CODE` drop,
+respectively, tasks whose source falls back to the issue text and tasks whose official test
+material can never decide a verdict, so the denominator counts only what can be judged; the
+same helper sets `PATCH_EVIDENCE_OFFICIAL_TESTS_ENABLE`, which lets the evidence gate run a
+task's official tests against the patched source inside the loop and release a
+gold-backed patch instead of rolling it back. Counting the faces, running the gate and
+executing the batch all read that one helper, so a face cannot be counted under one
+caliber and paid under another.
 
 Unattended operation: `RUNNING.lock` refuses a concurrent run (and is taken over when the
 recorded pid is gone), `PROGRESS.json` is rewritten atomically on every tick with stage
@@ -128,6 +141,17 @@ caps `--max-wall-hours` and `--max-stalls` stop opening new stages and record a 
 failed stage, so a shortened run can never read as a complete one. Parallelism is capped
 at 75% of physical cores and each run gets its own empty temp root, because the inner
 pytest puts that directory on `sys.path`.
+
+LLM parallelism per cell is no longer a constant: each "model × arm" stage resolves
+provider allowance ∩ machine allowance ∩ an explicit `--llm-parallel`, taking 80% of the
+registered allowance (`MODEL_RATE_LIMITS` — `deepseek-flash` 2500 in-flight requests,
+`deepseek-v4-pro` 500, `mimo-v2.6-pro` 100 requests/min and 10M tokens/min), where an
+in-flight allowance caps concurrency directly but a requests-per-minute allowance only
+caps the launch rate and leaves concurrency to the machine side
+(min(cores × 2.4, memory term, 40), floor 2, conservative on sampling failure). The
+resolution is printed per stage, hashed into the smoke fingerprint, and an explicit
+`--llm-parallel` above the provider line is clamped to it with a note — oversending buys
+429s, not throughput.
 
 ## Model-consuming paths, kept separate
 

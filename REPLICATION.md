@@ -77,7 +77,7 @@ build-arg 时该值记为 `unknown`，不作提交 SHA 使用。
 | `REPRODUCE_ALLOW_TEST_FAILURES=1` | 测试失败仅告警并继续 |
 | `REPRODUCE_SKIP_TESTS=1` | 整个测试门跳过，打印醒目 WARN |
 
-跳过时结论**不含测试验证**——这是披露，不是通过。默认不设任何变量即保持 fail-closed。 一次跑完全部测试面的入口是 `python scripts/run_all_tests.py`（两档：`smoke` 每个面跑一项验装配、`full` 每个面跑满出读数；默认 `both` 顺序执行且冒烟未全通即不开全量，详见 `INVENTORY.md` 的入口点表）；两条路径的深度思考默认关闭（`LLM_THINKING_MODE`，实测单调用输出 −92%/−94%），跨模型对比因此建立在同一设置上。
+跳过时结论**不含测试验证**——这是披露，不是通过。默认不设任何变量即保持 fail-closed。 一次跑完全部测试面的入口是 `python scripts/run_all_tests.py`（两档：`smoke` 每个面跑一项验装配、`full` 每个面跑满出读数；默认 `both` 顺序执行且冒烟未全通即不开全量——旧证据还必须与本轮**同配置指纹**（矩阵形状、协议取值、`HEAD`、工作树摘要、逐模型并发决议），详见 `INVENTORY.md` 的入口点表）；两条路径的深度思考默认关闭（`LLM_THINKING_MODE`，实测单调用输出 −92%/−94%），跨模型对比因此建立在同一设置上。付费段的三件事在同一处决定：每格 LLM 并发 = 厂商额度 80% ∩ 机器闸 ∩ 显式 `--llm-parallel`（额度登记在 `MODEL_RATE_LIMITS`，两种量纲不互换：在途档封顶并发，RPM 档只封发起速率）；数据集闸的结论参与选面（判不可判定的面点名剔除，不再照旧付费）；严格口径开关（`AITESTER_DATASET_STRICT_INSTANCE_CODE` / `AITESTER_DATASET_STRICT_TEST_CODE`）把"没有源码"与"官方测试给不出判定"的任务留在分母之外，同时 `PATCH_EVIDENCE_OFFICIAL_TESTS_ENABLE` 打开图内 gold 裁决——证据门等级不足时把该任务的官方测试跑在打补丁源码上，全绿才放行。
 
 ## 5. 证据索引
 
