@@ -6,6 +6,8 @@ How to reproduce AITester experiments: the zero-LLM recompute path, the LLM-depe
 path, and how mounting and the test gate behave. **Raw LLM responses are not distributed**, so
 the LLM path must spend new API quota; only metrics from committed artifacts reproduce offline.
 
+> **Archived snapshot**: the version-locked derived verdict rows (with the 50-cell aggregate, SHA-256 manifests and a one-command recompute script) are published as `10.5281/zenodo.24136905` (<https://doi.org/10.5281/zenodo.24136905>), CC0-1.0, with no raw execution traces or model transcripts. The results tree is excluded by `.gitignore`, so a fresh clone must be combined with this snapshot; cloning the repository alone cannot reproduce the manuscript tables.
+
 ## 1. Prerequisites
 
 - Python 3.12+ (`pyproject.toml` sets `requires-python = ">=3.12"`; CI matrix 3.12/3.13/3.14). Use the repository `.venv`.

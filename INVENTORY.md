@@ -18,7 +18,7 @@ prints the outcome of every command instead of only the passing ones.
 | Criterion | Status | Evidence in the package |
 | --- | --- | --- |
 | Downloadable | yes | One archive. Every verdict is stored as JSON or Markdown and is readable without executing anything: per-task rows under `experiments/results/`, the measurement-integrity notes `docs/MEASUREMENT_INTEGRITY.md`. |
-| Archived | not yet | No DOI exists at the time of writing. The archival deposit is a submission action the authors take; until then the review mirror is the only copy, and it is anonymized. |
+| Archived | yes | The version-locked 2026-11-11 derived-verdict-row snapshot is published as `10.5281/zenodo.24136905` (`https://doi.org/10.5281/zenodo.24136905`), access open, CC0-1.0, with a one-command `verify.sh` and SHA-256 manifests. It carries no raw execution traces or model transcripts. This snapshot backs the current manuscript; the remaining rows in this file describe the earlier zero-LLM recompute chain, which is a different corpus. |
 | Documented | yes | This file, `REPLICATION.md` (three reproduction paths, prerequisites, calibers), Appendix A of the manuscript (artifact-to-claim map with markers for what is distributed as data versus as a command), and the gate inventory in the repository itself (`scripts/gates/` with the `Makefile` targets that invoke them). |
 | Complete | partially | The pre-registered batch **landed**: `test_run_20261106T101605Z` (53 stages, 2026-11-06→11-10) plus independent supplementary reruns (2026-11-11: 9 swebench cells + 2 testgeneval cells), all under the batch fingerprint `9c9a85ffd4bd14cf`. The four zero-LLM recompute branches still target the pre-reset synthetic layout and stay `[SKIP]` until rewired (disclosed below); the batch-level aggregates are registered in `experiments/results/BILL_RECON_AGG_20261111.json` and `B2_REPORT.json`. |
 | Exercisable | yes for the tracked subset | `make install` then `make reproduce-zero-llm`. Only public modules and the shipped configuration are used. A fresh clone exercises the corpus that is tracked in git; the heavier per-task records travel with the archive rather than with the clone. |
@@ -180,9 +180,11 @@ The instruction artifacts measured in the study are extracted verbatim from
 source and pinned by SHA-256, so the exact prompt text is checkable from the
 archive.
 
-## Open items before the archival deposit
+## Archival deposit (closed 2026-11-11)
 
-1. Reserve the DOI and attach the deposit, then replace the placeholder in the
-   data-availability statement of the title page and the manuscript.
-2. Carry the CC0 dedication for the artifacts into the deposit as its own
-   statement rather than as a line in this file.
+1. The DOI is published (`10.5281/zenodo.24136905`) and the deposit is attached.
+   The placeholders in the title page, the two data-availability statements of
+   the manuscript, the cover letter and Appendix~A are replaced by the resolved
+   DOI rather than a "will cite" promise.
+2. The CC0 dedication is carried by the deposit metadata (`license: cc-zero`)
+   and by the deposit README; it is also stated in the criteria table above.

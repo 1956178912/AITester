@@ -6,6 +6,8 @@
 
 > **结论复现**：报告中的每个关键读数都走零 LLM 复算路径（`make reproduce-zero-llm`，L1 是 `make reproduce-zero-llm-l1`）。本仓库中需要消耗 API 配额的 `reproduce.sh` 与 `experiments/run_main_batch.py` 只是按预注册配置**重新跑批**，不在「工件 → 结论数值」的链路上。六个开放科学维度的逐条回答、以及包内哪些支路当前是 `skipped` 而非 `passed`，写在 [INVENTORY.md](INVENTORY.md)。
 
+> **数据归档 DOI**：[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.24136905.svg)](https://doi.org/10.5281/zenodo.24136905) — 2026-11-11 版本锁定的派生判定行快照已公开发布（`10.5281/zenodo.24136905`），CC0-1.0、不含原始执行 trace 与模型转录；与本仓代码配合使用可零 LLM 逐字节复算 50 格聚合。
+
 > 最后更新：2026-10-27
 
 ## 它是什么

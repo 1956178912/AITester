@@ -6,6 +6,8 @@ Current version 1.0.0 · [Changelog](CHANGELOG.en.md) · [Documentation index](d
 
 > **Result reproducibility**: every headline number is reached by the zero-LLM recompute path (`make reproduce-zero-llm`, and `make reproduce-zero-llm-l1` for L1). The quota-consuming entry points in this repository, `reproduce.sh` and `experiments/run_main_batch.py`, only **regenerate a batch** under the pre-registered configuration; they are not on the path from an artifact to a reported number. [INVENTORY.md](INVENTORY.md) answers the six open-science criteria one by one and lists which branches of the chain currently report `skipped` rather than `passed`.
 
+> **Archived data DOI**: [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.24136905.svg)](https://doi.org/10.5281/zenodo.24136905) — the version-locked 2026-11-11 derived-verdict-row snapshot is published as `10.5281/zenodo.24136905`, CC0-1.0, with no raw execution traces or model transcripts; combined with this repository it reproduces the 50-cell aggregate byte for byte with zero model calls.
+
 > Last updated: 2026-10-27
 
 ## What It Is
