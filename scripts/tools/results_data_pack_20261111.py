@@ -17,7 +17,8 @@ import json
 from collections import defaultdict
 from pathlib import Path
 
-ROOT = Path("/Users/wangchenyu/Workspace/AITester")
+# 从脚本位置推导仓库根，保证 fresh clone / 任意路径下都能零 LLM 复算。
+ROOT = Path(__file__).resolve().parents[2]
 
 # 正式批次目录白名单（与稿件 Appendix B 的三个登记目录一致）。禁止改回
 # experiments/results/** 全盘递归：H2 冒烟在同一 cell×task_id 上重写行，血统去重
