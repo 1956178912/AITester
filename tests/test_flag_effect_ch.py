@@ -36,7 +36,6 @@ D 组那两例（缺席 / 不可解析）不是本轮开头就写好的：首轮
 from __future__ import annotations
 
 import importlib.util
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -912,22 +911,3 @@ class TestRealTree:
         assert calls == []  # 写腿：缺席在分发前拒绝，write_manifest 未被触达
         assert cs.main(["--results-dir", str(tmp_path / "absent_verify"), "--verify"]) == 0
         assert calls == ["verify"]  # 验证腿：分发到达 verify_manifest，跳过语义由其承担
-
-    @pytest.mark.parametrize(
-        ("argv", "strict_seen"), [(["x"], False), (["x", "--warn-only"], False), (["x", "--strict"], True)]
-    )
-    def test_drift_gate_routes_warn_only_into_dispatch(self, argv, strict_seen, monkeypatch):
-        dh = _load("drift_under_test", PROJECT_ROOT / "scripts" / "gates" / "check_docs_history_drift.py")
-        seen: list[bool] = []
-        monkeypatch.setattr(sys, "argv", argv)
-        monkeypatch.setattr(dh, "_check_history_drift", lambda threshold, strict: seen.append(strict) or 0)
-        assert dh.main() == 0
-        assert seen == [strict_seen]
-
-    def test_drift_gate_rejects_contradictory_pair(self, monkeypatch):
-        dh = _load("drift_under_test2", PROJECT_ROOT / "scripts" / "gates" / "check_docs_history_drift.py")
-        called: list[bool] = []
-        monkeypatch.setattr(sys, "argv", ["x", "--strict", "--warn-only"])
-        monkeypatch.setattr(dh, "_check_history_drift", lambda threshold, strict: called.append(strict) or 0)
-        assert dh.main() == 2
-        assert called == []

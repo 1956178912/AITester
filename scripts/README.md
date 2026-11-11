@@ -9,7 +9,7 @@
 
 > 命名不是判定依据：`tools/check_quota.py` 虽以 `check_` 开头，但它是对 LLM 端点发探测请求的运维工具，不参与门禁；`tools/generate_static_report.py` 虽被 CI 调用，但产物是报告而非判定，故归 `tools/`。
 
-## gates/（38 个）
+## gates/（37 个）
 
 CI / pre-commit 阻断项，`make gates` 跑其中大部分：
 
@@ -29,7 +29,6 @@ CI / pre-commit 阻断项，`make gates` 跑其中大部分：
 | `check_dependency_exemptions.py` | pip-audit 漏洞豁免登记 |
 | `check_doc_commands.py` | 文档引用的 `scripts/….py` 路径与 `make <target>` 目标必须真实存在 |
 | `check_doc_links.py` | 文档相对链接 / 行锚 / 标题锚点静态完整性 |
-| `check_docs_history_drift.py` | 核心文档与 `docs/history/` 归档口径漂移 |
 | `check_env_budget.py` | 环境变量开关预算棘轮 |
 | `check_env_snapshot_keys.py` | 环境开关 provenance 快照完备性 |
 | `check_flag_effect.py` | 门禁开关有效性对账（dest 活性：传了却不改变行为的死开关判红） |

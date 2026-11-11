@@ -28,6 +28,7 @@
 - 全量测试运行器每次运行独占临时根（2026-11-04）：`stage_base_env()` 单点构建 `<报告目录>/tmp`，`TMPDIR`/`TEMP`/`TMP` 三变量同指、运行结束回收——一次运行的判定不再被上一次运行留下的临时目录拖慢；`build_parser()` 同时从 `main()` 提出，供锁直接取参数。
 
 ### Changed
+- 归档机制拆除与收口统一（2026-11-11，零 LLM）：`docs/history/`（42 份）与 `docs/checkpoints/`（4 份）随归档机制整体拆除——其唯一读者（`tests/test_doc_archive_integrity.py`）与专职门禁（`check_docs_history_drift.py`）、CI 快照归档步骤（generate/upload static snapshot）一并退役；`scripts/tools/generate_static_report.py` 退役；prompt 工件清单按现行源码重生成（7 artifact 哈希锁逐位一致）。30 个引用文件同步：CHANGELOG 双语去悬空链接、INDEX 双语改「过期内容直接删除」约定、冻结面 `docs/history/` 前缀退役（棘轮 9→0）、release-freshness 失效例外清理（tag 已删）。登记数字刷新：门禁脚本 38→37、门禁索引 38→37、ci唯一门禁 36→35、ci调用点 39→38、门禁步骤 37→36、非阻断步骤 2→1、已格式化 1119→1079（−40 = 归档受检文件）、全量测试实测 13,693 passed / 0 failed / 310 skipped / collected 14,003（退役与语料锁回填后终值）。
 - 描述性文档面同步近 5 轮机制（2026-11-06，零 LLM）：新增 ADR-0037（图内 gold 证据裁决与官方测试材料的复用边界，含"为什么选 gold 前移而不是放宽 keyword"）与 ADR-0038（冒烟证据的适用边界——并发决议、选面与协议取值同属一次配置）；`docs/adr/README.md` 索引补 ADR-0036 并纠正编号规则（此前停在"下一个 0036"，而 0036 早已落盘）；`docs/MEASUREMENT_INTEGRITY.md` 新增 §124 并滚动"最后更新"；`.env.example` 两处口径改正——fail-closed 的"无法裁决"集合补入被信号杀死（rc<0）与无有效通过，并说明 `patch_rollback_reason`；`logic` 档预设补 `PATCH_ROLLBACK_FAIL_CLOSED`；`docs/DATA_CARD.md/.en.md` 的 SWE-bench 状态补 2026-11-05 冒烟 10 格全 `harness_invalid` 与严格口径 217/225，并按本卡登记规则补 Defects4J-Python 行（可达性/许可/泄漏控制**未核实**照写未核实）；`docs/COST_MODEL.md/.en.md` 明确任务均值分母是"实际发起调用的任务数"，不得改用面规模；README 双语补一句贯通档范围（两模型 × 5 臂 × 5 面只证装配，不构成跨模型能力读数）。历史审计记录（`docs/COVERAGE_RATCHET_DEVIATION.md`、MEASUREMENT_INTEGRITY 各带日期小节）**不改**——它们的数字是当时事实。
 - A-03 P2P 回归裁决补理由字段（B9，2026-11-05）：`regression_failed` 只说"回滚了"、不说"为什么"，于是"补丁真把测试跑坏"（能力读数）与"60s 没跑完 / 被信号杀死 / 收集期就断"（墙钟读数）在结果行里是同一件事；`logic`/`safe` 两档都开 fail-closed，冒烟里 8 条 `rc=None` 回滚要回日志逐行对齐 snapshot 哈希才知道是超时。真缺陷一处：非超时的负 rc（OOM / rlimit）既不过 `rc>=2` 也不过 `rc==0`，直接落进兜底腿被读成断言级失败——fail-open 档因此误杀好补丁（真子进程复现 `{'verdict': 'regression_failed', 'returncode': -9}`）。现每条裁决自带 `reason`（verified / assertion_failure / collect_error / killed_by_signal / no_effective_pass / timeout / io_error / no_oracle），协议透出 `p2p_reason`，新声明键 `patch_rollback_reason` 进 state 与结果行（协议未执行记 None）；回滚策略、verdict 值域与路由一字未动。P2P 子进程调用同时补 `logger_name="patch_rollback_p2p"`（此前日志只写 `python`）。20 例锁。
 - 官方测试门的材料级阻断按任务 memo（B10，2026-11-05）：证据门每挡住一次就会重跑一遍沙箱 pytest，而 `exec_error` / `runner_unavailable` / `no_effective_pass` / `invalid_module` 只取决于测试材料与本机环境、与这一版补丁写了什么无关 ⇒ 第二次以后的重跑必然得到同一条裁决，白付墙钟，且日志里 N 条同名失败读起来像 N 次独立尝试。现 `official_tests_evidence` **只在**裁决为 `unavailable` 且理由属于该四类时复用 `state["official_test_evidence"]`，命中时出参带 `memoized: true` 使审计能分辨第一次跑与第二次读；`red`（逐补丁而变）与 `gold` 一律照常重跑、`no_official_tests` 本就不付执行成本 ⇒ 判定与放行口径零变化，省的是重复执行。8 例锁（含 3 条「不得 memo」反向腿）。
@@ -37,7 +38,7 @@
 - `doctor` 用例环境隔离：`TestNoSecretLeak` 原只 `setenv LLM_1_*`，但 `config` 导入期已把作者机 `.env.local` 的 `LLM_2_*` 注入 `os.environ` ⇒ `configured` 读成 2、本机必红。改经 `_doctor_check_llm_endpoints(environ=…)` 既有注入口喂固定环境，并补 `test_incomplete_numbering_is_counted_apart` 锁住"编号不完整单独点名"（断言用实际键名 `incomplete_indices`）。
 - 归档语料形状锁改为带读数显式 skip：`experiments/results/` 清空后 `archived_trace_files()`（`git ls-files` ∩ 盘面）自然为 0，把钉值 1756/5268 改成 0 会连"钉值本身为正"的自检一起作废。新增 `_corpus_guard.require_archived_corpus()`，口径与 `require_full_corpus` 及复现链 `[SKIP]` 一致，重跑入库后自动恢复判定。
 - 复现链一处硬红改判显式 skip：`emse_stats_extensions` 支路此前没有前提探针（兄弟支路都有），源批次缺席时直接 `FileNotFoundError` rc=1。补 `_skip_repro_batches()`，判据取该脚本实际读取的重建三臂文件；实测读数由「2/6 通过 + 3 skipped + 1 硬红」变为「2/6 通过 + 4 skipped + 0 硬红」。
-- 登记面同步：`docs/env_budget.yaml` 253 → 256（`LLM_HTTP_TIMEOUT`、`LLM_MAX_RETRIES` 系上一轮新增却漏登记，`test_x_batch` 的 X3 预算门因此红；`AITESTER_LLM_MODEL_FILTER` 本轮登记）；`docs/study/` 11 份批次世代读数转录移至 `docs/history/`（该目录此后只留预注册、外部文献与设施清单）；`subprojects/`（23 份未跟踪审计脚本、0 份入库）加入 `.gitignore`——它未被忽略时把 `make gates` 的 lint 步顶红 133 条，把产品代码的真问题埋在下面。
+- 登记面同步：`docs/env_budget.yaml` 253 → 256（`LLM_HTTP_TIMEOUT`、`LLM_MAX_RETRIES` 系上一轮新增却漏登记，`test_x_batch` 的 X3 预算门因此红；`AITESTER_LLM_MODEL_FILTER` 本轮登记）；`docs/study/` 11 份批次世代读数转录随归档机制拆除（2026-11-11）；`subprojects/`（23 份未跟踪审计脚本、0 份入库）加入 `.gitignore`——它未被忽略时把 `make gates` 的 lint 步顶红 133 条，把产品代码的真问题埋在下面。
 - 提示词全英化（2026-11-04）：`src/prompts/templates.py` 四个智能体 system prompt + 规约表达式契约段、`src/graph/nodes.py` 的 detection-first 干预段与过红修复段、补丁语法校验反馈，全部由中文改为英文。目标是消除"中文提示词 + 英文代码库"的跨语言混淆变量。
 - 默认思考档回到 **disabled**（`LLM_THINKING_MODE`，2026-11-04 用户更正「我记错了，默认应该关闭思考模式」）。本轮曾把它改成 enabled，实测后撤回：同一 prompt 的单条 Generator 调用（QuixBugs `bitcount`、`TEMPERATURE=0.0`）输出 token deepseek-flash 10,859（其中思维链 9,664）→ 关思考 **709**（−92.4%），mimo-v2.6-pro 9,640（思维链 8,407）→ 关思考 **342**（−94.1%）；两家的 `thinking={"type":"disabled"}` 都被接受（reasoning_tokens 分别为 null / 0），所以它是唯一能在两家产生同一设置的输出旋钮。`reasoning_effort` **不做跨模型统一口径**——实测 deepseek 单调（low 2,564 < 默认 10,859 < max 18,237）而 mimo **非单调**（max 3,862 < 默认 9,640），钉同一个 effort 值给两家不等于同一设置。单调用成本（峰时价）：deepseek ¥0.0878→¥0.0066，mimo ¥0.0593→¥0.0035。`base_agent._call_llm` 的 `max_retries` 改为延迟解析（`LLM_MAX_RETRIES`，默认 6），HTTP 读超时 180 → 600 s（`LLM_HTTP_TIMEOUT`）。
 - pytest 单测超时 1200 → **3600 s**（`--timeout-method=thread`）。
@@ -89,9 +90,9 @@
 ### Removed
 - `experiments/results/` 全部实验产物（8,185 文件 / 340 MB，其中 2,117 tracking + 6,068 未跟踪；已打包至 `~/Workspace/_aitester_backup/results_20261104.tar.gz`）。
 - LLM 响应缓存 `~/.cache/aitester/llm` 与 `llm.bak.*`（77 MB）、向量索引 `rag_data/`（2.2 MB）。数据集、仓库克隆、虚拟环境保留（重跑基础设施）。
-- 历史世代（withdrawn generation）在稿件与仓库文档中的全部内容：§4.2 整节、`tab:goldimpact` 整表、goldmat 合成行、Appendix B 历史批次、Appendix G 的 E8/T1-B2 规则行；台账归档至 `docs/history/`。
+- 历史世代（withdrawn generation）在稿件与仓库文档中的全部内容：§4.2 整节、`tab:goldimpact` 整表、goldmat 合成行、Appendix B 历史批次、Appendix G 的 E8/T1-B2 规则行；相关台账随归档机制拆除（2026-11-11）。
 - `experiments/results/` 残余非清单件：`standardized_20260819/`（8 月批次日志）、`strategy_bank.json`（已删批次积累的 7 条 outcome）、本轮运行器自测产生的 `test_run_20261104T*/`。仅保留 `prompt_artifacts_2026-10-15/`——它是 `prompt-artifacts-check --strict` 的清单依赖，删掉会让 strict 门失败。
-- `docs/study/` 中批次世代（2026-10-25/27）的**读数转录** 11 件移至 `docs/history/`：`GOLD_IMPACT_*`、`GOLD_MATERIAL_*`、`ANCHOR_DETECTION_*`、`COST_COMPARISON_*`、`DECLARATION_SIGNATURE_*`、`DENOMINATOR_DECOMPOSITION_*`、`MUTATION_CORRECTION_ANCHOR_*`、`RECLASSIFICATION_ANCHOR_*`、`SPEC_INSTRUMENTS_*`、`RQ1_PAIRING_REPORT_*`、`PAPER_CONSISTENCY_AUDIT_*`。`docs/study/` 此后只留预注册（`*_PREREG_*`）、外部文献读数与设施清单（`GATES_FAMILIES_*`、`REPRODUCTION_CHAIN_*`）——Python 侧对这些路径的引用均为预注册常量或审计排除名单，移动不触运行链，已核。
+- `docs/study/` 中批次世代（2026-10-25/27）的**读数转录** 11 件随归档机制拆除（2026-11-11）。
 - 稿件中指向已删工件的自有结果数字：摘要与贡献条目的 −20.6/−20.0 pp、`p = 0.065`、+3 任务 `p = 0.25`、873 判定位/8 检出、−14.3/−5.9/−2.9/+5.7 pp，引言的 21/35 与 29/36 对局、声明率 6.0%(3/50) 与 346/354，相关工作与结论效度段的同名数字，复现段的 300 Lite 实例 172 通过（57.3%）、gold 材料缺陷整段（依赖已删的 Appendix I 与 `-28.33 → -23.5 pp, p = 1.69e-9`）、以及批次构成与"约 $4"美元成本句，统一改为 `[Pending rerun]` 骨架句；引用已删工件的 `% SRC` 溯源注释一并撤下（保留指向不存在文件的溯源等于声称可复算）。
 - 题名页 `paper/title_page.tex` 遗留的"Xing Yu 与 Yue Xu 作为共同第三作者同等贡献"整句（前一轮只清了主稿 `§` 标记，题名页与 CRediT 段未同步）；co-first / co-second 声明按用户指示保留。
 - 稿件中 8 处指向已删附录的悬空交叉引用（正文 `Appendix~F/G/H/I` 为纯文本而非 `\ref`，"0 undefined reference"读数检不出此类断裂）：改写为指向仍在库的对象（`scripts/gates/`、`Makefile`）或删句，并把"three gaps are disclosed"改为与下游读数一致的"two gaps"。
@@ -105,12 +106,11 @@
 
 ### Fixed
 - G8 p2p 判定器转义缺陷（2026-11-02）：`judge_g8_p2p.py` 用 `x.replace("'", "'''")` 转义测试名中的单引号，该写法在 shell 单引号语境下不成立，含引号的参数化测试名使命令提前闭合 → 3 例被误记为 `p2p_broken`（并非 gold patch 破坏 pass-to-pass）。改用 `shlex.quote` 后复验 **19/19 `p2p_ok`**（3 例原 broken + 16 例含引号任务的静默假绿筛查，均无假绿）。完整门禁 **141/178 = 79.2% → 144/178 = 80.9%**，真实 p2p 破坏 **0 例**；稿件 G8 段与 SRC 注释同步更正并重编译（73 页 / 0 错误 / style 9/9 / compliance 0 FAIL）。四开关对称零（0/177）结论不变。
-- 队列脚本失控重启（2026-11-02 事故）：`scripts/b3_queue.sh` / `scripts/recovery_queue.sh` 被 launchd 以 `KeepAlive=true` 托管，退出即重拉（实测 6,425 / 772 次），判定步骤不幂等导致 983 个孤儿判定进程、load 747。已卸载并禁用两个 LaunchAgent、终止全部残留进程，脚本补**重入锁 + 完成标记 + 判定幂等**三重防护；空转批次写出的 `b3_lite_20261031/B3_JUDGE.json`（298 条全 `env_error`）重命名为 `.INVALID-20261102-env_error298` 隔离。处置与回滚见 `docs/checkpoints/incident-queue-runaway-20261102.md`。
+- 队列脚本失控重启（2026-11-02 事故）：`scripts/b3_queue.sh` / `scripts/recovery_queue.sh` 被 launchd 以 `KeepAlive=true` 托管，退出即重拉（实测 6,425 / 772 次），判定步骤不幂等导致 983 个孤儿判定进程、load 747。已卸载并禁用两个 LaunchAgent、终止全部残留进程，脚本补**重入锁 + 完成标记 + 判定幂等**三重防护；空转批次写出的 `b3_lite_20261031/B3_JUDGE.json`（298 条全 `env_error`）重命名为 `.INVALID-20261102-env_error298` 隔离。处置与回滚记录随检查点目录拆除（2026-11-11），要点保留在本条目。
 
 ### Changed
 - B3 Lite 判定口径更新（docker v2 终版）：原 78 条 `env_error` 复核为**冷启动资源竞争**——`judge_b3_docker_v2.py` 未校验 `docker run` 返回值，容器未运行被折叠成环境失败；分布上 78 条全部落在第一批 s1–s3（同批 s4–s6 为 0）。补跑 78/78 全部转 `red`（22m55s，零 LLM），有效分母 **222→300**、`env_error` 归零、**检出 0/300**。判定器已补返回值校验与一次重试（`58e0c41d`）。旧口径（py3.8/py3.14/conda 三版基线 env_error 246→281→286）为历史读数，**不可与 v2 混池**。
 - off 臂必卡任务处置口径：attempt29–33 五轮同点 stall、看护进度提取失效（`progress=?`）⇒ 两轮交叉 skip 失效，改 `AITESTER_SKIP_TASK_IDS` 显式跳过收官；两臂读数口径披露为 on 178/178 vs off 177/178+1skip，skip 任务的门禁读数由 per-instance 通道补位。
-- 逐轮条目归档：2026-11-02 批次之前的全部 `[Unreleased]` 条目（GK/GJ/GG/第十轮/GH/FF/FE/FD/FC/FB/DF 及更早 Fixed 各轮，128 行原文）移入 [docs/history/CHANGELOG_2026-11-02_batches.md](docs/history/CHANGELOG_2026-11-02_batches.md)（**原文逐字保留，未删改**；英文版同目录 `.en.md`）。
 
 ## [1.0.0] - 2026-10-25
 
@@ -134,5 +134,3 @@
 ## 更早版本
 
 0.8 / 0.9 系列与更早的逐轮记录见归档（原样保留，链接不保证可达）：
-[README（中文）](docs/history/README_2026-10-26_full.md) · [README（英文）](docs/history/README_2026-10-26_full.en.md) ·
-[CHANGELOG（中文）](docs/history/CHANGELOG_2026-10-26_full.md) · [CHANGELOG（英文）](docs/history/CHANGELOG_2026-10-26_full.en.md)。

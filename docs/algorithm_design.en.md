@@ -10,7 +10,7 @@
 > **Baseline numbers**: treat the repo-root [BASELINE.yaml](../BASELINE.yaml) as the single
 > source of truth (refreshed after each batch lands); this document no longer embeds
 > baseline numbers, avoiding stale snapshots. Historical trajectory: see `CHANGELOG.md`
-> entries and `docs/history/`.
+> entries (the archive directory was removed on 2026-11-11).
 
 ---
 

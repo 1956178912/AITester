@@ -99,7 +99,6 @@ grep -rl "semantic_cache" tests/
 | `scripts/gates/coverage_ratchet.py` + `check_branch_coverage.py` | 覆盖率棘轮与核心模块分支门槛（79% 总 / 85% 核心），删减用例会触发 |
 | `scripts/gates/check_state_contract.py` | 状态通道键读写契约（涉及 tests/ 的替换实现） |
 | `scripts/gates/audit_log_redaction.py` | 日志脱敏审计 |
-| `scripts/gates/check_docs_history_drift.py` | `docs/history/*.md` 中 "N passed" 声明与 `BASELINE.yaml` 的 `tests.total_passed` 对比 |
 | `BASELINE.yaml`（`tests:` 节） | 记录 `total_passed` / `total_failed` / `suite_seconds`；增删用例后需刷新，`check_baseline.py --verify` 按 ±2% 容差比对实测 |
 
 ## 五、为什么不做文件重命名（2026-10-10 目录治理决议）

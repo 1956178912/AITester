@@ -116,7 +116,6 @@ def test_scan_surface_is_not_empty():
         "check_scheduled_workflows.py",
         "check_dependency_audit.py",
         "check_bibtex_compilability.py",
-        "generate_static_report.py",
         "e2e_probes_logic.py",
     } <= names
     total = sum(len(_spawn_calls(path)) for path in files)
@@ -155,10 +154,3 @@ def test_artifacts_tracked_timeout_is_a_readable_failure(artifacts, tmp_path, mo
     tracked, why = artifacts._is_tracked(artifact)
     assert tracked is False
     assert "超时" in why
-
-
-def test_static_report_timeout_is_recorded_instead_of_raised(static_report, monkeypatch):
-    monkeypatch.setattr(static_report.subprocess, "run", _timeout_run)
-    rc, out = static_report._run(["ruff", "check", "."])
-    assert rc == 124
-    assert "超时" in out

@@ -226,12 +226,20 @@ class TestSummarizeFullStackTokenAverage:
 class TestRealCorpusCleanPath:
     """真语料独立复算：干净路径的均值逐位不变。"""
 
-    def test_top_level_benchmark_means_reproduce(self) -> None:
-        # BZ 轮：块数（34）以 results 顶层全部 benchmark_examples_*.json 为
-        # 扫描面——fresh clone 只有入库子集 ⇒ require_full_corpus 显式 skip
-        # 并带实测读数（tests/_corpus_guard.py）。
+    def test_llm_sweep_benchmark_means_reproduce(self) -> None:
+        # BZ 轮：扫描面原为 results 顶层 benchmark_*.json（旧布局，12 块）。
+        # 收口统一轮（2026-11-11）：主批重建为 `llm_sweep/<cell>/` 新布局，
+        # 扫描面接主批次 50 格汇总（2 模型 × 5 臂 × 5 数据集，每格 1 臂 ⇒ 50 块）；
+        # fresh clone 语料缺席时 require_full_corpus 显式 skip（tests/_corpus_guard.py）。
         require_full_corpus()
-        files = sorted(_RESULTS.glob("benchmark_*.json"))
+        # 每格取**最新**一份汇总（resume 语义下同格会有多份带时间戳快照，
+        # 最新一份才是含恢复源的终态读数；与 BILL_RECON_AGG 的血统口径一致）。
+        latest: dict[str, Path] = {}
+        for f_ in (_RESULTS / "test_run_20261106T101605Z").glob("llm_sweep/*/benchmark_*.json"):
+            cell = f_.parent.name
+            if cell not in latest or f_.name > latest[cell].name:
+                latest[cell] = f_
+        files = sorted(latest.values())
         assert files
         expected: dict[str, list[float]] = defaultdict(list)
         summaries: list[dict[str, Any]] = []
@@ -247,7 +255,7 @@ class TestRealCorpusCleanPath:
                 if isinstance(value, int) and not isinstance(value, bool):
                     expected[baseline].append(float(value))
                     n_blocks += 1
-        assert n_blocks == 12  # CI 重建 2026-10-24：新语料（原 34）
+        assert n_blocks == 50  # 收口统一轮 2026-11-11：主批次 50 格（每格 1 臂）
         agg = sf._aggregate_group(summaries)
         for baseline, values in expected.items():
             want = round(sum(values) / len(values), 3)

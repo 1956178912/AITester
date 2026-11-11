@@ -586,7 +586,7 @@ shell 管道、正则交替、绝对值记号。盲区成因：G16 门禁只校�
 
 **判据的作用面须如实登记**：本锁只管「行格数 > 表头列数」这一个方向（少格只补空格，属外观）；
 只管**有表头 + 分隔行**的块——缺表头的竖线块（本册 §4 首个空行之后的登记块即此形状）渲染为
-段落、内容不丢，判定器如实不报。冻结面 `docs/history/` 5 行 + `experiments/results/` 4 行 = 9 行
+段落、内容不丢，判定器如实不报。冻结面（归档与旧批次拆除后）0 行——原 9 行随 2026-11-11 机制拆除清零
 按逐文件清单登记、只许缩不许扩（两处目录受 SHA256SUMS 保护，改写即破坏校验门）。
 
 **可推广判据**：写任何"文档 ↔ 工件"类判据之前，先回答**消费者是谁**（GitHub 渲染 / 本地
@@ -3974,7 +3974,7 @@ v3 = **260 配置 / 6 基准 / R² 0.373（0.413）**；180/4 是 v3 全文里"�
 
 **① fresh clone 验证必须回放树变异步骤。** BZ 轮的 fresh clone 闭环（31 红 → 0 红）验证的是
 「干净检出的树」；CI 的树在 pytest 之前被「Generate static-check snapshot」步骤写入
-`docs/history/static_report_<日期>.md`——该文件计入 ruff 格式化面（+1），登记门禁
+静态快照归档步骤（写 `static_report_*.md`，计 ruff 格式化面 +1）已于 2026-11-11 拆除，登记门禁
 （由 pytest 内两条真树锁执行）复算 976 ≠ BASELINE 975 ⇒ CI 三档全红而本地全绿。
 **本地绿与 CI 红的差异从来不只是代码，可以是步骤顺序造成的树状态差。** 两条规矩：
 (a) 任何「往树里写文件」的 CI 步骤必须排在所有读树判定步骤之后（含 `if: failure()` 的
@@ -5361,7 +5361,7 @@ collected 13,669；3 红全部为基线 / 登记守卫（`test_registration_read
 - 删除 `DEFAULT_LLM_CONFIG`、`DOCKER_ENABLED`、`DOCKER_IMAGE` 三个零读者键，并同步
   删除 `.env.example` 的注释行、`docs/env_budget.yaml` 的两个名字（`env_total`
   253 → 251）、设计文档里以 `DOCKER_ENABLED` 为例的 import 期调用示意（改用
-  `EXECUTOR_USE_DOCKER`）；`docs/history/` 是历史快照，不动；
+  `EXECUTOR_USE_DOCKER`）；历史归档已拆除（2026-11-11），不存在该目录；
 - **同轮排除**：排除判据仍是严格 `>`（本轮的边界锁只证明这一点，不改语义）；不改
   `OrchestrationSearch` 的库默认 5（实验驱动才是接线点）；不动 champion 门槛
   `min_evals_per_arm`（另一族）；不顺手改 `DOCKER_*` 其余有真实读者的键。

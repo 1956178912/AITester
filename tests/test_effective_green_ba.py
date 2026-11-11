@@ -386,8 +386,8 @@ class TestRealCorpusApplicability:
         require_full_corpus()
         files = sorted(glob.glob(str(ROOT / "experiments" / "results" / "**" / "benchmark_*.json"), recursive=True))
         assert (
-            len(files) == 77
-        )  # C8 批回钉（2026-10-31：C8 v1/v2 生成批 4 + 冒烟 1 + G8 恢复 off 臂 1 + B3 Lite 冒烟 3 份落盘；较工具链迁移批 68 +9）
+            len(files) == 212
+        )  # 收口统一轮回钉（2026-11-11，只升不降）：主批 50 格 + B2 九格（examples/swebench 双命名）+ tge 修正两格 + smoke 残量 = 212；旧口径 77 随旧语料拆除退役
         marked = 0
         det1 = 0
         for path in files:
@@ -411,7 +411,9 @@ class TestRealCorpusApplicability:
                         marked += 1
                         if row.get("detection_rate") == 1.0:
                             det1 += 1
-        assert marked == 48  # B1 批二次回钉（2026-10-30 晚实测；原 11 = 旧语料）
+        assert marked == 139  # 收口统一轮回钉（2026-11-11，只升不降）：新语料
+        # （主批 50 格 + B2 九格 + tge 修正两格）实测；B1 批口径 48 随旧语料退役。
+        # det1=3 不变：伪 green 形态的实证样本仍为 3 行，正式归因见登记册 §B1 批。
         # det1=3（B1 批实测）：新语料出现 3 行「非 oracle、含 skip/xfail 标记、
         # detection_rate==1.0」——**伪 green 形态的实证样本**，正式归因见登记册
         # §B1 批（synthetic 饱和语料的生成测试行为）；本锁保持"只升不降+计数对账"。

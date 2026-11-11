@@ -17,10 +17,10 @@
 
 「少于表头列数」不丢内容（渲染器补空格），属外观问题，本锁一律不报。
 
-冻结面（只登记不修，按棘轮收口——允许变好、不允许变坏）：`docs/history/` 是历史快照
-（不可回写），`experiments/results/` 是批次工件（其中两处带 `SHA256SUMS`，改写即破坏
-`checksum_results.py --verify`）。`.private/`、`.workbuddy/` 不在 git 里，属机器本地目录，
-一律不扫——否则 CI 与本地的结论会随目录存在与否漂移。
+冻结面（只登记不修，按棘轮收口——允许变好、不允许变坏）：`experiments/results/` 是批次
+工件（其中两处带 `SHA256SUMS`，改写即破坏 `checksum_results.py --verify`）。`.private/`、
+`.workbuddy/` 不在 git 里，属机器本地目录，一律不扫——否则 CI 与本地的结论会随目录
+存在与否漂移。历史归档机制（docs/history/）已于 2026-11-11 拆除，不再属于冻结面。
 """
 
 from __future__ import annotations
@@ -34,21 +34,15 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
-FROZEN_PREFIXES: tuple[str, ...] = ("docs/history/", "experiments/results/")
+FROZEN_PREFIXES: tuple[str, ...] = ("experiments/results/",)
 UNTRACKED_PREFIXES: tuple[str, ...] = (".private/", ".workbuddy/", ".venv/", "node_modules/")
-# 2026-10-20 AB-7 实测：冻结面现存丢格行总数。棘轮只许下降。
-REGISTERED_FROZEN_LOSS_ROWS = 9
+# 2026-11-11 实测：冻结面现存丢格行总数。棘轮只许下降。
+# （2026-10-20 AB-7 登记 9 行；历史归档与旧批次工件拆除后冻结面清零。）
+REGISTERED_FROZEN_LOSS_ROWS = 0
 # 逐文件清单（文件 → 现存丢格行数）。只许缩小不许扩大：新文件里的丢格行按 0 登记，
 # 一律判为未登记。草稿曾把总数写成 12——那是不含「分隔行须与表头等宽」这条 GFM 规则
 # 时的宽口径产物，按实测 9 行收紧（清单由 scan_root 现算复核，不靠记忆）。
-FROZEN_LOSS_INVENTORY: dict[str, int] = {
-    "docs/history/assessment_2026-09-25_improvement_directions.md": 1,
-    "docs/history/optimization_plan.en.md": 2,
-    "docs/history/optimization_plan.md": 2,
-    "experiments/results/self_mutation_20261017/survivor_attribution.md": 2,
-    "experiments/results/t_round_b1_protocol_text_20261018/README.md": 1,
-    "experiments/results/t_round_b2_main_batch_20261018/PREREG.md": 1,
-}
+FROZEN_LOSS_INVENTORY: dict[str, int] = {}
 
 _CELL = r"\s*:?-+:?\s*"
 _DELIM_RE = re.compile(rf"^\s*\|?{_CELL}(\|{_CELL})+\|?\s*$")
@@ -59,8 +53,8 @@ _MAX_TABLE_INDENT = 3
 # 不用行号：文档增删会让行号漂移（AB-7 自己就漂过一次——§3.2 插入新行把登记册那行从
 # 243 推到 244）。锚文本必须在文件里唯一命中，否则两例变异测试当场失败，不许静默空跑。
 # DD 轮（2026-10-26）文档重写：README 的两处表格锚点（`**安全审查**` /
-# `凭证剔除 P0 补强回归`）随旧 README 归档到 docs/history/（该目录按冻结面只登记
-# 不修，且在扫描面之外）⇒ 三条锚点退役；活文档零丢格判据不变。
+# `凭证剔除 P0 补强回归`）随旧 README 退役（2026-11-11 归档机制拆除）⇒
+# 三条锚点退役；活文档零丢格判据不变。
 FIXED_ROWS: tuple[tuple[str, str, int], ...] = (
     ("docs/PROJECT_STATUS_REGISTER.md", "| 门禁总数 |", 3),
     ("docs/PROJECT_STATUS_REGISTER.md", "布尔口径残留分裂", 3),
@@ -320,7 +314,7 @@ class TestFrozenScope:
         assert sum(FROZEN_LOSS_INVENTORY.values()) == REGISTERED_FROZEN_LOSS_ROWS
 
     def test_frozen_roots_are_exactly_registered(self):
-        assert FROZEN_PREFIXES == ("docs/history/", "experiments/results/")
+        assert FROZEN_PREFIXES == ("experiments/results/",)
         assert UNTRACKED_PREFIXES[:2] == (".private/", ".workbuddy/")
 
     def test_frozen_loss_rows_stay_inside_the_registered_inventory(self):
@@ -340,7 +334,7 @@ class TestFrozenScope:
         """CI 上没有 `.private/`：判定必须按前缀，而不是「目录不存在所以没内容」。"""
         assert _is_scanned(".private/review/x.md") is False
         assert _is_scanned("docs/design/x.md") is True
-        assert _is_frozen("docs/history/x.md") is True
+        assert _is_frozen("experiments/results/x.md") is True
         assert _is_frozen("docs/design/x.md") is False
 
     def test_new_loss_outside_frozen_paths_is_caught(self, tmp_path: Path):

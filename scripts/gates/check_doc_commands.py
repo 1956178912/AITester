@@ -23,7 +23,7 @@ CS 轮实测抓到一处**登记面失实**：`docs/study/PAPER_CITATION_KEYS.md
 
 `README.md` / `README.en.md` / `QUICKSTART.md` / `QUICKSTART.en.md` / `REPLICATION.md` /
 `MODEL_CARD.md` / `CONTRIBUTING.md` / `docs/adr/*.md`。
-不扫 `docs/history/`（历史快照不可回写）与 `experiments/`（批次工件）。
+不扫 `experiments/`（批次工件）；历史归档目录已拆除（2026-11-11）。
 
 退出码：`0` = 全部存在（可含 notes）；`1` = 有指向不存在工件/目标的引用；`2` = 用法错误。
 """

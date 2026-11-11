@@ -24,5 +24,5 @@ from experiments.statistical_analysis import run_all_statistics  # noqa: E402
 if __name__ == "__main__":
     # W1（2026-10-05 审查落地）：默认输出移入 experiments/results/（gitignore 区）。
     # 旧默认 experiments/statistical_report.md 曾把过期口径报告带入版本库，
-    # 旧内容已归档 docs/history/statistical_report_2026-09-25_expired.md 并解除跟踪。
+    # 旧内容已删除并解除跟踪（归档机制已于 2026-11-11 拆除）。
     run_all_statistics("experiments/results", "experiments/results/statistical_report.md")

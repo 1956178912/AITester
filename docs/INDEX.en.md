@@ -3,8 +3,8 @@
 > Last updated: 2026-10-27 · 中文版: [INDEX.md](INDEX.md)
 
 This index is the entry point to all repository documentation: shortest reading paths by role,
-plus the core document list. Historical batch records live under [history/](history/) and are
-not maintained item by item.
+plus the core document list. The archive mechanism was removed on 2026-11-11; stale content is
+deleted outright.
 
 ## 1. Quick Entry
 
@@ -76,16 +76,15 @@ other documents.**
 - [PROJECT_STATUS_REGISTER.md](PROJECT_STATUS_REGISTER.md) ·
   [HUMAN_ADJUDICATION_PROTOCOL.md](HUMAN_ADJUDICATION_PROTOCOL.md)
 - Review booklets entry: [reviews/README.md](reviews/README.md)
-- Archive and topic directories: [adr/](adr/) · [design/](design/) · [study/](study/) · [security/](security/) ·
-  [history/](history/)
+- Archive and topic directories: [adr/](adr/) · [design/](design/) · [study/](study/) · [security/](security/)
 
 ## 4. Links and Bilingual Maintenance
 
 - **Bilingual pairing**: core documents at the top level of `docs/` need an `.en.md` twin;
   `make docs-check` checks pairing completeness, date sync, and section skeleton.
 - **Link integrity**: `make docs-check` also validates internal links; broken links block CI.
-  Historical `docs/history/` is excluded and its internal links are not guaranteed to resolve.
-- **Archive convention**: stale batches and historical narrative go to `docs/history/`; current
+  The historical archive directory was removed on 2026-11-11; no archive-internal links exist.
+- **Stale content**: delete outright (archive mechanism removed 2026-11-11); current
   documents keep only rules that still hold.
 - To add a document: put it in the matching section above, add an English twin (or register an
   exemption with a reason), then run `make docs-check`.

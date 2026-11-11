@@ -86,7 +86,7 @@ When skipped, conclusions **exclude test verification** — that is a disclosure
 | Data provenance and licenses (synthetic templates / SWE-bench / QuixBugs) | `docs/DATA_CARD.md` |
 | Preregistered protocol (E1–E7) | `docs/preregistration.md` |
 | Measurement caliber matrix and repair readings | `docs/design/repair_caliber_matrix.md` |
-| Withdrawn-artifact mapping (2026-10-24) | `docs/history/WITHDRAWN_ARTIFACTS_2026-10-24.md` |
+| Withdrawn-artifact mapping (2026-10-24) | removed with the archive mechanism (2026-11-11) |
 | Artifact checksums | `experiments/results/**/SHA256SUMS` |
 | License and citation | `LICENSE`, `CITATION.cff` |
 

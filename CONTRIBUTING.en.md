@@ -31,7 +31,7 @@ count and flag-instance count must agree).
 - **One source for numbers**: test, coverage, and static-check readings live in
   `BASELINE.yaml`; other documents point to it instead of copying counts.
 - **Archive superseded content; do not annotate in place**: move historical narrative to
-  `docs/history/` and keep current documents concise.
+  Delete stale content outright and keep current documents concise (archive mechanism removed 2026-11-11).
 - **Bilingual pairs**: `foo.md` ↔ `foo.en.md`; the `最后更新 / Last updated` dates must match
   and the section counts may differ by at most 2.
 - **Commands in code blocks must exist**: `make` targets and `scripts/*.py` paths are checked

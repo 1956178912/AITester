@@ -790,21 +790,17 @@ class TestComparabilityAndScannedSurface:
 
         require_full_corpus()
         surface = gate.corpus_surface()
-        # 收口回钉（2026-10-25，v0.8.0 二次回钉：b1_lite 七格入库）：34/4/16/34/34/34
-        # （CI 重建期下界 25/4/5/25/25/25；原历史 239/64/107/122/87/85）
-        # B1 批二次上调（2026-10-30 晚，只升不降）：Q03/Q04/Q07/S09 六臂 + N10
-        # 批 benchmark 落盘入库 ⇒ 57/4/28/57/56/56（56 = specir probe 旧工件
-        # pinned=False 系数不变）；结构层数以测试报数迭代回填。
-        assert (
-            surface["on_disk"] == 77
-        )  # C8 批回钉（2026-10-31：C8 v1/v2 生成批 4 + 冒烟 1 + G8 恢复 1 + B3 Lite 冒烟 3 = 较工具链迁移批 68 +9）
-        assert surface["top_level"] == 4, surface
-        assert surface["tracked"] == 28, surface
-        assert surface["with_provenance"] == 77, surface  # C8 批回钉（2026-10-31：新增 9 份均带 provenance）
-        assert surface["with_fingerprint"] == 76, (
-            surface
-        )  # C8 批回钉（2026-10-31）：77 盘面 −1 = E8 legacy-on 格（预注册披露：切点早于 S29 指纹机制，以披露替代）
-        assert surface["pinned_true"] == 76, surface  # 同上：legacy-on 格以披露替代 pinned
+        # 收口统一轮回钉（2026-11-11，只升不降）：主批 50 格 + B2 九格 + tge 修正两格
+        # + smoke 残量 ⇒ 盘面 212 全带 provenance/fingerprint；pinned_true 139 = 主批
+        # 25 格 + 部分重建批（B2/补跑格 namespace 隔离、pinned 语义见门禁 [SURFACE] 披露）。
+        # tracked/top_level = 0：新语料全部为 gitignore 的批次工件，无顶层汇总（旧布局退役）。
+        # 旧口径历史（C8 批 2026-10-31：77/4/28/77/76/76）随旧语料拆除退役。
+        assert surface["on_disk"] == 212, surface
+        assert surface["top_level"] == 0, surface
+        assert surface["tracked"] == 0, surface
+        assert surface["with_provenance"] == 212, surface
+        assert surface["with_fingerprint"] == 212, surface
+        assert surface["pinned_true"] == 139, surface
         assert surface["unsupported_alias"] == 0, surface
         assert surface["alias_mismatch_true"] == 0, surface
 

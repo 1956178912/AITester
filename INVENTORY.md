@@ -20,7 +20,7 @@ prints the outcome of every command instead of only the passing ones.
 | Downloadable | yes | One archive. Every verdict is stored as JSON or Markdown and is readable without executing anything: per-task rows under `experiments/results/`, the measurement-integrity notes `docs/MEASUREMENT_INTEGRITY.md`. |
 | Archived | not yet | No DOI exists at the time of writing. The archival deposit is a submission action the authors take; until then the review mirror is the only copy, and it is anonymized. |
 | Documented | yes | This file, `REPLICATION.md` (three reproduction paths, prerequisites, calibers), Appendix A of the manuscript (artifact-to-claim map with markers for what is distributed as data versus as a command), and the gate inventory in the repository itself (`scripts/gates/` with the `Makefile` targets that invoke them). |
-| Complete | pending the rerun | The batch artifacts this checklist described were deleted on 2026-11-04 (see "Corpus state" below); the recomputation chain is intact but has nothing to read until the rerun lands. See "What does not recompute" below. |
+| Complete | partially | The pre-registered batch **landed**: `test_run_20261106T101605Z` (53 stages, 2026-11-06→11-10) plus independent supplementary reruns (2026-11-11: 9 swebench cells + 2 testgeneval cells), all under the batch fingerprint `9c9a85ffd4bd14cf`. The four zero-LLM recompute branches still target the pre-reset synthetic layout and stay `[SKIP]` until rewired (disclosed below); the batch-level aggregates are registered in `experiments/results/BILL_RECON_AGG_20261111.json` and `B2_REPORT.json`. |
 | Exercisable | yes for the tracked subset | `make install` then `make reproduce-zero-llm`. Only public modules and the shipped configuration are used. A fresh clone exercises the corpus that is tracked in git; the heavier per-task records travel with the archive rather than with the clone. |
 | Licensed | code yes, data stated here | Code: MIT, `LICENSE`. Our own artifacts: dedicated to CC0-1.0, which is recorded in this file rather than in a second license text, and belongs in the deposit. Third-party benchmarks (QuixBugs, ULT, SWE-bench) stay under their upstream licenses, and only derived outputs are redistributed. |
 
@@ -28,12 +28,13 @@ prints the outcome of every command instead of only the passing ones.
 
 `git clone` and "the archive we hand to reviewers" are not the same corpus, so
 both counts are reported rather than blended. The 2026-11-04 direction reset
-deleted every archived batch artifact, so the historical row below is kept only
-as the provenance of the numbers the paper no longer prints.
+deleted every archived batch artifact; the 2026-11-06→11-10 pre-registered batch
+and the 2026-11-11 supplementary reruns rebuilt the corpus under the new
+`llm_sweep/` layout (row below).
 
 | Caliber | Batch files | Trace directories | Trace records | Checksum manifests |
 | --- | --- | --- | --- | --- |
-| Working tree, as measured 2026-11-04 after the purge | 0 | 0 | 0 | 1 (`prompt_artifacts_2026-10-15/SHA256SUMS`) |
+| Working tree, as measured 2026-11-11 after the rerun landed | 11 | 69 | 8,231 | 1 |
 | Historical, before the purge (working tree / tracked) | 34 / 16 | 21 / 14 | 1,456 / 760 | 9 / 4 |
 
 The four files that remain under `experiments/results/` are the instruction
@@ -50,11 +51,14 @@ nothing about corpus completeness.
 
 ## What the zero-LLM chain does as the package ships
 
-Measured on 2026-11-04 after the corpus purge: `python scripts/reproduce_zero_llm.py`
+Re-measured on 2026-11-11 (post-rerun): `python scripts/reproduce_zero_llm.py`
 reports **2/6 commands passing with 4 explicit `[SKIP]`** and
 **SHA256SUMS 0 directories passing (0 files) / 0 failures / 13 absent**. The chain
-is intact; it simply has nothing to read until the rerun lands, and a command with
-nothing to read is reported as skipped, never folded into a pass.
+is intact. The four skipped branches read the **pre-reset synthetic batch layout**
+(`main_batch/`, `b1_lite_20261025/`, …), which the 2026-11-04 reset withdrew; the
+landed 2026-11-06 batch uses the new `llm_sweep/` layout, and rewiring those four
+branches onto it is registered as follow-up work. A command with nothing to read is
+reported as skipped, never folded into a pass.
 
 One branch was fixed to degrade like its siblings rather than crash:
 `experiments/emse_stats_extensions.py` had no precondition probe, so with the
@@ -90,7 +94,7 @@ zero-LLM unless stated otherwise.
 | Entry point | Reads | Writes or reports |
 | --- | --- | --- |
 | `scripts/reproduce_zero_llm.py` | archived batch JSON | `REPRODUCTION_REPORT.md` and `.json` |
-| `experiments/statistical_analysis.py` | batch JSON, `--pool-seeds` for pooled rows | RQ1 pairing reports; the frozen 2026-10-25 transcription now lives in `docs/history/` (batch-generation reading), and both copies are regenerable from the rerun |
+| `experiments/statistical_analysis.py` | batch JSON, `--pool-seeds` for pooled rows | RQ1 pairing reports; the frozen 2026-10-25 transcription was removed with the archive mechanism (2026-11-11) (batch-generation reading), and both copies are regenerable from the rerun |
 | `experiments/emse_stats_extensions.py` | three-arm regenerated batches | `experiments/results/emse_stats_extensions_20261025/STATS_EXTENSIONS.json` |
 | `experiments/emse_quixbugs_mutk_full.py`, `experiments/emse_ult_mutk_full.py`, `experiments/emse_test_sanity_audit.py` | archived suites, cosmic-ray mutants (L1) | `*\_mutk_full_20261015/`, `emse_test_sanity_20261015/` (absent from the mirror until run) |
 | `experiments/emse_dsl_extend_recheck.py` (`--from-corpus`) | the archived 607-clause corpus | compilability re-score without the author-side cache |

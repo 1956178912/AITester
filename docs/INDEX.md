@@ -2,8 +2,8 @@
 
 > 最后更新：2026-10-27 · English: [INDEX.en.md](INDEX.en.md)
 
-本索引是全仓文档的入口：按角色给出最短阅读路径，并列出核心文档。历史批次记录统一归档在
-[history/](history/)，不再逐条维护。
+本索引是全仓文档的入口：按角色给出最短阅读路径，并列出核心文档。历史归档机制已于
+2026-11-11 拆除，过期内容直接删除。
 
 ## 1. 快速入口
 
@@ -75,15 +75,14 @@
 - [PROJECT_STATUS_REGISTER.md](PROJECT_STATUS_REGISTER.md) ·
   [HUMAN_ADJUDICATION_PROTOCOL.md](HUMAN_ADJUDICATION_PROTOCOL.md)
 - 评审分册入口：[reviews/README.md](reviews/README.md)
-- 归档与专题目录：[adr/](adr/) · [design/](design/) · [study/](study/) · [security/](security/) ·
-  [history/](history/)
+- 归档与专题目录：[adr/](adr/) · [design/](design/) · [study/](study/) · [security/](security/)
 
 ## 4. 链接与双语维护
 
 - **双语配对**：`docs/` 顶层核心文档需要有 `.en.md` 孪生；`make docs-check` 检查配对完整性、
   更新日期同步与章节骨架。
 - **链接完整性**：`make docs-check` 同时校验内部链接；坏链在 CI 阻断。历史目录
-  `docs/history/` 不参与链接检查，其内部链接不保证可解析。
-- **归档约定**：过期批次与历史叙事归档到 `docs/history/`，不就地追加；当前口径文档只保留
+  历史归档目录已拆除（2026-11-11），不存在归档内链。
+- **过期内容处理**：过期批次与历史叙事直接删除（归档机制已于 2026-11-11 拆除）；当前口径文档只保留
   仍然有效的规则。
 - 新增文档时：放进上表对应小节，补齐英文孪生（或登记豁免理由），再跑 `make docs-check`。

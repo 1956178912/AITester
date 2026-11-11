@@ -70,7 +70,7 @@ python scripts/gates/check_branch_coverage.py coverage.xml
 ## 五、静态报告归档
 
 `scripts/tools/generate_static_report.py` 把 ruff / mypy 快照归档到
-`docs/history/static_report_<date>.md`（CI 主分支上传 artifact）：
+静态快照归档步骤已拆除（2026-11-11），不再生成该文件：
 
 ```bash
 python scripts/tools/generate_static_report.py            # 写快照

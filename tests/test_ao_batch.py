@@ -87,7 +87,7 @@ class TestReadmeEnHeader:
     """AO3（DD 轮 2026-10-26 退役叙事锁）：头部只锁版本与变更日志入口。
 
     旧锁要求 en README 前 10 行出现 "**DC round:" 一类轮次标记。DD 轮文档重写后，
-    门面不再承载逐轮叙事（叙事归档到 docs/history/），轮次记账由
+    门面不再承载逐轮叙事（归档机制已于 2026-11-11 拆除），轮次记账由
     docs/PROJECT_STATUS_REGISTER.md 与 CHANGELOG 承担，故该锁整体退役。
     替代判据（防「改了文档但读者找不到版本与变更」）：
     - 前 15 行含版本行 "当前版本 1.0.0" / "Current version 1.0.0"；
