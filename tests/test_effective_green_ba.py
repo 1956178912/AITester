@@ -379,15 +379,18 @@ class TestRealCorpusApplicability:
                 assert not self.MODULE_WIDE_SKIP.search(text), f"{rel} :: {task_id} 出现模块级全 skip"
 
     def test_corpus_counts_are_stable(self):
-        """全仓静态扫：111 条非 oracle 标记行 / 12 条 detection=1.0。"""
+        """全仓静态扫：140 条非 oracle 标记行 / 3 条 detection=1.0（2026-11-12 实测）。"""
         # BZ 轮：239 份 / 111 条 / 12 条三个数（2026-10-23 provider 清理后重算）
         # 以全归档为扫描面——fresh clone 只有入库子集，前提不成立时显式 skip
         # 并带实测读数（tests/_corpus_guard.py），不把"没扫到"折成"扫过且干净"。
         require_full_corpus()
         files = sorted(glob.glob(str(ROOT / "experiments" / "results" / "**" / "benchmark_*.json"), recursive=True))
-        assert (
-            len(files) == 212
-        )  # 收口统一轮回钉（2026-11-11，只升不降）：主批 50 格 + B2 九格（examples/swebench 双命名）+ tge 修正两格 + smoke 残量 = 212；旧口径 77 随旧语料拆除退役
+        assert len(files) == 262  # 登记面收口轮回钉（2026-11-12，只升不降）：212 + 冒烟目录 test_run_20261111_smoke
+        # 的 50 格（2 端点 × 5 臂 × 5 面，每格 1 份）= 262。逐目录实测：主批 149 /
+        # smoke 50 / tge_v5 39 / swebench 补跑 20 / tge_v4 2 / tge 初版 1 / tge_v2 1。
+        # 增量**全部**来自冒烟目录，非冒烟部分逐目录等于旧钉值 212；冒烟格不入
+        # RESULTS_DATA_PACK_20261111.json 的 50 格判定面（白名单排除 *_smoke），
+        # 因此本钉只量扫描面，不改现稿任何读数。旧口径 77 随旧语料拆除退役。
         marked = 0
         det1 = 0
         for path in files:
@@ -411,10 +414,14 @@ class TestRealCorpusApplicability:
                         marked += 1
                         if row.get("detection_rate") == 1.0:
                             det1 += 1
-        assert marked == 139  # 收口统一轮回钉（2026-11-11，只升不降）：新语料
-        # （主批 50 格 + B2 九格 + tge 修正两格）实测；B1 批口径 48 随旧语料退役。
-        # det1=3 不变：伪 green 形态的实证样本仍为 3 行，正式归因见登记册 §B1 批。
-        # det1=3（B1 批实测）：新语料出现 3 行「非 oracle、含 skip/xfail 标记、
-        # detection_rate==1.0」——**伪 green 形态的实证样本**，正式归因见登记册
-        # §B1 批（synthetic 饱和语料的生成测试行为）；本锁保持"只升不降+计数对账"。
+        assert marked == 140  # 登记面收口轮回钉（2026-11-12，只升不降）：旧钉 139
+        # + 冒烟目录 1 条 = 140。新增那一条逐格定位：test_run_20261111_smoke/llm_sweep/
+        # mimo-v2-6-pro__aitester__testgeneval，task_id=tge__django__django-17087，
+        # 标记形态 `pytest.skip(`，detection_rate=None（不可测，不进 det1）。
+        # 非冒烟部分逐目录实测仍为 139（主批 90 / swebench 补跑 18 / tge_v5 15 /
+        # tge_v4 14 / tge 初版 1 / tge_v2 1）；B1 批口径 48 随旧语料退役。
+        # det1=3 不变（2026-11-12 复测，3 行全在主批）：新语料出现 3 行「非 oracle、
+        # 含 skip/xfail 标记、detection_rate==1.0」——**伪 green 形态的实证样本**，
+        # 正式归因见登记册 §B1 批（synthetic 饱和语料的生成测试行为）；
+        # 本锁保持"只升不降+计数对账"。
         assert det1 == 3

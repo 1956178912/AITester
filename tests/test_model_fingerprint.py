@@ -790,17 +790,21 @@ class TestComparabilityAndScannedSurface:
 
         require_full_corpus()
         surface = gate.corpus_surface()
-        # 收口统一轮回钉（2026-11-11，只升不降）：主批 50 格 + B2 九格 + tge 修正两格
-        # + smoke 残量 ⇒ 盘面 212 全带 provenance/fingerprint；pinned_true 139 = 主批
-        # 25 格 + 部分重建批（B2/补跑格 namespace 隔离、pinned 语义见门禁 [SURFACE] 披露）。
+        # 登记面收口轮回钉（2026-11-12，只升不降）：盘面 262 = 旧钉 212 + 冒烟目录
+        # test_run_20261111_smoke 的 50 格（2 端点 × 5 臂 × 5 面，每格 1 份），
+        # 262 份全带 provenance/fingerprint。pinned_true 164 = 旧钉 139 + 冒烟 25：
+        # 冒烟里 pinned=True 的恰好是 deepseek-flash 的 25 格（5 臂 × 5 面），
+        # mimo-v2.6-pro 的 25 格 pinned=False——与主批同语义（该别名不在钉版注册表内），
+        # 非冒烟部分逐目录 pinned 实测仍为 139（主批 90 / tge_v5 38 / swebench 补跑 10 /
+        # tge_v4 1）。冒烟格不入 RESULTS_DATA_PACK_20261111.json 的 50 格判定面。
         # tracked/top_level = 0：新语料全部为 gitignore 的批次工件，无顶层汇总（旧布局退役）。
         # 旧口径历史（C8 批 2026-10-31：77/4/28/77/76/76）随旧语料拆除退役。
-        assert surface["on_disk"] == 212, surface
+        assert surface["on_disk"] == 262, surface
         assert surface["top_level"] == 0, surface
         assert surface["tracked"] == 0, surface
-        assert surface["with_provenance"] == 212, surface
-        assert surface["with_fingerprint"] == 212, surface
-        assert surface["pinned_true"] == 139, surface
+        assert surface["with_provenance"] == 262, surface
+        assert surface["with_fingerprint"] == 262, surface
+        assert surface["pinned_true"] == 164, surface
         assert surface["unsupported_alias"] == 0, surface
         assert surface["alias_mismatch_true"] == 0, surface
 

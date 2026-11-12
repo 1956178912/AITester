@@ -12,6 +12,17 @@ bootstrap 口径钉死、§7 步骤 3-4 实际落在**勾选式 Markdown**上。
 **本模块不产生任何裁决结果**：它读裁决人填的空表；判定属人（协议 §3）。
 在 E7 真正执行并登记前，对外口径仍是"E7 未执行、无 Kappa 工件"。
 
+**E7-r2 更新（2026-11-12）**：抽样框已按设计修订换为现行权威批次 QuixBugs 的 89 条
+declared-pass 判定行普查（协议 §2.3）；旧 72 行框与 n=8/41/72 备料作废。本模块的
+template/validate/merge 三段执行面与 κ 口径**不变**且直接适用，只是工作表来源改为
+`experiments/results/e7_r2_falsefix_20261112/E7R2_WORKSHEET.md`（录入表已随包生成
+`E7R2_ENTRY_{A,B}.csv`）：
+
+    python experiments/e7_adjudication.py template \
+        --worksheet experiments/results/e7_r2_falsefix_20261112/E7R2_WORKSHEET.md --rater A \
+        --output experiments/results/e7_r2_falsefix_20261112/E7R2_ENTRY_A.csv
+
+
 用法::
 
     # 1) 由工作表生成两份独立录入表（裁决人各持一份，互不可见）

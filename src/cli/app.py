@@ -168,9 +168,10 @@ def cli() -> None:
     消费 experiments/_m1_metrics.py，需要 gold 材料），不在 CLI 输出中。
 
     注：编排层（LangGraph：Planner → Generator → Executor → Debugger →
-    PatchApplier）在本系统中定位为可消融容器，非主断言——项目自身 n=261
-    实验测得编排净贡献为负（δ≈−0.28，ADR-0016），故不再以"多智能体"为主表述
-    （与 README / MODEL_CARD 对齐）。
+    PatchApplier）在本系统中定位为可消融容器，非主断言——现稿的中心主张是
+    "声明通过 ≠ 裁决真实通过"的 false-fix 配对报告与 harness 排除披露，编排不
+    承载独立能力主张（与 README / MODEL_CARD 对齐）。旧代 n=261 池的 δ≈−0.28
+    属已退役协议代读数，不与现稿混池，出处见 docs/design/repair_caliber_matrix.md。
     """
     # U8：CLI 入口惰性日志初始化（幂等；库导入不再产生 aitester.log）
     _configure_cli_logging()

@@ -1,5 +1,8 @@
 > **语言 / Language**：[English](VALIDITY.en.md) | 简体中文（本文）
 
+> **状态声明（2026-11-12）**：本文是 **2026-10-19 及更早批次**的效度威胁登记，文内 59.58% / 143/240 / n=261 等读数与 `main_batch` 工件属**已退役协议代的历史事实**，有回归测试锁定、不作重算改写；**禁止与现行稿件混池或引用为当前结论**。现行权威口径 = `experiments/results/RESULTS_DATA_PACK_20261111.json` + `paper/tex/manuscript.tex`（F2 重写），现稿的 false-fix 配对报告与 harness 排除披露见稿件 RQ2/RQ3。E7 已按现行批次重建为 E7-r2 （89 行普查），裁决动作仍待人工。
+
+
 # 效度威胁报告（Validity Threats Report）
 
 最后更新：2026-10-19（Z 轮第三方审查 F01/F17/F20：① F01 更正 §4 旧非标准 BH 描述为标准 BH
@@ -35,7 +38,7 @@
    `emse_swebench_disclosure.md` 维持不入库；
 3. **无人工裁决**：全项目"gold 独立裁决"一律指**判据材料独立**（留出 gold 测试 /
    gold 补丁）的自动化 oracle，**不含任何人工裁决**；E7 人工复核为预注册项但**尚未
-   执行**，全仓不存在 Kappa 工件（`README.md` 基准指标节；核验见 §7 第 1 条）。
+   执行**，全仓不存在 Kappa 工件（`README.md` 基准指标节；核验见 §7 第 1 条）。**2026-11-12 更新**：抽样框已整体换为现行权威批次 QuixBugs 的 89 条判定行普查（E7-r2，见 `docs/HUMAN_ADJUDICATION_PROTOCOL.md` §2.3），旧 72 行分层框作废；「裁决动作未执行、无 Kappa 工件」这一状态不变。
 
 ---
 

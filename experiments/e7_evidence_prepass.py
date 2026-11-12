@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""E7 候选的客观证据预筛（零 LLM）——**只提取事实，不做判定**。
+"""**【旧框已退役，仅保留作历史复现】** E7 候选的客观证据预筛（零 LLM）——**只提取事实，不做判定**。
+
+2026-11-12 E7-r2 设计修订：抽样框已换为现行权威批次 QuixBugs 的 89 条判定行普查；
+本脚本的旧框（synthetic 三批次 patch_plausible=1，n=72）备料不再交付。现行备料入口 =
+`experiments/e7_falsefix_worksheet.py`，协议见 `docs/HUMAN_ADJUDICATION_PROTOCOL.md` §2.3。
 
 ## 定位
 

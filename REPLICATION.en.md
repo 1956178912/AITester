@@ -1,22 +1,18 @@
 # AITester Replication Guide
 
-Last updated: 2026-11-04
+Last updated: 2026-11-12
 
 How to reproduce AITester experiments: the zero-LLM recompute path, the LLM-dependent re-run
-path, and how mounting and the test gate behave. **Raw LLM responses are not distributed**, so
-the LLM path must spend new API quota; only metrics from committed artifacts reproduce offline.
+path, and how mounting and the test gate behave. **Raw LLM responses are not distributed**, so the LLM path must spend new API quota.
 
 > **Archived snapshot**: the version-locked derived verdict rows (with the 50-cell aggregate, SHA-256 manifests and a one-command recompute script) are published as `10.5281/zenodo.24136905` (<https://doi.org/10.5281/zenodo.24136905>), CC0-1.0, with no raw execution traces or model transcripts. The results tree is excluded by `.gitignore`, so a fresh clone must be combined with this snapshot; cloning the repository alone cannot reproduce the manuscript tables.
 
 ## 1. Prerequisites
 
 - Python 3.12+ (`pyproject.toml` sets `requires-python = ">=3.12"`; CI matrix 3.12/3.13/3.14). Use the repository `.venv`.
-- Dependencies: `pip install -r requirements.txt` (or `make install`); wheel installs that
-  run the executor also need `pip install "aitester[execution]"`.
-- The LLM path needs `LLM_1_API_KEY` / `LLM_1_BASE_URL` / `LLM_1_MODEL` in `.env.local`
-  (copied from `config.local.example`); **keys are never committed**; scripts warn when missing.
-- Optional: Docker (`Dockerfile.repro`); sandboxes are controlled by switches such as
-  `EXECUTOR_USE_VENV`, with the venv sandbox on by default.
+- Dependencies: `pip install -r requirements.txt` (or `make install`); wheel installs that run the executor also need `pip install "aitester[execution]"`.
+- The LLM path needs `LLM_1_API_KEY` / `LLM_1_BASE_URL` / `LLM_1_MODEL` in `.env.local` (copied from `config.local.example`); **keys are never committed**; scripts warn when missing.
+- Optional: Docker (`Dockerfile.repro`); sandboxes are controlled by switches such as `EXECUTOR_USE_VENV`, with the venv sandbox on by default.
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
@@ -29,24 +25,30 @@ cp config.local.example .env.local   # only the LLM path needs it filled in
 **A. Zero-LLM recompute (no API key)**:
 
 ```bash
-make reproduce-zero-llm
-make reproduce-zero-llm-l1
+python scripts/tools/results_data_pack_20261111.py   # current manuscript tables (needs the snapshot's verdict rows)
+make reproduce-zero-llm                              # earlier-corpus recompute chain, L0
+make reproduce-zero-llm-l1                           # L0 + hour-scale Mut@k recompute
 ```
 
-L0 runs statistical extensions, mutation × detection cross-validation, SWE-bench disclosure,
-citation checks, and SHA256SUMS verification; L1 adds the hour-scale QuixBugs Mut@k recompute.
-Results are tri-state: `ok` / `FAILED` / `skipped` — withdrawn artifacts print `[SKIP]`, and
+The pack script scans only the three registered batch directories (the 50-cell main batch plus the
+swebench / testgeneval supplementary reruns), deduplicates by lineage, and aggregates every metric with
+its own `n_obs` into `RESULTS_DATA_PACK_20261111.json`; smoke directories are not whitelisted. L0/L1 target
+the **retired protocol generation**: statistical extensions, mutation × detection cross-validation,
+SWE-bench disclosure, citation checks and SHA256SUMS verification (L1 adds the full QuixBugs Mut@k).
+Results are tri-state: `ok` / `FAILED` / `skipped` — withdrawn artifacts print `[SKIP]` with a reason, and
 **skip is not a pass**; the exit code counts only failed commands and checksum failures.
 
-**B. LLM-dependent single-batch re-run (API key required)**:
+**B. LLM-dependent batch re-run (API key required)**:
 
 ```bash
 bash reproduce.sh --dataset synthetic --full
 ```
 
-`--full` = 87 tasks / `--max-pattern-repeat 2` / seed 42 / three arms (`aitester`,
-`plain_llm`, `plain_llm_df`). One seed per run; the three-seed entry is `experiments/run_main_batch.py`,
-and **different-seed batches must not be pooled**. Outputs land in `experiments/results/` (never committed).
+`--full` = 87 tasks / `--max-pattern-repeat 2` / seed 42 / three arms (`aitester`, `plain_llm`,
+`plain_llm_df`) — the **retired synthetic protocol, not the current manuscript's batch**; the three-seed
+entry is `experiments/run_main_batch.py`, and **different-seed batches must not be pooled**. Re-running the
+current batch goes through the full profile of `scripts/run_all_tests.py` (two models × 5 arms × 5 faces).
+Outputs land in `experiments/results/` (never committed).
 
 **C. Dockerized reproduction**:
 
@@ -63,15 +65,11 @@ marker — with no build-arg it stays `unknown` and is never treated as a commit
 
 ## 3. Historical Input and Mounting
 
-`.dockerignore` excludes `experiments/results`, so the image does **not** contain that
-directory. The mounted directory is both **historical input** (the test suite uses archived
-artifacts there as fixtures) and output: mount a complete directory with archived results;
-starting from an empty directory makes the Step 3 suite fail, so the gate must be skipped explicitly.
+`.dockerignore` excludes `experiments/results`, so the image does **not** contain that directory. The mounted directory is both **historical input** (the test suite uses archived artifacts there as fixtures) and output: mount a complete directory with archived results; starting from an empty directory makes the Step 3 suite fail, so the gate must be skipped explicitly.
 
 ## 4. Test-Gate Escapes
 
-Step 3 of `reproduce.sh` runs `python3 -m pytest tests/ -v --tb=short` by default, and test
-failures **fail hard** (non-zero exit). Two explicit escapes:
+Step 3 of `reproduce.sh` runs `python3 -m pytest tests/ -v --tb=short` by default, and test failures **fail hard** (non-zero exit). Two explicit escapes:
 
 | Variable | Behavior |
 |----------|----------|
@@ -84,19 +82,17 @@ When skipped, conclusions **exclude test verification** — that is a disclosure
 
 | Content | Location |
 |---------|----------|
-| Single source of truth for numbers (test counts, static checks, benchmark readings) | `BASELINE.yaml` |
-| Data provenance and licenses (synthetic templates / SWE-bench / QuixBugs) | `docs/DATA_CARD.md` |
-| Preregistered protocol (E1–E7) | `docs/preregistration.md` |
-| Measurement caliber matrix and repair readings | `docs/design/repair_caliber_matrix.md` |
-| Withdrawn-artifact mapping (2026-10-24) | removed with the archive mechanism (2026-11-11) |
+| Source of truth for current readings (50-cell aggregate + manuscript) | `experiments/results/RESULTS_DATA_PACK_20261111.json`, `paper/tex/manuscript.tex` |
+| Derived verdict-row snapshot (version-locked, CC0-1.0) | DOI `10.5281/zenodo.24136905` |
+| Test counts / static checks / retired-generation benchmark readings | `BASELINE.yaml` |
+| Data provenance and licenses (five benchmark faces) | `docs/DATA_CARD.en.md` |
+| Preregistered protocol (E1–E7) | `docs/preregistration.en.md` |
+| Measurement caliber matrix and repair readings (retired generation) | `docs/design/repair_caliber_matrix.md` |
 | Artifact checksums | `experiments/results/**/SHA256SUMS` |
 | License and citation | `LICENSE`, `CITATION.cff` |
 
-The historical main batch (n=261/arm) was withdrawn on 2026-10-24; readings come from
-`BASELINE.yaml` and rebuilt batches. Gaps: raw LLM responses not archived; no model fingerprint.
+Current readings come from the data pack and the manuscript; the `BASELINE.yaml` benchmark section and the withdrawn n=261/arm main batch (2026-10-24) belong to a retired protocol generation and are never pooled. Gaps: raw LLM responses not archived; re-runs are subject to server-side drift.
 
 ## 6. Environment Quadruple (N08, frozen 2026-10-30)
 
-New batches must pin the quadruple — **seed / model alias+fingerprint / temperature /
-dataset version content fingerprint** (any missing ⇒ fail-closed; no pooling across quadruples);
-details: `docs/design/replication_quadruple_n08.en.md` (archived in the paper repository).
+New batches must pin the quadruple — **seed / model alias+fingerprint / temperature / dataset version content fingerprint** (any missing ⇒ fail-closed; no pooling across quadruples); details: `docs/design/replication_quadruple_n08.en.md` (archived in the paper repository).

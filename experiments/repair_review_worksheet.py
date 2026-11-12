@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""AP1（2026-10-07 第十五轮审查续·AO5 后续）：E7 修复上限人工复核工作表生成器。
+"""**【旧框已退役，仅保留作历史复现】** AP1（2026-10-07）：E7 修复上限人工复核工作表生成器。
+
+2026-11-12 E7-r2 设计修订：旧框工作表（n=8/41/72）作废；现行工作表由
+`experiments/e7_falsefix_worksheet.py` 生成（补丁轨 42 + 套件轨 47，含框架守卫）。
 
 零 LLM 成本：消费与 repair_sample_selection.py 完全相同的抽样（抽样框
 patch_plausible=1 修复循环行 → 分层 ceil(fraction)、seed 确定性），为每个

@@ -5,17 +5,41 @@ cff-version: 1.2.0
 # 与 INVENTORY.md。
 message: >-
   If you use AITester in your research, please cite this software.
-# 2026-10-16 定位对齐（R2/R26 叙事重构的漏网点）：标题不再以 multi-agent
-# 为主表述——完整编排臂相对轻量检出优先协议净负（−28pp，ADR-0016），
-# 多智能体编排在本项目中定位为可消融容器（非主断言）。
+# 标题定位：多智能体编排是可消融容器，不是主断言。现行稿件的中心主张是
+# 「声明通过 ≠ 裁决真实通过」的 false-fix 配对报告（权威源 paper/tex/manuscript.tex，
+# 状态表见 paper/SUBMISSION.md）；本文件不引用任何旧批次读数。
 title: AITester — Detection-First Python Test Generation and Repair Evaluation (Attribution) System
 authors:
-  # ORCID pending / ORCID 待补充：现有作者条目为集体署名
-  # （AITester Contributors），无个人 ORCID iD 可填；CFF 1.2.0 的 orcid 字段
-  # 需真实 ORCID iD（形如 0000-0000-0000-000X），不得以占位值填入，故此处
-  # 仅登记待补充项。[待补充：作者 ORCID iD（如需按个人署名提交）]
-  - name: AITester Contributors
-    website: https://github.com/1956178912/AITester
+  # 与稿件 \author / \institute 逐字同序。ORCID 只填稿件声明的三个（校验位与
+  # 公开 ORCID API 返回的姓名均已核）；其余五位按题名页声明不使用 ORCID，留空
+  # 而非填占位值。CFF 1.2.0 的 orcid 要完整 URL，不是裸 iD。
+  - family-names: Wang
+    given-names: Chenyu
+    orcid: https://orcid.org/0009-0004-3664-9239
+    affiliation: School of Intelligent Engineering, Hubei Enshi College, Enshi, Hubei, China
+  - family-names: Wang
+    given-names: Shaopin
+    orcid: https://orcid.org/0009-0004-9674-5855
+    affiliation: School of Computer and Information Engineering, Zhixing College of Hubei University, Wuhan, Hubei, China
+  - family-names: Lin
+    given-names: Bolun
+    orcid: https://orcid.org/0009-0004-1257-7322
+    affiliation: School of Artificial Intelligence, Wuchang University of Technology, Wuhan, Hubei, China
+  - family-names: Wang
+    given-names: Jinglin
+    affiliation: School of Computer Information Technology, Wuhan Institute of Shipbuilding Technology, Wuhan, Hubei, China
+  - family-names: Liu
+    given-names: Tong
+    affiliation: School of Computer Information Technology, Wuhan Institute of Shipbuilding Technology, Wuhan, Hubei, China
+  - family-names: Yu
+    given-names: Xing
+    affiliation: School of Computer Information Technology, Wuhan Institute of Shipbuilding Technology, Wuhan, Hubei, China
+  - family-names: Xu
+    given-names: Yue
+    affiliation: School of Computer and Artificial Intelligence, Wuhan University of Engineering Science, Wuhan, Hubei, China
+  - family-names: Xu
+    given-names: Da
+    affiliation: School of Computer Information Technology, Wuhan Institute of Shipbuilding Technology, Wuhan, Hubei, China
 version: 1.0.0
 date-released: "2026-10-28"
 license: MIT
@@ -23,21 +47,22 @@ doi: 10.5281/zenodo.24136905
 repository-code: https://github.com/1956178912/AITester
 abstract: >-
   A Python system for attribution-aware evaluation of LLM-based unit test
-  generation and repair, regenerated end-to-end on a single-provider corpus
-  (DeepSeek), with the detection-first protocol ("red before
-  green") as the primary success criterion, SpecIR specification oracles,
-  paired attribution baselines (plain_llm / plain_llm_df), and M1 honest
-  metrics (detection / repair / false-fix) adjudicated by held-out gold
-  materials. Multi-agent orchestration is included as an ablatable container
-  (not a primary claim: the full orchestration arm is net-negative versus the
-  detection-first prompt protocol, ADR-0016). The accompanying evaluation
-  methodology — pooled multi-seed statistics with McNemar, Bayesian paired
-  analysis, BH-FDR, Wilson intervals, effect sizes, and template-cluster
-  sensitivity — is an integral part of the artifact.
+  generation and repair. The current evaluation batch spans two endpoints
+  (deepseek-flash and mimo-v2.6-pro), five baseline arms and five benchmarks.
+  Every declared pass is adjudicated against held-out gold material, so pass
+  rates are reported together with a false-fix rate; the harness records
+  exclusions explicitly, and generation-stage costs stay in the record.
+  Detection-first prompting, held-out gold adjudication and paired reporting
+  keep the measurement auditable, with multi-agent orchestration included as
+  an ablatable container rather than a primary claim. The version-locked
+  derived verdict rows and 50-cell aggregates are archived under DOI
+  10.5281/zenodo.24136905; the implementation and zero-LLM recomputation
+  chain are in this repository.
 keywords:
   - software testing
   - LLM agents
   - unit test generation
   - automated program repair
-  - fault detection
-  - specification mining
+  - false fixes
+  - measurement validity
+  - benchmark evaluation

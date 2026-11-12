@@ -46,8 +46,9 @@
 # （Huang et al., TOSEM, 2026-02-25 接受）——该误判已在
 # `docs/INDEPENDENT_REVIEW_2026-10-16.md` 内更正，不涉及本清单。
 #
-# 现状（2026-10-26 DD 轮起）：**6 条登记，零历史遗留**，均为登记册轮次明细行
-# （行内数字是项目自身指标，不是外部文献引用）。DD 轮文档重写后，原 5 条
+# 现状（2026-11-12 登记面收口轮起）：**7 条登记，零历史遗留**，6 条为登记册轮次
+# 明细行、1 条为 VALIDITY.en 的退役世代状态注（行内数字均为项目自身指标，不是
+# 外部文献引用）。DD 轮文档重写后，原 5 条
 # `docs/INDEX*.md` 键因 INDEX 精简而不再命中，已随重写退役；行号漂移后命中会
 # 重现、需重新判定而非无脑续登；**重复键与陈旧条目由 tests/test_citations_gate.py
 # 计红**（登记面此前无任何读者，重复登记曾静默通过）。新增豁免前仍须在上述记录
@@ -76,3 +77,15 @@ docs/PROJECT_STATUS_REGISTER.md:318 @**BM 轮新登记（实验/报告读侧折�
 # 1.0.0 发布行（登记册 §3.2 的 CM 轮行；EZ 轮起不再是首行）：行内 26,114.9 / 0.025885 / 35-of-261 是
 # **已撤回世代**的内部成本读数（权威落点 WITHDRAWN_ARTIFACTS 表 W-1），不是外部
 # 文献引用；「数字是否真在工件里」由论文审计器的 `// SRC-CHECK: strict` 块判定。
+
+# ── 2026-11-12 登记面收口轮补登记（1 条）──────────────────────────────
+# docs/VALIDITY.en.md:3 的退役世代状态注：行内 59.58% / 143/240 / n=261 是
+# **项目自身已退役协议代**的内部读数（该注的功能正是禁止把它们当作当前结论引用），
+# 不是外部文献引用。命中原因是门禁的**词内误报**：VENUE_RE 无词边界，TSE 命中了
+# "itself" 的子串，PAPER_TONE_RE 命中 "reporting"，而 SELF_METRIC_RE 的 `false_fix`
+# 不匹配英文注里的连字符写法 "false-fix" ⇒ 该行未被自身指标豁免。中文侧同注因
+# VENUE_RE 零命中而不触发（实测：两侧 NUMERIC_REF/PAPER_TONE 均命中、VENUE 仅英文侧命中）。
+# 核验方法：`python scripts/gates/check_citations.py --traceability` 挂本清单后零命中；
+# 数字本身的权威落点是 docs/EVALUATION_SCOPE.md C2 行与 BASELINE.yaml caliber_labels
+# （两处均带退役标签）。不改门禁正则、不改状态注措辞——两者都会把误报压成静默。
+docs/VALIDITY.en.md:3 @**Status note (2026-11-12)**

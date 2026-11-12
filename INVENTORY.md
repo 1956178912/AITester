@@ -79,8 +79,11 @@ instead of `[SKIP]`. The probe now keys on the files that script actually reads.
 1. The pooled pairing of the protocol-matched comparison: the per-arm batch files
    it reads are no longer in the package, and no aggregator script ships for them.
    This is a standing gap, not a purge artifact.
-2. Aggregation behind `tab:protocol` ships its per-arm rows but no aggregator script
-   (rows regenerate, the table does not).
+2. `tab:protocol` belonged to the retired Chinese draft and is no longer a label in the
+   manuscript. The current tables (`tab:main`, `tab:falsefix`, `tab:cost`) aggregate
+   through `scripts/tools/results_data_pack_20261111.py` over the three whitelisted batch
+   directories, so rows *and* aggregation recompute — provided the published snapshot is
+   present, since the results tree is gitignored.
 
 Numbers that previously appeared here (a 3-pass reading, "489 files across 8
 directories verified", "5 absent") describe the pre-purge corpus and are withdrawn

@@ -3,88 +3,88 @@
 A **detection-first** research system for repair-evaluation (attribution-aware) Python test
 generation and repair. Covers model usage, data, evaluation calibers, and known limitations.
 
-Last updated: 2026-10-27
+Last updated: 2026-11-12 (refreshed against the current authoritative batch)
+
+> **Caliber statement**: this card's current caliber = `experiments/results/RESULTS_DATA_PACK_20261111.json`
+> (50-cell zero-LLM aggregate, per-metric n_obs) + the manuscript `paper/tex/manuscript.tex` (38 pages /
+> 86 references). Derived verdict rows and the 50-cell aggregate are version-locked and public under DOI
+> `10.5281/zenodo.24136905` (no raw traces or model transcripts). Numbers marked "historical readings" belong
+> to a retired protocol generation: **never pooled with the current manuscript**, never current capability
+> conclusions; round-by-round records: `CHANGELOG.en.md` and `docs/design/repair_caliber_matrix.md`.
 
 ## 1. System Overview
 
-Given function-level repair tasks (synthetic dataset or SWE-bench Lite splits), a
-LangGraph-orchestrated Planner → Generator → Executor → Debugger → PatchApplier loop
-generates pytest tests, executes them, diagnoses failures, and patches code. "Multi-agent
-orchestration" is an **ablatable container**, not a primary claim (ADR-0016; E2 double
-gates: aitester vs plain_llm_df δ=−0.3673, structurally inferior). Research code, not a
-deployed product.
+Given five benchmarks (QuixBugs, BugsInPy, SWE-bench, TestGenEval, ULT; per-face sizes and availability in
+`docs/DATA_CARD.en.md`), a LangGraph-orchestrated Planner → Generator → Executor → Debugger → PatchApplier
+loop generates pytest tests, executes them, diagnoses failures, and patches code.
+
+"Multi-agent orchestration" is an **ablatable container**, not a primary claim. The current manuscript's
+central claims are the false-fix paired reporting of "declared pass ≠ adjudicated real pass" (RQ2) and the
+harness-exclusion disclosure (RQ3); orchestration carries no independent capability claim. Research code,
+not a deployed product.
 
 ## 2. Model Usage
 
-- **Provenance**: no self-trained or fine-tuned models; all intelligence comes from
-  user-configured OpenAI-compatible endpoints (`.env.local` `LLM_N_*`: API key / base URL /
-  model name). The only built-in provider is the official DeepSeek endpoint and the price
-  table registers only deepseek-flash — a **single model family**, so conclusions do not
-  extend to other families.
-- **Roles**: Planner (logic analysis), Generator (tests), Debugger/Review (diagnosis and
-  patches), FaultLocalizer (RGFL-style reasoning localization, no repair), optional
-  ExpertPool.
-- **Deterministic channels**: SpecIR v2 DSL assertions, SMT witnesses, Ochiai spectral
-  localization, mutation scoring, and the P2P regression gate are non-LLM; the system
-  degrades conservatively when the LLM fails.
-- **Dual-channel localization**: spectral (Ochiai, non-LLM) plus reasoning
-  (`FaultLocalizerAgent`, consumes LLM, `FAULT_LOCALIZER_ENABLE` on by default, degrades to
-  `None` on failure).
-- **Invocation (ADR-0031)**: `LLM_THINKING_MODE` off by default (cost-protection caliber: measured on one identical prompt, output falls by 92% (deepseek) / 94% (mimo); it matches the
-  provider-side default and pins cross-model comparisons to one reasoning tier; reasoning chains are billed
-  as output); `LLM_JSON_MODE` on by default (seven JSON-contract sites bind
-  `response_format=json_object`); `finish_reason ∈ {length, insufficient_system_resource}`
-  retried as recoverable; numeric expressions in JSON values repaired by a bounded parse
-  layer (no `eval`).
+- **Provenance**: no self-trained or fine-tuned models; all intelligence comes from user-configured
+  OpenAI-compatible endpoints (`.env.local` `LLM_N_*`: API key / base URL / model name). `PROVIDER_TEMPLATES`
+  ships two providers (DeepSeek and xiaomi MiMo); the current authoritative batch compares `deepseek-flash`
+  and `mimo-v2.6-pro` cell by cell, concurrency resolved per provider allowance; prices and allowances are
+  registered in `MODEL_RATE_LIMITS`. **Cross-model readings are split by model × arm × face, never pooled.**
+- **Roles**: Planner (logic analysis), Generator (tests), Debugger/Review (diagnosis and patches),
+  FaultLocalizer (RGFL-style reasoning localization, no repair), optional ExpertPool.
+- **Deterministic channels**: SpecIR v2 DSL assertions, SMT witnesses, Ochiai spectral localization,
+  mutation scoring, and the P2P regression gate are non-LLM; the system degrades conservatively when the LLM fails.
+- **Dual-channel localization**: spectral (Ochiai, non-LLM) plus reasoning (`FaultLocalizerAgent`, consumes
+  LLM, `FAULT_LOCALIZER_ENABLE` on by default, degrades to `None` on failure).
+- **Invocation (ADR-0031)**: `LLM_THINKING_MODE` off by default (cross-model comparisons pinned to one
+  reasoning tier; reasoning chains billed as output); `LLM_JSON_MODE` on by default (seven JSON-contract
+  sites bind `response_format=json_object`); `finish_reason ∈ {length, insufficient_system_resource}` retried
+  as recoverable; numeric expressions in JSON values repaired by a bounded parse layer (no `eval`).
 
 ## 3. Data
 
-- **No training data.** Evaluation data: `data/swe_bench_lite_*` from public SWE-bench Lite
-  (the official repository distributes it under Apache-2.0; re-verify the current
-  declaration) and synthetic tasks from `src/datasets/synthetic_dataset.py` (in-house, MIT).
-  RAG cases come from the experiments' own history (local `rag_data/`, never committed).
-- **Known biases**: Python only; synthetic templates are hand-written boundary/exception/
-  contract defects that differ systematically from real-repository defect distributions;
-  tasks are mostly function-level single-file; generation and repair share one LLM pool, so
-  self-production/self-verification (`false_fix` measures it) is quantified but not
-  eliminated.
+- **No training data.** This project trains no models.
+- Evaluation data: the current authoritative batch is `test_run_20261106T101605Z` (50 cells) +
+  `rerun_swebench_20261110` + `rerun_testgeneval_20261110_v5`; the three-directory source whitelist is pinned
+  by `scripts/tools/results_data_pack_20261111.py` so smoke batches cannot pollute the manuscript base.
+  Per-face licences, leak controls and unverified items: `docs/DATA_CARD.en.md`.
+- RAG cases come from the experiments' own history (local `rag_data/`, never committed).
+- **Known biases**: Python only; function-level single-file and repository-level tasks differ substantially
+  at the execution layer; generation and repair share one LLM pool, and the self-production/self-verification
+  loop is intercepted by independent held-out gold adjudication; SWE-bench `harness_invalid` is a
+  protocol-level structural exclusion, recorded row by row and kept out of the verdict denominator (RQ3).
 
 ## 4. Metrics and Calibers
 
-- **repair = 39.31% (v2, 57/145 replayable rows, independent gold adjudication)**. The
-  historical "0.0% across all arms" came from two stacked measurement artifacts (ADR-0021
-  patch-field fence residue + ADR-0029 cross-file tasks not materialized); v1 caliber 35.86%
-  is a cross-file artifact lower bound (matrix: `docs/design/repair_caliber_matrix.md`).
-- **Generation notice**: the multi-seed pool at "n=261/arm" was withdrawn on 2026-10-24 and
-  is historical only; current readings live in `BASELINE.yaml` and the rebuilt batches,
-  never pooled with the 261-row pool.
-- **Detection**: after the E2 double gates aitester vs plain_llm_df δ=−0.3673 — the full
-  system is worse than the plain prompting protocol on a strong model; detection gains
-  attribute to the detection-first protocol, not the "logic-driven" spec chain.
-- **Effective pass (BA→BC)**: pytest also returns `rc==0` for all-skip/xfail/deselect
-  suites, so derived readings require at least one passed and zero failed, otherwise
-  fail-closed (`None`/`unverifiable`).
-- **spec_compile_rate** is 0.0 in the logic profile (AB1 12/12); E1 (preregistered ≥0.3
-  keep / <0.2 drop) decides that claim.
-- **Cost**: aitester $0.0259 / plain_llm_df $0.0045 per task (deepseek-flash peak rates);
-  plain_llm_df is a **lower bound** on recorded spend (`cost_caliber="recorded_lower_bound"`), not free.
-- **Real SWE-bench Lite (n=20 smoke)**: infrastructure failure with **no valid capability
-  conclusion** — 7 completions all hit 429, 3 failures, 10 timeouts
-  (`experiments/results/swebench_20_summary.json`); the benchmark is on the re-run list.
-- **E7 (repair-ceiling stratified sampling) is preregistered but not executed**
-  (`docs/preregistration.md`): ceiling attribution cannot be claimed until E7 data exists.
+- **Current authoritative caliber**: every declared pass is adjudicated against held-out gold material; pass
+  rates must be reported paired with false-fix rates (manuscript RQ2, per-cell adjudicated real passes on
+  QuixBugs). All 50-cell metrics derive from `RESULTS_DATA_PACK_20261111.json` with per-metric `n_obs`; no
+  observation means no zero denominator. The first-pass verdict reading (4,458 judged / 711 passed) is
+  **not** the paper's final caliber; replacements must be recomputed under the preregistered caliber
+  (`RESULTS_DIGEST_20261111.json` carries this warning verbatim).
+- **Effective pass (BA→BC)**: pytest also returns `rc==0` for all-skip/xfail/deselect suites, so derived
+  readings require at least one passed and zero failed, otherwise fail-closed (`None`/`unverifiable`).
+- **E7-r2 (2026-11-12 design revision)**: the human-calibration frame is replaced by a **census of the 89
+  declared-pass verdict rows** on QuixBugs in the current authoritative batch (= every verdict row of
+  manuscript tab:falsefix): a 42-row patch track under the five-class audit, a 47-row suite track with
+  structural confirmation + shape labels. Preparation pack and handoff zip are generated; **adjudication is
+  still pending human execution** (two independent raters + third-party merge, Cohen's κ unchanged); the old
+  72-row `patch_plausible` stratified frame is void.
+- **Historical readings (retired protocol generation, never pooled with the current manuscript)**: repair
+  39.31% (v2, 57/145 replayable rows), v1 35.86%, the "n=261/arm" three-seed pool, E2 δ=−0.3673,
+  `spec_compile_rate` constantly 0.0, aitester $0.0259 / plain_llm_df $0.0045 per task, the n=20 SWE-bench
+  Lite smoke (429 throttling, no capability conclusion). Facts of their time; provenance: CHANGELOG + caliber matrix.
+- **Current SWE-bench face**: of 2,197 rows, 1,919 are `harness_invalid` (structural exclusion), 278
+  judgeable; excluded rows never enter the denominator, and smoke throttling is not a capability reading.
 
 ## 5. Known Limitations
 
-- Single model family and mostly synthetic data: numbers do not extrapolate to other models
-  or real-repository distributions.
-- repair 39.31% is a measured reading, not a claim that "self-repair is achieved"; the
-  repair-engine route (localize → synthesize → verify) is in progress.
-- Real-benchmark evidence is missing: the n=20 smoke run supports neither a negative nor a
-  positive capability claim.
-- E7 is not executed, so the repair-ceiling attribution is not closed.
-- Arbitrary-code-execution risk: generated code runs on the host; the venv sandbox is on by
-  default (`EXECUTOR_USE_VENV`), Docker isolation is optional (`--network=none` +
-  `--read-only` + `--cap-drop=ALL`). Keys live only in `.env.local`, with gitleaks scans and
-  subprocess environment scrubbing.
+- Current readings are limited to this batch of two endpoints × five arms × five benchmarks; no extrapolation
+  to untested endpoints or task sets; **no cross-batch pooling** — historical readings must carry a batch label.
+- The current manuscript centers on the verdict caliber (declared vs adjudicated real pass) and **does not
+  claim** "self-repair achieved"; the repair-engine route (localize → synthesize → verify) is in progress.
+- E7-r2 human adjudication not executed; external calibration not closed; no Kappa artifact exists anywhere.
+- Arbitrary-code-execution risk: generated code runs on the host; venv sandbox on by default
+  (`EXECUTOR_USE_VENV`), Docker optional (`--network=none` + `--read-only` + `--cap-drop=ALL`). Keys only in
+  `.env.local` (never committed), with gitleaks scans and subprocess environment scrubbing.
 - No human subjects or personal data; SWE-bench tasks come from public issue/PR history. License: `LICENSE` (MIT); citation: `CITATION.cff`.

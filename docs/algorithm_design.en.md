@@ -244,11 +244,13 @@ Boolean switches control node enablement/disabling, forming 4 experiment variant
 
 ## 5. Theoretical Correctness Notes
 
-### Theorem 1 (Completeness)
+### Proposition 1 (Repair Convergence, a Falsifiable Empirical Proposition)
 
-If the function under test $f$ has a repairable bug and the LLM has sufficient capability, the probability that the algorithm converges to a state where all tests pass within $K$ iterations is $p > 0$.
+**Statement**: given an iteration budget $K$ and LLM temperature $T$, the algorithm's repair success rate $p$ is a **measurable** empirical quantity — it varies with defect class (SYNTAX/RUNTIME/ASSERTION/TIMEOUT/UNKNOWN), error-classification granularity and localization-channel precision, and is **not guaranteed a priori by any assumption about model capability**.
 
-**Proof**: Each Debugger call provides a targeted repair strategy based on error classification, covering the four known pattern classes SYNTAX/RUNTIME/ASSERTION/TIMEOUT. For the UNKNOWN class, the LLM performs general analysis. Since the LLM output space contains correct repair solutions (assuming the model is capable enough), there exists a path from the initial state to the success state. ∎
+**Falsification**: $p$ is measured per batch under the paired `repair_rate` / `false_fix_rate` calibers with independent gold adjudication; if $p$ stays at or near 0 for a defect class under fixed $K$, the claim that this class is "repairable" is falsified. The system's **retired-generation main batch (labelled 2026-11-12)** measured repair=0 under the original caliber and 39.31% under the corrected caliber (57/145 replayable rows), showing that the "a success path exists" guarantee is weak in practice and that repair success must be settled by measurement. The current authoritative caliber is `experiments/results/RESULTS_DATA_PACK_20261111.json` plus `paper/tex/manuscript.tex`, and **must not be pooled with that retired reading**.
+
+> **Erratum (2026-10-13 independent review S-01 / T-04)**: the former "Theorem 1 (Completeness)" assumed "the LLM has sufficient capability", while its conclusion (a success path exists) was already entailed by that assumption ("the LLM output space contains correct repair solutions") — a tautology. This version rewrites it as the falsifiable empirical proposition above. The former "Theorem 2 (Termination)" is a structural guarantee (given by the `MAX_ITERATIONS` upper bound), independent of any model-capability assumption, and is retained.
 
 ### Theorem 2 (Termination)
 

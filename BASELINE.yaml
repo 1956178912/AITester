@@ -563,9 +563,13 @@ error_categories: 18         # ErrorCategory 当前类别数（18 类，2026-10-
 
 synthetic_templates: 50      # P0-5（2026-10-05 V 批次）：唯一缺陷 pattern 总数（30→50；scripts/tools/verify_synthetic_templates.py 三重不变量全库自验证 50/50 通过——buggy 可检出 + fixed 自洽 + 测试数口径无漂移；6 个存量模板的 gold 材料缺陷已修复）
 
-# O30（D.4-7 修复）：benchmark 节——承载当前有效的主实验指标，
+# O30（D.4-7 修复）：benchmark 节——主实验指标的登记面，
 # 守卫脚本 check_baseline_numbers.py 校验文档引用与本节一致性。
-# 新工件落地后（run_benchmark.py 产出含 detection_rate 的批次）刷新本节点。
+# 状态（2026-11-12）：本节读数属**已退役协议代**（synthetic 三批次 / n=261 池），
+# 不与现稿混池。现稿权威口径 = experiments/results/RESULTS_DATA_PACK_20261111.json
+# （50 格零 LLM 聚合，来源白名单由 scripts/tools/results_data_pack_20261111.py 钉死）
+# + paper/tex/manuscript.tex。本节仅 metrics_schema 仍被机读（字段清单）；其余为
+# 带日期的历史登记，按当时事实保留，不改写数值。
 benchmark:
   # M1（2026-09-29 审查 P0）：三指标口径（替代旧 success_rate 单一指标）
   #   detection_rate  = 生成测试在已知缺陷代码上变红的比例（fail-to-pass 三段判定：
@@ -655,7 +659,8 @@ benchmark:
   #   第三起伪影定性见 ADR-0029。R4/QuixBugs 存量批次已入库
   #   experiments/results/r4_batches/（6 批次 JSON + SHA256SUMS/README——
   #   口径矩阵与勘误的证据链，此前滞留 /tmp）。
-  current_main_batch: "experiments/results/main_batch/benchmark_synthetic_20261006_140906.json"
+  # 该批次已于 2026-10-24 撤回（工件不在包内）；此键是历史指针，不是现稿批次。
+  retired_main_batch: "experiments/results/main_batch/benchmark_synthetic_20261006_140906.json"
   # EMSE 批次（2026-10-15）术语范围 + 口径标签纪律（防审稿误读，两条）：
   # ① **"gold 独立裁决" = 判据材料独立**（留出 gold 测试 / gold 补丁），
   #    **不含人工裁决**——全流程零 LLM 自动化 oracle 判定；人工复核（E7）
@@ -1293,10 +1298,17 @@ invocation:                  # CG 轮（2026-10-24）新增节：`scripts/gates/
 flag_effect:                 # CH 轮（2026-10-24）新增节：`scripts/gates/check_flag_effect.py` 的 9 个声明键
   # 权威 = 本门就地复算（`make flag-effect`）；登记面 = 登记册 §1「开关有效性（CH 轮）」行，两侧逐项对账，缺键即红。
   # 「命令行上传了这个开关」不等于「这个开关在源码里接了线」：CG 判读者活性，本节判 dest 活性——同一个分母、两条独立实现。
-  disk_scripts: 38           # 盘口径 `ls scripts/gates/*.py | wc -l`，与 `gates.scripts_total`、`invocation.disk_scripts` 三处同数（三条独立实现；DF 轮 +1 = check_dependency_audit.py）
-  argparse_gates: 31         # 有 `argparse` 声明的门禁数（其余 7 道无开关面，不进 (门禁, 开关) 分母；DF 轮 +1 = check_dependency_audit.py）
-  declared_flags: 82         # 26 道门声明的 (门禁, 开关) 实例数——与 `invocation.declared_flags` 同数、两条独立复算，任一实现漏一条即两侧不等（DF 轮 +2）
-  live_flags: 82             # `活`：dest 在声明行以外被显式读到的实例数（DF 轮 +2 = `check_dependency_audit.py` 的 `--require-audit` / `--list` 均被读；DB 轮 +2 ⇒ 78→80，DB 轮只刷了 `invocation` 节、漏了本键，DC 轮按本门复算收口）
+  # **2026-11-12 回钉（登记面收口轮）**：11-11 收口统一轮 `6bff04e2` 拆除
+  # `check_docs_history_drift.py` 时只刷了 `invocation` 节，漏了本节与登记册 §1
+  # 「调用口径」行 ⇒ 两门（flag-effect / invocation-caliber）红。差值逐键映射到
+  # 那一道门：它有 3 个 `add_argument`（`--threshold` / `--strict` / `--warn-only`），
+  # dest 均在声明行以外被读 ⇒ 3 个全「活」；读者分类 1+1+1 = `--warn-only` 被
+  # ci.yml 传过（passed 15→14）、`--strict` 有代码锁 `tests/test_flag_effect_ch.py`
+  # （locked 39→38）、`--threshold` 属范围呈现档无读者（presentation_unread 21→20）。
+  disk_scripts: 37           # 盘口径 `ls scripts/gates/*.py | wc -l`，与 `gates.scripts_total`、`invocation.disk_scripts` 三处同数（三条独立实现；DF 轮 +1 = check_dependency_audit.py；2026-11-12 −1 = check_docs_history_drift.py 已拆除）
+  argparse_gates: 30         # 有 `argparse` 声明的门禁数（其余 7 道无开关面，不进 (门禁, 开关) 分母；DF 轮 +1 = check_dependency_audit.py；2026-11-12 −1 同上）
+  declared_flags: 79         # 30 道门声明的 (门禁, 开关) 实例数——与 `invocation.declared_flags` 同数、两条独立复算，任一实现漏一条即两侧不等（DF 轮 +2；2026-11-12 −3 同上）
+  live_flags: 79             # `活`：dest 在声明行以外被显式读到的实例数（DF 轮 +2 = `check_dependency_audit.py` 的 `--require-audit` / `--list` 均被读；DB 轮 +2 ⇒ 78→80，DB 轮只刷了 `invocation` 节、漏了本键，DC 轮按本门复算收口；2026-11-12 −3 同上，拆除门的 3 个 dest 全为活）
   proxy_flags: 0             # `代理`：dest 从不被读，但与已读的兄弟同处 `required=True` 互斥组——当下等价、保证来自组而不是它自己，仍计红
   dead_flags: 0              # `死`：dest 在整个模块从不被读且无结构代理——传与不传都不改变行为（改前实测 dest 从不被读 **2** 条 = 死 1（`check_docs_history_drift --warn-only`）+ 代理 1（`checksum_results --verify`，等价性由 `required=True` 互斥组担保）；两条都是判据档、都真被 ci.yml 传上去，本轮逐个接了线）
   opaque_flags: 0            # `不可判`：整包读走 Namespace 的门里那些 dest 级判不出的实例（显式计红，绝不静默算成「活」）

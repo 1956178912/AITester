@@ -21,9 +21,11 @@ BugsInPy 无 SPDX 许可证〔L2 决策门槛新登记〕；AA2：§2 重复采�
 
 ## 1. 数据集总览
 
+> **现行权威批次（2026-11-12）**：本文各行（含 §2 标题与表内措辞）记录的是**截至 2026-11-05 的加载器与许可状态**，属历史登记。现行稿件（F2 重写）的评估数据面 = `test_run_20261106T101605Z` 主批 50 格（2 端点 × 5 臂 × 5 基准）+ `rerun_swebench_20261110` 与 `rerun_testgeneval_20261110_v5` 两个补跑面；逐面规模 quixbugs 50 / bugsinpy 8 / swebench 225 / testgeneval 160 / ult 200 任务，SWE-bench 面 2,197 行中 1,919 行 `harness_invalid`（结构性排除）、278 行可判（稿件 RQ3）。逐面数字以 `RESULTS_DATA_PACK_20261111.json` 与稿件 §Datasets 为准；派生判定行已随 DOI `10.5281/zenodo.24136905` 版本锁定公开。本文「当前确认性主批」「零实跑」等措辞均指旧代时点，**不得与现稿混池**。
+
 | 数据集 | 加载名 | 状态 | 用途 |
 |--------|--------|------|------|
-| 合成缺陷模板库 | `synthetic` | ✅ 多批次在用（模板库 50 个唯一 pattern；当前确认性主批 = 87 任务 × 3 seeds {42,43,44} × 3 臂 = 261 行/臂；n=50/seed42 为**历史主批**） | 主实验 / 消融 |
+| 合成缺陷模板库 | `synthetic` | ✅ 多批次在用（模板库 50 个唯一 pattern；**历史**确认性批（已退役协议代）= 87 任务 × 3 seeds {42,43,44} × 3 臂 = 261 行/臂；n=50/seed42 亦为历史主批；现行权威批次见本节开头状态段） | 主实验 / 消融 |
 | QuixBugs（Python 子集，完整 50 程序） | `quixbugs` | ✅ 多批次在用（D1 A/B / spec_ir pilot / 新门校准 n=50；定位仍为 L1——近饱和+记忆污染声明见 §4） | 真实缺陷阶梯 L1 |
 | ULT（UnLeakedTestBench，本地克隆） | `ult` | ✅ 子集在用（ult_lite46 / specir 探针 / 新门校准 / Mut@k 子集，n=25–46；**detection 口径适配性另议**——生成测试零检出 0/45、0/24，gold 断言实测可在缺陷码上变红，属"LLM 测试不产红"） | 真实基准（mutation 主指标 Mut@k / 周期复杂度过滤 cyclomatic ≥10） |
 | BugsInPy | `bugsinpy` | 加载器就绪，**零实跑** | 真实缺陷阶梯 L2 |
@@ -144,12 +146,12 @@ BugsInPy 无 SPDX 许可证〔L2 决策门槛新登记〕；AA2：§2 重复采�
     唯一缺陷 pattern 的 buggy / `fixed` / gold `test_cases` 三件套，定义在
     `src/datasets/synthetic_dataset.py`；pattern 总数以 `BASELINE.yaml` 的
     `synthetic_templates` 为单一事实来源（见 §2）；
-  - 聚合结果工件（部分入库）：`experiments/results/`。其中
-    `（工件已清除）` 的批次 JSON、统计报告与 `SHA256SUMS`
-    已入库（`git ls-files` 实测 2,029 个文件）；其余批次目录默认被
-    `.gitignore` 第 158 行 `experiments/results/**` 忽略，仅部分工件/校验
-    文件被强制入库（`experiments/results/` 下 24 个 `SHA256SUMS*` 中 18 个
-    已被 git 跟踪）；
+  - 聚合结果工件（2026-11-12 更新）：上段的「2,029 个文件 / 18 个
+    `SHA256SUMS`」是 **2026-11-04 清空前**的历史盘面；`experiments/results/`
+    现按用户决策清空重收口，现行权威产物 = 主批 `test_run_20261106T101605Z` +
+    `rerun_swebench_20261110` + `rerun_testgeneval_20261110_v5` 三目录白名单，
+    其派生判定行与 50 格聚合已随 DOI `10.5281/zenodo.24136905` 版本锁定公开
+    （GitHub 侧保留实现/门禁/零 LLM 复算链与 DAS 声明，二者配合使用）；
   - 复现说明：仓库根 `REPLICATION.md`（环境、零 LLM 可复算路径、预期产物
     与已知偏差）。
 - **不随仓库分发的内容**：
@@ -171,6 +173,4 @@ BugsInPy 无 SPDX 许可证〔L2 决策门槛新登记〕；AA2：§2 重复采�
   - TestGenEval（L2 候补，未加载零实跑）："**许可：CC BY-NC 4.0**"（§4）；
   - 合成缺陷模板库：来源为项目作者手写（§2），本卡未就合成模板单独声明
     再分发许可。[待补充：合成缺陷模板库的再分发许可声明]
-- **归档与联系**：[待补充：Zenodo DOI / 归档计划]；
-  [待补充：通讯作者与联系邮箱]。引用元数据见仓库根 `CITATION.cff`
-  （该文件内已以 YAML 注释登记 DOI 待归档）。
+- **归档与联系（2026-11-12 更新）**：版本锁定的派生判定行快照已公开发布，DOI `10.5281/zenodo.24136905`（2026-11-11，CC0-1.0，不含原始执行 trace 与模型转录；与本仓代码配合可零 LLM 逐字节复算 50 格聚合）。引用元数据见仓库根 `CITATION.cff`（顶层 `doi` 已回填）。通讯作者与联系邮箱见 `paper/title_page.tex`。

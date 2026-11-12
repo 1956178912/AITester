@@ -305,6 +305,22 @@ def main() -> None:
 
     write_text_files(out)
 
+    # 署名与单位逐字取自稿件 \author / \institute（paper/tex/manuscript.tex）。
+    # 2026-11-12 修正：原名单把 Jinglin Wang 写成 "Yang, Jinglin"、Tong Liu 写成
+    # "Xu, Tong"，且不带 orcid/affiliation。已公开的 zip 内 zenodo_metadata.json
+    # 是修正前的版本（DOI 10.5281/zenodo.24136905 的元数据已在网页侧改完并逐字段
+    # 复核，文件字节未动）⇒ 重跑本脚本不再逐字节复现该文件，这是已披露的分歧。
+    # 第二处表示差异：网页富文本编辑器把 notes 强制包成 <p>…</p>（TinyMCE 的
+    # forced_root_block，填纯文本会被重新包上），去标签后与下面的 notes 逐字一致；
+    # 本文件仍写纯文本，上传载荷口径不变。
+    aff = (
+        "School of Intelligent Engineering, Hubei Enshi College, Enshi, Hubei, China",
+        "School of Computer and Information Engineering, Zhixing College of Hubei University, Wuhan, Hubei, China",
+        "School of Artificial Intelligence, Wuchang University of Technology, Wuhan, Hubei, China",
+        "School of Computer Information Technology, Wuhan Institute of Shipbuilding Technology, Wuhan, Hubei, China",
+        "School of Computer and Artificial Intelligence, Wuhan University of Engineering Science, Wuhan, Hubei, China",
+    )
+
     metadata = {
         "metadata": {
             "title": (
@@ -335,14 +351,14 @@ def main() -> None:
                 "EMSE",
             ],
             "creators": [
-                {"name": "Wang, Chenyu"},
-                {"name": "Wang, Shaopin"},
-                {"name": "Lin, Bolun"},
-                {"name": "Yang, Jinglin"},
-                {"name": "Xu, Tong"},
-                {"name": "Yu, Xing"},
-                {"name": "Xu, Yue"},
-                {"name": "Xu, Da"},
+                {"name": "Wang, Chenyu", "orcid": "0009-0004-3664-9239", "affiliation": aff[0]},
+                {"name": "Wang, Shaopin", "orcid": "0009-0004-9674-5855", "affiliation": aff[1]},
+                {"name": "Lin, Bolun", "orcid": "0009-0004-1257-7322", "affiliation": aff[2]},
+                {"name": "Wang, Jinglin", "affiliation": aff[3]},
+                {"name": "Liu, Tong", "affiliation": aff[3]},
+                {"name": "Yu, Xing", "affiliation": aff[3]},
+                {"name": "Xu, Yue", "affiliation": aff[4]},
+                {"name": "Xu, Da", "affiliation": aff[3]},
             ],
             "related_identifiers": [
                 {
@@ -352,14 +368,18 @@ def main() -> None:
                 }
             ],
             "notes": (
-                "Version-locked snapshot. A reserved DOI is obtained when the "
-                "Zenodo deposition is created and is cited in the published "
-                "version of the manuscript. No DOI is fabricated in this file."
+                "Version-locked snapshot published on 2026-11-11 under DOI "
+                "10.5281/zenodo.24136905 (concept DOI 10.5281/zenodo.24136904). "
+                "Creator metadata (two family names, ORCID iDs and affiliations) "
+                "was corrected on 2026-11-12 after publication. The deposited zip "
+                "and all files are unchanged, so zenodo_metadata.json inside the "
+                "archive still carries the original creator list; the DOI and all "
+                "file checksums are unaffected."
             ),
         }
     }
     (out / "zenodo_metadata.json").write_text(
-        json.dumps(metadata, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        json.dumps(metadata, ensure_ascii=False, indent=2, allow_nan=False) + "\n", encoding="utf-8"
     )
 
     verify_in_fresh_tree(out / "verdict_rows", ROOT / AGGREGATES[0])

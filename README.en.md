@@ -4,29 +4,29 @@ A **detection-first** Python test generation and repair-evaluation (attribution)
 
 Current version 1.0.0 · [Changelog](CHANGELOG.en.md) · [Documentation index](docs/INDEX.en.md) · [MIT license](LICENSE)
 
-> **Result reproducibility**: every headline number is reached by the zero-LLM recompute path (`make reproduce-zero-llm`, and `make reproduce-zero-llm-l1` for L1). The quota-consuming entry points in this repository, `reproduce.sh` and `experiments/run_main_batch.py`, only **regenerate a batch** under the pre-registered configuration; they are not on the path from an artifact to a reported number. [INVENTORY.md](INVENTORY.md) answers the six open-science criteria one by one and lists which branches of the chain currently report `skipped` rather than `passed`.
+> **Result reproducibility**: the current manuscript's tables are aggregated with zero model calls by `scripts/tools/results_data_pack_20261111.py` over the three registered batch directories (recomputable once the DOI snapshot below is present). `make reproduce-zero-llm` (and `make reproduce-zero-llm-l1` for L1) is the recompute chain of the **earlier corpus**; some of its branches report `skipped` because the old main batch was withdrawn — a skip is not a pass. The quota-consuming entry points `reproduce.sh` and `experiments/run_main_batch.py` only **regenerate a batch** under the retired pre-registered configuration; they are not on the path from an artifact to a current manuscript number. [INVENTORY.md](INVENTORY.md) answers the six open-science criteria one by one.
 
 > **Archived data DOI**: [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.24136905.svg)](https://doi.org/10.5281/zenodo.24136905) — the version-locked 2026-11-11 derived-verdict-row snapshot is published as `10.5281/zenodo.24136905`, CC0-1.0, with no raw execution traces or model transcripts; combined with this repository it reproduces the 50-cell aggregate byte for byte with zero model calls.
 
-> Last updated: 2026-10-27
+> Last updated: 2026-11-12
 
 ## What It Is
 
 AITester is a research system that orchestrates a Planner → Generator → Executor → Debugger → PatchApplier loop with LangGraph:
 
-- **Input**: function-level repair tasks (synthetic dataset, or SWE-bench Lite split tasks).
+- **Input**: tasks from five benchmarks (QuixBugs, BugsInPy, SWE-bench, TestGenEval, ULT; function-level single-file and repository-level).
 - **Process**: generate pytest tests → execute in a sandbox → diagnose failures → produce a patch → re-run.
 - **Output**: tests, patches, structured traces, and recomputable metric artifacts.
 
-The research question is not "are multiple agents better", but "can detection-first test generation be a reliable prerequisite for repair". Multi-agent orchestration participates only as an ablatable container (ADR-0016).
+The current manuscript's central claim is not "are multiple agents better" but the false-fix paired reporting of "declared pass ≠ adjudicated real pass" (RQ2) and the harness-exclusion disclosure (RQ3). Multi-agent orchestration participates only as an ablatable container and carries no independent capability claim.
 
 ## What It Is Not (Honest Disclosure)
 
 - **Not "self-repair achieved"**. Self-repair is a **measurable caliber**, not a proven claim.
-- The repair metric is **39.31%** (v2, 57/145 replayable rows; independent gold adjudication) after two rounds of measurement-caliber corrections (ADR-0021/0027/0029). The earlier **repair=0** reading was a **measurement artifact** caused by patch-fence residue and unmaterialized cross-file tasks, not a capability reading. Caliber splits and recomputation are documented in the [repair caliber matrix](docs/design/repair_caliber_matrix.md).
-- **The E7 human adjudication has not been executed**: the protocol and preregistration are frozen ([preregistration](docs/preregistration.md)); its results appear in no released reading.
-- **SWE-bench Lite covers pipeline capability only; there is no citable pass rate.** Quoting its pass_rate is misuse.
-- The main batches use a **single model family** (user-configured OpenAI-compatible endpoints; only the official DeepSeek endpoint is built in). Cross-model extrapolation is out of scope. The two-model end-to-end profile of `scripts/run_all_tests.py` (`deepseek-flash` × `mimo-v2.6-pro`, 5 arms × 5 faces) only answers "does the assembly hold": one task per cell, with per-cell concurrency resolved per model from provider allowance ∩ machine cap ∩ `--llm-parallel` and hashed into the smoke fingerprint. It is not a cross-model capability reading, so the limitation above still stands.
+- **Historical readings (retired protocol generation, never pooled with the current manuscript)**: the repair metric is **39.31%** (v2, 57/145 replayable rows; independent gold adjudication) after two rounds of measurement-caliber corrections (ADR-0021/0027/0029). The earlier **repair=0** reading was a **measurement artifact** caused by patch-fence residue and unmaterialized cross-file tasks, not a capability reading. Caliber splits and recomputation are documented in the [repair caliber matrix](docs/design/repair_caliber_matrix.md).
+- **E7-r2 human calibration has not been executed**: the sampling frame is now a **census of the 89 declared-pass verdict rows** behind manuscript tab:falsefix (42 patch-track rows + 47 suite-track rows); the preparation pack is generated, adjudication is still pending human execution. Protocol: [preregistration](docs/preregistration.md). Its results appear in no released reading, and no Kappa artifact exists anywhere in the repository.
+- **The SWE-bench face is a structural exclusion, not a pass rate**: of 2,197 rows, 1,919 are `harness_invalid` and 278 are judgeable; excluded rows never enter the verdict denominator (disclosed in RQ3). Quoting its pass_rate is misuse.
+- **Readings are limited to this batch**: the current authoritative batch compares two endpoints cell by cell (`deepseek-flash` × `mimo-v2.6-pro`, 5 arms × 5 faces); cross-model readings are split by model × arm × face and never pooled, with no extrapolation to untested endpoints or task sets and no cross-batch pooling. The smoke profile of `scripts/run_all_tests.py` runs one task per cell to prove assembly only, with per-cell concurrency resolved per model from provider allowance ∩ machine cap ∩ `--llm-parallel` and hashed into the smoke fingerprint — smoke is not a capability reading.
 
 ## Quick Start
 
@@ -44,8 +44,9 @@ LLM endpoints are configured through `LLM_1_API_KEY` / `LLM_1_BASE_URL` / `LLM_1
 
 | Capability | Entry point | Notes |
 |---|---|---|
-| Test generation + repair loop | `make repro` | Consumes LLM quota; reproduces the main batches |
-| Zero-LLM recomputation | `make reproduce-zero-llm` | Statistics, caliber matrix, citation checks |
+| Current manuscript tables | `python scripts/tools/results_data_pack_20261111.py` | Zero LLM; needs the verdict rows from the DOI snapshot |
+| Test generation + repair loop | `make repro` | Consumes LLM quota; regenerates a batch (retired synthetic protocol) |
+| Zero-LLM recomputation (earlier corpus) | `make reproduce-zero-llm` | Statistics, caliber matrix, citation checks |
 | Full gate chain | `make gates` | lint / format / typecheck / tests / docs and registry gates |
 | Code quality | `make lint` / `make format` / `make typecheck` | [Ruff](https://docs.astral.sh/ruff/) + mypy |
 | Mutation evaluation | `make self-mutation` | Mutation testing of this test suite (zero LLM) |
@@ -78,11 +79,12 @@ Fault localization has two channels: Ochiai spectrum (non-LLM) and RGFL-style re
 Three paths, from cheapest to most expensive:
 
 ```bash
-make reproduce-zero-llm   # zero LLM: statistical recomputation + artifact verification
+make reproduce-zero-llm   # zero LLM: earlier-corpus statistical recomputation + artifact verification
 make test                 # test suite (same caliber as CI)
-make repro                # main batches (consumes LLM quota; do not trigger automatically)
+make repro                # regenerate a batch (retired synthetic protocol; consumes LLM quota, do not trigger automatically)
 ```
 
+The current manuscript's tables take a different zero-LLM path: `python scripts/tools/results_data_pack_20261111.py` (needs the verdict rows from the DOI snapshot).
 Prerequisites, image mounts, and the evidence index are in [REPLICATION.en.md](REPLICATION.en.md).
 
 ## Test Status

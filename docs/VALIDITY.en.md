@@ -1,5 +1,8 @@
 > **Language**: [中文版](VALIDITY.md) | English (this document)
 
+> **Status note (2026-11-12)**: This is a validity-threat register for the **2026-10-19 and earlier batches**. Figures such as 59.58% / 143/240 / n=261 and the `main_batch` artifacts are **historical facts of a retired protocol generation**, locked by regression tests and not recomputed here; **do not pool them with the current manuscript or cite them as current results**. The current authoritative caliber is `experiments/results/RESULTS_DATA_PACK_20261111.json` + `paper/tex/manuscript.tex` (F2 rewrite); see RQ2/RQ3 there for paired false-fix reporting and harness exclusions. E7 has been rebuilt on the current batch as E7-r2 (89-row census); the adjudication itself is still pending.
+
+
 # Validity Threats Report
 
 Last updated: 2026-10-19 (Z-round third-party review F01/F17/F20: (i) F01 corrects the
@@ -47,7 +50,7 @@ Three rules apply throughout:
 3. **No human adjudication anywhere**: project-wide, "gold independent adjudication"
    always means an automated oracle whose *adjudicating material* is independent
    (held-out gold tests / gold patches), **never human adjudication**; the E7 human
-   review is preregistered but **has not been executed**, and no Kappa artifact exists
+   review is preregistered but **has not been executed**, and no Kappa artifact exists **2026-11-12 update**: the sampling frame has been replaced by the current-batch QuixBugs 89-row census (E7-r2, protocol §2.3); the old 72-row frame is void, while "not executed / no Kappa artifact" still holds.
    anywhere (benchmark-metrics row of `README.md`; verification in §7 item 1).
 
 ---

@@ -3,9 +3,17 @@
 批次：U13（2026-10-05 系统性审查落地）·状态：**L1/L2 加载器已落地（W4，2026-10-05：`src/datasets/dataset_realbugs.py` 的 `QuixBugsDataset` / `BugsInPyDataset`，经 `load_dataset("quixbugs"|"bugsinpy")` 注册）**；L2 manifest 导出与 L3 复测仍未实现——本文档其余部分仍为设计稿
 前置约束（全局决策日志 2026-10-05 条目）：R3 基准升级属大改动，需先出设计文档再动代码——本文档即该设计。
 
+> 状态注（2026-11-12，按现稿口径补标）：本文 §1「现状」与 §2 候补块的「零加载零实跑」
+> 是 **2026-10-05 / 2026-10-07 时点快照**，不是现行事实。现稿权威批次已在五个真实面
+> 跑批（quixbugs 50 / bugsinpy 8 / swebench 225 / testgeneval 160 / ult 200，2 端点 × 5 臂
+> = 50 格），事实源为 `experiments/results/RESULTS_DATA_PACK_20261111.json` 与
+> `paper/tex/manuscript.tex`；本文提到的 synthetic 主批（n=50 / R-P0-2 三种子 n=261/臂）
+> 属**已退役协议代**，不与现稿混池。本文其余部分仍为设计稿，§3 工程清单的完成度以
+> 代码与登记册为准，本注不逐项改判。
+
 ## 1. 动机与现状
 
-当前系统在真实基准上的实证为零：SWE-bench Lite n=20 冒烟 resolved 0/20（限流 + 缺 `instance_code`/`sqlfluff` 依赖，工件 `results/swebench_20_summary.json` 等 5 份一致）；主批次全部证据来自合成数据集（历史批 n=50：detection 2.0% / repair 0.0% / false_fix 89.8%；当前口径 R-P0-2 三种子 n=261/臂：detection 15.8% / repair 0.0%）。合成集无法回答"系统对真实历史缺陷是否有效"。
+**2026-10-05 时点**系统在真实基准上的实证为零：SWE-bench Lite n=20 冒烟 resolved 0/20（限流 + 缺 `instance_code`/`sqlfluff` 依赖，工件 `results/swebench_20_summary.json` 等 5 份一致）；当时主批次全部证据来自合成数据集（历史批 n=50：detection 2.0% / repair 0.0% / false_fix 89.8%；旧代口径 R-P0-2 三种子 n=261/臂：detection 15.8% / repair 0.0%——两者均属已退役协议代）。合成集无法回答"系统对真实历史缺陷是否有效"。
 
 系统能力定位是**函数级**修复（合成集同为函数级），而 SWE-bench Lite 是仓库级基准——靶点错位。2026-10 检索口径（AL14 更新）：**SWE-bench Verified 已于 2026-02-23 被 OpenAI 官方弃用**（定性"饱和且高度污染"，内部审计发现 59.4% 最难未解任务的测试本身有缺陷）；替代榜 SWE-bench Pro / SWE-bench Live / SWE-rebench 三者排名互相冲突（2026-04 分析）——**L3 选型原则（预注册）：防污染滚动基准二选一（SWE-bench Live〔arXiv 2505.23419，滚动新增真实 issue〕 vs SWE-rebench〔Nebius 持续重建〕），执行前在 ADR 固化选型与理由，禁止单源口径；引用任何具体 SOTA 分数须先联网核验**；函数级/单文件级基准更贴合本系统能力（不变）。
 
@@ -26,8 +34,8 @@ arXiv:2410.00752；`facebookresearch/testgeneval`，1,210 代码/测试文件对
 2026-10-07 = Attribution-NonCommercial 4.0 International）——学术非商业
 研究评估可用（署名），商业用途与衍生工件再分发受限；与 BugsInPy（无
 SPDX）同列"非清洁许可"决策门槛（DATA_CARD §4 三选一口径同样适用）。
-L2 立项时与 BugsInPy 并列决策，均未解除实跑前置（当前零加载零实跑，
-仅有此登记）。
+L2 立项时与 BugsInPy 并列决策，当时均未解除实跑前置（**2026-10-07 时点**零加载零实跑，
+仅有此登记；现稿批次 testgeneval 已跑 160 任务、bugsinpy 8 任务，见顶部状态注）。
 
 **判定口径（对齐 M1 严谨性检查点）**：
 - 主指标：resolved（gold F2P 全过 ∧ P2P 不回归 ∧ 补丁非仅改测试）；辅助：detection / repair / false_fix / FL@k / patch_plausible / $/task。

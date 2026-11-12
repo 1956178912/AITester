@@ -19,7 +19,9 @@
         stop_reason == "regression_detected"（回归停止）
     - CPR（Correct-patch Retention Rate，正确补丁保留率）：
       patch_correct=1 行中未被任何负信号/回滚误伤的比例。
-      当前主批次 correct=0 → CPR 无定义（诚实输出 None，不编造）。
+      旧代主批（已退役协议代；默认 --results-dir 即该批）correct=0 → CPR 无定义
+      （诚实输出 None，不编造）。本脚本只读旧代语料，不读现稿权威批次
+      （RESULTS_DATA_PACK_20261111.json），两者不可混池。
 
 用法（确定性、无网络、无 LLM；报告只打 stdout，落盘用 shell 重定向）：
     python experiments/cpr_idr_report.py \

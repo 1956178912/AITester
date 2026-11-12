@@ -26,9 +26,11 @@ license [new L2 decision gate registered]; AA2: §2 registers the
 
 ## 1. Dataset Overview
 
+> **Current authoritative batch (2026-11-12)**: this card (including the §2 heading and the wording inside the tables) records loader and licence status **as of 2026-11-05** and is a historical register. The evaluation face of the current manuscript (F2 rewrite) is the 50-cell main batch `test_run_20261106T101605Z` (2 endpoints x 5 arms x 5 benchmarks) plus the `rerun_swebench_20261110` and `rerun_testgeneval_20261110_v5` reruns; per-face sizes are quixbugs 50 / bugsinpy 8 / swebench 225 / testgeneval 160 / ult 200 tasks, with 1,919 of 2,197 SWE-bench rows `harness_invalid` (structural exclusion) and 278 judgeable (manuscript RQ3). Authoritative figures are `RESULTS_DATA_PACK_20261111.json` and the manuscript Datasets section; derived verdict rows are version-locked under DOI `10.5281/zenodo.24136905`. Wording such as "current confirmatory main batch" or "never run" anywhere in this card refers to the retired generation and **must not be pooled with the current manuscript**.
+
 | Dataset | Loader name | Status | Purpose |
 |---------|-------------|--------|---------|
-| Synthetic defect template library | `synthetic` | ✅ multi-batch in use (50 unique patterns in the template library; current confirmatory main batch = 87 tasks × 3 seeds {42,43,44} × 3 arms = 261 rows/arm; n=50/seed42 is the **historical main batch**) | main experiments / ablations |
+| Synthetic defect template library | `synthetic` | ✅ multi-batch in use (50 unique patterns in the template library; **historical** confirmatory batch (retired protocol generation) = 87 tasks × 3 seeds {42,43,44} × 3 arms = 261 rows/arm; n=50/seed42 is also historical; see the status note above for the current authoritative batch) | main experiments / ablations |
 | QuixBugs (Python subset, complete 50 programs) | `quixbugs` | ✅ multi-batch in use (D1 A/B / spec_ir pilot / recalibration n=50; positioning remains L1 — near-saturation + memorization statements in §4) | real-defect ladder L1 |
 | ULT (UnLeakedTestBench, local clone) | `ult` | ✅ subset in use (ult_lite46 / specir probe / recalibration / Mut@k subset, n=25–46; **detection-caliber fitness under review** — generated tests show zero detections 0/45, 0/24 while gold assertions demonstrably fail on the buggy code, i.e. "LLM tests produce no red") | real benchmark (mutation main metric Mut@k / cyclomatic ≥10 filter) |
 | BugsInPy | `bugsinpy` | loader ready, **never run** | real-defect ladder L2 |
@@ -178,13 +180,15 @@ license [new L2 decision gate registered]; AA2: §2 registers the
     `src/datasets/synthetic_dataset.py`; the pattern total uses
     `BASELINE.yaml`'s `synthetic_templates` as the single source of truth
     (see §2);
-  - Aggregated result artifacts (partially committed): `experiments/results/`.
-    The batch JSONs, statistical reports and `SHA256SUMS` under
-    `（工件已清除）` are committed (2,029 files measured with
-    `git ls-files`); the remaining batch directories are ignored by
-    `.gitignore` line 158 (`experiments/results/**`) and only selected
-    artifacts/checksum files were force-added (18 of the 24 `SHA256SUMS*`
-    files under `experiments/results/` are git-tracked);
+  - Aggregated result artifacts (updated 2026-11-12): the "2,029 files / 18
+    SHA256SUMS" figures above describe the **pre-2026-11-04 disk state**;
+    `experiments/results/` has since been cleared and re-closed by decision.
+    The current authoritative products are the three-directory whitelist
+    (`test_run_20261106T101605Z` + `rerun_swebench_20261110` +
+    `rerun_testgeneval_20261110_v5`), whose derived verdict rows and 50-cell
+    aggregates are version-locked under DOI `10.5281/zenodo.24136905`
+    (GitHub keeps implementation/gates/zero-LLM recompute and the DAS
+    statement; the two are used together);
   - Replication notes: `REPLICATION.md` at the repository root (environment,
     zero-LLM recomputation path, expected artifacts and known deviations).
 - **Not included with the repository**:
@@ -214,7 +218,9 @@ license [new L2 decision gate registered]; AA2: §2 registers the
     (§2); this card does not declare a separate redistribution license for the
     synthetic templates. [TO BE COMPLETED: redistribution license statement
     for the synthetic template library]
-- **Deposit and contact**: [TO BE COMPLETED: Zenodo DOI / archival plan];
-  [TO BE COMPLETED: corresponding author and contact email]. Citation
-  metadata lives in `CITATION.cff` at the repository root (which already
-  records the pending DOI as a YAML comment).
+- **Deposit and contact (updated 2026-11-12)**: the version-locked derived verdict-row
+  snapshot is published under DOI `10.5281/zenodo.24136905` (2026-11-11, CC0-1.0,
+  no raw execution traces or model transcripts; combined with this repository it
+  reproduces the 50-cell aggregates byte-for-byte with zero LLM calls). Citation
+  metadata lives in `CITATION.cff` at the repository root (top-level `doi` filled).
+  Corresponding author and contact email: see `paper/title_page.tex`.
