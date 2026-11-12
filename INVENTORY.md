@@ -24,6 +24,17 @@ prints the outcome of every command instead of only the passing ones.
 | Exercisable | yes for the tracked subset | `make install` then `make reproduce-zero-llm`. Only public modules and the shipped configuration are used. A fresh clone exercises the corpus that is tracked in git; the heavier per-task records travel with the archive rather than with the clone. |
 | Licensed | code yes, data stated here | Code: MIT, `LICENSE`. Our own artifacts: dedicated to CC0-1.0, which is recorded in this file rather than in a second license text, and belongs in the deposit. Third-party benchmarks (QuixBugs, ULT, SWE-bench) stay under their upstream licenses, and only derived outputs are redistributed. |
 
+### Tracked manifests outside the archive
+
+`experiments/manifests/` holds small derived manifests that are not on the
+deposit's field whitelist and are therefore tracked in the repository rather
+than in the archive. The current one is
+`spec_replace_applied_20261111.csv`: the `+df_spec` arm's fallback flag for
+every task row, 1,276 rows after lineage deduplication (894
+`attempted_fallback`, 382 harness-invalid rows with no generation). It backs
+the manuscript's Limitations and Appendix C statements and carries no model
+output or execution trace.
+
 ## Corpus state: measured, not inherited
 
 `git clone` and "the archive we hand to reviewers" are not the same corpus, so

@@ -97,6 +97,11 @@ make repro                # 重新跑批（旧代 synthetic 协议；消耗 LLM 
 现稿表格走另一条零 LLM 路径：`python scripts/tools/results_data_pack_20261111.py`（需 DOI 快照的判定行）。
 前置条件、镜像挂载与证据索引见 [REPLICATION.md](REPLICATION.md)。
 
+`experiments/manifests/` 存放不在 Zenodo 归档字段白名单内、因而随仓库跟踪的小型派生清单。
+当前一份是 `spec_replace_applied_20261111.csv`：`+df_spec` 臂每个任务行的 fallback 标志，
+1,276 行（按 lineage 去重；894 行 `attempted_fallback`，382 行无生成的 harness-invalid）。
+论文 Limitations 与附录 C 引用该路径及 SHA-256 前缀作为 fallback 的可复核入口。
+
 ## 测试状态
 
 数值只在一处维护：[BASELINE.yaml](BASELINE.yaml) 的 `tests` / `coverage` / `static_checks` 节；

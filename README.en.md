@@ -87,6 +87,14 @@ make repro                # regenerate a batch (retired synthetic protocol; cons
 The current manuscript's tables take a different zero-LLM path: `python scripts/tools/results_data_pack_20261111.py` (needs the verdict rows from the DOI snapshot).
 Prerequisites, image mounts, and the evidence index are in [REPLICATION.en.md](REPLICATION.en.md).
 
+`experiments/manifests/` holds small derived manifests that are not on the Zenodo
+deposit's field whitelist and are therefore tracked in the repository. The current
+one is `spec_replace_applied_20261111.csv`: the fallback flag of the `+df_spec` arm
+for every task row, 1,276 rows after lineage deduplication (894 `attempted_fallback`
+and 382 harness-invalid rows with no generation). The manuscript's Limitations and
+Appendix C cite this path and its SHA-256 prefix as the re-derivable entry point for
+the fallback.
+
 ## Test Status
 
 Numbers are maintained in one place: the `tests` / `coverage` / `static_checks` sections of
