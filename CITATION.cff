@@ -49,8 +49,10 @@ abstract: >-
   A Python system for attribution-aware evaluation of LLM-based unit test
   generation and repair. The current evaluation batch spans two endpoints
   (deepseek-flash and mimo-v2.6-pro), five baseline arms and five benchmarks.
-  Every declared pass is adjudicated against held-out gold material, so pass
-  rates are reported together with a false-fix rate; the harness records
+  Every declared pass is adjudicated against held-out gold material where that
+  material exists, and the places where it does not are reported rather than
+  filled in; pass rates are reported together with a false-fix rate. The
+  harness records
   exclusions explicitly, and generation-stage costs stay in the record.
   Detection-first prompting, held-out gold adjudication and paired reporting
   keep the measurement auditable, with multi-agent orchestration included as

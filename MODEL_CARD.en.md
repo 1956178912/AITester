@@ -6,8 +6,8 @@ generation and repair. Covers model usage, data, evaluation calibers, and known 
 Last updated: 2026-11-12 (refreshed against the current authoritative batch)
 
 > **Caliber statement**: this card's current caliber = `experiments/results/RESULTS_DATA_PACK_20261111.json`
-> (50-cell zero-LLM aggregate, per-metric n_obs) + the manuscript `paper/tex/manuscript.tex` (38 pages /
-> 86 references). Derived verdict rows and the 50-cell aggregate are version-locked and public under DOI
+> (50-cell zero-LLM aggregate, per-metric n_obs) + the manuscript `paper/tex/manuscript.tex` (40 pages /
+> 86 references). Derived verdict rows and the 50-cell aggregate are DOI-locked and public under DOI
 > `10.5281/zenodo.24136905` (no raw traces or model transcripts). Numbers marked "historical readings" belong
 > to a retired protocol generation: **never pooled with the current manuscript**, never current capability
 > conclusions; round-by-round records: `CHANGELOG.en.md` and `docs/design/repair_caliber_matrix.md`.
@@ -60,7 +60,8 @@ not a deployed product.
   rates must be reported paired with false-fix rates (manuscript RQ2, per-cell adjudicated real passes on
   QuixBugs). All 50-cell metrics derive from `RESULTS_DATA_PACK_20261111.json` with per-metric `n_obs`; no
   observation means no zero denominator. The first-pass verdict reading (4,458 judged / 711 passed) is
-  **not** the paper's final caliber; replacements must be recomputed under the preregistered caliber
+  the paper's RQ1 endpoint, but quoting it alone collides with the false-fix caliber: the table must be
+  reported paired under RQ2, and first-pass verdicts must not be read as a capability claim
   (`RESULTS_DIGEST_20261111.json` carries this warning verbatim).
 - **Effective pass (BA→BC)**: pytest also returns `rc==0` for all-skip/xfail/deselect suites, so derived
   readings require at least one passed and zero failed, otherwise fail-closed (`None`/`unverifiable`).
@@ -81,6 +82,8 @@ not a deployed product.
 
 - Current readings are limited to this batch of two endpoints × five arms × five benchmarks; no extrapolation
   to untested endpoints or task sets; **no cross-batch pooling** — historical readings must carry a batch label.
+  One of the five arms (specification replacement) never received its anchor table and ran at the
+  detection-first fallback; its column is a repeat of that arm, not a delivered specification treatment.
 - The current manuscript centers on the verdict caliber (declared vs adjudicated real pass) and **does not
   claim** "self-repair achieved"; the repair-engine route (localize → synthesize → verify) is in progress.
 - E7-r2 human adjudication not executed; external calibration not closed; no Kappa artifact exists anywhere.

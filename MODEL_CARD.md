@@ -5,8 +5,8 @@
 最后更新：2026-11-12（按现行权威批次刷新）
 
 > **口径声明**：本卡的当前口径 = `experiments/results/RESULTS_DATA_PACK_20261111.json`
-> （50 格零 LLM 聚合，逐指标 n_obs）+ 稿件 `paper/tex/manuscript.tex`（38 页 / 86 文献）。
-> 派生判定行与 50 格聚合已随 DOI `10.5281/zenodo.24136905` 版本锁定公开（不含原始
+> （50 格零 LLM 聚合，逐指标 n_obs）+ 稿件 `paper/tex/manuscript.tex`（40 页 / 86 文献）。
+> 派生判定行与 50 格聚合已随 DOI `10.5281/zenodo.24136905` DOI 锁定公开（不含原始
 > trace 与模型转录）。凡标注「历史读数」的数字属已退役协议代，**不与现稿混池**、不作为
 > 当前能力结论；旧代逐轮记录见 `CHANGELOG.md` 与 `docs/design/repair_caliber_matrix.md`。
 
@@ -57,8 +57,9 @@ Debugger → PatchApplier 闭环：生成 pytest 测试、执行、诊断失败�
 - **现行权威口径**：每条声明通过对 held-out gold 材料做独立裁决；pass rate 必须与
   false-fix rate 配对报告（稿件 RQ2 的 QuixBugs 逐格 adjudicated real passes）。50 格
   全部指标由 `RESULTS_DATA_PACK_20261111.json` 派生，逐指标带 `n_obs`，观测不到不计
-  0 分母；首过判定读数（4,458 判定 / 711 passed）**不是**论文最终口径，换数须按预
-  注册口径另行重算（`RESULTS_DIGEST_20261111.json` 已写死该警示）。
+  0 分母；首过判定读数（4,458 判定 / 711 passed）是论文 RQ1 的终点，但单独引用会与
+  false-fix 口径混淆——整表必须按 RQ2 配对报告，不得把首过判定当作能力结论
+  （`RESULTS_DIGEST_20261111.json` 已写死该警示）。
 - **有效通过口径（BA→BC）**：pytest 对全 skip/xfail/deselect 也返回 `rc==0`，故派生
   读数要求至少 1 个 passed 且 0 个 failed，否则 fail-closed（`None`/`unverifiable`）。
 - **E7-r2（2026-11-12 设计修订）**：人工校标的抽样框换为现行权威批次 QuixBugs 的
@@ -76,6 +77,8 @@ Debugger → PatchApplier 闭环：生成 pytest 测试、执行、诊断失败�
 ## 5. 已知限制
 
 - 现行读数限于两端点 × 五臂 × 五基准的这一批次，不外推到未测端点或任务集；
+  五臂中的规格替换臂未收到锚表、实际跑在检出优先的回落口径上，其列是该臂的重复而非
+  已交付的规格处理；
   **跨批次不混池**，引用任何历史读数必须带批次标签。
 - 现行稿件以判定口径为中心（declared pass vs adjudicated real pass），**不主张**
   「自修复已达成」；修复引擎路线（定位 → 合成 → 验证）仍在推进。

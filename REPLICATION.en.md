@@ -5,7 +5,7 @@ Last updated: 2026-11-12
 How to reproduce AITester experiments: the zero-LLM recompute path, the LLM-dependent re-run
 path, and how mounting and the test gate behave. **Raw LLM responses are not distributed**, so the LLM path must spend new API quota.
 
-> **Archived snapshot**: the version-locked derived verdict rows (with the 50-cell aggregate, SHA-256 manifests and a one-command recompute script) are published as `10.5281/zenodo.24136905` (<https://doi.org/10.5281/zenodo.24136905>), CC0-1.0, with no raw execution traces or model transcripts. The results tree is excluded by `.gitignore`, so a fresh clone must be combined with this snapshot; cloning the repository alone cannot reproduce the manuscript tables.
+> **Archived snapshot**: the DOI-locked derived verdict rows (with the 50-cell aggregate, SHA-256 manifests and a one-command recompute script) are published as `10.5281/zenodo.24136905` (<https://doi.org/10.5281/zenodo.24136905>), CC0-1.0, with no raw execution traces or model transcripts. The results tree is excluded by `.gitignore`, so a fresh clone must be combined with this snapshot; cloning the repository alone cannot reproduce the manuscript tables.
 
 ## 1. Prerequisites
 
@@ -83,7 +83,7 @@ When skipped, conclusions **exclude test verification** — that is a disclosure
 | Content | Location |
 |---------|----------|
 | Source of truth for current readings (50-cell aggregate + manuscript) | `experiments/results/RESULTS_DATA_PACK_20261111.json`, `paper/tex/manuscript.tex` |
-| Derived verdict-row snapshot (version-locked, CC0-1.0) | DOI `10.5281/zenodo.24136905` |
+| Derived verdict-row snapshot (DOI-locked, CC0-1.0) | DOI `10.5281/zenodo.24136905` |
 | Test counts / static checks / retired-generation benchmark readings | `BASELINE.yaml` |
 | Data provenance and licenses (five benchmark faces) | `docs/DATA_CARD.en.md` |
 | Preregistered protocol (E1–E7) | `docs/preregistration.en.md` |

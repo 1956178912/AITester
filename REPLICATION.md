@@ -5,7 +5,7 @@
 本文件说明如何复现 AITester 的实验：零 LLM 复算路径、含 LLM 的重新跑批路径，以及挂载与
 测试门的行为。**原始 LLM 响应不随仓库分发**，含 LLM 路径必须重新消耗 API 配额。
 
-> **归档快照**：版本锁定的派生判定行（含 50 格聚合、SHA-256 清单与一键复算脚本）
+> **归档快照**：DOI 锁定的派生判定行（含 50 格聚合、SHA-256 清单与一键复算脚本）
 > 在 `10.5281/zenodo.24136905`（<https://doi.org/10.5281/zenodo.24136905>）公开，
 > CC0-1.0、不含原始执行 trace 与模型转录。结果目录被 `.gitignore` 排除，
 > 因此 fresh clone 必须把该快照与本仓代码配合使用，单独克隆仓库不足以复算稿件表格。
@@ -84,7 +84,7 @@ build-arg 时该值记为 `unknown`，不作提交 SHA 使用。
 | 内容 | 位置 |
 |------|------|
 | 现稿读数事实源（50 格聚合 + 稿件） | `experiments/results/RESULTS_DATA_PACK_20261111.json`、`paper/tex/manuscript.tex` |
-| 派生判定行快照（版本锁定、CC0-1.0） | DOI `10.5281/zenodo.24136905` |
+| 派生判定行快照（DOI 锁定、CC0-1.0） | DOI `10.5281/zenodo.24136905` |
 | 测试计数 / 静态检查 / 旧代基准读数 | `BASELINE.yaml` |
 | 数据来源与许可（五个基准面） | `docs/DATA_CARD.md` |
 | 预注册协议（E1–E7） | `docs/preregistration.md` |

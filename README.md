@@ -6,7 +6,7 @@
 
 > **结论复现**：现稿表格的读数由 `scripts/tools/results_data_pack_20261111.py` 在三个登记批次目录上零 LLM 聚合（配合下面的 DOI 快照即可复算）；`make reproduce-zero-llm`（L1 是 `make reproduce-zero-llm-l1`）是**旧代语料**的复算链，部分支路因旧主批撤回而 `skipped`——跳过不等于通过。消耗 API 配额的 `reproduce.sh` 与 `experiments/run_main_batch.py` 只是按旧代预注册配置**重新跑批**，不在「工件 → 现稿数值」的链路上。六个开放科学维度的逐条回答写在 [INVENTORY.md](INVENTORY.md)。
 
-> **数据归档 DOI**：[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.24136905.svg)](https://doi.org/10.5281/zenodo.24136905) — 2026-11-11 版本锁定的派生判定行快照已公开发布（`10.5281/zenodo.24136905`），CC0-1.0、不含原始执行 trace 与模型转录；与本仓代码配合使用可零 LLM 逐字节复算 50 格聚合。
+> **数据归档 DOI**：[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.24136905.svg)](https://doi.org/10.5281/zenodo.24136905) — 2026-11-11 DOI 锁定的派生判定行快照已公开发布（`10.5281/zenodo.24136905`），CC0-1.0、不含原始执行 trace 与模型转录；与本仓代码配合使用可零 LLM 逐字节复算 50 格聚合。
 
 > 最后更新：2026-11-12
 

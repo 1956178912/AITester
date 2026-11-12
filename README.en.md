@@ -6,7 +6,7 @@ Current version 1.0.0 · [Changelog](CHANGELOG.en.md) · [Documentation index](d
 
 > **Result reproducibility**: the current manuscript's tables are aggregated with zero model calls by `scripts/tools/results_data_pack_20261111.py` over the three registered batch directories (recomputable once the DOI snapshot below is present). `make reproduce-zero-llm` (and `make reproduce-zero-llm-l1` for L1) is the recompute chain of the **earlier corpus**; some of its branches report `skipped` because the old main batch was withdrawn — a skip is not a pass. The quota-consuming entry points `reproduce.sh` and `experiments/run_main_batch.py` only **regenerate a batch** under the retired pre-registered configuration; they are not on the path from an artifact to a current manuscript number. [INVENTORY.md](INVENTORY.md) answers the six open-science criteria one by one.
 
-> **Archived data DOI**: [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.24136905.svg)](https://doi.org/10.5281/zenodo.24136905) — the version-locked 2026-11-11 derived-verdict-row snapshot is published as `10.5281/zenodo.24136905`, CC0-1.0, with no raw execution traces or model transcripts; combined with this repository it reproduces the 50-cell aggregate byte for byte with zero model calls.
+> **Archived data DOI**: [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.24136905.svg)](https://doi.org/10.5281/zenodo.24136905) — the DOI-locked 2026-11-11 derived-verdict-row snapshot is published as `10.5281/zenodo.24136905`, CC0-1.0, with no raw execution traces or model transcripts; combined with this repository it reproduces the 50-cell aggregate byte for byte with zero model calls.
 
 > Last updated: 2026-11-12
 
