@@ -35,7 +35,7 @@ template/validate/merge 直接消费（本工作表的候选标题与分层行�
 
 - ``E7R2_FRAME_MANIFEST.md``  框定义、来源 SHA256、逐格计数与 tab:falsefix 守卫、
   盲法与决策分支（裁决前必读）；
-- ``E7R2_WORKSHEET.md``       裁决工作表（第 I 部分补丁轨 44 行 + 第 II 部分套件轨 45 行）；
+- ``E7R2_WORKSHEET.md``       裁决工作表（第 I 部分补丁轨 42 行 + 第 II 部分套件轨 47 行）；
 - ``E7R2_ENTRY_{A,B}.csv``    补丁轨空白录入表（e7_adjudication.py render_entry_sheet 生成）；
 - ``E7R2_SUITE_{A,B}.csv``    套件轨空白录入表（确认 + 形态标注）；
 - ``SHA256SUMS``              上述工件的校验和。

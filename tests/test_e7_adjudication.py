@@ -7,8 +7,10 @@
 2. 统计量按手算复核（Cohen's κ = 0.25 的可算样例、p_e=1 的无定义分支、N=0）；
 3. 结构性错误必须**报错**而不是静默降级（两表候选集不一致不得取交集、
    越界标签、删行、改 task_id）；
-4. 工件面：三份路径的空白录入表已备料且**判定列全空**，仓内不存在
-   `E7_KAPPA.json`（协议 §0"不存在任何 Kappa 工件"的机读版）。
+4. 工件面：E7-r2 交接包的 4 份空白录入表（补丁轨 42 行 × 2、套件轨 47 行 × 2）已备料
+   且**判定列全空**，仓内不存在 `E7_KAPPA.json`（协议 §0"不存在任何 Kappa 工件"的机读版）。
+   交接包工件缺失时按具名 skip 处理（`experiments/results/**` 不入库），框架计数改由
+   `e7_falsefix_worksheet._EXPECTED_TOTALS` 与 `--selftest` 在 CI 面锁定。
 
 第 4 条同样属于"预期会红"的反面锁定：E7 真正执行并产出 κ 工件时，必须连同
 `docs/HUMAN_ADJUDICATION_PROTOCOL.md` §0 的状态声明一起改写。
@@ -37,6 +39,14 @@ WORKSHEETS = {
     "n8": MAIN_BATCH / "e7_review_worksheet.md",
     "n41": MAIN_BATCH / "e7_review_worksheet_n41.md",
     "n72": MAIN_BATCH / "e7_review_worksheet_n72.md",
+}
+# E7-r2（2026-11-12 设计修订，协议 §2.3 现行框）：4 份空白录入表 + 各自的行数与判定列
+E7R2_DIR = ROOT / "experiments" / "results" / "e7_r2_falsefix_20261112"
+R2_SHEETS = {
+    "E7R2_ENTRY_A.csv": ("A", 42, ("judgment", "reason")),
+    "E7R2_ENTRY_B.csv": ("B", 42, ("judgment", "reason")),
+    "E7R2_SUITE_A.csv": ("A", 47, ("confirmed", "annotation", "reason")),
+    "E7R2_SUITE_B.csv": ("B", 47, ("confirmed", "annotation", "reason")),
 }
 # 手算样例：6 行，A=B 3 行 → p_o=0.5；两侧边际均为 2/2/2 → p_e=12/36=1/3
 # → κ=(0.5−1/3)/(1−1/3)=0.25（Landis & Koch 带：Fair）
@@ -428,17 +438,29 @@ class TestCli:
 class TestArtifactSurface:
     """备料齐备 + "尚无裁决结果"的机读锁定（协议 §0/§7 步骤 0-2 的可核验形式）。"""
 
-    @pytest.mark.parametrize("tag", ["n8", "n41", "n72"])
-    @pytest.mark.parametrize("rater", ["A", "B"])
-    def test_blank_entry_templates_exist_with_expected_rows(self, tag: str, rater: str) -> None:
-        expected = {"n8": 8, "n41": 41, "n72": 72}[tag]
-        path = MAIN_BATCH / f"e7_entry_rater{rater}_{tag}.csv"
-        rows = e7.load_entry_sheet(path)
+    @pytest.mark.parametrize("name", sorted(R2_SHEETS))
+    def test_blank_entry_templates_exist_with_expected_rows(self, name: str) -> None:
+        rater, expected, blank_cols = R2_SHEETS[name]
+        with (E7R2_DIR / name).open(encoding="utf-8", newline="") as fh:
+            rows = list(csv.DictReader(fh))
         assert len(rows) == expected
         assert all(r["rater"] == rater for r in rows)
         # E7 仍未执行：判定列必须全空（非空即意味着有人已经填进备料工件）
-        assert all((r["judgment"] or "").strip() == "" for r in rows)
-        assert all((r["finished_at_utc"] or "").strip() == "" for r in rows)
+        for col in (*blank_cols, "finished_at_utc"):
+            assert all((r[col] or "").strip() == "" for r in rows), f"{name}:{col} 非空"
+
+    def test_frame_totals_and_generator_selftest(self) -> None:
+        from experiments import e7_falsefix_worksheet as e7w
+
+        # 协议 §2.3 现行框：89 = 补丁轨 42 + 套件轨 47（交接包缺失时本锁仍在 CI 面生效）
+        assert e7w._EXPECTED_TOTALS == {
+            "declared": 89,
+            "false": 47,
+            "real": 42,
+            "patch_track": 42,
+            "suite_track": 47,
+        }
+        assert e7w.selftest() == 0
 
     def test_no_kappa_artifact_exists_yet(self) -> None:
         found = sorted(p.name for p in (ROOT / "experiments" / "results").rglob("E7_KAPPA.json"))
