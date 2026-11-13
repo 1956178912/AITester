@@ -186,5 +186,5 @@ pack["by_model_dataset"] = {
     for (m, ds), v in sorted(by_model_ds.items())
 }
 out = ROOT / "experiments/results/RESULTS_DATA_PACK_20261111.json"
-out.write_text(json.dumps(pack, ensure_ascii=False, indent=1), encoding="utf-8")
+out.write_text(json.dumps(pack, ensure_ascii=False, indent=1, allow_nan=False), encoding="utf-8")
 print("written", out, "| cells:", len(cells))

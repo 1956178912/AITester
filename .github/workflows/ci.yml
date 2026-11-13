@@ -953,13 +953,32 @@ jobs:
         # 可用性不归仓库控制：若 runner 恰好预装 bwrap，探针会走"真实执行"分支，
         # 沙箱启动被拒时会把**环境差异**伪装成功能回归（本地 macOS 走 Seatbelt，
         # 覆盖不到该路径）。本作业的 CI 口径是"无后端 → 显式 skip 并打印原因"，
-        # 故显式保证 bwrap 不在 PATH；如有预装则移除（移除失败 job 红，不静默）。
+        # 故显式保证 bwrap 不在 PATH；如有预装则移出（移出失败 job 红，不静默）。
+        #
+        # 2026-11-13：ubuntu-latest 自 2026-10-19 起迁移 Ubuntu 26，runner 预装
+        # bwrap 且 `apt-get remove bubblewrap` 在新镜像上返回 100（run #310 注解
+        # "Process completed with exit code 100"），本步骤随镜像批次间歇性假红
+        # （#306 绿、#308/#310 红）。改为不依赖包管理器：枚举 PATH 中的实际
+        # 可执行文件并逐个移出；每个 job 独立 VM，改动不跨 job。末端自检保留
+        # 「仍可见即红」，不静默降级。
         run: |
+          set -euo pipefail
+          hash -r
+          for bwrap_path in $(type -a -p bwrap 2>/dev/null || true); do
+            # /bin 常为 /usr/bin 的符号链接：同一 inode 的第二个路径在首次移出后已不存在
+            [ -e "${bwrap_path}" ] || continue
+            echo "检测到预装 bwrap：${bwrap_path} → 移出 PATH（内核沙箱探针走显式 skip）"
+            if ! sudo mv -f "${bwrap_path}" "${bwrap_path}.aitester-ci-disabled"; then
+              echo "::error::无法把 ${bwrap_path} 移出 PATH"
+              exit 1
+            fi
+          done
+          hash -r
           if command -v bwrap >/dev/null 2>&1; then
-            echo "检测到预装 bwrap：移除，使内核沙箱探针走显式 skip（见步骤注释）"
-            sudo apt-get remove -y bubblewrap
+            echo "::error::bwrap 仍可见于 PATH：$(command -v bwrap)"
+            exit 1
           fi
-          ! command -v bwrap
+          echo "确认 bwrap 不在 PATH；内核沙箱探针将走显式 skip"
 
       - name: Configure deterministic nested-pytest bytecode (CI stability)
         # 最小复现的 CI 稳定性缺陷（本地 6/15 概率假红，定位后无源码改动）：

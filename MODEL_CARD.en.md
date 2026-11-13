@@ -14,9 +14,8 @@ Last updated: 2026-11-12 (refreshed against the current authoritative batch)
 
 ## 1. System Overview
 
-Given five benchmarks (QuixBugs, BugsInPy, SWE-bench, TestGenEval, ULT; per-face sizes and availability in
-`docs/DATA_CARD.en.md`), a LangGraph-orchestrated Planner → Generator → Executor → Debugger → PatchApplier
-loop generates pytest tests, executes them, diagnoses failures, and patches code.
+Given five benchmarks (QuixBugs, BugsInPy, SWE-bench, TestGenEval, ULT; per-face sizes in `docs/DATA_CARD.en.md`),
+a LangGraph-orchestrated Planner → Generator → Executor → Debugger → PatchApplier loop generates pytest tests, executes them, diagnoses failures, and patches code.
 
 "Multi-agent orchestration" is an **ablatable container**, not a primary claim. The current manuscript's
 central claims are the false-fix paired reporting of "declared pass ≠ adjudicated real pass" (RQ2) and the
@@ -60,9 +59,8 @@ not a deployed product.
   rates must be reported paired with false-fix rates (manuscript RQ2, per-cell adjudicated real passes on
   QuixBugs). All 50-cell metrics derive from `RESULTS_DATA_PACK_20261111.json` with per-metric `n_obs`; no
   observation means no zero denominator. The first-pass verdict reading (4,458 judged / 711 passed) is
-  the paper's RQ1 endpoint, but quoting it alone collides with the false-fix caliber: the table must be
-  reported paired under RQ2, and first-pass verdicts must not be read as a capability claim
-  (`RESULTS_DIGEST_20261111.json` carries this warning verbatim).
+  the paper's RQ1 endpoint, but quoting it alone collides with the false-fix caliber: report the table
+  paired under RQ2, never as a capability claim (`RESULTS_DIGEST_20261111.json` carries this warning verbatim).
 - **Effective pass (BA→BC)**: pytest also returns `rc==0` for all-skip/xfail/deselect suites, so derived
   readings require at least one passed and zero failed, otherwise fail-closed (`None`/`unverifiable`).
 - **E7-r2 (2026-11-12 design revision)**: the human-calibration frame is replaced by a **census of the 89
@@ -80,10 +78,9 @@ not a deployed product.
 
 ## 5. Known Limitations
 
-- Current readings are limited to this batch of two endpoints × five arms × five benchmarks; no extrapolation
-  to untested endpoints or task sets; **no cross-batch pooling** — historical readings must carry a batch label.
-  One of the five arms (specification replacement) never received its anchor table and ran at the
-  detection-first fallback; its column is a repeat of that arm, not a delivered specification treatment.
+- Current readings: two endpoints × five arms × five benchmarks in this batch only; no extrapolation; **no
+  cross-batch pooling** — historical readings must carry a batch label. The specification-replacement arm
+  lacked its anchor table and ran at the detection-first fallback; its column repeats that arm, not a treatment.
 - The current manuscript centers on the verdict caliber (declared vs adjudicated real pass) and **does not
   claim** "self-repair achieved"; the repair-engine route (localize → synthesize → verify) is in progress.
 - E7-r2 human adjudication not executed; external calibration not closed; no Kappa artifact exists anywhere.
