@@ -439,7 +439,16 @@ def run_single_agent_baseline(
                 _n_orig_defs = len(re.findall(r"^\s*def \w+", state["target_code"], re.M))
                 _n_new_defs = len(re.findall(r"^\s*def \w+", new_code, re.M))
                 if len(new_code) >= max(1, len(state["target_code"]) // 10) and _n_new_defs >= _n_orig_defs:
+                    # 2026-11-22（R21 补跑）：本轮此前只写 state["target_code"] 与
+                    # 磁盘文件，**从不写 state["patch"]**——落库取
+                    # final_state.get("patch") 得 None，于是"一轮后变绿"缺补丁
+                    # 证据，只能记 undecided（旧批 QuixBugs single_agent 43 个名义
+                    # 通过里 42 个即由此而来）。
+                    # 口径与工作流 _patch_applier_node / debugger 一致：patch 字段
+                    # 存的是**修复后的完整代码**（```python 围栏），不是 diff——
+                    # 同字段两种格式会让下游（patch_evidence / e7 工单）各自误读。
                     state["target_code"] = new_code
+                    state["patch"] = f"```python\n{new_code}\n```"
                     # 安全检查通过，写回文件并重试
                     with open(state["target_file"], "w", encoding="utf-8") as f:
                         f.write(new_code)

@@ -582,3 +582,47 @@ class TestW4RealBugsLoaders(unittest.TestCase):
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+class TestSingleAgentPatchRecording(unittest.TestCase):
+    """R21 补跑准备：single_agent 的修复必须落 state["patch"]。
+
+    背景：旧实现只改 ``state["target_code"]`` 并原地写盘，从不写
+    ``state["patch"]``；落库取 ``final_state.get("patch")`` 得 None，于是
+    "一轮后变绿"缺补丁证据，只能判 undecided（旧批 QuixBugs single_agent
+    43 个名义通过里 42 个即由此而来）。本锁要求：修复路径一旦走通，
+    ``state["patch"]`` 必须是带 ```python 围栏的修复后完整代码（与工作流
+    ``_patch_applier_node`` / debugger 同口径），不得退化成 unified diff。
+    """
+
+    def test_repair_writes_fenced_full_code_into_state_patch(self):
+        class _ChangedGenerator:
+            """返回与原始代码不同的修复体，用于验证补丁字段确实落库。"""
+
+            def _call_llm(self, _query: str) -> str:
+                return "def f():\n    return 2\n"
+
+            @staticmethod
+            def _extract_python_code(raw: str) -> str:
+                return raw
+
+        with tempfile.TemporaryDirectory() as td:
+            state = _base_state(Path(td) / "mymod.py")
+            self.assertIsNone(state.get("patch"), "前置：初始状态无补丁")
+
+            import experiments.run_benchmark as rb
+
+            with (
+                patch("src.agents.generator.GeneratorAgent", lambda: _ChangedGenerator()),
+                patch("src.agents.executor.ExecutorAgent", lambda **_k: _FakeExecutor([_red(), _green()])),
+            ):
+                out = rb.run_single_agent_baseline(state)
+
+            self.assertEqual(out["iteration"], 1, "前置：修复轮确实跑过")
+            self.assertTrue(out["test_passed"], "前置：修复后判绿")
+            self.assertTrue(out.get("patch"), "修复路径必须落补丁，否则裁决只能记 undecided")
+            # 与工作流 _patch_applier_node / debugger 同格式：修复后的完整代码 + 围栏，
+            # 不是 unified diff（同字段两种格式会让下游各自误读）
+            self.assertTrue(out["patch"].startswith("```python\n"), "patch 必须是围栏代码块")
+            self.assertIn("return 2", out["patch"], "patch 必须是修复后的代码")
+            self.assertNotIn("@@", out["patch"], "patch 不得是 diff 格式")

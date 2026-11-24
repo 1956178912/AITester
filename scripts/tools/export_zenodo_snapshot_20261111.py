@@ -33,6 +33,8 @@ SOURCE_ROOTS = (
     "experiments/results/test_run_20261106T101605Z",
     "experiments/results/rerun_swebench_20261110",
     "experiments/results/rerun_testgeneval_20261110_v5",
+    # R22：single_agent 补跑，Table falsefix 的三分法裁决依赖该行的 patch 字段。
+    "experiments/results/test_run_20261122T162000Z",
 )
 DIAGNOSTIC_MARKERS = ("/verify/", "/retry6/", "/probe/")
 
@@ -71,6 +73,9 @@ BOOL_KEYS = (
 )
 KEEP_FIELDS = frozenset(
     {
+        # 三分法裁决必须能拿到候选补丁本身，否则发布件只能复算聚合数、
+        # 不能独立重做 Table falsefix 的 gold 裁决（R22 审稿意见）。
+        "patch",
         "task_id",
         "repo",
         "passed",
@@ -153,19 +158,20 @@ def verify_in_fresh_tree(tree: Path, official_pack: Path) -> None:
 
 def write_text_files(out: Path) -> None:
     (out / "README.md").write_text(
-        """# Where Orchestration Pays — replication snapshot (2026-11-11)
+        """# What Survives Adjudication — replication snapshot (2026-11-22)
 
 This is the version-locked replication package for the manuscript
-"Where Orchestration Pays: A Measurement-First Evaluation of LLM Test
-Generation Across Five Benchmarks" (submitted to Empirical Software
-Engineering). It contains **derived per-task verdict rows only**: no raw
-execution traces, no model prompts, no model transcripts, no generated
-patches and no generated test code.
+"What Survives Adjudication: A Measurement Audit of LLM Test Generation Across
+Five Benchmarks" (submitted to Empirical Software Engineering). It contains
+**derived per-task verdict rows only**: no raw execution traces, no model
+prompts, no model transcripts and no generated test code. The recorded
+`patch` field is kept for the replacement cells so that the QuixBugs gold
+adjudication can be re-run with zero model calls.
 
 ## Layout
 
 - `verdict_rows/` — a tree that can be merged into a fresh clone of
-  <https://github.com/1956178912/AITester> at its root. It carries the three
+  <https://github.com/1956178912/AITester> at its root. It carries the four
   registered batch directories and the zero-LLM recomputation script.
 - `aggregates/` — the 50-cell aggregate used by every table in the paper,
   plus the independent digest used for cross-checking.
@@ -217,6 +223,10 @@ place even when every value is correct.
 
 - Identity and verdict: `task_id`, `repo`, `passed`, `harness_invalid`,
   `error_category`.
+- Candidate repair: `patch`. It is kept because the QuixBugs adjudication in
+  the paper's Table 5 applies the recorded patch and runs the official gold
+  module; without it the deposit could reproduce the aggregate but not the
+  adjudication counts.
 - Cost: `token_usage` (provider usage counters only).
 - Numeric metrics: """
         + ", ".join(f"`{k}`" for k in NUMERIC_KEYS)
@@ -227,11 +237,13 @@ place even when every value is correct.
 
 ## Removed fields (exhaustive by policy: anything not listed above)
 
-In particular the deposit contains no `execution_trace`, `patch`,
+In particular the deposit contains no `execution_trace`,
 `generated_test`, `diagnosis`, `repair_history`, `oracle_quality_history`,
 `task_metadata`, `*_outcomes`, `*_signals`, `*_verdict`, `*_status` or
 `rag_stats` content. These are raw execution traces, model outputs or free
-text, and none of them is read by the recomputation chain.
+text, and none of them is read by the recomputation chain. The `patch` field
+is the one model output that is deliberately kept, for the reason stated
+above.
 
 The exclusion is enforced by a whitelist, not by a blacklist: a future field
 is absent from the deposit unless someone deliberately adds it here.
@@ -324,21 +336,24 @@ def main() -> None:
     metadata = {
         "metadata": {
             "title": (
-                "Replication snapshot for 'Where Orchestration Pays: A "
-                "Measurement-First Evaluation of LLM Test Generation Across "
-                "Five Benchmarks'"
+                "Replication snapshot for 'What Survives Adjudication: A "
+                "Measurement Audit of LLM Test Generation Across Five "
+                "Benchmarks'"
             ),
             "upload_type": "dataset",
             "access_right": "open",
             "license": "CC0-1.0",
-            "publication_date": "2026-11-11",
+            "publication_date": "2026-11-22",
+            "version": "R23 (2026-11-22)",
             "description": (
                 "Derived per-task verdict rows and zero-LLM recomputation chain "
                 "for a 2-model x 5-arm x 5-benchmark evaluation of LLM test "
                 "generation (6,377 attempts, 4,458 judgeable verdicts, 1,919 "
                 "harness-invalid exclusions). The deposit contains no raw "
-                "execution traces, model prompts, model transcripts, generated "
-                "patches or generated tests. See INVENTORY.md and verify.sh."
+                "execution traces, model prompts, model transcripts or generated "
+                "test code. The R22 replacement rows carry the recorded patch "
+                "field so that the QuixBugs gold adjudication can be re-run "
+                "with zero model calls. See INVENTORY.md and verify.sh."
             ),
             "keywords": [
                 "software testing",
@@ -368,13 +383,12 @@ def main() -> None:
                 }
             ],
             "notes": (
-                "Version-locked snapshot published on 2026-11-11 under DOI "
-                "10.5281/zenodo.24136905 (concept DOI 10.5281/zenodo.24136904). "
-                "Creator metadata (two family names, ORCID iDs and affiliations) "
-                "was corrected on 2026-11-12 after publication. The deposited zip "
-                "and all files are unchanged, so zenodo_metadata.json inside the "
-                "archive still carries the original creator list; the DOI and all "
-                "file checksums are unaffected."
+                "Version R23 (2026-11-22). R22 added the QuixBugs single-agent "
+                "replacement rows and the recorded patch field; R23 corrects "
+                "README.md, INVENTORY.md and this metadata so that they match "
+                "the shipped rows. The verdict rows and the recomputed "
+                "aggregate are unchanged from R22. Concept DOI "
+                "10.5281/zenodo.24136904."
             ),
         }
     }

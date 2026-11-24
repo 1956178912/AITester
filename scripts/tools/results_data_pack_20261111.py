@@ -30,6 +30,12 @@ SOURCE_ROOTS = (
     "experiments/results/test_run_20261106T101605Z",  # 主批 50 格
     "experiments/results/rerun_swebench_20261110",  # SWE-bench 补充
     "experiments/results/rerun_testgeneval_20261110_v5",  # TestGenEval corrected 终版
+    # R21（2026-11-22）：QuixBugs single_agent 补跑。修掉 single_agent 不写
+    # state["patch"] 的记录缺陷后重跑两格（100 次尝试，同配置、cache 关），
+    # 血统去重按「同 cell×task 取最新行」自然覆盖旧行。
+    # 目录名必须用 test_run_<时间戳>：去重是 sorted(路径) 后「后者覆盖」，
+    # 若命名为 rerun_*（字典序在 test_run_* 之前）新批会被旧批静默覆盖。
+    "experiments/results/test_run_20261122T162000Z",
 )
 DIAGNOSTIC_MARKERS = ("/verify/", "/retry6/", "/probe/")
 
