@@ -522,3 +522,42 @@ def test_dependency_exemption_check_passes_when_registered() -> None:
         # 合写格式补全：PYSEC-2026-3813 / 3814 → {3813, 3814}，全部已登记
         assert ci_vulns == {"PYSEC-2026-3813", "PYSEC-2026-3814"}
         assert ci_vulns - registry_vulns == set()
+
+
+def test_dependency_exemption_ghsa_primary_ids_are_extracted() -> None:
+    """GHSA 主 ID（字母数字混合段）必须被两侧提取；PYSEC-only 正则会漏。"""
+    import sys as _sys
+    import tempfile
+
+    _sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts", "gates"))
+    from check_dependency_exemptions import _extract_ci_ignore_vulns, _extract_registry_vuln_ids
+
+    with tempfile.TemporaryDirectory() as d:
+        ci_path = os.path.join(d, "ci.yml")
+        registry_path = os.path.join(d, "dependency_exemptions.md")
+        with open(ci_path, "w", encoding="utf-8") as f:
+            f.write("          pip-audit -r requirements.lock \\\n            --ignore-vuln GHSA-2wm9-hf6c-p5cr\n")
+        with open(registry_path, "w", encoding="utf-8") as f:
+            f.write("| chromadb | 1.5.9 | GHSA-2wm9-hf6c-p5cr | reason | trigger | deadline | note |\n")
+        assert _extract_ci_ignore_vulns(ci_path) == {"GHSA-2wm9-hf6c-p5cr"}
+        assert "GHSA-2wm9-hf6c-p5cr" in _extract_registry_vuln_ids(registry_path)
+
+
+def test_dependency_exemption_bare_id_before_ghsa_is_completed() -> None:
+    """合写裸序号后接 `+ GHSA-...` 时末尾裸序号仍须补全（2026-11-24 回归锁）。"""
+    import sys as _sys
+    import tempfile
+
+    _sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts", "gates"))
+    from check_dependency_exemptions import _extract_registry_vuln_ids
+
+    with tempfile.TemporaryDirectory() as d:
+        registry_path = os.path.join(d, "dependency_exemptions.md")
+        with open(registry_path, "w", encoding="utf-8") as f:
+            f.write(
+                "| chromadb | 1.5.9 | PYSEC-2026-3813 / 3814 / 3815 "
+                "+ GHSA-f4j7-r4q5-qw2c / GHSA-2wm9-hf6c-p5cr | reason | trigger | deadline | note |\n"
+            )
+        ids = _extract_registry_vuln_ids(registry_path)
+        assert {"PYSEC-2026-3813", "PYSEC-2026-3814", "PYSEC-2026-3815"} <= ids
+        assert {"GHSA-f4j7-r4q5-qw2c", "GHSA-2wm9-hf6c-p5cr"} <= ids

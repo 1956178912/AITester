@@ -14,7 +14,8 @@ docs/dependency_exemptions.md 登记表留痕。
     1. 提取 .github/workflows/ci.yml 中所有 --ignore-vuln <ID> 行；
     2. 提取 docs/dependency_exemptions.md "当前豁免" 表中的漏洞 ID
        列（兼容 "PYSEC-2026-311（重复两条）+ PYSEC-2026-3813 / 3814 / 3815"
-       这种合写格式，按 PYSEC / CVE 前缀正则切分）；
+       这种合写格式，按 PYSEC / CVE / GHSA 前缀正则切分；GHSA 主 ID 形如
+       ``GHSA-2wm9-hf6c-p5cr``，合写组后接 ``+ <完整 ID>`` 时末尾裸序号同样补全）；
     3. 对照：ci.yml 豁免了但登记表未留痕的 ID → 阻断（退出码 1）；
        登记表留痕但 ci.yml 未豁免的 ID → warning（豁免已撤 / 待关闭，
        提示维护者把该行移入"已复审关闭"节）；
@@ -43,7 +44,7 @@ def _extract_ci_ignore_vulns(ci_path: str) -> set[str]:
     with open(ci_path, encoding="utf-8") as f:
         content = f.read()
     # 匹配 `--ignore-vuln PYSEC-2026-3813` / `--ignore-vuln CVE-2024-1234`
-    for m in re.finditer(r"--ignore-vuln\s+([A-Z]{2,}-\d{4}-\d+)", content):
+    for m in re.finditer(r"--ignore-vuln\s+([A-Z]{2,}-\d{4}-\d+|GHSA-[a-z0-9-]+)", content):
         ids.add(m.group(1))
     return ids
 
@@ -69,7 +70,7 @@ def _extract_registry_vuln_ids(registry_path: str) -> set[str]:
         return ids
     with open(registry_path, encoding="utf-8") as f:
         content = f.read()
-    for m in re.finditer(r"[A-Z]{2,}-\d{4}-\d+", content):
+    for m in re.finditer(r"[A-Z]{2,}-\d{4}-\d+|GHSA-[a-z0-9-]+", content):
         ids.add(m.group(0))
     # 合写格式补全：`PYSEC-2026-3813 / 3814 / 3815` 后续裸序号
     # （每行内"完整 ID + 斜杠分隔裸序号"逐个提取，避免链式回溯
@@ -83,7 +84,7 @@ def _extract_registry_vuln_ids(registry_path: str) -> set[str]:
         # 命中完整 ID，这里补全斜杠分隔的后续裸序号，去重后加入集合）
         tail = line[prefix_m.end() :]
         # 匹配斜杠分隔的裸序号（兼容 " / 3814 / 3815" 与 "+ PYSEC-2026-3813 / 3814 / 3815"）
-        for bare in re.findall(r"/\s*(\d{3,5})(?=\s*(?:$|/|\)|，|、|;|；|\|))", tail):
+        for bare in re.findall(r"/\s*(\d{3,5})(?=\s*(?:$|/|\)|，|、|;|；|\||\+))", tail):
             ids.add(f"{prefix}-{bare}")
     return ids
 

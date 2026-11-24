@@ -718,8 +718,12 @@ jobs:
       - name: Check dependencies for vulnerabilities (R10 转阻断)
         # 说明：safety 工具已于 2024-06 起弃用 `check` 子命令（CI 上退出码 64），
         # 改用 PyPA 维护的 pip-audit。
-        # 当前 chromadb==1.5.9 命中 5 条已知漏洞（PYSEC-2026-311 重复两条 + PYSEC-2026-3813/3814/3815），
-        # 但 PyPI 上暂无修复版本（1.5.9 为最新版），故显式忽略并在 CHANGELOG/决策日志记录；
+        # 当前 chromadb==1.5.9 在 PyPI 漏洞源里命中 8 个条目：4 个 PYSEC 主 ID
+        # （311 重复两条 + 3813/3814/3815）与 4 个 GHSA 主 ID（f4j7/2wm9/36p7/xph7，
+        # 为同一批 advisory 的别名条目）。pip-audit 的 --ignore-vuln 按“主 ID ∪ 别名”
+        # 匹配，而新增 GHSA 条目的别名只含 CVE、不含对应 PYSEC ⇒ 只豁免 PYSEC 会
+        # 穿透转红（2026-11-22 定时运行 / 11-24 推送运行的实证根因）。故 8 个主 ID
+        # 全部显式列出；PyPI 上暂无修复版本（1.5.9 为最新版），并在 CHANGELOG/决策日志记录；
         # 一旦发布修复版本，应升级并移除对应 --ignore-vuln。
         # 注：9-11 审计复跑后漏洞 ID 由旧 CVE-2026-45830/45831/45833 漂移为
         # PYSEC-2026-3813/3814/3815，本豁免清单与本地 pip-audit 实测结果同步（2026-09-11）。
@@ -736,6 +740,10 @@ jobs:
             --ignore-vuln PYSEC-2026-3813 \
             --ignore-vuln PYSEC-2026-3814 \
             --ignore-vuln PYSEC-2026-3815 \
+            --ignore-vuln GHSA-f4j7-r4q5-qw2c \
+            --ignore-vuln GHSA-2wm9-hf6c-p5cr \
+            --ignore-vuln GHSA-36p7-vc44-83pf \
+            --ignore-vuln GHSA-xph7-9rjv-w5fr \
             -f json -o pip_audit_latest.json || {
             code=$?
             echo "::error title=pip-audit 退出码非 0（R10 阻断）::出现未豁免的新漏洞或网络错误；JSON 报告见下方输出与工件，新 advisory 请评估升级，暂无法修复时按 docs/dependency_exemptions.md 流程登记豁免"
@@ -760,6 +768,10 @@ jobs:
             --ignore-vuln PYSEC-2026-3813 \
             --ignore-vuln PYSEC-2026-3814 \
             --ignore-vuln PYSEC-2026-3815 \
+            --ignore-vuln GHSA-f4j7-r4q5-qw2c \
+            --ignore-vuln GHSA-2wm9-hf6c-p5cr \
+            --ignore-vuln GHSA-36p7-vc44-83pf \
+            --ignore-vuln GHSA-xph7-9rjv-w5fr \
             -f json -o pip_audit_lock.json || {
             code=$?
             echo "::error title=pip-audit(lock) 退出码非 0（P1-7 阻断）::传递依赖出现未豁免漏洞；新 advisory 请评估升级，暂无法修复时按 docs/dependency_exemptions.md 流程登记豁免"

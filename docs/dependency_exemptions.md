@@ -29,11 +29,17 @@
 > 4. **季度人工复审**：每季度末检查本表所有条目的"复审期限"，过期未复审的
 >    条目在 CHANGELOG 对应批次标注"豁免过期"，并决定是否续期 / 升级 / 关闭。
 
+> **别名主 ID 口径（2026-11-24 补）**：PyPI 对同一 advisory 可能同时给出 PYSEC
+> 与 GHSA 两个条目。`pip-audit` 的 `--ignore-vuln` 按「主 ID ∪ 别名」匹配；新增的
+> GHSA 条目别名只含 CVE、不含对应的 PYSEC，因此只豁免 PYSEC 会被穿透转红（2026-11-22
+> 定时运行与 11-24 推送运行的实证根因）。本表 4 个 GHSA 主 ID 与 4 个 PYSEC 指向
+> 同一批漏洞，属别名条目同步，不是新增豁免范围；上游修复版发布时须一并移除。
+
 ## 当前豁免
 
 | 依赖 | 锁定版本 | 漏洞 ID | 豁免原因 | 复审触发条件 | 复审期限 | 备注 |
 |---|---|---|---|---|---|---|
-| chromadb | 1.5.9 | PYSEC-2026-311（重复两条）+ PYSEC-2026-3813 / 3814 / 3815 | PyPI 暂无含修复的发布版本；chromadb 1.5.9 是 RAG 嵌入后端的可选依赖（缺失时透明降级，不进 git 运行时路径） | chromadb 上游发布修复版（新版本号命中 3813/3814/3815 任一 CVE 的 advisory）；或 `requirements.lock` 中 chromadb 版本变化 | 每季度，或修复版发布后立即 | 升级后同步移除 `ci.yml` 对应 `--ignore-vuln` 行 + 本表条目 |
+| chromadb | 1.5.9 | PYSEC-2026-311（重复两条）+ PYSEC-2026-3813 / 3814 / 3815 + GHSA-f4j7-r4q5-qw2c / GHSA-2wm9-hf6c-p5cr / GHSA-36p7-vc44-83pf / GHSA-xph7-9rjv-w5fr（后 4 项为同一批 advisory 的 GHSA 别名主 ID 条目） | PyPI 暂无含修复的发布版本；chromadb 1.5.9 是 RAG 嵌入后端的可选依赖（缺失时透明降级，不进 git 运行时路径） | chromadb 上游发布修复版（新版本号命中 3813/3814/3815 任一 CVE 的 advisory）；或 `requirements.lock` 中 chromadb 版本变化 | 每季度，或修复版发布后立即 | 升级后同步移除 `ci.yml` 对应 `--ignore-vuln` 行 + 本表条目 |
 
 ## 已复审关闭的历史豁免
 

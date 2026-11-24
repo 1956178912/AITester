@@ -138,6 +138,17 @@ class TestRegistryParsing:
     def test_duplicate_id_in_cell_is_deduped(self, gate):
         assert gate._vuln_ids("PYSEC-2026-311 与 PYSEC-2026-311") == ("PYSEC-2026-311",)
 
+    def test_ghsa_primary_ids_are_parsed(self, gate):
+        """GHSA 别名主 ID（字母数字混合段）须被解析；PYSEC-only 正则会漏。"""
+        cell = "PYSEC-2026-3813 / 3814 / 3815 + GHSA-f4j7-r4q5-qw2c / GHSA-2wm9-hf6c-p5cr"
+        assert gate._vuln_ids(cell) == (
+            "PYSEC-2026-3813",
+            "PYSEC-2026-3814",
+            "PYSEC-2026-3815",
+            "GHSA-f4j7-r4q5-qw2c",
+            "GHSA-2wm9-hf6c-p5cr",
+        )
+
 
 class TestLockParsing:
     def test_versions_are_read(self, gate):
@@ -175,6 +186,11 @@ class TestJudge:
     def test_unregistered_finding_is_red(self, gate):
         verdict = self._judge(gate, [_dep("newpkg", "0.1.0", {"PYSEC-2026-9999": []})])
         assert any("未登记" in red and "PYSEC-2026-9999" in red for red in verdict.reds)
+
+    def test_unregistered_ghsa_primary_finding_is_red(self, gate):
+        """PyPI 新增的 GHSA 主 ID 条目必须同样进入登记对账面。"""
+        verdict = self._judge(gate, [_dep("chromadb", "1.5.9", {"GHSA-2wm9-hf6c-p5cr": []})])
+        assert any("未登记" in red and "GHSA-2wm9-hf6c-p5cr" in red for red in verdict.reds)
 
     def test_duplicate_advisory_entries_do_not_double_count(self, gate):
         """实测 PYSEC-2026-311 会被报告两次；去重后不得产生红。"""

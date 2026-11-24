@@ -67,7 +67,7 @@ SRC = PROJECT_ROOT / "src"
 
 _SECTION_TITLE = "## 当前豁免"
 _LOCK_RE = re.compile(r"^(?P<name>[A-Za-z0-9_.-]+)==(?P<version>[^\s;]+)")
-_VULN_TOKEN_RE = re.compile(r"(?P<full>[A-Z]{2,}-\d{4}-\d+)|/\s*(?P<bare>\d{3,5})\b")
+_VULN_TOKEN_RE = re.compile(r"(?P<full>[A-Z]{2,}-\d{4}-\d+|GHSA-[a-z0-9-]+)|/\s*(?P<bare>\d{3,5})\b")
 
 #: 五条 chromadb 通告的触发面。命中即表示登记表的「仅嵌入式」前提不再成立。
 _REACHABILITY_TOKENS: tuple[tuple[str, str], ...] = (
@@ -127,6 +127,8 @@ def _vuln_ids(cell: str) -> tuple[str, ...]:
 
     兼容 ``PYSEC-2026-3813 / 3814 / 3815`` 的合写：裸序号继承**最近一个完整 ID**
     的前缀（``PYSEC-2026``）。完整 ID 自身由前半支命中，不重复补全。
+    同时识别 ``GHSA-2wm9-hf6c-p5cr`` 形态的主 ID（2026-11-24：PyPI 对同一
+    advisory 新增 GHSA 主 ID 条目，别名只含 CVE，只豁免 PYSEC 会被穿透）。
     """
     ids: list[str] = []
     prefix: str | None = None
