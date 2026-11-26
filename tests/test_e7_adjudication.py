@@ -7,13 +7,14 @@
 2. 统计量按手算复核（Cohen's κ = 0.25 的可算样例、p_e=1 的无定义分支、N=0）；
 3. 结构性错误必须**报错**而不是静默降级（两表候选集不一致不得取交集、
    越界标签、删行、改 task_id）；
-4. 工件面：E7-r2 交接包的 4 份空白录入表（补丁轨 42 行 × 2、套件轨 47 行 × 2）已备料
-   且**判定列全空**，仓内不存在 `E7_KAPPA.json`（协议 §0"不存在任何 Kappa 工件"的机读版）。
-   交接包工件缺失时按具名 skip 处理（`experiments/results/**` 不入库），框架计数改由
-   `e7_falsefix_worksheet._EXPECTED_TOTALS` 与 `--selftest` 在 CI 面锁定。
+4. 工件面：E7-r2 交接包的 4 份空白录入表（补丁轨 42 行 × 2、套件轨 47 行 × 2）仍为
+   备料原件、判定列全空；补丁轨填好副本与 κ 工件归档于
+   `experiments/results/e7_r2_adjudication_20261126/`，工件数字须与填好表实算一致
+   （协议 §0"补丁轨已收口、κ 无定义"的机读版）。归档目录缺失时按具名 skip 处理
+   （`experiments/results/**` 不入库），框架计数改由 `e7_falsefix_worksheet._EXPECTED_TOTALS`
+   与 `--selftest` 在 CI 面锁定。
 
-第 4 条同样属于"预期会红"的反面锁定：E7 真正执行并产出 κ 工件时，必须连同
-`docs/HUMAN_ADJUDICATION_PROTOCOL.md` §0 的状态声明一起改写。
+第 4 条在收口后由反面锁定转为正面锁：篡改 κ 工件数字或协议 §0 声明即红。
 """
 
 from __future__ import annotations
@@ -462,10 +463,29 @@ class TestArtifactSurface:
         }
         assert e7w.selftest() == 0
 
-    def test_no_kappa_artifact_exists_yet(self) -> None:
-        found = sorted(p.name for p in (ROOT / "experiments" / "results").rglob("E7_KAPPA.json"))
-        assert found == [], f"E7 若已执行，须同步改写 HUMAN_ADJUDICATION_PROTOCOL.md §0 状态声明：{found}"
+    def test_kappa_artifact_matches_filled_sheets(self) -> None:
+        """收口锁：κ 工件须存在且数字与两份填好表实算一致（禁止伪造 κ=1.0）。"""
+        out = ROOT / "experiments" / "results" / "e7_r2_adjudication_20261126"
+        if not out.exists():
+            pytest.skip("E7 裁决归档目录未入库（experiments/results/** 忽略）；按 BZ 轮纪律具名 skip")
+        artifact = out / "E7_KAPPA.json"
+        assert artifact.exists(), "归档目录在盘但缺 E7_KAPPA.json"
+        payload = json.loads(artifact.read_text(encoding="utf-8"))
+        rows_a = e7.load_entry_sheet(out / "E7R2_ENTRY_A_utf8.csv")
+        rows_b = e7.load_entry_sheet(out / "E7R2_ENTRY_B.csv")
+        pairs, excluded = e7.align_pairs(rows_a, rows_b)
+        expected = e7.cohen_kappa(pairs)
+        for key, value in (
+            ("p_o", expected["p_o"]),
+            ("p_e", expected["p_e"]),
+            ("kappa", expected["kappa"]),
+            ("n_scored", expected["n"]),
+            ("n_rows", len(pairs) + len(excluded)),
+        ):
+            assert payload[key] == value, f"κ 工件 {key} 与填好表实算不一致：{payload[key]!r} != {value!r}"
+        assert payload["disagreement_rows"] == []
+        assert (out / "E7_KAPPA.md").exists()
 
-    def test_protocol_still_declares_e7_not_executed(self) -> None:
+    def test_protocol_declares_e7_closed(self) -> None:
         text = (ROOT / "docs" / "HUMAN_ADJUDICATION_PROTOCOL.md").read_text(encoding="utf-8")
-        assert "## 0. 状态声明：E7 尚未执行，且不存在任何 Kappa 工件" in text
+        assert "## 0. 状态声明：E7-r2 补丁轨已收口（κ 无定义），套件轨与前置登记未完成" in text

@@ -1,6 +1,6 @@
 > **语言 / Language**：[English](VALIDITY.en.md) | 简体中文（本文）
 
-> **状态声明（2026-11-12）**：本文是 **2026-10-19 及更早批次**的效度威胁登记，文内 59.58% / 143/240 / n=261 等读数与 `main_batch` 工件属**已退役协议代的历史事实**，有回归测试锁定、不作重算改写；**禁止与现行稿件混池或引用为当前结论**。现行权威口径 = `experiments/results/RESULTS_DATA_PACK_20261111.json` + `paper/tex/manuscript.tex`（F2 重写），现稿的 false-fix 配对报告与 harness 排除披露见稿件 RQ2/RQ3。E7 已按现行批次重建为 E7-r2 （89 行普查），裁决动作仍待人工。
+> **状态声明（2026-11-12）**：本文是 **2026-10-19 及更早批次**的效度威胁登记，文内 59.58% / 143/240 / n=261 等读数与 `main_batch` 工件属**已退役协议代的历史事实**，有回归测试锁定、不作重算改写；**禁止与现行稿件混池或引用为当前结论**。现行权威口径 = `experiments/results/RESULTS_DATA_PACK_20261111.json` + `paper/tex/manuscript.tex`（F2 重写），现稿的 false-fix 配对报告与 harness 排除披露见稿件 RQ2/RQ3。E7 已按现行批次重建为 E7-r2（89 行普查）；补丁轨 42 行已于 2026-11-26 完成双人独立裁决，但 κ 因 `p_e=1` 退化不可定义、不构成可引用的信度证据，套件轨 47 行仍未执行。
 
 
 # 效度威胁报告（Validity Threats Report）
@@ -37,8 +37,7 @@
    统计报告随证据链入库（`mutation_detection_correlation.md`，2026-10-16 起），
    `emse_swebench_disclosure.md` 维持不入库；
 3. **无人工裁决**：全项目"gold 独立裁决"一律指**判据材料独立**（留出 gold 测试 /
-   gold 补丁）的自动化 oracle，**不含任何人工裁决**；E7 人工复核为预注册项但**尚未
-   执行**，全仓不存在 Kappa 工件（`README.md` 基准指标节；核验见 §7 第 1 条）。**2026-11-12 更新**：抽样框已整体换为现行权威批次 QuixBugs 的 89 条判定行普查（E7-r2，见 `docs/HUMAN_ADJUDICATION_PROTOCOL.md` §2.3），旧 72 行分层框作废；「裁决动作未执行、无 Kappa 工件」这一状态不变。
+   gold 补丁）的自动化 oracle，**不含任何人工裁决**；E7 人工复核为预注册项，其结论**不进入任何读数**。**2026-11-12 更新**：抽样框已整体换为现行权威批次 QuixBugs 的 89 条判定行普查（E7-r2，见 `docs/HUMAN_ADJUDICATION_PROTOCOL.md` §2.3），旧 72 行分层框作废。**2026-11-26 更新**：补丁轨 42 行已完成双人独立裁决（42/42 `equivalent`、零分歧），但 κ 因 `p_e=1` 边际退化**不可定义**、bootstrap 10000 次全退化、CI 不可用；套件轨 47 行未执行。按协议 §7 步骤 7，该结果**不构成可引用的信度证据**，本文所有读数仍不依赖它。
 
 ---
 
@@ -87,7 +86,7 @@
 ### 5.1 `detection_rate` 作为"测试质量"代理（构念效度，open）
 
 - **为何未缓解**：本数据集上唯一可用于"质量"外部校标的变异得分**已饱和**——权威工件 `（工件已清除）` 聚合 `（工件已清除）` 下全部 10 个批次 JSON（配对 n 556 / 609 / 571），分层均值 0.87–1.00；`plain_llm_df` 的分层方向甚至为负（Δ均值 = −0.0098，判定"无鉴别力（饱和）"），`aitester` 与 `plain_llm` 仅弱正（Δ均值 = +0.1263 / +0.0232）（同文件第 15–17 行）。**注意口径**：`docs/study/OPTIMIZATION_2026-10-15.md` §2 此前引用的"R-P0-2 三种子 n=261/臂"表（Δ均值 = +0.0456 / +0.0290 / −0.0036）已被该文件 2026-10-15 修订的口径说明**明确取代并删除**——两表人群不同（10 批次 vs 三种子），本文只引用前者的权威工件。饱和指标无法充当校标，因此"代理"主张缺少可用的收敛证据。
-- **什么实验/分析会缓解**：把 detection 与**非饱和**外部信号配对——ULT 全变异体 Mut@k（健全子集口径，`docs/design/repair_caliber_matrix.md` 第 ⑨ 行）已具备可复算入口，但该子集同时存在有效性缺口（生成套件在目标代码上通过率 19.6%/20%，`(私有 paper 仓 docs/workspace/SUBMISSION_CHECKLIST_2026-10-15.md)` §4 第 10 条）与 gold 参照作废（同清单 §4 第 11 条）；可行的下一步是 E7 人工复核建立 detection 的**人工校标**（`docs/study/OPTIMIZATION_2026-10-15.md` §3 明记其为"唯一能建立 detection 外部校标的动作"）。
+- **什么实验/分析会缓解**：把 detection 与**非饱和**外部信号配对——ULT 全变异体 Mut@k（健全子集口径，`docs/design/repair_caliber_matrix.md` 第 ⑨ 行）已具备可复算入口，但该子集同时存在有效性缺口（生成套件在目标代码上通过率 19.6%/20%，`(私有 paper 仓 docs/workspace/SUBMISSION_CHECKLIST_2026-10-15.md)` §4 第 10 条）与 gold 参照作废（同清单 §4 第 11 条）；原计划的下一步是 E7 人工复核建立 detection 的**人工校标**（`docs/study/OPTIMIZATION_2026-10-15.md` §3 明记其为"唯一能建立 detection 外部校标的动作"）；其中补丁轨 42 行已于 2026-11-26 完成双人裁决，但 κ 不可定义 ⇒ 尚不足以充当校标，套件轨 47 行未执行。
 - **若持续 open，论文必须如何收缩**：detection **只能**被表述为"本基准上的检出信号（protocol-level signal）"，不得作为测试质量的通用代理；与 mutation 相关性的数字必须作为**构念效度的反证证据**如实披露并附"解读纪律"（不得单独引用、须与分层均值并列）（`（工件已清除）` 第 8–11 行；`docs/study/OPTIMIZATION_2026-10-15.md` §2 结论 3）。
 
 ### 5.2 false-fix 跨臂比较被"声明通过率"混杂（构念效度，open）
@@ -132,7 +131,7 @@
 
 ## 7. 不可核验与未核验事项（诚实清单）
 
-1. **E7 未执行、无 Kappa 工件**：全仓 `grep -rin "kappa" --include=*.md docs/ README.md` 在本文档落盘**之前**仅 3 行命中，且全部是"不存在 / 未执行"陈述（`docs/study/OPTIMIZATION_2026-10-15.md` 2 处、`README.md` 1 处）。本文档与 `docs/HUMAN_ADJUDICATION_PROTOCOL.md` 落盘后该 grep 会新增**说明性**命中（协议如何计算 Kappa），但**没有**任何一行主张 Kappa 工件存在；执行协议见 `docs/HUMAN_ADJUDICATION_PROTOCOL.md`。
+1. **E7 无可用 Kappa 估计（2026-11-26 更新）**：历史核验记录如下——全仓 `grep -rin "kappa" --include=*.md docs/ README.md` 在本文档落盘**之前**仅 3 行命中，且全部是"不存在 / 未执行"陈述（`docs/study/OPTIMIZATION_2026-10-15.md` 2 处、`README.md` 1 处）；本文档与 `docs/HUMAN_ADJUDICATION_PROTOCOL.md` 落盘后该 grep 新增**说明性**命中（协议如何计算 Kappa）。**2026-11-26 收口**：补丁轨 42 行双人裁决已合并，`p_o=p_e=1.0` ⇒ κ 无定义（`p_e=1` 退化），bootstrap 10000 次全退化、CI 不可用；工件在 `experiments/results/e7_r2_adjudication_20261126/`，套件轨 47 行未执行。因此"无可用 Kappa 估计"成立，且**不得**把 42/42 的原始一致率当作信度证据引用。
 2. **false_fix 口径的仓内自动复算路径仍缺**：`README.md` / `README.en.md` / `BASELINE.yaml` 引用的 `docs/design/false_fix_caliber_matrix.md` **在仓库中不存在**（`find docs -name "*caliber*"` 只返回 `docs/design/repair_caliber_matrix.md`；`git log --all -- docs/design/false_fix_caliber_matrix.md` 无输出）——`docs/design/repair_caliber_matrix.md` 新增的"false_fix 口径（权威落点）"节解释了原因：该路径**从未纳入版本控制**（被 `.gitignore` 忽略），故**不是可引用路径**，权威落点改为"该节 + 代码 + 锁定测试"。实测 `experiments/emse_optimization.py::build_false_fix_matrix()` 仍返回 `"source": "10-13_caliber_fallback"`，原因是 `_load_main_batch_rows()` 只接收 `timestamp <= 2026-10-02` 的批次（同文件注释将该批称为"R-P0-2 主批次"），而 R-P0-2 三种子批次的时间戳为 2026-10-06，因此**自动复算分支对 R-P0-2 人群不会触发**。**59.58% / 100% 的两个分母经本次核验可从三个 10-06 工件直接复算得到**（aitester 143/240 与 143/143），但该复算**不经过**仓内矩阵函数。
 3. **mutation × detection 的口径已在源文件内改版（本文按新版引用）**：`docs/study/OPTIMIZATION_2026-10-15.md` §2 于 2026-10-15 修订中把原"R-P0-2 三种子 n=261/臂"表**替换**为"批次文件数 = 10"表（Δ均值 = +0.1263 / +0.0232 / −0.0098），并在口径说明中声明旧表**已被取代、两表人群不同不得互相替换**；该新表与权威工件 `（工件已清除）` 逐格一致（并有门禁 `scripts/gates/check_artifact_doc_consistency.py` 对账）。本文因此只引用 10 批次口径的 Δ 值；`README.md` / `BASELINE.yaml` 的三种子口径 detection 44.8% / 15.8% / 1.5% 是**另一总体**（任务检测率），不受该表改版影响，但同样**不得**与 mutation 交叉验证的 Δ 值混用。
 4. **派生工件未入库（余两项）**：`（工件已清除）` 被 `.gitignore` 第 158 行 `experiments/results/**` 忽略且未被 git 跟踪；T-10 敏感性分析的 `experiments/results/emse_stats_2026-10-15/PASS_MATCHED.{md,json}` 同样位于被忽略目录（`experiments/results/**`）。两者按设计可由源工件零 LLM 再生（`docs/study/OPTIMIZATION_2026-10-15.md` §5 同口径；T-10 再生入口 `experiments/pass_matched_sensitivity.py`）。（`（工件已清除）` 原列于此；已随 2026-10-16 批次按 `main_batch/` 白名单入库，与同目录既有 11 份报告同口径。）

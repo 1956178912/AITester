@@ -5,8 +5,8 @@
 §2/§2.1/§2.2 的旧框与 n=8/41/72 三路径备料**已作废**；执行清单见 §7、执行面见 §7.1。
 历史：AA 批次 2026-10-19 新增 §7.1 可机器校验执行面（CSV 录入表、量表校验、κ 合并与
 bootstrap CI）；EMSE 批次 2026-10-15 把预注册 E7 从"设计描述"落成可执行协议。
-**E7 仍未执行**——E7-r2 补丁轨 42 行（judgment/reason）与套件轨 47 行（confirmed/annotation）
-录入表实测全空）
+**E7-r2 补丁轨已收口（2026-11-26），套件轨 47 行仍未执行**——补丁轨两份填好的裁决表
+（A/B 各 42 行）与 κ 工件已归档；套件轨录入表仍为空，前置登记未提供，均如实登记。
 
 > ⚠️ **开工前必读（两代抽样框共存）**：本协议只有 **§2.3** 生效。§2/§2.1/§2.2 及其
 > 复现命令、10%/≥40 样本量路径、n=8/41/72 备料清单全部属**已退役的 2026-10-06
@@ -23,17 +23,23 @@ bootstrap CI）；EMSE 批次 2026-10-15 把预注册 E7 从"设计描述"落成
 
 ---
 
-## 0. 状态声明：E7 尚未执行，且不存在任何 Kappa 工件
+## 0. 状态声明：E7-r2 补丁轨已收口（κ 无定义），套件轨与前置登记未完成
 
-- **E7 未执行**：`docs/preregistration.md` 执行记录表中 E7 行状态为"**待人工复核（候选清单已生成，AO 批）**"，其"批次工件 / 主终点结果 / 判定 / 日期"四列**均为空**——即已预注册、已备料、尚未取数；`docs/study/OPTIMIZATION_2026-10-15.md`
+- **当前状态（2026-11-26 收口）**：E7-r2 补丁轨 42 行的两份独立裁决表（A/B 各 42 行）已完成第三方合并，工件归档于 `experiments/results/e7_r2_adjudication_20261126/`（`E7_KAPPA.{json,md}` + 两份填好表 + UTF-8 规范化副本）。合并读数：`p_o=p_e=1.0`、N=42、`kappa=None`（`p_e=1` 退化，κ 无定义；10000 次 bootstrap 全退化、CI 不可用）、分歧 0、排除 0；混淆矩阵唯一非零格为 (equivalent, equivalent)=42。按 §2.3 决策分支，全部 `equivalent` ⇒ `tab:falsefix` real 列（补丁轨 42 行）获人类外部确认、无需勘误；该判定口径结论与"信度统计量不可量化"分开表述。
+- **未完成项（如实登记，不代填）**：套件轨 47 行 `confirmed`/`annotation` 仍全空（未执行）；协议 §7 步骤 0 要求的前置登记（裁决人名单与角色、判定时间窗、第三裁决人、合并与登记执行人）未提供；第三裁决人未触发（本案零分歧）。A 表 `finished_at_utc` 全空、B 表有值。
+- **对外口径限制**：按 §7 步骤 7，κ 不可接受时论文/README **仍不得**声称人工复核已执行，维持"E7 未执行、无 Kappa 工件可引用"的对外表述；本工件仅供审计与内部登记。
+- **口径边界披露**：21/42 条理由为"代码改写但差分无差异"，与 §3 逐字定义"差异仅注释/格式/docstring 等无语义改动"有张力；两裁决人按"实质语义等价"解释可自洽。
+
+- **历史状态（截至 2026-11-25，已被下文收口状态取代）**：`docs/preregistration.md` 执行记录表中 E7 行状态为"**待人工复核（候选清单已生成，AO 批）**"，其"批次工件 / 主终点结果 / 判定 / 日期"四列**均为空**——即已预注册、已备料、尚未取数；`docs/study/OPTIMIZATION_2026-10-15.md`
   §3 亦把"E7 人工复核"列为**未执行**，阻塞原因记"需人力投入"；同文件 §1.1 明记
   "E7 预注册未执行"。
-- **工件已备料但判定列全空（E7-r2，2026-11-12）**：交接包内 `E7R2_WORKSHEET.md`
+- **备料状态（E7-r2，2026-11-12；交接包本体至今未改）**：交接包内 `E7R2_WORKSHEET.md`
   （第 I 部分补丁轨 42 行 + 第 II 部分套件轨 47 行）每节的判定勾选栏
   （`☐ equivalent ☐ plausible_overfit ☐ wrong_location ☐ test_only ☐ incomplete`）
   均未勾选；`E7R2_ENTRY_{A,B}.csv`（各 42 行）的 judgment/reason/finished_at_utc 与
   `E7R2_SUITE_{A,B}.csv`（各 47 行）的 confirmed/annotation/reason/finished_at_utc
-  实测全空。旧框的候选清单与工作表（n=8/41/72 代际）已作废，见 §2。
+  实测全空。旧框的候选清单与工作表（n=8/41/72 代际）已作废，见 §2。填好的补丁轨副本见
+  `experiments/results/e7_r2_adjudication_20261126/`。
 - **核验命令与结果（本次核验，2026-10-15，在本协议落盘之前执行）**：
 
   ```bash
@@ -53,8 +59,8 @@ bootstrap CI）；EMSE 批次 2026-10-15 把预注册 E7 从"设计描述"落成
   展开并报 `no matches found` 而**假报 0**；② 该陈述现已不只靠文档：
   `tests/test_e7_adjudication.py::TestArtifactSurface` 机读锁定 E7-r2 的 4 份空白录入表
   （`E7R2_ENTRY_{A,B}.csv` 42 行、`E7R2_SUITE_{A,B}.csv` 47 行，判定列全空；工件在盘时
-  才判定，缺失按 BZ 轮纪律具名 skip）、`experiments/results/` 下无 `E7_KAPPA.json`、
-  以及本文 §0 标题原文仍在。CI 面另由 `experiments/e7_falsefix_worksheet.py` 的
+  才判定，缺失按 BZ 轮纪律具名 skip）、κ 工件的存在性与数字一致性由配对锁守护（见下）。
+  CI 面另由 `experiments/e7_falsefix_worksheet.py` 的
   `_EXPECTED_TOTALS`（89/42/47）与 `--selftest` 锁定框架计数。
 
 ---
@@ -394,14 +400,14 @@ p_e = (1/N²) * Σ_i (n_i+ * n_+i)            # 期望一致率（行边际 × �
 报告里把计数顺手改成百分比。算术锚在手算样例上（6 行、3 行一致 → p_o=0.5、p_e=1/3、
 κ=0.25，落 Fair 带），故统计量本身不依赖任何运行时库。
 
-**"E7 仍未执行"现在是机读事实**，而不只是文档陈述：E7-r2 交接包内 4 份空白录入表
-（`E7R2_ENTRY_{A,B}.csv` 各 42 行、`E7R2_SUITE_{A,B}.csv` 各 47 行，判定列与时间戳列全空）
-已备料；`experiments/results/` 下**必须不存在** `E7_KAPPA.json`；本文 §0 标题必须仍是
-"E7 尚未执行，且不存在任何 Kappa 工件"。前两条各由一例测试锁定（工件在盘时判定；缺失时
-按 BZ 轮纪律具名 skip——交接包按 `experiments/results/**` 忽略，不入库），框架计数另由
+**收口后的机读状态**：E7-r2 交接包内 4 份空白录入表（`E7R2_ENTRY_{A,B}.csv` 各 42 行、
+`E7R2_SUITE_{A,B}.csv` 各 47 行）仍为备料原件、判定列全空；填表副本在
+`experiments/results/e7_r2_adjudication_20261126/`。同目录 `E7_KAPPA.json` 已落盘，
+其存在性与数字（与填好表实算一致）由 `test_kappa_artifact_matches_filled_sheets` 锁定，
+本文 §0 标题由 `test_protocol_declares_e7_closed` 锁定；归档目录缺失时按 BZ 轮纪律具名
+skip（`experiments/results/**` 不入库）。框架计数另由
 `experiments/e7_falsefix_worksheet.py` 的 `_EXPECTED_TOTALS`（89/42/47）与 `--selftest`
-在 CI 面锁定。E7 真正产出 κ 工件时**必须**连同 §0 的状态声明一起改写，否则测试红
-（预期会红的反面锁定，与 §2.1 的嵌套性锁同类）。
+在 CI 面锁定。收口后该配对锁由反面转为正面：篡改 κ 工件数字或 §0 声明即红。
 
 > **填表位置纪律（E7-r2）**：交接包内 4 份空白表受包内 `SHA256SUMS` 约束，
 > 裁决人须把副本拷到裁决批次目录后再填写，**不得原地改写交接包本体**——

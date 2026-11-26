@@ -28,9 +28,11 @@ AITester 是一个研究用系统，用 LangGraph 编排 Planner → Generator �
   **39.31%**（v2，57/145 可重放行；gold 独立裁决）。修正前口径的 **repair=0** 是 patch 字段围栏残留与
   跨文件任务未物化造成的**伪影**，不是能力读数；口径分叉与复算方式见
   [修复口径矩阵](docs/design/repair_caliber_matrix.md)。
-- **E7-r2 人工校标未执行**：抽样框已换成现稿 tab:falsefix 的 **89 条 declared-pass 判定行普查**
-  （补丁轨 42 行 + 套件轨 47 行），备料包已生成、裁决仍待人工；协议见
-  [预注册](docs/preregistration.md)，结果不在任何发布读数中（全仓无 Kappa 工件）。
+- **E7-r2 人工校标不构成可引用证据**：抽样框为现稿 tab:falsefix 的 **89 条 declared-pass 判定行普查**
+  （补丁轨 42 行 + 套件轨 47 行）。补丁轨已完成双人独立裁决（42/42 判 `equivalent`、零分歧），
+  但 κ 因 `p_e=1`（边际分布退化）**不可定义**、bootstrap CI 不可用，套件轨 47 行仍未执行；
+  协议见 [预注册](docs/preregistration.md) 与
+  [裁决协议 §0](docs/HUMAN_ADJUDICATION_PROTOCOL.md)。结果**不进入任何发布读数、不作为一致性证据**。
 - **SWE-bench 面是结构性排除，不是通过率**：2,197 行中 1,919 行 `harness_invalid`、278 行可判，
   排除行不进判定分母（RQ3 如实披露）；引用其 pass_rate 属误用。
 - **读数限于本批次**：现行权威批次逐格对比两个端点（`deepseek-flash` × `mimo-v2.6-pro`，5 臂 × 5 面），

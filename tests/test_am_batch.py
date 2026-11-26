@@ -249,11 +249,16 @@ class TestPreregConsistency:
         # 都要改测试（把守卫变成状态冻结点，反而掩盖真实的状态迁移）。
         assert "| E6 |" in PREREG_ZH
         assert any(s in PREREG_ZH for s in ("E6 | 待执行", "E6 | **执行中", "E6 | **已执行"))
-        # AO 批（2026-10-07）：E7 候选清单已生成，状态推进为"待人工复核"
-        assert "E7 | 待人工复核（候选清单已生成，AO 批）" in PREREG_ZH
+        # E7 同 E6：锚定行存在 + 状态 ∈ 已知状态集，不冻结状态字面量——
+        # AO 批（2026-10-07）为"待人工复核"，2026-11-26 补丁轨收口后为"部分执行"。
+        assert "| E7 |" in PREREG_ZH
+        assert any(s in PREREG_ZH for s in ("E7 | 待人工复核", "E7 | **部分执行", "E7 | **已执行"))
         assert "| E6 |" in PREREG_EN
         assert any(s in PREREG_EN for s in ("E6 | pending", "E6 | **running", "E6 | **executed"))
-        assert "E7 | pending manual review (candidate list generated, batch AO)" in PREREG_EN
+        assert "| E7 |" in PREREG_EN
+        assert any(
+            s in PREREG_EN for s in ("E7 | pending manual review", "E7 | **partially executed", "E7 | **executed")
+        )
 
     def test_ready_commands_have_e6_block(self) -> None:
         assert "### E6 就绪命令" in PREREG_ZH
