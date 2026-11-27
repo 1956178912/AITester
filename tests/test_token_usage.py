@@ -77,6 +77,14 @@ class TestGlobalUsage:
     """跨线程聚合。"""
 
     def test_global_aggregates_threads(self):
+        # registry 刻意保留已退出线程的条目（供基准结束聚合），不清零会聚合到
+        # 同进程先前用例的残留——本文件 test_worker_thread_independent 的
+        # worker 线程记了 100/100（model="worker"）后退出；该条目是否被本用例
+        # 新线程的 ident 复用覆盖取决于 CPython 时序（run #322 的 3.12 档实测
+        # 未复用，聚合值 10+7+100=117）。与 test_2026_09_26_review_round8 同
+        # 口径：聚合前清零，断言只覆盖本用例创建的两个线程。
+        with token_usage._registry_lock:
+            token_usage._registry.clear()
         reset()
         record_usage(10, 5)
 
