@@ -958,7 +958,7 @@ _BIB_ARXIV_ID = re.compile(r"arXiv:\s*(\d{4}\.\d{4,5})")
 
 _TITLE_PAGE_CLAIMS: dict[str, re.Pattern[str]] = {
     "title_page_abstract_words": re.compile(r"Abstract:\s*(\d+)\s*words"),
-    "title_page_pages": re.compile(r"Manuscript body:\s*(\d+)\s*pages"),
+    "title_page_pages": re.compile(r"Manuscript:\s*(\d+)\s*pages"),
 }
 
 
