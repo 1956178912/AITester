@@ -32,6 +32,8 @@ def test_swebench_filter_evidence_is_consistent() -> None:
     from scripts.tools.paper_recompute import collect_swebench_filter_evidence
 
     evidence = collect_swebench_filter_evidence()
+    # 实时记录（作者机）与入库快照（fresh clone / CI）必须同形状、同结论。
+    assert evidence["source"] in {"live-records", "archived-snapshot"}
     assert evidence["pool"] == 225
     assert evidence["after_filter"] == 217
     assert evidence["skipped"] == 8
@@ -44,6 +46,7 @@ def test_swebench_filter_json_output() -> None:
     proc = _run("swebench-filter", "--json")
     assert proc.returncode == 0, proc.stderr
     payload = json.loads(proc.stdout)
+    assert payload["source"] in {"live-records", "archived-snapshot"}
     assert payload["after_filter"] == 217
     assert "sqlfluff__sqlfluff-3330" in payload["instance_code_skipped"]
     assert "pvlib__pvlib-python-1048" in payload["test_material_skipped"]

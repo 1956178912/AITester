@@ -24,6 +24,7 @@ import json
 import os
 import subprocess
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +32,9 @@ ROOT = Path(__file__).resolve().parents[2]
 PACK_SCRIPT = ROOT / "scripts" / "tools" / "results_data_pack_20261111.py"
 PACK_OUT = ROOT / "experiments" / "results" / "RESULTS_DATA_PACK_20261111.json"
 SWE_BENCH_GLOB = "experiments/results/**/benchmark_swebench_*.json"
+#: 入库的证据快照（2026-11-27）：实时跑批记录按 `.gitignore` 纪律不入库，
+#: fresh clone（CI / 审稿人）里回退读此文件，保证 `swebench-filter` 可运行。
+SWE_BENCH_EVIDENCE_SNAPSHOT = ROOT / "experiments" / "results" / "SWEBENCH_FILTER_EVIDENCE_20261127.json"
 
 #: 本地 SWE-bench 池规模与剔除后规模（稿件 §3.5 / Appendix B 的登记值）。
 EXPECTED_POOL = 225
@@ -46,12 +50,99 @@ def _json_load(path: Path) -> Any:
         raise SystemExit(f"无法读取 {path}: {type(exc).__name__}: {exc}") from exc
 
 
+def _check_evidence_consistency(
+    *,
+    pool: int,
+    after_filter: int,
+    skipped: int,
+    instance_code: Sequence[str],
+    test_material: Sequence[str],
+    origin: str,
+) -> None:
+    """校验证据自洽：剔除数与池规模、两类剔除清单长度必须互相吻合。
+
+    Args:
+        pool: 过滤前实例池规模。
+        after_filter: 过滤后实例数。
+        skipped: 剔除总数。
+        instance_code: 因实例代码缺失剔除的 ID 清单。
+        test_material: 因测试材料缺失剔除的 ID 清单。
+        origin: 证据来源（实时记录 / 入库快照），用于报错定位。
+
+    Raises:
+        SystemExit: 任一等式不成立，避免把自相矛盾的证据交给审稿人。
+    """
+    if pool - skipped != after_filter:
+        raise SystemExit(f"[{origin}] {pool} - {skipped} ≠ {after_filter}：登记值自相矛盾")
+    if len(instance_code) + len(test_material) != skipped:
+        raise SystemExit(f"[{origin}] 剔除清单长度 {len(instance_code)} + {len(test_material)} ≠ {skipped}")
+
+
+def _load_swebench_snapshot() -> dict[str, Any]:
+    """读取入库的证据快照（实时跑批记录缺席时的回退源）。
+
+    Returns:
+        与实时提取同形状的字典，另含 ``source``（``archived-snapshot``）与
+        ``snapshot``（快照相对路径）两键。
+
+    Raises:
+        SystemExit: 快照缺席、schema 不符或自洽校验失败。
+    """
+    if not SWE_BENCH_EVIDENCE_SNAPSHOT.is_file():
+        raise SystemExit(
+            f"未找到 SWE-bench 跑批记录（{SWE_BENCH_GLOB}），且入库证据快照缺席：{SWE_BENCH_EVIDENCE_SNAPSHOT}"
+        )
+    data = _json_load(SWE_BENCH_EVIDENCE_SNAPSHOT)
+    if not isinstance(data, dict) or data.get("schema") != "swebench-filter-evidence-v1":
+        raise SystemExit(f"证据快照 schema 不符：{SWE_BENCH_EVIDENCE_SNAPSHOT}")
+
+    pool = int(data.get("pool") or 0)
+    after_filter = int(data.get("after_filter") or 0)
+    skipped = int(data.get("skipped") or 0)
+    inst = [str(x) for x in (data.get("instance_code_skipped") or [])]
+    test = [str(x) for x in (data.get("test_material_skipped") or [])]
+    _check_evidence_consistency(
+        pool=pool,
+        after_filter=after_filter,
+        skipped=skipped,
+        instance_code=inst,
+        test_material=test,
+        origin="archived-snapshot",
+    )
+    if (pool, after_filter, skipped) != (
+        EXPECTED_POOL,
+        EXPECTED_AFTER_FILTER,
+        EXPECTED_SKIPPED,
+    ):
+        raise SystemExit(f"证据快照与常量登记值不一致：pool={pool} after_filter={after_filter} skipped={skipped}")
+    return {
+        "records": int(data.get("records") or 0),
+        "pool": pool,
+        "after_filter": after_filter,
+        "skipped": skipped,
+        "instance_code_skipped": inst,
+        "test_material_skipped": test,
+        "record_files": [str(x) for x in (data.get("record_files") or [])],
+        "source": "archived-snapshot",
+        "snapshot": str(SWE_BENCH_EVIDENCE_SNAPSHOT.relative_to(ROOT)),
+    }
+
+
 def collect_swebench_filter_evidence(pattern: str = SWE_BENCH_GLOB) -> dict[str, Any]:
     """从全部 SWE-bench 跑批记录提取筛选证据。
 
+    实时记录优先（作者机全量证据）；记录缺席（fresh clone / CI）时回退读
+    入库快照，并在返回值的 ``source`` 中标明来源，不静默降级为「无证据」。
+
+    Args:
+        pattern: 相对仓库根的跑批记录 glob。
+
     Returns:
-        包含 ``records``、``pool``、``after_filter``、``skipped`` 与两类
-        剔除清单的字典。全部记录必须给出一致的清单，否则抛 ``SystemExit``。
+        包含 ``records``、``pool``、``after_filter``、``skipped``、两类剔除
+        清单与 ``source`` 的字典。全部记录必须给出一致的清单。
+
+    Raises:
+        SystemExit: 实时记录与快照均缺席，或证据不自洽。
     """
     records: list[dict[str, Any]] = []
     variants: dict[tuple[tuple[str, ...], tuple[str, ...]], list[str]] = {}
@@ -74,7 +165,7 @@ def collect_swebench_filter_evidence(pattern: str = SWE_BENCH_GLOB) -> dict[str,
         variants.setdefault((inst, test), []).append(str(path.relative_to(ROOT)))
 
     if not records:
-        raise SystemExit(f"未找到 SWE-bench 跑批记录：{pattern}")
+        return _load_swebench_snapshot()
     if len(variants) != 1:
         raise SystemExit(f"SWE-bench 剔除清单不一致：{len(variants)} 种变体")
 
@@ -82,8 +173,14 @@ def collect_swebench_filter_evidence(pattern: str = SWE_BENCH_GLOB) -> dict[str,
     skipped = len(inst_ids) + len(test_ids)
     if skipped != EXPECTED_SKIPPED:
         raise SystemExit(f"剔除数 {skipped} ≠ 登记值 {EXPECTED_SKIPPED}")
-    if EXPECTED_POOL - skipped != EXPECTED_AFTER_FILTER:
-        raise SystemExit(f"{EXPECTED_POOL} - {skipped} ≠ {EXPECTED_AFTER_FILTER}：登记值自相矛盾")
+    _check_evidence_consistency(
+        pool=EXPECTED_POOL,
+        after_filter=EXPECTED_AFTER_FILTER,
+        skipped=skipped,
+        instance_code=inst_ids,
+        test_material=test_ids,
+        origin="live-records",
+    )
 
     return {
         "records": len(records),
@@ -93,6 +190,7 @@ def collect_swebench_filter_evidence(pattern: str = SWE_BENCH_GLOB) -> dict[str,
         "instance_code_skipped": list(inst_ids),
         "test_material_skipped": list(test_ids),
         "record_files": owners,
+        "source": "live-records",
     }
 
 
@@ -155,6 +253,10 @@ def cmd_swebench_filter(args: argparse.Namespace) -> int:
         f"SWE-bench pool {evidence['pool']} -> {evidence['after_filter']} "
         f"({evidence['skipped']} excluded, {evidence['records']} records)"
     )
+    origin = evidence["source"]
+    if evidence.get("snapshot"):
+        origin = f"{origin} ({evidence['snapshot']})"
+    print(f"  source: {origin}")
     print("  instance_code fallback:", ", ".join(evidence["instance_code_skipped"]))
     print("  no Python test material:", ", ".join(evidence["test_material_skipped"]))
     return 0

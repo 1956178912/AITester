@@ -381,3 +381,13 @@ docs/emse/
 # 忽略即可，不必为规避守卫去调低守卫灵敏度。
 .research-buddy/
 project/
+
+# ── 论文复算证据快照（CI 红修复轮 2026-11-27）─────────────────────────────
+# `scripts/tools/paper_recompute.py swebench-filter` 的实时证据源是 34 份
+# `benchmark_swebench_*.json`（每份 5-6 MB，按上方 experiments/results/** 纪律
+# 不入库）。fresh clone 里没有这些记录 ⇒ CLI 报「未找到跑批记录」、契约测试
+# 全红（本地因记录在盘而不可见——与 BZ 轮「测试契约锁定的工件不入库」同一
+# 失效形态）。处置：放行从这 34 份记录**真实提取**的小体积快照（约 5 KB，
+# 只含计数 + 8 个剔除 ID + 来源路径清单），CLI 在实时记录缺席时回退读它并
+# 在输出标注 source=archived-snapshot；重记录本身仍不入库。
+!experiments/results/SWEBENCH_FILTER_EVIDENCE_20261127.json
